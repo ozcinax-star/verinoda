@@ -88,7 +88,6 @@ def test_setup_cli_json(project):
     assert out["ok"] and out["index"]["nodes"] > 0 and out["next_steps"]
 
 
-
 def test_reference_trees_are_recorded_merged_and_validated(tmp_path):
     from verinoda import workflow
     from verinoda.paths import DEFAULT_CONFIG, load_config
@@ -97,7 +96,8 @@ def test_reference_trees_are_recorded_merged_and_validated(tmp_path):
     (repo / "original" / "src").mkdir(parents=True)
     (repo / "src").mkdir()
     workflow.init(repo)
-    assert setup_mod.add_reference(repo, "original=Plugin,paper") ==         {"path": "original/", "aliases": ["paper", "plugin"], "added": True}
+    assert setup_mod.add_reference(repo, "original=Plugin,paper") == {
+        "path": "original/", "aliases": ["paper", "plugin"], "added": True}
     # the same folder again (absolute this time) merges aliases instead of adding a second entry
     again = setup_mod.add_reference(repo, f"{repo / 'original'}=orijinal")
     assert again == {"path": "original/", "aliases": ["orijinal", "paper", "plugin"], "added": False}
@@ -118,6 +118,7 @@ def test_setup_records_reference_trees(project):
     rep = setup_mod.setup_project(project, agents="none", reference=["vendored=legacy"])
     assert rep["ok"] and rep["reference"] == [{"path": "vendored/", "aliases": ["legacy"], "added": True}]
     assert "reference" in rep["steps"]
+
 
 # -- installer scripts -------------------------------------------------------------------------------
 
@@ -156,3 +157,13 @@ def test_install_sh_installs_a_working_cli_from_a_local_source(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     exe = next((tmp_path / "bin").glob("verinoda*"))
     assert subprocess.run([str(exe), "setup", "--help"], capture_output=True).returncode == 0
+
+
+def test_folders_that_copy_other_code_are_suggested_as_reference_trees(tmp_path):
+    names = [f"mod{i}.py" for i in range(8)]
+    files = [f"app/src/{n}" for n in names] + [f"legacy/plugin/src/{n}" for n in names[:6]] + \
+        ["legacy/plugin/src/only_here.py", "app/tests/test_mod0.py", "docs/readme.md"]
+    sugg = setup_mod.reference_suggestions(tmp_path, files)
+    assert sugg == [{"path": "legacy/plugin/src/", "shared": 6, "files": 7, "copy_of": "app/"}]
+    assert setup_mod.reference_suggestions(tmp_path, files, ["legacy/"]) == []   # already configured
+    assert setup_mod.reference_suggestions(tmp_path, [f"app/{n}" for n in names]) == []

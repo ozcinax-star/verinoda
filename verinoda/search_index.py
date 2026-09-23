@@ -1089,6 +1089,20 @@ def _lexicon_expansions(repo: Path | None, words: list[str],
     return {k: list(dict.fromkeys(v)) for k, v in out.items() if v}
 
 
+def _exact_seed_expansions(repo: Path | None, words: list[str]) -> dict[str, list[str]]:
+    """Grounded exact-spelling seed hits (``öldüğünde`` -> die, death) for the words as written."""
+    if repo is None or not words:
+        return {}
+    try:
+        from verinoda import lexicon
+
+        lx = lexicon.load(repo)
+        hits = lx.seed_exact(words) if lx is not None else []
+    except Exception:  # noqa: BLE001 - no lexicon: nothing to add
+        return {}
+    return {textnorm.fold_tr(words[h["index"]]): list(h["targets"]) for h in hits}
+
+
 def command_words(question: str) -> list[str]:
     """Command names a question uses as such: ``the scan command``, ``init and scan commands``,
     ``scan komutu``, ``init ve scan komutları``, ```verinoda scan` ``."""
@@ -1210,6 +1224,12 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
     for src, targets in provided.items():
         for tgt in targets or ():
             add(str(src), str(tgt), via_default, PROVIDED_EXPANSION_WEIGHT, indexed=False)
+    if expansions and tr_question:
+        # the question plan reads folded words, so it cannot tell "öl" (die) from "ol" (be):
+        # the exact-spelling seed entries are added to its glosses here
+        for src, targets in _exact_seed_expansions(repo, words).items():
+            for tgt in targets:
+                add(src, tgt, "lexicon", PROVIDED_EXPANSION_WEIGHT, indexed=False)
     # "the scan command" / "scan komutu": its handler (cmd_scan) counts as named by the question
     for handler, word in command_handlers(conn, command_words(question)).items():
         if handler not in named:

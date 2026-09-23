@@ -73,7 +73,7 @@ Facts found (pinpointed), tokens per question:
 |---|---|---|---|
 | raw grep+read | 33 (29), 2,695 | 33 (29), 2,695 | 33 (29), 2,695 |
 | Graphify (vendored renderer) | 13 (13), 1,200 | 13 (13), 1,200 | 13 (13), 1,200 |
-| Verinoda analyze | 18 (17), 672 | 25 (24), 774 | **39 (37)**, 1,006 |
+| Verinoda analyze | 18 (17), 672 | 25 (24), 774 | **41 (39)**, 1,025 |
 | Verinoda retrieve (JSON) | 25 (25), 1,327 | 32 (32), 1,396 | **43 (43)**, 1,430 |
 | Verinoda retrieve (text) | 34 (32), 1,381 | 46 (44), 1,431 | **48 (45)**, 1,484 |
 
@@ -100,8 +100,9 @@ correctness fix below, a Turkish stem rule (an inflected word also searches
 its longest indexed stem: "bıçağının" -> `bicagi`), `öl` (die) matched as
 written so it no longer collides with `ol` (be), and a PageRank prior for data
 units through their links. Measured on all seven sets against the run before
-them: `glow_mod` JSON 41 -> 43, the private set JSON +1, every other cell
-unchanged. A 0.8 factor for test files was tried in the same round and
+them: `glow_mod` JSON 41 -> 43 and analyze 39 -> 41 (the exact-spelling
+entries now also reach the question plan's glosses), the private set JSON +1,
+every other cell unchanged. A 0.8 factor for test files was tried in the same round and
 dropped: +3 facts on `heldout_repoatlas`, but -2 on `glow_mod` and -1 on
 `orders_app_tr`, whose behaviour questions cite tests.
 

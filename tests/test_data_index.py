@@ -378,3 +378,11 @@ def test_a_data_file_takes_graph_prior_through_the_code_that_names_it(mod):
     rk = search_index.rank(mod, "what does onDeath do when a wisp dies")
     death = next((h for h in rk.hits if h.file == RES + "data/glow/function/wisp_death.mcfunction"), None)
     assert death is not None and any("graph prior through the link" in r for r in death.reasons)
+
+
+def test_plan_glosses_get_the_exact_spelling_seed_entries(mod):
+    # the question plan reads folded words and cannot tell "öl" (die) from "ol" (be)
+    q = search_index.analyze_query("Bir wisp öldüğünde ne oluyor?", _db(mod), expansions={"wisp": ["wisp"]},
+                                   repo=mod.root)
+    got = {(e["from"], e["to"]) for e in q.expansions}
+    assert ("oldugunde", "death") in got and not any(e["from"] == "oluyor" for e in q.expansions)

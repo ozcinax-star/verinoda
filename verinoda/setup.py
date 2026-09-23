@@ -87,6 +87,60 @@ def add_reference(repo: Path, spec: str) -> dict:
     return {"path": path, "aliases": (entry or entries[-1]).get("aliases", aliases), "added": added}
 
 
+CODE_SUFFIXES = (".py", ".java", ".kt", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".cs", ".rb", ".php", ".scala",
+                 ".swift", ".c", ".cpp", ".h", ".hpp", ".lua", ".groovy")
+MIN_SHARED = 5          # code files a folder must share by name with another folder to look like a copy
+MIN_SHARE = 0.5         # ... and that share of its own code files
+
+
+def reference_suggestions(repo: Path, files: list[str], configured: list[str] = ()) -> list[dict]:
+    """Folders that look like a copy of other code in the repository (an original being ported,
+    a frozen snapshot): most of their code files share a name with files of one other folder,
+    which is larger. Folders already configured as reference trees are left out.
+
+    Returns ``[{"path", "shared", "files", "copy_of"}]``; only a suggestion, never applied.
+    """
+    from collections import Counter, defaultdict
+
+    from verinoda.architecture_map import is_test_file
+
+    code = [f for f in files if f.endswith(CODE_SUFFIXES) and not is_test_file(f)]
+    groups: dict[str, list[str]] = defaultdict(list)
+    for f in code:
+        parts = f.split("/")
+        for depth in (1, 2, 3):
+            if len(parts) > depth:
+                groups["/".join(parts[:depth]) + "/"].append(f)
+    by_name: dict[str, set[str]] = defaultdict(set)
+    for f in code:
+        by_name[f.rsplit("/", 1)[-1]].add(f)
+    done = tuple(c.strip("/") + "/" for c in configured)
+    out: list[dict] = []
+    for g, members in sorted(groups.items(), key=lambda kv: (kv[0].count("/"), kv[0])):
+        seen = done + tuple(o["path"] for o in out)  # configured trees and copies already found
+        if len(members) < MIN_SHARED or g.startswith(seen) or any(s.startswith(g) for s in seen):
+            continue
+
+        def elsewhere(f: str) -> list[str]:
+            return [o for o in by_name[f.rsplit("/", 1)[-1]] if not o.startswith(g) and not o.startswith(seen)]
+
+        shared_files = [f for f in members if elsewhere(f)]
+        if len(shared_files) < MIN_SHARED or len(shared_files) < MIN_SHARE * len(members):
+            continue
+        partners: Counter = Counter(o.split("/")[0] + "/" for f in shared_files for o in elsewhere(f))
+        other, _n = partners.most_common(1)[0]
+        if len(groups.get(other, [])) <= len(members):
+            continue  # the partner is the smaller tree: it would be the copy
+        # the deepest sub-folder that still holds nearly all of the shared files
+        path = g
+        for d in sorted((k for k in groups if k.startswith(g) and k != g), key=lambda k: -k.count("/")):
+            if sum(1 for f in shared_files if f.startswith(d)) >= 0.9 * len(shared_files):
+                path = d
+                break
+        out.append({"path": path, "shared": len(shared_files), "files": len(members), "copy_of": other})
+    return out
+
+
 def detect_agents() -> list[str]:
     """Agents whose CLI is on PATH (the same lookup the installer uses)."""
     from verinoda.agents import installer
@@ -144,6 +198,22 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
     finally:
         st.close()
     snap = res.get("snapshot") or {}
+    try:
+        from verinoda.paths import load_config
+        from verinoda.snapshot import list_files
+
+        configured = [e.get("path") if isinstance(e, dict) else e
+                      for e in (load_config(repo).get("index") or {}).get("reference") or []]
+        sugg = reference_suggestions(repo, list_files(repo), [c for c in configured if isinstance(c, str)])
+    except Exception:  # noqa: BLE001 - a suggestion never fails setup
+        sugg = []
+    if sugg:
+        report["reference_suggestions"] = sugg
+        for s in sugg[:3]:
+            report["warnings"].append(
+                f"{s['path']} looks like a copy of code in {s['copy_of']} ({s['shared']} of its {s['files']} code "
+                f"files share a name there); if it is reference code (an original being ported, a snapshot), "
+                f"run `verinoda setup --reference {s['path'].rstrip('/')}` so it ranks below your own code")
     report["index"] = {
         "mode": "scan" if first else res.get("mode", "update"),
         "files": snap.get("file_count"),

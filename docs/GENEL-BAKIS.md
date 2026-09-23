@@ -220,7 +220,9 @@ dosyaları hiç okumuyordu.
   `Wisp.spawn()` biçimindedir.
 - **Referans ağaçları:** `verinoda setup --reference orijinal-eklenti/=orijinal,eklenti`
   özgün uygulamayı aranabilir tutar, ama soru "orijinal", "eklenti" ya da klasör
-  adını anmadıkça 0,6 katsayıyla sıralar.
+  adını anmadıkça 0,6 katsayıyla sıralar. `setup`, kod dosyalarının çoğu daha büyük bir klasördeki
+  dosyalarla aynı adı taşıyan klasörleri (özgün eklenti, donmuş kopya) bulup bu komutu önerir;
+  kendisi uygulamaz.
 - **Depodan Türkçe adlar:** paralel dil dosyaları (`lang/en_us.json` +
   `lang/tr_tr.json`) sözlüğe "Fener Asası" = `lantern_staff` bilgisini öğretir.
 - **Komut adları:** "`scan` komutu", "init ve scan komutları" gibi ifadeler
@@ -814,7 +816,7 @@ bilgi (50 üzerinden):
 |---|---|---|---|
 | Ham grep+okuma | 33 | 33 | 33 |
 | Graphify | 13 | 13 | 13 |
-| Verinoda analyze | 18 | 25 | **39** |
+| Verinoda analyze | 18 | 25 | **41** |
 | Verinoda retrieve (JSON) | 25 | 32 | **43** |
 | Verinoda retrieve (düz metin) | 34 | 46 | **48** |
 
