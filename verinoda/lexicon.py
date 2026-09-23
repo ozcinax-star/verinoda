@@ -444,11 +444,29 @@ def seed_entries() -> dict[str, tuple[str, ...]]:
     return {k: tuple(v) for k, v in json.loads(raw)["entries"].items()}
 
 
+# Final-consonant softening before a vowel-initial suffix, folded: reddet -> reddediyor,
+# kaydet -> kaydedilir, gerek -> gereği (ğ folds to g), kitap -> kitabı. ç -> c is
+# invisible after folding.
+_SOFTENED = {"t": "d", "k": "g", "p": "b"}
+_VOWELS = frozenset("aeiou")
+
+
 def seed_key_matches(key_word: str, word: str) -> bool:
-    """Does the folded ``word`` start with seed key word ``key_word`` followed only by inflection?"""
-    if not word.startswith(key_word):
+    """Does the folded ``word`` start with seed key word ``key_word`` followed only by inflection?
+
+    The key's last consonant may be softened (``reddet`` matches ``reddediyor``) when
+    a vowel-initial suffix follows it.
+    """
+    if word.startswith(key_word):
+        rest = word[len(key_word):]
+        return len(key_word) >= 5 or tn.is_suffix_chain(rest)
+    soft = _SOFTENED.get(key_word[-1:])
+    if soft is None or len(key_word) < 2:
         return False
-    rest = word[len(key_word):]
+    stem = key_word[:-1] + soft
+    rest = word[len(stem):]
+    if not word.startswith(stem) or not rest or rest[0] not in _VOWELS:
+        return False
     return len(key_word) >= 5 or tn.is_suffix_chain(rest)
 
 

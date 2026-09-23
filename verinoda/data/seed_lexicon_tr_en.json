@@ -2,6 +2,10 @@
  "version": 1,
  "description": "Turkish -> English seed glossary for question understanding (docs/DESIGN.md D6). Keys are fold_tr-folded Turkish stems (a space joins multi-word terms); values are English words. An expansion is used only when its English word occurs in the repository's own vocabulary, and it only proposes candidates - it is never evidence.",
  "entries": {
+  "abone": [
+   "subscribe",
+   "subscriber"
+  ],
   "abonelik": [
    "subscription"
   ],
@@ -19,6 +23,10 @@
   ],
   "adim": [
    "step"
+  ],
+  "adlandir": [
+   "name",
+   "rename"
   ],
   "adres": [
    "address"
@@ -40,6 +48,9 @@
   "anahtar": [
    "key"
   ],
+  "ara katman": [
+   "middleware"
+  ],
   "arabellek": [
    "buffer"
   ],
@@ -57,6 +68,9 @@
   "arguman": [
    "arg",
    "argument"
+  ],
+  "arsiv": [
+   "archive"
   ],
   "asama": [
    "stage",
@@ -151,10 +165,16 @@
   "benzersiz": [
    "unique"
   ],
+  "betik": [
+   "script"
+  ],
   "beyanname": [
    "declaration",
    "return",
    "filing"
+  ],
+  "bicim": [
+   "format"
   ],
   "bilanco": [
    "balance_sheet",
@@ -202,6 +222,9 @@
   "bulut": [
    "cloud"
   ],
+  "buton": [
+   "button"
+  ],
   "cagir": [
    "call",
    "invoke"
@@ -212,6 +235,9 @@
   "cagri": [
    "call",
    "invocation"
+  ],
+  "cakisma": [
+   "conflict"
   ],
   "calisan": [
    "employee",
@@ -226,6 +252,9 @@
    "customer",
    "ledger"
   ],
+  "cerceve": [
+   "framework"
+  ],
   "cevap": [
    "response",
    "reply",
@@ -234,6 +263,10 @@
   "cevir": [
    "convert",
    "translate"
+  ],
+  "ceviri": [
+   "translation",
+   "i18n"
   ],
   "cikar": [
    "remove",
@@ -265,6 +298,9 @@
    "deployment",
    "distribution"
   ],
+  "dal": [
+   "branch"
+  ],
   "deger": [
    "value"
   ],
@@ -292,6 +328,9 @@
    "audit",
    "inspect"
   ],
+  "denetleyici": [
+   "controller"
+  ],
   "departman": [
    "department"
   ],
@@ -313,6 +352,10 @@
   "derle": [
    "compile",
    "build"
+  ],
+  "dinle": [
+   "listen",
+   "listener"
   ],
   "disa aktar": [
    "export"
@@ -411,6 +454,11 @@
    "email",
    "mail"
   ],
+  "es zamanli": [
+   "sync",
+   "synchronous",
+   "concurrent"
+  ],
   "esik": [
    "threshold",
    "limit"
@@ -427,12 +475,25 @@
    "tag",
    "label"
   ],
+  "ev dizin": [
+   "home"
+  ],
+  "ev klasor": [
+   "home"
+  ],
+  "fark": [
+   "diff",
+   "difference"
+  ],
   "fatura": [
    "invoice",
    "bill",
    "billing"
   ],
   "filtre": [
+   "filter"
+  ],
+  "filtrele": [
    "filter"
   ],
   "firma": [
@@ -480,6 +541,9 @@
    "rollback",
    "revert"
   ],
+  "geri yukle": [
+   "restore"
+  ],
   "getir": [
    "fetch",
    "get",
@@ -502,6 +566,10 @@
    "secret",
    "private"
   ],
+  "goc": [
+   "migration",
+   "migrate"
+  ],
   "gonder": [
    "send",
    "post",
@@ -519,6 +587,9 @@
    "body"
   ],
   "grup": [
+   "group"
+  ],
+  "grupla": [
    "group"
   ],
   "guncelle": [
@@ -579,6 +650,9 @@
   "ice aktar": [
    "import"
   ],
+  "icerik": [
+   "content"
+  ],
   "ileti": [
    "message",
    "msg"
@@ -586,6 +660,9 @@
   "iliski": [
    "relation",
    "relationship"
+  ],
+  "imaj": [
+   "image"
   ],
   "imza": [
    "signature",
@@ -600,12 +677,19 @@
   "indirim": [
    "discount"
   ],
+  "insa": [
+   "build",
+   "construct"
+  ],
   "iptal": [
    "cancel",
    "void"
   ],
   "is akisi": [
    "workflow"
+  ],
+  "is parcacig": [
+   "thread"
   ],
   "is parcacigi": [
    "thread"
@@ -633,6 +717,11 @@
   "istisna": [
    "exception"
   ],
+  "izin": [
+   "permission",
+   "allow",
+   "grant"
+  ],
   "izle": [
    "watch",
    "monitor",
@@ -648,6 +737,11 @@
   ],
   "kabul": [
    "accept"
+  ],
+  "kaldir": [
+   "remove",
+   "uninstall",
+   "delete"
   ],
   "kalici": [
    "persistent",
@@ -666,6 +760,9 @@
    "coverage",
    "scope"
   ],
+  "kapsayici": [
+   "container"
+  ],
   "kargo": [
    "shipping",
    "shipment",
@@ -678,6 +775,9 @@
   ],
   "kategori": [
    "category"
+  ],
+  "katman": [
+   "layer"
   ],
   "kayd": [
    "record",
@@ -743,6 +843,21 @@
   "kodla": [
    "encode"
   ],
+  "kok": [
+   "root"
+  ],
+  "kok dizin": [
+   "root"
+  ],
+  "komsu": [
+   "neighbor",
+   "neighbour"
+  ],
+  "komut": [
+   "command",
+   "cmd",
+   "cli"
+  ],
   "konteyner": [
    "container"
   ],
@@ -760,6 +875,10 @@
   "kullanici": [
    "user"
   ],
+  "kume": [
+   "set",
+   "cluster"
+  ],
   "kupon": [
    "coupon",
    "voucher"
@@ -775,6 +894,10 @@
   "kurulum": [
    "install",
    "setup"
+  ],
+  "kutuphane": [
+   "library",
+   "lib"
   ],
   "kuyruk": [
    "queue"
@@ -858,10 +981,18 @@
   "onbellek": [
    "cache"
   ],
+  "onceki": [
+   "previous",
+   "prev"
+  ],
   "ornek": [
    "example",
    "sample",
    "instance"
+  ],
+  "ortalama": [
+   "average",
+   "mean"
   ],
   "ortam": [
    "env",
@@ -885,6 +1016,9 @@
   "paket": [
    "package",
    "pkg"
+  ],
+  "para birim": [
+   "currency"
   ],
   "para birimi": [
    "currency"
@@ -920,10 +1054,16 @@
   ],
   "reddet": [
    "reject",
-   "deny"
+   "deny",
+   "refuse"
   ],
   "rol": [
    "role"
+  ],
+  "saat": [
+   "hour",
+   "clock",
+   "time"
   ],
   "sabit": [
    "constant",
@@ -967,6 +1107,9 @@
    "certificate",
    "cert"
   ],
+  "servis": [
+   "service"
+  ],
   "sifre": [
    "password",
    "secret"
@@ -988,6 +1131,9 @@
   "sil": [
    "delete",
    "remove"
+  ],
+  "sinama": [
+   "test"
   ],
   "sinif": [
    "class"
@@ -1011,6 +1157,9 @@
   "soket": [
    "socket"
   ],
+  "sonraki": [
+   "next"
+  ],
   "sonuc": [
    "result",
    "output",
@@ -1027,6 +1176,9 @@
    "dict",
    "dictionary",
    "map"
+  ],
+  "stil": [
+   "style"
   ],
   "stok": [
    "stock",
@@ -1063,6 +1215,9 @@
    "collection",
    "receipt"
   ],
+  "takvim": [
+   "calendar"
+  ],
   "tamamla": [
    "complete",
    "finish",
@@ -1075,6 +1230,12 @@
   "tanimla": [
    "define",
    "declare"
+  ],
+  "tara": [
+   "scan"
+  ],
+  "tarayici": [
+   "browser"
   ],
   "tarih": [
    "date"
@@ -1106,6 +1267,9 @@
   "telefon": [
    "phone"
   ],
+  "tema": [
+   "theme"
+  ],
   "teminat": [
    "coverage",
    "guarantee"
@@ -1114,6 +1278,16 @@
    "deliver",
    "delivery",
    "shipment"
+  ],
+  "teslimat": [
+   "delivery"
+  ],
+  "tetikle": [
+   "trigger"
+  ],
+  "topla": [
+   "sum",
+   "collect"
   ],
   "toplam": [
    "total",
@@ -1204,6 +1378,9 @@
   "yavas": [
    "slow"
   ],
+  "yayinla": [
+   "publish"
+  ],
   "yaz": [
    "write",
    "save",
@@ -1219,6 +1396,9 @@
   ],
   "yedek": [
    "backup"
+  ],
+  "yeniden adlandir": [
+   "rename"
   ],
   "yeniden baslat": [
    "restart"
@@ -1237,6 +1417,10 @@
    "journal",
    "entry"
   ],
+  "yigin": [
+   "stack",
+   "heap"
+  ],
   "yol": [
    "path",
    "route"
@@ -1248,6 +1432,9 @@
   "yonlendir": [
    "route",
    "redirect",
+   "router"
+  ],
+  "yonlendirici": [
    "router"
   ],
   "yontem": [
@@ -1269,6 +1456,9 @@
   "zaman": [
    "time",
    "timestamp"
+  ],
+  "zaman asim": [
+   "timeout"
   ],
   "zaman asimi": [
    "timeout"

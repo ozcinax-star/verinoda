@@ -1526,10 +1526,29 @@ def draft(question: str, graph, lexicon=None) -> dict:
                 return r
         return _role_of(tok["text"], lex) if lex is not None and lang in ("tr", "mixed") else None
 
+    # multi-word seed phrases ("ev dizininde" -> home) are read before the short-word
+    # filter below would drop a part of them ("ev")
+    phrase_at: dict[int, tuple[int, str]] = {}
+    if lex is not None and lang in ("tr", "mixed"):
+        folded_toks = [tn.fold_tr(tn.split_apostrophe(t["text"])[0]).lower() for t in toks]
+        for hit in lex.seed(folded_toks):
+            if hit["n"] >= 2 and hit["targets"]:
+                phrase_at[hit["start"]] = (hit["n"], hit["targets"][0])
     pending: list[dict] = []
-    for tok in toks:
-        if any(a <= tok["start"] < b for a, b in ref_spans):
+    skip_to = 0
+    for ti, tok in enumerate(toks):
+        if ti < skip_to or any(a <= tok["start"] < b for a, b in ref_spans):
             continue
+        if ti in phrase_at:
+            n, g_en = phrase_at[ti]
+            last = toks[ti + n - 1]
+            if clause_of(last["start"]) == clause_of(tok["start"]) \
+                    and not any(a < last["end"] and tok["start"] < b for a, b in ref_spans):
+                ptok = {"text": question[tok["start"]:last["end"]], "start": tok["start"], "end": last["end"]}
+                pending.append({"tok": ptok, "kind": "domain_concept", "required": False,
+                                "clause": clause_of(tok["start"]), "gloss": g_en, "role_tok": last})
+                skip_to = ti + n
+                continue
         text = tok["text"]
         base, _ = tn.split_apostrophe(text)
         folded = tn.fold_tr(base).lower()
@@ -1578,11 +1597,11 @@ def draft(question: str, graph, lexicon=None) -> dict:
             lk = link_mention(m, graph, lex, with_hash=False)
             if lk["status"] == "unlinked":
                 continue
-        role = role_at(tok)
+        role = role_at(p.get("role_tok") or tok)
         if role:
             m["role"] = role
         if lex is not None and lang in ("tr", "mixed"):
-            g_en = _gloss(lex, tn.split_apostrophe(tok["text"])[0])
+            g_en = p.get("gloss") or _gloss(lex, tn.split_apostrophe(tok["text"])[0])
             if g_en:
                 m["gloss_en"] = g_en
         if len(mentions) >= LIMITS["mentions"]:
@@ -1755,14 +1774,17 @@ def retrieval_inputs(plan: dict, check_result: dict, sq: dict, lexicon=None, *,
     expansions: dict[str, list[str]] = {}
     text = sq.get("text") or ""
     user_text = sq.get("text_user_lang") or ""
-    words = []
+    words, seq = [], []  # content words; every word in order (multi-word seed keys need adjacency)
     for t in tn.raw_tokens(text + " " + (user_text if user_text != text else "")):
         for w in re.findall(r"[a-z0-9_]+", tn.fold_tr(t).lower()):
+            seq.append(w)
             if len(w) >= 3 and w not in tn.TR_STOPWORDS and w not in tn.EN_STOPWORDS and w not in words:
                 words.append(w)
     if lexicon is not None:
-        for hit in lexicon.seed(words):
-            src = " ".join(words[hit["start"]:hit["start"] + hit["n"]])
+        for hit in lexicon.seed(seq):
+            src = " ".join(seq[hit["start"]:hit["start"] + hit["n"]])
+            if hit["n"] == 1 and src not in words:
+                continue  # a single short or stop word keeps being ignored
             if hit["targets"] and not all(lexicon.has(x) for x in src.split()):
                 expansions.setdefault(src, [])
                 expansions[src] += [t for t in hit["targets"] if t not in expansions[src]]

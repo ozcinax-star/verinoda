@@ -217,6 +217,26 @@ def test_seed_dictionary_is_grounded_and_longest_key_wins(shop):
     assert two[0]["key"] == "ortam degisken" and two[0]["n"] == 2
 
 
+def test_seed_keys_match_softened_final_consonants():
+    """reddet -> reddediyor, istek -> isteği, grup -> grubu; only before a vowel-initial suffix."""
+    keys = lambda w: [k for _, _, k, _ in lexicon.seed_lookup([w])]  # noqa: E731
+    assert keys("reddediyor") == ["reddet"] and "refuse" in lexicon.seed_entries()["reddet"]
+    assert keys("istegi") == ["istek"] and keys("grubu") == ["grup"] and keys("esigi") == ["esik"]
+    assert keys("egitim") == [] and keys("reddedm") == []  # softened stem needs a vowel after it
+    assert not lexicon.seed_key_matches("istek", "istegx")
+
+
+def test_seed_covers_command_and_home_directory_words():
+    """Found by running Verinoda on its own repo: "init ve scan komutları ev dizininde ... reddediyor mu?"."""
+    from verinoda import textnorm as tn
+
+    words = [tn.fold_tr(w) for w in "init ve scan komutları ev dizininde çalıştırılınca reddediyor mu".split()]
+    found = {words[s]: (k, t) for s, _, k, t in lexicon.seed_lookup(words)}
+    assert found["komutlari"][0] == "komut" and "command" in found["komutlari"][1]
+    assert found["ev"] == ("ev dizin", ("home",))
+    assert found["reddediyor"][0] == "reddet"
+
+
 def test_seed_file_entries_are_folded_and_nonempty():
     entries = lexicon.seed_entries()
     assert len(entries) >= 200

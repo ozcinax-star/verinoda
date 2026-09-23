@@ -348,6 +348,39 @@ def test_files_changed_after_indexing_are_reported(tmp_path):
     assert "changed since indexing" in retrieval.render_text(res)
 
 
+def test_near_and_query_pairs():
+    a, b = frozenset({"hom"}), frozenset({"directory"})
+    assert search_index._near(["the", "hom", "directory"], a, b)
+    assert search_index._near(["directory", "hom"], a, b)                    # either order
+    assert not search_index._near(["directory", "of", "hom"], a, b)          # adjacent only (gap 1)
+    assert not search_index._near(["hom", "x", "y", "z", "directory"], a, b)
+    pairs = search_index._query_pairs(["home", "directory", "resolution"])
+    assert pairs == [(frozenset({"hom"}), frozenset({"directory"})),
+                     (frozenset({"directory"}), frozenset({"resolution"}))]
+    assert search_index._query_pairs(["home"]) == []
+
+
+def test_adjacent_question_words_lift_the_passage_that_uses_them_together(tmp_path):
+    """Found by running Verinoda on itself: "home directory" ranked the function whose
+    docstring says "The home directory ..." below functions that merely repeat a
+    ``home`` parameter and mention a directory somewhere else."""
+    root = tmp_path / "prox"
+    _write(root, "pkg/installer.py", (
+        "def copy_files(home, target, home_backup, home_cache):\n"
+        "    '''Copy home files, home backups and home caches.'''\n"
+        "    for name in (home, home_backup, home_cache):\n"
+        "        print('home', name, target)\n"
+        "    # the target directory must exist\n"
+        "    return target\n"))
+    _write(root, "pkg/paths.py", (
+        "def find_root(start):\n"
+        "    '''The nearest project above start; the home directory is never used.'''\n"
+        "    return start\n"))
+    g = _scan(root)
+    rk = search_index.rank(g, "home directory", ppr=False)
+    assert rk.hits[0].name == "find_root", [(h.name, round(h.score, 3)) for h in rk.hits[:3]]
+
+
 def test_no_file_cap_every_indexed_file_is_searchable(tmp_path):
     """The old per-query scan silently stopped after 400 files."""
     root = tmp_path / "many"

@@ -26,7 +26,10 @@ Turkish letters are folded first, so ``sipariş`` and ``siparis`` agree.
 **Ranking** (:func:`rank`) is BM25F (Robertson & Zaragoza 2009) per passage
 with fields name (weight 3.0, b 0.3), path (weight 0.5) and body (b 0.75),
 k1 1.2; idf is counted per *unit*; a unit scores its best passage, divided by
-the best unit's score. A unit whose name the question spells out as code
+the best unit's score. A passage of code (not of prose: documentation
+repeats command names side by side), or a unit name, in which two adjacent
+words of the question are also adjacent (``home directory``) counts
+``1 + 0.3`` times. A unit whose name the question spells out as code
 (``_query_terms``, ``OrderRepository.save``) gets lexical score 1.0. A
 personalised PageRank computed by local push (Andersen, Chung & Lang 2006;
 alpha 0.3, eps 1e-4, at most 20k pushes) from the top lexical units adds
@@ -80,6 +83,9 @@ REL_WEIGHTS = {"calls": (1.0, 0.6), "uses": (0.5, 0.3), "inherits": (0.5, 0.3), 
                "references": (0.4, 0.2), "imports_from": (0.15, 0.1)}
 EXPANSION_WEIGHT = 0.5            # abbreviation / prefix / Turkish-stem expansions
 PROVIDED_EXPANSION_WEIGHT = 0.7   # expansions supplied by the caller (question plan, lexicon)
+PROX_BOOST = 0.3                  # code passage factor when two adjacent question words are adjacent in it
+PROX_GAP = 1                      # "adjacent": at most this many tokens apart, in either order
+PROX_CANDIDATES = 300             # passages checked for proximity, best term coverage first
 MAX_FILE_BYTES = 4_000_000        # larger files are not indexed (reported in stats)
 PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc")
 MAX_SIG_CHARS = 220
@@ -1018,6 +1024,75 @@ def personalized_pagerank(g, seeds: dict[str, float], nid_uid: dict[str, int], *
     return dict(p), pushes
 
 
+def _query_pairs(words: list[str]) -> list[tuple[frozenset, frozenset]]:
+    """Token sets of consecutive content words of the question ("home directory")."""
+    sets = [frozenset(word_tokens(w)) for w in words]
+    return [(a, b) for a, b in zip(sets, sets[1:]) if a and b and not (a & b)]
+
+
+def _near(seq: list[str], a: frozenset, b: frozenset, gap: int = PROX_GAP) -> bool:
+    """Do tokens of ``a`` and ``b`` occur at most ``gap`` positions apart in ``seq``?"""
+    last_a = last_b = -(10 ** 9)
+    for i, t in enumerate(seq):
+        if t in a:
+            if i - last_b <= gap:
+                return True
+            last_a = i
+        elif t in b:
+            if i - last_a <= gap:
+                return True
+            last_b = i
+    return False
+
+
+def _proximity(g, conn: sqlite3.Connection, h: "Handle", q: "QueryTerms",
+               acc: dict[int, dict[str, float]], name_tf: dict[int, dict[str, int]],
+               qw: dict[str, float]) -> tuple[set[int], set[int]]:
+    """Passages (pids) and unit names (uids) where two adjacent question words occur near each other.
+
+    Only the user's own words count (not expansions). Passage text is re-read from the
+    working tree, so a file edited since indexing can only lose or gain this bonus.
+    """
+    pairs = _query_pairs(q.words)
+    if not pairs:
+        return set(), set()
+    want = set().union(*(a | b for a, b in pairs))
+
+    def has_pair(keys) -> bool:
+        return any(keys & a and keys & b for a, b in pairs)
+
+    cand = [pid for pid, a_p in acc.items() if len(want & a_p.keys()) >= 2 and has_pair(a_p.keys())]
+    cand.sort(key=lambda pid: (-sum(qw.get(t, 0.0) for t in acc[pid]), pid))
+    cand = cand[:PROX_CANDIDATES]
+    hit_p: set[int] = set()
+    if cand:
+        rows = _fetch(conn, "SELECT p.pid, p.a, p.b, u.file, u.kind FROM passages p JOIN units u ON u.uid = p.uid "
+                            "WHERE p.pid IN ({ph})", cand)
+        lines_of: dict[str, list[str] | None] = {}
+        root = Path(getattr(g, "root", None) or ".")
+        for pid, a, b, f, kind in rows:
+            if kind == "prose":
+                continue  # documentation repeats command names ("graphify update") next to each other
+            if f not in lines_of:
+                try:
+                    lines_of[f] = (root / f).read_text(encoding="utf-8", errors="replace").splitlines()
+                except OSError:
+                    lines_of[f] = None
+            lines = lines_of[f]
+            if not lines:
+                continue
+            seq = tokens("\n".join(lines[max(0, a - 1):b]))
+            if any(_near(seq, x, y) for x, y in pairs):
+                hit_p.add(pid)
+    hit_u: set[int] = set()
+    for uid, ntf in name_tf.items():
+        if has_pair(ntf.keys()) and uid in h.units:
+            seq = tokens(h.units[uid][3] or "")
+            if any(_near(seq, x, y) for x, y in pairs):
+                hit_u.add(uid)
+    return hit_p, hit_u
+
+
 def _fetch(conn: sqlite3.Connection, sql: str, keys: list, extra: tuple = ()) -> list:
     out: list = []
     for k in range(0, len(keys), 900):
@@ -1067,6 +1142,7 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
         per_unit: dict[int, list[tuple[float, int]]] = {}
         qw = {t: q.weights[t] * idf[t] for t in terms}
         order_of = {t: k for k, t in enumerate(terms)}
+        prox_p, prox_u = _proximity(g, conn, h, q, acc, name_tf, qw)
         empty: dict = {}
         for uid, pids in unit_pids.items():
             row = h.units.get(uid)
@@ -1086,6 +1162,8 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
                 for t in sorted(a_p.keys() | fixed.keys(), key=order_of.__getitem__):
                     tf = a_p.get(t, 0.0) + fixed.get(t, 0.0)
                     s += qw[t] * tf / (K1 + tf)
+                if pid in prox_p or uid in prox_u:
+                    s *= 1 + PROX_BOOST
                 scored.append((s, pid))
             scored.sort(key=lambda x: (-x[0], x[1]))
             per_unit[uid] = scored

@@ -198,6 +198,7 @@ il ul in un n l is us s t it ut dir tir dur tur ir ur ar er
 iyor uyor yor abil ebil ma me mis mus di du ti tu ken ince unca arak erek ip up
 an en yan yen dik duk tik tuk dig dug tig tug acak ecek yacak yecek
 lik luk li lu siz suz ce ca da de ta te
+u um su umuz unuz muz nuz
 """.split()), key=len, reverse=True))
 
 _EN_SUFFIXES = (("ations", 4), ("ation", 4), ("ments", 4), ("ment", 4), ("ings", 4), ("ing", 4),
