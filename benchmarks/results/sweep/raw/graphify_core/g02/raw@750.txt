@@ -1,0 +1,35 @@
+$ grep -rniE 'functions|graphify|query|command|call|turn|question|graph|context' .   # 17827 matching lines in 225 files
+graphify/build.py:1: # assemble node+edge dicts into a NetworkX graph, preserving edge direction
+graphify/build.py:9: # 2. Between files (build): NetworkX G.add_node() is idempotent — calling it
+graphify/build.py:10: #    twice with the same ID overwrites the attributes with the second call's
+graphify/build.py:14: #    carry richer labels and cross-file context, while AST nodes have precise
+graphify/build.py:18: # 3. Semantic merge (skill): before calling build(), the skill merges cached
+graphify/build.py:21: #    before any graph construction happens.
+graphify/build.py:34: from .paths import default_graph_json as _default_graph_json
+graphify/build.py:51: return o == "ast"
+graphify/build.py:53: return isinstance(loc, str) and bool(_AST_LOC_RE.match(loc))
+graphify/build.py:57: # HOW. An extractor that finds a specific fact for a pair — a call, an import, an
+graphify/build.py:59: # simple graph collapses the pair to one edge, the generic one must never be the
+graphify/build.py:61: # every relation: ranking `contains` against `calls` would be inventing a
+graphify/build.py:67: # graph (stdlib, a third-party dependency, another repo). Historically the edge
+graphify/build.py:68: # to such a target was dropped, which left the in-memory graph clean but let the
+graphify/build.py:69: # on-disk graph.json (written by the incremental update path) keep the edge with
+graphify/build.py:72: # external stub node so every edge endpoint resolves. Deliberately NOT `calls`:
+graphify/build.py:73: # a sourceless external call target is suppressed on purpose (#3156) to avoid a
+graphify/build.py:80: def _mint_external_stub(G: "nx.Graph", node_set: set, nid: str) -> None:
+graphify/build.py:85: than warning on a missing ``file_type``). ``merge-graphs`` reads the
+graphify/build.py:90: return
+graphify/build.py:107: needs the same stubbing to keep the on-disk graph.json free of undeclared
+graphify/build.py:108: edge endpoints (#2873). Idempotent: a graph already carrying its stubs (from
+graphify/build.py:116: return
+graphify/build.py:141: # graph; C/C++/ObjC share a compilation unit via headers; JVM langs share bytecode),
+graphify/build.py:142: # so a legitimate TS->JS import or C impl->header call survives, while a Python
+graphify/build.py:143: # `import time` binding to a `time.ts` (#1749) or a cross-language INFERRED `calls`
+graphify/build.py:179: # Hyperedge member lists are canonically keyed `nodes` (see graphify/llm.py
+graphify/build.py:180: # extraction spec), but LLM/subagent drift and externally-supplied graph.json
+graphify/build.py:207: f"[graphify] WARNING: hyperedge "
+graphify/build.py:216: f"[graphify] WARNING: hyperedge "
+graphify/build.py:226: return coerced
+graphify/build.py:241: return
+graphify/build.py:250: f"[graphify] WARNING: hyperedge "
+... (17794 more matching lines not shown)

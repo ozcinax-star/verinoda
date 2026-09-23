@@ -1,0 +1,43 @@
+# What happens when an order is submitted with no items?
+## orders/service.py:12-16 def validate_items(items: list[dict]) -> None
+  calls: ValidationError@14
+  called by: place_order (orders/service.py:20)
+def validate_items(items: list[dict]) -> None:
+    if not items:
+        raise ValidationError("order has no items")
+    if len(items) > MAX_ITEMS_PER_ORDER:
+        raise ValidationError("too many items")
+## orders/service.py:19-22 def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int
+  calls: validate_items@20, compute_total@21, save@22?
+  called by: create_order_handler (orders/api.py:18); test_empty_order_rejected (tests/test_service.py:15); test_place_and_fetch_roundtrip (tests/test_service.py:9)
+def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+    validate_items(items)
+    total = compute_total(items)
+    return repo.save(customer, total)
+## orders/pricing.py:6-8 def compute_total(items: list[dict]) -> float
+  calls: apply_discount@8
+  called by: place_order (orders/service.py:21); test_compute_total (tests/test_pricing.py:13)
+def compute_total(items: list[dict]) -> float:
+    subtotal = sum(i["price"] * i["qty"] for i in items)
+    return apply_discount(subtotal)
+## orders/config.py:10-15 def load_settings() -> dict
+def load_settings() -> dict:
+    return {
+        "database_url": DATABASE_URL,
+        "max_items": MAX_ITEMS_PER_ORDER,
+        "discount_threshold": DISCOUNT_THRESHOLD,
+    }
+## orders/config.py:5-7 DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+MAX_ITEMS_PER_ORDER = int(os.environ.get("ORDERS_MAX_ITEMS", "50"))
+DISCOUNT_THRESHOLD = float(os.environ.get("ORDERS_DISCOUNT_THRESHOLD", "100.0"))
+## orders/api.py:16-21 def create_order_handler(payload: dict) -> tuple[int, dict]
+def create_order_handler(payload: dict) -> tuple[int, dict]:
+    try:
+        order_id = place_order(get_repo(), payload["customer"], payload["items"])
+    except ValidationError as exc:
+        return 400, {"error": str(exc)}
+    return 201, {"id": order_id}
+## orders/repository.py:8-26 class OrderRepository
+… 17 more candidates not shown: orders/service.py:8-9 class ValidationError(ValueError); tests/test_service.py:13-15 test_empty_order_rejected; orders/pricing.py:11-15 apply_discount; tests/test_service.py:7-10 test_place_and_fetch_roundtrip
+next: repoatlas query "What happens when an order is submitted with no items?" --max-chars 6000

@@ -1,0 +1,24 @@
+{
+ "schema": "verinoda.http_cassette/1",
+ "key": "38e420e1308d5934ac79cbb9c0714d7503677723",
+ "request": {
+  "method": "GET",
+  "url": "https://app.readthedocs.org/api/v3/projects/requests/versions/stable/",
+  "headers": {
+   "User-Agent": "<redacted>"
+  }
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json"
+  },
+  "final_url": "https://app.readthedocs.org/api/v3/projects/requests/versions/stable/",
+  "body_sha256": "eda4eeeaa5cb4cab114727357dbf483c1cc926c99b9af2a2e1baf1ed5729d456",
+  "body_text": "{\"_links\":{\"_self\":\"https://app.readthedocs.org/api/v3/projects/requests/versions/stable/\",\"builds\":\"https://app.readthedocs.org/api/v3/projects/requests/versions/stable/builds/\",\"project\":\"https://app.readthedocs.org/api/v3/projects/requests/\"},\"active\":true,\"aliases\":[],\"built\":true,\"downloads\":{\"epub\":\"https://requests.readthedocs.io/_/downloads/en/stable/epub/\",\"pdf\":\"https://requests.readthedocs.io/_/downloads/en/stable/pdf/\"},\"hidden\":false,\"id\":1654288,\"identifier\":\"6e83187b8feb273ed4c6cdab5efd8d54901dfab3\",\"privacy_level\":\"public\",\"ref\":\"v2.34.2\",\"slug\":\"stable\",\"type\":\"tag\",\"urls\":{\"dashboard\":{\"edit\":\"https://app.readthedocs.org/dashboard/requests/version/stable/edit/\"},\"documentation\":\"https://requests.readthedocs.io/en/stable/\",\"vcs\":\"https://github.com/requests/requests/tree/v2.34.2/\"},\"verbose_name\":\"stable\"}",
+  "body_b64": null,
+  "trimmed": false
+ },
+ "recorded_at": "2026-09-22T23:15:47Z",
+ "recorder": "tools/record_reference_cassettes.py/1"
+}

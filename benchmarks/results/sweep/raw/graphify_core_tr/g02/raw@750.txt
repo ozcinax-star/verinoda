@@ -1,0 +1,32 @@
+$ grep -rniE 'graphify|query|komutu|bir|soruyu|graf|bağlamına|çevirmek|için|hangi|fonksiyonları|çağırıyor' .   # 7178 matching lines in 220 files
+graphify/extractors/sql.py:1: """Sql extractor. Moved verbatim from graphify/extract.py."""
+graphify/extractors/sql.py:7: from graphify.extractors.base import _file_stem, _make_id
+graphify/extractors/sql.py:407: # Dialect-specific syntax (e.g. Firebird COMPUTED BY) causes ERROR
+graphify/extractors/sql.py:585: Scoping matters: a CTE is visible only inside the query that declares it,
+graphify/extractors/sql.py:586: and a `WITH` inside a subquery is scoped to that subquery alone. So the
+graphify/extractors/sql.py:588: children (`create_query` for a statement-level WITH, `subquery` for a
+graphify/extractors/sql.py:591: to a real table that merely shares a subquery-CTE's name
+graphify/extractors/sql.py:661: # (e.g. Firebird COMPUTED BY columns push constraints out of the tree entirely).
+graphify/cli.py:1: """graphify command dispatch — every non-install subcommand.
+graphify/cli.py:5: module. The path-redirect (`graphify <path>` -> extract) re-enters via a lazy
+graphify/cli.py:14: from graphify.paths import GRAPHIFY_OUT as _GRAPHIFY_OUT
+graphify/cli.py:22: 'MANDATORY: graphify-out/graph.json exists. You MUST run '
+graphify/cli.py:23: '`graphify query "<question>"` before grepping raw files. Only grep '
+graphify/cli.py:24: 'after graphify has oriented you, or to modify/debug specific lines.'
+graphify/cli.py:32: 'MANDATORY: graphify-out/graph.json exists. You MUST run graphify '
+graphify/cli.py:33: 'before reading source files. Use: `graphify query "<question>"` '
+graphify/cli.py:34: '(scoped subgraph), `graphify explain "<concept>"`, or '
+graphify/cli.py:35: '`graphify path "<A>" "<B>"`. Only read raw files after graphify has '
+graphify/cli.py:46: 'graphify-out/graph.json exists but may be STALE for this file (the file '
+graphify/cli.py:47: 'changed after the last build). Prefer `graphify query "<question>"` for '
+graphify/cli.py:48: 'orientation, and run `graphify update` to refresh the graph. Reading the '
+graphify/cli.py:62: 'graphify strict mode: this project has a fresh knowledge graph that covers '
+graphify/cli.py:63: 'this file. Run `graphify query "<your question>"` (or `graphify explain` / '
+graphify/cli.py:64: '`graphify path`) FIRST to orient yourself, then re-issue this Read — it '
+graphify/cli.py:66: 'files to modify or debug specific lines is fine after one query. Apply the '
+graphify/cli.py:77: 'graphify: knowledge graph at graphify-out/. For focused questions, run '
+graphify/cli.py:78: '`graphify query "<question>"` (scoped subgraph, usually much smaller than '
+graphify/cli.py:85: return str(Path(_GRAPHIFY_OUT) / "graph.json")
+graphify/cli.py:117: Mirrors the #1890 path normalization in graphify.llm.
+graphify/cli.py:213: f"[graphify extract] semantic extraction is incomplete: unverified semantic "
+... (7148 more matching lines not shown)

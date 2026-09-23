@@ -1,0 +1,1 @@
+$ grep -rniE 'sipariş|veritabanına|nerede|yazılıyor' .   # 0 matching lines in 0 files

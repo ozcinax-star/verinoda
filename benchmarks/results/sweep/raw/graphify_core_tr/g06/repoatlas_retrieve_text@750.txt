@@ -1,0 +1,32 @@
+# Graphify sorgu terimlerinden neden stopword'leri atıyor?
+expanded: terimlerinden->term (turkish stem 'ter'); terimlerinden->terminal (turkish stem 'ter'); terimlerinden->terraform (turkish stem 'ter'); graphify->install (lexicon); graphify->uninstall (lexicon); graphify->hook (lexicon)
+## graphify/serve.py:281-300 def _query_terms(question: str) -> list[str]
+  doc: Split a query into searchable terms, segmenting Chinese text, then drop question/filler words (`_QUERY_STOPWORDS`, English plus common German/ Romance-language…
+  calls: _has_chinese@289, _segment_chinese@290, _is_searchable@292
+  called by: _query_subgraph_tokens (graphify/benchmark.py:39); _query_graph_text (graphify/serve.py:1359)
+  const graphify/serve.py:249: _QUERY_STOPWORDS = frozenset({
+def _query_terms(question: str) -> list[str]:
+    """Split a query into searchable terms, segmenting Chinese text, then drop
+    question/filler words (`_QUERY_STOPWORDS`, English plus common German/
+    Romance-language fillers) so content words drive seeding. Falls back to the
+    unfiltered terms if the query is all stopwords, so a question like "how does
+    it work" or "wie funktioniert das" still seeds on something."""
+    terms: list[str] = []
+    for raw in question.split():
+        if _has_chinese(raw):
+            for seg in _segment_chinese(raw.lower().strip()):
+                seg = seg.strip()
+                if seg and _is_searchable(seg):
+                    terms.append(seg)
+        else:
+            # Strip punctuation without touching Unicode characters (avoid NFKD mangling non-Latin scripts)
+            for tok in re.findall(r"\w+", raw.lower()):
+                if _is_searchable(tok):
+                    terms.append(tok)
+    content = [t for t in terms if t not in _QUERY_STOPWORDS]
+    return content or terms
+## graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+  calls: _custom_providers_path@1069, provider_base_url_ok@1140, cmd_prs@1184, install@1194, uninstall@1196, status@1198, _default_graph_path@1214, _enforce_graph_size_cap_or_exit@1251, graph_has_legacy_ids@1287, _query_graph_text@1302, log_query@1311, _touch_query_stamp@1321 (+107)
+  called by: _run_cli (graphify/__main__.py:751)
+… 1635 more candidates not shown: graphify/serve.py:239-250 # set of question/filler words. Diacritics are kept intact (the query tokenizer; graphify/skills/agents/references/hooks.md:5-19 ## For git commit hook; graphify/skills/amp/references/hooks.md:5-19 ## For git commit hook; graphify/dedup.py:118-124 _STOPWORDS
+next: repoatlas query "Graphify sorgu terimlerinden neden stopword'leri atıyor?" --max-chars 6000

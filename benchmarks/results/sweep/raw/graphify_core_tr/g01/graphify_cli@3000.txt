@@ -1,0 +1,82 @@
+Graph: graphify-out/graph.json (4092 nodes) | Traversal: BFS depth=2 | Start: ['graphify', 'Token-reduction benchmark - measures how much context graphify saves vs naive…', 'Estimate USD cost for a given token count using published pricing.'] | 24 nodes found
+
+NODE graphify [src=graphify/always_on/agents-md.md loc=L1 community=agents-md.md]
+NODE Token-reduction benchmark - measures how much context graphify saves vs naive… [src=graphify/benchmark.py loc=L1 community=sys]
+NODE Estimate USD cost for a given token count using published pricing. [src=graphify/llm.py loc=L3066 community=cli.py]
+NODE benchmark.py [src=graphify/benchmark.py loc=L1 community=sys]
+NODE estimate_cost() [src=graphify/llm.py loc=L3065 community=cli.py]
+NODE agents-md.md [src=graphify/always_on/agents-md.md loc=L1 community=agents-md.md]
+NODE cli.py [src=graphify/cli.py loc=L1 community=cli.py]
+NODE dispatch_command() [src=graphify/cli.py loc=L1064 community=cli.py]
+NODE llm.py [src=graphify/llm.py loc=L1 community=llm.py]
+NODE serve.py [src=graphify/serve.py loc=L1 community=serve.py]
+NODE build.py [src=graphify/build.py loc=L1 community=build.py]
+NODE paths.py [src=graphify/paths.py loc=L1 community=paths.py]
+NODE sys [src= loc= community=sys]
+NODE edge_data() [src=graphify/build.py loc=L608 community=sys]
+NODE networkx [src= loc= community=networkx]
+NODE default_graph_json() [src=graphify/paths.py loc=L368 community=default_graph_json]
+NODE load_node_link_graph() [src=graphify/paths.py loc=L474 community=sys]
+NODE _query_terms() [src=graphify/serve.py loc=L281 community=_query_terms]
+NODE _query_subgraph_tokens() [src=graphify/benchmark.py loc=L37 community=sys]
+NODE run_benchmark() [src=graphify/benchmark.py loc=L85 community=sys]
+NODE print_benchmark() [src=graphify/benchmark.py loc=L136 community=sys]
+NODE _hr() [src=graphify/benchmark.py loc=L28 community=sys]
+NODE _safe() [src=graphify/benchmark.py loc=L14 community=sys]
+NODE _estimate_tokens() [src=graphify/benchmark.py loc=L33 community=sys]
+EDGE Estimate USD cost for a given token count using published pricing. --rationale_for [EXTRACTED]--> estimate_cost() at=graphify/llm.py:L3066
+EDGE agents-md.md --contains [EXTRACTED]--> graphify at=graphify/always_on/agents-md.md:L1
+EDGE Token-reduction benchmark - measures how much context graphify saves vs naive… --rationale_for [EXTRACTED]--> benchmark.py at=graphify/benchmark.py:L1
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> estimate_cost() at=graphify/cli.py:L4410
+EDGE cli.py --imports [EXTRACTED context=import]--> estimate_cost() at=graphify/cli.py:L3688
+EDGE llm.py --contains [EXTRACTED]--> estimate_cost() at=graphify/llm.py:L3065
+EDGE benchmark.py --imports [EXTRACTED context=import]--> load_node_link_graph() at=graphify/benchmark.py:L103
+EDGE benchmark.py --imports [EXTRACTED context=import]--> sys at=graphify/benchmark.py:L3
+EDGE benchmark.py --imports [EXTRACTED context=import]--> networkx at=graphify/benchmark.py:L4
+EDGE benchmark.py --imports [EXTRACTED context=import]--> edge_data() at=graphify/benchmark.py:L6
+EDGE benchmark.py --imports [EXTRACTED context=import]--> _query_terms() at=graphify/benchmark.py:L7
+EDGE benchmark.py --imports [EXTRACTED context=import]--> default_graph_json() at=graphify/benchmark.py:L8
+EDGE benchmark.py --imports_from [EXTRACTED context=import]--> build.py at=graphify/benchmark.py:L6
+EDGE benchmark.py --imports_from [EXTRACTED context=import]--> serve.py at=graphify/benchmark.py:L7
+EDGE benchmark.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/benchmark.py:L8
+EDGE benchmark.py --contains [EXTRACTED]--> print_benchmark() at=graphify/benchmark.py:L136
+EDGE benchmark.py --contains [EXTRACTED]--> _safe() at=graphify/benchmark.py:L14
+EDGE benchmark.py --contains [EXTRACTED]--> _hr() at=graphify/benchmark.py:L28
+EDGE benchmark.py --contains [EXTRACTED]--> _estimate_tokens() at=graphify/benchmark.py:L33
+EDGE benchmark.py --contains [EXTRACTED]--> _query_subgraph_tokens() at=graphify/benchmark.py:L37
+EDGE benchmark.py --contains [EXTRACTED]--> run_benchmark() at=graphify/benchmark.py:L85
+EDGE _query_subgraph_tokens() --calls [EXTRACTED context=call]--> _estimate_tokens() at=graphify/benchmark.py:L73
+EDGE _hr() --calls [EXTRACTED context=call]--> _safe() at=graphify/benchmark.py:L30
+EDGE print_benchmark() --calls [EXTRACTED context=call]--> _hr() at=graphify/benchmark.py:L143
+EDGE print_benchmark() --calls [EXTRACTED context=call]--> _safe() at=graphify/benchmark.py:L144
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> print_benchmark() at=graphify/cli.py:L3150
+EDGE cli.py --imports [EXTRACTED context=import]--> print_benchmark() at=graphify/cli.py:L3136
+EDGE _query_subgraph_tokens() --calls [EXTRACTED context=call]--> _query_terms() at=graphify/benchmark.py:L39
+EDGE _query_subgraph_tokens() --calls [EXTRACTED context=call]--> edge_data() at=graphify/benchmark.py:L70
+EDGE run_benchmark() --calls [EXTRACTED context=call]--> _query_subgraph_tokens() at=graphify/benchmark.py:L115
+EDGE run_benchmark() --calls [EXTRACTED context=call]--> load_node_link_graph() at=graphify/benchmark.py:L104
+EDGE run_benchmark() --calls [EXTRACTED context=call]--> default_graph_json() at=graphify/benchmark.py:L99
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> run_benchmark() at=graphify/cli.py:L3149
+EDGE cli.py --imports [EXTRACTED context=import]--> run_benchmark() at=graphify/cli.py:L3136
+EDGE build.py --imports [EXTRACTED context=import]--> sys at=graphify/build.py:L28
+EDGE build.py --imports [EXTRACTED context=import]--> networkx at=graphify/build.py:L32
+EDGE build.py --imports [EXTRACTED context=import]--> default_graph_json() at=graphify/build.py:L34
+EDGE build.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/build.py:L35
+EDGE serve.py --imports_from [EXTRACTED context=import]--> build.py at=graphify/serve.py:L17
+EDGE build.py --contains [EXTRACTED]--> edge_data() at=graphify/build.py:L608
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> edge_data() at=graphify/cli.py:L1799
+EDGE cli.py --imports [EXTRACTED context=import]--> edge_data() at=graphify/cli.py:L1792
+EDGE serve.py --imports [EXTRACTED context=import]--> edge_data() at=graphify/serve.py:L17
+EDGE cli.py --imports [EXTRACTED context=import]--> sys at=graphify/cli.py:L12
+EDGE cli.py --imports [EXTRACTED context=import]--> load_node_link_graph() at=graphify/cli.py:L2582
+EDGE cli.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/cli.py:L14
+EDGE cli.py --contains [EXTRACTED]--> dispatch_command() at=graphify/cli.py:L1064
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> load_node_link_graph() at=graphify/cli.py:L2583
+EDGE llm.py --imports [EXTRACTED context=import]--> sys at=graphify/llm.py:L13
+EDGE serve.py --imports_from [EXTRACTED context=submodule_import]--> paths.py at=graphify/serve.py:L1815
+EDGE paths.py --contains [EXTRACTED]--> default_graph_json() at=graphify/paths.py:L368
+EDGE paths.py --contains [EXTRACTED]--> load_node_link_graph() at=graphify/paths.py:L474
+EDGE serve.py --imports [EXTRACTED context=import]--> default_graph_json() at=graphify/serve.py:L18
+EDGE serve.py --imports [EXTRACTED context=import]--> networkx at=graphify/serve.py:L14
+EDGE serve.py --imports [EXTRACTED context=import]--> sys at=graphify/serve.py:L7
+EDGE serve.py --contains [EXTRACTED]--> _query_terms() at=graphify/serve.py:L281

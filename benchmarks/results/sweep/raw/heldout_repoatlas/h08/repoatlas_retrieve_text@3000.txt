@@ -1,0 +1,133 @@
+# Which tests cover stale claim invalidation?
+## tests/test_claims.py:492-497 def test_stale_cannot_be_requested_at_creation(env)
+  calls: make@496, src@496
+def test_stale_cannot_be_requested_at_creation(env):
+    repo, st, cl = env
+    n = st.one("SELECT COUNT(*) AS n FROM claims")["n"]
+    with pytest.raises(ClaimRuleError, match="stale is set only by invalidation"):
+        make(cl, "stale", [(src(repo), "supports")])
+    assert st.one("SELECT COUNT(*) AS n FROM claims")["n"] == n  # nothing half-created
+## tests/test_analysis.py:163-193 def test_test_run_claim_goes_stale_and_is_only_restored_by_a_fresh_run(tmp_path)
+  calls: _copy_example@164, init@165, open_store@166, scan@168, analyze@169, update@175, verify@177, Claims@183
+  tests/test_analysis.py:168-176
+        workflow.scan(st, repo)
+        res = analysis.analyze(st, repo, "Which tests cover compute_total?", run_tests=True, challenge=False)
+        c = next(c for c in res["claims"] if c["text"].startswith("Tests that reach `compute_total()`"))
+        assert c["status"] == "experiment_verified"
+        p = repo / "orders" / "pricing.py"
+        original = p.read_text(encoding="utf-8")
+        p.write_text(original + "\n# harmless trailing comment\n", encoding="utf-8")
+        assert c["id"] in {s["id"] for s in workflow.update(st, repo)["stale"]}
+
+  tests/test_analysis.py:180-184
+
+        v = workflow.verify(st, repo, c["id"], run=True)
+        assert v["experiment"]["outcome"] == "pass" and v["after"]["status"] == "experiment_verified"
+        assert Claims(st, repo).get(c["id"])["snapshot_id"] == st.latest_snapshot()["id"]
+
+## tests/test_snapshot_stale.py:244-260 def test_memory_from_a_stale_claim_is_invalidated_not_deleted(proj)
+  calls: Memory@246, learn@247?, _edit@250, update@251, recall@252?, history@254?
+def test_memory_from_a_stale_claim_is_invalidated_not_deleted(proj):
+    repo, st, cl, claims = proj
+    mem = Memory(st)
+    mem.learn("pricing.entry", "orders/pricing.py::compute_total", source_claim_id=claims["pricing"]["id"])
+    mem.learn("persistence.owner", "orders/repository.py", source_claim_id=claims["repository"]["id"])
+    rows_before = st.one("SELECT COUNT(*) AS n FROM memory")["n"]
+    _edit(repo, "orders/pricing.py", "return apply_discount(subtotal)", "return subtotal")
+    workflow.update(st, repo)
+    assert mem.recall("pricing.entry") == []
+    assert [m["value"] for m in mem.recall("persistence.owner")] == ["orders/repository.py"]
+    hist = mem.history("pricing.entry")
+    assert len(hist) == 1 and hist[0]["valid"] == 0 and hist[0]["invalidated_at"]
+    assert hist[0]["invalidation_reason"] == "source claim became stale"
+    assert st.one("SELECT COUNT(*) AS n FROM memory")["n"] == rows_before
+    # Learning from a stale claim is refused (recall must only return standing facts).
+    with pytest.raises(ValueError, match="stale"):
+        mem.learn("pricing.entry", "again", source_claim_id=claims["pricing"]["id"])
+## tests/test_claims.py:293-302 def test_stale_never_raises_confidence_and_invalidates_memory(env)
+def test_stale_never_raises_confidence_and_invalidates_memory(env):
+    repo, st, cl = env
+    c = make(cl, "unknown")
+    assert cl.set_status(c["id"], "stale", reason="changed")["confidence"] == 0.0
+    v = make(cl, "statically_verified", [(src(repo), "supports")])
+    Memory(st).learn("calc.total", "pkg/calc.py", source_claim_id=v["id"])
+    after = cl.set_status(v["id"], "stale", reason="changed")
+    assert after["confidence"] == CONFIDENCE_CAP["stale"]
+    assert Memory(st).recall("calc.total") == []
+    assert Memory(st).history("calc.total")[0]["invalidation_reason"] == "source claim became stale"
+## tests/test_cli.py:383-393 def test_claim_add_status_choices(repo)
+def test_claim_add_status_choices(repo):
+    from repoatlas import cli
+    from repoatlas.claims import ORDER
+
+    assert set(cli.CLAIM_ADD_STATUSES) == set(ORDER) | {"contradicted"} and "stale" not in cli.CLAIM_ADD_STATUSES
+    for bad in ("stale", "verified", "nonsense"):
+        r = ra("claim", "add", "x", "--status", bad, "--repo", str(repo), cwd=repo)
+        assert r.returncode == 2 and "invalid choice" in r.stderr, bad
+    c = ok_json("claim", "add", "compute_total never applies the discount", "--source", "orders/pricing.py:6-8",
+                "--refutes", "--status", "contradicted", "--repo", str(repo), "--json", cwd=repo)
+    assert c["status"] == "contradicted" and c["refuting"]
+## repoatlas/claims.py:942-942 # -- stale invalidation --------------------------------------------------------
+# -- stale invalidation --------------------------------------------------------
+## tests/test_snapshot_stale.py:3-7 Covers: modify / commit / delete a cited file -> exactly the dependent claims go
+Covers: modify / commit / delete a cited file -> exactly the dependent claims go
+stale; revert + verify restores up to the ceiling and re-binds to a snapshot of
+the current tree; memories derived from stale claims are invalidated, never
+deleted; an added (restored) file re-resolves its dependents' edges.
+"""
+tests/test_snapshot_stale.py:138-138 # -- stale invalidation ----------------------------------------------------------------------
+repoatlas/claims.py:458-530 def set_status( self, cid: str, status: str, *, reason: str, actor: str = "repoatlas", confidence: float | None = None,…
+repoatlas/snapshot.py:3-5 A snapshot is (commit, dirty flag, per-file sha256). Claims are pinned to a
+tests/test_snapshot_stale.py:1-1 """Snapshots and stale invalidation on a scanned, git-committed copy of examples/orders_app.
+tests/test_snapshot_stale.py:140-161 def test_modifying_a_cited_file_marks_exactly_its_claims_stale(proj)
+repoatlas/workflow.py:126-154 def scan(store: Store, repo: Path, *, force: bool = False) -> dict
+tests/test_snapshot_stale.py:181-191 def test_deleting_a_cited_file_marks_its_claims_stale(proj)
+tests/test_snapshot_stale.py:449-457 def test_body_edit_stales_only_claims_that_depend_on_it(sym)
+tests/test_cli.py:250-267 def test_update_after_edit_marks_claim_stale_via_cli(repo, tmp_path_factory)
+tests/test_analysis.py:539-550 def test_invalid_plan_is_refused_before_any_work(proj)
+tests/test_snapshot_stale.py:422-446 def test_shift_edit_rebinds_symbol_claims_instead_of_staling_them(sym)
+tests/test_analysis.py:731-750 def test_audit_marks_a_subquestion_stale_when_its_claim_goes_stale(tmp_path)
+tests/test_snapshot_stale.py:305-332 def test_watch_tests_claims_go_stale_when_a_test_file_is_added_changed_or_removed(proj)
+tests/test_snapshot_stale.py:164-178 def test_a_new_commit_that_changes_a_file_marks_its_claims_stale(proj)
+tests/test_mcp.py:417-447 def test_edit_makes_evidence_changed_and_claim_stale(fresh_repo)
+tests/test_critique.py:347-357 def test_deleted_claim_file_is_stale_in_critique(proj)
+tests/test_snapshot_stale.py:263-276 def test_claims_citing_other_checkouts_do_not_go_stale_on_local_changes(proj, tmp_path)
+repoatlas/benchmark/staleness.py:18-28 resolver). A claim's truth is unchanged only when an identical claim exists
+tests/test_critique.py:165-174 def test_staleness_check_marks_changed_claims_stale(proj)
+repoatlas/workflow.py:248-337 def verify(store: Store, repo: Path, cid: str, *, run: bool = False) -> dict
+repoatlas/claims.py:327-367 def create( self, text: str, *, project: str, snapshot: dict | None, subjects: list[str] | None = None, status: str = "…
+tests/test_critique.py:360-375 def test_claim_watching_tests_is_stale_in_critique_when_a_test_file_is_added(proj)
+tests/test_feedback.py:290-296 def test_invalid_proposition_is_reported_not_evaluated(orders)
+tests/test_staleness_harness.py:87-99 def test_history_replay_recall_is_one_and_nothing_is_silently_wrong(history, tmp_path)
+tests/test_feedback.py:554-563 def test_stale_reason_names_the_changed_lines(orders)
+repoatlas/memory.py:50-70 def recall(self, key: str | None = None) -> list[dict]
+tests/test_critique.py:323-344 def test_staleness_hashes_only_the_claims_own_files(proj, monkeypatch)
+tests/test_memory.py:97-106 def test_recall_hides_and_invalidates_memories_of_a_fallen_claim(env)
+tests/test_analysis.py:371-378 def test_tests_intent_says_statically_reaches_and_negative_watches_tests(proj)
+tests/test_snapshot_stale.py:194-224 def test_revert_then_verify_restores_up_to_ceiling_and_rebinds(proj)
+tests/test_memory.py:75-83 def test_learning_requires_a_standing_existing_claim(env)
+tests/test_store.py:156-165 def test_record_transition_updates_claim_and_appends_history(st)
+tests/test_snapshot_stale.py:484-494 def test_missing_facts_fall_back_to_file_level(sym, monkeypatch)
+tests/test_snapshot_stale.py:472-481 def test_rebinding_the_called_name_stales_the_relation(sym)
+tests/test_snapshot_stale.py:460-469 def test_renamed_target_stales_the_relation_and_the_callers_location(sym)
+repoatlas/feedback.py:664-673 def _stale_reason(claim: dict, evs: list[dict], store: Store) -> str | None
+tests/test_snapshot_stale.py:372-372 # -- symbol/facet-level invalidation (DESIGN D24) -------------------------------------------------
+repoatlas/claims.py:1022-1092 def invalidate_stale(store: Store, new_snapshot: dict | None, *, actor: str = "repoatlas", files: dict[str, str] | None…
+tests/test_snapshot_stale.py:337-369 def test_refused_index_rebuild_records_no_snapshot_and_says_what_to_do(proj, monkeypatch)
+tests/test_precise.py:200-206 def test_resolve_file_covers_every_call_site(repo)
+tests/test_mcp.py:326-344 def test_analyze_records_claims_like_core(repo, tools, analysis)
+tests/test_agents.py:524-532 def test_refuses_invalid_or_inline_toml(env)
+tests/test_mcp.py:347-355 def test_claim_list(repo, tools, analysis)
+tests/test_snapshot_stale.py:497-517 def test_cited_file_outside_the_snapshot_is_rechecked(proj)
+repoatlas/claims.py:44-52 Invalidation (docs/DESIGN.md D24) works on *claim dependencies* recorded at
+tests/test_packaging.py:91-107 def test_package_data_globs_cover_every_runtime_data_file()
+repoatlas/analysis.py:1429-1598 def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budget | None = None, run_tests: bool = Fals…
+tests/test_search_index.py:130-142 def test_units_cover_symbols_module_blocks_and_prose_sections(mini)
+repoatlas/benchmark/staleness.py:3-4 Question-independent. It measures whether invalidation marks exactly the claims
+repoatlas/memory.py:21-48 def learn(self, key: str, value: str, *, source_claim_id: str | None = None, snapshot_id: str | None = None) -> dict
+repoatlas/memory.py:75-83 def invalidate_for_claim(self, claim_id: str, reason: str) -> int
+tests/test_memory.py:52-63 def test_memory_invalidated_when_source_claim_falls(env, fall_to)
+tests/test_claims.py:323-337 def test_history_records_every_transition_with_actor(env)
+(calls / called by: static call graph, '?' = inferred edge; may be incomplete)
+… 1291 more candidates not shown
+next: repoatlas query "Which tests cover stale claim invalidation?" --max-chars 24000

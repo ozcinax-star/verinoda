@@ -1,0 +1,166 @@
+# Graphify sorgu terimlerinden neden stopword'leri atıyor?
+expanded: terimlerinden->term (turkish stem 'ter'); terimlerinden->terminal (turkish stem 'ter'); terimlerinden->terraform (turkish stem 'ter'); graphify->install (lexicon); graphify->uninstall (lexicon); graphify->hook (lexicon)
+## graphify/serve.py:281-300 def _query_terms(question: str) -> list[str]
+  doc: Split a query into searchable terms, segmenting Chinese text, then drop question/filler words (`_QUERY_STOPWORDS`, English plus common German/ Romance-language…
+  calls: _has_chinese@289, _segment_chinese@290, _is_searchable@292
+  called by: _query_subgraph_tokens (graphify/benchmark.py:39); _query_graph_text (graphify/serve.py:1359)
+  const graphify/serve.py:249: _QUERY_STOPWORDS = frozenset({
+def _query_terms(question: str) -> list[str]:
+    """Split a query into searchable terms, segmenting Chinese text, then drop
+    question/filler words (`_QUERY_STOPWORDS`, English plus common German/
+    Romance-language fillers) so content words drive seeding. Falls back to the
+    unfiltered terms if the query is all stopwords, so a question like "how does
+    it work" or "wie funktioniert das" still seeds on something."""
+    terms: list[str] = []
+    for raw in question.split():
+        if _has_chinese(raw):
+            for seg in _segment_chinese(raw.lower().strip()):
+                seg = seg.strip()
+                if seg and _is_searchable(seg):
+                    terms.append(seg)
+        else:
+            # Strip punctuation without touching Unicode characters (avoid NFKD mangling non-Latin scripts)
+            for tok in re.findall(r"\w+", raw.lower()):
+                if _is_searchable(tok):
+                    terms.append(tok)
+    content = [t for t in terms if t not in _QUERY_STOPWORDS]
+    return content or terms
+## graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+  calls: _custom_providers_path@1069, provider_base_url_ok@1140, cmd_prs@1184, install@1194, uninstall@1196, status@1198, _default_graph_path@1214, _enforce_graph_size_cap_or_exit@1251, graph_has_legacy_ids@1287, _query_graph_text@1302, log_query@1311, _touch_query_stamp@1321 (+107)
+  called by: _run_cli (graphify/__main__.py:751)
+  graphify/cli.py:1177-1190
+
+        else:
+            print("Usage: graphify provider [add|list|show|remove]", file=sys.stderr)
+            if subcmd:
+                sys.exit(1)
+    elif cmd == "prs":
+        from graphify.prs import cmd_prs
+        cmd_prs(sys.argv[2:])
+    elif cmd == "hook":
+        from graphify.hooks import (
+            install as hook_install,
+            uninstall as hook_uninstall,
+            status as hook_status,
+        )
+  graphify/cli.py:1191-1204
+
+        subcmd = sys.argv[2] if len(sys.argv) > 2 else ""
+        if subcmd == "install":
+            print(hook_install(Path(".")))
+        elif subcmd == "uninstall":
+            print(hook_uninstall(Path(".")))
+        elif subcmd == "status":
+            print(hook_status(Path(".")))
+        else:
+            print("Usage: graphify hook [install|uninstall|status]", file=sys.stderr)
+            sys.exit(1)
+    elif cmd == "query":
+        if len(sys.argv) < 3:
+            print("Usage: graphify query \"<question>\" [--dfs] [--context C] [--budget N] [--graph path]", file=sys.stderr)
+## graphify/serve.py:239-250 # set of question/filler words. Diacritics are kept intact (the query tokenizer
+# set of question/filler words. Diacritics are kept intact (the query tokenizer
+# does not NFKD-strip).
+#
+# Collision tradeoff: a few foreign stopwords are also English content words.
+# We include high-German-value ones like "die"/"hat" (the all-stopword fallback
+# in _query_terms and the unfiltered find_node path keep an English "die"/"hat"
+# query workable), but deliberately OMIT "war"/"bald" (German was/soon) so
+# English queries about "war" or "bald" are not clobbered. On the Romance side
+# we likewise omit "comment" (FR how), "come" (IT how), "son"/"sin"/"con" (ES),
+# and "pour"/"des" (FR) — all too common as English/code terms.
+_QUERY_STOPWORDS = frozenset({
+    # English
+## graphify/skills/agents/references/hooks.md:5-19 ## For git commit hook
+## For git commit hook
+
+Install a post-commit hook that auto-rebuilds the graph after every commit. No background process needed - triggers once per commit, works with any editor.
+
+```bash
+graphify hook install    # install
+graphify hook uninstall  # remove
+graphify hook status     # check
+```
+
+After every `git commit`, the hook detects which code files changed (via `git diff HEAD~1`), re-runs AST extraction on those files, and rebuilds `graph.json` a…
+
+If a post-commit hook already exists, graphify appends to it rather than replacing it.
+
+---
+## graphify/skills/amp/references/hooks.md:5-19 ## For git commit hook
+## For git commit hook
+
+Install a post-commit hook that auto-rebuilds the graph after every commit. No background process needed - triggers once per commit, works with any editor.
+
+```bash
+graphify hook install    # install
+graphify hook uninstall  # remove
+graphify hook status     # check
+```
+
+After every `git commit`, the hook detects which code files changed (via `git diff HEAD~1`), re-runs AST extraction on those files, and rebuilds `graph.json` a…
+
+If a post-commit hook already exists, graphify appends to it rather than replacing it.
+
+---
+## graphify/dedup.py:118-124 # Function words. A restatement of one entity is what inserts or swaps these
+# Function words. A restatement of one entity is what inserts or swaps these
+# ("export a read-only ..." vs "export the read-only ..."); a content word
+# carries the entity's identity and swapping one names something else.
+_STOPWORDS = frozenset({
+    "a", "an", "the", "and", "or", "of", "for", "to", "in", "on", "at", "by",
+    "with", "from", "as", "is", "are", "be", "this", "that", "its",
+})
+## graphify/__main__.py:40-51 _antigravity_install,
+    _antigravity_install,
+    _antigravity_uninstall,
+    _canonical_platform,
+    _claude_pretooluse_hooks,
+    _copy_skill_file,
+    _cursor_install,
+    _cursor_uninstall,
+    _devin_rules_install,
+    _devin_rules_uninstall,
+    _gemini_hook,
+    _install_claude_hook,
+    _install_codebuddy_hook,
+graphify/__main__.py:52-63 _install_codex_hook,
+graphify/install.py:1862-1906 def uninstall_all(project_dir: Path | None = None, purge: bool = False) -> None
+graphify/install.py:1536-1549 def _uninstall_codex_hook(project_dir: Path) -> None
+graphify/install.py:1837-1846 def _uninstall_claude_hook(project_dir: Path) -> None
+graphify/serve.py:1349-1408 def _query_graph_text( G: nx.Graph, question: str, *, mode: str = "bfs", depth: int = 3, token_budget: int = 2000, cont…
+graphify/hooks.py:1-1 # git hook integration - install/uninstall graphify post-commit and post-checkout hooks
+graphify/install.py:2100-2375 def dispatch_install_cli(cmd: str) -> bool
+graphify/dedup.py:150-190 def _content_token_swap(a: str, b: str) -> bool
+graphify/install.py:2018-2033 def _uninstall_codebuddy_hook(project_dir: Path) -> None
+graphify/install.py:849-863 def _uninstall_gemini_hook(project_dir: Path) -> None
+graphify/__main__.py:509-751 def _run_cli() -> None
+graphify/install.py:1907-1950 def claude_uninstall(project_dir: Path | None = None, *, project: bool = False, remove_user_skill: bool | None = None) …
+graphify/hooks.py:894-905 def uninstall(path: Path = Path(".")) -> str
+graphify/install.py:2034-2069 def codebuddy_uninstall(project_dir: Path | None = None, *, project: bool = False, remove_user_skill: bool | None = Non…
+graphify/benchmark.py:37-73 def _query_subgraph_tokens(G: nx.Graph, question: str, depth: int = 3) -> int
+graphify/hooks.py:659-677 def _uninstall_hook(hooks_dir: Path, name: str, marker: str, marker_end: str) -> str
+graphify/callflow_html.py:757-768 },
+graphify/install.py:864-896 def gemini_uninstall(project_dir: Path | None = None, *, project: bool = False, remove_user_skill: bool | None = None) …
+graphify/__main__.py:76-87 _replace_or_append_section,
+graphify/hooks.py:851-861 def _user_hooks_dir(hooks_dir: Path) -> Path
+graphify/__main__.py:88-99 claude_install,
+graphify/install.py:1670-1705 def _project_uninstall(platform_name: str, project_dir: Path | None = None) -> None
+graphify/install.py:324-359 def _claude_pretooluse_hooks(strict: bool = False, project: bool = False) -> "list[dict]"
+graphify/__main__.py:27-39 # Install/uninstall subsystem moved to graphify/install.py; re-exported here so
+graphify/install.py:1706-1714 def _project_uninstall_all(project_dir: Path | None = None) -> None
+graphify/install.py:3-6 The per-platform skill/hook installers and uninstallers, extracted verbatim from
+graphify/serve.py:542-722 def _score_query( G: nx.Graph, terms: list[str], *, collect_per_term_seeds: bool ) -> _QueryScores
+graphify/serve.py:220-224 def _is_searchable(term: str) -> bool
+graphify/hooks.py:628-656 def _install_hook( hooks_dir: Path, name: str, script: str, marker: str, marker_end: str = "", ) -> str
+graphify/hooks.py:864-891 def install(path: Path = Path(".")) -> str
+graphify/install.py:1-1 """graphify install/uninstall subsystem.
+graphify/install.py:1497-1533 def _install_codex_hook(project_dir: Path, project: bool = False) -> None
+graphify/install.py:739-744 def _print_install_usage() -> None
+graphify/install.py:1814-1836 def _install_claude_hook(project_dir: Path, strict: bool = False, project: bool = False) -> None
+graphify/install.py:833-848 def _install_gemini_hook(project_dir: Path, project: bool = False) -> None
+graphify/install.py:2000-2017 def _install_codebuddy_hook(project_dir: Path) -> None
+graphify/install.py:1786-1813 def claude_install(project_dir: Path | None = None, strict: bool = False, project: bool = False) -> None
+(calls / called by: static call graph, '?' = inferred edge; may be incomplete)
+… 1578 more candidates not shown
+next: repoatlas query "Graphify sorgu terimlerinden neden stopword'leri atıyor?" --max-chars 24000

@@ -1,0 +1,43 @@
+# How does graphify update rebuild the code graph without an LLM?
+## graphify/skill-aider.md:1224-1243 ## For --watch
+## For --watch
+
+Start a background watcher that monitors a folder and auto-updates the graph when files change.
+
+```bash
+python3 -m graphify.watch INPUT_PATH --debounce 3
+```
+
+Replace INPUT_PATH with the folder to watch. Behavior depends on what changed:
+
+- **Code files only (.py, .ts, .go, etc.):** re-runs AST extraction + rebuild + cluster immediately, no LLM needed. `graph.json` and `GRAPH_REPORT.md` are upda…
+- **Docs, papers, or images:** writes a `graphify-out/needs_update` flag and prints a notification to run `/graphify --update` (LLM semantic re-extraction requ…
+
+Debounce (default 3s): waits until file activity stops before triggering, so a wave of parallel agent writes doesn't trigger a rebuild per file.
+
+Press Ctrl+C to stop.
+
+For agentic workflows: run `--watch` in a background terminal. Code changes from agent waves are picked up automatically between waves. If agents are also writ…
+
+---
+## graphify/skill-devin.md:1356-1373 ## For --watch
+## For --watch
+
+Start a background watcher that monitors a folder and auto-updates the graph when files change.
+
+```bash
+python3 -m graphify.watch INPUT_PATH --debounce 3
+```
+
+Replace INPUT_PATH with the folder to watch. Behavior depends on what changed:
+
+- **Code files only (.py, .ts, .go, etc.):** re-runs AST extraction + rebuild + cluster immediately, no LLM needed. `graph.json` and `GRAPH_REPORT.md` are upda…
+- **Docs, papers, or images:** writes a `graphify-out/needs_update` flag and prints a notification to run `/graphify --update` (LLM semantic re-extraction requ…
+
+Debounce (default 3s): waits until file activity stops before triggering, so a wave of parallel agent writes doesn't trigger a rebuild per file.
+
+Press Ctrl+C to stop.
+
+---
+… 1870 more candidates not shown: graphify/watch.py:1355-2223 def _rebuild_code( watch_path: Path, *, changed_paths: list[Path] | None = None, follow_syml; graphify/watch.py:2256-2267 def _batch_triggers_rebuild(batch: list[Path]) -> bool; graphify/watch.py:2298-2386 def watch(watch_path: Path, debounce: float = 3.0) -> None; graphify/watch.py:2288-2295 def _batch_needs_llm_flag(batch: list[Path]…
+next: repoatlas query "How does graphify update rebuild the code graph without an LLM?" --max-chars 6000

@@ -1,0 +1,37 @@
+$ grep -rniE 'tests|cover|graph|file|size|cap|environment|override' .   # 18049 matching lines in 225 files
+graphify/llm.py:2: # Used by `graphify extract . --backend gemini` and the benchmark scripts.
+graphify/llm.py:3: # The default graphify pipeline uses Claude Code subagents via skill.md;
+graphify/llm.py:4: # this module provides a direct API path for non-Claude-Code environments.
+graphify/llm.py:20: from graphify.file_slice import (
+graphify/llm.py:21: FileSlice,
+graphify/llm.py:23: expand_oversized_files,
+graphify/llm.py:28: # `_read_files` truncates each file at this many characters before joining into
+graphify/llm.py:29: # the user message. Token estimates use the same cap so packing matches reality.
+graphify/llm.py:30: _FILE_CHAR_CAP = 20_000
+graphify/llm.py:31: # `_read_files` wraps each file in an `<untrusted_source path=... sha256=...>`
+graphify/llm.py:32: # delimiter block (see issue #1210); this is roughly the per-file overhead in
+graphify/llm.py:34: _PER_FILE_OVERHEAD_CHARS = 160
+graphify/llm.py:104: # server (LiteLLM proxy, gateways, ...); ANTHROPIC_MODEL overrides the
+graphify/llm.py:142: "model_env_key": "GRAPHIFY_GEMINI_MODEL",
+graphify/llm.py:151: # (llama.cpp, vLLM, LM Studio, ...); OPENAI_MODEL overrides the default
+graphify/llm.py:152: # model. GRAPHIFY_OPENAI_MODEL still wins over OPENAI_MODEL when both
+graphify/llm.py:157: "model_env_key": "GRAPHIFY_OPENAI_MODEL",
+graphify/llm.py:162: # automatically by _resolve_temperature; GRAPHIFY_LLM_TEMPERATURE
+graphify/llm.py:163: # overrides either way (#1191).
+graphify/llm.py:174: "model_env_key": "GRAPHIFY_DEEPSEEK_MODEL",
+graphify/llm.py:182: # GRAPHIFY_DISABLE_THINKING=1 to turn it off (tradeoff documented on the flag).
+graphify/llm.py:191: #           AZURE_OPENAI_DEPLOYMENT or GRAPHIFY_AZURE_MODEL (deployment name).
+graphify/llm.py:194: "default_model": os.environ.get("AZURE_OPENAI_DEPLOYMENT", os.environ.get("GRAPHIFY_AZURE_MODEL", "gpt-4o")),
+graphify/llm.py:196: "model_env_key": "GRAPHIFY_AZURE_MODEL",
+graphify/llm.py:203: "model_env_key": "GRAPHIFY_BEDROCK_MODEL",
+graphify/llm.py:227: return Path.home() / ".graphify" / "providers.json"
+graphify/llm.py:228: return Path(".graphify") / "providers.json"
+graphify/llm.py:240: config is the GRAPHIFY_ALLOW_LOCAL_PROVIDERS gate on project-local files.
+graphify/llm.py:247: print(f"[graphify] WARNING: provider {name!r} has an unparseable base_url; ignoring.", file=sys.stderr)
+graphify/llm.py:252: f"[graphify] WARNING: provider {name!r} base_url scheme {parsed.scheme!r} is not "
+graphify/llm.py:254: file=sys.stderr,
+graphify/llm.py:261: f"[graphify] WARNING: provider {name!r} sends your corpus to {host!r} over plaintext "
+graphify/llm.py:263: file=sys.stderr,
+graphify/llm.py:269: # A project-local ./.graphify/providers.json travels with a cloned or shared
+graphify/llm.py:272: # the user's own global ~/.graphify/providers.json stays trusted.
+... (18014 more matching lines not shown)

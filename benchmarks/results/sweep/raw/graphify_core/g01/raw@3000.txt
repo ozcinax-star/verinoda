@@ -1,0 +1,210 @@
+$ grep -rniE 'graphify|query|output|cut|fit|token|budget' .   # 9022 matching lines in 222 files
+graphify/serve.py:1: # MCP stdio server - exposes graph query tools to Claude and other agents
+graphify/serve.py:16: from graphify.security import sanitize_label, check_graph_file_size_cap, _CONTROL_CHAR_RE
+graphify/serve.py:17: from graphify.build import edge_data, edge_datas
+graphify/serve.py:18: from graphify.paths import default_graph_json as _default_graph_json
+graphify/serve.py:63: from graphify.build import graph_has_legacy_ids as _legacy
+graphify/serve.py:66: "[graphify] note: this graph uses the pre-#1504 node-ID scheme; "
+graphify/serve.py:67: "rebuild with `graphify extract --force` for path-qualified IDs.",
+graphify/serve.py:78: # the query/MCP read surface can annotate NODE lines display-only. Empty
+graphify/serve.py:79: # when no sidecar exists, leaving un-annotated output byte-identical.
+graphify/serve.py:81: from graphify.reflect import load_learning_overlay as _llo
+graphify/serve.py:87: print(f"error: graph.json is corrupted ({exc}). Re-run /graphify to rebuild.", file=sys.stderr)
+graphify/serve.py:107: ``GRAPHIFY_MAX_CONTEXTS`` overrides the default. Invalid or blank values
+graphify/serve.py:112: raw = os.environ.get("GRAPHIFY_MAX_CONTEXTS", "").strip()
+graphify/serve.py:141: # Warm the index before exposing the graph so its first query does not
+graphify/serve.py:191: def _search_tokens(text: str) -> list[str]:
+graphify/serve.py:192: """Split text into word tokens, stripping punctuation and diacritics.
+graphify/serve.py:195: character but not hyphen, so `graph_first_guard` stayed one token while the
+graphify/serve.py:196: label `graph-first-guard.py` split into three — and the query matched
+graphify/serve.py:197: nothing. Both the query and the node label pass through here, so splitting
+graphify/serve.py:199: (their tokens simply match the same way). Found 2026-07-29: the graph could
+graphify/serve.py:212: segments = [w for w in _jieba.cut(text) if len(w.strip()) > 0]
+graphify/serve.py:227: # Question/filler words dropped from query terms so content words drive BFS
+graphify/serve.py:231: # to query terms only — node text is never filtered, so a symbol literally named
+graphify/serve.py:239: # set of question/filler words. Diacritics are kept intact (the query tokenizer
+graphify/serve.py:244: # in _query_terms and the unfiltered find_node path keep an English "die"/"hat"
+graphify/serve.py:245: # query workable), but deliberately OMIT "war"/"bald" (German was/soon) so
+graphify/serve.py:249: _QUERY_STOPWORDS = frozenset({
+graphify/serve.py:281: def _query_terms(question: str) -> list[str]:
+graphify/serve.py:282: """Split a query into searchable terms, segmenting Chinese text, then drop
+graphify/serve.py:283: question/filler words (`_QUERY_STOPWORDS`, English plus common German/
+graphify/serve.py:285: unfiltered terms if the query is all stopwords, so a question like "how does
+graphify/serve.py:299: content = [t for t in terms if t not in _QUERY_STOPWORDS]
+graphify/serve.py:331: """The node's `attributes` key-value pairs normalized and tokenized for search."""
+graphify/serve.py:341: tokens = " ".join(_search_tokens(norm))
+graphify/serve.py:342: return norm, tokens
+graphify/serve.py:347: """IDF weights for query terms, cached in G.graph['_idf_cache'].
+graphify/serve.py:393: """Concatenate every field _score_nodes / _find_node match a query against, so
+graphify/serve.py:401: - `label_tokens` (the space-joined token form) feeds _find_node's
+graphify/serve.py:402: `term in label_tokens` branch, where a multi-word `term` can span a token
+graphify/serve.py:403: boundary that punctuation hides in `norm_label` (e.g. query "foo bar" matches
+... (8982 more matching lines not shown)
+
+==> graphify/serve.py:1-166 <==  (truncated at char cap; file has 2689 lines)
+     1	# MCP stdio server - exposes graph query tools to Claude and other agents
+     2	from __future__ import annotations
+     3	import json
+     4	import math
+     5	import os
+     6	import re
+     7	import sys
+     8	import warnings
+     9	from array import array
+    10	from collections import OrderedDict
+    11	from pathlib import Path
+    12	import threading
+    13	from typing import NamedTuple
+    14	import networkx as nx
+    15	from networkx.readwrite import json_graph
+    16	from graphify.security import sanitize_label, check_graph_file_size_cap, _CONTROL_CHAR_RE
+    17	from graphify.build import edge_data, edge_datas
+    18	from graphify.paths import default_graph_json as _default_graph_json
+    19	
+    20	try:
+    21	    with warnings.catch_warnings():
+    22	        # jieba/jieba-py carry invalid regex escapes that emit a SyntaxWarning on
+    23	        # compile; the message and line moved across Python versions (3.12 also
+    24	        # reworded it), so ignore the category wholesale here rather than pinning
+    25	        # a message/lineno. Under `-W error::SyntaxWarning` this keeps the import
+    26	        # from escalating to a fatal SyntaxError.
+    27	        warnings.simplefilter("ignore", SyntaxWarning)
+    28	        import jieba as _jieba  # type: ignore[import-untyped]
+    29	except (ImportError, SyntaxError):
+    30	    # A stray/broken jieba must never take down the whole server import.
+    31	    _jieba = None
+    32	
+    33	
+    34	class ToolError(Exception):
+    35	    """Raised by a tool handler to signal an error result.
+    36	
+    37	    A normal string return is sent as an ordinary (successful) text result. A
+    38	    ToolError is instead turned into a tool result with ``isError: true`` so a
+    39	    client that only checks ``isError`` can tell a genuine failure — e.g. the
+    40	    ``gh`` CLI missing or a PR that cannot be resolved — from success.
+    41	    """
+    42	
+    43	
+    44	def _load_graph(graph_path: str) -> nx.Graph:
+    45	    try:
+    46	        resolved = Path(graph_path).resolve()
+    47	        if resolved.suffix != ".json":
+    48	            raise ValueError(f"Graph path must be a .json file, got: {graph_path!r}")
+    49	        if not resolved.exists():
+    50	            raise FileNotFoundError(f"Graph file not found: {resolved}")
+    51	        check_graph_file_size_cap(resolved)
+    52	        safe = resolved
+    53	        data = json.loads(safe.read_text(encoding="utf-8"))
+    54	        if "links" not in data and "edges" in data:
+    55	            data = dict(data, links=data["edges"])
+    56	        # Stash the on-disk logical flag before the load-time override below:
+    57	        # `directed: True` exists only so renderers can recover stored arc
+    58	        # order (#2309); tools that care about logical direction (#2487) must
+    59	        # not mistake the override for graph truth.
+    60	        _logical_directed = bool(data.get("directed", False))
+    61	        data = {**data, "directed": True}
+    62	        try:
+    63	            from graphify.build import graph_has_legacy_ids as _legacy
+    64	            if _legacy(data.get("nodes", [])):
+    65	                print(
+    66	                    "[graphify] note: this graph uses the pre-#1504 node-ID scheme; "
+    67	                    "rebuild with `graphify extract --force` for path-qualified IDs.",
+    68	                    file=sys.stderr,
+    69	                )
+    70	        except Exception:
+    71	            pass
+    72	        try:
+    73	            G = json_graph.node_link_graph(data, edges="links")
+    74	        except TypeError:
+    75	            G = json_graph.node_link_graph(data)
+    76	        G.graph["_logical_directed"] = _logical_directed
+    77	        # Attach the work-memory overlay (derived sidecar next to graph.json) so
+    78	        # the query/MCP read surface can annotate NODE lines display-only. Empty
+    79	        # when no sidecar exists, leaving un-annotated output byte-identical.
+    80	        try:
+    81	            from graphify.reflect import load_learning_overlay as _llo
+    82	            G.graph["_learning_overlay"] = _llo(resolved)
+    83	        except Exception:
+    84	            G.graph["_learning_overlay"] = {}
+    85	        return G
+    86	    except json.JSONDecodeError as exc:
+    87	        print(f"error: graph.json is corrupted ({exc}). Re-run /graphify to rebuild.", file=sys.stderr)
+    88	        sys.exit(1)
+    89	    except (ValueError, FileNotFoundError) as exc:
+    90	        print(f"error: {exc}", file=sys.stderr)
+    91	        sys.exit(1)
+    92	
+    93	
+    94	def _communities_from_graph(G: nx.Graph) -> dict[int, list[str]]:
+    95	    """Reconstruct community dict from community property stored on nodes."""
+    96	    communities: dict[int, list[str]] = {}
+    97	    for node_id, data in G.nodes(data=True):
+    98	        cid = data.get("community")
+    99	        if cid is not None:
+   100	            communities.setdefault(int(cid), []).append(node_id)
+   101	    return communities
+   102	
+   103	
+   104	def _max_server_contexts() -> int:
+   105	    """Return the project-context LRU capacity (default 8, minimum 1).
+   106	
+   107	    ``GRAPHIFY_MAX_CONTEXTS`` overrides the default. Invalid or blank values
+   108	    use 8; zero and negative values clamp to 1, since each request needs a
+   109	    graph context. The server's configured default graph is pinned separately
+   110	    and does not count against this limit.
+   111	    """
+   112	    raw = os.environ.get("GRAPHIFY_MAX_CONTEXTS", "").strip()
+   113	    if not raw:
+   114	        return 8
+   115	    try:
+   116	        return max(1, int(raw))
+   117	    except ValueError:
+   118	        return 8
+   119	
+   120	
+   121	class _GraphContextCache:
+   122	    """Thread-safe graph contexts: one pinned default plus an LRU of projects."""
+   123	
+   124	    def __init__(self, max_contexts: int):
+   125	        self._max_contexts = max_contexts
+   126	        self._entries: OrderedDict[str, dict] = OrderedDict()
+   127	        self._pinned: dict[str, dict] = {}
+   128	        self._lock = threading.Lock()
+   129	
+   130	    def _load_entry(self, resolved_path: str, key: tuple[int, int]) -> dict:
+   131	        """Build one entry for an already-resolved path and known file key.
+   132	
+   133	        ``_load_graph`` is also used by the CLI, where invalid input terminates
+   134	        the process. A client-supplied ``project_path`` must instead become a
+   135	        tool error, so the shared MCP server can continue serving other graphs.
+   136	        """
+   137	        try:
+   138	            graph = _load_graph(resolved_path)
+   139	        except SystemExit as exc:
+   140	            raise RuntimeError(f"could not load graph.json at {resolved_path}") from exc
+   141	        # Warm the index before exposing the graph so its first query does not
+   142	        # pay the expensive build cost.
+   143	        _get_trigram_index(graph)
+   144	        communities = _communities_from_graph(graph)
+   145	        entry = {
+   146	            "key": key,
+   147	            "G": graph,
+   148	            "communities": communities,
+   149	        }
+   150	        return entry
+   151	
+   152	    def load(self, resolved_path: str, *, pinned: bool = False) -> tuple[nx.Graph, dict[int, list[str]]]:
+   153	        """Return a fresh context, retaining project contexts by LRU order.
+   154	
+   155	        ``resolved_path`` is resolved by the caller, making this method the
+   156	        sole owner of file statting and cache-key construction.
+   157	
+   158	        ``pinned=True`` is reserved for the server's configured default graph;
+   159	        it remains warm without consuming a project-cache slot.
+   160	        """
+   161	        with self._lock:
+   162	            try:
+   163	                stat_result = Path(resolved_path).stat()
+   164	            except FileNotFoundError:
+   165	                raise FileNotFoundError(f"graph.json not found: {resolved_path}") from None
+   166	            key = (stat_result.st_mtime_ns, stat_result.st_size)

@@ -1,0 +1,32 @@
+$ grep -rniE 'get_order_handler|bir|siparişi|depodan|nasıl|yüklüyor' .   # 1 matching lines in 1 files
+orders/api.py:24: def get_order_handler(order_id: int) -> tuple[int, dict]:
+
+==> orders/api.py:1-28 <==
+     1	"""HTTP-style entry points (framework-free handlers)."""
+     2	
+     3	from orders.repository import OrderRepository
+     4	from orders.service import ValidationError, fetch_order, place_order
+     5	
+     6	_repo = None
+     7	
+     8	
+     9	def get_repo() -> OrderRepository:
+    10	    global _repo
+    11	    if _repo is None:
+    12	        _repo = OrderRepository()
+    13	    return _repo
+    14	
+    15	
+    16	def create_order_handler(payload: dict) -> tuple[int, dict]:
+    17	    try:
+    18	        order_id = place_order(get_repo(), payload["customer"], payload["items"])
+    19	    except ValidationError as exc:
+    20	        return 400, {"error": str(exc)}
+    21	    return 201, {"id": order_id}
+    22	
+    23	
+    24	def get_order_handler(order_id: int) -> tuple[int, dict]:
+    25	    order = fetch_order(get_repo(), order_id)
+    26	    if order is None:
+    27	        return 404, {"error": "not found"}
+    28	    return 200, order

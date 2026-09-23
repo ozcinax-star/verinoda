@@ -1,0 +1,74 @@
+$ grep -rniE 'environment|variables|passed|experiment|commands|decided' .   # 457 matching lines in 56 files
+repoatlas/experiments.py:1: """Targeted experiments with real, stated isolation.
+repoatlas/experiments.py:11: * environment rebuilt from an allowlist - API keys, tokens and other
+repoatlas/experiments.py:12: secrets from the caller's environment are not passed;
+repoatlas/experiments.py:22: the container is named ``repoatlas-<experiment id>`` and killed by name on
+repoatlas/experiments.py:25: Policy (:func:`policy`): only commands matching the configured test-runner
+repoatlas/experiments.py:36: ``container`` isolation; without it the experiment is *refused*, not run, and
+repoatlas/experiments.py:37: the refusal names the offending argument. Commands are never passed through a
+repoatlas/experiments.py:44: environment variables (``env_extra``), and collect files the child writes to
+repoatlas/experiments.py:83: r"(=+ .*(passed|failed|error).* =+"
+repoatlas/experiments.py:84: # pytest -q prints the bare summary: "3 passed in 0.17s", "1 failed, 2 passed in ..."
+repoatlas/experiments.py:85: r"|^\d+ (passed|failed|errors?|skipped|xfailed|xpassed|deselected)\b.*\bin [\d.]+s.*$"
+repoatlas/experiments.py:93: ARGS_CONFINED = "allowlisted commands may only name paths inside the repository copy"
+repoatlas/experiments.py:110: class ExperimentRefused(RuntimeError):
+repoatlas/experiments.py:257: "NO_COLOR": "1", "REPOATLAS_EXPERIMENT": "1"})
+repoatlas/experiments.py:371: """Run one experiment and record it (and its evidence) in the store.
+repoatlas/experiments.py:375: them with ``-p <module>``). ``env_extra`` adds ``REPOATLAS_*`` variables
+repoatlas/experiments.py:380: cfg = load_config(repo)["experiments"]
+repoatlas/experiments.py:390: raise ValueError(f"env_extra may only set REPOATLAS_* variables, not {key!r}")
+repoatlas/experiments.py:412: "RepoAtlas does not run non-allowlisted commands with process isolation only")
+repoatlas/experiments.py:415: store.insert("experiments", {**base, "cwd": str(repo), "isolation": "none",
+repoatlas/experiments.py:417: "environment": {"policy": {"kind": kind, "reason": why_risky}}})
+repoatlas/experiments.py:418: raise ExperimentRefused(reason)
+repoatlas/experiments.py:479: store.insert("experiments", {**base, "cwd": str(copy), "isolation": level, "status": "error",
+repoatlas/experiments.py:480: "summary": f"could not start: {exc}", "environment": guarantees})
+repoatlas/experiments.py:510: "source_type": "test_result" if is_test else "experiment",
+repoatlas/experiments.py:515: "meta": {"experiment_id": eid,
+repoatlas/experiments.py:522: store.insert("experiments", {
+repoatlas/experiments.py:524: "environment": {"guarantees": guarantees, "limits": limits, "python": sys.version.split()[0],
+repoatlas/experiments.py:537: note=f"experiment {eid}: expected {expect}, got {outcome}"
+repoatlas/experiments.py:548: res["next_step"] = ("install pytest in the project's environment (or create .venv) and re-run"
+tests/test_experiments.py:1: """Experiments: real isolated runs on a git-committed copy of examples/orders_app.
+tests/test_experiments.py:3: Every test runs a real child process (no mocks of experiments.run): allowlisted
+tests/test_experiments.py:4: pytest in a throw-away copy with a scrubbed environment, timeouts that kill the
+tests/test_experiments.py:5: whole process tree, refusal of non-allowlisted commands, logs on disk with only
+tests/test_experiments.py:26: from repoatlas import experiments  # noqa: E402
+tests/test_experiments.py:36: pytestmark = [pytest.mark.experiment,
+tests/test_experiments.py:117: assert experiments.classify(argv, DEFAULT_CONFIG["experiments"]["process_isolation_allowlist"]) == expected
+tests/test_experiments.py:124: env = experiments._scrubbed_env(tmp_path)
+tests/test_experiments.py:129: assert env["REPOATLAS_EXPERIMENT"] == "1"
+tests/test_experiments.py:140: "    Path('WRITTEN_BY_EXPERIMENT.txt').write_text('x')\n"
+... (417 more matching lines not shown)
+
+==> repoatlas/experiments.py:1-30 <==  (truncated at char cap; file has 550 lines)
+     1	"""Targeted experiments with real, stated isolation.
+     2	
+     3	Two isolation levels exist, and the one used is recorded on every run:
+     4	
+     5	``process`` (always available)
+     6	    * separate process in its own process group/session;
+     7	    * wall-clock timeout that kills the whole process tree;
+     8	    * working directory is a throw-away *copy* of the repository
+     9	      (tracked + untracked-not-ignored files), so the user's tree is never
+    10	      written to;
+    11	    * environment rebuilt from an allowlist - API keys, tokens and other
+    12	      secrets from the caller's environment are not passed;
+    13	    * POSIX only: CPU-time, address-space and file-size rlimits.
+    14	    It does NOT isolate the network, and it does NOT confine the child's file
+    15	    system access: the command's own path arguments are checked (see Policy),
+    16	    but the code it runs - the project's tests - can still read and write
+    17	    anywhere the user can. ``guarantees`` in every result says exactly this
+    18	    (``fs_reads_confined`` / ``fs_writes_confined`` are false).
+    19	
+    20	``container`` (docker or podman on PATH)
+    21	    ``--network none``, memory/CPU/pid limits, read-write mount of the copy only;
+    22	    the container is named ``repoatlas-<experiment id>`` and killed by name on
+    23	    timeout (killing the CLI client alone would leave it running).
+    24	
+    25	Policy (:func:`policy`): only commands matching the configured test-runner
+    26	allowlist and free of shell metacharacters may run under ``process``
+    27	isolation. An absolute path to a Python interpreter (e.g. the project's
+    28	``.venv``, see :func:`python_for`) counts as ``python``. Every *argument* of an
+    29	allowlisted command must stay inside the repository copy: absolute paths,
+    30	home-relative paths, URLs and ``..`` escapes are rejected wherever they appear

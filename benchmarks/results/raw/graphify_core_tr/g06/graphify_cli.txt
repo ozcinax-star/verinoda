@@ -1,0 +1,5 @@
+Graph: graphify-out/graph.json (4092 nodes) | Traversal: BFS depth=2 | Start: ['graphify'] | 2 nodes found
+
+NODE graphify [src=graphify/always_on/agents-md.md loc=L1 community=agents-md.md]
+NODE agents-md.md [src=graphify/always_on/agents-md.md loc=L1 community=agents-md.md]
+EDGE agents-md.md --contains [EXTRACTED]--> graphify at=graphify/always_on/agents-md.md:L1

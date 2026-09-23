@@ -1,0 +1,33 @@
+$ grep -rniE 'graphify|query|output|cut|fit|token|budget' .   # 9022 matching lines in 222 files
+graphify/serve.py:1: # MCP stdio server - exposes graph query tools to Claude and other agents
+graphify/serve.py:16: from graphify.security import sanitize_label, check_graph_file_size_cap, _CONTROL_CHAR_RE
+graphify/serve.py:17: from graphify.build import edge_data, edge_datas
+graphify/serve.py:18: from graphify.paths import default_graph_json as _default_graph_json
+graphify/serve.py:63: from graphify.build import graph_has_legacy_ids as _legacy
+graphify/serve.py:66: "[graphify] note: this graph uses the pre-#1504 node-ID scheme; "
+graphify/serve.py:67: "rebuild with `graphify extract --force` for path-qualified IDs.",
+graphify/serve.py:78: # the query/MCP read surface can annotate NODE lines display-only. Empty
+graphify/serve.py:79: # when no sidecar exists, leaving un-annotated output byte-identical.
+graphify/serve.py:81: from graphify.reflect import load_learning_overlay as _llo
+graphify/serve.py:87: print(f"error: graph.json is corrupted ({exc}). Re-run /graphify to rebuild.", file=sys.stderr)
+graphify/serve.py:107: ``GRAPHIFY_MAX_CONTEXTS`` overrides the default. Invalid or blank values
+graphify/serve.py:112: raw = os.environ.get("GRAPHIFY_MAX_CONTEXTS", "").strip()
+graphify/serve.py:141: # Warm the index before exposing the graph so its first query does not
+graphify/serve.py:191: def _search_tokens(text: str) -> list[str]:
+graphify/serve.py:192: """Split text into word tokens, stripping punctuation and diacritics.
+graphify/serve.py:195: character but not hyphen, so `graph_first_guard` stayed one token while the
+graphify/serve.py:196: label `graph-first-guard.py` split into three — and the query matched
+graphify/serve.py:197: nothing. Both the query and the node label pass through here, so splitting
+graphify/serve.py:199: (their tokens simply match the same way). Found 2026-07-29: the graph could
+graphify/serve.py:212: segments = [w for w in _jieba.cut(text) if len(w.strip()) > 0]
+graphify/serve.py:227: # Question/filler words dropped from query terms so content words drive BFS
+graphify/serve.py:231: # to query terms only — node text is never filtered, so a symbol literally named
+graphify/serve.py:239: # set of question/filler words. Diacritics are kept intact (the query tokenizer
+graphify/serve.py:244: # in _query_terms and the unfiltered find_node path keep an English "die"/"hat"
+graphify/serve.py:245: # query workable), but deliberately OMIT "war"/"bald" (German was/soon) so
+graphify/serve.py:249: _QUERY_STOPWORDS = frozenset({
+graphify/serve.py:281: def _query_terms(question: str) -> list[str]:
+graphify/serve.py:282: """Split a query into searchable terms, segmenting Chinese text, then drop
+graphify/serve.py:283: question/filler words (`_QUERY_STOPWORDS`, English plus common German/
+graphify/serve.py:285: unfiltered terms if the query is all stopwords, so a question like "how does
+... (8991 more matching lines not shown)

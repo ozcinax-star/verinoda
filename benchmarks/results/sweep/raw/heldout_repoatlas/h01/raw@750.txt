@@ -1,0 +1,32 @@
+$ grep -rniE 'experiment|process|tree|killed|times|out' .   # 2757 matching lines in 102 files
+tests/test_experiments.py:1: """Experiments: real isolated runs on a git-committed copy of examples/orders_app.
+tests/test_experiments.py:3: Every test runs a real child process (no mocks of experiments.run): allowlisted
+tests/test_experiments.py:4: pytest in a throw-away copy with a scrubbed environment, timeouts that kill the
+tests/test_experiments.py:5: whole process tree, refusal of non-allowlisted commands, logs on disk with only
+tests/test_experiments.py:13: os.environ.setdefault("GRAPHIFY_OUT", ".repoatlas/index")
+tests/test_experiments.py:18: import subprocess  # noqa: E402
+tests/test_experiments.py:26: from repoatlas import experiments  # noqa: E402
+tests/test_experiments.py:36: pytestmark = [pytest.mark.experiment,
+tests/test_experiments.py:41: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.autocrlf=false", *args],
+tests/test_experiments.py:42: cwd=cwd, check=True, capture_output=True)
+tests/test_experiments.py:46: shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".repoatlas", "__pycache__", "*.pyc",
+tests/test_experiments.py:54: def _tree_digest(repo: Path) -> dict[str, str]:
+tests/test_experiments.py:55: """Every file outside .repoatlas (where run logs legitimately go)."""
+tests/test_experiments.py:56: out = {}
+tests/test_experiments.py:60: out[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
+tests/test_experiments.py:61: return out
+tests/test_experiments.py:69: h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+tests/test_experiments.py:73: k32.GetExitCodeProcess(h, ctypes.byref(code))
+tests/test_experiments.py:78: except ProcessLookupError:
+tests/test_experiments.py:117: assert experiments.classify(argv, DEFAULT_CONFIG["experiments"]["process_isolation_allowlist"]) == expected
+tests/test_experiments.py:124: env = experiments._scrubbed_env(tmp_path)
+tests/test_experiments.py:129: assert env["REPOATLAS_EXPERIMENT"] == "1"
+tests/test_experiments.py:134: def test_allowlisted_pytest_passes_in_a_copy_with_process_isolation(proj):
+tests/test_experiments.py:140: "    Path('WRITTEN_BY_EXPERIMENT.txt').write_text('x')\n"
+tests/test_experiments.py:142: before = _tree_digest(repo)
+tests/test_experiments.py:143: res = experiments.run(st, repo, [*PYTEST, "-s", "tests/test_pricing.py", probe],
+tests/test_experiments.py:145: assert res["isolation"] == "process" and res["outcome"] == "pass" and res["matches_expectation"]
+tests/test_experiments.py:147: assert g["separate_process"] and g["cwd_is_copy"] and g["env_allowlisted"] and g["timeout_kills_tree"]
+tests/test_experiments.py:149: # The original tree is untouched: nothing written, nothing changed.
+tests/test_experiments.py:150: assert _tree_digest(repo) == before
+... (2727 more matching lines not shown)

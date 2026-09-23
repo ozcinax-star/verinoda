@@ -1,0 +1,32 @@
+$ grep -rniE 'affected|evidence|content_hash|changes' .   # 1060 matching lines in 59 files
+repoatlas/mcp/server.py:57: "evidence_inspect",
+repoatlas/mcp/server.py:132: numbers (e.g. ``env_vars``, ``affected_files``, ``churn``). Records - hops,
+repoatlas/mcp/server.py:133: evidence rows, claims - mix value types or hold strings and are never cut
+repoatlas/mcp/server.py:351: "evidence ids from claim_inspect"}
+repoatlas/mcp/server.py:374: """The loaded graph, cached until graph.json changes."""
+repoatlas/mcp/server.py:499: source = "git working-tree changes (HEAD + untracked)"
+repoatlas/mcp/server.py:548: def evidence_inspect(self, evidence_id: str) -> dict:
+repoatlas/mcp/server.py:550: from repoatlas import evidence as evmod
+repoatlas/mcp/server.py:552: eid = _text(evidence_id, "evidence_id")
+repoatlas/mcp/server.py:554: ev = st.evidence(eid)
+repoatlas/mcp/server.py:556: raise ToolFailure("not_found", f"no evidence {eid}",
+repoatlas/mcp/server.py:557: "evidence ids are listed by claim_inspect (supporting/refuting/qualifying)")
+repoatlas/mcp/server.py:558: cited_by = st.claims_for_evidence(eid)
+repoatlas/mcp/server.py:561: "evidence": {k: ev.get(k) for k in ("id", "source_type", "locator", "path", "line_start", "line_end",
+repoatlas/mcp/server.py:562: "url", "commit_sha", "version", "content_hash", "excerpt",
+repoatlas/mcp/server.py:571: out["note"] = f"{stype} evidence is recorded for traceability and never verifies a claim by itself"
+repoatlas/mcp/server.py:577: if ev.get("content_hash"):
+repoatlas/mcp/server.py:581: "reason": "no content hash was recorded for this evidence (e.g. a graph edge), "
+repoatlas/mcp/server.py:588: "reason": f"not file/line evidence (source_type={stype}); "
+repoatlas/mcp/server.py:593: return self._run("evidence_inspect", go)
+repoatlas/mcp/server.py:659: def feedback_resolve(self, feedback_id: str, verdict: str, reason: str, evidence_ids: list[str] | None = None,
+repoatlas/mcp/server.py:666: ids = [evidence_ids] if isinstance(evidence_ids, str) else list(evidence_ids or [])
+repoatlas/mcp/server.py:670: evidence_ids=[str(i) for i in ids if str(i).strip()],
+repoatlas/mcp/server.py:698: return "the evidence does not allow that status; inspect the claim with claim_inspect"
+repoatlas/mcp/server.py:707: INSTRUCTIONS = """RepoAtlas: evidence-first analysis of the repository {repo}.
+repoatlas/mcp/server.py:713: - analyze: answer a question as recorded claims with evidence, critique and unknowns.
+repoatlas/mcp/server.py:714: - claim_inspect / claim_list / evidence_inspect / claim_verify / claim_challenge: audit claims.
+repoatlas/mcp/server.py:717: - index_update: re-index after editing files (marks affected claims stale).
+repoatlas/mcp/server.py:722: When evidence is missing the answer is 'unknown' plus a next step - do not fill the gap by guessing.
+repoatlas/mcp/server.py:752: "changes are used. Large views are truncated."),
+... (1030 more matching lines not shown)

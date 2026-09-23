@@ -1,0 +1,33 @@
+$ grep -rniE 'claim|marked|stale|cited|files|change' .   # 2848 matching lines in 86 files
+repoatlas/claims.py:1: """Claims: every important conclusion, its status, confidence and evidence.
+repoatlas/claims.py:3: Status rules (enforced by :func:`check_status`, tested in tests/test_claims.py):
+repoatlas/claims.py:6: fresh (cited lines still match, relocated through their anchor when they
+repoatlas/claims.py:8: mechanically state the claim, not merely exist. Documentary kinds
+repoatlas/claims.py:11: states what the claim attributes to it).
+repoatlas/claims.py:20: feedback (a graph edge between the claimed endpoints is enough here - that is
+repoatlas/claims.py:23: * ``unknown``               nothing: a claim without evidence is unknown.
+repoatlas/claims.py:26: "heuristic"``) never contradicts: it lowers the claim one step
+repoatlas/claims.py:28: * ``stale``                 is set only by invalidation (``create`` refuses it).
+repoatlas/claims.py:30: Evidence groups (FEVER evidence sets): ``claim_evidence.grp`` names a group;
+repoatlas/claims.py:31: without one each evidence is its own group, except a flow claim's hop and sink
+repoatlas/claims.py:34: Every claim records two levels in ``spec``: ``assessed`` - the status its
+repoatlas/claims.py:42: in the claim's history before the error is raised.
+repoatlas/claims.py:44: Invalidation (docs/DESIGN.md D24) works on *claim dependencies* recorded at
+repoatlas/claims.py:47: :mod:`repoatlas.anchors`, falling back to whole files where no facts exist.
+repoatlas/claims.py:48: An update marks a claim stale only when a facet it depends on changed or its
+repoatlas/claims.py:49: cited evidence no longer relocates to identical text; a claim whose files
+repoatlas/claims.py:50: changed but whose facets did not is re-bound to the new snapshot (backdated)
+repoatlas/claims.py:51: without a status change, and the history says so.
+repoatlas/claims.py:67: "strong_inference", "weak_inference", "unknown", "contradicted", "stale",
+repoatlas/claims.py:77: "unknown": 0.0, "contradicted": 0.05, "stale": 0.3,
+repoatlas/claims.py:83: # Evidence whose cited lines are re-read before any status decision.
+repoatlas/claims.py:94: class ClaimRuleError(ValueError):
+repoatlas/claims.py:121: A cited block that no longer matches (changed, deleted, or moved without an
+repoatlas/claims.py:168: stale = [e for e in members if not ctx.live(e)]
+repoatlas/claims.py:169: if stale:
+repoatlas/claims.py:170: return f"{len(stale)} cited source block(s) no longer match"
+repoatlas/claims.py:173: return (f"it does not {'state' if need == 'full' else 'attribute'} the claim "
+repoatlas/claims.py:185: return "no cited source lines in it"
+repoatlas/claims.py:203: stale = [e for e in _supports(ctx.evs) if not ctx.live(e)]
+repoatlas/claims.py:205: + (f" ({len(stale)} cited source block(s) no longer match)" if stale else ""))
+... (2817 more matching lines not shown)

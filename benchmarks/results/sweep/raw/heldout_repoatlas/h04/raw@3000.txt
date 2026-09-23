@@ -1,0 +1,213 @@
+$ grep -rniE 'affected|evidence|content_hash|changes' .   # 1060 matching lines in 59 files
+repoatlas/mcp/server.py:57: "evidence_inspect",
+repoatlas/mcp/server.py:132: numbers (e.g. ``env_vars``, ``affected_files``, ``churn``). Records - hops,
+repoatlas/mcp/server.py:133: evidence rows, claims - mix value types or hold strings and are never cut
+repoatlas/mcp/server.py:351: "evidence ids from claim_inspect"}
+repoatlas/mcp/server.py:374: """The loaded graph, cached until graph.json changes."""
+repoatlas/mcp/server.py:499: source = "git working-tree changes (HEAD + untracked)"
+repoatlas/mcp/server.py:548: def evidence_inspect(self, evidence_id: str) -> dict:
+repoatlas/mcp/server.py:550: from repoatlas import evidence as evmod
+repoatlas/mcp/server.py:552: eid = _text(evidence_id, "evidence_id")
+repoatlas/mcp/server.py:554: ev = st.evidence(eid)
+repoatlas/mcp/server.py:556: raise ToolFailure("not_found", f"no evidence {eid}",
+repoatlas/mcp/server.py:557: "evidence ids are listed by claim_inspect (supporting/refuting/qualifying)")
+repoatlas/mcp/server.py:558: cited_by = st.claims_for_evidence(eid)
+repoatlas/mcp/server.py:561: "evidence": {k: ev.get(k) for k in ("id", "source_type", "locator", "path", "line_start", "line_end",
+repoatlas/mcp/server.py:562: "url", "commit_sha", "version", "content_hash", "excerpt",
+repoatlas/mcp/server.py:571: out["note"] = f"{stype} evidence is recorded for traceability and never verifies a claim by itself"
+repoatlas/mcp/server.py:577: if ev.get("content_hash"):
+repoatlas/mcp/server.py:581: "reason": "no content hash was recorded for this evidence (e.g. a graph edge), "
+repoatlas/mcp/server.py:588: "reason": f"not file/line evidence (source_type={stype}); "
+repoatlas/mcp/server.py:593: return self._run("evidence_inspect", go)
+repoatlas/mcp/server.py:659: def feedback_resolve(self, feedback_id: str, verdict: str, reason: str, evidence_ids: list[str] | None = None,
+repoatlas/mcp/server.py:666: ids = [evidence_ids] if isinstance(evidence_ids, str) else list(evidence_ids or [])
+repoatlas/mcp/server.py:670: evidence_ids=[str(i) for i in ids if str(i).strip()],
+repoatlas/mcp/server.py:698: return "the evidence does not allow that status; inspect the claim with claim_inspect"
+repoatlas/mcp/server.py:707: INSTRUCTIONS = """RepoAtlas: evidence-first analysis of the repository {repo}.
+repoatlas/mcp/server.py:713: - analyze: answer a question as recorded claims with evidence, critique and unknowns.
+repoatlas/mcp/server.py:714: - claim_inspect / claim_list / evidence_inspect / claim_verify / claim_challenge: audit claims.
+repoatlas/mcp/server.py:717: - index_update: re-index after editing files (marks affected claims stale).
+repoatlas/mcp/server.py:722: When evidence is missing the answer is 'unknown' plus a next step - do not fill the gap by guessing.
+repoatlas/mcp/server.py:752: "changes are used. Large views are truncated."),
+repoatlas/mcp/server.py:754: "Answer a question as claims with evidence: retrieves code, re-checks cited lines, uses git "
+repoatlas/mcp/server.py:757: "evidence, uncertainties), challenges each claim and lists unknowns with the next verification "
+repoatlas/mcp/server.py:762: "supporting/refuting/qualifying evidence (id, type, file:line or URL, hash) and its complete "
+repoatlas/mcp/server.py:767: "evidence_inspect": (
+repoatlas/mcp/server.py:768: "One evidence record (source type, locator, commit, content hash, excerpt, metadata), whether that "
+repoatlas/mcp/server.py:769: "source type can verify a claim, the claims citing it, and a live re-check: file/line evidence is "
+repoatlas/mcp/server.py:774: "unchanged evidence keeps (or restores up to its assessed ceiling) the status, changed evidence "
+repoatlas/mcp/server.py:780: "'only X does Y' pattern occur elsewhere, did the files change. Failures attach refuting evidence; "
+repoatlas/mcp/server.py:785: "with its pinned commit/hash as evidence. May use the network (git clone / HTTP) and write under "
+repoatlas/mcp/server.py:789: "document pinned at ref; findings are recorded with evidence from both sides. May use the network."),
+... (1020 more matching lines not shown)
+
+==> repoatlas/mcp/server.py:1-169 <==  (truncated at char cap; file has 1085 lines)
+     1	"""RepoAtlas MCP server: the CLI's core operations as tools for coding agents.
+     2	
+     3	Design rules
+     4	------------
+     5	* One implementation: every tool calls the same core function as the matching
+     6	  CLI command (``repoatlas query`` -> :func:`repoatlas.retrieval.retrieve`,
+     7	  ``analyze`` -> :func:`repoatlas.analysis.analyze`, ...). :class:`AtlasTools`
+     8	  holds those adapters and has no MCP SDK dependency, so it is testable and
+     9	  usable in-process; :func:`build_server` only registers them with the SDK.
+    10	* Small, structured answers: every response is a JSON object capped at
+    11	  ``MAX_RESPONSE_CHARS`` (compact JSON, env ``REPOATLAS_MCP_MAX_CHARS``). Long
+    12	  lists/maps are cut and the response is marked ``"truncated": true`` with a
+    13	  ``truncation`` note naming what was cut (``kept``/``total``). A view's
+    14	  ``coverage`` (method + limits) is never cut; if that alone exceeds the cap,
+    15	  ``truncation.over_limit`` says so.
+    16	* Errors never crash the server: they come back as
+    17	  ``{"error": <code>, "message": ..., "hint": <next step>, "tool": ...}``
+    18	  (flagged ``isError`` on mcp 2.x). A repository that was never scanned (no
+    19	  ``.repoatlas/``) yields ``error="not_initialised"``; the server never creates
+    20	  ``.repoatlas/`` itself. Argument *type* violations are rejected by the SDK
+    21	  before a tool runs (plain-text ``isError`` result).
+    22	* The repository is resolved once at startup; the SQLite store is opened per
+    23	  call (and closed after it), so no connection crosses threads. Tool calls are
+    24	  serialised with a lock (index rebuilds and stdout redirection are global),
+    25	  and stdout is redirected to stderr during each call.
+    26	* ``research`` and ``feedback`` are imported lazily inside their tools, so the
+    27	  server still starts when those modules are missing or broken.
+    28	* SDK: mcp 2.x (``mcp.server.mcpserver.MCPServer``) or 1.x (``FastMCP``).
+    29	  ``import mcp`` here is absolute, so it resolves to the SDK, not to this
+    30	  ``repoatlas.mcp`` package.
+    31	"""
+    32	
+    33	import contextlib
+    34	import importlib
+    35	import json
+    36	import os
+    37	import sys
+    38	import threading
+    39	import traceback
+    40	from pathlib import Path
+    41	from typing import Annotated, Any, Callable, Literal
+    42	
+    43	from repoatlas.paths import configure_index_env
+    44	
+    45	configure_index_env()  # before anything imports repoatlas.project_index
+    46	
+    47	from repoatlas.paths import ATLAS_DIRNAME, atlas_dir, graph_path  # noqa: E402
+    48	
+    49	TOOL_NAMES: tuple[str, ...] = (
+    50	    "project_query",
+    51	    "node_inspect",
+    52	    "relation_trace",
+    53	    "map_view",
+    54	    "analyze",
+    55	    "claim_inspect",
+    56	    "claim_list",
+    57	    "evidence_inspect",
+    58	    "claim_verify",
+    59	    "claim_challenge",
+    60	    "reference_research",
+    61	    "reference_compare",
+    62	    "feedback_submit",
+    63	    "feedback_resolve",
+    64	    "index_update",
+    65	)
+    66	
+    67	MAX_RESPONSE_CHARS = int(os.environ.get("REPOATLAS_MCP_MAX_CHARS", "12000"))
+    68	QUERY_MAX_CHARS = 6000          # same default as `repoatlas query --max-chars`
+    69	EXCERPT_MAX_LINES = 30
+    70	EDGE_CAP = 25
+    71	LIST_CAP = 50
+    72	VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact")
+    73	VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
+    74	RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
+    75	
+    76	
+    77	# -- errors ---------------------------------------------------------------------
+    78	
+    79	class ToolFailure(Exception):
+    80	    """An expected failure, reported to the agent as a structured error."""
+    81	
+    82	    def __init__(self, error: str, message: str, hint: str, **extra: Any):
+    83	        super().__init__(message)
+    84	        self.error, self.message, self.hint, self.extra = error, message, hint, extra
+    85	
+    86	    def as_dict(self) -> dict:
+    87	        return {"error": self.error, "message": self.message, "hint": self.hint, **self.extra}
+    88	
+    89	
+    90	def _clamp(value: Any, lo: int | float, hi: int | float, name: str, cast: type = int):
+    91	    try:
+    92	        v = cast(value)
+    93	    except (TypeError, ValueError):
+    94	        raise ToolFailure("invalid_argument", f"{name} must be a number, got {value!r}",
+    95	                          f"pass {name} as a number between {lo} and {hi}") from None
+    96	    return max(lo, min(hi, v))
+    97	
+    98	
+    99	def _text(value: Any, name: str) -> str:
+   100	    if not isinstance(value, str) or not value.strip():
+   101	        raise ToolFailure("invalid_argument", f"{name} must be a non-empty string",
+   102	                          f"pass a non-empty {name}")
+   103	    return value.strip()
+   104	
+   105	
+   106	def _opt_text(value: Any) -> str | None:
+   107	    return value.strip() if isinstance(value, str) and value.strip() else None
+   108	
+   109	
+   110	# -- response size cap ----------------------------------------------------------
+   111	
+   112	def _jsonable(obj: Any) -> Any:
+   113	    """Plain JSON types only (tuples -> lists, Paths -> str)."""
+   114	    return json.loads(json.dumps(obj, ensure_ascii=False, default=str))
+   115	
+   116	
+   117	def _size(obj: Any) -> int:
+   118	    return len(json.dumps(obj, ensure_ascii=False, separators=(",", ":")))
+   119	
+   120	
+   121	def _path_str(path: tuple) -> str:
+   122	    out = ""
+   123	    for p in path:
+   124	        out += f"[{p}]" if isinstance(p, int) else (f".{p}" if out else str(p))
+   125	    return out or "(root)"
+   126	
+   127	
+   128	def _map_like(d: dict) -> bool:
+   129	    """A dict used as a mapping (name -> data), not a record with fixed fields.
+   130	
+   131	    Heuristic: at least 4 entries whose values are all dicts, all lists or all
+   132	    numbers (e.g. ``env_vars``, ``affected_files``, ``churn``). Records - hops,
+   133	    evidence rows, claims - mix value types or hold strings and are never cut
+   134	    field by field.
+   135	    """
+   136	    if len(d) < 4:
+   137	        return False
+   138	    kinds = set()
+   139	    for v in d.values():
+   140	        if isinstance(v, dict):
+   141	            kinds.add("dict")
+   142	        elif isinstance(v, list):
+   143	            kinds.add("list")
+   144	        elif isinstance(v, (int, float)) and not isinstance(v, bool):
+   145	            kinds.add("num")
+   146	        else:
+   147	            return False
+   148	    return len(kinds) == 1
+   149	
+   150	
+   151	# Top-level keys never cut: a view's method/limits statement must survive truncation.
+   152	PROTECTED_KEYS = frozenset({"coverage"})
+   153	
+   154	
+   155	def _scan(node: Any, parent: Any, key: Any, path: tuple, best: dict) -> int:
+   156	    """Estimate the compact-JSON size of ``node``; remember the biggest cuttables."""
+   157	    if len(path) == 1 and path[0] in PROTECTED_KEYS:
+   158	        return _size(node)
+   159	    if isinstance(node, dict):
+   160	        size = 2 + max(0, len(node) - 1)
+   161	        for k, v in node.items():
+   162	            size += len(json.dumps(str(k), ensure_ascii=False)) + 1 + _scan(v, node, k, path + (k,), best)
+   163	        if path and _map_like(node) and size > best["c"][0]:
+   164	            best["c"] = (size, parent, key, path, node)
+   165	        return size
+   166	    if isinstance(node, list):
+   167	        size = 2 + max(0, len(node) - 1)
+   168	        for i, v in enumerate(node):
+   169	            size += _scan(v, node, i, path + (i,), best)

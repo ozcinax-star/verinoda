@@ -1,0 +1,211 @@
+$ grep -rniE 'affected|_query_terms|changes' .   # 218 matching lines in 80 files
+graphify/serve.py:244: # in _query_terms and the unfiltered find_node path keep an English "die"/"hat"
+graphify/serve.py:281: def _query_terms(question: str) -> list[str]:
+graphify/serve.py:842: # X", "what uses Y") rather than a symbol to look up. `_query_terms` keeps them
+graphify/serve.py:1315: the test and the neighbouring modules. Every other MCP tool was unaffected:
+graphify/serve.py:1359: terms = _query_terms(question)
+graphify/serve.py:1515: # existing callers need no changes; an empty result falls through to
+graphify/serve.py:1972: "Get detailed graph impact for a specific PR: which files it changes, "
+graphify/serve.py:1973: "which knowledge-graph communities are affected, and how many nodes are touched. "
+graphify/serve.py:2234: pr.communities_touched, pr.nodes_affected = compute_pr_impact(files, G)
+graphify/serve.py:2237: "Rank these by review priority. Higher blast_radius = more graph communities affected = higher merge risk.\n"
+graphify/watch.py:22: _PENDING_FILENAME = ".pending_changes"
+graphify/watch.py:27: """Append ``changed_paths`` to ``out_dir/.pending_changes`` (one per line).
+graphify/watch.py:49: """Read + unlink ``out_dir/.pending_changes`` and return deduplicated paths.
+graphify/watch.py:148: contents of ``.pending_changes`` so the lock-holding rebuild covers
+graphify/watch.py:1404: f"{watch_path.resolve()} - changes queued.")
+graphify/watch.py:1802: the raw detect output so #1908 pruning is unaffected.
+graphify/watch.py:1975: print("[graphify watch] No code-graph changes detected (--no-cluster); outputs left untouched.")
+graphify/watch.py:2021: "[graphify watch] No code-graph topology changes detected; "
+graphify/watch.py:2026: "[graphify watch] No code-graph topology changes detected; "
+graphify/watch.py:2030: print("[graphify watch] No code-graph topology changes detected; outputs left untouched.")
+graphify/watch.py:2141: print("[graphify watch] No code-graph changes detected; graph.json/GRAPH_REPORT.md left untouched.")
+graphify/watch.py:2196: # opt-in by existence so users who never ran callflow-html aren't affected.
+graphify/watch.py:2230: Non-code file changes (docs, papers, images) require LLM-backed
+graphify/watch.py:2236: print(f"[graphify check-update] Pending non-code changes in {watch_path}.")
+graphify/watch.py:2259: Code changes always rebuild (AST extraction needs no LLM). Deletions of
+graphify/watch.py:2279: agents reading files. Counting those as changes makes the watcher re-trigger
+graphify/watch.py:2282: deletion and close-after-write are changes; macOS (PollingObserver) never
+graphify/watch.py:2302: For code-only changes: re-runs AST extraction + rebuild immediately (no LLM).
+graphify/watch.py:2303: For doc/paper/image changes: writes a needs_update flag and notifies the user
+graphify/watch.py:2366: print(f"[graphify watch] Code changes rebuild graph automatically. "
+graphify/watch.py:2367: f"Doc/image changes require /graphify --update.")
+graphify/prs.py:71: review_decision: str        # APPROVED | CHANGES_REQUESTED | ""
+graphify/prs.py:78: nodes_affected: int = 0
+graphify/prs.py:91: if not self.nodes_affected:
+graphify/prs.py:93: n = self.nodes_affected
+graphify/prs.py:100: _STATUS_ORDER = ["WRONG-BASE", "CI-FAIL", "CHANGES-REQ", "DRAFT", "STALE", "PENDING", "APPROVED", "READY"]
+graphify/prs.py:109: if pr.review_decision == "CHANGES_REQUESTED":
+graphify/prs.py:110: return "CHANGES-REQ"
+graphify/prs.py:127: "CHANGES-REQ": red(status),
+graphify/prs.py:261: """Return (communities_touched, nodes_affected) for a set of changed files.
+... (178 more matching lines not shown)
+
+==> graphify/serve.py:1-167 <==  (truncated at char cap; file has 2689 lines)
+     1	# MCP stdio server - exposes graph query tools to Claude and other agents
+     2	from __future__ import annotations
+     3	import json
+     4	import math
+     5	import os
+     6	import re
+     7	import sys
+     8	import warnings
+     9	from array import array
+    10	from collections import OrderedDict
+    11	from pathlib import Path
+    12	import threading
+    13	from typing import NamedTuple
+    14	import networkx as nx
+    15	from networkx.readwrite import json_graph
+    16	from graphify.security import sanitize_label, check_graph_file_size_cap, _CONTROL_CHAR_RE
+    17	from graphify.build import edge_data, edge_datas
+    18	from graphify.paths import default_graph_json as _default_graph_json
+    19	
+    20	try:
+    21	    with warnings.catch_warnings():
+    22	        # jieba/jieba-py carry invalid regex escapes that emit a SyntaxWarning on
+    23	        # compile; the message and line moved across Python versions (3.12 also
+    24	        # reworded it), so ignore the category wholesale here rather than pinning
+    25	        # a message/lineno. Under `-W error::SyntaxWarning` this keeps the import
+    26	        # from escalating to a fatal SyntaxError.
+    27	        warnings.simplefilter("ignore", SyntaxWarning)
+    28	        import jieba as _jieba  # type: ignore[import-untyped]
+    29	except (ImportError, SyntaxError):
+    30	    # A stray/broken jieba must never take down the whole server import.
+    31	    _jieba = None
+    32	
+    33	
+    34	class ToolError(Exception):
+    35	    """Raised by a tool handler to signal an error result.
+    36	
+    37	    A normal string return is sent as an ordinary (successful) text result. A
+    38	    ToolError is instead turned into a tool result with ``isError: true`` so a
+    39	    client that only checks ``isError`` can tell a genuine failure — e.g. the
+    40	    ``gh`` CLI missing or a PR that cannot be resolved — from success.
+    41	    """
+    42	
+    43	
+    44	def _load_graph(graph_path: str) -> nx.Graph:
+    45	    try:
+    46	        resolved = Path(graph_path).resolve()
+    47	        if resolved.suffix != ".json":
+    48	            raise ValueError(f"Graph path must be a .json file, got: {graph_path!r}")
+    49	        if not resolved.exists():
+    50	            raise FileNotFoundError(f"Graph file not found: {resolved}")
+    51	        check_graph_file_size_cap(resolved)
+    52	        safe = resolved
+    53	        data = json.loads(safe.read_text(encoding="utf-8"))
+    54	        if "links" not in data and "edges" in data:
+    55	            data = dict(data, links=data["edges"])
+    56	        # Stash the on-disk logical flag before the load-time override below:
+    57	        # `directed: True` exists only so renderers can recover stored arc
+    58	        # order (#2309); tools that care about logical direction (#2487) must
+    59	        # not mistake the override for graph truth.
+    60	        _logical_directed = bool(data.get("directed", False))
+    61	        data = {**data, "directed": True}
+    62	        try:
+    63	            from graphify.build import graph_has_legacy_ids as _legacy
+    64	            if _legacy(data.get("nodes", [])):
+    65	                print(
+    66	                    "[graphify] note: this graph uses the pre-#1504 node-ID scheme; "
+    67	                    "rebuild with `graphify extract --force` for path-qualified IDs.",
+    68	                    file=sys.stderr,
+    69	                )
+    70	        except Exception:
+    71	            pass
+    72	        try:
+    73	            G = json_graph.node_link_graph(data, edges="links")
+    74	        except TypeError:
+    75	            G = json_graph.node_link_graph(data)
+    76	        G.graph["_logical_directed"] = _logical_directed
+    77	        # Attach the work-memory overlay (derived sidecar next to graph.json) so
+    78	        # the query/MCP read surface can annotate NODE lines display-only. Empty
+    79	        # when no sidecar exists, leaving un-annotated output byte-identical.
+    80	        try:
+    81	            from graphify.reflect import load_learning_overlay as _llo
+    82	            G.graph["_learning_overlay"] = _llo(resolved)
+    83	        except Exception:
+    84	            G.graph["_learning_overlay"] = {}
+    85	        return G
+    86	    except json.JSONDecodeError as exc:
+    87	        print(f"error: graph.json is corrupted ({exc}). Re-run /graphify to rebuild.", file=sys.stderr)
+    88	        sys.exit(1)
+    89	    except (ValueError, FileNotFoundError) as exc:
+    90	        print(f"error: {exc}", file=sys.stderr)
+    91	        sys.exit(1)
+    92	
+    93	
+    94	def _communities_from_graph(G: nx.Graph) -> dict[int, list[str]]:
+    95	    """Reconstruct community dict from community property stored on nodes."""
+    96	    communities: dict[int, list[str]] = {}
+    97	    for node_id, data in G.nodes(data=True):
+    98	        cid = data.get("community")
+    99	        if cid is not None:
+   100	            communities.setdefault(int(cid), []).append(node_id)
+   101	    return communities
+   102	
+   103	
+   104	def _max_server_contexts() -> int:
+   105	    """Return the project-context LRU capacity (default 8, minimum 1).
+   106	
+   107	    ``GRAPHIFY_MAX_CONTEXTS`` overrides the default. Invalid or blank values
+   108	    use 8; zero and negative values clamp to 1, since each request needs a
+   109	    graph context. The server's configured default graph is pinned separately
+   110	    and does not count against this limit.
+   111	    """
+   112	    raw = os.environ.get("GRAPHIFY_MAX_CONTEXTS", "").strip()
+   113	    if not raw:
+   114	        return 8
+   115	    try:
+   116	        return max(1, int(raw))
+   117	    except ValueError:
+   118	        return 8
+   119	
+   120	
+   121	class _GraphContextCache:
+   122	    """Thread-safe graph contexts: one pinned default plus an LRU of projects."""
+   123	
+   124	    def __init__(self, max_contexts: int):
+   125	        self._max_contexts = max_contexts
+   126	        self._entries: OrderedDict[str, dict] = OrderedDict()
+   127	        self._pinned: dict[str, dict] = {}
+   128	        self._lock = threading.Lock()
+   129	
+   130	    def _load_entry(self, resolved_path: str, key: tuple[int, int]) -> dict:
+   131	        """Build one entry for an already-resolved path and known file key.
+   132	
+   133	        ``_load_graph`` is also used by the CLI, where invalid input terminates
+   134	        the process. A client-supplied ``project_path`` must instead become a
+   135	        tool error, so the shared MCP server can continue serving other graphs.
+   136	        """
+   137	        try:
+   138	            graph = _load_graph(resolved_path)
+   139	        except SystemExit as exc:
+   140	            raise RuntimeError(f"could not load graph.json at {resolved_path}") from exc
+   141	        # Warm the index before exposing the graph so its first query does not
+   142	        # pay the expensive build cost.
+   143	        _get_trigram_index(graph)
+   144	        communities = _communities_from_graph(graph)
+   145	        entry = {
+   146	            "key": key,
+   147	            "G": graph,
+   148	            "communities": communities,
+   149	        }
+   150	        return entry
+   151	
+   152	    def load(self, resolved_path: str, *, pinned: bool = False) -> tuple[nx.Graph, dict[int, list[str]]]:
+   153	        """Return a fresh context, retaining project contexts by LRU order.
+   154	
+   155	        ``resolved_path`` is resolved by the caller, making this method the
+   156	        sole owner of file statting and cache-key construction.
+   157	
+   158	        ``pinned=True`` is reserved for the server's configured default graph;
+   159	        it remains warm without consuming a project-cache slot.
+   160	        """
+   161	        with self._lock:
+   162	            try:
+   163	                stat_result = Path(resolved_path).stat()
+   164	            except FileNotFoundError:
+   165	                raise FileNotFoundError(f"graph.json not found: {resolved_path}") from None
+   166	            key = (stat_result.st_mtime_ns, stat_result.st_size)
+   167	            entries = self._pinned if pinned else self._entries

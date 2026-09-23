@@ -1,0 +1,91 @@
+$ grep -rniE 'graphify|query|output|cut|fit|token|budget' .   # 9022 matching lines in 222 files
+graphify/serve.py:1: # MCP stdio server - exposes graph query tools to Claude and other agents
+graphify/serve.py:16: from graphify.security import sanitize_label, check_graph_file_size_cap, _CONTROL_CHAR_RE
+graphify/serve.py:17: from graphify.build import edge_data, edge_datas
+graphify/serve.py:18: from graphify.paths import default_graph_json as _default_graph_json
+graphify/serve.py:63: from graphify.build import graph_has_legacy_ids as _legacy
+graphify/serve.py:66: "[graphify] note: this graph uses the pre-#1504 node-ID scheme; "
+graphify/serve.py:67: "rebuild with `graphify extract --force` for path-qualified IDs.",
+graphify/serve.py:78: # the query/MCP read surface can annotate NODE lines display-only. Empty
+graphify/serve.py:79: # when no sidecar exists, leaving un-annotated output byte-identical.
+graphify/serve.py:81: from graphify.reflect import load_learning_overlay as _llo
+graphify/serve.py:87: print(f"error: graph.json is corrupted ({exc}). Re-run /graphify to rebuild.", file=sys.stderr)
+graphify/serve.py:107: ``GRAPHIFY_MAX_CONTEXTS`` overrides the default. Invalid or blank values
+graphify/serve.py:112: raw = os.environ.get("GRAPHIFY_MAX_CONTEXTS", "").strip()
+graphify/serve.py:141: # Warm the index before exposing the graph so its first query does not
+graphify/serve.py:191: def _search_tokens(text: str) -> list[str]:
+graphify/serve.py:192: """Split text into word tokens, stripping punctuation and diacritics.
+graphify/serve.py:195: character but not hyphen, so `graph_first_guard` stayed one token while the
+graphify/serve.py:196: label `graph-first-guard.py` split into three — and the query matched
+graphify/serve.py:197: nothing. Both the query and the node label pass through here, so splitting
+graphify/serve.py:199: (their tokens simply match the same way). Found 2026-07-29: the graph could
+graphify/serve.py:212: segments = [w for w in _jieba.cut(text) if len(w.strip()) > 0]
+graphify/serve.py:227: # Question/filler words dropped from query terms so content words drive BFS
+graphify/serve.py:231: # to query terms only — node text is never filtered, so a symbol literally named
+graphify/serve.py:239: # set of question/filler words. Diacritics are kept intact (the query tokenizer
+graphify/serve.py:244: # in _query_terms and the unfiltered find_node path keep an English "die"/"hat"
+graphify/serve.py:245: # query workable), but deliberately OMIT "war"/"bald" (German was/soon) so
+graphify/serve.py:249: _QUERY_STOPWORDS = frozenset({
+graphify/serve.py:281: def _query_terms(question: str) -> list[str]:
+graphify/serve.py:282: """Split a query into searchable terms, segmenting Chinese text, then drop
+graphify/serve.py:283: question/filler words (`_QUERY_STOPWORDS`, English plus common German/
+graphify/serve.py:285: unfiltered terms if the query is all stopwords, so a question like "how does
+graphify/serve.py:299: content = [t for t in terms if t not in _QUERY_STOPWORDS]
+graphify/serve.py:331: """The node's `attributes` key-value pairs normalized and tokenized for search."""
+graphify/serve.py:341: tokens = " ".join(_search_tokens(norm))
+graphify/serve.py:342: return norm, tokens
+graphify/serve.py:347: """IDF weights for query terms, cached in G.graph['_idf_cache'].
+graphify/serve.py:393: """Concatenate every field _score_nodes / _find_node match a query against, so
+graphify/serve.py:401: - `label_tokens` (the space-joined token form) feeds _find_node's
+graphify/serve.py:402: `term in label_tokens` branch, where a multi-word `term` can span a token
+graphify/serve.py:403: boundary that punctuation hides in `norm_label` (e.g. query "foo bar" matches
+... (8982 more matching lines not shown)
+
+==> graphify/serve.py:1-47 <==  (truncated at char cap; file has 2689 lines)
+     1	# MCP stdio server - exposes graph query tools to Claude and other agents
+     2	from __future__ import annotations
+     3	import json
+     4	import math
+     5	import os
+     6	import re
+     7	import sys
+     8	import warnings
+     9	from array import array
+    10	from collections import OrderedDict
+    11	from pathlib import Path
+    12	import threading
+    13	from typing import NamedTuple
+    14	import networkx as nx
+    15	from networkx.readwrite import json_graph
+    16	from graphify.security import sanitize_label, check_graph_file_size_cap, _CONTROL_CHAR_RE
+    17	from graphify.build import edge_data, edge_datas
+    18	from graphify.paths import default_graph_json as _default_graph_json
+    19	
+    20	try:
+    21	    with warnings.catch_warnings():
+    22	        # jieba/jieba-py carry invalid regex escapes that emit a SyntaxWarning on
+    23	        # compile; the message and line moved across Python versions (3.12 also
+    24	        # reworded it), so ignore the category wholesale here rather than pinning
+    25	        # a message/lineno. Under `-W error::SyntaxWarning` this keeps the import
+    26	        # from escalating to a fatal SyntaxError.
+    27	        warnings.simplefilter("ignore", SyntaxWarning)
+    28	        import jieba as _jieba  # type: ignore[import-untyped]
+    29	except (ImportError, SyntaxError):
+    30	    # A stray/broken jieba must never take down the whole server import.
+    31	    _jieba = None
+    32	
+    33	
+    34	class ToolError(Exception):
+    35	    """Raised by a tool handler to signal an error result.
+    36	
+    37	    A normal string return is sent as an ordinary (successful) text result. A
+    38	    ToolError is instead turned into a tool result with ``isError: true`` so a
+    39	    client that only checks ``isError`` can tell a genuine failure — e.g. the
+    40	    ``gh`` CLI missing or a PR that cannot be resolved — from success.
+    41	    """
+    42	
+    43	
+    44	def _load_graph(graph_path: str) -> nx.Graph:
+    45	    try:
+    46	        resolved = Path(graph_path).resolve()
+    47	        if resolved.suffix != ".json":

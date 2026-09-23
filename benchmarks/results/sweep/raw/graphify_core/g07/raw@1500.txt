@@ -1,0 +1,93 @@
+$ grep -rniE 'affected|_query_terms|changes' .   # 218 matching lines in 80 files
+graphify/serve.py:244: # in _query_terms and the unfiltered find_node path keep an English "die"/"hat"
+graphify/serve.py:281: def _query_terms(question: str) -> list[str]:
+graphify/serve.py:842: # X", "what uses Y") rather than a symbol to look up. `_query_terms` keeps them
+graphify/serve.py:1315: the test and the neighbouring modules. Every other MCP tool was unaffected:
+graphify/serve.py:1359: terms = _query_terms(question)
+graphify/serve.py:1515: # existing callers need no changes; an empty result falls through to
+graphify/serve.py:1972: "Get detailed graph impact for a specific PR: which files it changes, "
+graphify/serve.py:1973: "which knowledge-graph communities are affected, and how many nodes are touched. "
+graphify/serve.py:2234: pr.communities_touched, pr.nodes_affected = compute_pr_impact(files, G)
+graphify/serve.py:2237: "Rank these by review priority. Higher blast_radius = more graph communities affected = higher merge risk.\n"
+graphify/watch.py:22: _PENDING_FILENAME = ".pending_changes"
+graphify/watch.py:27: """Append ``changed_paths`` to ``out_dir/.pending_changes`` (one per line).
+graphify/watch.py:49: """Read + unlink ``out_dir/.pending_changes`` and return deduplicated paths.
+graphify/watch.py:148: contents of ``.pending_changes`` so the lock-holding rebuild covers
+graphify/watch.py:1404: f"{watch_path.resolve()} - changes queued.")
+graphify/watch.py:1802: the raw detect output so #1908 pruning is unaffected.
+graphify/watch.py:1975: print("[graphify watch] No code-graph changes detected (--no-cluster); outputs left untouched.")
+graphify/watch.py:2021: "[graphify watch] No code-graph topology changes detected; "
+graphify/watch.py:2026: "[graphify watch] No code-graph topology changes detected; "
+graphify/watch.py:2030: print("[graphify watch] No code-graph topology changes detected; outputs left untouched.")
+graphify/watch.py:2141: print("[graphify watch] No code-graph changes detected; graph.json/GRAPH_REPORT.md left untouched.")
+graphify/watch.py:2196: # opt-in by existence so users who never ran callflow-html aren't affected.
+graphify/watch.py:2230: Non-code file changes (docs, papers, images) require LLM-backed
+graphify/watch.py:2236: print(f"[graphify check-update] Pending non-code changes in {watch_path}.")
+graphify/watch.py:2259: Code changes always rebuild (AST extraction needs no LLM). Deletions of
+graphify/watch.py:2279: agents reading files. Counting those as changes makes the watcher re-trigger
+graphify/watch.py:2282: deletion and close-after-write are changes; macOS (PollingObserver) never
+graphify/watch.py:2302: For code-only changes: re-runs AST extraction + rebuild immediately (no LLM).
+graphify/watch.py:2303: For doc/paper/image changes: writes a needs_update flag and notifies the user
+graphify/watch.py:2366: print(f"[graphify watch] Code changes rebuild graph automatically. "
+graphify/watch.py:2367: f"Doc/image changes require /graphify --update.")
+graphify/prs.py:71: review_decision: str        # APPROVED | CHANGES_REQUESTED | ""
+graphify/prs.py:78: nodes_affected: int = 0
+graphify/prs.py:91: if not self.nodes_affected:
+graphify/prs.py:93: n = self.nodes_affected
+graphify/prs.py:100: _STATUS_ORDER = ["WRONG-BASE", "CI-FAIL", "CHANGES-REQ", "DRAFT", "STALE", "PENDING", "APPROVED", "READY"]
+graphify/prs.py:109: if pr.review_decision == "CHANGES_REQUESTED":
+graphify/prs.py:110: return "CHANGES-REQ"
+graphify/prs.py:127: "CHANGES-REQ": red(status),
+graphify/prs.py:261: """Return (communities_touched, nodes_affected) for a set of changed files.
+... (178 more matching lines not shown)
+
+==> graphify/serve.py:1-49 <==  (truncated at char cap; file has 2689 lines)
+     1	# MCP stdio server - exposes graph query tools to Claude and other agents
+     2	from __future__ import annotations
+     3	import json
+     4	import math
+     5	import os
+     6	import re
+     7	import sys
+     8	import warnings
+     9	from array import array
+    10	from collections import OrderedDict
+    11	from pathlib import Path
+    12	import threading
+    13	from typing import NamedTuple
+    14	import networkx as nx
+    15	from networkx.readwrite import json_graph
+    16	from graphify.security import sanitize_label, check_graph_file_size_cap, _CONTROL_CHAR_RE
+    17	from graphify.build import edge_data, edge_datas
+    18	from graphify.paths import default_graph_json as _default_graph_json
+    19	
+    20	try:
+    21	    with warnings.catch_warnings():
+    22	        # jieba/jieba-py carry invalid regex escapes that emit a SyntaxWarning on
+    23	        # compile; the message and line moved across Python versions (3.12 also
+    24	        # reworded it), so ignore the category wholesale here rather than pinning
+    25	        # a message/lineno. Under `-W error::SyntaxWarning` this keeps the import
+    26	        # from escalating to a fatal SyntaxError.
+    27	        warnings.simplefilter("ignore", SyntaxWarning)
+    28	        import jieba as _jieba  # type: ignore[import-untyped]
+    29	except (ImportError, SyntaxError):
+    30	    # A stray/broken jieba must never take down the whole server import.
+    31	    _jieba = None
+    32	
+    33	
+    34	class ToolError(Exception):
+    35	    """Raised by a tool handler to signal an error result.
+    36	
+    37	    A normal string return is sent as an ordinary (successful) text result. A
+    38	    ToolError is instead turned into a tool result with ``isError: true`` so a
+    39	    client that only checks ``isError`` can tell a genuine failure — e.g. the
+    40	    ``gh`` CLI missing or a PR that cannot be resolved — from success.
+    41	    """
+    42	
+    43	
+    44	def _load_graph(graph_path: str) -> nx.Graph:
+    45	    try:
+    46	        resolved = Path(graph_path).resolve()
+    47	        if resolved.suffix != ".json":
+    48	            raise ValueError(f"Graph path must be a .json file, got: {graph_path!r}")
+    49	        if not resolved.exists():

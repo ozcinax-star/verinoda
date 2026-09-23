@@ -1,0 +1,487 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "verinoda.question_plan/1",
+ "title": "Verinoda question plan",
+ "description": "Filled by the host agent from the user's message (or drafted by rules); validated and grounded by Verinoda before any work. Omit optional fields instead of sending null. Flat on purpose (no schema references, no alternatives) so every host can read it.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "schema",
+  "user_message",
+  "language",
+  "restated_goal",
+  "sub_questions"
+ ],
+ "properties": {
+  "schema": {
+   "const": "verinoda.question_plan/1"
+  },
+  "user_message": {
+   "type": "string",
+   "minLength": 1,
+   "description": "The user's message verbatim - never translated, shortened or merged with your own words."
+  },
+  "conversation_context": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   },
+   "description": "Verbatim earlier turns you used to resolve 'bunu', 'that function', 'the old version'."
+  },
+  "language": {
+   "enum": [
+    "tr",
+    "en",
+    "mixed",
+    "other"
+   ]
+  },
+  "restated_goal": {
+   "type": "string",
+   "description": "One English sentence: what the user wants to know (and why, if stated)."
+  },
+  "restated_goal_user_lang": {
+   "type": "string",
+   "description": "The same goal in the user's language; shown first in the answer."
+  },
+  "derived_by": {
+   "type": "string",
+   "description": "Set by rules (question_plan.draft); hosts omit it."
+  },
+  "sub_questions": {
+   "type": "array",
+   "minItems": 1,
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "id",
+     "text",
+     "intent",
+     "done_when"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^q[0-9]+$"
+     },
+     "text": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Self-contained sub-question (English when you can translate it)."
+     },
+     "text_user_lang": {
+      "type": "string"
+     },
+     "intent": {
+      "enum": [
+       "locate",
+       "define",
+       "flow",
+       "callers",
+       "dataflow",
+       "config",
+       "tests",
+       "why",
+       "history",
+       "impact",
+       "behaviour",
+       "compare_reference",
+       "performance",
+       "architecture",
+       "usage"
+      ]
+     },
+     "secondary_intents": {
+      "type": "array",
+      "items": {
+       "enum": [
+        "locate",
+        "define",
+        "flow",
+        "callers",
+        "dataflow",
+        "config",
+        "tests",
+        "why",
+        "history",
+        "impact",
+        "behaviour",
+        "compare_reference",
+        "performance",
+        "architecture",
+        "usage"
+       ]
+      },
+      "description": "Other intents the same clause also asks for; their handlers run as support."
+     },
+     "mentions": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^m[0-9]+$"
+      }
+     },
+     "references": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^r[0-9]+$"
+      }
+     },
+     "depends_on": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^q[0-9]+$"
+      }
+     },
+     "subject_from": {
+      "type": "string",
+      "pattern": "^q[0-9]+$",
+      "description": "Earlier sub-question whose located symbols become this one's subject ('bunu', 'it')."
+     },
+     "derived_by": {
+      "type": "string"
+     },
+     "done_when": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "kind",
+       "detail"
+      ],
+      "properties": {
+       "kind": {
+        "enum": [
+         "location_verified",
+         "path_found",
+         "set_enumerated",
+         "claim_exists",
+         "decision_found",
+         "proposition_checked",
+         "reference_pinned",
+         "comparison_done"
+        ]
+       },
+       "subjects": {
+        "type": "array",
+        "items": {
+         "type": "string",
+         "pattern": "^[mr][0-9]+$"
+        },
+        "description": "Mention/reference ids the criterion is about; for path_found: source first, target last."
+       },
+       "min_status": {
+        "enum": [
+         "experiment_verified",
+         "statically_verified",
+         "primary_source_verified",
+         "observed",
+         "strong_inference",
+         "weak_inference"
+        ]
+       },
+       "detail": {
+        "type": "string",
+        "description": "One checkable sentence: what must be shown."
+       },
+       "proposition": {
+        "type": "string",
+        "description": "proposition_checked only: 'A before B in F' or 'regex:<re> in:<glob>'."
+       }
+      }
+     }
+    }
+   }
+  },
+  "mentions": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "id",
+     "text",
+     "kind"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^m[0-9]+$"
+     },
+     "text": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Exact substring of user_message (or of conversation_context when source=conversation)."
+     },
+     "span": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "[start, end) character offsets in user_message."
+     },
+     "source": {
+      "enum": [
+       "user_message",
+       "conversation"
+      ]
+     },
+     "kind": {
+      "enum": [
+       "domain_concept",
+       "symbol",
+       "file",
+       "module",
+       "config_key",
+       "env_var",
+       "test",
+       "error_message",
+       "cli_command",
+       "endpoint",
+       "db_table",
+       "other"
+      ]
+     },
+     "role": {
+      "enum": [
+       "source",
+       "target",
+       "container",
+       "owner",
+       "object",
+       "instrument"
+      ],
+      "description": "Grammatical role: 'API'den' is a source, 'veritabanına' a target."
+     },
+     "gloss_en": {
+      "type": "string",
+      "description": "English gloss of a non-English domain word ('sipariş' -> 'order')."
+     },
+     "candidates": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 5,
+      "description": "Code names: identifier, 'Class.method', 'path/file.py', 'path/file.py::Symbol'. Prefer names seen in Verinoda output; never invent paths."
+     },
+     "required": {
+      "type": "boolean",
+      "description": "false when the sub-question can be answered without it."
+     },
+     "derived_by": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "references": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "id",
+     "text",
+     "kind",
+     "version"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^r[0-9]+$"
+     },
+     "text": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Exact words the user used for the reference."
+     },
+     "span": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      },
+      "minItems": 2,
+      "maxItems": 2
+     },
+     "kind": {
+      "enum": [
+       "git_repo",
+       "file",
+       "symbol",
+       "commit",
+       "pull_request",
+       "issue",
+       "package",
+       "paper",
+       "doc_url",
+       "application",
+       "local_path"
+      ]
+     },
+     "locator": {
+      "type": "string",
+      "description": "URL, local path, 'owner/repo#123', package name, DOI or arXiv id - only if known."
+     },
+     "locator_source": {
+      "enum": [
+       "user_message",
+       "conversation",
+       "project_metadata",
+       "agent_lookup"
+      ]
+     },
+     "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "source"
+      ],
+      "properties": {
+       "spec": {
+        "type": "string",
+        "description": "Tag / branch / SHA / semver / PR number / arXiv vN / date, exactly as meant."
+       },
+       "source": {
+        "enum": [
+         "user_explicit",
+         "user_relative",
+         "conversation",
+         "project_lock",
+         "project_installed",
+         "unspecified"
+        ]
+       },
+       "evidence": {
+        "type": "string",
+        "description": "The user's verbatim words that fix the version ('v0.3', 'eski sürüm', 'kullandığımız')."
+       }
+      }
+     },
+     "purpose": {
+      "enum": [
+       "compare",
+       "behaviour_source",
+       "cite",
+       "context"
+      ]
+     },
+     "derived_by": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "constraints": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "scope_paths": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "exclude_paths": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "environment": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string"
+     }
+    },
+    "as_of": {
+     "type": "string",
+     "description": "Commit / tag / ISO date the question is about, only if the user said so."
+    },
+    "include_tests": {
+     "type": "boolean"
+    }
+   }
+  },
+  "interpretations": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "id",
+     "reading"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^i[0-9]+$"
+     },
+     "reading": {
+      "type": "string"
+     },
+     "affects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "assumptions": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "answers": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "clarification_id",
+     "choice",
+     "answered_by"
+    ],
+    "properties": {
+     "clarification_id": {
+      "type": "string"
+     },
+     "choice": {
+      "type": "string"
+     },
+     "answered_by": {
+      "enum": [
+       "user",
+       "user_free_text",
+       "timeout_default",
+       "mcp_elicitation",
+       "agent"
+      ]
+     }
+    }
+   }
+  },
+  "on_ambiguity": {
+   "enum": [
+    "ask",
+    "answer_all",
+    "best_guess"
+   ]
+  },
+  "host": {
+   "enum": [
+    "claude_code",
+    "codex",
+    "cli",
+    "other"
+   ]
+  }
+ }
+}

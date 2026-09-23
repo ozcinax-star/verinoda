@@ -1,0 +1,9 @@
+$ grep -rniE 'sipariş|oluşturma|api|sinden|veritabanı|yazımına|kadar|çağrı|yolu|nedir' .   # 1 matching lines in 1 files
+README.md:3: Example service for RepoAtlas. `orders/api.py` handlers call `orders/service.py`,
+
+==> README.md:1-5 <==
+     1	# orders_app
+     2	
+     3	Example service for RepoAtlas. `orders/api.py` handlers call `orders/service.py`,
+     4	which prices orders via `orders/pricing.py` and persists them through
+     5	`orders/repository.py` (SQLite, see docs/adr/0001-sqlite-persistence.md).

@@ -1,0 +1,172 @@
+Graph: graphify-out/graph.json (4092 nodes) | Traversal: BFS depth=2 | Start: ['graphify', 'graphify reference: query, path, explain', 'graphify command dispatch — every non-install subcommand. Extracted verbatim…', 'command-kilo.md', 'contextlib', '_prescan_functions()', 'Graph', '.query()', 'suggest_questions()', 'Turn a URL into a safe filename.'] | Context: call (heuristic) | 65 nodes found
+
+[i] Complete answer over budget: all 65 nodes and 103 edges shown (~5257 tokens vs the requested ~2000-token budget). Edges are never dropped once every node fits, so this is already the full answer — raising --budget further will not shrink it. Narrow with context_filter=['call'] or use get_node for a specific symbol to reduce size instead.
+
+NODE graphify [src=graphify/always_on/agents-md.md loc=L1 community=agents-md.md]
+NODE graphify reference: query, path, explain [src=graphify/skills/agents/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE graphify command dispatch — every non-install subcommand. Extracted verbatim… [src=graphify/cli.py loc=L1 community=cli.py]
+NODE command-kilo.md [src=graphify/command-kilo.md loc=L1 community=command-kilo.md]
+NODE contextlib [src= loc= community=sys]
+NODE _prescan_functions() [src=graphify/extractors/bash.py loc=L537 community=extract_bash]
+NODE Graph [src= loc= community=serve.py]
+NODE .query() [src=graphify/_minhash.py loc=L101 community=.query]
+NODE suggest_questions() [src=graphify/analyze.py loc=L443 community=god_nodes]
+NODE Turn a URL into a safe filename. [src=graphify/ingest.py loc=L57 community=ingest.py]
+NODE dispatch_command() [src=graphify/cli.py loc=L1064 community=cli.py]
+NODE _rebuild_code() [src=graphify/watch.py loc=L1355 community=watch.py]
+NODE _build_server() [src=graphify/serve.py loc=L1795 community=_build_server]
+NODE _node_community_map() [src=graphify/analyze.py loc=L58 community=god_nodes]
+NODE extract_bash() [src=graphify/extractors/bash.py loc=L105 community=extract_bash]
+NODE read_resource() [src=graphify/serve.py loc=L2283 community=_build_server]
+NODE _is_file_node() [src=graphify/analyze.py loc=L63 community=god_nodes]
+NODE _is_concept_node() [src=graphify/analyze.py loc=L180 community=god_nodes]
+NODE cohesion_score() [src=graphify/cluster.py loc=L355 community=god_nodes]
+NODE _bash_func_name() [src=graphify/extractors/bash.py loc=L227 community=extract_bash]
+NODE _read_text() [src=graphify/extractors/base.py loc=L84 community=_read_text]
+NODE _make_id() [src=graphify/extractors/base.py loc=L54 community=_make_id]
+NODE _file_stem() [src=graphify/extractors/base.py loc=L58 community=_make_id]
+NODE sanitize_metadata() [src=graphify/security.py loc=L442 community=test_security.py]
+NODE sanitize_label() [src=graphify/security.py loc=L394 community=sanitize_label]
+NODE to_obsidian() [src=graphify/export.py loc=L686 community=export.py]
+NODE to_html() [src=graphify/exporters/html.py loc=L402 community=json]
+NODE walk() [src=graphify/extractors/bash.py loc=L281 community=extract_bash]
+NODE generate() [src=graphify/report.py loc=L96 community=report.py]
+NODE edge_data() [src=graphify/build.py loc=L608 community=sys]
+NODE to_json() [src=graphify/export.py loc=L271 community=export.py]
+NODE fetch_prs() [src=graphify/prs.py loc=L202 community=_build_server]
+NODE walk_calls() [src=graphify/extractors/bash.py loc=L235 community=extract_bash]
+NODE _cross_file_surprises() [src=graphify/analyze.py loc=L292 community=god_nodes]
+NODE god_nodes() [src=graphify/analyze.py loc=L109 community=god_nodes]
+NODE surprising_connections() [src=graphify/analyze.py loc=L148 community=god_nodes]
+NODE _detect_default_branch() [src=graphify/prs.py loc=L158 community=_build_server]
+NODE _cross_community_surprises() [src=graphify/analyze.py loc=L355 community=god_nodes]
+NODE _is_file_node_label() [src=graphify/build.py loc=L424 community=resolve_ruby_member_calls]
+NODE cluster() [src=graphify/cluster.py loc=L232 community=sys]
+NODE to_graphml() [src=graphify/export.py loc=L1210 community=export.py]
+NODE _gh() [src=graphify/prs.py loc=L141 community=_build_server]
+NODE serve() [src=graphify/serve.py loc=L2403 community=default_graph_json]
+NODE literal() [src=graphify/extractors/bash.py loc=L215 community=extract_bash]
+NODE compute_pr_impact() [src=graphify/prs.py loc=L260 community=_build_server]
+NODE fetch_worktrees() [src=graphify/prs.py loc=L309 community=_build_server]
+NODE _select_graph() [src=graphify/serve.py loc=L1856 community=_build_server]
+NODE score_all() [src=graphify/cluster.py loc=L373 community=sys]
+NODE push_to_falkordb() [src=graphify/exporters/graphdb.py loc=L80 community=networkx]
+NODE push_to_neo4j() [src=graphify/exporters/graphdb.py loc=L9 community=networkx]
+NODE add_edge() [src=graphify/extractors/bash.py loc=L147 community=extract_bash]
+NODE add_node() [src=graphify/extractors/bash.py loc=L140 community=extract_bash]
+NODE _parse_ci() [src=graphify/prs.py loc=L188 community=_build_server]
+NODE _build_http_app() [src=graphify/serve.py loc=L2479 community=default_graph_json]
+NODE to_svg() [src=graphify/export.py loc=L1287 community=export.py]
+NODE fetch_pr_files() [src=graphify/prs.py loc=L234 community=_build_server]
+NODE format_prs_text() [src=graphify/prs.py loc=L293 community=_build_server]
+NODE _load_ctx() [src=graphify/serve.py loc=L1823 community=_build_server]
+NODE _bash_assignment_base() [src=graphify/extractors/bash.py loc=L76 community=extract_bash]
+NODE _load_community_labels() [src=graphify/serve.py loc=L2262 community=_build_server]
+NODE _on_read_resource() [src=graphify/serve.py loc=L2379 community=_build_server]
+NODE _tool_god_nodes() [src=graphify/serve.py loc=L2138 community=_build_server]
+NODE _tool_graph_stats() [src=graphify/serve.py loc=L2149 community=_build_server]
+NODE _GraphContextCache [src=graphify/serve.py loc=L121 community=_GraphContextCache]
+NODE _max_server_contexts() [src=graphify/serve.py loc=L104 community=_build_server]
+EDGE _build_server() --calls [EXTRACTED context=call]--> suggest_questions() at=graphify/serve.py:L2320
+EDGE read_resource() --calls [EXTRACTED context=call]--> suggest_questions() at=graphify/serve.py:L2320
+EDGE suggest_questions() --calls [EXTRACTED context=call]--> _is_concept_node() at=graphify/analyze.py:L479
+EDGE suggest_questions() --calls [EXTRACTED context=call]--> _is_file_node() at=graphify/analyze.py:L479
+EDGE suggest_questions() --calls [EXTRACTED context=call]--> _node_community_map() at=graphify/analyze.py:L458
+EDGE suggest_questions() --calls [EXTRACTED context=call]--> cohesion_score() at=graphify/analyze.py:L547
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> suggest_questions() at=graphify/cli.py:L2274
+EDGE _rebuild_code() --calls [EXTRACTED context=call]--> suggest_questions() at=graphify/watch.py:L2097
+EDGE extract_bash() --contains [EXTRACTED context=call]--> _prescan_functions() at=graphify/extractors/bash.py:L537
+EDGE _prescan_functions() --calls [EXTRACTED context=call]--> _bash_func_name() at=graphify/extractors/bash.py:L539
+EDGE _bash_func_name() --calls [EXTRACTED context=call]--> literal() at=graphify/extractors/bash.py:L232
+EDGE walk() --calls [EXTRACTED context=call]--> _bash_func_name() at=graphify/extractors/bash.py:L284
+EDGE cluster() --calls [EXTRACTED context=call]--> cohesion_score() at=graphify/cluster.py:L320
+EDGE score_all() --calls [EXTRACTED context=call]--> cohesion_score() at=graphify/cluster.py:L374
+EDGE generate() --calls [EXTRACTED context=call]--> _is_file_node() at=graphify/report.py:L159
+EDGE _cross_community_surprises() --calls [EXTRACTED context=call]--> _is_file_node() at=graphify/analyze.py:L401
+EDGE _cross_file_surprises() --calls [EXTRACTED context=call]--> _is_file_node() at=graphify/analyze.py:L316
+EDGE god_nodes() --calls [EXTRACTED context=call]--> _is_file_node() at=graphify/analyze.py:L134
+EDGE _is_file_node() --calls [EXTRACTED context=call]--> _is_file_node_label() at=graphify/analyze.py:L80
+EDGE read_resource() --calls [EXTRACTED context=call]--> _load_community_labels() at=graphify/serve.py:L2319
+EDGE _on_read_resource() --calls [EXTRACTED context=call]--> read_resource() at=graphify/serve.py:L2380
+EDGE read_resource() --calls [EXTRACTED context=call]--> _select_graph() at=graphify/serve.py:L2284
+EDGE read_resource() --calls [EXTRACTED context=call]--> _tool_graph_stats() at=graphify/serve.py:L2292
+EDGE read_resource() --calls [EXTRACTED context=call]--> _tool_god_nodes() at=graphify/serve.py:L2294
+EDGE read_resource() --calls [EXTRACTED context=call]--> surprising_connections() at=graphify/serve.py:L2298
+EDGE to_graphml() --calls [EXTRACTED context=call]--> _node_community_map() at=graphify/export.py:L1221
+EDGE to_json() --calls [EXTRACTED context=call]--> _node_community_map() at=graphify/export.py:L328
+EDGE to_obsidian() --calls [EXTRACTED context=call]--> _node_community_map() at=graphify/export.py:L738
+EDGE to_svg() --calls [EXTRACTED context=call]--> _node_community_map() at=graphify/export.py:L1309
+EDGE push_to_falkordb() --calls [EXTRACTED context=call]--> _node_community_map() at=graphify/exporters/graphdb.py:L117
+EDGE push_to_neo4j() --calls [EXTRACTED context=call]--> _node_community_map() at=graphify/exporters/graphdb.py:L30
+EDGE _cross_community_surprises() --calls [EXTRACTED context=call]--> _node_community_map() at=graphify/analyze.py:L392
+EDGE _cross_file_surprises() --calls [EXTRACTED context=call]--> _node_community_map() at=graphify/analyze.py:L306
+EDGE to_html() --calls [EXTRACTED context=call]--> _node_community_map() at=graphify/exporters/html.py:L487
+EDGE _build_server() --calls [EXTRACTED context=call]--> _GraphContextCache at=graphify/serve.py:L1821
+EDGE _build_server() --calls [EXTRACTED context=call]--> sanitize_label() at=graphify/serve.py:L2066
+EDGE _build_server() --calls [EXTRACTED context=call]--> edge_data() at=graphify/serve.py:L2097
+EDGE _build_server() --calls [EXTRACTED context=call]--> compute_pr_impact() at=graphify/serve.py:L2192
+EDGE _build_server() --calls [EXTRACTED context=call]--> _detect_default_branch() at=graphify/serve.py:L2167
+EDGE _build_server() --calls [EXTRACTED context=call]--> fetch_pr_files() at=graphify/serve.py:L2189
+EDGE _build_server() --calls [EXTRACTED context=call]--> fetch_prs() at=graphify/serve.py:L2169
+EDGE _build_server() --calls [EXTRACTED context=call]--> fetch_worktrees() at=graphify/serve.py:L2172
+EDGE _build_server() --calls [EXTRACTED context=call]--> format_prs_text() at=graphify/serve.py:L2175
+EDGE _build_server() --calls [EXTRACTED context=call]--> _gh() at=graphify/serve.py:L2186
+EDGE _build_server() --calls [EXTRACTED context=call]--> _parse_ci() at=graphify/serve.py:L2193
+EDGE _build_http_app() --calls [EXTRACTED context=call]--> _build_server() at=graphify/serve.py:L2519
+EDGE _build_server() --calls [EXTRACTED context=call]--> _max_server_contexts() at=graphify/serve.py:L1821
+EDGE _build_server() --calls [EXTRACTED context=call]--> god_nodes() at=graphify/serve.py:L2141
+EDGE _build_server() --calls [EXTRACTED context=call]--> surprising_connections() at=graphify/serve.py:L2298
+EDGE serve() --calls [EXTRACTED context=call]--> _build_server() at=graphify/serve.py:L2412
+EDGE _build_server() --contains [EXTRACTED context=call]--> _load_ctx() at=graphify/serve.py:L1823
+EDGE generate() --calls [EXTRACTED context=call]--> _is_concept_node() at=graphify/report.py:L316
+EDGE _cross_file_surprises() --calls [EXTRACTED context=call]--> _is_concept_node() at=graphify/analyze.py:L314
+EDGE god_nodes() --calls [EXTRACTED context=call]--> _is_concept_node() at=graphify/analyze.py:L134
+EDGE extract_bash() --calls [EXTRACTED context=call]--> _file_stem() at=graphify/extractors/bash.py:L122
+EDGE extract_bash() --calls [EXTRACTED context=call]--> _make_id() at=graphify/extractors/bash.py:L167
+EDGE extract_bash() --calls [EXTRACTED context=call]--> _read_text() at=graphify/extractors/bash.py:L318
+EDGE extract_bash() --calls [EXTRACTED context=call]--> sanitize_metadata() at=graphify/extractors/bash.py:L145
+EDGE extract_bash() --calls [EXTRACTED context=call]--> _bash_assignment_base() at=graphify/extractors/bash.py:L566
+EDGE extract_bash() --contains [EXTRACTED context=call]--> add_node() at=graphify/extractors/bash.py:L140
+EDGE extract_bash() --contains [EXTRACTED context=call]--> add_edge() at=graphify/extractors/bash.py:L147
+EDGE extract_bash() --contains [EXTRACTED context=call]--> walk_calls() at=graphify/extractors/bash.py:L235
+EDGE extract_bash() --contains [EXTRACTED context=call]--> walk() at=graphify/extractors/bash.py:L281
+EDGE _cross_community_surprises() --calls [EXTRACTED context=call]--> edge_data() at=graphify/analyze.py:L377
+EDGE _cross_file_surprises() --calls [EXTRACTED context=call]--> _cross_community_surprises() at=graphify/analyze.py:L352
+EDGE surprising_connections() --calls [EXTRACTED context=call]--> _cross_community_surprises() at=graphify/analyze.py:L177
+EDGE surprising_connections() --calls [EXTRACTED context=call]--> _cross_file_surprises() at=graphify/analyze.py:L175
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> god_nodes() at=graphify/cli.py:L1454
+EDGE _rebuild_code() --calls [EXTRACTED context=call]--> god_nodes() at=graphify/watch.py:L2038
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> surprising_connections() at=graphify/cli.py:L2121
+EDGE _rebuild_code() --calls [EXTRACTED context=call]--> surprising_connections() at=graphify/watch.py:L2039
+EDGE to_obsidian() --calls [EXTRACTED context=call]--> edge_data() at=graphify/export.py:L811
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> edge_data() at=graphify/cli.py:L1799
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> sanitize_label() at=graphify/cli.py:L1460
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> to_graphml() at=graphify/cli.py:L3104
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> to_json() at=graphify/cli.py:L2309
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> to_obsidian() at=graphify/cli.py:L3070
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> to_svg() at=graphify/cli.py:L3098
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> generate() at=graphify/cli.py:L2322
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> cluster() at=graphify/cli.py:L2105
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> score_all() at=graphify/cli.py:L2119
+EDGE dispatch_command() --calls [INFERRED context=call]--> _gh() at=graphify/cli.py:L2284
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> _rebuild_code() at=graphify/cli.py:L2445
+EDGE dispatch_command() --calls [INFERRED context=call]--> to_html() at=graphify/cli.py:L2377
+EDGE _rebuild_code() --calls [EXTRACTED context=call]--> cluster() at=graphify/watch.py:L2033
+EDGE _rebuild_code() --calls [EXTRACTED context=call]--> score_all() at=graphify/watch.py:L2037
+EDGE _rebuild_code() --calls [EXTRACTED context=call]--> to_json() at=graphify/watch.py:L2105
+EDGE to_html() --calls [EXTRACTED context=call]--> sanitize_label() at=graphify/exporters/html.py:L512
+EDGE walk() --calls [EXTRACTED context=call]--> _make_id() at=graphify/extractors/bash.py:L286
+EDGE walk_calls() --calls [EXTRACTED context=call]--> _make_id() at=graphify/extractors/bash.py:L254
+EDGE walk() --calls [EXTRACTED context=call]--> _read_text() at=graphify/extractors/bash.py:L318
+EDGE walk() --calls [EXTRACTED context=call]--> add_edge() at=graphify/extractors/bash.py:L289
+EDGE walk_calls() --calls [EXTRACTED context=call]--> add_edge() at=graphify/extractors/bash.py:L258
+EDGE add_node() --calls [EXTRACTED context=call]--> sanitize_metadata() at=graphify/extractors/bash.py:L145
+EDGE walk() --calls [EXTRACTED context=call]--> add_node() at=graphify/extractors/bash.py:L288
+EDGE walk() --calls [EXTRACTED context=call]--> literal() at=graphify/extractors/bash.py:L311
+EDGE walk_calls() --calls [EXTRACTED context=call]--> literal() at=graphify/extractors/bash.py:L249
+EDGE _detect_default_branch() --calls [EXTRACTED context=call]--> _gh() at=graphify/prs.py:L165
+EDGE fetch_prs() --calls [EXTRACTED context=call]--> _detect_default_branch() at=graphify/prs.py:L203
+EDGE fetch_prs() --calls [EXTRACTED context=call]--> _gh() at=graphify/prs.py:L212
+EDGE fetch_prs() --calls [EXTRACTED context=call]--> _parse_ci() at=graphify/prs.py:L227
+EDGE _rebuild_code() --calls [EXTRACTED context=call]--> generate() at=graphify/watch.py:L2099
+EDGE _select_graph() --calls [EXTRACTED context=call]--> _load_ctx() at=graphify/serve.py:L1859

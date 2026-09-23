@@ -1,0 +1,1 @@
+$ grep -rniE 'ndirim|hesaplamasını|hangi|testler|çalıştırıyor' .   # 0 matching lines in 0 files

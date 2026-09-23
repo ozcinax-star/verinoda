@@ -1,0 +1,31 @@
+# Where does graphify store its AST extraction cache and how is a cache entry keyed?
+expanded: extraction->extra (corpus prefix); extraction->extract (corpus prefix)
+## graphify/cache.py:965-1068 def load_cached(path: Path, root: Path = Path("."), kind: str = "ast", cache_root: Path | None = None, prompt: "str | Path | None" = None, prompt_file: "str | Path | None" = None, allow_legacy: bool …
+  doc: Return cached extraction for this file if hash matches, else None.
+  calls: file_hash@1003, _resolve_prompt_fp@1006, cache_dir@1007, _semantic_entry_matches_path@1051, _absolutize_source_files_in@1060, _absolutize_ids_in@1066
+  called by: check_semantic_cache (graphify/cache.py:1282); save_semantic_cache (graphify/cache.py:1633); _extract_single_file (graphify/extract.py:6586); extract (graphify/extract.py:6906)
+  const graphify/cache.py:86: _legacy_semantic_hits = 0
+  const graphify/cache.py:92: _corrupt_cache_entries = 0
+  graphify/cache.py:971-975
+
+    Cache key: SHA256 of file contents.
+    Cache value: stored as graphify-out/cache/{kind}/{hash}.json (AST entries
+    under the per-version subdirectory, see :func:`cache_dir`).
+
+  graphify/cache.py:1029-1042
+        # file is re-dispatched and retried. Self-heals: a later complete
+        # extraction overwrites the same content-hash key with a non-partial
+        # entry. ``allow_partial`` is the one exception — the merge_existing
+        # checkpoint peeks at a partial prev so it can accumulate a file's slices
+        # across chunks without losing the truncated one (it stays partial).
+        if not allow_partial and isinstance(result, dict) and result.get("partial"):
+            return None
+        # A semantic entry with zero nodes and zero hyperedges is invalid (#2927):
+        # an edge-only or empty result (e.g. LLM omitted entities for the file)
+        # is not a valid standalone extraction. Treating it as a cache MISS
+        # ensures the file is re-dispatched and retried (#933/#1666).
+        if (
+            not allow_partial
+            and kind.startswith("semantic")
+… 2229 more candidates not shown: graphify/cache.py:1379-1680 def save_semantic_cache( nodes: list[dict], edges: list[dict], hyperedges: list[dict] | None; graphify/detect.py:2450-2588 def detect_incremental( root: Path, manifest_path: str = _MANIFEST_PATH, *, follow_symlinks; graphify/cache.py:1179-1230 prune_semantic_cache; graphify/cache.py:933-962 cache_dir
+next: repoatlas query "Where does graphify store its AST extraction cache and how is a cache entry keyed?" --max-chars 6000

@@ -1,0 +1,41 @@
+$ grep -rniE 'order|written|database' .   # 50 matching lines in 11 files
+orders/repository.py:5: from orders.config import DATABASE_URL
+orders/repository.py:8: class OrderRepository:
+orders/repository.py:9: def __init__(self, url: str = DATABASE_URL):
+orders/repository.py:12: "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+orders/repository.py:17: "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+orders/repository.py:22: def get(self, order_id: int):
+orders/repository.py:24: "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+orders/config.py:5: DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+orders/config.py:6: MAX_ITEMS_PER_ORDER = int(os.environ.get("ORDERS_MAX_ITEMS", "50"))
+orders/config.py:7: DISCOUNT_THRESHOLD = float(os.environ.get("ORDERS_DISCOUNT_THRESHOLD", "100.0"))
+orders/config.py:12: "database_url": DATABASE_URL,
+orders/config.py:13: "max_items": MAX_ITEMS_PER_ORDER,
+docs/adr/0001-sqlite-persistence.md:1: # ADR 0001: SQLite for order persistence
+docs/adr/0001-sqlite-persistence.md:5: We persist orders in SQLite through `OrderRepository` only. No other module
+docs/adr/0001-sqlite-persistence.md:6: may open a database connection. Chosen for zero-ops local development; a
+docs/adr/0001-sqlite-persistence.md:7: server database can replace it behind the same repository interface.
+orders/api.py:3: from orders.repository import OrderRepository
+orders/api.py:4: from orders.service import ValidationError, fetch_order, place_order
+orders/api.py:9: def get_repo() -> OrderRepository:
+orders/api.py:12: _repo = OrderRepository()
+orders/api.py:16: def create_order_handler(payload: dict) -> tuple[int, dict]:
+orders/api.py:18: order_id = place_order(get_repo(), payload["customer"], payload["items"])
+orders/api.py:21: return 201, {"id": order_id}
+orders/api.py:24: def get_order_handler(order_id: int) -> tuple[int, dict]:
+orders/api.py:25: order = fetch_order(get_repo(), order_id)
+orders/api.py:26: if order is None:
+orders/api.py:28: return 200, order
+orders/service.py:3: from orders.config import MAX_ITEMS_PER_ORDER
+orders/service.py:4: from orders.pricing import compute_total
+orders/service.py:5: from orders.repository import OrderRepository
+orders/service.py:14: raise ValidationError("order has no items")
+orders/service.py:15: if len(items) > MAX_ITEMS_PER_ORDER:
+orders/service.py:19: def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+orders/service.py:25: def fetch_order(repo: OrderRepository, order_id: int):
+orders/service.py:26: return repo.get(order_id)
+tests/test_service.py:3: from orders.repository import OrderRepository
+tests/test_service.py:4: from orders.service import ValidationError, fetch_order, place_order
+tests/test_service.py:8: repo = OrderRepository(":memory:")
+tests/test_service.py:9: oid = place_order(repo, "ada", [{"price": 5.0, "qty": 1}])
+... (11 more matching lines not shown)

@@ -1,0 +1,34 @@
+# What is affected if evidence.content_hash changes?
+## repoatlas/schemas/question_plan.v1.json:359-364 "evidence"
+       "evidence": {
+        "type": "string",
+        "description": "The user's verbatim words that fix the version ('v0.3', 'eski sürüm', 'kullandığımız')."
+       }
+      }
+     },
+## repoatlas/evidence.py:71-73 def content_hash(text: str) -> str
+  called by: _h_why (repoatlas/analysis.py:929); source_evidence (repoatlas/evidence.py:175) <- _src_ev (repoatlas/analysis.py:269), _h_why (repoatlas/analysis.py:902), _create (repoatlas/benchmark/critique_eval.py:209), replay (repoatlas/benchmark/staleness.py:385) (+62); _legacy_search (repoatlas/evidence.py:191) <- check_source (repoatlas/evidence.py:235); check_source (repoatlas/evidence.py:215) <- replay (repoatlas/benchmark/staleness.py:452), _evidence_changes (repoatlas/claims.py:932), challenge (repoatlas/critique.py:399), _cited_range (repoatlas/entail.py:308) (+20); url_evidence (repoatlas/evidence.py:301) <- _research_issue (repoatlas/research.py:1741), _research_document (repoatlas/research.py:803), test_url_evidence_hashes_the_text (tests/test_evidence.py:235); add (repoatlas/feedback.py:635) <- cmd_feedback (repoatlas/cli.py:372), test_wrong_critique_is_recorded_but_claim_confirmed (tests/test_feedback.py:112), test_valid_critique_with_correction_supersedes (tests/test_feedback.py:143), test_valid_critique_without_correction_contradicts_and_leaves_statement_unknown (tests/test_feedback.py:179) (+20); resolution_evidence (repoatlas/precise.py:544) <- test_resolution_evidence_is_anchored_on_the_call_line (tests/test_precise.py:241); _site_hash (repoatlas/question_plan.py:685) <- _cand (repoatlas/question_plan.py:799) (+8)
+def content_hash(text: str) -> str:
+    norm = "\n".join(line.rstrip() for line in text.replace("\r\n", "\n").split("\n"))
+    return "sha256:" + hashlib.sha256(norm.encode("utf-8")).hexdigest()
+## tests/test_evidence.py:40-46 def test_content_hash_is_stable_across_crlf_lf_and_trailing_whitespace()
+  calls: content_hash@42
+def test_content_hash_is_stable_across_crlf_lf_and_trailing_whitespace():
+    lf = "def f():\n    return 1\n"
+    assert evmod.content_hash(lf) == evmod.content_hash(lf.replace("\n", "\r\n"))
+    assert evmod.content_hash(lf) == evmod.content_hash("def f():   \n    return 1\t\n")
+    assert evmod.content_hash(lf).startswith("sha256:")
+    assert evmod.content_hash(lf) != evmod.content_hash(lf.replace("1", "2"))
+    assert evmod.content_hash(lf) != evmod.content_hash(lf.replace("    return", "  return"))  # indentation counts
+## repoatlas/claims.py:406-407 def evidence(self, cid: str) -> list[dict]
+  called by: replay (repoatlas/benchmark/staleness.py:451)? <- main (repoatlas/benchmark/staleness.py:660), test_history_replay_recall_is_one_and_nothing_is_silently_wrong (tests/test_staleness_harness.py:88); _record_deps (repoatlas/claims.py:393) <- create (repoatlas/claims.py:364), attach (repoatlas/claims.py:385); grades (repoatlas/claims.py:411); show (repoatlas/claims.py:415) <- process (repoatlas/feedback.py:728)?, test_valid_critique_with_correction_supersedes (tests/test_feedback.py:150)?, test_reference_with_different_assumptions_qualifies (tests/test_feedback.py:202)?, test_analyze_records_claims_like_core (tests/test_mcp.py:338)? (+1); set_status (repoatlas/claims.py:481) <- invalidate_stale (repoatlas/claims.py:1063)?, create (repoatlas/claims.py:365), reassess (repoatlas/claims.py:586), supersede (repoatlas/claims.py:618) (+7); reassess (repoatlas/claims.py:582) <- resolve (repoatlas/feedback.py:1069)?, _correct (repoatlas/feedback.py:260)?, verify (repoatlas/workflow.py:319)?, test_experiment_attached_to_a_claim_supports_or_refutes_it (tests/test_experiments.py:289)? (+2); challenge (repoatlas/critique.py:374)? <- analyze (repoatlas/analysis.py:1553), evaluate (repoatlas/benchmark/critique_eval.py:249), cmd_challenge (repoatlas/cli.py:342), process (repoatlas/feedback.py:864) (+31); process (repoatlas/feedback.py:876)? <- cmd_feedback (repoatlas/cli.py:376), test_wrong_critique_is_recorded_but_claim_confirmed (tests/test_feedback.py:118), test_valid_critique_with_correction_supersedes (tests/test_feedback.py:146), test_valid_critique_without_correction_contradicts_and_leaves_statement_unknown (tests/test_feedback.py:180) (+17) (+5)
+    def evidence(self, cid: str) -> list[dict]:
+        return self.store.claim_evidence(cid)
+## repoatlas/store.py:501-502 def evidence(self, eid: str) -> dict | None
+  called by: resolve (repoatlas/feedback.py:1021)? <- cmd_feedback (repoatlas/cli.py:380), _resolve_refs (repoatlas/feedback.py:327), test_resolve_requires_evidence_and_applies_claim_updates (tests/test_feedback.py:314), test_resolve_qualified_and_unresolved (tests/test_feedback.py:345) (+3); test_relocations_are_appended_to_evidence_locations (tests/test_evidence.py:169)?; test_add_validates_source_type_and_summarize_is_small (tests/test_evidence.py:226)?
+    def evidence(self, eid: str) -> dict | None:
+        return self.one("SELECT * FROM evidence WHERE id = ?", (eid,))
+repoatlas/evidence.py:125-178 def source_evidence( repo: Path, path: str, start: int, end: int | None = None, *, commit: str | None, source_type: str…
+## tests/test_research.py:425-453 def test_document_research_records_versioned_evidence(analysed, monkeypatch)
+… 869 more candidates not shown: tests/test_evidence.py:234-238 test_url_evidence_hashes_the_text; repoatlas/evidence.py:294-304 url_evidence; repoatlas/research.py:1628-1668 _record_mechanism; repoatlas/research.py:724-838 _research_document
+next: repoatlas query "What is affected if evidence.content_hash changes?" --max-chars 12000

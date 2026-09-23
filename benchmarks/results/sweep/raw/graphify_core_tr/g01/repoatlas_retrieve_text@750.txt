@@ -1,0 +1,41 @@
+# Graphify sorgu çıktısı token bütçesine sığmak için nerede kesiliyor?
+expanded: sığmak->signal (turkish stem 'sig'); sığmak->signatur (turkish stem 'sig'); sığmak->significant (turkish stem 'sig'); sigmak->sig (corpus prefix); graphify->install (lexicon); graphify->uninstall (lexicon)
+## graphify/benchmark.py:85-133 def run_benchmark( graph_path: str | None = None, corpus_words: int | None = None, questions: list[str] | None = None, ) -> dict
+  doc: Measure token reduction: corpus tokens vs graphify query tokens.
+  calls: default_graph_json@99, load_node_link_graph@104, _query_subgraph_tokens@115
+  called by: dispatch_command (graphify/cli.py:3149)
+  const graphify/benchmark.py:76: _SAMPLE_QUESTIONS = [
+  graphify/benchmark.py:111-118
+
+    qs = questions or _SAMPLE_QUESTIONS
+    per_question = []
+    for q in qs:
+        qt = _query_subgraph_tokens(G, q)
+        if qt > 0:
+            per_question.append({"question": q, "query_tokens": qt, "reduction": round(corpus_tokens / qt, 1)})
+
+  graphify/benchmark.py:121-124
+
+    avg_query_tokens = sum(p["query_tokens"] for p in per_question) // len(per_question)
+    reduction_ratio = round(corpus_tokens / avg_query_tokens, 1) if avg_query_tokens > 0 else 0
+
+## graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+  calls: _custom_providers_path@1069, provider_base_url_ok@1140, cmd_prs@1184, install@1194, uninstall@1196, status@1198, _default_graph_path@1214, _enforce_graph_size_cap_or_exit@1251, graph_has_legacy_ids@1287, _query_graph_text@1302, log_query@1311, _touch_query_stamp@1321 (+107)
+  called by: _run_cli (graphify/__main__.py:751)
+  graphify/cli.py:1177-1190
+
+        else:
+            print("Usage: graphify provider [add|list|show|remove]", file=sys.stderr)
+            if subcmd:
+                sys.exit(1)
+    elif cmd == "prs":
+        from graphify.prs import cmd_prs
+        cmd_prs(sys.argv[2:])
+    elif cmd == "hook":
+        from graphify.hooks import (
+            install as hook_install,
+            uninstall as hook_uninstall,
+            status as hook_status,
+        )
+… 2082 more candidates not shown: graphify/benchmark.py:136-152 def print_benchmark(result: dict) -> None; graphify/skills/agents/references/hooks.md:5-19 ## For git commit hook; graphify/install.py:324-359 _claude_pretooluse_hooks; graphify/serve.py:191-202 _search_tokens
+next: repoatlas query "Graphify sorgu çıktısı token bütçesine sığmak için nerede kesiliyor?" --max-chars 6000

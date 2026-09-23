@@ -1,0 +1,1 @@
+$ grep -rniE 'kalemsiz|bir|sipariş|gönderilince|oluyor' .   # 0 matching lines in 0 files

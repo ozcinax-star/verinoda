@@ -1,0 +1,154 @@
+# Which environment variables are passed to experiment commands, and where is that decided?
+expanded: environ->env (abbreviation)
+## repoatlas/agents/templates/claude_SKILL.md:100-145 ## Commands (examples; always add --json when you read the result)
+  repoatlas/agents/templates/claude_SKILL.md:124-127
+
+# targeted experiment (runs in a throw-away copy; non-test commands need docker/podman)
+repoatlas experiment run --hypothesis "discount is applied before tax" --expect pass --json -- python -m pytest -q tests/test_pricing.py
+
+  repoatlas/agents/templates/claude_SKILL.md:142-145
+
+Workflow: orient (`map`, `query`) -> `analyze` the question -> drill down (`trace`, `claim show`)
+-> `challenge` the claims you will rely on -> `verify` / `experiment run` where static evidence is
+not enough -> answer.
+## repoatlas/agents/templates/codex_SKILL.md:86-131 ## Commands (examples; always add --json when you read the result)
+  repoatlas/agents/templates/codex_SKILL.md:110-113
+
+# targeted experiment (runs in a throw-away copy; non-test commands need docker/podman)
+repoatlas experiment run --hypothesis "discount is applied before tax" --expect pass --json -- python -m pytest -q tests/test_pricing.py
+
+  repoatlas/agents/templates/codex_SKILL.md:128-131
+
+Workflow: orient (`map`, `query`) -> `analyze` the question -> drill down (`trace`, `claim show`)
+-> `challenge` the claims you will rely on -> `verify` / `experiment run` where static evidence is
+not enough -> answer.
+## tests/test_critique.py:602-623 def test_config_claim_on_a_line_that_reads_another_variable_is_refuted(plain)
+  doc: orders_app q03.n.repo_env: the repository does not read an environment variable itself.
+  calls: challenge@615
+def test_config_claim_on_a_line_that_reads_another_variable_is_refuted(plain):
+    """orders_app q03.n.repo_env: the repository does not read an environment variable itself."""
+    repo, st, cl = plain
+
+    def cfg(var, at):
+        path, _, ln = at.rpartition(":")
+        ev = evmod.source_evidence(repo, path, int(ln), commit=None, meta={"env": var})
+        return cl.create(f"`x` in {path} reads environment variable {var} ({at})", project="orders_app",
+                         snapshot=None, status="statically_verified", evidence=[(ev, "supports")], kind="config",
+                         subjects=[path], spec={"env": var})
+
+    ok = cfg("ORDERS_DATABASE_URL", "orders/config.py:5")
+    assert ok["status"] == "statically_verified"
+    assert critique.challenge(st, repo, ok["id"])["after"]["status"] == "statically_verified"
+    for var, at, words in (("ORDERS_MAX_ITEMS", "orders/config.py:5", "reads ORDERS_DATABASE_URL"),
+                           ("ORDERS_DATABASE_URL", "orders/repository.py:9", "no environment read")):
+        bad = cfg(var, at)
+        assert bad["status"] not in ("statically_verified",)
+        res = critique.challenge(st, repo, bad["id"])
+        probe = next(f for f in res["findings"] if f["check"] == "config_read")
+        assert probe["strength"] == "definitive" and words in probe["detail"]
+        assert res["after"]["status"] == "contradicted"
+## tests/test_search_index.py:221-228 def test_abbreviations_are_expanded_and_reported(mini)
+def test_abbreviations_are_expanded_and_reported(mini):
+    q = _query(mini, "Which environment variables are allowed?")
+    exp = {(e["from"], e["to"], e["via"]) for e in q.expansions}
+    assert ("environ", "env", "abbreviation") in exp
+    assert q.weights["env"] == search_index.EXPANSION_WEIGHT < q.weights["environ"] == 1.0
+    res = retrieval.retrieve(mini, "Which environment variables are allowed?")
+    assert any(e.startswith("environ->env") for e in res["budget"]["expansions"])
+    assert res["items"][0]["symbol"] in ("_scrubbed_env()", "(module level)")
+## tests/test_experiments.py:165-187 def test_parent_secrets_are_not_visible_to_the_child(proj, monkeypatch)
+def test_parent_secrets_are_not_visible_to_the_child(proj, monkeypatch):
+    repo, st = proj
+    monkeypatch.setenv("ANTHROPIC_API_KEY", FAKE_SECRET)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-fake")
+    monkeypatch.setenv("TZ", "UTC")  # allowlisted variable: proves the env is filtered, not emptied
+    absent = _probe(repo, "test_probe_env.py", (
+        "import os\n\n"
+        "def test_secrets_absent():\n"
+        "    assert 'ANTHROPIC_API_KEY' not in os.environ\n"
+        "    assert 'OPENAI_API_KEY' not in os.environ\n"
+        "    assert os.environ.get('REPOATLAS_EXPERIMENT') == '1'\n"
+        "    assert os.environ.get('TZ') == 'UTC'\n"))
+    res = experiments.run(st, repo, [*PYTEST, absent], hypothesis="secrets are scrubbed")
+    assert res["outcome"] == "pass", Path(res["logs"]["stdout"]).read_text(encoding="utf-8")[-2000:]
+    # Control: a test that *requires* the key fails in the child (expected failure).
+    present = _probe(repo, "test_probe_env_present.py", (
+        "import os\n\ndef test_secret_present():\n    assert os.environ['ANTHROPIC_API_KEY']\n"))
+    ctl = experiments.run(st, repo, [*PYTEST, present], hypothesis="the key is visible", expect="fail")
+    assert ctl["outcome"] == "fail" and ctl["matches_expectation"] is True
+    for r in (res, ctl):
+        logs = Path(r["logs"]["stdout"]).read_text(encoding="utf-8") + Path(r["logs"]["stderr"]).read_text(
+            encoding="utf-8")
+        assert FAKE_SECRET not in logs and FAKE_SECRET not in json.dumps(r)
+## repoatlas/feedback.py:424-600 def decide(ctx: dict) -> tuple[str, str, list[str], dict]
+  repoatlas/feedback.py:582-595
+    if reference is not None and reference.get("kind") == "document":
+        pids = [p["evidence_id"] for p in reference.get("passages", [])[:3]]
+        return "unresolved", ("the claim holds locally, but a document's statements cannot be compared with code "
+                              "mechanically" + (f"; relevant passages recorded: {', '.join(pids)}" if pids else
+                                                "; no passage mentions the topic")), [
+            "read the recorded passages (repoatlas feedback show " + fid + ")",
+            f"then: repoatlas feedback resolve {fid} --verdict qualified|confirmed --reason ... --evidence <id>"], details
+    # 10. confirmed
+    why = [f"re-check passed ({len(passes)} pass, 0 fail)", "no refuting evidence at least as strong as the support"]
+    if pl.get("holds") is False:
+        why.append(f"proposition /{pl['pattern']}/ does not hold locally (0 hits in {pl['files_scanned']} files"
+                   + (f" matching {pl['in']}" if pl.get("in") else "") + ")")
+    if pr.get("holds") is False:
+        why.append("nor in the reference checkout")
+## tests/test_claims.py:150-159 def test_experiment_verified_needs_a_passing_relevant_run(env)
+def test_experiment_verified_needs_a_passing_relevant_run(env):
+    repo, st, cl = env
+    failing = make(cl, "experiment_verified", [(run_result("fail"), "supports")], text=RUN_TEXT)
+    assert failing["status"] not in VERIFIED
+    with pytest.raises(ClaimRuleError, match="passed"):
+        cl.set_status(failing["id"], "experiment_verified", reason="x", downgrade=False)
+    passing = make(cl, "experiment_verified", [(run_result("pass"), "supports")], text=RUN_TEXT)
+    assert (passing["status"], passing["confidence"]) == ("experiment_verified", 0.95)
+    # A source line is not an experiment.
+    assert make(cl, "experiment_verified", [(src(repo), "supports")])["status"] == "statically_verified"
+repoatlas/experiments.py:365-550 def run( store: Store, repo: Path, argv: list[str] | str, *, hypothesis: str, expect: str = "pass", timeout: float | No…
+tests/test_search_index.py:31-33 def _scrubbed_env()
+tests/test_analysis.py:218-223 def test_config_question_cites_env_reads(proj)
+tests/test_analysis.py:450-470 def test_config_claims_rank_env_vars_by_the_question_words_they_carry(tmp_path)
+tests/test_experiments.py:134-162 def test_allowlisted_pytest_passes_in_a_copy_with_process_isolation(proj)
+tests/test_cli.py:323-330 def test_index_passes_other_commands_through(monkeypatch)
+tests/test_experiments.py:217-230 def test_non_allowlisted_command_is_refused_without_container(proj)
+tests/test_experiments.py:560-580 def test_plugins_env_extra_and_artifacts(proj)
+tests/test_analysis.py:146-160 def test_run_tests_produces_an_experiment_verified_claim(proj)
+repoatlas/doctor.py:3-4 Never prints secret values: environment variables are reported as set/unset.
+tests/test_experiments.py:3-7 Every test runs a real child process (no mocks of experiments.run): allowlisted
+tests/test_feedback.py:251-271 def test_decide_ignores_trivial_differences()
+tests/test_claims.py:379-390 def test_unrelated_passing_run_never_verifies(env)
+tests/test_mcp.py:655-663 def _server_params(repo: Path)
+tests/test_claims.py:247-258 def test_best_status_respects_order_and_ceiling(env)
+repoatlas/workflow.py:248-337 def verify(store: Store, repo: Path, cid: str, *, run: bool = False) -> dict
+tests/test_question_plan.py:248-259 ("Where is graphify query output cut to fit the token budget?", ["locate"]),
+tests/test_safety.py:68-79 def test_read_only_commands_never_create_state(tmp_path)
+repoatlas/experiments.py:41-46 Plugins and artifacts: internal callers (the runtime tracer,
+repoatlas/research.py:1324-1335 _ENV_RX = [re.compile(r"os\.environ\.get\(\s*['\"]([A-Za-z_]\w*)['\"]"),
+repoatlas/paths.py:14-17 The project_index package (derived from Graphify) reads its output directory
+repoatlas/benchmark/critique_eval.py:78-82 def _cfg(cid: str, truth: bool, var: str, at: str, symbol: str, *, source: str) -> dict
+repoatlas/experiments.py:110-111 class ExperimentRefused(RuntimeError)
+repoatlas/cli.py:526-700 def build_parser() -> argparse.ArgumentParser
+repoatlas/cli.py:392-420 def cmd_experiment(args) -> int
+repoatlas/analysis.py:1654-1699 def _run_tests(store: Store, repo: Path, g: index.Graph, it: dict, test_nodes: list[str], commit: str | None, budget: B…
+repoatlas/experiments.py:5-16 ``process`` (always available)
+repoatlas/entail.py:30-41 the line (``os.environ.get``/``getenv``/``os.environ[...]``, or the
+tests/test_snapshot_stale.py:227-241 def test_verify_does_not_restore_when_a_subject_file_changed_without_recheckable_evidence(proj)
+tests/test_safety.py:137-161 def test_an_unrelated_passing_test_run_does_not_verify(orders)
+repoatlas/store.py:123-134 CREATE TABLE IF NOT EXISTS experiments (
+repoatlas/experiments.py:37-39 the refusal names the offending argument. Commands are never passed through a
+tests/test_cli.py:227-247 def test_experiment_run_allowlisted_and_refused(repo)
+tests/test_claims.py:65-68 def run_result(outcome: str) -> dict
+tests/test_experiments.py:519-544 def test_audit_absolute_test_path_outside_the_project_is_refused(proj, tmp_path)
+repoatlas/experiments.py:253-260 def _scrubbed_env(home: Path) -> dict[str, str]
+tests/test_experiments.py:385-397 def test_verify_rerun_that_is_inconclusive_does_not_contradict(proj)
+repoatlas/entail.py:210-219 # Common code abbreviations (DESIGN D22): a claim word matches its expansion and back.
+tests/test_experiments.py:276-291 def test_experiment_attached_to_a_claim_supports_or_refutes_it(proj)
+tests/test_retrieval.py:265-272 def test_term_matching_respects_identifier_boundaries_and_stems()
+repoatlas/benchmark/staleness.py:143-260 def derive(path: str, text: str, exists=lambda p: False) -> tuple[list[HClaim], dict[str, dict]]
+tests/test_search_index.py:130-142 def test_units_cover_symbols_module_blocks_and_prose_sections(mini)
+tests/test_agents.py:447-457 def test_mcp_json_entry_update_when_command_changes(env)
+… 858 more candidates not shown: repoatlas/analysis.py:740-772 def _h_config(ctx: _Ctx, sub: _Sub) -> None; repoatlas/store.py:375-379 _JSON_COLS =; repoatlas/experiments.py:75-86 SHELL_META = re.compile(r"[;&|<>`$\n]|\$\("); tests/test_search_index.py:108-120 def test_tokens_are_identifier_aware_and_folded()
+next: repoatlas query "Which environment variables are passed to experiment commands, and where is that decided?" --max-chars 24000

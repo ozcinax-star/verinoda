@@ -1,0 +1,115 @@
+# graphify query komutu bir soruyu graf bağlamına çevirmek için hangi fonksiyonları çağırıyor?
+expanded: graphify->install (lexicon); graphify->uninstall (lexicon); graphify->hook (lexicon); query->shortest (lexicon); query->graph (lexicon); baglamina->bind (lexicon)
+## graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+  calls: _custom_providers_path@1069, provider_base_url_ok@1140, cmd_prs@1184, install@1194, uninstall@1196, status@1198, _default_graph_path@1214, _enforce_graph_size_cap_or_exit@1251, graph_has_legacy_ids@1287, _query_graph_text@1302, log_query@1311, _touch_query_stamp@1321 (+107)
+  called by: _run_cli (graphify/__main__.py:751)
+  graphify/cli.py:1177-1190
+
+        else:
+            print("Usage: graphify provider [add|list|show|remove]", file=sys.stderr)
+            if subcmd:
+                sys.exit(1)
+    elif cmd == "prs":
+        from graphify.prs import cmd_prs
+        cmd_prs(sys.argv[2:])
+    elif cmd == "hook":
+        from graphify.hooks import (
+            install as hook_install,
+            uninstall as hook_uninstall,
+            status as hook_status,
+        )
+  graphify/cli.py:1191-1204
+
+        subcmd = sys.argv[2] if len(sys.argv) > 2 else ""
+        if subcmd == "install":
+            print(hook_install(Path(".")))
+        elif subcmd == "uninstall":
+            print(hook_uninstall(Path(".")))
+        elif subcmd == "status":
+            print(hook_status(Path(".")))
+        else:
+            print("Usage: graphify hook [install|uninstall|status]", file=sys.stderr)
+            sys.exit(1)
+    elif cmd == "query":
+        if len(sys.argv) < 3:
+            print("Usage: graphify query \"<question>\" [--dfs] [--context C] [--budget N] [--graph path]", file=sys.stderr)
+## graphify/extractors/bash.py:235-279 def walk_calls(body_node, func_nid: str, seen_calls: set) -> None
+  calls: _bash_call_in_command_allowed@244, literal@249, _make_id@254, add_edge@258, walk_calls@279
+  called by: walk_calls (graphify/extractors/bash.py:279)
+  graphify/extractors/bash.py:246-259
+                if cmd_name_node is None and child.children:
+                    cmd_name_node = child.children[0]
+                if cmd_name_node:
+                    name = literal(cmd_name_node)
+                    # Defined-functions wins. Skip-lists for external commands
+                    # would create false negatives when a user defines a
+                    # function shadowing an external (`install`, `find`, etc.).
+                    if name and name in defined_functions:
+                        tgt = _make_id(stem, name)
+                        key = (func_nid, tgt)
+                        if tgt and key not in seen_calls:
+                            seen_calls.add(key)
+                            add_edge(func_nid, tgt, "calls",
+                                     child.start_point[0] + 1,
+  graphify/extractors/bash.py:264-277
+                        # from a sourced library. Record an unresolved raw_call for
+                        # resolve_bash_source_edges to bind against the files this
+                        # script `source`s. A callee that is not a sourced function
+                        # (a genuine external command) matches nothing there and
+                        # yields no edge, so this can't over-connect the graph (#2141).
+                        raw_key = (func_nid, name)
+                        if raw_key not in raw_seen:
+                            raw_seen.add(raw_key)
+                            raw_calls.append({
+                                "language": "bash",
+                                "callee": name,
+                                "caller_nid": func_nid,
+                                "source_file": str_path,
+                                "source_location": f"L{child.start_point[0] + 1}",
+## graphify/skills/agents/references/hooks.md:5-19 ## For git commit hook
+## For git commit hook
+
+Install a post-commit hook that auto-rebuilds the graph after every commit. No background process needed - triggers once per commit, works with any editor.
+
+```bash
+graphify hook install    # install
+graphify hook uninstall  # remove
+graphify hook status     # check
+```
+
+After every `git commit`, the hook detects which code files changed (via `git diff HEAD~1`), re-runs AST extraction on those files, and rebuilds `graph.json` a…
+
+If a post-commit hook already exists, graphify appends to it rather than replacing it.
+
+---
+## graphify/skills/amp/references/hooks.md:5-19 ## For git commit hook
+## For git commit hook
+
+Install a post-commit hook that auto-rebuilds the graph after every commit. No background process needed - triggers once per commit, works with any editor.
+
+```bash
+graphify hook install    # install
+graphify hook uninstall  # remove
+graphify hook status     # check
+```
+
+After every `git commit`, the hook detects which code files changed (via `git diff HEAD~1`), re-runs AST extraction on those files, and rebuilds `graph.json` a…
+
+If a post-commit hook already exists, graphify appends to it rather than replacing it.
+
+---
+## graphify/__main__.py:40-51 _antigravity_install,
+    _antigravity_install,
+    _antigravity_uninstall,
+    _canonical_platform,
+    _claude_pretooluse_hooks,
+    _copy_skill_file,
+    _cursor_install,
+    _cursor_uninstall,
+    _devin_rules_install,
+    _devin_rules_uninstall,
+    _gemini_hook,
+    _install_claude_hook,
+    _install_codebuddy_hook,
+… 2222 more candidates not shown: graphify/serve.py:1652-1750 def _shortest_path_text(G: nx.Graph, arguments: dict) -> str; graphify/__main__.py:52-63 _install_codex_hook,; graphify/install.py:1862-1906 uninstall_all; graphify/install.py:1536-1549 _uninstall_codex_hook
+next: repoatlas query "graphify query komutu bir soruyu graf bağlamına çevirmek için hangi fonksiyonları çağırıyor?" --max-chars 12000

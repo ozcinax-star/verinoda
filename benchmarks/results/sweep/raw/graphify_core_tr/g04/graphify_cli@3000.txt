@@ -1,0 +1,132 @@
+Graph: graphify-out/graph.json (4092 nodes) | Traversal: BFS depth=2 | Start: ['ast', 'graphify', 'graphify prs — graph-aware PR dashboard. Fast terminal overview of open PRs…'] | 38 nodes found
+
+[i] Complete answer over budget: all 38 nodes and 90 edges shown (~4500 tokens vs the requested ~4000-token budget). Edges are never dropped once every node fits, so this is already the full answer — raising --budget further will not shrink it. Narrow with context_filter=['call'] or use get_node for a specific symbol to reduce size instead.
+
+NODE ast [src= loc= community=symbol_resolution.py]
+NODE graphify [src=graphify/always_on/agents-md.md loc=L1 community=agents-md.md]
+NODE graphify prs — graph-aware PR dashboard. Fast terminal overview of open PRs… [src=graphify/prs.py loc=L1 community=prs.py]
+NODE prs.py [src=graphify/prs.py loc=L1 community=prs.py]
+NODE symbol_resolution.py [src=graphify/symbol_resolution.py loc=L1 community=symbol_resolution.py]
+NODE agents-md.md [src=graphify/always_on/agents-md.md loc=L1 community=agents-md.md]
+NODE extract.py [src=graphify/extract.py loc=L1 community=extract.py]
+NODE _file_stem() [src=graphify/extractors/base.py loc=L58 community=_make_id]
+NODE pathlib [src= loc= community=_make_id]
+NODE re [src= loc= community=_make_id]
+NODE security.py [src=graphify/security.py loc=L1 community=security.py]
+NODE paths.py [src=graphify/paths.py loc=L1 community=paths.py]
+NODE extractors/base.py [src=graphify/extractors/base.py loc=L1 community=_make_id]
+NODE typing [src= loc= community=_make_id]
+NODE sanitize_metadata() [src=graphify/security.py loc=L442 community=test_security.py]
+NODE make_id() [src=graphify/ids.py loc=L86 community=mcp_ingest.py]
+NODE ids.py [src=graphify/ids.py loc=L1 community=mcp_ingest.py]
+NODE dataclasses [src= loc= community=resolver_registry.py]
+NODE resolve_python_import_guided_calls() [src=graphify/symbol_resolution.py loc=L218 community=symbol_resolution.py]
+NODE collections_abc [src= loc= community=extract_terraform]
+NODE disambiguate_ambiguous_candidates() [src=graphify/paths.py loc=L295 community=paths.py]
+NODE unicodedata [src= loc= community=mcp_ingest.py]
+NODE build_python_symbol_index() [src=graphify/symbol_resolution.py loc=L181 community=symbol_resolution.py]
+NODE resolve_bash_source_edges() [src=graphify/symbol_resolution.py loc=L406 community=symbol_resolution.py]
+NODE resolve_cross_file_raw_calls() [src=graphify/symbol_resolution.py loc=L307 community=symbol_resolution.py]
+NODE build_label_index() [src=graphify/symbol_resolution.py loc=L57 community=symbol_resolution.py]
+NODE existing_edge_pairs() [src=graphify/symbol_resolution.py loc=L74 community=symbol_resolution.py]
+NODE node_is_resolvable_symbol() [src=graphify/symbol_resolution.py loc=L36 community=symbol_resolution.py]
+NODE parse_python_import_aliases() [src=graphify/symbol_resolution.py loc=L123 community=symbol_resolution.py]
+NODE _file_node_id_for_path() [src=graphify/symbol_resolution.py loc=L394 community=symbol_resolution.py]
+NODE normalise_callable_label() [src=graphify/symbol_resolution.py loc=L30 community=symbol_resolution.py]
+NODE _bash_make_id() [src=graphify/symbol_resolution.py loc=L382 community=symbol_resolution.py]
+NODE find_unique_python_symbol() [src=graphify/symbol_resolution.py loc=L206 community=symbol_resolution.py]
+NODE ImportedSymbol [src=graphify/symbol_resolution.py loc=L20 community=symbol_resolution.py]
+NODE iter_raw_calls() [src=graphify/symbol_resolution.py loc=L91 community=symbol_resolution.py]
+NODE _node_source_stem() [src=graphify/symbol_resolution.py loc=L172 community=symbol_resolution.py]
+NODE _module_stem() [src=graphify/symbol_resolution.py loc=L115 community=symbol_resolution.py]
+NODE Deterministic symbol indexing and conservative cross-file resolution helpers. [src=graphify/symbol_resolution.py loc=L1 community=symbol_resolution.py]
+EDGE symbol_resolution.py --imports [EXTRACTED context=import]--> ast at=graphify/symbol_resolution.py:L5
+EDGE agents-md.md --contains [EXTRACTED]--> graphify at=graphify/always_on/agents-md.md:L1
+EDGE graphify prs — graph-aware PR dashboard. Fast terminal overview of open PRs… --rationale_for [EXTRACTED]--> prs.py at=graphify/prs.py:L1
+EDGE symbol_resolution.py --imports [EXTRACTED context=import]--> make_id() at=graphify/symbol_resolution.py:L13
+EDGE symbol_resolution.py --imports [EXTRACTED context=import]--> disambiguate_ambiguous_candidates() at=graphify/symbol_resolution.py:L14
+EDGE symbol_resolution.py --imports [EXTRACTED context=import]--> sanitize_metadata() at=graphify/symbol_resolution.py:L15
+EDGE symbol_resolution.py --imports [EXTRACTED context=import]--> _file_stem() at=graphify/symbol_resolution.py:L391
+EDGE symbol_resolution.py --imports [EXTRACTED context=import]--> re at=graphify/symbol_resolution.py:L6
+EDGE symbol_resolution.py --imports [EXTRACTED context=import]--> unicodedata at=graphify/symbol_resolution.py:L7
+EDGE extract.py --imports_from [EXTRACTED context=import]--> symbol_resolution.py at=graphify/extract.py:L152
+EDGE symbol_resolution.py --imports_from [EXTRACTED context=import]--> collections_abc at=graphify/symbol_resolution.py:L10
+EDGE symbol_resolution.py --imports_from [EXTRACTED context=import]--> typing at=graphify/symbol_resolution.py:L11
+EDGE symbol_resolution.py --imports_from [EXTRACTED context=import]--> ids.py at=graphify/symbol_resolution.py:L13
+EDGE symbol_resolution.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/symbol_resolution.py:L14
+EDGE symbol_resolution.py --imports_from [EXTRACTED context=import]--> security.py at=graphify/symbol_resolution.py:L15
+EDGE symbol_resolution.py --imports_from [EXTRACTED context=import]--> extractors/base.py at=graphify/symbol_resolution.py:L391
+EDGE symbol_resolution.py --imports_from [EXTRACTED context=import]--> dataclasses at=graphify/symbol_resolution.py:L8
+EDGE symbol_resolution.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/symbol_resolution.py:L9
+EDGE symbol_resolution.py --contains [EXTRACTED]--> _module_stem() at=graphify/symbol_resolution.py:L115
+EDGE symbol_resolution.py --contains [EXTRACTED]--> parse_python_import_aliases() at=graphify/symbol_resolution.py:L123
+EDGE symbol_resolution.py --contains [EXTRACTED]--> _node_source_stem() at=graphify/symbol_resolution.py:L172
+EDGE symbol_resolution.py --contains [EXTRACTED]--> build_python_symbol_index() at=graphify/symbol_resolution.py:L181
+EDGE symbol_resolution.py --contains [EXTRACTED]--> ImportedSymbol at=graphify/symbol_resolution.py:L20
+EDGE symbol_resolution.py --contains [EXTRACTED]--> find_unique_python_symbol() at=graphify/symbol_resolution.py:L206
+EDGE symbol_resolution.py --contains [EXTRACTED]--> resolve_python_import_guided_calls() at=graphify/symbol_resolution.py:L218
+EDGE symbol_resolution.py --contains [EXTRACTED]--> normalise_callable_label() at=graphify/symbol_resolution.py:L30
+EDGE symbol_resolution.py --contains [EXTRACTED]--> resolve_cross_file_raw_calls() at=graphify/symbol_resolution.py:L307
+EDGE symbol_resolution.py --contains [EXTRACTED]--> node_is_resolvable_symbol() at=graphify/symbol_resolution.py:L36
+EDGE symbol_resolution.py --contains [EXTRACTED]--> _bash_make_id() at=graphify/symbol_resolution.py:L382
+EDGE symbol_resolution.py --contains [EXTRACTED]--> _file_node_id_for_path() at=graphify/symbol_resolution.py:L394
+EDGE symbol_resolution.py --contains [EXTRACTED]--> resolve_bash_source_edges() at=graphify/symbol_resolution.py:L406
+EDGE symbol_resolution.py --contains [EXTRACTED]--> build_label_index() at=graphify/symbol_resolution.py:L57
+EDGE symbol_resolution.py --contains [EXTRACTED]--> existing_edge_pairs() at=graphify/symbol_resolution.py:L74
+EDGE symbol_resolution.py --contains [EXTRACTED]--> iter_raw_calls() at=graphify/symbol_resolution.py:L91
+EDGE Deterministic symbol indexing and conservative cross-file resolution helpers. --rationale_for [EXTRACTED]--> symbol_resolution.py at=graphify/symbol_resolution.py:L1
+EDGE security.py --imports_from [EXTRACTED context=import]--> collections_abc at=graphify/security.py:L11
+EDGE extract.py --imports_from [EXTRACTED context=import]--> dataclasses at=graphify/extract.py:L13
+EDGE prs.py --imports_from [EXTRACTED context=import]--> dataclasses at=graphify/prs.py:L25
+EDGE extract.py --imports [EXTRACTED context=import]--> resolve_bash_source_edges() at=graphify/extract.py:L152
+EDGE extract.py --imports [EXTRACTED context=import]--> _file_stem() at=graphify/extract.py:L31
+EDGE extract.py --imports [EXTRACTED context=import]--> sanitize_metadata() at=graphify/extract.py:L64
+EDGE extract.py --imports [EXTRACTED context=import]--> disambiguate_ambiguous_candidates() at=graphify/extract.py:L65
+EDGE extract.py --imports [EXTRACTED context=import]--> re at=graphify/extract.py:L8
+EDGE extract.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/extract.py:L14
+EDGE extract.py --imports_from [EXTRACTED context=import]--> typing at=graphify/extract.py:L15
+EDGE extract.py --imports_from [EXTRACTED context=import]--> extractors/base.py at=graphify/extract.py:L31
+EDGE extract.py --imports_from [EXTRACTED context=import]--> security.py at=graphify/extract.py:L64
+EDGE extract.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/extract.py:L65
+EDGE extractors/base.py --imports [EXTRACTED context=import]--> make_id() at=graphify/extractors/base.py:L6
+EDGE extractors/base.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/extractors/base.py:L4
+EDGE extractors/base.py --imports_from [EXTRACTED context=import]--> ids.py at=graphify/extractors/base.py:L6
+EDGE extractors/base.py --contains [EXTRACTED]--> _file_stem() at=graphify/extractors/base.py:L58
+EDGE _file_node_id_for_path() --calls [EXTRACTED context=call]--> _file_stem() at=graphify/symbol_resolution.py:L403
+EDGE ids.py --imports [EXTRACTED context=import]--> re at=graphify/ids.py:L44
+EDGE ids.py --imports [EXTRACTED context=import]--> unicodedata at=graphify/ids.py:L45
+EDGE ids.py --contains [EXTRACTED]--> make_id() at=graphify/ids.py:L86
+EDGE _bash_make_id() --calls [EXTRACTED context=call]--> make_id() at=graphify/symbol_resolution.py:L388
+EDGE paths.py --imports [EXTRACTED context=import]--> re at=graphify/paths.py:L21
+EDGE paths.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/paths.py:L24
+EDGE prs.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/prs.py:L33
+EDGE security.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/security.py:L18
+EDGE paths.py --contains [EXTRACTED]--> disambiguate_ambiguous_candidates() at=graphify/paths.py:L295
+EDGE resolve_cross_file_raw_calls() --calls [EXTRACTED context=call]--> disambiguate_ambiguous_candidates() at=graphify/symbol_resolution.py:L347
+EDGE prs.py --imports [EXTRACTED context=import]--> re at=graphify/prs.py:L20
+EDGE prs.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/prs.py:L27
+EDGE prs.py --imports_from [EXTRACTED context=import]--> typing at=graphify/prs.py:L28
+EDGE security.py --imports [EXTRACTED context=import]--> re at=graphify/security.py:L7
+EDGE security.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/security.py:L12
+EDGE security.py --imports_from [EXTRACTED context=import]--> typing at=graphify/security.py:L13
+EDGE security.py --contains [EXTRACTED]--> sanitize_metadata() at=graphify/security.py:L442
+EDGE resolve_python_import_guided_calls() --calls [EXTRACTED context=call]--> sanitize_metadata() at=graphify/symbol_resolution.py:L294
+EDGE _file_node_id_for_path() --calls [EXTRACTED context=call]--> _bash_make_id() at=graphify/symbol_resolution.py:L402
+EDGE build_label_index() --calls [EXTRACTED context=call]--> node_is_resolvable_symbol() at=graphify/symbol_resolution.py:L62
+EDGE build_label_index() --calls [EXTRACTED context=call]--> normalise_callable_label() at=graphify/symbol_resolution.py:L67
+EDGE resolve_cross_file_raw_calls() --calls [EXTRACTED context=call]--> build_label_index() at=graphify/symbol_resolution.py:L321
+EDGE build_python_symbol_index() --calls [EXTRACTED context=call]--> node_is_resolvable_symbol() at=graphify/symbol_resolution.py:L191
+EDGE build_python_symbol_index() --calls [EXTRACTED context=call]--> _node_source_stem() at=graphify/symbol_resolution.py:L193
+EDGE build_python_symbol_index() --calls [EXTRACTED context=call]--> normalise_callable_label() at=graphify/symbol_resolution.py:L196
+EDGE resolve_python_import_guided_calls() --calls [EXTRACTED context=call]--> build_python_symbol_index() at=graphify/symbol_resolution.py:L236
+EDGE resolve_bash_source_edges() --calls [EXTRACTED context=call]--> existing_edge_pairs() at=graphify/symbol_resolution.py:L459
+EDGE resolve_cross_file_raw_calls() --calls [EXTRACTED context=call]--> existing_edge_pairs() at=graphify/symbol_resolution.py:L322
+EDGE resolve_python_import_guided_calls() --calls [EXTRACTED context=call]--> existing_edge_pairs() at=graphify/symbol_resolution.py:L237
+EDGE resolve_bash_source_edges() --calls [EXTRACTED context=call]--> _file_node_id_for_path() at=graphify/symbol_resolution.py:L433
+EDGE resolve_python_import_guided_calls() --calls [EXTRACTED context=call]--> find_unique_python_symbol() at=graphify/symbol_resolution.py:L273
+EDGE find_unique_python_symbol() --references [EXTRACTED context=parameter_type]--> ImportedSymbol at=graphify/symbol_resolution.py:L206
+EDGE parse_python_import_aliases() --calls [EXTRACTED context=call]--> ImportedSymbol at=graphify/symbol_resolution.py:L161
+EDGE resolve_cross_file_raw_calls() --calls [EXTRACTED context=call]--> iter_raw_calls() at=graphify/symbol_resolution.py:L332
+EDGE parse_python_import_aliases() --calls [EXTRACTED context=call]--> _module_stem() at=graphify/symbol_resolution.py:L154
+EDGE node_is_resolvable_symbol() --calls [EXTRACTED context=call]--> normalise_callable_label() at=graphify/symbol_resolution.py:L54
+EDGE resolve_python_import_guided_calls() --calls [EXTRACTED context=call]--> parse_python_import_aliases() at=graphify/symbol_resolution.py:L255

@@ -1,0 +1,154 @@
+# How is a claim marked stale when its cited files change?
+## tests/test_snapshot_stale.py:181-191 def test_deleting_a_cited_file_marks_its_claims_stale(proj)
+  calls: update@184, _status@188, verify@189
+def test_deleting_a_cited_file_marks_its_claims_stale(proj):
+    repo, st, cl, claims = proj
+    (repo / "orders" / "repository.py").unlink()
+    res = workflow.update(st, repo)
+    assert res["changed"]["removed"] == ["orders/repository.py"]
+    assert {s["id"] for s in res["stale"]} == {claims["repository"]["id"]}
+    assert res["stale"][0]["changed"] == [{"file": "orders/repository.py", "change": "removed"}]
+    assert _status(cl, claims)["repository"] == "stale"
+    v = workflow.verify(st, repo, claims["repository"]["id"])
+    assert v["after"]["status"] == "stale"
+    assert v["source_checks"][0]["reason"] == "file no longer exists: orders/repository.py"
+## tests/test_snapshot_stale.py:140-161 def test_modifying_a_cited_file_marks_exactly_its_claims_stale(proj)
+  calls: _hist_len@142, _edit@143, update@144, _status@150
+def test_modifying_a_cited_file_marks_exactly_its_claims_stale(proj):
+    repo, st, cl, claims = proj
+    hist = _hist_len(cl, claims)
+    _edit(repo, "orders/pricing.py", 'i["price"] * i["qty"]', 'i["price"] * i["qty"] * 2')
+    res = workflow.update(st, repo)
+    assert res["mode"] == "incremental" and res["changed"]["modified"] == ["orders/pricing.py"]
+    stale_ids = {s["id"] for s in res["stale"]}
+    assert stale_ids == {claims["pricing"]["id"], claims["pricing_inference"]["id"]}
+    for s in res["stale"]:
+        assert s["changed"] == [{"file": "orders/pricing.py", "change": "modified"}]
+    st_now = _status(cl, claims)
+    assert st_now["pricing"] == st_now["pricing_inference"] == "stale"
+    assert st_now["service"] == st_now["repository"] == st_now["config"] == "statically_verified"
+    after = _hist_len(cl, claims)
+    for k in ("service", "repository", "config"):
+        assert after[k] == hist[k], f"{k} history must be untouched"
+    h = cl.show(claims["pricing"]["id"])["history"][-1]
+    assert h["to_status"] == "stale" and "changed since snapshot" in h["reason"]
+    assert cl.get(claims["pricing"]["id"])["confidence"] == CONFIDENCE_CAP["stale"]
+    # A second update is a no-op and does not touch history again.
+    assert workflow.update(st, repo)["mode"] == "noop"
+    assert _hist_len(cl, claims) == after
+## tests/test_snapshot_stale.py:164-178 def test_a_new_commit_that_changes_a_file_marks_its_claims_stale(proj)
+  calls: _edit@167, _git@168, update@169, _status@174
+def test_a_new_commit_that_changes_a_file_marks_its_claims_stale(proj):
+    repo, st, cl, claims = proj
+    old_commit = st.latest_snapshot()["commit_sha"]
+    _edit(repo, "orders/service.py", "validate_items(items)\n", "validate_items(items)  # checked\n")
+    _git(repo, "commit", "-q", "-am", "annotate service")
+    res = workflow.update(st, repo)
+    assert res["snapshot"]["commit_sha"] != old_commit and res["snapshot"]["dirty"] == 0
+    assert {s["id"] for s in res["stale"]} == {claims["service"]["id"]}
+    reason = cl.show(claims["service"]["id"])["history"][-1]["reason"]
+    assert f"commit {old_commit[:10]} -> {res['snapshot']['commit_sha'][:10]}" in reason
+    assert _status(cl, claims)["pricing"] == "statically_verified"
+    # A commit that changes no file content creates a snapshot but marks nothing stale.
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "empty")
+    res2 = workflow.update(st, repo)
+    assert res2["mode"] == "incremental" and res2["changed_count"] == 0 and res2["stale"] == []
+## repoatlas/feedback.py:664-673 def _stale_reason(claim: dict, evs: list[dict], store: Store) -> str | None
+  calls: history@670?, _short@672
+  called by: process (repoatlas/feedback.py:936)
+def _stale_reason(claim: dict, evs: list[dict], store: Store) -> str | None:
+    """Why a claim is stale, precisely: cited lines that no longer match, or its last stale transition."""
+    changed = [e for e in evs if e["relation"] == "supports" and e.get("recheck_ok") is False]
+    if changed:
+        locs = ", ".join(f"{e['locator']} ({e.get('recheck_status') or 'changed'})" for e in changed[:3])
+        return f"the lines the claim cites no longer match: {locs}"
+    for h in reversed(store.history(claim["id"])):
+        if h["to_status"] == "stale":
+            return f"the claim was marked stale: {_short(h['reason'], 160)}"
+    return None
+## tests/test_critique.py:165-174 def test_staleness_check_marks_changed_claims_stale(proj)
+  calls: _exclusive_claim@167, challenge@171
+def test_staleness_check_marks_changed_claims_stale(proj):
+    repo, st, cl, g = proj
+    c = _exclusive_claim(repo, st, cl)
+    p = repo / "orders" / "repository.py"
+    p.write_text(p.read_text(encoding="utf-8").replace("sqlite3.connect(url)", "sqlite3.connect(url, timeout=5)"),
+                 encoding="utf-8")
+    res = critique.challenge(st, repo, c["id"], graph=g)
+    checks = {f["check"]: f["result"] for f in res["findings"]}
+    assert checks["staleness"] == "fail" and checks["source_recheck"] == "fail"
+    assert res["after"]["status"] == "stale" and res["after"]["confidence"] <= res["before"]["confidence"]
+## tests/test_feedback.py:554-563 def test_stale_reason_names_the_changed_lines(orders)
+  calls: Claims@558, add@559, process@560
+def test_stale_reason_names_the_changed_lines(orders):
+    repo, st, cid = orders
+    p = repo / "orders" / "repository.py"
+    p.write_bytes(p.read_bytes().replace(b"import sqlite3", b"import sqlite3 as db", 1))
+    Claims(st, repo).set_status(cid, "stale", reason="verify: cited lines changed", actor="test")
+    fb = feedback.add(st, repo, "repository.py changed", claim_id=cid)
+    res = feedback.process(st, repo, fb["id"])
+    assert res["verdict"] == "unresolved"
+    assert "the lines the claim cites no longer match" in res["explanation"]
+    assert "files behind the claim changed since its snapshot" not in res["explanation"]
+## tests/test_analysis.py:731-750 def test_audit_marks_a_subquestion_stale_when_its_claim_goes_stale(tmp_path)
+  calls: _copy_example@732, init@733, open_store@734, scan@736, analyze@737, audit@739
+def test_audit_marks_a_subquestion_stale_when_its_claim_goes_stale(tmp_path):
+    repo = _copy_example(tmp_path / "orders_app")
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+        res = analysis.analyze(st, repo, "Where is compute_total defined?", challenge=False)
+        assert res["subquestions"][0]["status"] == "met"
+        clean = analysis.audit(st, repo, res["analysis_id"])
+        assert clean["subquestions"][0]["now"] == "met" and clean["changed"] == []
+        p = repo / "orders" / "pricing.py"
+        p.write_bytes(p.read_bytes().replace(b"def compute_total(items: list[dict]) -> float:",
+                                             b"def compute_total(lines: list[dict], rate: float = 1.0) -> float:")
+                      .replace(b"for i in items)", b"for i in lines)"))
+        audit = analysis.audit(st, repo, res["analysis_id"])
+        sq = audit["subquestions"][0]
+        assert sq["now"] == "stale" and sq["stale_claims"] and audit["changed"] == ["q1"]
+        assert audit["plan_id"] == res["plan_id"] and audit["refreshed"]["mode"] != "noop"
+    finally:
+        st.close()
+repoatlas/workflow.py:157-219 def update(store: Store, repo: Path) -> dict
+tests/test_snapshot_stale.py:194-224 def test_revert_then_verify_restores_up_to_ceiling_and_rebinds(proj)
+repoatlas/mcp/server.py:799-802 "Re-index files changed since the last snapshot, record a new snapshot and mark claims whose files "
+repoatlas/workflow.py:248-337 def verify(store: Store, repo: Path, cid: str, *, run: bool = False) -> dict
+tests/test_snapshot_stale.py:449-457 def test_body_edit_stales_only_claims_that_depend_on_it(sym)
+repoatlas/claims.py:1022-1092 def invalidate_stale(store: Store, new_snapshot: dict | None, *, actor: str = "repoatlas", files: dict[str, str] | None…
+tests/test_snapshot_stale.py:305-332 def test_watch_tests_claims_go_stale_when_a_test_file_is_added_changed_or_removed(proj)
+repoatlas/feedback.py:690-988 def process(store: Store, repo: Path, feedback_id: str, *, topic: str | None = None, network: str | None = None) -> dict
+repoatlas/analysis.py:1613-1651 def audit(store: Store, repo: Path, analysis_id: str, *, refresh: bool = True) -> dict
+repoatlas/agents/templates/claude_SKILL.md:168-171 ## After editing code
+repoatlas/agents/templates/codex_SKILL.md:154-157 ## After editing code
+repoatlas/critique.py:362-670 def challenge(store: Store, repo: Path, cid: str, *, graph=None, actor: str = "critique", current_files: dict[str, str]…
+tests/test_mcp.py:417-447 def test_edit_makes_evidence_changed_and_claim_stale(fresh_repo)
+repoatlas/claims.py:986-1019 def assess_change(store: Store, repo: Path | None, claim: dict, old_files: dict[str, str], new_files: dict[str, str], *…
+repoatlas/claims.py:44-52 Invalidation (docs/DESIGN.md D24) works on *claim dependencies* recorded at
+repoatlas/analysis.py:1429-1598 def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budget | None = None, run_tests: bool = Fals…
+tests/test_snapshot_stale.py:497-517 def test_cited_file_outside_the_snapshot_is_rechecked(proj)
+repoatlas/claims.py:964-983 def changed_claim_files(store: Store, claim: dict, old_files: dict[str, str], new_files: dict[str, str]) -> list[dict]
+tests/test_snapshot_stale.py:263-276 def test_claims_citing_other_checkouts_do_not_go_stale_on_local_changes(proj, tmp_path)
+tests/test_cli.py:250-267 def test_update_after_edit_marks_claim_stale_via_cli(repo, tmp_path_factory)
+tests/test_feedback.py:531-551 def test_proposition_at_changed_cited_lines_reaches_corrected(orders)
+repoatlas/workflow.py:35-52 def _index_refused(store: Store, repo: Path, stats: dict, *, force: bool, files: dict[str, str] | None = None ) -> dict
+tests/test_snapshot_stale.py:3-7 Covers: modify / commit / delete a cited file -> exactly the dependent claims go
+repoatlas/workflow.py:126-154 def scan(store: Store, repo: Path, *, force: bool = False) -> dict
+repoatlas/benchmark/staleness.py:312-495 def replay(corpus: Path, *, commits: int = 300, pathspec: str = "*.py", cap_per_kind: int | None = 40, workdir: Path | …
+repoatlas/snapshot.py:3-5 A snapshot is (commit, dirty flag, per-file sha256). Claims are pinned to a
+tests/test_snapshot_stale.py:100-101 def _status(cl, claims) -> dict
+tests/test_store.py:156-165 def test_record_transition_updates_claim_and_appends_history(st)
+tests/test_search_index.py:339-348 def test_files_changed_after_indexing_are_reported(tmp_path)
+repoatlas/feedback.py:676-687 def _proposition_hits_cited_lines(repo: Path, claim: dict, evs: list[dict], pl: dict) -> list[dict]
+repoatlas/cli.py:176-182 def render(r)
+tests/test_snapshot_stale.py:337-369 def test_refused_index_rebuild_records_no_snapshot_and_says_what_to_do(proj, monkeypatch)
+repoatlas/benchmark/staleness.py:18-28 resolver). A claim's truth is unchanged only when an identical claim exists
+repoatlas/benchmark/runner.py:157-212 def score(approach: str, q: dict, text: str, meta: dict, root: Path) -> dict
+repoatlas/claims.py:321-620 class Claims
+tests/test_snapshot_stale.py:227-241 def test_verify_does_not_restore_when_a_subject_file_changed_without_recheckable_evidence(proj)
+tests/test_critique.py:347-357 def test_deleted_claim_file_is_stale_in_critique(proj)
+tests/test_claims.py:293-302 def test_stale_never_raises_confidence_and_invalidates_memory(env)
+… 1401 more candidates not shown: repoatlas/benchmark/staleness.py:3-4 Question-independent. It measures whether invalidation marks exactly the claims; repoatlas/references/local.py:19-22 Every item carries ``source_file`` and ``line`` so it can be cited as source; tests/test_snapshot_stale.py:484-494 def test_missing_facts_fall_back_to_file_level(sym, monkeypatch); tests/test_snapshot_stale.py:4…
+next: repoatlas query "How is a claim marked stale when its cited files change?" --max-chars 24000

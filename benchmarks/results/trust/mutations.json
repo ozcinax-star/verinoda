@@ -1,0 +1,301 @@
+{
+  "agree": 38,
+  "all_ok": true,
+  "categories": 12,
+  "environment": {
+    "cpu_count": 6,
+    "date_utc": "2026-09-23T01:22:36+00:00",
+    "git": "git version 2.53.0.windows.1",
+    "graphify_cli": null,
+    "machine": "AMD64",
+    "os": "Windows-11-10.0.26200-SP0",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "python": "3.12.0",
+    "python_impl": "CPython",
+    "repoatlas_package_changes_vs_commit": [
+      "M repoatlas/agents/templates/claude_SKILL.md",
+      "M repoatlas/agents/templates/codex_SKILL.md",
+      "M repoatlas/analysis.py",
+      "M repoatlas/benchmark/__main__.py",
+      "M repoatlas/benchmark/approaches.py",
+      "M repoatlas/benchmark/critique_eval.py",
+      "M repoatlas/benchmark/metrics.py",
+      "M repoatlas/benchmark/questions/graphify_core.json",
+      "M repoatlas/benchmark/questions/orders_app.json",
+      "M repoatlas/benchmark/report.py",
+      "M repoatlas/benchmark/runner.py",
+      "M repoatlas/benchmark/sanitize.py",
+      "M repoatlas/benchmark/staleness.py",
+      "M repoatlas/cli.py",
+      "M repoatlas/doctor.py",
+      "M repoatlas/feedback.py",
+      "M repoatlas/mcp/__init__.py",
+      "M repoatlas/mcp/server.py",
+      "M repoatlas/paths.py",
+      "M repoatlas/workflow.py",
+      "?? repoatlas/benchmark/questions/graphify_core_tr.json",
+      "?? repoatlas/benchmark/questions/heldout_repoatlas.json",
+      "?? repoatlas/benchmark/questions/orders_app_tr.json"
+    ],
+    "repoatlas_package_diff_sha256": "1a8dd47e680d8a7333ce15c25b0b9e14d8789cfc6fa066e1d476e3973b34f764",
+    "repoatlas_source_commit": "73719901c9dea49c2e87120ca040c6b998298fe3",
+    "repoatlas_version": "0.1.0.dev0",
+    "vendored_graphify_commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7"
+  },
+  "missed": [],
+  "paths_sanitized": {
+    "placeholders": [],
+    "rule": "absolute home / temp / checkout paths replaced when written; see repoatlas/benchmark/sanitize.py"
+  },
+  "rows": [
+    {
+      "category": "whitespace_comment",
+      "expected": {
+        "loc_apply": "kept",
+        "loc_compute": "stale",
+        "rel_compute_apply": "kept",
+        "rel_place_compute": "kept"
+      },
+      "got": {
+        "loc_apply": "kept",
+        "loc_compute": "stale",
+        "rel_compute_apply": "kept",
+        "rel_place_compute": "kept"
+      },
+      "ok": true,
+      "statuses_before": {
+        "loc_apply": "statically_verified",
+        "loc_compute": "statically_verified",
+        "rel_compute_apply": "statically_verified",
+        "rel_place_compute": "statically_verified"
+      },
+      "update_ms": 224.7
+    },
+    {
+      "category": "shift_above",
+      "expected": {
+        "loc_apply": "kept",
+        "loc_compute": "kept",
+        "rel_compute_apply": "kept",
+        "rel_place_compute": "kept"
+      },
+      "got": {
+        "loc_apply": "kept",
+        "loc_compute": "kept",
+        "rel_compute_apply": "kept",
+        "rel_place_compute": "kept"
+      },
+      "ok": true,
+      "statuses_before": {
+        "loc_apply": "statically_verified",
+        "loc_compute": "statically_verified",
+        "rel_compute_apply": "statically_verified",
+        "rel_place_compute": "statically_verified"
+      },
+      "update_ms": 221.9
+    },
+    {
+      "category": "unrelated_def_edit",
+      "expected": {
+        "loc_apply": "stale",
+        "loc_compute": "kept",
+        "rel_compute_apply": "kept",
+        "rel_place_compute": "kept"
+      },
+      "got": {
+        "loc_apply": "stale",
+        "loc_compute": "kept",
+        "rel_compute_apply": "kept",
+        "rel_place_compute": "kept"
+      },
+      "ok": true,
+      "statuses_before": {
+        "loc_apply": "statically_verified",
+        "loc_compute": "statically_verified",
+        "rel_compute_apply": "statically_verified",
+        "rel_place_compute": "statically_verified"
+      },
+      "update_ms": 589.0
+    },
+    {
+      "category": "docstring_edit",
+      "expected": {
+        "loc_compute": "stale",
+        "rel_compute_apply": "kept",
+        "rel_place_compute": "kept"
+      },
+      "got": {
+        "loc_compute": "stale",
+        "rel_compute_apply": "kept",
+        "rel_place_compute": "kept"
+      },
+      "ok": true,
+      "statuses_before": {
+        "loc_compute": "statically_verified",
+        "rel_compute_apply": "statically_verified",
+        "rel_place_compute": "statically_verified"
+      },
+      "update_ms": 640.1
+    },
+    {
+      "category": "local_rename_in_cited_def",
+      "expected": {
+        "loc_apply": "kept",
+        "loc_compute": "stale",
+        "rel_compute_apply": "stale",
+        "rel_place_compute": "kept"
+      },
+      "got": {
+        "loc_apply": "kept",
+        "loc_compute": "stale",
+        "rel_compute_apply": "stale",
+        "rel_place_compute": "kept"
+      },
+      "ok": true,
+      "statuses_before": {
+        "loc_apply": "statically_verified",
+        "loc_compute": "statically_verified",
+        "rel_compute_apply": "statically_verified",
+        "rel_place_compute": "statically_verified"
+      },
+      "update_ms": 243.7
+    },
+    {
+      "category": "delete_the_call",
+      "expected": {
+        "loc_apply": "kept",
+        "rel_compute_apply": "stale"
+      },
+      "got": {
+        "loc_apply": "kept",
+        "rel_compute_apply": "stale"
+      },
+      "ok": true,
+      "statuses_before": {
+        "loc_apply": "statically_verified",
+        "rel_compute_apply": "statically_verified"
+      },
+      "update_ms": 757.9
+    },
+    {
+      "category": "rename_the_target",
+      "expected": {
+        "loc_apply": "stale",
+        "rel_compute_apply": "stale",
+        "rel_place_compute": "kept"
+      },
+      "got": {
+        "loc_apply": "stale",
+        "rel_compute_apply": "stale",
+        "rel_place_compute": "kept"
+      },
+      "ok": true,
+      "statuses_before": {
+        "loc_apply": "statically_verified",
+        "rel_compute_apply": "statically_verified",
+        "rel_place_compute": "statically_verified"
+      },
+      "update_ms": 240.1
+    },
+    {
+      "category": "change_the_import_alias",
+      "expected": {
+        "loc_compute": "kept",
+        "rel_place_compute": "stale"
+      },
+      "got": {
+        "loc_compute": "kept",
+        "rel_place_compute": "stale"
+      },
+      "ok": true,
+      "statuses_before": {
+        "loc_compute": "statically_verified",
+        "rel_place_compute": "statically_verified"
+      },
+      "update_ms": 228.1
+    },
+    {
+      "category": "move_def_to_another_file",
+      "expected": {
+        "loc_apply": "kept",
+        "loc_compute": "stale",
+        "rel_compute_apply": "stale",
+        "rel_place_compute": "stale"
+      },
+      "got": {
+        "loc_apply": "kept",
+        "loc_compute": "stale",
+        "rel_compute_apply": "stale",
+        "rel_place_compute": "stale"
+      },
+      "ok": true,
+      "statuses_before": {
+        "loc_apply": "statically_verified",
+        "loc_compute": "statically_verified",
+        "rel_compute_apply": "statically_verified",
+        "rel_place_compute": "statically_verified"
+      },
+      "update_ms": 326.5
+    },
+    {
+      "category": "delete_the_file",
+      "expected": {
+        "loc_compute": "kept",
+        "loc_save": "stale"
+      },
+      "got": {
+        "loc_compute": "kept",
+        "loc_save": "stale"
+      },
+      "ok": true,
+      "statuses_before": {
+        "loc_compute": "statically_verified",
+        "loc_save": "statically_verified"
+      },
+      "update_ms": 196.3
+    },
+    {
+      "category": "add_same_name_symbol",
+      "expected": {
+        "loc_compute": "kept",
+        "no_test_watch": "kept",
+        "rel_place_compute": "kept"
+      },
+      "got": {
+        "loc_compute": "kept",
+        "no_test_watch": "kept",
+        "rel_place_compute": "kept"
+      },
+      "ok": true,
+      "statuses_before": {
+        "loc_compute": "statically_verified",
+        "no_test_watch": "unknown",
+        "rel_place_compute": "statically_verified"
+      },
+      "update_ms": 278.6
+    },
+    {
+      "category": "add_a_test",
+      "expected": {
+        "loc_compute": "kept",
+        "no_test_watch": "stale",
+        "rel_compute_apply": "kept"
+      },
+      "got": {
+        "loc_compute": "kept",
+        "no_test_watch": "stale",
+        "rel_compute_apply": "kept"
+      },
+      "ok": true,
+      "statuses_before": {
+        "loc_compute": "statically_verified",
+        "no_test_watch": "unknown",
+        "rel_compute_apply": "statically_verified"
+      },
+      "update_ms": 269.7
+    }
+  ],
+  "schema": "repoatlas.staleness_mutations/1",
+  "stale_recall": 1.0,
+  "verdicts": 38
+}

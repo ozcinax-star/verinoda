@@ -1,0 +1,158 @@
+# Grafik dosyası boyut sınırını ve ortam değişkeniyle aşılmasını hangi testler kapsıyor?
+expanded: dosyası->dos (turkish stem 'dos'); dosyası->dosomething (turkish stem 'dos'); sınırını->singl (turkish stem 'sin'); sınırını->sinc (turkish stem 'sin'); sınırını->singleton (turkish stem 'sin'); testler->test (turkish stem 'test')
+## graphify/security.py:35-66 def _max_graph_file_bytes() -> int
+  doc: Return the graph.json size cap in bytes.
+  called by: check_graph_file_size_cap (graphify/security.py:373); test_max_graph_bytes_default_when_unset (tests/test_security.py:243); test_max_graph_bytes_default_when_blank (tests/test_security.py:248); test_max_graph_bytes_plain_integer (tests/test_security.py:253); test_max_graph_bytes_mb_suffix_is_binary (tests/test_security.py:258); test_max_graph_bytes_gb_suffix_is_binary (tests/test_security.py:263); test_max_graph_bytes_suffix_is_case_insensitive (tests/test_security.py:268); test_max_graph_bytes_tolerates_space_before_suffix (tests/test_security.py:273) (+2)
+  const graphify/security.py:32: _MAX_GRAPH_FILE_BYTES = 512 * 1024 * 1024   # 512 MiB
+  graphify/security.py:37-45
+
+    Honors the ``GRAPHIFY_MAX_GRAPH_BYTES`` environment variable so users with
+    large codebases can raise the limit without editing source. The value may
+    be plain bytes (``671088640``) or carry an ``MB`` / ``GB`` suffix
+    (``640MB``, ``2GB`` — case-insensitive, binary multipliers: ``MB`` is
+    1024*1024 and ``GB`` is 1024*1024*1024, i.e. MiB / GiB).
+    Falls back to ``_MAX_GRAPH_FILE_BYTES`` (512 MiB) when the env var is unset,
+    blank, or unparseable.
+
+  graphify/security.py:57-66
+    elif text.endswith("MB"):
+        multiplier = 1024 * 1024
+        text = text[:-2].strip()
+    try:
+        value = int(text)
+    except ValueError:
+        return _MAX_GRAPH_FILE_BYTES
+    if value <= 0:
+        return _MAX_GRAPH_FILE_BYTES
+    return value * multiplier
+## tests/test_security.py:294-299 def test_graph_size_cap_over_limit_raises(monkeypatch, tmp_path)
+  calls: check_graph_file_size_cap@299
+def test_graph_size_cap_over_limit_raises(monkeypatch, tmp_path):
+    monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 16)
+    p = tmp_path / "graph.json"
+    p.write_text('{"nodes": [], "links": [], "padding": "x" * 50}', encoding="utf-8")
+    with pytest.raises(ValueError, match="exceeds"):
+        check_graph_file_size_cap(p)
+## graphify/security.py:357-383 def check_graph_file_size_cap(path: Path) -> None
+  doc: Reject *path* if its size exceeds the configured graph-file cap.
+  calls: _max_graph_file_bytes@373
+  called by: _load_existing_graph (graphify/build.py:1635); load_graph (graphify/callflow_html.py:270); dispatch_command (graphify/cli.py:2088); _enforce_graph_size_cap_or_exit (graphify/cli.py:671); _read_json_file (graphify/diagnostics.py:300); existing_graph_node_count (graphify/export.py:249); to_json (graphify/export.py:277); global_add (graphify/global_graph.py:109) (+12)
+  graphify/security.py:364-368
+
+    The cap is resolved on every call via :func:`_max_graph_file_bytes`, so the
+    ``GRAPHIFY_MAX_GRAPH_BYTES`` env var can be set before import and still
+    apply.
+
+  graphify/security.py:374-383
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return
+    if size > cap:
+        raise ValueError(
+            f"graph file {path} is {size:_d} bytes, exceeds {cap:_d}-byte cap\n"
+            f"(set GRAPHIFY_MAX_GRAPH_BYTES=<bytes> or "
+            f"GRAPHIFY_MAX_GRAPH_BYTES=<N>GB to raise the limit)"
+        )
+## graphify/exporters/html.py:17-30 def _viz_node_limit() -> int
+def _viz_node_limit() -> int:
+    """Return the effective viz node limit, honoring GRAPHIFY_VIZ_NODE_LIMIT env var.
+
+    Falls back to MAX_NODES_FOR_VIZ when the env var is unset, empty, or non-integer.
+    Set to 0 to disable HTML viz unconditionally (useful for CI runners).
+    """
+    import os
+    raw = os.environ.get("GRAPHIFY_VIZ_NODE_LIMIT")
+    if raw is None or not raw.strip():
+        return MAX_NODES_FOR_VIZ
+    try:
+        return int(raw)
+    except ValueError:
+        return MAX_NODES_FOR_VIZ
+## tests/test_security.py:288-291 def test_graph_size_cap_under_limit_returns_none(tmp_path)
+def test_graph_size_cap_under_limit_returns_none(tmp_path):
+    p = tmp_path / "graph.json"
+    p.write_text('{"nodes": [], "links": []}', encoding="utf-8")
+    assert check_graph_file_size_cap(p) is None
+## graphify/llm.py:3157-3169 def backend_detection_env_vars() -> tuple[str, ...]
+def backend_detection_env_vars() -> tuple[str, ...]:
+    """Every environment variable ``detect_backend()`` consults, in probe order.
+
+    Covers the API-key variables of every registered backend (built-in and
+    custom) plus the endpoint/region/host variables checked directly.
+    """
+    seen: dict[str, None] = {}
+    for name in BACKENDS:
+        for env_key in _backend_env_keys(name):
+            seen.setdefault(env_key, None)
+    for env_key in _BACKEND_DETECTION_EXTRA_ENV:
+        seen.setdefault(env_key, None)
+    return tuple(seen)
+## graphify/llm.py:308-318 def _resolve_max_tokens(default: int) -> int
+def _resolve_max_tokens(default: int) -> int:
+    """Honour GRAPHIFY_MAX_OUTPUT_TOKENS env var override, else use backend default."""
+    raw = os.environ.get("GRAPHIFY_MAX_OUTPUT_TOKENS", "").strip()
+    if raw:
+        try:
+            v = int(raw)
+            if v > 0:
+                return v
+        except ValueError:
+            pass
+    return default
+graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+graphify/llm.py:1300-1309 def _backend_env_keys(backend: str) -> list[str]
+tests/test_security.py:237-239 # ---------------------------------------------------------------------------
+tests/test_security.py:314-323 def test_graph_size_cap_at_boundary_passes(monkeypatch, tmp_path)
+tests/test_security.py:302-311 def test_graph_size_cap_error_message_includes_size_and_cap(monkeypatch, tmp_path)
+tests/test_security.py:99-115 def test_safe_fetch_raises_on_size_exceeded()
+tests/test_security.py:233-234 def test_graph_size_cap_default_is_512_mib()
+graphify/extract.py:6605-6745 def _extract_parallel( uncached_work: list[tuple[int, Path]], per_file: list[dict | None], root: Path, max_workers: int…
+tests/test_security.py:326-330 def test_graph_size_cap_missing_file_silently_returns(tmp_path)
+tests/test_querylog.py:74-81 def test_disable_env(tmp_path, monkeypatch)
+tests/test_security.py:333-342 def test_graph_size_cap_unreadable_directory_silently_returns(monkeypatch, tmp_path)
+tests/test_querylog.py:84-91 def test_disable_env_true(tmp_path, monkeypatch)
+tests/test_security.py:246-248 def test_max_graph_bytes_default_when_blank(monkeypatch)
+tests/test_security.py:241-243 def test_max_graph_bytes_default_when_unset(monkeypatch)
+tests/test_security.py:277-279 def test_max_graph_bytes_unparseable_falls_back(monkeypatch, bad)
+tests/test_security.py:283-285 def test_max_graph_bytes_nonpositive_falls_back(monkeypatch, nonpositive)
+graphify/llm.py:783-791 # token budget would otherwise pack hundreds of images into one request —
+tests/test_security.py:251-253 def test_max_graph_bytes_plain_integer(monkeypatch)
+tests/test_security.py:271-273 def test_max_graph_bytes_tolerates_space_before_suffix(monkeypatch)
+tests/test_security.py:266-268 def test_max_graph_bytes_suffix_is_case_insensitive(monkeypatch)
+tests/test_security.py:261-263 def test_max_graph_bytes_gb_suffix_is_binary(monkeypatch)
+tests/test_security.py:256-258 def test_max_graph_bytes_mb_suffix_is_binary(monkeypatch)
+graphify/serve.py:104-118 def _max_server_contexts() -> int
+tests/test_security.py:13-24 check_graph_file_size_cap,
+graphify/llm.py:1321-1324 def _format_backend_env_keys(backend: str) -> str
+graphify/extractors/dart.py:10-564 def extract_dart(path: Path) -> dict
+graphify/mcp_ingest.py:40-47 Security
+graphify/mcp_ingest.py:25-31 Schema emitted
+graphify/exporters/html.py:402-652 def to_html( G: nx.Graph, communities: dict[int, list[str]], output_path: str, community_labels: dict[int, str] | None …
+graphify/extractors/engine.py:1394-1413 def walk(n) -> None
+graphify/llm.py:420-436 def _resolve_max_retries(default: int = 6) -> int
+graphify/detect.py:73-108 def _zip_within_caps(path: Path) -> bool
+graphify/llm.py:1353-1492 def _call_openai_compat( base_url: str, api_key: str, model: str, user_message: str, temperature: float | None = 0, rea…
+graphify/export.py:271-416 def to_json(G: nx.Graph, communities: dict[int, list[str]], output_path: str, *, force: bool = False, built_at_commit: …
+graphify/mcp_ingest.py:169-267 def _emit_server( *, server_name: str, spec: dict[str, Any], file_nid: str, file_stem: str, source_file: str, nodes: li…
+graphify/extractors/bash.py:105-579 def extract_bash(path: Path) -> dict
+graphify/llm.py:1312-1318 def _get_backend_api_key(backend: str) -> str
+graphify/extract.py:6787-8247 def extract( paths: list[Path], cache_root: Path | None = None, *, root: Path | None = None, parallel: bool = True, max…
+graphify/export.py:229-268 def existing_graph_node_count(path: "str | Path")
+graphify/security.py:258-299 def safe_fetch(url: str, max_bytes: int = _MAX_FETCH_BYTES, timeout: int = 30) -> bytes
+graphify/llm.py:3383-3489 def label_communities( G, communities, *, backend: str, model: str | None = None, gods=None, max_communities: int | Non…
+graphify/tree_html.py:583-603 def write_tree_html( graph_path: Path, output_path: Path, *, root: Optional[str] = None, max_children: int = DEFAULT_MA…
+graphify/llm.py:1929-2056 def extract_files_direct( files: list[Path], backend: str | None = None, api_key: str | None = None, model: str | None …
+graphify/extractors/engine.py:1682-1719 def _cpp_local_var_types(body_node, source: bytes, table: dict[str, str]) -> None
+graphify/detect.py:65-70 def _file_within_size_cap(path: Path, cap: int = _OFFICE_MAX_RAW_BYTES) -> bool
+graphify/llm.py:1878-1926 def _call_bedrock(model: str, user_message: str, max_tokens: int = 8192, *, deep_mode: bool = False, images: list[_Imag…
+graphify/cache.py:223-237 def _mtime_granularity_ns() -> int
+graphify/extractors/robot.py:23-71 def _resolve_robot_import(raw: str, source_path: Path) -> Path | None
+graphify/extractors/bash.py:66-69 # Name of the leading variable of a `source` argument: `${ROOT}/lib/x.sh` -> ROOT.
+tests/test_querylog.py:190-193 def test_query_log_off_by_default(monkeypatch)
+graphify/detect.py:471-503 def _shebang_interpreter(path: Path) -> str | None
+graphify/llm.py:407-417 def _resolve_api_timeout(default: float = 600.0) -> float
+graphify/extractors/bash.py:281-532 def walk(node, parent_nid: str) -> None
+(calls / called by: static call graph, '?' = inferred edge; may be incomplete)
+… 2313 more candidates not shown
+next: repoatlas query "Grafik dosyası boyut sınırını ve ortam değişkeniyle aşılmasını hangi testler kapsıyor?" --max-chars 24000

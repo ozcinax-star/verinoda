@@ -1,0 +1,159 @@
+# Verinoda architecture
+
+Verinoda answers questions about a codebase as **claims backed by evidence**
+and keeps those claims honest over time: facet-level stale invalidation,
+anchored re-checks, critique, and user corrections handled as hypotheses. The
+knowledge graph comes from the Graphify-derived `project_index`. Everything
+else is Verinoda's own.
+
+The design decisions (D1-D30) and their implementation status are in
+[DESIGN.md](DESIGN.md). Measured results are in [BENCHMARKS.md](BENCHMARKS.md).
+
+```
+             verinoda CLI (cli.py)              MCP server (mcp/server.py, 23 tools)
+                         \                        /
+                          \   same core functions /
+  workflow.py (init / scan / update / verify)    analysis.py (budgeted loop per question plan)
+     |                                               |
+     |  derived, disposable indexes                  |  per sub-question
+     |  index.py -> project_index/ (Graphify)        |  question_plan.py <- lexicon.py, textnorm.py
+     |  search_index.py (search.db)                  |  retrieval.py     <- search_index.py
+     |  lexicon.py (lexicon.json)                    |  architecture_map.py (views)
+     |  anchors.py (file_facts)                      |  precise.py / scip_reader.py (optional)
+     |                                               |  runtime/ (optional test observation)
+     v                                               |  references/ (offline pinning)
+  snapshot.py (stat-cached hashes, git state)        v
+                                   claims.py <- entail.py, evidence.py, anchors.py
+                                   critique.py (probes, definitive vs heuristic refutation)
+                                   store.py (SQLite atlas.db, schema v4, append-only)
+  research.py / feedback.py / memory.py / experiments.py
+```
+
+## Module responsibilities
+
+### Graph and indexes
+
+| Module | Role |
+|---|---|
+| `project_index/` | Graphify at a pinned commit: file detection, tree-sitter extraction, graph build, clustering, report/HTML, and the upstream CLI (`verinoda index -- ...`, installer and `~/.graphify` writers blocked). Read-only for Verinoda; see [UPSTREAM.md](UPSTREAM.md). |
+| `index.py` | The only door into `project_index`. `build()` does a full or changed-paths rebuild (AST only) and installs the path-identity memo (a monkeypatch; the vendored file is unchanged). `load()` returns a `Graph` with true edge direction. Symbol spans come from one pass per file: Python `ast` end lines, tree-sitter `end_point` for other languages, Markdown sections; the capped next-symbol rule is a labelled fallback (`span_basis`). A per-file interval index answers "which symbol encloses line N". The Python receiver-call pass (`param.method()` on annotated parameters, `x = Cls()` locals) runs at build time and is stored in the `receiver_calls.json` sidecar; `load()` only applies it. Those edges are `INFERRED` with `derived_by=verinoda.receiver`. |
+| `search_index.py` | Persistent passage index in `.verinoda/index/search.db` (D17-D19, D22). Units are symbols (own lines only), module-level blocks and prose sections. Passages are 12-line windows with stride 6. The tokenizer is identifier-aware (whole compound and camel/snake parts, light stemming, Turkish folding). Ranking is BM25F (name, path, body fields; idf per unit; unit = best passage), plus an exact-identifier override and a personalised-PageRank prior by local push. Incremental per changed file; a schema or tokenizer version change rebuilds it. |
+| `textnorm.py` | Shared TR/EN normalisation (D5): length-preserving Turkish folding (`İndirim` -> `indirim`), apostrophe-suffix splitting, stopwords, a short-technical-term keep-list, `tr_stem` confirmed by the repository vocabulary with a 5-character prefix fallback, light English stemming, Turkish case suffix -> role, language detection. |
+| `lexicon.py` | Repo-learned lexicon in `.verinoda/index/lexicon.json` (D6). Associates words from docstrings, comments, string literals and backticked doc lines with identifier parts (Dunning G² >= 10.83, support >= 2, up to 3 `file:line` sites per pair). It also holds a packaged TR->EN seed dictionary (`verinoda/data/seed_lexicon_tr_en.json`), used only when the English target occurs in the repository. Lexicon output is candidates only, never evidence. |
+| `snapshot.py` | Commit, branch and dirty flag from one `git status --porcelain=v2 --branch`, the file list from one `git ls-files`, and sha256 per file. Hashes are cached by stat (`file_stat` table: size, mtime_ns) with git's racy-clean rule. Diffs between snapshots drive invalidation. |
+| `architecture_map.py` | Views: hierarchy, dependencies (file level; calls, imports, uses, inherits), dataflow (entry -> persistence over `calls`), config (env reads, config files), tests (static reachability; `coverage.xml` if present), history (git log, decision records), impact (reverse reachability). Every view returns `coverage.method` and `coverage.limits`. |
+| `retrieval.py` | Question -> a small, justified set of code locations, ranked by `search_index`. `retrieve()` returns JSON for programs; its character budget counts everything returned, and `budget.more` lists further candidates as locators. `render_text()` renders the plain-text context a model reads, skeleton first (D20), and states truncation with the follow-up command. `trace()` gives directed paths in `flow` mode (calls, plus class -> `__init__` construction) or `any` mode, with hints and a next step when an endpoint does not resolve. |
+
+### Understanding the question and the references in it
+
+| Module | Role |
+|---|---|
+| `question_plan.py` | The `verinoda.question_plan/1` contract (D1-D4, D8); the schema ships as package data in `verinoda/schemas/`. `draft()` builds a plan from bilingual rules: clause segmentation, intent cue tables with domain shadowing, Turkish case roles, anaphora via `subject_from`. `check()` is deterministic and offline: schema, integrity (unique ids, DAG, limits), verbatim grounding of mentions and references in the message, version tokens carried by a reference (`version_dropped`), cross-checks against rule intents (warnings only), mention linking in evidence tiers, and at most 3 grounded clarifications from fixed TR/EN templates. `store_plan()` records plans immutably; revisions link through `parent_id`. |
+| `references/` | Reference resolution (D10-D16): parse -> classify -> bind -> pin -> report, output schema `verinoda.reference_resolution/1`, stored append-only. `mentions.py` extracts TR/EN mentions. `classify.py` is a table-driven classifier (GitHub/GitLab/Codeberg/Bitbucket URL shapes, `owner/repo`, package specs, purl, Go modules, Maven, arXiv, DOI, SWHID). `resolver.py` binds versions to references and reports mismatches M1-M12. `pin.py` holds the precedence ladder. `gitref.py` does qualified ref lookup (`refs/heads/X` vs `refs/tags/X`, a clash is M5) and blobless mirrors. `versions.py` matches version text to tags (PEP 440 when `packaging` is importable). `local.py` reads the versions the project uses from lock files, the project's own venv metadata and runtime pins, without importing project code. `transport.py` is offline-first HTTP: live, cache (`research/http-cache`) and cassette transports, per-host rate-limit blocking, and no credentials stored. `registries.py` does registry lookups, which are pointers only. `contentmatch.py` maps a package to a commit by git blob hashes. `provenance.py` reads PEP 740 source commits (signature not verified). `render.py` gives the compact JSON and text outputs. `evaluate.py` scores the golden corpus. |
+
+### Claims, evidence and trust
+
+| Module | Role |
+|---|---|
+| `store.py` | SQLite `atlas.db`, schema v4 (migrations v1-v4 applied in order; a newer database is refused). Tables: snapshots and files, claims, evidence, claim-evidence links (with evidence group `grp`), append-only claim history, feedback, experiments, research, memory, analyses, question plans, claim dependencies, evidence locations, runtime runs and calls, reference resolutions. Derived caches: `file_facts`, `resolutions`, `file_stat`. Triggers reject deletes on every audited table, updates of history, links, plan bodies, evidence locations and reference resolutions, and (v4) any change to a claim's `text` or `created_at`. |
+| `evidence.py` | Evidence construction and re-checking. Source ranks run from 1 (project source) to 7 (secondary). `static_resolution` has rank 2. `graph_edge`, `user_feedback`, `search_result`, `model_summary` and `secondary` never verify. `user_feedback`, `search_result` and `model_summary` are not even support for an inference. Cited lines carry an anchor, so `check_source()` tells `same` / `moved` / `changed` / `gone` / `ambiguous` apart. Markdown lines are `design_doc`. |
+| `anchors.py` | Symbol facts cached by file sha256 (D23): per-definition signature, body (docstring removed, nested definitions Merkle-hashed) and doc hashes; per-file import bindings, module statements and Markdown sections. Python uses its own AST serializer (not `ast.dump`); other languages hash tree-sitter leaf sequences. Evidence anchors (D25) and `relocate()`: a `changed` anchor is a candidate location only, never verification. An unsupported file has no facts, and callers fall back to file level. |
+| `entail.py` | Mechanical entailment grades `full` / `partial` / `none` per claim kind (D26). Relation: an AST call at the cited line inside the claimed caller whose callee is the target or an import alias of it; a method on an unresolved receiver is `partial`; a definitive static resolution or an observed runtime call is `full`. Location: the definition spans exactly the cited lines. Config: an env read of that literal. Flow: every hop and the sink. Tests/impact: `partial` at most. Decision/history: `partial` at most, and only with attribution. `general`: term coverage, a labelled heuristic. |
+| `claims.py` | Status rules in `check_status()`, which every stored status change passes through (`Claims.set_status` always grades the claim), so irrelevant evidence cannot verify a claim on any path. A verified status needs one evidence group that is verifying, fresh and fully graded. `strong_inference` needs relevant non-pointer support. A claim with no evidence is `unknown`. Only a definitive refutation contradicts; a heuristic one lowers one step. `assessed` and `ceiling` live in `spec`, and critique's `penalty` is kept. Dependencies are derived per claim kind (`derive_deps`: signature, body, bindings, module statements, sections, test-set hash; file level as fallback). `assess_change()` / `invalidate_stale()` mark a claim stale only when a facet it depends on changed or its evidence no longer relocates. Otherwise the claim is re-bound to the new snapshot and its history says so. |
+| `callsite.py` | Legacy name-level check that a cited line names the call target, import aliases included. The analysis prefers `entail.call_site`. |
+| `critique.py` | Tries to break a claim (D27): support, entailment, source re-check, existence of cited commits/runs, graph-only support, call site (AST), ambiguity of INFERRED targets, exclusivity, facet staleness, and counter-hypothesis probes (for example "a call after an earlier raise in a `pytest.raises` block cannot run"). A definitive failure attaches refuting evidence and contradicts; a heuristic one lowers one step with an uncertainty. Status and confidence only go down. Critique is idempotent on an unchanged claim and never restores a stale or contradicted claim (`verify` does). Accepts `current_files` so one freshness pass serves the whole analysis. |
+| `precise.py` | Optional (`verinoda[precise]` = jedi, D29). `resolve_call(repo, path, line, target)` returns `definitive` / `dynamic` / `ambiguous` / `external` / `unresolved`, and with the graph's target also `confirms` / `refutes` / `undetermined`. Only a definitive answer confirms or refutes; a method on a parameter or local receiver is `dynamic`. Results are cached in `resolutions` by file sha256. A per-analysis `Budget` (default 20 sites or 1.5 s) bounds fresh work, and a site skipped for budget gets the uncertainty "not resolved (budget)". Without jedi, every call answers `None`. |
+| `scip_reader.py` | Dependency-free SCIP protobuf decoder and `ScipResolver` with the `precise` interface (D29), for non-Python files only (SCIP symbols are name-based). Lines are converted to 1-based. Per-document freshness is recorded in `scip_fresh.json`: a document is used only while its file keeps the hash it had when the index was first read. |
+| `runtime/` | Optional runtime observation (D28). `calltrace_plugin.py` is a standalone pytest plugin on `sys.monitoring` (PY_START primary, CALL once per site for boundary calls) with a `setprofile` fallback, budgets on events, edges, bytes and time, and a JSONL trace. `trace.py` has `observe()`, which runs selected tests through `experiments.run` with the project's interpreter, ingests the trace into `runtime_runs` / `runtime_calls` with its sha256, snapshot and commit, and returns observed edges, per-test reach sets, boundary calls and `call_trace` evidence. `select_tests()` and `reach_evidence()` (pass supports, fail refutes, inconclusive qualifies) are also here. An observation is run-scoped and existential: it never supports an "always" claim, and edges seen through test doubles never support production edges. |
+| `memory.py` | Versioned key/value learnings, written by `verinoda memory learn`. One linked to a claim is invalidated (never deleted) when that claim goes stale or is contradicted, and is not restored automatically. |
+
+### Loops and entry points
+
+| Module | Role |
+|---|---|
+| `workflow.py` | `init`, `scan`, `update`, `verify`. After every build it refreshes the derived data: `search_index.update`, then `lexicon.build` and `anchors.update_facts` (errors are reported per step, never raised). A refused or failed index rebuild is reported, not swallowed. `verify` re-checks cited lines through their anchors and uses `claims.assess_change` for facet-level decisions. |
+| `analysis.py` | The budgeted loop (D7). Refresh the index if the tree changed. Draft or parse the plan and check it (an invalid plan stops; `needs_clarification` returns the questions and writes no claim). Then, per sub-question in dependency order, with a share of the budget: retrieval seeded by linked mentions and lexicon expansions, a relevance test (irrelevant items become an `unknown` with a next step), location and relation claims, and the intent handler (flow, dataflow, callers, config, tests with optional test run or `observe`, why/history, impact, behaviour, reference comparison resolved offline). Relation call sites are graded by `entail.call_site` and, when installed, by `precise`. Critique follows. Each sub-question gets a verdict against its `done_when`. Every returned claim, unknown, step and critique entry is charged to the context budget. `plan audit` recomputes the verdicts later. |
+| `experiments.py` | Hypothesis -> command in a throw-away copy (tracked plus untracked-not-ignored files), with its own process group, a tree-killing timeout and an allowlisted environment (no secrets). POSIX rlimits exist but have not been run. Under `process` isolation, every argument of an allowlisted test command must stay inside the copy: absolute, home-relative, URL and `..` paths are rejected, and so are code-running runner options (`pytest --pyargs`, `node -e`, ...). The tests themselves can still read and write outside the copy and use the network, and every result says so (`guarantees`). `container` isolation (named container, `--network none`, killed by name on timeout) has never been run against a real docker/podman. Outcomes are `pass` / `fail` / `timeout` / `inconclusive`; inconclusive only qualifies. The `plugins` / `env_extra` / artifact collection options serve the tracer. |
+| `research.py` | Reference repositories pinned to an exact commit in per-commit detached worktrees, local directories pinned by content hash, and documents with content hashes. A pin from `verinoda resolve` (`--resolution`) is used as is; a named ref that cannot be resolved is an error, never a default-branch fallback. Package research downloads the sdist and compares it by content. `mechanism()` does a heuristic trace (data structures, errors, concurrency, environment, "why" material), and `compare()` diffs local vs reference. |
+| `feedback.py` | User critique as a hypothesis: the references are resolved first (a conflict means `unresolved`), then the 9-step protocol and a deterministic verdict (`confirmed` / `qualified` / `corrected` / `unresolved`), with supersession on correction. A manual `confirmed` / `qualified` accepts only evidence already linked to the claim or produced by this feedback's own runs, and never raises the claim. |
+| `cli.py` | Thin adapters over the core; `--json` everywhere. `query` prints the plain-text context by default. Exit codes: 0 done, 1 error, 2 usage error / invalid plan / blocked upstream command, 3 "needs more" (clarification, partial resolution, refused experiment, incomplete observation, no precise answer). Output is UTF-8 whatever the console code page. |
+| `mcp/` | MCP server over the same functions: 23 tools, responses capped (12,000 characters by default). The long-lived process keeps the graph (re-deriving spans only for edited files), the lexicon and a warm jedi project. |
+| `agents/` | Claude Code and Codex skill + MCP installers with ownership markers and an install manifest; idempotent install, exact uninstall. The skills carry the understand-first protocol and the references protocol. |
+| `benchmark/` | Harnesses. `runner.py` / `approaches.py` / `metrics.py` / `report.py` / `sanitize.py` / `llm.py` run raw search vs Graphify (vendored renderer and upstream CLI) vs Verinoda on question sets with gold facts. `staleness.py` has the history replay and mutation suite against a from-scratch oracle (D30). `critique_eval.py` measures critique precision and recall on a labelled claim set (D30). They are exposed as `verinoda benchmark run / staleness replay / staleness mutations / critique-eval`. |
+| `doctor.py` | Installation and project state without printing secrets: package layout (hardlinked/editable installs warn for sandboxes), graph and snapshot freshness, schema and claim counts, search index and receiver sidecar state, lexicon and seed dictionary, precise availability, `sys.monitoring` in the project's interpreter, SCIP index freshness, reference network mode, HTTP cache and rate-limited hosts, `packaging`, agent skills and MCP config. |
+| `paths.py` | State locations and `DEFAULT_CONFIG` (budgets incl. `precise_sites` / `precise_seconds`, experiment allowlist, `research.network`, `understanding` thresholds). |
+
+## State on disk
+
+```
+<repo>/.verinoda/
+  atlas.db                  SQLite, schema v4: claims, evidence, history, plans, runtime runs, ...
+                            (audited rows are never deleted; file_facts / resolutions / file_stat
+                            are derived caches)
+  config.json               budgets, experiment allowlist, research.network, understanding thresholds
+  index/                    DERIVED, DISPOSABLE - rebuilt by `verinoda scan --force`
+    graph.json ...          project_index output (+ GRAPH_REPORT.md, graph.html, cache/)
+    search.db               passage index (search_index.py)
+    receiver_calls.json     receiver-call edges, keyed by graph.json's identity
+    lexicon.json            repo-learned lexicon (lexicon.py)
+    index.scip              only when the user supplies one (`scan --scip FILE`)
+    scip_fresh.json         per-document freshness of that SCIP index
+  plans/                    question-plan files (JSON is never passed on the command line)
+  runs/<experiment-id>/     stdout.txt / stderr.txt; artifacts/calltrace.jsonl for observe runs
+  research/<slug>/          mirror.git (bare), <sha12>/ worktrees, tree-<hash12>/ copies,
+                            meta.git (blobless mirror for reference pinning)
+  research/http-cache/      offline-first HTTP cache of the reference resolver (+ hosts.json)
+  install-manifest.json     project-scope agent installs
+  .gitignore                "*" - keeps all of this out of the user's git
+```
+
+## Invariants
+
+1. **A verified status needs relevant, fresh, verifying evidence, enforced in
+   one place.** `claims.check_status` requires one evidence group that is
+   verifying, fresh (relocated through its anchor when the code only moved)
+   and graded `full` by `entail`. Every stored status change goes through it
+   with the claim, whether it comes from the Claims API, attach + reassess,
+   `verify`, `feedback resolve`, experiment runs, runtime observations or MCP.
+   This is acceptance criterion 6: unrelated evidence (a passing but unrelated
+   test, a foreign evidence id) cannot raise a claim.
+2. **A graph edge alone never verifies.** `EXTRACTED` / `INFERRED` edges are
+   at most support for `strong_inference`. Search results, model summaries and
+   user feedback are not even that.
+3. **No evidence means `unknown`.** Insufficient evidence produces `unknown`
+   with a next step, including when the budget runs out or retrieval finds
+   nothing relevant.
+4. **Staleness is facet-level.** A claim goes `stale` on the next
+   `update` / `scan` / `analyze` / `verify` when a facet it depends on changed
+   (signature, body, binding, module statement, section, test set) or its
+   cited lines no longer relocate to identical text. If its files changed but
+   its facets did not, it is re-bound to the new snapshot without a status
+   change, and the history says so. Files without facts fall back to
+   file-level rules.
+5. **Evidence is anchored.** A cited line that only moved is re-found at exact
+   new lines (`moved`). A `changed` anchor is a candidate location, never
+   verification. A duplicated line is `ambiguous`, never relocated by guess.
+   Evidence rows are immutable; relocations are appended.
+6. **Definitive vs heuristic refutation.** Only a definitive refutation, an
+   exhaustive check within a stated scope, makes a claim `contradicted`.
+   Examples: no call to the target on the cited line, the line is outside the
+   claimed caller, the "only" pattern occurs elsewhere, a precise resolver's
+   definitive different target. A heuristic refutation lowers the claim one
+   step and adds an uncertainty.
+7. **Critique never raises confidence** and never restores a stale or
+   contradicted claim. Re-verification cannot go above the assessed ceiling or
+   undo critique's penalty.
+8. **Nothing is deleted.** Claims change status, memories are invalidated,
+   corrections supersede. A claim's text is immutable (schema v4). Plans,
+   reference resolutions, runtime runs and evidence locations are
+   append-only.
+9. **Heuristics are labelled**: `coverage.limits`, `uncertainties`,
+   `derived_by` (receiver pass, lexicon, seed dictionary, rules), the
+   `general` entailment grade, and query expansions reported in the output
+   header.
+10. **Runtime observations are run-scoped.** "Observed in run R at commit C"
+    never supports an "always" claim, and test-double edges never support
+    production edges.
+11. **References are pinned, never floated silently.** A named version never
+    falls back to the default branch. Every mention is accounted for, and
+    every conflict (M1-M12) is reported.

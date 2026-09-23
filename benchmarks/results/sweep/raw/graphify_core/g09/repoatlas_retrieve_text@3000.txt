@@ -1,0 +1,114 @@
+# Which tests cover the graph file size cap and its environment override?
+expanded: environ->env (abbreviation)
+## tests/test_security.py:233-234 def test_graph_size_cap_default_is_512_mib()
+def test_graph_size_cap_default_is_512_mib():
+    assert _MAX_GRAPH_FILE_BYTES == 512 * 1024 * 1024
+## tests/test_security.py:302-311 def test_graph_size_cap_error_message_includes_size_and_cap(monkeypatch, tmp_path)
+  calls: check_graph_file_size_cap@307
+def test_graph_size_cap_error_message_includes_size_and_cap(monkeypatch, tmp_path):
+    monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 8)
+    p = tmp_path / "graph.json"
+    p.write_text("AAAAAAAAAAAAAAAA", encoding="utf-8")  # 16 bytes
+    with pytest.raises(ValueError) as excinfo:
+        check_graph_file_size_cap(p)
+    msg = str(excinfo.value)
+    assert "16" in msg  # observed size
+    assert "8" in msg   # cap
+    assert "byte" in msg.lower()
+## tests/test_security.py:314-323 def test_graph_size_cap_at_boundary_passes(monkeypatch, tmp_path)
+  calls: check_graph_file_size_cap@320
+def test_graph_size_cap_at_boundary_passes(monkeypatch, tmp_path):
+    # Boundary: equal to cap is allowed; strictly greater is rejected.
+    p = tmp_path / "graph.json"
+    payload = "A" * 32
+    p.write_text(payload, encoding="utf-8")
+    monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 32)
+    assert check_graph_file_size_cap(p) is None
+    monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 31)
+    with pytest.raises(ValueError):
+        check_graph_file_size_cap(p)
+## tests/test_security.py:326-330 def test_graph_size_cap_missing_file_silently_returns(tmp_path)
+def test_graph_size_cap_missing_file_silently_returns(tmp_path):
+    # When stat() fails (FileNotFoundError → OSError), the helper returns None
+    # so the caller's own existence check can surface a clearer error.
+    missing = tmp_path / "does_not_exist.json"
+    assert check_graph_file_size_cap(missing) is None
+## tests/test_security.py:294-299 def test_graph_size_cap_over_limit_raises(monkeypatch, tmp_path)
+def test_graph_size_cap_over_limit_raises(monkeypatch, tmp_path):
+    monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 16)
+    p = tmp_path / "graph.json"
+    p.write_text('{"nodes": [], "links": [], "padding": "x" * 50}', encoding="utf-8")
+    with pytest.raises(ValueError, match="exceeds"):
+        check_graph_file_size_cap(p)
+## tests/test_security.py:288-291 def test_graph_size_cap_under_limit_returns_none(tmp_path)
+def test_graph_size_cap_under_limit_returns_none(tmp_path):
+    p = tmp_path / "graph.json"
+    p.write_text('{"nodes": [], "links": []}', encoding="utf-8")
+    assert check_graph_file_size_cap(p) is None
+## tests/test_security.py:333-342 def test_graph_size_cap_unreadable_directory_silently_returns(monkeypatch, tmp_path)
+def test_graph_size_cap_unreadable_directory_silently_returns(monkeypatch, tmp_path):
+    # Force stat() to raise PermissionError → still OSError → silent return.
+    p = tmp_path / "graph.json"
+    p.write_text("{}", encoding="utf-8")
+
+    def _boom(self):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(Path, "stat", _boom)
+    assert check_graph_file_size_cap(p) is None
+graphify/security.py:357-383 def check_graph_file_size_cap(path: Path) -> None
+graphify/cli.py:658-674 def _enforce_graph_size_cap_or_exit(gp: Path) -> None
+graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+graphify/security.py:35-66 def _max_graph_file_bytes() -> int
+graphify/diagnostics.py:295-310 def _read_json_file(path: str | Path) -> dict[str, Any]
+graphify/paths.py:474-500 def load_node_link_graph(path_or_data)
+tests/test_security.py:229-231 # ---------------------------------------------------------------------------
+graphify/export.py:229-268 def existing_graph_node_count(path: "str | Path")
+graphify/serve.py:44-91 def _load_graph(graph_path: str) -> nx.Graph
+graphify/export.py:271-416 def to_json(G: nx.Graph, communities: dict[int, list[str]], output_path: str, *, force: bool = False, built_at_commit: …
+graphify/callflow_html.py:265-305 def load_graph(path: str | Path) -> tuple
+graphify/prs.py:336-344 def _load_graph_json(graph_path: Path) -> dict | None
+graphify/global_graph.py:79-168 def global_add(source_path: Path, repo_tag: str) -> dict
+graphify/tree_html.py:583-603 def write_tree_html( graph_path: Path, output_path: Path, *, root: Optional[str] = None, max_children: int = DEFAULT_MA…
+graphify/detect.py:65-70 def _file_within_size_cap(path: Path, cap: int = _OFFICE_MAX_RAW_BYTES) -> bool
+graphify/global_graph.py:49-60 def _load_global_graph() -> nx.Graph
+tests/test_security.py:184-195 def test_validate_graph_path_default_base_honours_graphify_out_override(tmp_path, monkeypatch)
+graphify/build.py:1616-1663 def _load_existing_graph(graph_path: Path) -> "tuple[list, list, list, bool] | None"
+graphify/security.py:24-32 # Graph-load memory-bomb cap: reject .json files larger than this before
+graphify/extract.py:6605-6745 def _extract_parallel( uncached_work: list[tuple[int, Path]], per_file: list[dict | None], root: Path, max_workers: int…
+graphify/watch.py:1355-2223 def _rebuild_code( watch_path: Path, *, changed_paths: list[Path] | None = None, follow_symlinks: bool = False, force: …
+graphify/llm.py:2550-2850 def extract_corpus_parallel( files: list[Path], backend: str = "kimi", api_key: str | None = None, model: str | None = …
+tests/test_security.py:13-24 check_graph_file_size_cap,
+graphify/transcribe.py:95-115 def build_whisper_prompt(god_nodes: list[dict]) -> str
+graphify/llm.py:2086-2140 def _estimate_file_tokens(unit: "Path | FileSlice") -> int
+tests/test_security.py:99-115 def test_safe_fetch_raises_on_size_exceeded()
+graphify/detect.py:73-108 def _zip_within_caps(path: Path) -> bool
+graphify/llm.py:1327-1335 def _default_model_for_backend(backend: str) -> str
+graphify/querylog.py:15-31 def _log_path() -> Path | None
+graphify/cli.py:2569-2583 def _load_graph(p: str)
+tests/test_querylog.py:74-81 def test_disable_env(tmp_path, monkeypatch)
+tests/test_querylog.py:84-91 def test_disable_env_true(tmp_path, monkeypatch)
+graphify/__main__.py:125-131 _enforce_graph_size_cap_or_exit,
+tests/test_security.py:246-248 def test_max_graph_bytes_default_when_blank(monkeypatch)
+graphify/llm.py:598-634 def _read_files(units: "list[Path | FileSlice]", root: Path) -> str
+tests/test_security.py:241-243 def test_max_graph_bytes_default_when_unset(monkeypatch)
+tests/test_security.py:277-279 def test_max_graph_bytes_unparseable_falls_back(monkeypatch, bad)
+tests/test_security.py:283-285 def test_max_graph_bytes_nonpositive_falls_back(monkeypatch, nonpositive)
+graphify/llm.py:407-417 def _resolve_api_timeout(default: float = 600.0) -> float
+graphify/llm.py:308-318 def _resolve_max_tokens(default: int) -> int
+tests/test_security.py:251-253 def test_max_graph_bytes_plain_integer(monkeypatch)
+tests/test_security.py:271-273 def test_max_graph_bytes_tolerates_space_before_suffix(monkeypatch)
+tests/test_security.py:261-263 def test_max_graph_bytes_gb_suffix_is_binary(monkeypatch)
+tests/test_security.py:266-268 def test_max_graph_bytes_suffix_is_case_insensitive(monkeypatch)
+tests/test_security.py:256-258 def test_max_graph_bytes_mb_suffix_is_binary(monkeypatch)
+graphify/skill-windows.md:65-132 ### Step 1 - Ensure graphify is installed
+tests/test_security.py:169-173 def test_validate_graph_path_raises_if_file_missing(tmp_path)
+graphify/cli.py:221-403 def _stale_graph_sources( graph_path: Path, scan_root: Path, seen_files: set[str], detection: dict | None = None, ) -> …
+tests/test_security.py:237-239 # ---------------------------------------------------------------------------
+graphify/watch.py:754-1053 def _reconcile_existing_graph( existing_graph: Path, result: dict, *, out: Path, project_root: Path, watch_root: Path, …
+graphify/llm.py:149-160 "openai"
+graphify/extractors/apex.py:9-215 def extract_apex(path: Path) -> dict
+graphify/llm.py:101-112 BACKENDS: dict[str, dict] =
+(calls / called by: static call graph, '?' = inferred edge; may be incomplete)
+… 2124 more candidates not shown
+next: repoatlas query "Which tests cover the graph file size cap and its environment override?" --max-chars 24000

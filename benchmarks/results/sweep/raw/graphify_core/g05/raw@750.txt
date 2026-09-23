@@ -1,0 +1,37 @@
+$ grep -rniE 'environment|variable|raises|maximum|graph|json|size|default|limit' .   # 12541 matching lines in 224 files
+graphify/llm.py:2: # Used by `graphify extract . --backend gemini` and the benchmark scripts.
+graphify/llm.py:3: # The default graphify pipeline uses Claude Code subagents via skill.md;
+graphify/llm.py:4: # this module provides a direct API path for non-Claude-Code environments.
+graphify/llm.py:9: import json
+graphify/llm.py:20: from graphify.file_slice import (
+graphify/llm.py:23: expand_oversized_files,
+graphify/llm.py:32: # delimiter block (see issue #1210); this is roughly the per-file overhead in
+graphify/llm.py:61: def _resolve_ollama_base_url(default: str) -> str:
+graphify/llm.py:64: default. OLLAMA_HOST may be a bare host, host:port, ``:port`` or bare port —
+graphify/llm.py:66: missing, default the port to 11434 when absent, and append the OpenAI-compat
+graphify/llm.py:73: return default
+graphify/llm.py:76: return default
+graphify/llm.py:84: # Default the port to Ollama's 11434 when the host omits it (bare hostname
+graphify/llm.py:105: # default model. Mirrors the OPENAI_BASE_URL / OPENAI_MODEL pattern.
+graphify/llm.py:107: "default_model": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+graphify/llm.py:118: "default_model": "kimi-k2.6",
+graphify/llm.py:124: "temperature": None,  # kimi-k2.6 enforces its own fixed temperature; sending any value raises 400
+graphify/llm.py:129: "default_model": os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b"),
+graphify/llm.py:140: "default_model": "gemini-3-flash-preview",
+graphify/llm.py:142: "model_env_key": "GRAPHIFY_GEMINI_MODEL",
+graphify/llm.py:151: # (llama.cpp, vLLM, LM Studio, ...); OPENAI_MODEL overrides the default
+graphify/llm.py:152: # model. GRAPHIFY_OPENAI_MODEL still wins over OPENAI_MODEL when both
+graphify/llm.py:155: "default_model": os.environ.get("OPENAI_MODEL", "gpt-4.1-mini"),
+graphify/llm.py:157: "model_env_key": "GRAPHIFY_OPENAI_MODEL",
+graphify/llm.py:160: # Default (gpt-4.1-mini) accepts temperature=0. Reasoning models
+graphify/llm.py:162: # automatically by _resolve_temperature; GRAPHIFY_LLM_TEMPERATURE
+graphify/llm.py:172: "default_model": "deepseek-v4-flash",
+graphify/llm.py:174: "model_env_key": "GRAPHIFY_DEEPSEEK_MODEL",
+graphify/llm.py:181: # thinking ENABLED by default (verified against the live API, #1621) — set
+graphify/llm.py:182: # GRAPHIFY_DISABLE_THINKING=1 to turn it off (tradeoff documented on the flag).
+graphify/llm.py:190: # Optional: AZURE_OPENAI_API_VERSION (defaults to 2024-12-01-preview),
+graphify/llm.py:191: #           AZURE_OPENAI_DEPLOYMENT or GRAPHIFY_AZURE_MODEL (deployment name).
+graphify/llm.py:194: "default_model": os.environ.get("AZURE_OPENAI_DEPLOYMENT", os.environ.get("GRAPHIFY_AZURE_MODEL", "gpt-4o")),
+graphify/llm.py:196: "model_env_key": "GRAPHIFY_AZURE_MODEL",
+graphify/llm.py:202: "default_model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+... (12506 more matching lines not shown)

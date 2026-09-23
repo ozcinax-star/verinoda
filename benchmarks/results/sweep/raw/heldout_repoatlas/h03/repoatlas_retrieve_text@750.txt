@@ -1,0 +1,29 @@
+# What does repoatlas scan call to build the index and invalidate stale claims?
+expanded: index->idx (abbreviation); invalidat->invalid (corpus prefix); repoatla->repo (corpus prefix)
+## repoatlas/workflow.py:126-154 def scan(store: Store, repo: Path, *, force: bool = False) -> dict
+  doc: Full index build, snapshot, stale invalidation and derived data.
+  calls: graph_path@135, missing_source_files@136, build@138, _index_refused@141, _no_missing_files@142, take_snapshot@143, invalidate_stale@144, snapshot_files@145?, _derive@148
+  called by: evaluate (repoatlas/benchmark/critique_eval.py:235); run_benchmark (repoatlas/benchmark/runner.py:373); run_mutation_suite (repoatlas/benchmark/staleness.py:602); cmd_scan (repoatlas/cli.py:174); update (repoatlas/workflow.py:175); test_test_run_claim_goes_stale_and_is_only_restored_by_a_fresh_run (tests/test_analysis.py:168); test_analysis_refreshes_a_changed_tree_before_citing (tests/test_analysis.py:238); test_entry_point_that_writes_directly_is_a_one_node_path (tests/test_analysis.py:264) (+29)
+  repoatlas/workflow.py:126-128
+def scan(store: Store, repo: Path, *, force: bool = False) -> dict:
+    """Full index build, snapshot, stale invalidation and derived data.
+
+  repoatlas/workflow.py:134-147
+    t0 = time.monotonic()
+    had_graph = graph_path(repo).exists()
+    missing_before = index.missing_source_files(repo) if had_graph else []
+    force = force or not had_graph or bool(missing_before)
+    stats = index.build(repo, force=force)
+    t_index = time.monotonic() - t0
+    if not stats.get("ok", True):
+        return {**_index_refused(store, repo, stats, force=force), "index_seconds": round(t_index, 3)}
+    stats, pruned = _no_missing_files(repo, stats)
+    snap = take_snapshot(store, repo, graph_stats=stats)
+    stale = invalidate_stale(store, snap)
+    files = store.snapshot_files(snap["id"])
+    out = {"snapshot": snap, "graph": {k: stats[k] for k in ("nodes", "edges", "graph_path")},
+           "index_seconds": round(t_index, 3), "stale": stale,
+## tests/test_snapshot_stale.py:337-369 def test_refused_index_rebuild_records_no_snapshot_and_says_what_to_do(proj, monkeypatch)
+  calls: update@349, _status@355, verify@357, scan@361
+… 1849 more candidates not shown: tests/test_snapshot_stale.py:244-260 def test_memory_from_a_stale_claim_is_invalidated_not_deleted(proj); repoatlas/claims.py:1022-1092 def invalidate_stale(store: Store, new_snapshot: dict | None, *, actor: str = "repoatlas",; tests/test_claims.py:293-302 test_stale_never_raises_confidence_and_invalidates_memory; tests/test_workflow_index.py:53-62 test_scan_buil…
+next: repoatlas query "What does repoatlas scan call to build the index and invalidate stale claims?" --max-chars 6000

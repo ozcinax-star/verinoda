@@ -1,0 +1,66 @@
+$ grep -rniE 'orderrepository|save|değişirse|neleri|yeniden|test|etmek|gerekir' .   # 22 matching lines in 7 files
+tests/test_service.py:1: import pytest
+tests/test_service.py:3: from orders.repository import OrderRepository
+tests/test_service.py:7: def test_place_and_fetch_roundtrip():
+tests/test_service.py:8: repo = OrderRepository(":memory:")
+tests/test_service.py:13: def test_empty_order_rejected():
+tests/test_service.py:14: with pytest.raises(ValidationError):
+tests/test_service.py:15: place_order(OrderRepository(":memory:"), "ada", [])
+orders/service.py:5: from orders.repository import OrderRepository
+orders/service.py:19: def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+orders/service.py:22: return repo.save(customer, total)
+orders/service.py:25: def fetch_order(repo: OrderRepository, order_id: int):
+orders/repository.py:8: class OrderRepository:
+orders/repository.py:15: def save(self, customer: str, total: float) -> int:
+orders/api.py:3: from orders.repository import OrderRepository
+orders/api.py:9: def get_repo() -> OrderRepository:
+orders/api.py:12: _repo = OrderRepository()
+tests/test_pricing.py:4: def test_discount_applies_above_threshold():
+tests/test_pricing.py:8: def test_no_discount_below_threshold():
+tests/test_pricing.py:12: def test_compute_total():
+pyproject.toml:6: [tool.pytest.ini_options]
+pyproject.toml:7: testpaths = ["tests"]
+docs/adr/0001-sqlite-persistence.md:5: We persist orders in SQLite through `OrderRepository` only. No other module
+
+==> tests/test_service.py:1-15 <==
+     1	import pytest
+     2	
+     3	from orders.repository import OrderRepository
+     4	from orders.service import ValidationError, fetch_order, place_order
+     5	
+     6	
+     7	def test_place_and_fetch_roundtrip():
+     8	    repo = OrderRepository(":memory:")
+     9	    oid = place_order(repo, "ada", [{"price": 5.0, "qty": 1}])
+    10	    assert fetch_order(repo, oid)["total"] == 5.0
+    11	
+    12	
+    13	def test_empty_order_rejected():
+    14	    with pytest.raises(ValidationError):
+    15	        place_order(OrderRepository(":memory:"), "ada", [])
+
+==> orders/service.py:1-24 <==  (truncated at char cap; file has 26 lines)
+     1	"""Business logic between the HTTP layer and the repository."""
+     2	
+     3	from orders.config import MAX_ITEMS_PER_ORDER
+     4	from orders.pricing import compute_total
+     5	from orders.repository import OrderRepository
+     6	
+     7	
+     8	class ValidationError(ValueError):
+     9	    pass
+    10	
+    11	
+    12	def validate_items(items: list[dict]) -> None:
+    13	    if not items:
+    14	        raise ValidationError("order has no items")
+    15	    if len(items) > MAX_ITEMS_PER_ORDER:
+    16	        raise ValidationError("too many items")
+    17	
+    18	
+    19	def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+    20	    validate_items(items)
+    21	    total = compute_total(items)
+    22	    return repo.save(customer, total)
+    23	
+    24	

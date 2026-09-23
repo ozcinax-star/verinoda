@@ -1,0 +1,27 @@
+{
+ "schema": "verinoda.http_cassette/1",
+ "key": "e9906b4609ed4bb21d62037d5ef7e84cb4fd64be",
+ "request": {
+  "method": "GET",
+  "url": "https://registry.npmjs.org/react",
+  "headers": {
+   "Accept": "application/vnd.npm.install-v1+json",
+   "User-Agent": "<redacted>"
+  }
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/vnd.npm.install-v1+json",
+   "etag": "\"b0fd52dc7ccedcbf13dd14ba899aaf3a\"",
+   "last-modified": "Tue, 22 Sep 2026 16:29:27 GMT"
+  },
+  "final_url": "https://registry.npmjs.org/react",
+  "body_sha256": "1150d837e8c55af1c49a65e518012eb0d405e8bd9928b382fd0992f660765cb4",
+  "body_text": "{\n \"name\": \"react\",\n \"dist-tags\": {\n  \"beta\": \"19.0.0-beta-26f2496093-20240514\",\n  \"rc\": \"19.0.0-rc.1\",\n  \"next\": \"19.3.0-canary-d5736f09-20260507\",\n  \"backport\": \"19.0.8\",\n  \"latest\": \"19.3.0\",\n  \"canary\": \"19.3.0-canary-8b0da1c6-20260922\",\n  \"experimental\": \"0.0.0-experimental-8b0da1c6-20260922\"\n },\n \"modified\": \"2026-09-22T16:29:24.067Z\",\n \"versions\": {\n  \"18.2.0\": {\n   \"name\": \"react\",\n   \"version\": \"18.2.0\",\n   \"deprecated\": null\n  },\n  \"18.3.1\": {\n   \"name\": \"react\",\n   \"version\": \"18.3.1\",\n   \"deprecated\": null\n  },\n  \"19.0.0\": {\n   \"name\": \"react\",\n   \"version\": \"19.0.0\",\n   \"deprecated\": null\n  }\n }\n}",
+  "body_b64": null,
+  "trimmed": true
+ },
+ "recorded_at": "2026-09-22T23:15:49Z",
+ "recorder": "tools/record_reference_cassettes.py/1"
+}

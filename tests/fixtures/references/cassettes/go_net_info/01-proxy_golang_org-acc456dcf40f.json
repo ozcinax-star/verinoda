@@ -1,0 +1,24 @@
+{
+ "schema": "verinoda.http_cassette/1",
+ "key": "acc456dcf40f072afca899d6662dbdbd00f3e349",
+ "request": {
+  "method": "GET",
+  "url": "https://proxy.golang.org/golang.org/x/net/@v/v0.20.0.info",
+  "headers": {
+   "User-Agent": "<redacted>"
+  }
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json"
+  },
+  "final_url": "https://proxy.golang.org/golang.org/x/net/@v/v0.20.0.info",
+  "body_sha256": "e5338e69d591ceef06ef814aed31ad950c8dfab96b32603129baa299a2bceb91",
+  "body_text": "{\"Version\":\"v0.20.0\",\"Time\":\"2024-01-08T18:08:52Z\",\"Origin\":{\"VCS\":\"git\",\"URL\":\"https://go.googlesource.com/net\",\"Ref\":\"refs/tags/v0.20.0\",\"Hash\":\"cb5b10f0bbc51089bf49030ce3bd43bbfee08c23\"}}",
+  "body_b64": null,
+  "trimmed": false
+ },
+ "recorded_at": "2026-09-22T23:15:49Z",
+ "recorder": "tools/record_reference_cassettes.py/1"
+}

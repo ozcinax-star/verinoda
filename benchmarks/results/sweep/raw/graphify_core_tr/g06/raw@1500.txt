@@ -1,0 +1,81 @@
+$ grep -rniE 'graphify|sorgu|terimlerinden|neden|stopword|leri|atıyor' .   # 6739 matching lines in 219 files
+graphify/serve.py:16: from graphify.security import sanitize_label, check_graph_file_size_cap, _CONTROL_CHAR_RE
+graphify/serve.py:17: from graphify.build import edge_data, edge_datas
+graphify/serve.py:18: from graphify.paths import default_graph_json as _default_graph_json
+graphify/serve.py:63: from graphify.build import graph_has_legacy_ids as _legacy
+graphify/serve.py:66: "[graphify] note: this graph uses the pre-#1504 node-ID scheme; "
+graphify/serve.py:67: "rebuild with `graphify extract --force` for path-qualified IDs.",
+graphify/serve.py:81: from graphify.reflect import load_learning_overlay as _llo
+graphify/serve.py:87: print(f"error: graph.json is corrupted ({exc}). Re-run /graphify to rebuild.", file=sys.stderr)
+graphify/serve.py:107: ``GRAPHIFY_MAX_CONTEXTS`` overrides the default. Invalid or blank values
+graphify/serve.py:112: raw = os.environ.get("GRAPHIFY_MAX_CONTEXTS", "").strip()
+graphify/serve.py:242: # Collision tradeoff: a few foreign stopwords are also English content words.
+graphify/serve.py:243: # We include high-German-value ones like "die"/"hat" (the all-stopword fallback
+graphify/serve.py:249: _QUERY_STOPWORDS = frozenset({
+graphify/serve.py:283: question/filler words (`_QUERY_STOPWORDS`, English plus common German/
+graphify/serve.py:285: unfiltered terms if the query is all stopwords, so a question like "how does
+graphify/serve.py:299: content = [t for t in terms if t not in _QUERY_STOPWORDS]
+graphify/serve.py:1119: # corpus document can otherwise inject ANSI escapes, fake graphify-out
+graphify/serve.py:1288: Relative to the CWD when it sits underneath it — `graphify-out/graph.json`,
+graphify/serve.py:1390: # Name the graph this answer came from. `graphify-out/` resolves against the
+graphify/serve.py:1807: raise ImportError('mcp not installed. Run: pip install "graphifyy[mcp]"') from e
+graphify/serve.py:1815: from graphify import paths as _paths
+graphify/serve.py:1836: resolves to ``<project_path>/<GRAPHIFY_OUT>/graph.json``, honouring the
+graphify/serve.py:1837: GRAPHIFY_OUT override so worktree/shared-output setups keep working."""
+graphify/serve.py:1840: return str(Path(project_path) / _paths.GRAPHIFY_OUT / "graph.json")
+graphify/serve.py:2015: "graphify-out/graph.json. Optional — defaults to the graph "
+graphify/serve.py:2023: from graphify import querylog
+graphify/serve.py:2139: from graphify.analyze import god_nodes as _god_nodes
+graphify/serve.py:2165: from graphify.prs import fetch_prs, fetch_worktrees, format_prs_text, _detect_default_branch
+graphify/serve.py:2178: from graphify.prs import fetch_pr_files, compute_pr_impact, _gh, _parse_ci
+graphify/serve.py:2209: from graphify.prs import fetch_prs, fetch_worktrees, fetch_pr_files, compute_pr_impact, _STATUS_ORDER, _detect_default_branch
+graphify/serve.py:2263: labels_path = Path(active_graph_path).parent / ".graphify_labels.json"
+graphify/serve.py:2275: types.Resource(uri="graphify://report", name="Graph Report", description="Full GRAPH_REPORT.md", mimeType="text/markdown"),
+graphify/serve.py:2276: types.Resource(uri="graphify://stats", name="Graph Stats", description="Node/edge/community counts and confidence breakdown", mimeType="text/plain"),
+graphify/serve.py:2277: types.Resource(uri="graphify://god-nodes", name="God Nodes", description="Top 10 most-connected nodes", mimeType="text/plain"),
+graphify/serve.py:2278: types.Resource(uri="graphify://surprises", name="Surprising Connections", description="Cross-community surprising connections", mimeType="text/plain"),
+graphify/serve.py:2279: types.Resource(uri="graphify://audit", name="Confidence Audit", description="EXTRACTED/INFERRED/AMBIGUOUS edge breakdown", mimeType="text/plain"),
+graphify/serve.py:2280: types.Resource(uri="graphify://questions", name="Suggested Questions", description="Suggested questions for this codebase", mimeType="text/plain"),
+graphify/serve.py:2286: if uri_str == "graphify://report":
+graphify/serve.py:2290: return "GRAPH_REPORT.md not found. Run graphify extract first."
+graphify/serve.py:2291: if uri_str == "graphify://stats":
+... (6699 more matching lines not shown)
+
+==> graphify/serve.py:1-37 <==  (truncated at char cap; file has 2689 lines)
+     1	# MCP stdio server - exposes graph query tools to Claude and other agents
+     2	from __future__ import annotations
+     3	import json
+     4	import math
+     5	import os
+     6	import re
+     7	import sys
+     8	import warnings
+     9	from array import array
+    10	from collections import OrderedDict
+    11	from pathlib import Path
+    12	import threading
+    13	from typing import NamedTuple
+    14	import networkx as nx
+    15	from networkx.readwrite import json_graph
+    16	from graphify.security import sanitize_label, check_graph_file_size_cap, _CONTROL_CHAR_RE
+    17	from graphify.build import edge_data, edge_datas
+    18	from graphify.paths import default_graph_json as _default_graph_json
+    19	
+    20	try:
+    21	    with warnings.catch_warnings():
+    22	        # jieba/jieba-py carry invalid regex escapes that emit a SyntaxWarning on
+    23	        # compile; the message and line moved across Python versions (3.12 also
+    24	        # reworded it), so ignore the category wholesale here rather than pinning
+    25	        # a message/lineno. Under `-W error::SyntaxWarning` this keeps the import
+    26	        # from escalating to a fatal SyntaxError.
+    27	        warnings.simplefilter("ignore", SyntaxWarning)
+    28	        import jieba as _jieba  # type: ignore[import-untyped]
+    29	except (ImportError, SyntaxError):
+    30	    # A stray/broken jieba must never take down the whole server import.
+    31	    _jieba = None
+    32	
+    33	
+    34	class ToolError(Exception):
+    35	    """Raised by a tool handler to signal an error result.
+    36	
+    37	    A normal string return is sent as an ordinary (successful) text result. A

@@ -1,0 +1,85 @@
+# Which environment variables are passed to experiment commands, and where is that decided?
+expanded: environ->env (abbreviation)
+## repoatlas/agents/templates/claude_SKILL.md:100-145 ## Commands (examples; always add --json when you read the result)
+  repoatlas/agents/templates/claude_SKILL.md:124-127
+
+# targeted experiment (runs in a throw-away copy; non-test commands need docker/podman)
+repoatlas experiment run --hypothesis "discount is applied before tax" --expect pass --json -- python -m pytest -q tests/test_pricing.py
+
+  repoatlas/agents/templates/claude_SKILL.md:142-145
+
+Workflow: orient (`map`, `query`) -> `analyze` the question -> drill down (`trace`, `claim show`)
+-> `challenge` the claims you will rely on -> `verify` / `experiment run` where static evidence is
+not enough -> answer.
+## repoatlas/agents/templates/codex_SKILL.md:86-131 ## Commands (examples; always add --json when you read the result)
+  repoatlas/agents/templates/codex_SKILL.md:110-113
+
+# targeted experiment (runs in a throw-away copy; non-test commands need docker/podman)
+repoatlas experiment run --hypothesis "discount is applied before tax" --expect pass --json -- python -m pytest -q tests/test_pricing.py
+
+  repoatlas/agents/templates/codex_SKILL.md:128-131
+
+Workflow: orient (`map`, `query`) -> `analyze` the question -> drill down (`trace`, `claim show`)
+-> `challenge` the claims you will rely on -> `verify` / `experiment run` where static evidence is
+not enough -> answer.
+## tests/test_critique.py:602-623 def test_config_claim_on_a_line_that_reads_another_variable_is_refuted(plain)
+  doc: orders_app q03.n.repo_env: the repository does not read an environment variable itself.
+  calls: challenge@615
+def test_config_claim_on_a_line_that_reads_another_variable_is_refuted(plain):
+    """orders_app q03.n.repo_env: the repository does not read an environment variable itself."""
+    repo, st, cl = plain
+
+    def cfg(var, at):
+        path, _, ln = at.rpartition(":")
+        ev = evmod.source_evidence(repo, path, int(ln), commit=None, meta={"env": var})
+        return cl.create(f"`x` in {path} reads environment variable {var} ({at})", project="orders_app",
+                         snapshot=None, status="statically_verified", evidence=[(ev, "supports")], kind="config",
+                         subjects=[path], spec={"env": var})
+
+    ok = cfg("ORDERS_DATABASE_URL", "orders/config.py:5")
+    assert ok["status"] == "statically_verified"
+    assert critique.challenge(st, repo, ok["id"])["after"]["status"] == "statically_verified"
+    for var, at, words in (("ORDERS_MAX_ITEMS", "orders/config.py:5", "reads ORDERS_DATABASE_URL"),
+                           ("ORDERS_DATABASE_URL", "orders/repository.py:9", "no environment read")):
+        bad = cfg(var, at)
+        assert bad["status"] not in ("statically_verified",)
+        res = critique.challenge(st, repo, bad["id"])
+        probe = next(f for f in res["findings"] if f["check"] == "config_read")
+        assert probe["strength"] == "definitive" and words in probe["detail"]
+        assert res["after"]["status"] == "contradicted"
+## tests/test_search_index.py:221-228 def test_abbreviations_are_expanded_and_reported(mini)
+def test_abbreviations_are_expanded_and_reported(mini):
+    q = _query(mini, "Which environment variables are allowed?")
+    exp = {(e["from"], e["to"], e["via"]) for e in q.expansions}
+    assert ("environ", "env", "abbreviation") in exp
+    assert q.weights["env"] == search_index.EXPANSION_WEIGHT < q.weights["environ"] == 1.0
+    res = retrieval.retrieve(mini, "Which environment variables are allowed?")
+    assert any(e.startswith("environ->env") for e in res["budget"]["expansions"])
+    assert res["items"][0]["symbol"] in ("_scrubbed_env()", "(module level)")
+## tests/test_experiments.py:165-187 def test_parent_secrets_are_not_visible_to_the_child(proj, monkeypatch)
+def test_parent_secrets_are_not_visible_to_the_child(proj, monkeypatch):
+    repo, st = proj
+    monkeypatch.setenv("ANTHROPIC_API_KEY", FAKE_SECRET)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-fake")
+    monkeypatch.setenv("TZ", "UTC")  # allowlisted variable: proves the env is filtered, not emptied
+    absent = _probe(repo, "test_probe_env.py", (
+        "import os\n\n"
+        "def test_secrets_absent():\n"
+        "    assert 'ANTHROPIC_API_KEY' not in os.environ\n"
+        "    assert 'OPENAI_API_KEY' not in os.environ\n"
+        "    assert os.environ.get('REPOATLAS_EXPERIMENT') == '1'\n"
+        "    assert os.environ.get('TZ') == 'UTC'\n"))
+    res = experiments.run(st, repo, [*PYTEST, absent], hypothesis="secrets are scrubbed")
+    assert res["outcome"] == "pass", Path(res["logs"]["stdout"]).read_text(encoding="utf-8")[-2000:]
+    # Control: a test that *requires* the key fails in the child (expected failure).
+    present = _probe(repo, "test_probe_env_present.py", (
+        "import os\n\ndef test_secret_present():\n    assert os.environ['ANTHROPIC_API_KEY']\n"))
+    ctl = experiments.run(st, repo, [*PYTEST, present], hypothesis="the key is visible", expect="fail")
+    assert ctl["outcome"] == "fail" and ctl["matches_expectation"] is True
+    for r in (res, ctl):
+        logs = Path(r["logs"]["stdout"]).read_text(encoding="utf-8") + Path(r["logs"]["stderr"]).read_text(
+            encoding="utf-8")
+        assert FAKE_SECRET not in logs and FAKE_SECRET not in json.dumps(r)
+## repoatlas/feedback.py:424-600 def decide(ctx: dict) -> tuple[str, str, list[str], dict]
+… 903 more candidates not shown: tests/test_claims.py:150-159 def test_experiment_verified_needs_a_passing_relevant_run(env); repoatlas/experiments.py:365-550 def run( store: Store, repo: Path, argv: list[str] | str, *, hypothesis: str, expect: s; tests/test_search_index.py:31-33 def _scrubbed_env(); tests/test_analysis.py:218-223 def test_config_question_cites_env_reads(proj)
+next: repoatlas query "Which environment variables are passed to experiment commands, and where is that decided?" --max-chars 12000

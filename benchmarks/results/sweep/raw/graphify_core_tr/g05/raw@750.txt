@@ -1,0 +1,30 @@
+$ grep -rniE 'hangi|ortam|değişkeni|büyük|graph|json|boyutunu|artırıyor|varsayılan|sınır|nedir' .   # 11220 matching lines in 222 files
+graphify/extract.py:6: import json
+graphify/extract.py:30: # --- migrated to graphify/extractors/ (see graphify/extractors/MIGRATION.md) ---
+graphify/extract.py:31: from graphify.extractors.base import (  # noqa: F401
+graphify/extract.py:37: from graphify.extractors.apex import extract_apex  # noqa: F401
+graphify/extract.py:38: from graphify.extractors.bash import extract_bash  # noqa: F401
+graphify/extract.py:39: from graphify.extractors.blade import extract_blade  # noqa: F401
+graphify/extract.py:40: from graphify.extractors.csharp import (
+graphify/extract.py:45: from graphify.extractors.dart import extract_dart  # noqa: F401
+graphify/extract.py:46: from graphify.extractors.dm import extract_dm, extract_dmf, extract_dmi, extract_dmm  # noqa: F401
+graphify/extract.py:47: from graphify.extractors.elixir import extract_elixir  # noqa: F401
+graphify/extract.py:48: from graphify.extractors.fortran import _cpp_preprocess, extract_fortran  # noqa: F401
+graphify/extract.py:49: from graphify.extractors.go import _GO_PREDECLARED_FUNCS, extract_go  # noqa: F401
+graphify/extract.py:50: from graphify.extractors.json_config import extract_json  # noqa: F401
+graphify/extract.py:51: from graphify.extractors.commonlisp import extract_commonlisp  # noqa: F401
+graphify/extract.py:52: from graphify.extractors.markdown import extract_markdown, _MD_LINK_INDEX_CACHE  # noqa: F401
+graphify/extract.py:53: from graphify.extractors.ocaml import extract_ocaml  # noqa: F401
+graphify/extract.py:54: from graphify.extractors.pascal_forms import extract_delphi_form, extract_lazarus_form  # noqa: F401
+graphify/extract.py:55: from graphify.extractors.powershell import extract_powershell, extract_powershell_manifest  # noqa: F401
+graphify/extract.py:56: from graphify.extractors.razor import extract_razor  # noqa: F401
+graphify/extract.py:57: from graphify.extractors.robot import extract_robot  # noqa: F401
+graphify/extract.py:58: from graphify.extractors.rust import extract_rust  # noqa: F401
+graphify/extract.py:59: from graphify.extractors.sln import extract_sln  # noqa: F401
+graphify/extract.py:60: from graphify.extractors.sql import extract_sql  # noqa: F401
+graphify/extract.py:61: from graphify.extractors.terraform import extract_terraform, prepare_terraform, resolve_terraform_modules  # noqa: F401
+graphify/extract.py:62: from graphify.extractors.verilog import extract_verilog  # noqa: F401
+graphify/extract.py:63: from graphify.extractors.zig import extract_zig  # noqa: F401
+graphify/extract.py:64: from graphify.security import sanitize_metadata
+graphify/extract.py:65: from graphify.paths import disambiguate_ambiguous_candidates
+... (11192 more matching lines not shown)

@@ -1,0 +1,32 @@
+$ grep -rniE 'tests|cover|stale|claim|invalidation' .   # 2395 matching lines in 82 files
+tests/test_snapshot_stale.py:1: """Snapshots and stale invalidation on a scanned, git-committed copy of examples/orders_app.
+tests/test_snapshot_stale.py:3: Covers: modify / commit / delete a cited file -> exactly the dependent claims go
+tests/test_snapshot_stale.py:4: stale; revert + verify restores up to the ceiling and re-binds to a snapshot of
+tests/test_snapshot_stale.py:5: the current tree; memories derived from stale claims are invalidated, never
+tests/test_snapshot_stale.py:23: from repoatlas.claims import CONFIDENCE_CAP, Claims  # noqa: E402
+tests/test_snapshot_stale.py:76: cl = Claims(st, repo)
+tests/test_snapshot_stale.py:78: def claim(text, rel, a, b=None, status="statically_verified", subjects=None):
+tests/test_snapshot_stale.py:85: claims = {
+tests/test_snapshot_stale.py:86: "pricing": claim("compute_total sums price*qty", "orders/pricing.py", a, a + 2),
+tests/test_snapshot_stale.py:87: "pricing_inference": claim("compute_total is the only pricing entry", "orders/pricing.py", a, a + 2,
+tests/test_snapshot_stale.py:89: "service": claim("place_order calls validate_items", "orders/service.py",
+tests/test_snapshot_stale.py:91: "repository": claim("save inserts into orders", "orders/repository.py",
+tests/test_snapshot_stale.py:93: "config": claim("the discount threshold is read from ORDERS_DISCOUNT_THRESHOLD", "orders/config.py",
+tests/test_snapshot_stale.py:96: yield repo, st, cl, claims
+tests/test_snapshot_stale.py:100: def _status(cl, claims) -> dict:
+tests/test_snapshot_stale.py:101: return {k: cl.get(c["id"])["status"] for k, c in claims.items()}
+tests/test_snapshot_stale.py:104: def _hist_len(cl, claims) -> dict:
+tests/test_snapshot_stale.py:105: return {k: len(cl.show(c["id"])["history"]) for k, c in claims.items()}
+tests/test_snapshot_stale.py:111: repo, st, cl, claims = proj
+tests/test_snapshot_stale.py:138: # -- stale invalidation ----------------------------------------------------------------------
+tests/test_snapshot_stale.py:140: def test_modifying_a_cited_file_marks_exactly_its_claims_stale(proj):
+tests/test_snapshot_stale.py:141: repo, st, cl, claims = proj
+tests/test_snapshot_stale.py:142: hist = _hist_len(cl, claims)
+tests/test_snapshot_stale.py:146: stale_ids = {s["id"] for s in res["stale"]}
+tests/test_snapshot_stale.py:147: assert stale_ids == {claims["pricing"]["id"], claims["pricing_inference"]["id"]}
+tests/test_snapshot_stale.py:148: for s in res["stale"]:
+tests/test_snapshot_stale.py:150: st_now = _status(cl, claims)
+tests/test_snapshot_stale.py:151: assert st_now["pricing"] == st_now["pricing_inference"] == "stale"
+tests/test_snapshot_stale.py:153: after = _hist_len(cl, claims)
+tests/test_snapshot_stale.py:156: h = cl.show(claims["pricing"]["id"])["history"][-1]
+... (2365 more matching lines not shown)

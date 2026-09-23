@@ -1,0 +1,167 @@
+{
+  "schema": 1,
+  "name": "orders_app_tr",
+  "description": "Turkish paraphrases of the orders_app questions; gold facts, negatives and corpus are the English set's, unchanged. In-sample: written by the author of the question-understanding rules while tuning them.",
+  "verified_by": "Gold facts were written by reading every file of examples/orders_app line by line; each fact's source.at/source.contains pair is re-checked against the benchmark copy before any approach is scored (metrics.validate_gold).",
+  "provenance": {
+    "questions_written_by": "question-understanding track agent, the author of the Turkish rules (textnorm / lexicon / question_plan), while tuning them",
+    "gold_written_by": "copied unchanged from orders_app.json (benchmark harness author, round 1)",
+    "in_sample": true,
+    "caveat": "the paraphrases and the rules were written by the same author; Turkish results on these sets are an upper bound, not an independent measurement",
+    "english_set": "orders_app",
+    "original_file": "qu_track/orders_app_tr.json (research scratch, not in the repository)"
+  },
+  "corpus": {
+    "include": null,
+    "exclude": null
+  },
+  "questions": [
+    {
+      "id": "q01",
+      "category": "where",
+      "question": "Sipariş veritabanına nerede yazılıyor?",
+      "question_en": "Where is an order written to the database?",
+      "facts": [
+        {"id": "q01.save", "fact": "OrderRepository.save writes the order (orders/repository.py:15-20)", "source": {"at": "orders/repository.py:15", "contains": "def save("}, "match_any": [{"loc": "orders/repository.py:15-20"}]},
+        {"id": "q01.insert", "fact": "the write is an INSERT INTO orders statement (orders/repository.py:17)", "source": {"at": "orders/repository.py:17", "contains": "INSERT INTO orders"}, "match_any": [{"loc": "orders/repository.py:17"}, {"text": "INSERT INTO orders"}]},
+        {"id": "q01.commit", "fact": "the transaction is committed right after the insert (orders/repository.py:19)", "source": {"at": "orders/repository.py:19", "contains": "self.conn.commit()"}, "match_any": [{"loc": "orders/repository.py:19"}, {"text": "self.conn.commit()"}]}
+      ],
+      "negatives": [
+        {"id": "q01.n.service_sql", "statement": "place_order talks to SQLite directly (it only calls repo.save)", "relation": ["place_order", "calls", "connect|execute|commit"]},
+        {"id": "q01.n.sqlite_import", "statement": "service.py or api.py imports sqlite3 (only repository.py does)", "relation": ["service.py|api.py", "imports|imports_from", "sqlite3"]}
+      ]
+    },
+    {
+      "id": "q02",
+      "category": "flow",
+      "question": "Sipariş oluşturma API'sinden veritabanı yazımına kadar çağrı yolu nedir?",
+      "question_en": "What is the call path from the create-order HTTP handler to the database write?",
+      "facts": [
+        {"id": "q02.handler", "fact": "create_order_handler calls place_order (orders/api.py:18)", "source": {"at": "orders/api.py:18", "contains": "place_order(get_repo()"}, "match_any": [{"loc": "orders/api.py:18"}]},
+        {"id": "q02.service", "fact": "place_order calls repo.save (orders/service.py:22)", "source": {"at": "orders/service.py:22", "contains": "repo.save(customer, total)"}, "match_any": [{"loc": "orders/service.py:22"}, {"text": "repo.save("}]},
+        {"id": "q02.sink", "fact": "OrderRepository.save executes the INSERT (orders/repository.py:17)", "source": {"at": "orders/repository.py:17", "contains": "INSERT INTO orders"}, "match_any": [{"loc": "orders/repository.py:17"}]}
+      ],
+      "negatives": [
+        {"id": "q02.n.handler_save", "statement": "create_order_handler calls save directly (it goes through place_order)", "relation": ["create_order_handler", "calls", "save"]},
+        {"id": "q02.n.service_sql", "statement": "place_order talks to SQLite directly", "relation": ["place_order", "calls", "connect|execute|commit"]}
+      ]
+    },
+    {
+      "id": "q03",
+      "category": "config",
+      "question": "Sipariş servisini hangi ortam değişkenleri yapılandırıyor ve bunlar nerede okunuyor?",
+      "question_en": "Which environment variables configure the orders service and where are they read?",
+      "facts": [
+        {"id": "q03.db", "fact": "ORDERS_DATABASE_URL is read at orders/config.py:5", "source": {"at": "orders/config.py:5", "contains": "ORDERS_DATABASE_URL"}, "match_any": [{"loc": "orders/config.py:5"}, {"text": "ORDERS_DATABASE_URL"}]},
+        {"id": "q03.max", "fact": "ORDERS_MAX_ITEMS is read at orders/config.py:6", "source": {"at": "orders/config.py:6", "contains": "ORDERS_MAX_ITEMS"}, "match_any": [{"loc": "orders/config.py:6"}, {"text": "ORDERS_MAX_ITEMS"}]},
+        {"id": "q03.discount", "fact": "ORDERS_DISCOUNT_THRESHOLD is read at orders/config.py:7", "source": {"at": "orders/config.py:7", "contains": "ORDERS_DISCOUNT_THRESHOLD"}, "match_any": [{"loc": "orders/config.py:7"}, {"text": "ORDERS_DISCOUNT_THRESHOLD"}]}
+      ],
+      "negatives": [
+        {"id": "q03.n.repo_env", "statement": "the repository reads an environment variable itself (it imports DATABASE_URL from orders/config.py)", "assertion_regex": "(?i)(repository\\.py|OrderRepository)[^\\n]*reads environment variable"}
+      ]
+    },
+    {
+      "id": "q04",
+      "category": "tests",
+      "question": "İndirim hesaplamasını hangi testler çalıştırıyor?",
+      "question_en": "Which tests exercise the discount calculation?",
+      "facts": [
+        {"id": "q04.above", "fact": "test_discount_applies_above_threshold (tests/test_pricing.py:4)", "source": {"at": "tests/test_pricing.py:4", "contains": "def test_discount_applies_above_threshold"}, "match_any": [{"loc": "tests/test_pricing.py:4-5"}, {"text": "test_discount_applies_above_threshold"}]},
+        {"id": "q04.below", "fact": "test_no_discount_below_threshold (tests/test_pricing.py:8)", "source": {"at": "tests/test_pricing.py:8", "contains": "def test_no_discount_below_threshold"}, "match_any": [{"loc": "tests/test_pricing.py:8-9"}, {"text": "test_no_discount_below_threshold"}]},
+        {"id": "q04.total", "fact": "test_compute_total reaches apply_discount through compute_total (tests/test_pricing.py:12, orders/pricing.py:8)", "source": {"at": "tests/test_pricing.py:12", "contains": "def test_compute_total"}, "match_any": [{"loc": "tests/test_pricing.py:12-13"}, {"text": "test_compute_total"}]},
+        {"id": "q04.roundtrip", "fact": "test_place_and_fetch_roundtrip runs place_order -> compute_total -> apply_discount with a non-empty order (tests/test_service.py:7-10)", "source": {"at": "tests/test_service.py:9", "contains": "place_order(repo, \"ada\""}, "match_any": [{"loc": "tests/test_service.py:7-10"}, {"text": "test_place_and_fetch_roundtrip"}]}
+      ],
+      "negatives": [
+        {"id": "q04.n.empty_order", "statement": "test_empty_order_rejected exercises the discount calculation (validate_items raises before compute_total runs)", "assertion_regex": "(apply_discount|compute_total|discount)[^\\n]*test_empty_order_rejected|test_empty_order_rejected[^\\n]*(apply_discount|compute_total|discount)"}
+      ]
+    },
+    {
+      "id": "q05",
+      "category": "why",
+      "question": "Proje kalıcılık için neden SQLite kullanıyor?",
+      "question_en": "Why does the project use SQLite for persistence?",
+      "facts": [
+        {"id": "q05.zero_ops", "fact": "ADR 0001: chosen for zero-ops local development (docs/adr/0001-sqlite-persistence.md:6)", "source": {"at": "docs/adr/0001-sqlite-persistence.md:6", "contains": "zero-ops local development"}, "match_any": [{"loc": "docs/adr/0001-sqlite-persistence.md:6"}, {"text": "zero-ops"}]},
+        {"id": "q05.accepted", "fact": "the decision is accepted (docs/adr/0001-sqlite-persistence.md:3)", "source": {"at": "docs/adr/0001-sqlite-persistence.md:3", "contains": "Status: accepted"}, "match_any": [{"loc": "docs/adr/0001-sqlite-persistence.md:3"}, {"text": "Status: accepted"}]},
+        {"id": "q05.only_repo", "fact": "only OrderRepository may open a database connection (docs/adr/0001-sqlite-persistence.md:5-6)", "source": {"at": "docs/adr/0001-sqlite-persistence.md:5", "contains": "No other module"}, "match_any": [{"loc": "docs/adr/0001-sqlite-persistence.md:5-6"}, {"text": "No other module"}]}
+      ],
+      "negatives": [
+      ]
+    },
+    {
+      "id": "q06",
+      "category": "impact",
+      "question": "OrderRepository.save değişirse neleri yeniden test etmek gerekir?",
+      "question_en": "What needs retesting if OrderRepository.save changes?",
+      "facts": [
+        {"id": "q06.caller", "fact": "place_order calls repo.save (orders/service.py:22)", "source": {"at": "orders/service.py:22", "contains": "repo.save("}, "match_any": [{"loc": "orders/service.py:22"}, {"text": "repo.save("}]},
+        {"id": "q06.handler", "fact": "create_order_handler reaches save through place_order (orders/api.py:18)", "source": {"at": "orders/api.py:18", "contains": "place_order("}, "match_any": [{"loc": "orders/api.py:18"}]},
+        {"id": "q06.test", "fact": "test_place_and_fetch_roundtrip saves through place_order (tests/test_service.py:7-10)", "source": {"at": "tests/test_service.py:7", "contains": "def test_place_and_fetch_roundtrip"}, "match_any": [{"loc": "tests/test_service.py:7-10"}, {"text": "test_place_and_fetch_roundtrip"}]}
+      ],
+      "negatives": [
+        {"id": "q06.n.read_path", "statement": "the read path (fetch_order / get_order_handler) calls save", "relation": ["fetch_order|get_order_handler", "calls", "save"]},
+        {"id": "q06.n.pricing", "statement": "changing the repository affects orders/pricing.py (pricing does not depend on the repository)", "assertion_regex": "(?i)affect[^\\n]*orders/pricing\\.py"}
+      ]
+    },
+    {
+      "id": "q07",
+      "category": "where",
+      "question": "%10 indirim nerede uygulanıyor ve bunu hangi eşik kontrol ediyor?",
+      "question_en": "Where is the 10% discount applied and what threshold controls it?",
+      "facts": [
+        {"id": "q07.apply", "fact": "apply_discount multiplies by 0.9 above the threshold (orders/pricing.py:11-15)", "source": {"at": "orders/pricing.py:14", "contains": "subtotal * 0.9"}, "match_any": [{"loc": "orders/pricing.py:11-15"}, {"text": "subtotal * 0.9"}]},
+        {"id": "q07.threshold", "fact": "the threshold is DISCOUNT_THRESHOLD from ORDERS_DISCOUNT_THRESHOLD (orders/config.py:7)", "source": {"at": "orders/config.py:7", "contains": "ORDERS_DISCOUNT_THRESHOLD"}, "match_any": [{"loc": "orders/config.py:7"}, {"text": "ORDERS_DISCOUNT_THRESHOLD"}]},
+        {"id": "q07.caller", "fact": "compute_total applies it to the subtotal (orders/pricing.py:8)", "source": {"at": "orders/pricing.py:8", "contains": "apply_discount(subtotal)"}, "match_any": [{"loc": "orders/pricing.py:8"}, {"text": "apply_discount(subtotal)"}]}
+      ],
+      "negatives": [
+        {"id": "q07.n.service_discount", "statement": "place_order calls apply_discount directly (it goes through compute_total)", "relation": ["place_order", "calls", "apply_discount"]},
+        {"id": "q07.n.reversed", "statement": "apply_discount calls compute_total (direction reversed)", "relation": ["apply_discount", "calls", "compute_total"]}
+      ]
+    },
+    {
+      "id": "q08",
+      "category": "flow",
+      "question": "get_order_handler bir siparişi depodan nasıl yüklüyor?",
+      "question_en": "How does get_order_handler load an order from storage?",
+      "facts": [
+        {"id": "q08.handler", "fact": "get_order_handler calls fetch_order (orders/api.py:25)", "source": {"at": "orders/api.py:25", "contains": "fetch_order(get_repo(), order_id)"}, "match_any": [{"loc": "orders/api.py:25"}]},
+        {"id": "q08.service", "fact": "fetch_order calls repo.get (orders/service.py:26)", "source": {"at": "orders/service.py:26", "contains": "repo.get(order_id)"}, "match_any": [{"loc": "orders/service.py:26"}, {"text": "repo.get(order_id)"}]},
+        {"id": "q08.select", "fact": "OrderRepository.get runs SELECT ... FROM orders WHERE id = ? (orders/repository.py:24)", "source": {"at": "orders/repository.py:24", "contains": "SELECT id, customer, total FROM orders"}, "match_any": [{"loc": "orders/repository.py:24"}, {"text": "SELECT id, customer, total FROM orders"}]},
+        {"id": "q08.missing", "fact": "a missing order yields 404 (orders/api.py:26-27)", "source": {"at": "orders/api.py:27", "contains": "return 404"}, "match_any": [{"loc": "orders/api.py:26-27"}, {"text": "return 404"}]}
+      ],
+      "negatives": [
+        {"id": "q08.n.fetch_save", "statement": "fetch_order calls save", "relation": ["fetch_order", "calls", "save"]},
+        {"id": "q08.n.handler_place", "statement": "get_order_handler calls place_order", "relation": ["get_order_handler", "calls", "place_order"]}
+      ]
+    },
+    {
+      "id": "q09",
+      "category": "where",
+      "question": "SQLite bağlantısı nerede açılıyor ve veritabanı dosyasını ne belirliyor?",
+      "question_en": "Where is the SQLite connection opened and what decides the database file?",
+      "facts": [
+        {"id": "q09.connect", "fact": "sqlite3.connect(url) in OrderRepository.__init__ (orders/repository.py:10)", "source": {"at": "orders/repository.py:10", "contains": "sqlite3.connect(url)"}, "match_any": [{"loc": "orders/repository.py:10"}, {"text": "sqlite3.connect(url)"}]},
+        {"id": "q09.default", "fact": "the url defaults to DATABASE_URL (orders/repository.py:9)", "source": {"at": "orders/repository.py:9", "contains": "url: str = DATABASE_URL"}, "match_any": [{"loc": "orders/repository.py:9"}, {"text": "url: str = DATABASE_URL"}]},
+        {"id": "q09.env", "fact": "DATABASE_URL comes from ORDERS_DATABASE_URL, default orders.db (orders/config.py:5)", "source": {"at": "orders/config.py:5", "contains": "ORDERS_DATABASE_URL"}, "match_any": [{"loc": "orders/config.py:5"}, {"text": "ORDERS_DATABASE_URL"}]}
+      ],
+      "negatives": [
+        {"id": "q09.n.sqlite_import", "statement": "service.py or api.py imports sqlite3", "relation": ["service.py|api.py", "imports|imports_from", "sqlite3"]},
+        {"id": "q09.n.connect_elsewhere", "statement": "a handler or the service opens the connection itself", "relation": ["get_repo|create_order_handler|get_order_handler|place_order|fetch_order", "calls", "connect"]}
+      ]
+    },
+    {
+      "id": "q10",
+      "category": "behaviour",
+      "question": "Kalemsiz bir sipariş gönderilince ne oluyor?",
+      "question_en": "What happens when an order is submitted with no items?",
+      "facts": [
+        {"id": "q10.raise", "fact": "validate_items raises ValidationError('order has no items') (orders/service.py:13-14)", "source": {"at": "orders/service.py:14", "contains": "order has no items"}, "match_any": [{"loc": "orders/service.py:13-14"}, {"text": "order has no items"}]},
+        {"id": "q10.status", "fact": "create_order_handler turns it into HTTP 400 (orders/api.py:19-20)", "source": {"at": "orders/api.py:20", "contains": "return 400"}, "match_any": [{"loc": "orders/api.py:19-20"}, {"text": "return 400"}]},
+        {"id": "q10.test", "fact": "test_empty_order_rejected covers it (tests/test_service.py:13-15)", "source": {"at": "tests/test_service.py:13", "contains": "def test_empty_order_rejected"}, "match_any": [{"loc": "tests/test_service.py:13-15"}, {"text": "test_empty_order_rejected"}]}
+      ],
+      "negatives": [
+        {"id": "q10.n.handler_validates", "statement": "create_order_handler calls validate_items directly (it goes through place_order)", "relation": ["create_order_handler", "calls", "validate_items"]}
+      ]
+    }
+  ]
+}

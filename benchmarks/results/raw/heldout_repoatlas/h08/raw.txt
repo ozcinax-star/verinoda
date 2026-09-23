@@ -1,0 +1,390 @@
+$ grep -rniE 'tests|cover|stale|claim|invalidation' .   # 2395 matching lines in 82 files
+tests/test_snapshot_stale.py:1: """Snapshots and stale invalidation on a scanned, git-committed copy of examples/orders_app.
+tests/test_snapshot_stale.py:3: Covers: modify / commit / delete a cited file -> exactly the dependent claims go
+tests/test_snapshot_stale.py:4: stale; revert + verify restores up to the ceiling and re-binds to a snapshot of
+tests/test_snapshot_stale.py:5: the current tree; memories derived from stale claims are invalidated, never
+tests/test_snapshot_stale.py:23: from repoatlas.claims import CONFIDENCE_CAP, Claims  # noqa: E402
+tests/test_snapshot_stale.py:76: cl = Claims(st, repo)
+tests/test_snapshot_stale.py:78: def claim(text, rel, a, b=None, status="statically_verified", subjects=None):
+tests/test_snapshot_stale.py:85: claims = {
+tests/test_snapshot_stale.py:86: "pricing": claim("compute_total sums price*qty", "orders/pricing.py", a, a + 2),
+tests/test_snapshot_stale.py:87: "pricing_inference": claim("compute_total is the only pricing entry", "orders/pricing.py", a, a + 2,
+tests/test_snapshot_stale.py:89: "service": claim("place_order calls validate_items", "orders/service.py",
+tests/test_snapshot_stale.py:91: "repository": claim("save inserts into orders", "orders/repository.py",
+tests/test_snapshot_stale.py:93: "config": claim("the discount threshold is read from ORDERS_DISCOUNT_THRESHOLD", "orders/config.py",
+tests/test_snapshot_stale.py:96: yield repo, st, cl, claims
+tests/test_snapshot_stale.py:100: def _status(cl, claims) -> dict:
+tests/test_snapshot_stale.py:101: return {k: cl.get(c["id"])["status"] for k, c in claims.items()}
+tests/test_snapshot_stale.py:104: def _hist_len(cl, claims) -> dict:
+tests/test_snapshot_stale.py:105: return {k: len(cl.show(c["id"])["history"]) for k, c in claims.items()}
+tests/test_snapshot_stale.py:111: repo, st, cl, claims = proj
+tests/test_snapshot_stale.py:138: # -- stale invalidation ----------------------------------------------------------------------
+tests/test_snapshot_stale.py:140: def test_modifying_a_cited_file_marks_exactly_its_claims_stale(proj):
+tests/test_snapshot_stale.py:141: repo, st, cl, claims = proj
+tests/test_snapshot_stale.py:142: hist = _hist_len(cl, claims)
+tests/test_snapshot_stale.py:146: stale_ids = {s["id"] for s in res["stale"]}
+tests/test_snapshot_stale.py:147: assert stale_ids == {claims["pricing"]["id"], claims["pricing_inference"]["id"]}
+tests/test_snapshot_stale.py:148: for s in res["stale"]:
+tests/test_snapshot_stale.py:150: st_now = _status(cl, claims)
+tests/test_snapshot_stale.py:151: assert st_now["pricing"] == st_now["pricing_inference"] == "stale"
+tests/test_snapshot_stale.py:153: after = _hist_len(cl, claims)
+tests/test_snapshot_stale.py:156: h = cl.show(claims["pricing"]["id"])["history"][-1]
+tests/test_snapshot_stale.py:157: assert h["to_status"] == "stale" and "changed since snapshot" in h["reason"]
+tests/test_snapshot_stale.py:158: assert cl.get(claims["pricing"]["id"])["confidence"] == CONFIDENCE_CAP["stale"]
+tests/test_snapshot_stale.py:161: assert _hist_len(cl, claims) == after
+tests/test_snapshot_stale.py:164: def test_a_new_commit_that_changes_a_file_marks_its_claims_stale(proj):
+tests/test_snapshot_stale.py:165: repo, st, cl, claims = proj
+tests/test_snapshot_stale.py:171: assert {s["id"] for s in res["stale"]} == {claims["service"]["id"]}
+tests/test_snapshot_stale.py:172: reason = cl.show(claims["service"]["id"])["history"][-1]["reason"]
+tests/test_snapshot_stale.py:174: assert _status(cl, claims)["pricing"] == "statically_verified"
+tests/test_snapshot_stale.py:175: # A commit that changes no file content creates a snapshot but marks nothing stale.
+tests/test_snapshot_stale.py:178: assert res2["mode"] == "incremental" and res2["changed_count"] == 0 and res2["stale"] == []
+... (2355 more matching lines not shown)
+
+==> tests/test_snapshot_stale.py:1-346 <==  (truncated at char cap; file has 531 lines)
+     1	"""Snapshots and stale invalidation on a scanned, git-committed copy of examples/orders_app.
+     2	
+     3	Covers: modify / commit / delete a cited file -> exactly the dependent claims go
+     4	stale; revert + verify restores up to the ceiling and re-binds to a snapshot of
+     5	the current tree; memories derived from stale claims are invalidated, never
+     6	deleted; an added (restored) file re-resolves its dependents' edges.
+     7	"""
+     8	
+     9	from __future__ import annotations
+    10	
+    11	import os
+    12	
+    13	os.environ.setdefault("GRAPHIFY_OUT", ".repoatlas/index")
+    14	
+    15	import shutil  # noqa: E402
+    16	import subprocess  # noqa: E402
+    17	from pathlib import Path  # noqa: E402
+    18	
+    19	import pytest  # noqa: E402
+    20	
+    21	from repoatlas import evidence as evmod  # noqa: E402
+    22	from repoatlas import index, workflow  # noqa: E402
+    23	from repoatlas.claims import CONFIDENCE_CAP, Claims  # noqa: E402
+    24	from repoatlas.memory import Memory  # noqa: E402
+    25	from repoatlas.snapshot import (  # noqa: E402
+    26	    changed_files,
+    27	    current_state,
+    28	    git_info,
+    29	    hash_files,
+    30	    list_files,
+    31	    take_snapshot,
+    32	)
+    33	from repoatlas.store import open_store  # noqa: E402
+    34	
+    35	ROOT = Path(__file__).resolve().parents[1]
+    36	EXAMPLE = ROOT / "examples" / "orders_app"
+    37	
+    38	pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
+    39	
+    40	
+    41	def _git(cwd: Path, *args: str) -> str:
+    42	    r = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.autocrlf=false", *args],
+    43	                       cwd=cwd, check=True, capture_output=True, text=True, encoding="utf-8")
+    44	    return r.stdout
+    45	
+    46	
+    47	def _copy_example(dst: Path) -> Path:
+    48	    shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".repoatlas", "__pycache__", "*.pyc",
+    49	                                                                ".pytest_cache", "*.db"))
+    50	    _git(dst, "init", "-q")
+    51	    _git(dst, "add", "-A")
+    52	    _git(dst, "commit", "-q", "-m", "init")
+    53	    return dst
+    54	
+    55	
+    56	def _line(repo: Path, rel: str, needle: str) -> int:
+    57	    return next(i for i, t in enumerate((repo / rel).read_text(encoding="utf-8").splitlines(), 1) if needle in t)
+    58	
+    59	
+    60	def _edit(repo: Path, rel: str, old: str, new: str) -> bytes:
+    61	    p = repo / rel
+    62	    before = p.read_bytes()
+    63	    text = before.decode("utf-8")
+    64	    assert old in text
+    65	    p.write_bytes(text.replace(old, new).encode("utf-8"))
+    66	    return before
+    67	
+    68	
+    69	@pytest.fixture
+    70	def proj(tmp_path):
+    71	    repo = _copy_example(tmp_path / "orders_app")
+    72	    workflow.init(repo)
+    73	    st = open_store(repo)
+    74	    workflow.scan(st, repo)
+    75	    snap = st.latest_snapshot()
+    76	    cl = Claims(st, repo)
+    77	
+    78	    def claim(text, rel, a, b=None, status="statically_verified", subjects=None):
+    79	        ev = evmod.source_evidence(repo, rel, a, b or a, commit=snap["commit_sha"])
+    80	        assert ev is not None
+    81	        return cl.create(text, project=snap["project"], snapshot=snap, status=status,
+    82	                         evidence=[(ev, "supports")], subjects=subjects or [rel], actor="test")
+    83	
+    84	    a = _line(repo, "orders/pricing.py", "def compute_total")
+    85	    claims = {
+    86	        "pricing": claim("compute_total sums price*qty", "orders/pricing.py", a, a + 2),
+    87	        "pricing_inference": claim("compute_total is the only pricing entry", "orders/pricing.py", a, a + 2,
+    88	                                   status="strong_inference"),
+    89	        "service": claim("place_order calls validate_items", "orders/service.py",
+    90	                         _line(repo, "orders/service.py", "validate_items(items)")),
+    91	        "repository": claim("save inserts into orders", "orders/repository.py",
+    92	                            _line(repo, "orders/repository.py", "INSERT INTO")),
+    93	        "config": claim("the discount threshold is read from ORDERS_DISCOUNT_THRESHOLD", "orders/config.py",
+    94	                        _line(repo, "orders/config.py", "ORDERS_DISCOUNT_THRESHOLD")),
+    95	    }
+    96	    yield repo, st, cl, claims
+    97	    st.close()
+    98	
+    99	
+   100	def _status(cl, claims) -> dict:
+   101	    return {k: cl.get(c["id"])["status"] for k, c in claims.items()}
+   102	
+   103	
+   104	def _hist_len(cl, claims) -> dict:
+   105	    return {k: len(cl.show(c["id"])["history"]) for k, c in claims.items()}
+   106	
+   107	
+   108	# -- snapshots -----------------------------------------------------------------------------
+   109	
+   110	def test_snapshot_records_commit_files_and_is_reused_for_an_unchanged_tree(proj):
+   111	    repo, st, cl, claims = proj
+   112	    snap = st.latest_snapshot()
+   113	    info = git_info(repo)
+   114	    assert snap["commit_sha"] == info["commit"] and len(snap["commit_sha"]) == 40
+   115	    assert snap["dirty"] == 0 and snap["graph_nodes"] > 0 and snap["graph_path"].endswith("graph.json")
+   116	    files = st.snapshot_files(snap["id"])
+   117	    assert "orders/pricing.py" in files and not any(f.startswith(".repoatlas") for f in files)
+   118	    assert files == hash_files(repo) and snap["file_count"] == len(files) == len(list_files(repo))
+   119	    assert take_snapshot(st, repo)["id"] == snap["id"]  # nothing changed -> same snapshot
+   120	    assert workflow.update(st, repo)["mode"] == "noop"
+   121	
+   122	
+   123	def test_changed_files_classifies_added_removed_modified():
+   124	    assert changed_files({"a": "1", "b": "2", "c": "3"}, {"a": "1", "b": "9", "d": "4"}) == {
+   125	        "added": ["d"], "removed": ["c"], "modified": ["b"]}
+   126	
+   127	
+   128	def test_list_files_without_git_skips_tool_dirs(tmp_path):
+   129	    (tmp_path / "pkg").mkdir()
+   130	    (tmp_path / "pkg" / "m.py").write_text("x = 1\n", encoding="utf-8")
+   131	    for junk in (".repoatlas", "__pycache__", ".venv", "node_modules"):
+   132	        (tmp_path / junk).mkdir()
+   133	        (tmp_path / junk / "f.py").write_text("y = 2\n", encoding="utf-8")
+   134	    assert list_files(tmp_path) == ["pkg/m.py"]
+   135	    assert git_info(tmp_path)["is_git"] is False
+   136	
+   137	
+   138	# -- stale invalidation ----------------------------------------------------------------------
+   139	
+   140	def test_modifying_a_cited_file_marks_exactly_its_claims_stale(proj):
+   141	    repo, st, cl, claims = proj
+   142	    hist = _hist_len(cl, claims)
+   143	    _edit(repo, "orders/pricing.py", 'i["price"] * i["qty"]', 'i["price"] * i["qty"] * 2')
+   144	    res = workflow.update(st, repo)
+   145	    assert res["mode"] == "incremental" and res["changed"]["modified"] == ["orders/pricing.py"]
+   146	    stale_ids = {s["id"] for s in res["stale"]}
+   147	    assert stale_ids == {claims["pricing"]["id"], claims["pricing_inference"]["id"]}
+   148	    for s in res["stale"]:
+   149	        assert s["changed"] == [{"file": "orders/pricing.py", "change": "modified"}]
+   150	    st_now = _status(cl, claims)
+   151	    assert st_now["pricing"] == st_now["pricing_inference"] == "stale"
+   152	    assert st_now["service"] == st_now["repository"] == st_now["config"] == "statically_verified"
+   153	    after = _hist_len(cl, claims)
+   154	    for k in ("service", "repository", "config"):
+   155	        assert after[k] == hist[k], f"{k} history must be untouched"
+   156	    h = cl.show(claims["pricing"]["id"])["history"][-1]
+   157	    assert h["to_status"] == "stale" and "changed since snapshot" in h["reason"]
+   158	    assert cl.get(claims["pricing"]["id"])["confidence"] == CONFIDENCE_CAP["stale"]
+   159	    # A second update is a no-op and does not touch history again.
+   160	    assert workflow.update(st, repo)["mode"] == "noop"
+   161	    assert _hist_len(cl, claims) == after
+   162	
+   163	
+   164	def test_a_new_commit_that_changes_a_file_marks_its_claims_stale(proj):
+   165	    repo, st, cl, claims = proj
+   166	    old_commit = st.latest_snapshot()["commit_sha"]
+   167	    _edit(repo, "orders/service.py", "validate_items(items)\n", "validate_items(items)  # checked\n")
+   168	    _git(repo, "commit", "-q", "-am", "annotate service")
+   169	    res = workflow.update(st, repo)
+   170	    assert res["snapshot"]["commit_sha"] != old_commit and res["snapshot"]["dirty"] == 0
+   171	    assert {s["id"] for s in res["stale"]} == {claims["service"]["id"]}
+   172	    reason = cl.show(claims["service"]["id"])["history"][-1]["reason"]
+   173	    assert f"commit {old_commit[:10]} -> {res['snapshot']['commit_sha'][:10]}" in reason
+   174	    assert _status(cl, claims)["pricing"] == "statically_verified"
+   175	    # A commit that changes no file content creates a snapshot but marks nothing stale.
+   176	    _git(repo, "commit", "-q", "--allow-empty", "-m", "empty")
+   177	    res2 = workflow.update(st, repo)
+   178	    assert res2["mode"] == "incremental" and res2["changed_count"] == 0 and res2["stale"] == []
+   179	
+   180	
+   181	def test_deleting_a_cited_file_marks_its_claims_stale(proj):
+   182	    repo, st, cl, claims = proj
+   183	    (repo / "orders" / "repository.py").unlink()
+   184	    res = workflow.update(st, repo)
+   185	    assert res["changed"]["removed"] == ["orders/repository.py"]
+   186	    assert {s["id"] for s in res["stale"]} == {claims["repository"]["id"]}
+   187	    assert res["stale"][0]["changed"] == [{"file": "orders/repository.py", "change": "removed"}]
+   188	    assert _status(cl, claims)["repository"] == "stale"
+   189	    v = workflow.verify(st, repo, claims["repository"]["id"])
+   190	    assert v["after"]["status"] == "stale"
+   191	    assert v["source_checks"][0]["reason"] == "file no longer exists: orders/repository.py"
+   192	
+   193	
+   194	def test_revert_then_verify_restores_up_to_ceiling_and_rebinds(proj):
+   195	    repo, st, cl, claims = proj
+   196	    s1 = st.latest_snapshot()
+   197	    original = _edit(repo, "orders/pricing.py", 'i["price"] * i["qty"]', 'i["price"] + i["qty"]')
+   198	    s2 = workflow.update(st, repo)["snapshot"]
+   199	    assert _status(cl, claims)["pricing"] == "stale"
+   200	
+   201	    # Verify while still modified: cited lines changed -> stays stale, not rebound.
+   202	    v = workflow.verify(st, repo, claims["pricing"]["id"])
+   203	    assert v["after"]["status"] == "stale" and v["source_checks"][0]["reason"].startswith("cited lines changed")
+   204	    assert cl.get(claims["pricing"]["id"])["snapshot_id"] == s1["id"]
+   205	
+   206	    (repo / "orders" / "pricing.py").write_bytes(original)  # revert (no update in between)
+   207	    v = workflow.verify(st, repo, claims["pricing"]["id"])
+   208	    assert v["before"]["status"] == "stale"
+   209	    assert v["after"] == {"status": "statically_verified", "confidence": CONFIDENCE_CAP["statically_verified"]}
+   210	    assert v["index_refresh"]["mode"] == "incremental"  # verify refreshed the snapshot of the reverted tree
+   211	    c = cl.get(claims["pricing"]["id"])
+   212	    assert c["snapshot_id"] not in (s1["id"], s2["id"]) and c["snapshot_id"] == st.latest_snapshot()["id"]
+   213	    assert st.snapshot(c["snapshot_id"])["tree_hash"] == current_state(repo)["tree_hash"]
+   214	    assert v["snapshot"]["id"] == c["snapshot_id"]
+   215	    hist = cl.show(claims["pricing"]["id"])["history"]
+   216	    assert [h["to_status"] for h in hist][-3:] == ["stale", "statically_verified", "statically_verified"]
+   217	    assert hist[-1]["reason"] == "verify: rebound to current snapshot"
+   218	
+   219	    # The inference claim citing the same lines is restored only up to its ceiling.
+   220	    vi = workflow.verify(st, repo, claims["pricing_inference"]["id"])
+   221	    assert vi["after"]["status"] == "strong_inference"
+   222	    # Once re-bound, a later unrelated update leaves the restored claim alone.
+   223	    _edit(repo, "orders/config.py", '"orders.db"', '"orders2.db"')
+   224	    assert claims["pricing"]["id"] not in {s["id"] for s in workflow.update(st, repo)["stale"]}
+   225	
+   226	
+   227	def test_verify_does_not_restore_when_a_subject_file_changed_without_recheckable_evidence(proj):
+   228	    repo, st, cl, claims = proj
+   229	    snap = st.latest_snapshot()
+   230	    # A test-run claim: its only evidence is an (old) passing run, its subjects are files.
+   231	    run_ev = {"source_type": "test_result", "locator": "run exp_old: pytest tests/test_pricing.py",
+   232	              "content_hash": "sha256:0", "meta": {"outcome": "pass", "experiment_id": "exp_old"}}
+   233	    c = cl.create("pricing tests pass", project=snap["project"], snapshot=snap, status="experiment_verified",
+   234	                  evidence=[(run_ev, "supports")], subjects=["orders/pricing.py", "tests/test_pricing.py"],
+   235	                  kind="test_run", spec={"command": ["tests/test_pricing.py"], "experiment": "exp_old"})
+   236	    assert c["status"] == "experiment_verified"
+   237	    _edit(repo, "orders/pricing.py", "round(subtotal * 0.9, 2)", "round(subtotal * 0.5, 2)")
+   238	    v = workflow.verify(st, repo, c["id"])
+   239	    # The old run says nothing about the changed code: it must not be carried over.
+   240	    assert v["after"]["status"] == "stale" and v["unconfirmed_files"] == ["orders/pricing.py"]
+   241	    assert cl.get(c["id"])["snapshot_id"] == snap["id"]
+   242	
+   243	
+   244	def test_memory_from_a_stale_claim_is_invalidated_not_deleted(proj):
+   245	    repo, st, cl, claims = proj
+   246	    mem = Memory(st)
+   247	    mem.learn("pricing.entry", "orders/pricing.py::compute_total", source_claim_id=claims["pricing"]["id"])
+   248	    mem.learn("persistence.owner", "orders/repository.py", source_claim_id=claims["repository"]["id"])
+   249	    rows_before = st.one("SELECT COUNT(*) AS n FROM memory")["n"]
+   250	    _edit(repo, "orders/pricing.py", "return apply_discount(subtotal)", "return subtotal")
+   251	    workflow.update(st, repo)
+   252	    assert mem.recall("pricing.entry") == []
+   253	    assert [m["value"] for m in mem.recall("persistence.owner")] == ["orders/repository.py"]
+   254	    hist = mem.history("pricing.entry")
+   255	    assert len(hist) == 1 and hist[0]["valid"] == 0 and hist[0]["invalidated_at"]
+   256	    assert hist[0]["invalidation_reason"] == "source claim became stale"
+   257	    assert st.one("SELECT COUNT(*) AS n FROM memory")["n"] == rows_before
+   258	    # Learning from a stale claim is refused (recall must only return standing facts).
+   259	    with pytest.raises(ValueError, match="stale"):
+   260	        mem.learn("pricing.entry", "again", source_claim_id=claims["pricing"]["id"])
+   261	
+   262	
+   263	def test_claims_citing_other_checkouts_do_not_go_stale_on_local_changes(proj, tmp_path):
+   264	    repo, st, cl, claims = proj
+   265	    ext = tmp_path / "ref"
+   266	    (ext / "orders").mkdir(parents=True)
+   267	    (ext / "orders" / "pricing.py").write_text("def compute_total(items):\n    return 0\n", encoding="utf-8")
+   268	    snap = st.latest_snapshot()
+   269	    ev = evmod.source_evidence(ext, "orders/pricing.py", 1, 2, commit="refsha", source_type="reference_repo",
+   270	                               meta={"root": str(ext)})
+   271	    c = cl.create("compute_total returns 0", project=snap["project"], snapshot=snap,
+   272	                  status="statically_verified", evidence=[(ev, "supports")])
+   273	    assert c["status"] == "statically_verified"
+   274	    _edit(repo, "orders/pricing.py", "return apply_discount(subtotal)", "return subtotal")
+   275	    stale = {s["id"] for s in workflow.update(st, repo)["stale"]}
+   276	    assert c["id"] not in stale and claims["pricing"]["id"] in stale
+   277	
+   278	
+   279	def test_restoring_a_deleted_file_re_resolves_dependents(proj):
+   280	    repo, st, cl, claims = proj
+   281	    full = st.latest_snapshot()["graph_edges"]
+   282	    original = (repo / "orders" / "repository.py").read_bytes()
+   283	    (repo / "orders" / "repository.py").unlink()
+   284	    res = workflow.update(st, repo)
+   285	    assert res["index_mode"] == "incremental" and res["snapshot"]["graph_edges"] < full
+   286	    (repo / "orders" / "repository.py").write_bytes(original)
+   287	    res = workflow.update(st, repo)
+   288	    # Unchanged files (api.py, service.py, tests) import the restored module; an
+   289	    # incremental pass alone would leave those cross-file edges unresolved.
+   290	    assert res["index_mode"] == "full" and res["changed"]["added"] == ["orders/repository.py"]
+   291	    assert res["snapshot"]["graph_edges"] == full
+   292	    g = index.load(repo)
+   293	    assert any(g.label(u) == "get_repo()" and g.label(v) == "OrderRepository"
+   294	               for u, v, d in g.edges({"calls"}))
+   295	
+   296	
+   297	# -- claims that watch the test suite ----------------------------------------------------------
+   298	
+   299	def _watch_claim(cl, st, text="No test statically reaches `compute_total`"):
+   300	    snap = st.latest_snapshot()
+   301	    return cl.create(text, project=snap["project"], snapshot=snap, status="weak_inference", kind="tests",
+   302	                     subjects=["orders/pricing.py::compute_total"], spec={"watch": "tests"}, actor="test")
+   303	
+   304	
+   305	def test_watch_tests_claims_go_stale_when_a_test_file_is_added_changed_or_removed(proj):
+   306	    repo, st, cl, claims = proj
+   307	    tests_dir = repo / "tests"
+   308	    existing = sorted(p.name for p in tests_dir.glob("test_*.py"))
+   309	    assert existing, "the example has tests"
+   310	    w1 = _watch_claim(cl, st)
+   311	    (tests_dir / "test_new_probe.py").write_text("def test_probe():\n    assert True\n", encoding="utf-8")
+   312	    (repo / "orders" / "notes.py").write_text("X = 1\n", encoding="utf-8")  # a non-test file: not watched
+   313	    res = workflow.update(st, repo)
+   314	    assert res["changed"]["added"] == ["orders/notes.py", "tests/test_new_probe.py"]
+   315	    by_id = {s["id"]: s for s in res["stale"]}
+   316	    assert set(by_id) == {w1["id"]}  # ordinary claims ignore new files; the watcher does not
+   317	    assert by_id[w1["id"]]["changed"] == [{"file": "tests/test_new_probe.py", "change": "added"}]
+   318	    assert cl.get(w1["id"])["status"] == "stale"
+   319	
+   320	    w2 = _watch_claim(cl, st, "watcher 2")
+   321	    _edit(repo, f"tests/{existing[0]}", "def test_", "def test_renamed_")
+   322	    res = workflow.update(st, repo)
+   323	    assert {s["id"] for s in res["stale"]} == {w2["id"]}
+   324	    assert res["stale"][0]["changed"] == [{"file": f"tests/{existing[0]}", "change": "modified"}]
+   325	
+   326	    w3 = _watch_claim(cl, st, "watcher 3")
+   327	    (tests_dir / "test_new_probe.py").unlink()
+   328	    res = workflow.update(st, repo)
+   329	    assert {s["id"] for s in res["stale"]} == {w3["id"]}
+   330	    assert res["stale"][0]["changed"] == [{"file": "tests/test_new_probe.py", "change": "removed"}]
+   331	    # verify does not restore a watcher while the test set differs from its snapshot
+   332	    assert workflow.verify(st, repo, w1["id"])["after"]["status"] == "stale"
+   333	
+   334	
+   335	# -- the indexer refuses to rewrite the graph --------------------------------------------------
+   336	
+   337	def test_refused_index_rebuild_records_no_snapshot_and_says_what_to_do(proj, monkeypatch):
+   338	    repo, st, cl, claims = proj
+   339	    prev = st.latest_snapshot()
+   340	    n_snaps = st.one("SELECT COUNT(*) AS n FROM snapshots")["n"]
+   341	    real_build = index.build
+   342	
+   343	    def refusing_build(repo_, **kw):
+   344	        return {"ok": False, "graph_path": prev["graph_path"], "nodes": prev["graph_nodes"],
+   345	                "edges": prev["graph_edges"], "log": "[graphify] refusing to overwrite: graph would shrink"}
+   346	

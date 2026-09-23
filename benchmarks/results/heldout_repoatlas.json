@@ -1,0 +1,4506 @@
+{
+ "benchmark": "repoatlas raw-vs-graphify-vs-repoatlas",
+ "schema": 2,
+ "set": {
+  "name": "heldout_repoatlas",
+  "file": "<REPO>/repoatlas/benchmark/questions/heldout_repoatlas.json",
+  "description": "Held-out set on RepoAtlas's own source at commit 7371990 (the repoatlas package without the vendored project_index and the benchmark question files, plus tests/ without fixtures): 8 questions, where x2, config, flow, impact, behaviour, why, tests. Questions and gold as written by the retrieval research agent; gold re-anchored to 7371990.",
+  "questions": 8,
+  "gold_verified_by": "Gold facts were written by the retrieval research agent by reading the RepoAtlas source of its research snapshot; for this set every fact was re-read at commit 7371990 by the measurement agent, its locators re-pointed to the same code (3 facts restated where the code was restructured, see each fact's review), and each source.at/source.contains pair is re-checked against the benchmark copy before scoring (metrics.validate_gold).",
+  "provenance": {
+   "questions_written_by": "retrieval research agent (round-3 research), after its prototype was built and before the prototype was run on this corpus",
+   "gold_written_by": "retrieval research agent, same time",
+   "gold_reviewed_by": "measurement agent (round-3 measurement step): every fact re-read and re-anchored to commit 7371990; no fact added or removed, question wording unchanged",
+   "in_sample": false,
+   "caveat": "held out from RepoAtlas design, not unseen: the search track ran it during development and reports it was not used for tuning",
+   "original_file": "retrieval_track/heldout.json (research scratch, not in the repository)"
+  }
+ },
+ "params": {
+  "repeat": 2,
+  "raw": {
+   "top_files": 5,
+   "char_cap": 24000,
+   "grep_lines": 40,
+   "min_term_len": 3,
+   "terms": "repoatlas.retrieval.terms_for (Graphify _query_terms)"
+  },
+  "graphify_vendored": {
+   "renderer": "repoatlas.index.graphify_query_text",
+   "mode": "bfs",
+   "depth": 3,
+   "token_budget": 2000
+  },
+  "graphify_cli": {
+   "command": "graphify query <question>",
+   "mode": "bfs",
+   "depth": 2,
+   "token_budget": 2000
+  },
+  "repoatlas_analyze": {
+   "budget": "config defaults (60 s, 40 tool calls, 6000 tokens)",
+   "challenge": true,
+   "run_tests": false
+  },
+  "repoatlas_retrieve": {
+   "max_items": 10,
+   "max_chars": 6000
+  },
+  "repoatlas_retrieve_text": {
+   "max_items": 10,
+   "max_chars": 6000,
+   "render_chars": 6000,
+   "call": "retrieval.render_text(retrieve(g, q, Budget(10, 6000)), 6000)"
+  },
+  "sweep": null,
+  "pinpoint_max_lines": 30,
+  "sweep_only": false
+ },
+ "token_count_method": "chars/4 estimate",
+ "llm": {
+  "enabled": false,
+  "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)",
+  "model": null,
+  "prices_usd_per_mtok": null,
+  "price_source": null
+ },
+ "workdir": "<TMP>/repoatlas-bench-bx2cxcuh",
+ "workdir_kept": false,
+ "corpus": {
+  "source": "<REPO>",
+  "source_commit": "73719901c9dea49c2e87120ca040c6b998298fe3",
+  "source_dirty": false,
+  "snapshot": "git archive 73719901c9dea49c2e87120ca040c6b998298fe3",
+  "include": [
+   "repoatlas",
+   "tests"
+  ],
+  "exclude": [
+   "repoatlas/project_index/*",
+   "repoatlas/benchmark/questions/*",
+   "tests/fixtures/*",
+   "*/__pycache__/*"
+  ],
+  "file_count": 106,
+  "bytes": 2189328,
+  "workdir_commit": "751da3e346f686d0d8d01e2f1e74334b8035af9e"
+ },
+ "gold_validation": {
+  "ok": true,
+  "facts_checked": 33,
+  "failures": []
+ },
+ "graphify_cli_status": "run",
+ "approaches": [
+  "raw",
+  "graphify_vendored",
+  "graphify_cli",
+  "repoatlas_analyze",
+  "repoatlas_retrieve",
+  "repoatlas_retrieve_text"
+ ],
+ "environment": {
+  "date_utc": "2026-09-23T01:48:56+00:00",
+  "os": "Windows-11-10.0.26200-SP0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+  "cpu_count": 6,
+  "python": "3.12.0",
+  "python_impl": "CPython",
+  "repoatlas_version": "0.1.0.dev0",
+  "vendored_graphify_commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7",
+  "graphify_cli": {
+   "path": "<HOME>/Desktop/RepoAtlas/.venv-upstream/Scripts/graphify.exe",
+   "version": "graphify 0.9.65"
+  },
+  "git": "git version 2.53.0.windows.1",
+  "repoatlas_source_commit": "73719901c9dea49c2e87120ca040c6b998298fe3",
+  "repoatlas_package_changes_vs_commit": [
+   "M repoatlas/agents/templates/claude_SKILL.md",
+   "M repoatlas/agents/templates/codex_SKILL.md",
+   "M repoatlas/analysis.py",
+   "M repoatlas/benchmark/__main__.py",
+   "M repoatlas/benchmark/approaches.py",
+   "M repoatlas/benchmark/critique_eval.py",
+   "M repoatlas/benchmark/metrics.py",
+   "M repoatlas/benchmark/questions/graphify_core.json",
+   "M repoatlas/benchmark/questions/orders_app.json",
+   "M repoatlas/benchmark/report.py",
+   "M repoatlas/benchmark/runner.py",
+   "M repoatlas/benchmark/sanitize.py",
+   "M repoatlas/benchmark/staleness.py",
+   "M repoatlas/cli.py",
+   "M repoatlas/doctor.py",
+   "M repoatlas/feedback.py",
+   "M repoatlas/mcp/__init__.py",
+   "M repoatlas/mcp/server.py",
+   "M repoatlas/paths.py",
+   "M repoatlas/workflow.py",
+   "?? repoatlas/benchmark/questions/graphify_core_tr.json",
+   "?? repoatlas/benchmark/questions/heldout_repoatlas.json",
+   "?? repoatlas/benchmark/questions/orders_app_tr.json"
+  ],
+  "repoatlas_package_diff_sha256": "1a8dd47e680d8a7333ce15c25b0b9e14d8789cfc6fa066e1d476e3973b34f764"
+ },
+ "index": {
+  "raw": {
+   "note": "no index; every query greps and reads the working tree"
+  },
+  "repoatlas": {
+   "cold_seconds": 11.351,
+   "warm_seconds": 4.111,
+   "nodes": 3613,
+   "edges": 9728,
+   "warm_nodes": 3613,
+   "warm_edges": 9728,
+   "cache_files": 106,
+   "what": "workflow.scan = Graphify-derived AST index (in-process) + snapshot (file hashes) + stale-claim check; warm = same tree again with the AST cache present",
+   "used_by": [
+    "graphify_vendored",
+    "repoatlas_analyze",
+    "repoatlas_retrieve",
+    "repoatlas_retrieve_text"
+   ]
+  },
+  "graphify_cli": {
+   "cold": {
+    "seconds": 6.225,
+    "ok": true,
+    "error": null,
+    "returncode": 0,
+    "nodes": 3613,
+    "edges": 9728,
+    "log": [
+     "Re-extracting code files in . (no LLM needed)...",
+     "  AST extraction: 100/106 uncached files (94%) [6 workers]",
+     "  AST extraction: 106/106 uncached files (100%) [6 workers]",
+     "[graphify watch] Rebuilt: 3613 nodes, 9728 edges, 155 communities",
+     "[graphify watch] graph.json, graph.html and GRAPH_REPORT.md updated in graphify-out",
+     "Code graph updated. For doc/paper/image changes run /graphify --update in your AI assistant."
+    ],
+    "stderr": {
+     "lines": 2,
+     "skill_version_warnings": 2,
+     "other": []
+    },
+    "cache_files": 106
+   },
+   "warm": {
+    "seconds": 5.069,
+    "ok": true,
+    "error": null,
+    "returncode": 0,
+    "nodes": 3613,
+    "edges": 9728,
+    "log": [
+     "Re-extracting code files in . (no LLM needed)...",
+     "  AST extraction: 1/1 uncached files (100%)",
+     "[graphify watch] No code-graph topology changes detected; outputs left untouched.",
+     "Code graph updated. For doc/paper/image changes run /graphify --update in your AI assistant.",
+     "Tip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction."
+    ],
+    "stderr": {
+     "lines": 2,
+     "skill_version_warnings": 2,
+     "other": []
+    },
+    "cache_files": 106
+   },
+   "what": "`graphify update .` subprocess (AST only, no LLM); includes interpreter start-up; warm = same tree again with graphify-out/cache present"
+  }
+ },
+ "questions": [
+  {
+   "id": "h01",
+   "category": "where",
+   "question": "Where is an experiment's process tree killed when it times out?",
+   "facts": 4,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.136,
+       "chars": 23929,
+       "sha256": "4307b570020b23e8be7e17022a1b76db2636b084201d1d285ad60694d236880a"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1314,
+       "chars": 23929,
+       "sha256": "4307b570020b23e8be7e17022a1b76db2636b084201d1d285ad60694d236880a"
+      }
+     ],
+     "score": {
+      "chars": 23929,
+      "tokens": 5983,
+      "sha256": "4307b570020b23e8be7e17022a1b76db2636b084201d1d285ad60694d236880a",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h01.kill",
+        "h01.call",
+        "h01.container",
+        "h01.drain"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 41,
+       "files": 1,
+       "point_or_short": 40
+      },
+      "agent_tool_calls": 2,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "experiment",
+        "process",
+        "tree",
+        "killed",
+        "times",
+        "out"
+       ],
+       "matching_files": 102,
+       "matching_lines": 2757,
+       "files_read": [
+        {
+         "file": "tests/test_experiments.py",
+         "lines": [
+          1,
+          351
+         ],
+         "of": 580
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h01/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1935,
+       "chars": 6616,
+       "sha256": "c728577afcaf3c0e462d1976e91cce62d69eee9605586baad7c25935eb3f133a"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1935,
+       "chars": 6616,
+       "sha256": "c728577afcaf3c0e462d1976e91cce62d69eee9605586baad7c25935eb3f133a"
+      }
+     ],
+     "score": {
+      "chars": 6616,
+      "tokens": 1654,
+      "sha256": "c728577afcaf3c0e462d1976e91cce62d69eee9605586baad7c25935eb3f133a",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h01.kill",
+        "h01.call",
+        "h01.container",
+        "h01.drain"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 63,
+       "files": 21,
+       "point_or_short": 63
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 74,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 543,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h01/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.5162,
+       "chars": 6574,
+       "sha256": "022755d93cf6f7d6eb5f751bd28e45f45147db14e837b426445b78f951f71fa5"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.5264,
+       "chars": 6574,
+       "sha256": "022755d93cf6f7d6eb5f751bd28e45f45147db14e837b426445b78f951f71fa5"
+      }
+     ],
+     "score": {
+      "chars": 6574,
+      "tokens": 1644,
+      "sha256": "022755d93cf6f7d6eb5f751bd28e45f45147db14e837b426445b78f951f71fa5",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h01.kill",
+        "h01.call",
+        "h01.container",
+        "h01.drain"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 64,
+       "files": 18,
+       "point_or_short": 64
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 70,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 154,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 2,
+        "skill_version_warnings": 2,
+        "other": []
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h01/graphify_cli.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.0678,
+       "chars": 3059,
+       "sha256": "f8046a56f30bc7fbe43b5aad3e16d5cdaff6f4da89909fa485b8ea3f62793a84",
+       "claims": 8,
+       "claims_reused": 0,
+       "claims_new": 8,
+       "internal_tool_calls": 18,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.3154,
+       "chars": 3059,
+       "sha256": "f8046a56f30bc7fbe43b5aad3e16d5cdaff6f4da89909fa485b8ea3f62793a84",
+       "claims": 8,
+       "claims_reused": 8,
+       "claims_new": 0,
+       "internal_tool_calls": 18,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 3059,
+      "tokens": 765,
+      "sha256": "f8046a56f30bc7fbe43b5aad3e16d5cdaff6f4da89909fa485b8ea3f62793a84",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 3,
+       "found": [
+        "h01.kill",
+        "h01.call",
+        "h01.container",
+        "h01.drain"
+       ],
+       "missed": [],
+       "via": {
+        "h01.kill": "loc repoatlas/experiments.py:318-332",
+        "h01.call": "loc repoatlas/experiments.py:488",
+        "h01.container": "loc repoatlas/experiments.py:288-293",
+        "h01.drain": "loc repoatlas/experiments.py:365-550"
+       }
+      },
+      "locators": {
+       "distinct": 8,
+       "files": 2,
+       "point_or_short": 7
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 8,
+       "by_status": {
+        "statically_verified": 8
+       },
+       "verified": 8,
+       "inference": 0,
+       "verified_share": 1.0,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 8,
+        "graph_edge": 5,
+        "static_resolution": 5
+       },
+       "evidence_verifying": 13,
+       "evidence_non_verifying": 5,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 1.047,
+       "tool_calls": 18,
+       "context_chars": 4486,
+       "context_tokens_est": 1121,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null,
+       "precise": {
+        "max_sites": 20,
+        "max_seconds": 1.5,
+        "sites": 5,
+        "spent_s": 0.415,
+        "skipped": 0
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 5,
+       "checked": 5,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h01/repoatlas_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.094,
+       "chars": 5738,
+       "sha256": "0c6a9b1b2da3b78771aa540d91a624d9c1a1438a9a8461aa7140c2cb3b4eb855"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1005,
+       "chars": 5738,
+       "sha256": "0c6a9b1b2da3b78771aa540d91a624d9c1a1438a9a8461aa7140c2cb3b4eb855"
+      }
+     ],
+     "score": {
+      "chars": 5738,
+      "tokens": 1435,
+      "sha256": "0c6a9b1b2da3b78771aa540d91a624d9c1a1438a9a8461aa7140c2cb3b4eb855",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "h01.kill",
+        "h01.call",
+        "h01.container",
+        "h01.drain"
+       ],
+       "missed": [],
+       "via": {
+        "h01.kill": "loc repoatlas/experiments.py:326-332",
+        "h01.call": "loc repoatlas/experiments.py:487",
+        "h01.container": "loc repoatlas/experiments.py:288",
+        "h01.drain": "loc repoatlas/experiments.py:486-496"
+       }
+      },
+      "locators": {
+       "distinct": 21,
+       "files": 6,
+       "point_or_short": 21
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 6,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5945,
+        "truncated": true
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h01/repoatlas_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0936,
+       "chars": 5538,
+       "sha256": "ad0d4bfea07e74b5662144dd46ff86a5b3c7975a4842bdc678db94e477a4262c"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.2469,
+       "chars": 5538,
+       "sha256": "ad0d4bfea07e74b5662144dd46ff86a5b3c7975a4842bdc678db94e477a4262c"
+      }
+     ],
+     "score": {
+      "chars": 5538,
+      "tokens": 1385,
+      "sha256": "ad0d4bfea07e74b5662144dd46ff86a5b3c7975a4842bdc678db94e477a4262c",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "h01.kill",
+        "h01.call",
+        "h01.container",
+        "h01.drain"
+       ],
+       "missed": [],
+       "via": {
+        "h01.kill": "loc repoatlas/experiments.py:318-332",
+        "h01.call": "loc repoatlas/experiments.py:488",
+        "h01.container": "loc repoatlas/experiments.py:288-293",
+        "h01.drain": "loc repoatlas/experiments.py:87"
+       }
+      },
+      "locators": {
+       "distinct": 25,
+       "files": 6,
+       "point_or_short": 24
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 6,
+       "outline_edges": 23,
+       "edge_confidence": {
+        "EXTRACTED": 23
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 23,
+       "checked": 23,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h01/repoatlas_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "h02",
+   "category": "config",
+   "question": "Which environment variables are passed to experiment commands, and where is that decided?",
+   "facts": 4,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1269,
+       "chars": 23966,
+       "sha256": "9dbbdd85bf74d1d22bf1268c5e738d750f82e045fa07e211a40d20bee3bfa18d"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1251,
+       "chars": 23966,
+       "sha256": "9dbbdd85bf74d1d22bf1268c5e738d750f82e045fa07e211a40d20bee3bfa18d"
+      }
+     ],
+     "score": {
+      "chars": 23966,
+      "tokens": 5992,
+      "sha256": "9dbbdd85bf74d1d22bf1268c5e738d750f82e045fa07e211a40d20bee3bfa18d",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 1,
+       "found": [
+        "h02.allow",
+        "h02.scrub",
+        "h02.set",
+        "h02.path"
+       ],
+       "missed": [],
+       "via": {
+        "h02.allow": "loc repoatlas/experiments.py:1-395",
+        "h02.scrub": "loc repoatlas/experiments.py:1-395",
+        "h02.set": "loc repoatlas/experiments.py:257",
+        "h02.path": "loc repoatlas/experiments.py:1-395"
+       }
+      },
+      "locators": {
+       "distinct": 41,
+       "files": 2,
+       "point_or_short": 40
+      },
+      "agent_tool_calls": 2,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "environment",
+        "variables",
+        "passed",
+        "experiment",
+        "commands",
+        "decided"
+       ],
+       "matching_files": 56,
+       "matching_lines": 457,
+       "files_read": [
+        {
+         "file": "repoatlas/experiments.py",
+         "lines": [
+          1,
+          395
+         ],
+         "of": 550
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h02/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1894,
+       "chars": 6713,
+       "sha256": "4000b59544053627cfd98995f53e808a93944894dfb243b2e9a392de5a507b8e"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.194,
+       "chars": 6713,
+       "sha256": "4000b59544053627cfd98995f53e808a93944894dfb243b2e9a392de5a507b8e"
+      }
+     ],
+     "score": {
+      "chars": 6713,
+      "tokens": 1679,
+      "sha256": "4000b59544053627cfd98995f53e808a93944894dfb243b2e9a392de5a507b8e",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h02.allow",
+        "h02.scrub",
+        "h02.set",
+        "h02.path"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 67,
+       "files": 27,
+       "point_or_short": 67
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 76,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 682,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h02/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.5051,
+       "chars": 6674,
+       "sha256": "773ed452f245f46e0d7d508d889301adf1d7469005e0fc3480ce104a1cf81fc2"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.5035,
+       "chars": 6674,
+       "sha256": "773ed452f245f46e0d7d508d889301adf1d7469005e0fc3480ce104a1cf81fc2"
+      }
+     ],
+     "score": {
+      "chars": 6674,
+      "tokens": 1669,
+      "sha256": "773ed452f245f46e0d7d508d889301adf1d7469005e0fc3480ce104a1cf81fc2",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h02.allow",
+        "h02.scrub",
+        "h02.set",
+        "h02.path"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 66,
+       "files": 28,
+       "point_or_short": 66
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 75,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 166,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 2,
+        "skill_version_warnings": 2,
+        "other": []
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h02/graphify_cli.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.9543,
+       "chars": 3395,
+       "sha256": "da5ba26aec3f12d4d9c313c21cad828e1967a89dd7aa3327415c72741b12a04b",
+       "claims": 10,
+       "claims_reused": 1,
+       "claims_new": 9,
+       "internal_tool_calls": 21,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.4273,
+       "chars": 3395,
+       "sha256": "da5ba26aec3f12d4d9c313c21cad828e1967a89dd7aa3327415c72741b12a04b",
+       "claims": 10,
+       "claims_reused": 10,
+       "claims_new": 0,
+       "internal_tool_calls": 21,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 3395,
+      "tokens": 849,
+      "sha256": "da5ba26aec3f12d4d9c313c21cad828e1967a89dd7aa3327415c72741b12a04b",
+      "facts": {
+       "total": 4,
+       "found_n": 1,
+       "pinpointed_n": 0,
+       "found": [
+        "h02.set"
+       ],
+       "missed": [
+        "h02.allow",
+        "h02.scrub",
+        "h02.path"
+       ],
+       "via": {
+        "h02.set": "text 'REPOATLAS_EXPERIMENT'"
+       }
+      },
+      "locators": {
+       "distinct": 10,
+       "files": 8,
+       "point_or_short": 7
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 10,
+       "by_status": {
+        "primary_source_verified": 1,
+        "statically_verified": 6,
+        "weak_inference": 1,
+        "contradicted": 2
+       },
+       "verified": 7,
+       "inference": 1,
+       "verified_share": 0.7,
+       "inference_share": 0.1,
+       "weak_or_unknown": 1,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 2,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "design_doc": 1,
+        "source_code": 11,
+        "graph_edge": 2,
+        "static_resolution": 2
+       },
+       "evidence_verifying": 14,
+       "evidence_non_verifying": 2,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.953,
+       "tool_calls": 21,
+       "context_chars": 5358,
+       "context_tokens_est": 1339,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null,
+       "precise": {
+        "max_sites": 20,
+        "max_seconds": 1.5,
+        "sites": 2,
+        "spent_s": 0.184,
+        "skipped": 0
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 2,
+       "checked": 2,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h02/repoatlas_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1009,
+       "chars": 5756,
+       "sha256": "737ad97ea36d92448daf5e05a9112cfd1b67bfe261129b6d07b8fe1b0a6bff8f"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0966,
+       "chars": 5756,
+       "sha256": "737ad97ea36d92448daf5e05a9112cfd1b67bfe261129b6d07b8fe1b0a6bff8f"
+      }
+     ],
+     "score": {
+      "chars": 5756,
+      "tokens": 1439,
+      "sha256": "737ad97ea36d92448daf5e05a9112cfd1b67bfe261129b6d07b8fe1b0a6bff8f",
+      "facts": {
+       "total": 4,
+       "found_n": 1,
+       "pinpointed_n": 0,
+       "found": [
+        "h02.scrub"
+       ],
+       "missed": [
+        "h02.allow",
+        "h02.set",
+        "h02.path"
+       ],
+       "via": {
+        "h02.scrub": "text '_scrubbed_env'"
+       }
+      },
+      "locators": {
+       "distinct": 17,
+       "files": 8,
+       "point_or_short": 17
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 7,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5982,
+        "truncated": true,
+        "expansions": [
+         "environ->env (abbreviation)"
+        ],
+        "more": [
+         "tests/test_search_index.py:31-33 (module level)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h02/repoatlas_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0974,
+       "chars": 5986,
+       "sha256": "da1e903d6373e70096a90882bd889fbc2bb454222b055983ab0a1c8219d4ed2c"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0977,
+       "chars": 5986,
+       "sha256": "da1e903d6373e70096a90882bd889fbc2bb454222b055983ab0a1c8219d4ed2c"
+      }
+     ],
+     "score": {
+      "chars": 5986,
+      "tokens": 1497,
+      "sha256": "da1e903d6373e70096a90882bd889fbc2bb454222b055983ab0a1c8219d4ed2c",
+      "facts": {
+       "total": 4,
+       "found_n": 2,
+       "pinpointed_n": 0,
+       "found": [
+        "h02.scrub",
+        "h02.set"
+       ],
+       "missed": [
+        "h02.allow",
+        "h02.path"
+       ],
+       "via": {
+        "h02.scrub": "text '_scrubbed_env'",
+        "h02.set": "text 'REPOATLAS_EXPERIMENT'"
+       }
+      },
+      "locators": {
+       "distinct": 16,
+       "files": 11,
+       "point_or_short": 12
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 7,
+       "outline_edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h02/repoatlas_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "h03",
+   "category": "flow",
+   "question": "What does repoatlas scan call to build the index and invalidate stale claims?",
+   "facts": 5,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1807,
+       "chars": 23990,
+       "sha256": "b5aa0529c16bafc97de7cef37b40949ebd4e20cff2a9766a26943279c6c72392"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1838,
+       "chars": 23990,
+       "sha256": "b5aa0529c16bafc97de7cef37b40949ebd4e20cff2a9766a26943279c6c72392"
+      }
+     ],
+     "score": {
+      "chars": 23990,
+      "tokens": 5998,
+      "sha256": "b5aa0529c16bafc97de7cef37b40949ebd4e20cff2a9766a26943279c6c72392",
+      "facts": {
+       "total": 5,
+       "found_n": 1,
+       "pinpointed_n": 0,
+       "found": [
+        "h03.snapshot"
+       ],
+       "missed": [
+        "h03.cli",
+        "h03.build",
+        "h03.rebuild",
+        "h03.stale"
+       ],
+       "via": {
+        "h03.snapshot": "text 'take_snapshot'"
+       }
+      },
+      "locators": {
+       "distinct": 41,
+       "files": 1,
+       "point_or_short": 40
+      },
+      "agent_tool_calls": 2,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "repoatlas",
+        "scan",
+        "call",
+        "build",
+        "index",
+        "invalidate",
+        "stale",
+        "claims"
+       ],
+       "matching_files": 103,
+       "matching_lines": 4242,
+       "files_read": [
+        {
+         "file": "tests/test_snapshot_stale.py",
+         "lines": [
+          1,
+          348
+         ],
+         "of": 531
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h03/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2413,
+       "chars": 6481,
+       "sha256": "0ac98af55a7cc89ee47fe2d44d2f3dbfe70fc7cea45f1b2ed0b5ad3986fe3b74"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.2377,
+       "chars": 6481,
+       "sha256": "0ac98af55a7cc89ee47fe2d44d2f3dbfe70fc7cea45f1b2ed0b5ad3986fe3b74"
+      }
+     ],
+     "score": {
+      "chars": 6481,
+      "tokens": 1621,
+      "sha256": "0ac98af55a7cc89ee47fe2d44d2f3dbfe70fc7cea45f1b2ed0b5ad3986fe3b74",
+      "facts": {
+       "total": 5,
+       "found_n": 1,
+       "pinpointed_n": 0,
+       "found": [
+        "h03.stale"
+       ],
+       "missed": [
+        "h03.cli",
+        "h03.build",
+        "h03.rebuild",
+        "h03.snapshot"
+       ],
+       "via": {
+        "h03.stale": "text 'invalidate_stale'"
+       }
+      },
+      "locators": {
+       "distinct": 62,
+       "files": 25,
+       "point_or_short": 62
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 63,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 771,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h03/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.5709,
+       "chars": 6478,
+       "sha256": "cf47301830037a9e5541d83c335bc783a54c2cacccf4284b057c783eee4ae3be"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.5621,
+       "chars": 6478,
+       "sha256": "cf47301830037a9e5541d83c335bc783a54c2cacccf4284b057c783eee4ae3be"
+      }
+     ],
+     "score": {
+      "chars": 6478,
+      "tokens": 1620,
+      "sha256": "cf47301830037a9e5541d83c335bc783a54c2cacccf4284b057c783eee4ae3be",
+      "facts": {
+       "total": 5,
+       "found_n": 1,
+       "pinpointed_n": 0,
+       "found": [
+        "h03.stale"
+       ],
+       "missed": [
+        "h03.cli",
+        "h03.build",
+        "h03.rebuild",
+        "h03.snapshot"
+       ],
+       "via": {
+        "h03.stale": "text 'invalidate_stale'"
+       }
+      },
+      "locators": {
+       "distinct": 62,
+       "files": 25,
+       "point_or_short": 62
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 63,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 327,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 2,
+        "skill_version_warnings": 2,
+        "other": []
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h03/graphify_cli.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.0347,
+       "chars": 3760,
+       "sha256": "8e28dff27a087e391a34d4755ec7072402f6c34338693efcc95a8efb4523ab54",
+       "claims": 7,
+       "claims_reused": 0,
+       "claims_new": 7,
+       "internal_tool_calls": 17,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.6041,
+       "chars": 3760,
+       "sha256": "8e28dff27a087e391a34d4755ec7072402f6c34338693efcc95a8efb4523ab54",
+       "claims": 7,
+       "claims_reused": 7,
+       "claims_new": 0,
+       "internal_tool_calls": 17,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 3760,
+      "tokens": 940,
+      "sha256": "8e28dff27a087e391a34d4755ec7072402f6c34338693efcc95a8efb4523ab54",
+      "facts": {
+       "total": 5,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "h03.build",
+        "h03.snapshot",
+        "h03.stale"
+       ],
+       "missed": [
+        "h03.cli",
+        "h03.rebuild"
+       ],
+       "via": {
+        "h03.build": "loc repoatlas/workflow.py:126-154",
+        "h03.snapshot": "loc repoatlas/workflow.py:143",
+        "h03.stale": "loc repoatlas/workflow.py:144"
+       }
+      },
+      "locators": {
+       "distinct": 15,
+       "files": 7,
+       "point_or_short": 14
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 7,
+       "by_status": {
+        "statically_verified": 4,
+        "strong_inference": 3
+       },
+       "verified": 4,
+       "inference": 3,
+       "verified_share": 0.571,
+       "inference_share": 0.429,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 17,
+        "graph_edge": 2,
+        "static_resolution": 2
+       },
+       "evidence_verifying": 19,
+       "evidence_non_verifying": 2,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 1.016,
+       "tool_calls": 17,
+       "context_chars": 5213,
+       "context_tokens_est": 1303,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null,
+       "precise": {
+        "max_sites": 20,
+        "max_seconds": 1.5,
+        "sites": 2,
+        "spent_s": 0.171,
+        "skipped": 0
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 12,
+       "checked": 2,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h03/repoatlas_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2575,
+       "chars": 5750,
+       "sha256": "883fab3bd12fb9431b106e8d5e83d050df5e1f728dc84cfa1a6b60865554e764"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1096,
+       "chars": 5750,
+       "sha256": "883fab3bd12fb9431b106e8d5e83d050df5e1f728dc84cfa1a6b60865554e764"
+      }
+     ],
+     "score": {
+      "chars": 5750,
+      "tokens": 1438,
+      "sha256": "883fab3bd12fb9431b106e8d5e83d050df5e1f728dc84cfa1a6b60865554e764",
+      "facts": {
+       "total": 5,
+       "found_n": 3,
+       "pinpointed_n": 2,
+       "found": [
+        "h03.cli",
+        "h03.snapshot",
+        "h03.stale"
+       ],
+       "missed": [
+        "h03.build",
+        "h03.rebuild"
+       ],
+       "via": {
+        "h03.cli": "loc repoatlas/cli.py:174",
+        "h03.snapshot": "text 'take_snapshot'",
+        "h03.stale": "loc repoatlas/workflow.py:144"
+       }
+      },
+      "locators": {
+       "distinct": 23,
+       "files": 8,
+       "point_or_short": 23
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 4,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5957,
+        "truncated": true,
+        "expansions": [
+         "index->idx (abbreviation)",
+         "invalidat->invalid (corpus prefix)",
+         "repoatla->repo (corpus prefix)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h03/repoatlas_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.106,
+       "chars": 5480,
+       "sha256": "28c6cc92de7ed9fe1b7731b42eaff89838c3dd6b5c8bc89d68f1abd13b0cbb32"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1075,
+       "chars": 5480,
+       "sha256": "28c6cc92de7ed9fe1b7731b42eaff89838c3dd6b5c8bc89d68f1abd13b0cbb32"
+      }
+     ],
+     "score": {
+      "chars": 5480,
+      "tokens": 1370,
+      "sha256": "28c6cc92de7ed9fe1b7731b42eaff89838c3dd6b5c8bc89d68f1abd13b0cbb32",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "h03.cli",
+        "h03.build",
+        "h03.snapshot",
+        "h03.stale"
+       ],
+       "missed": [
+        "h03.rebuild"
+       ],
+       "via": {
+        "h03.cli": "loc repoatlas/cli.py:174",
+        "h03.build": "loc repoatlas/workflow.py:134-147",
+        "h03.snapshot": "loc repoatlas/workflow.py:134-147",
+        "h03.stale": "loc repoatlas/workflow.py:134-147"
+       }
+      },
+      "locators": {
+       "distinct": 19,
+       "files": 10,
+       "point_or_short": 17
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 4,
+       "outline_edges": 27,
+       "edge_confidence": {
+        "EXTRACTED": 23,
+        "INFERRED": 4
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 27,
+       "checked": 27,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h03/repoatlas_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "h04",
+   "category": "impact",
+   "question": "What is affected if evidence.content_hash changes?",
+   "facts": 5,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0967,
+       "chars": 23989,
+       "sha256": "29c339ee1c622b695dd2b720c258877a42740aa7e3959fb6beee5f94d1c26b96"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.098,
+       "chars": 23989,
+       "sha256": "29c339ee1c622b695dd2b720c258877a42740aa7e3959fb6beee5f94d1c26b96"
+      }
+     ],
+     "score": {
+      "chars": 23989,
+      "tokens": 5998,
+      "sha256": "29c339ee1c622b695dd2b720c258877a42740aa7e3959fb6beee5f94d1c26b96",
+      "facts": {
+       "total": 5,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h04.source",
+        "h04.check",
+        "h04.url",
+        "h04.feedback",
+        "h04.research"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 41,
+       "files": 1,
+       "point_or_short": 40
+      },
+      "agent_tool_calls": 2,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "affected",
+        "evidence",
+        "content_hash",
+        "changes"
+       ],
+       "matching_files": 59,
+       "matching_lines": 1060,
+       "files_read": [
+        {
+         "file": "repoatlas/mcp/server.py",
+         "lines": [
+          1,
+          412
+         ],
+         "of": 1085
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h04/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2062,
+       "chars": 6477,
+       "sha256": "4310fc8885e2c30ba02c48efc50873a84192d8b5dfd2ba89d86e5dafa2d6fb1d"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.2098,
+       "chars": 6477,
+       "sha256": "4310fc8885e2c30ba02c48efc50873a84192d8b5dfd2ba89d86e5dafa2d6fb1d"
+      }
+     ],
+     "score": {
+      "chars": 6477,
+      "tokens": 1620,
+      "sha256": "4310fc8885e2c30ba02c48efc50873a84192d8b5dfd2ba89d86e5dafa2d6fb1d",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 1,
+       "found": [
+        "h04.source",
+        "h04.check",
+        "h04.url",
+        "h04.research"
+       ],
+       "missed": [
+        "h04.feedback"
+       ],
+       "via": {
+        "h04.source": "text 'source_evidence'",
+        "h04.check": "loc repoatlas/evidence.py:181",
+        "h04.url": "text 'url_evidence'",
+        "h04.research": "text '_research_document'"
+       }
+      },
+      "locators": {
+       "distinct": 64,
+       "files": 34,
+       "point_or_short": 64
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 70,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 1535,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h04/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.5309,
+       "chars": 6470,
+       "sha256": "2bd89188035aafce02d767a01d09a67ec0369a3ba6cc1cdf5799d560c83e05f1"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.5238,
+       "chars": 6470,
+       "sha256": "2bd89188035aafce02d767a01d09a67ec0369a3ba6cc1cdf5799d560c83e05f1"
+      }
+     ],
+     "score": {
+      "chars": 6470,
+      "tokens": 1618,
+      "sha256": "2bd89188035aafce02d767a01d09a67ec0369a3ba6cc1cdf5799d560c83e05f1",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 1,
+       "found": [
+        "h04.source",
+        "h04.check",
+        "h04.url",
+        "h04.research"
+       ],
+       "missed": [
+        "h04.feedback"
+       ],
+       "via": {
+        "h04.source": "text 'source_evidence'",
+        "h04.check": "loc repoatlas/evidence.py:181",
+        "h04.url": "text 'url_evidence'",
+        "h04.research": "text '_research_document'"
+       }
+      },
+      "locators": {
+       "distinct": 64,
+       "files": 34,
+       "point_or_short": 64
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 70,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 550,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 2,
+        "skill_version_warnings": 2,
+        "other": []
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h04/graphify_cli.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.4113,
+       "chars": 2877,
+       "sha256": "9c7c68f946d6bb9238aa7c0c61ec9dcb6af32188419289ac8fbd28d231374c19",
+       "claims": 4,
+       "claims_reused": 0,
+       "claims_new": 4,
+       "internal_tool_calls": 10,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.2093,
+       "chars": 2877,
+       "sha256": "9c7c68f946d6bb9238aa7c0c61ec9dcb6af32188419289ac8fbd28d231374c19",
+       "claims": 4,
+       "claims_reused": 4,
+       "claims_new": 0,
+       "internal_tool_calls": 10,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 2877,
+      "tokens": 720,
+      "sha256": "9c7c68f946d6bb9238aa7c0c61ec9dcb6af32188419289ac8fbd28d231374c19",
+      "facts": {
+       "total": 5,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h04.source",
+        "h04.check",
+        "h04.url",
+        "h04.feedback",
+        "h04.research"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 3,
+       "files": 3,
+       "point_or_short": 3
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 4,
+       "by_status": {
+        "strong_inference": 1,
+        "statically_verified": 2,
+        "weak_inference": 1
+       },
+       "verified": 2,
+       "inference": 2,
+       "verified_share": 0.5,
+       "inference_share": 0.5,
+       "weak_or_unknown": 1,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 3,
+        "graph_edge": 4,
+        "static_resolution": 1
+       },
+       "evidence_verifying": 4,
+       "evidence_non_verifying": 4,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.406,
+       "tool_calls": 10,
+       "context_chars": 4127,
+       "context_tokens_est": 1031,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null,
+       "precise": {
+        "max_sites": 20,
+        "max_seconds": 1.5,
+        "sites": 1,
+        "spent_s": 0.047,
+        "skipped": 0
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h04/repoatlas_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1225,
+       "chars": 5819,
+       "sha256": "a38862de3714febd64c62b05a4973682a7ad75b27a8319b8b986274dddbebf3b"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1114,
+       "chars": 5819,
+       "sha256": "a38862de3714febd64c62b05a4973682a7ad75b27a8319b8b986274dddbebf3b"
+      }
+     ],
+     "score": {
+      "chars": 5819,
+      "tokens": 1455,
+      "sha256": "a38862de3714febd64c62b05a4973682a7ad75b27a8319b8b986274dddbebf3b",
+      "facts": {
+       "total": 5,
+       "found_n": 5,
+       "pinpointed_n": 4,
+       "found": [
+        "h04.source",
+        "h04.check",
+        "h04.url",
+        "h04.feedback",
+        "h04.research"
+       ],
+       "missed": [],
+       "via": {
+        "h04.source": "loc repoatlas/evidence.py:175",
+        "h04.check": "loc repoatlas/evidence.py:235",
+        "h04.url": "loc repoatlas/evidence.py:301",
+        "h04.feedback": "loc repoatlas/feedback.py:635",
+        "h04.research": "text '_research_document'"
+       }
+      },
+      "locators": {
+       "distinct": 67,
+       "files": 20,
+       "point_or_short": 67
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 4,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5989,
+        "truncated": true
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h04/repoatlas_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1155,
+       "chars": 5673,
+       "sha256": "68ec649f9e251174f0485eee11d72769816281ce0ffb93a55a7a3b136660519d"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1107,
+       "chars": 5673,
+       "sha256": "68ec649f9e251174f0485eee11d72769816281ce0ffb93a55a7a3b136660519d"
+      }
+     ],
+     "score": {
+      "chars": 5673,
+      "tokens": 1419,
+      "sha256": "68ec649f9e251174f0485eee11d72769816281ce0ffb93a55a7a3b136660519d",
+      "facts": {
+       "total": 5,
+       "found_n": 5,
+       "pinpointed_n": 4,
+       "found": [
+        "h04.source",
+        "h04.check",
+        "h04.url",
+        "h04.feedback",
+        "h04.research"
+       ],
+       "missed": [],
+       "via": {
+        "h04.source": "loc repoatlas/evidence.py:175",
+        "h04.check": "loc repoatlas/evidence.py:235",
+        "h04.url": "loc repoatlas/evidence.py:301",
+        "h04.feedback": "loc repoatlas/feedback.py:635",
+        "h04.research": "loc repoatlas/research.py:724-838"
+       }
+      },
+      "locators": {
+       "distinct": 76,
+       "files": 22,
+       "point_or_short": 73
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 4,
+       "outline_edges": 66,
+       "edge_confidence": {
+        "EXTRACTED": 51,
+        "INFERRED": 15
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 66,
+       "checked": 66,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h04/repoatlas_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "h05",
+   "category": "behaviour",
+   "question": "How is a claim marked stale when its cited files change?",
+   "facts": 4,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1399,
+       "chars": 23962,
+       "sha256": "c772512c6e5bcec73d672be6d9b7f484b9f117f6a188170d02436e747c166759"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1333,
+       "chars": 23962,
+       "sha256": "c772512c6e5bcec73d672be6d9b7f484b9f117f6a188170d02436e747c166759"
+      }
+     ],
+     "score": {
+      "chars": 23962,
+      "tokens": 5991,
+      "sha256": "c772512c6e5bcec73d672be6d9b7f484b9f117f6a188170d02436e747c166759",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h05.inv",
+        "h05.changed",
+        "h05.files",
+        "h05.caller"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 41,
+       "files": 1,
+       "point_or_short": 40
+      },
+      "agent_tool_calls": 2,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "claim",
+        "marked",
+        "stale",
+        "cited",
+        "files",
+        "change"
+       ],
+       "matching_files": 86,
+       "matching_lines": 2848,
+       "files_read": [
+        {
+         "file": "repoatlas/claims.py",
+         "lines": [
+          1,
+          347
+         ],
+         "of": 1092
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h05/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2097,
+       "chars": 6591,
+       "sha256": "4d075ef049759411808daf55663aa6f0950cf3dc2a37cf8ac2ff56e053ab10db"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.3702,
+       "chars": 6591,
+       "sha256": "4d075ef049759411808daf55663aa6f0950cf3dc2a37cf8ac2ff56e053ab10db"
+      }
+     ],
+     "score": {
+      "chars": 6591,
+      "tokens": 1648,
+      "sha256": "4d075ef049759411808daf55663aa6f0950cf3dc2a37cf8ac2ff56e053ab10db",
+      "facts": {
+       "total": 4,
+       "found_n": 2,
+       "pinpointed_n": 1,
+       "found": [
+        "h05.changed",
+        "h05.files"
+       ],
+       "missed": [
+        "h05.inv",
+        "h05.caller"
+       ],
+       "via": {
+        "h05.changed": "text 'changed_claim_files'",
+        "h05.files": "loc repoatlas/claims.py:948"
+       }
+      },
+      "locators": {
+       "distinct": 63,
+       "files": 19,
+       "point_or_short": 63
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 79,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 1566,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h05/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.5247,
+       "chars": 6584,
+       "sha256": "e208f2bc87ad07b1597b8b440afd70eafba91f6d1acf2946cacd0a697f6a27a5"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.5264,
+       "chars": 6584,
+       "sha256": "e208f2bc87ad07b1597b8b440afd70eafba91f6d1acf2946cacd0a697f6a27a5"
+      }
+     ],
+     "score": {
+      "chars": 6584,
+      "tokens": 1646,
+      "sha256": "e208f2bc87ad07b1597b8b440afd70eafba91f6d1acf2946cacd0a697f6a27a5",
+      "facts": {
+       "total": 4,
+       "found_n": 2,
+       "pinpointed_n": 1,
+       "found": [
+        "h05.changed",
+        "h05.files"
+       ],
+       "missed": [
+        "h05.inv",
+        "h05.caller"
+       ],
+       "via": {
+        "h05.changed": "text 'changed_claim_files'",
+        "h05.files": "loc repoatlas/claims.py:948"
+       }
+      },
+      "locators": {
+       "distinct": 63,
+       "files": 19,
+       "point_or_short": 63
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 79,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 366,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 2,
+        "skill_version_warnings": 2,
+        "other": []
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h05/graphify_cli.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2576,
+       "chars": 1238,
+       "sha256": "be5f7a2dc785c8aaea4a2a7f3643aa1a271297b24dfd557abb80b27f5026b03f",
+       "claims": 2,
+       "claims_reused": 0,
+       "claims_new": 2,
+       "internal_tool_calls": 6,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.2608,
+       "chars": 1238,
+       "sha256": "be5f7a2dc785c8aaea4a2a7f3643aa1a271297b24dfd557abb80b27f5026b03f",
+       "claims": 2,
+       "claims_reused": 2,
+       "claims_new": 0,
+       "internal_tool_calls": 6,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 1238,
+      "tokens": 310,
+      "sha256": "be5f7a2dc785c8aaea4a2a7f3643aa1a271297b24dfd557abb80b27f5026b03f",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h05.inv",
+        "h05.changed",
+        "h05.files",
+        "h05.caller"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 1,
+       "files": 1,
+       "point_or_short": 1
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 2,
+       "by_status": {
+        "statically_verified": 1,
+        "weak_inference": 1
+       },
+       "verified": 1,
+       "inference": 1,
+       "verified_share": 0.5,
+       "inference_share": 0.5,
+       "weak_or_unknown": 1,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 1,
+        "graph_edge": 3
+       },
+       "evidence_verifying": 1,
+       "evidence_non_verifying": 3,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.25,
+       "tool_calls": 6,
+       "context_chars": 2223,
+       "context_tokens_est": 555,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h05/repoatlas_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0992,
+       "chars": 5791,
+       "sha256": "c1f87fce911e4bd6149a22d3204766f9679be4ea1f6dec521c6e608814969e7b"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1042,
+       "chars": 5791,
+       "sha256": "c1f87fce911e4bd6149a22d3204766f9679be4ea1f6dec521c6e608814969e7b"
+      }
+     ],
+     "score": {
+      "chars": 5791,
+      "tokens": 1448,
+      "sha256": "c1f87fce911e4bd6149a22d3204766f9679be4ea1f6dec521c6e608814969e7b",
+      "facts": {
+       "total": 4,
+       "found_n": 1,
+       "pinpointed_n": 0,
+       "found": [
+        "h05.caller"
+       ],
+       "missed": [
+        "h05.inv",
+        "h05.changed",
+        "h05.files"
+       ],
+       "via": {
+        "h05.caller": "loc repoatlas/workflow.py:157-219"
+       }
+      },
+      "locators": {
+       "distinct": 15,
+       "files": 6,
+       "point_or_short": 13
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 5,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5978,
+        "truncated": true,
+        "more": [
+         "tests/test_feedback.py:554-563 test_stale_reason_names_the_changed_lines",
+         "tests/test_analysis.py:731-750 test_audit_marks_a_subquestion_stale_when_its_claim_goes_st…",
+         "repoatlas/workflow.py:157-219 update",
+         "tests/test_snapshot_stale.py:194-224 test_revert_then_verify_restores_up_to_ceiling_and_rebinds"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h05/repoatlas_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1055,
+       "chars": 5702,
+       "sha256": "ded57dfe76d367849c3ec8f16144a56b53e7c47cb075a0aa37d4c5d3968811bf"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1051,
+       "chars": 5702,
+       "sha256": "ded57dfe76d367849c3ec8f16144a56b53e7c47cb075a0aa37d4c5d3968811bf"
+      }
+     ],
+     "score": {
+      "chars": 5702,
+      "tokens": 1426,
+      "sha256": "ded57dfe76d367849c3ec8f16144a56b53e7c47cb075a0aa37d4c5d3968811bf",
+      "facts": {
+       "total": 4,
+       "found_n": 1,
+       "pinpointed_n": 0,
+       "found": [
+        "h05.caller"
+       ],
+       "missed": [
+        "h05.inv",
+        "h05.changed",
+        "h05.files"
+       ],
+       "via": {
+        "h05.caller": "loc repoatlas/workflow.py:157-219"
+       }
+      },
+      "locators": {
+       "distinct": 11,
+       "files": 7,
+       "point_or_short": 9
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 5,
+       "outline_edges": 19,
+       "edge_confidence": {
+        "EXTRACTED": 18,
+        "INFERRED": 1
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 19,
+       "checked": 19,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h05/repoatlas_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "h06",
+   "category": "why",
+   "question": "Why can a claim not be deleted from the store?",
+   "facts": 2,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0929,
+       "chars": 23973,
+       "sha256": "fd8d2fb3e9ef7e76aa04d7d7affe6c4e298ae23043d0de2390e930685db71138"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0923,
+       "chars": 23973,
+       "sha256": "fd8d2fb3e9ef7e76aa04d7d7affe6c4e298ae23043d0de2390e930685db71138"
+      }
+     ],
+     "score": {
+      "chars": 23973,
+      "tokens": 5994,
+      "sha256": "fd8d2fb3e9ef7e76aa04d7d7affe6c4e298ae23043d0de2390e930685db71138",
+      "facts": {
+       "total": 2,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h06.trigger",
+        "h06.rule"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 41,
+       "files": 1,
+       "point_or_short": 40
+      },
+      "agent_tool_calls": 2,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "claim",
+        "deleted",
+        "store"
+       ],
+       "matching_files": 75,
+       "matching_lines": 2212,
+       "files_read": [
+        {
+         "file": "repoatlas/feedback.py",
+         "lines": [
+          1,
+          348
+         ],
+         "of": 1222
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h06/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2111,
+       "chars": 6595,
+       "sha256": "ca8e9c014deedf34a8f506e57cca47f851a6bd31d4b98eedb2df69821167e80b"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.2146,
+       "chars": 6595,
+       "sha256": "ca8e9c014deedf34a8f506e57cca47f851a6bd31d4b98eedb2df69821167e80b"
+      }
+     ],
+     "score": {
+      "chars": 6595,
+      "tokens": 1649,
+      "sha256": "ca8e9c014deedf34a8f506e57cca47f851a6bd31d4b98eedb2df69821167e80b",
+      "facts": {
+       "total": 2,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h06.trigger",
+        "h06.rule"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 77,
+       "files": 26,
+       "point_or_short": 77
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 77,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 1631,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h06/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.5165,
+       "chars": 6588,
+       "sha256": "4e26aa4cf147359095fb7a9c02810c8abeb7adc49d1dc51aea57a2d885526bf4"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.5161,
+       "chars": 6588,
+       "sha256": "4e26aa4cf147359095fb7a9c02810c8abeb7adc49d1dc51aea57a2d885526bf4"
+      }
+     ],
+     "score": {
+      "chars": 6588,
+      "tokens": 1647,
+      "sha256": "4e26aa4cf147359095fb7a9c02810c8abeb7adc49d1dc51aea57a2d885526bf4",
+      "facts": {
+       "total": 2,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h06.trigger",
+        "h06.rule"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 77,
+       "files": 26,
+       "point_or_short": 77
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 77,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 798,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 2,
+        "skill_version_warnings": 2,
+        "other": []
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h06/graphify_cli.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.5546,
+       "chars": 908,
+       "sha256": "37758135068688c6551b30bb47784caee9bf89d0eccdd7f4bf0a22339d3b3211",
+       "claims": 1,
+       "claims_reused": 0,
+       "claims_new": 1,
+       "internal_tool_calls": 5,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.5466,
+       "chars": 908,
+       "sha256": "37758135068688c6551b30bb47784caee9bf89d0eccdd7f4bf0a22339d3b3211",
+       "claims": 1,
+       "claims_reused": 1,
+       "claims_new": 0,
+       "internal_tool_calls": 5,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 908,
+      "tokens": 227,
+      "sha256": "37758135068688c6551b30bb47784caee9bf89d0eccdd7f4bf0a22339d3b3211",
+      "facts": {
+       "total": 2,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "h06.trigger"
+       ],
+       "missed": [
+        "h06.rule"
+       ],
+       "via": {
+        "h06.trigger": "loc repoatlas/store.py:187-193"
+       }
+      },
+      "locators": {
+       "distinct": 1,
+       "files": 1,
+       "point_or_short": 1
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 1,
+       "by_status": {
+        "statically_verified": 1
+       },
+       "verified": 1,
+       "inference": 0,
+       "verified_share": 1.0,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 1
+       },
+       "evidence_verifying": 1,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 2,
+      "analysis_usage": {
+       "elapsed_s": 0.547,
+       "tool_calls": 5,
+       "context_chars": 1630,
+       "context_tokens_est": 407,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h06/repoatlas_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2508,
+       "chars": 5745,
+       "sha256": "e40c784dab70b35c74f0cd70fc98729d1382c7f166cd8338f325b2192bc10c9e"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1108,
+       "chars": 5745,
+       "sha256": "e40c784dab70b35c74f0cd70fc98729d1382c7f166cd8338f325b2192bc10c9e"
+      }
+     ],
+     "score": {
+      "chars": 5745,
+      "tokens": 1437,
+      "sha256": "e40c784dab70b35c74f0cd70fc98729d1382c7f166cd8338f325b2192bc10c9e",
+      "facts": {
+       "total": 2,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "h06.trigger"
+       ],
+       "missed": [
+        "h06.rule"
+       ],
+       "via": {
+        "h06.trigger": "loc repoatlas/store.py:187-193"
+       }
+      },
+      "locators": {
+       "distinct": 16,
+       "files": 4,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 7,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5957,
+        "truncated": true,
+        "more": [
+         "repoatlas/store.py:202-213 _SCHEMA_V2",
+         "repoatlas/store.py:405-647 Store"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h06/repoatlas_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0948,
+       "chars": 5500,
+       "sha256": "2bb3a189d37c2529228c0d549685421218b08d8971173691e3f3d155d1ef1f4a"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1097,
+       "chars": 5500,
+       "sha256": "2bb3a189d37c2529228c0d549685421218b08d8971173691e3f3d155d1ef1f4a"
+      }
+     ],
+     "score": {
+      "chars": 5500,
+      "tokens": 1375,
+      "sha256": "2bb3a189d37c2529228c0d549685421218b08d8971173691e3f3d155d1ef1f4a",
+      "facts": {
+       "total": 2,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "h06.trigger"
+       ],
+       "missed": [
+        "h06.rule"
+       ],
+       "via": {
+        "h06.trigger": "loc repoatlas/store.py:187-198"
+       }
+      },
+      "locators": {
+       "distinct": 11,
+       "files": 5,
+       "point_or_short": 10
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 7,
+       "outline_edges": 10,
+       "edge_confidence": {
+        "EXTRACTED": 8,
+        "INFERRED": 2
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 10,
+       "checked": 10,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h06/repoatlas_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "h07",
+   "category": "where",
+   "question": "Where does RepoAtlas decide whether an experiment command needs a container?",
+   "facts": 4,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1465,
+       "chars": 23943,
+       "sha256": "3ba69b86ff9826f15262bbfd431f27ad30c2ad5bea96d0e755bbe9208fbbbe2e"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1425,
+       "chars": 23943,
+       "sha256": "3ba69b86ff9826f15262bbfd431f27ad30c2ad5bea96d0e755bbe9208fbbbe2e"
+      }
+     ],
+     "score": {
+      "chars": 23943,
+      "tokens": 5986,
+      "sha256": "3ba69b86ff9826f15262bbfd431f27ad30c2ad5bea96d0e755bbe9208fbbbe2e",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h07.level",
+        "h07.classify",
+        "h07.runtime",
+        "h07.refuse"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 41,
+       "files": 1,
+       "point_or_short": 40
+      },
+      "agent_tool_calls": 2,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "repoatlas",
+        "decide",
+        "whether",
+        "experiment",
+        "command",
+        "needs",
+        "container"
+       ],
+       "matching_files": 103,
+       "matching_lines": 1877,
+       "files_read": [
+        {
+         "file": "repoatlas/analysis.py",
+         "lines": [
+          1,
+          378
+         ],
+         "of": 1699
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h07/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2509,
+       "chars": 6668,
+       "sha256": "d157a25bedd3f6446d978673549855173da7adfe92f417e1e9a504adc57c758e"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.2428,
+       "chars": 6668,
+       "sha256": "d157a25bedd3f6446d978673549855173da7adfe92f417e1e9a504adc57c758e"
+      }
+     ],
+     "score": {
+      "chars": 6668,
+      "tokens": 1667,
+      "sha256": "d157a25bedd3f6446d978673549855173da7adfe92f417e1e9a504adc57c758e",
+      "facts": {
+       "total": 4,
+       "found_n": 1,
+       "pinpointed_n": 0,
+       "found": [
+        "h07.classify"
+       ],
+       "missed": [
+        "h07.level",
+        "h07.runtime",
+        "h07.refuse"
+       ],
+       "via": {
+        "h07.classify": "text 'classify'"
+       }
+      },
+      "locators": {
+       "distinct": 67,
+       "files": 50,
+       "point_or_short": 67
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 70,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 1597,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h07/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.5451,
+       "chars": 6661,
+       "sha256": "8202be0bda8d4a8d446054ec644526f8d4265bcecfa8958c57bab94a39a7ad15"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.5445,
+       "chars": 6661,
+       "sha256": "8202be0bda8d4a8d446054ec644526f8d4265bcecfa8958c57bab94a39a7ad15"
+      }
+     ],
+     "score": {
+      "chars": 6661,
+      "tokens": 1666,
+      "sha256": "8202be0bda8d4a8d446054ec644526f8d4265bcecfa8958c57bab94a39a7ad15",
+      "facts": {
+       "total": 4,
+       "found_n": 1,
+       "pinpointed_n": 0,
+       "found": [
+        "h07.classify"
+       ],
+       "missed": [
+        "h07.level",
+        "h07.runtime",
+        "h07.refuse"
+       ],
+       "via": {
+        "h07.classify": "text 'classify'"
+       }
+      },
+      "locators": {
+       "distinct": 67,
+       "files": 50,
+       "point_or_short": 67
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 70,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 761,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 2,
+        "skill_version_warnings": 2,
+        "other": []
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h07/graphify_cli.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.4256,
+       "chars": 2849,
+       "sha256": "67acaeee851c1a29b06c86fb2f33526f40d24c798663129c76dbc4d9db92a0db",
+       "claims": 7,
+       "claims_reused": 4,
+       "claims_new": 3,
+       "internal_tool_calls": 13,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.3899,
+       "chars": 2849,
+       "sha256": "67acaeee851c1a29b06c86fb2f33526f40d24c798663129c76dbc4d9db92a0db",
+       "claims": 7,
+       "claims_reused": 7,
+       "claims_new": 0,
+       "internal_tool_calls": 13,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 2849,
+      "tokens": 713,
+      "sha256": "67acaeee851c1a29b06c86fb2f33526f40d24c798663129c76dbc4d9db92a0db",
+      "facts": {
+       "total": 4,
+       "found_n": 2,
+       "pinpointed_n": 0,
+       "found": [
+        "h07.level",
+        "h07.refuse"
+       ],
+       "missed": [
+        "h07.classify",
+        "h07.runtime"
+       ],
+       "via": {
+        "h07.level": "loc repoatlas/experiments.py:365-550",
+        "h07.refuse": "loc repoatlas/experiments.py:365-550"
+       }
+      },
+      "locators": {
+       "distinct": 7,
+       "files": 5,
+       "point_or_short": 6
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 7,
+       "by_status": {
+        "statically_verified": 4,
+        "primary_source_verified": 1,
+        "contradicted": 2
+       },
+       "verified": 5,
+       "inference": 0,
+       "verified_share": 0.714,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 2,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 8,
+        "design_doc": 1,
+        "graph_edge": 1,
+        "static_resolution": 1
+       },
+       "evidence_verifying": 10,
+       "evidence_non_verifying": 1,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.422,
+       "tool_calls": 13,
+       "context_chars": 4258,
+       "context_tokens_est": 1064,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null,
+       "precise": {
+        "max_sites": 20,
+        "max_seconds": 1.5,
+        "sites": 1,
+        "spent_s": 0.001,
+        "skipped": 0
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h07/repoatlas_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1004,
+       "chars": 5766,
+       "sha256": "72fd559baae1c9333255ea6e1d16b2b689fb813bb080e1c350bf180352ca1518"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1081,
+       "chars": 5766,
+       "sha256": "72fd559baae1c9333255ea6e1d16b2b689fb813bb080e1c350bf180352ca1518"
+      }
+     ],
+     "score": {
+      "chars": 5766,
+      "tokens": 1442,
+      "sha256": "72fd559baae1c9333255ea6e1d16b2b689fb813bb080e1c350bf180352ca1518",
+      "facts": {
+       "total": 4,
+       "found_n": 2,
+       "pinpointed_n": 1,
+       "found": [
+        "h07.runtime",
+        "h07.refuse"
+       ],
+       "missed": [
+        "h07.level",
+        "h07.classify"
+       ],
+       "via": {
+        "h07.runtime": "text 'container_runtime'",
+        "h07.refuse": "loc repoatlas/experiments.py:409"
+       }
+      },
+      "locators": {
+       "distinct": 18,
+       "files": 9,
+       "point_or_short": 18
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 5,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5961,
+        "truncated": true,
+        "expansions": [
+         "repo->repository (abbreviation)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h07/repoatlas_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1003,
+       "chars": 4915,
+       "sha256": "2b83dcd851e94adf9c2fb891c894397f15b849c4e9d9a088f630494dcdc02d95"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1169,
+       "chars": 4915,
+       "sha256": "2b83dcd851e94adf9c2fb891c894397f15b849c4e9d9a088f630494dcdc02d95"
+      }
+     ],
+     "score": {
+      "chars": 4915,
+      "tokens": 1229,
+      "sha256": "2b83dcd851e94adf9c2fb891c894397f15b849c4e9d9a088f630494dcdc02d95",
+      "facts": {
+       "total": 4,
+       "found_n": 3,
+       "pinpointed_n": 1,
+       "found": [
+        "h07.level",
+        "h07.runtime",
+        "h07.refuse"
+       ],
+       "missed": [
+        "h07.classify"
+       ],
+       "via": {
+        "h07.level": "loc repoatlas/experiments.py:365-550",
+        "h07.runtime": "text 'container_runtime'",
+        "h07.refuse": "loc repoatlas/experiments.py:408-419"
+       }
+      },
+      "locators": {
+       "distinct": 20,
+       "files": 10,
+       "point_or_short": 19
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 5,
+       "outline_edges": 25,
+       "edge_confidence": {
+        "EXTRACTED": 25
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 25,
+       "checked": 25,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h07/repoatlas_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "h08",
+   "category": "tests",
+   "question": "Which tests cover stale claim invalidation?",
+   "facts": 5,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1299,
+       "chars": 23986,
+       "sha256": "c89aa4f3be88bc84949d06349fc498c839a3f643ad1e3160762c7031d1daa1c8"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1285,
+       "chars": 23986,
+       "sha256": "c89aa4f3be88bc84949d06349fc498c839a3f643ad1e3160762c7031d1daa1c8"
+      }
+     ],
+     "score": {
+      "chars": 23986,
+      "tokens": 5997,
+      "sha256": "c89aa4f3be88bc84949d06349fc498c839a3f643ad1e3160762c7031d1daa1c8",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 2,
+       "found": [
+        "h08.modify",
+        "h08.commit",
+        "h08.delete",
+        "h08.watch"
+       ],
+       "missed": [
+        "h08.cli"
+       ],
+       "via": {
+        "h08.modify": "loc tests/test_snapshot_stale.py:140",
+        "h08.commit": "loc tests/test_snapshot_stale.py:164",
+        "h08.delete": "loc tests/test_snapshot_stale.py:1-346",
+        "h08.watch": "loc tests/test_snapshot_stale.py:1-346"
+       }
+      },
+      "locators": {
+       "distinct": 41,
+       "files": 1,
+       "point_or_short": 40
+      },
+      "agent_tool_calls": 2,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "tests",
+        "cover",
+        "stale",
+        "claim",
+        "invalidation"
+       ],
+       "matching_files": 82,
+       "matching_lines": 2395,
+       "files_read": [
+        {
+         "file": "tests/test_snapshot_stale.py",
+         "lines": [
+          1,
+          346
+         ],
+         "of": 531
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h08/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2359,
+       "chars": 6563,
+       "sha256": "3673fce30293c722e6ae1ff9a9346fb54beddc7ad0d07c4fdcf83024f9754834"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.3822,
+       "chars": 6563,
+       "sha256": "3673fce30293c722e6ae1ff9a9346fb54beddc7ad0d07c4fdcf83024f9754834"
+      }
+     ],
+     "score": {
+      "chars": 6563,
+      "tokens": 1641,
+      "sha256": "3673fce30293c722e6ae1ff9a9346fb54beddc7ad0d07c4fdcf83024f9754834",
+      "facts": {
+       "total": 5,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h08.modify",
+        "h08.commit",
+        "h08.delete",
+        "h08.watch",
+        "h08.cli"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 67,
+       "files": 27,
+       "point_or_short": 67
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 82,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 1417,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h08/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.5422,
+       "chars": 6568,
+       "sha256": "67562850c08c79bc2f4c78fc270f86bc0900045f7c807bb7fced0a1d7bfc090d"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.5414,
+       "chars": 6568,
+       "sha256": "67562850c08c79bc2f4c78fc270f86bc0900045f7c807bb7fced0a1d7bfc090d"
+      }
+     ],
+     "score": {
+      "chars": 6568,
+      "tokens": 1642,
+      "sha256": "67562850c08c79bc2f4c78fc270f86bc0900045f7c807bb7fced0a1d7bfc090d",
+      "facts": {
+       "total": 5,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h08.modify",
+        "h08.commit",
+        "h08.delete",
+        "h08.watch",
+        "h08.cli"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 67,
+       "files": 28,
+       "point_or_short": 67
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 82,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 237,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 2,
+        "skill_version_warnings": 2,
+        "other": []
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h08/graphify_cli.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.3223,
+       "chars": 675,
+       "sha256": "c254b7f6181d286a5a1ebd8f3156fa031031b23d5d28a2e35cad7e43d43abc72",
+       "claims": 2,
+       "claims_reused": 0,
+       "claims_new": 2,
+       "internal_tool_calls": 5,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.308,
+       "chars": 675,
+       "sha256": "c254b7f6181d286a5a1ebd8f3156fa031031b23d5d28a2e35cad7e43d43abc72",
+       "claims": 2,
+       "claims_reused": 2,
+       "claims_new": 0,
+       "internal_tool_calls": 5,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 675,
+      "tokens": 169,
+      "sha256": "c254b7f6181d286a5a1ebd8f3156fa031031b23d5d28a2e35cad7e43d43abc72",
+      "facts": {
+       "total": 5,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h08.modify",
+        "h08.commit",
+        "h08.delete",
+        "h08.watch",
+        "h08.cli"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 2,
+       "files": 2,
+       "point_or_short": 2
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 2,
+       "by_status": {
+        "statically_verified": 2
+       },
+       "verified": 2,
+       "inference": 0,
+       "verified_share": 1.0,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 2
+       },
+       "evidence_verifying": 2,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.313,
+       "tool_calls": 5,
+       "context_chars": 1312,
+       "context_tokens_est": 328,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h08/repoatlas_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1003,
+       "chars": 5740,
+       "sha256": "7135fc54129b5ac5a876b98747eeafbab6a65f0144dd92ff28a18e6bc9b44c60"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0982,
+       "chars": 5740,
+       "sha256": "7135fc54129b5ac5a876b98747eeafbab6a65f0144dd92ff28a18e6bc9b44c60"
+      }
+     ],
+     "score": {
+      "chars": 5740,
+      "tokens": 1435,
+      "sha256": "7135fc54129b5ac5a876b98747eeafbab6a65f0144dd92ff28a18e6bc9b44c60",
+      "facts": {
+       "total": 5,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "h08.modify",
+        "h08.commit",
+        "h08.delete",
+        "h08.watch",
+        "h08.cli"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 15,
+       "files": 6,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 8,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5973,
+        "truncated": true
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h08/repoatlas_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "repoatlas_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1019,
+       "chars": 5924,
+       "sha256": "f2765a0b38b6b5e396633afb1b5584df7532e864ef1c528ed238f755164d18dc"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1006,
+       "chars": 5924,
+       "sha256": "f2765a0b38b6b5e396633afb1b5584df7532e864ef1c528ed238f755164d18dc"
+      }
+     ],
+     "score": {
+      "chars": 5924,
+      "tokens": 1481,
+      "sha256": "f2765a0b38b6b5e396633afb1b5584df7532e864ef1c528ed238f755164d18dc",
+      "facts": {
+       "total": 5,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "h08.modify",
+        "h08.delete"
+       ],
+       "missed": [
+        "h08.commit",
+        "h08.watch",
+        "h08.cli"
+       ],
+       "via": {
+        "h08.modify": "loc tests/test_snapshot_stale.py:140-161",
+        "h08.delete": "loc tests/test_snapshot_stale.py:181-191"
+       }
+      },
+      "locators": {
+       "distinct": 17,
+       "files": 8,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 8,
+       "outline_edges": 16,
+       "edge_confidence": {
+        "EXTRACTED": 13,
+        "INFERRED": 3
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 16,
+       "checked": 16,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/heldout_repoatlas/h08/repoatlas_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  }
+ ],
+ "summary": {
+  "raw": {
+   "questions": 8,
+   "errors": 0,
+   "facts_found": 9,
+   "facts_total": 33,
+   "facts_pinpointed": 3,
+   "questions_all_facts": 1,
+   "tokens_mean": 5992.4,
+   "tokens_median": 5993.0,
+   "tokens_max": 5998,
+   "tokens_total": 47939,
+   "chars_total": 191738,
+   "facts_per_1k_tokens": 0.19,
+   "pinpointed_per_1k_tokens": 0.06,
+   "locators_distinct_mean": 41,
+   "agent_tool_calls_mean": 2,
+   "seconds_cold_median": 0.133,
+   "seconds_cold_total": 1.05,
+   "seconds_warm_median": 0.13,
+   "seconds_warm_total": 1.035,
+   "facts_found_via_locator": 8,
+   "assertions_scored": false,
+   "negatives_matched": 0,
+   "negatives_checked": 0,
+   "relations_asserted": 0,
+   "relations_checked": 0,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "graphify_vendored": {
+   "questions": 8,
+   "errors": 0,
+   "facts_found": 8,
+   "facts_total": 33,
+   "facts_pinpointed": 2,
+   "questions_all_facts": 0,
+   "tokens_mean": 1647.4,
+   "tokens_median": 1648.5,
+   "tokens_max": 1679,
+   "tokens_total": 13179,
+   "chars_total": 52704,
+   "facts_per_1k_tokens": 0.61,
+   "pinpointed_per_1k_tokens": 0.15,
+   "locators_distinct_mean": 66.2,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.21,
+   "seconds_cold_total": 1.738,
+   "seconds_warm_median": 0.226,
+   "seconds_warm_total": 2.045,
+   "facts_found_via_locator": 2,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 0,
+   "relations_asserted": 0,
+   "relations_checked": 0,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "graphify_cli": {
+   "questions": 8,
+   "errors": 0,
+   "facts_found": 8,
+   "facts_total": 33,
+   "facts_pinpointed": 2,
+   "questions_all_facts": 0,
+   "tokens_mean": 1644,
+   "tokens_median": 1645.0,
+   "tokens_max": 1669,
+   "tokens_total": 13152,
+   "chars_total": 52597,
+   "facts_per_1k_tokens": 0.61,
+   "pinpointed_per_1k_tokens": 0.15,
+   "locators_distinct_mean": 66.2,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.528,
+   "seconds_cold_total": 4.252,
+   "seconds_warm_median": 0.526,
+   "seconds_warm_total": 4.244,
+   "facts_found_via_locator": 2,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 0,
+   "relations_asserted": 0,
+   "relations_checked": 0,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "repoatlas_analyze": {
+   "questions": 8,
+   "errors": 0,
+   "facts_found": 11,
+   "facts_total": 33,
+   "facts_pinpointed": 7,
+   "questions_all_facts": 1,
+   "tokens_mean": 586.6,
+   "tokens_median": 716.5,
+   "tokens_max": 940,
+   "tokens_total": 4693,
+   "chars_total": 18761,
+   "facts_per_1k_tokens": 2.34,
+   "pinpointed_per_1k_tokens": 1.49,
+   "locators_distinct_mean": 5.9,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.49,
+   "seconds_cold_total": 5.028,
+   "seconds_warm_median": 0.353,
+   "seconds_warm_total": 3.061,
+   "facts_found_via_locator": 10,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 0,
+   "relations_asserted": 21,
+   "relations_checked": 11,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0,
+   "claims": {
+    "total": 41,
+    "by_status": {
+     "statically_verified": 28,
+     "primary_source_verified": 2,
+     "weak_inference": 3,
+     "contradicted": 4,
+     "strong_inference": 4
+    },
+    "verified_share": 0.732,
+    "inference_share": 0.171,
+    "weak_or_unknown": 3,
+    "weak_or_unknown_unlabelled": 0,
+    "negatives_presented_as_findings": 0,
+    "contradicted_relations": 0,
+    "contradicted_but_cited_line_names_target": 0,
+    "contradicted_named_via_import_alias": 0,
+    "unknowns": 2
+   },
+   "cache": {
+    "method": "claims whose id already existed in atlas.db before the run (same text + snapshot)",
+    "cold_claims": 41,
+    "cold_reused": 5,
+    "warm_claims": 41,
+    "warm_reused": 41
+   }
+  },
+  "repoatlas_retrieve": {
+   "questions": 8,
+   "errors": 0,
+   "facts_found": 17,
+   "facts_total": 33,
+   "facts_pinpointed": 12,
+   "questions_all_facts": 2,
+   "tokens_mean": 1441.1,
+   "tokens_median": 1438.5,
+   "tokens_max": 1455,
+   "tokens_total": 11529,
+   "chars_total": 46105,
+   "facts_per_1k_tokens": 1.47,
+   "pinpointed_per_1k_tokens": 1.04,
+   "locators_distinct_mean": 24,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.101,
+   "seconds_cold_total": 1.126,
+   "seconds_warm_median": 0.106,
+   "seconds_warm_total": 0.839,
+   "facts_found_via_locator": 13,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 0,
+   "relations_asserted": 3,
+   "relations_checked": 3,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "repoatlas_retrieve_text": {
+   "questions": 8,
+   "errors": 0,
+   "facts_found": 22,
+   "facts_total": 33,
+   "facts_pinpointed": 16,
+   "questions_all_facts": 2,
+   "tokens_mean": 1397.8,
+   "tokens_median": 1402.0,
+   "tokens_max": 1497,
+   "tokens_total": 11182,
+   "chars_total": 44718,
+   "facts_per_1k_tokens": 1.97,
+   "pinpointed_per_1k_tokens": 1.43,
+   "locators_distinct_mean": 24.4,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.101,
+   "seconds_cold_total": 0.815,
+   "seconds_warm_median": 0.109,
+   "seconds_warm_total": 0.995,
+   "facts_found_via_locator": 19,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 0,
+   "relations_asserted": 187,
+   "relations_checked": 187,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  }
+ },
+ "sweep": null,
+ "not_measured": [
+  "model-in-the-loop answer accuracy, model tokens and model cost - not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)",
+  "runtime correctness of answers (only presence of gold facts in the delivered context is scored)",
+  "OS file-cache effects are not separated from process warm-up in cold vs warm timings",
+  "memory use"
+ ],
+ "status": "ok",
+ "paths_sanitized": {
+  "placeholders": [
+   "<TMP>",
+   "<REPO>",
+   "<HOME>"
+  ],
+  "rule": "absolute home / temp / checkout paths replaced when written; see repoatlas/benchmark/sanitize.py"
+ }
+}

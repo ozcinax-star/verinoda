@@ -1,0 +1,32 @@
+Verinoda (formerly developed under the working name RepoAtlas)
+Copyright 2026 The Verinoda contributors.
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product is a derivative work of Graphify
+(https://github.com/Graphify-Labs/graphify), pinned at upstream commit
+20a20d30d8e7eef77675651f0199d87f913bd3e7 (after tag v0.9.65).
+Verinoda is an independent project and is NOT an official Graphify release,
+nor is it endorsed by the Graphify authors.
+
+The upstream NOTICE is reproduced below, unmodified:
+
+----------------------------------------------------------------------------
+Graphify
+Copyright 2026 Safi Shamsi and the Graphify contributors.
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Portions of this software were contributed under the MIT License prior to the
+relicensing and remain available under those terms. The original MIT license
+text is retained in LICENSE-MIT.
+----------------------------------------------------------------------------
+
+Modifications to upstream files:
+  All files under verinoda/project_index/ and tests_upstream/ originate from
+  upstream graphify/ and tests/. They were modified by Verinoda contributors
+  (2026) as follows: module paths rewritten from `graphify.*` to
+  `verinoda.project_index.*` and distribution-name lookups changed from
+  "graphifyy" to "verinoda" by tools/port_upstream.py. Files with further
+  hand edits carry a "Modified by Verinoda" header comment and are listed in
+  docs/UPSTREAM.md.

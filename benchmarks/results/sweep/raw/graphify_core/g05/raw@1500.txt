@@ -1,0 +1,105 @@
+$ grep -rniE 'environment|variable|raises|maximum|graph|json|size|default|limit' .   # 12541 matching lines in 224 files
+graphify/llm.py:2: # Used by `graphify extract . --backend gemini` and the benchmark scripts.
+graphify/llm.py:3: # The default graphify pipeline uses Claude Code subagents via skill.md;
+graphify/llm.py:4: # this module provides a direct API path for non-Claude-Code environments.
+graphify/llm.py:9: import json
+graphify/llm.py:20: from graphify.file_slice import (
+graphify/llm.py:23: expand_oversized_files,
+graphify/llm.py:32: # delimiter block (see issue #1210); this is roughly the per-file overhead in
+graphify/llm.py:61: def _resolve_ollama_base_url(default: str) -> str:
+graphify/llm.py:64: default. OLLAMA_HOST may be a bare host, host:port, ``:port`` or bare port —
+graphify/llm.py:66: missing, default the port to 11434 when absent, and append the OpenAI-compat
+graphify/llm.py:73: return default
+graphify/llm.py:76: return default
+graphify/llm.py:84: # Default the port to Ollama's 11434 when the host omits it (bare hostname
+graphify/llm.py:105: # default model. Mirrors the OPENAI_BASE_URL / OPENAI_MODEL pattern.
+graphify/llm.py:107: "default_model": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+graphify/llm.py:118: "default_model": "kimi-k2.6",
+graphify/llm.py:124: "temperature": None,  # kimi-k2.6 enforces its own fixed temperature; sending any value raises 400
+graphify/llm.py:129: "default_model": os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b"),
+graphify/llm.py:140: "default_model": "gemini-3-flash-preview",
+graphify/llm.py:142: "model_env_key": "GRAPHIFY_GEMINI_MODEL",
+graphify/llm.py:151: # (llama.cpp, vLLM, LM Studio, ...); OPENAI_MODEL overrides the default
+graphify/llm.py:152: # model. GRAPHIFY_OPENAI_MODEL still wins over OPENAI_MODEL when both
+graphify/llm.py:155: "default_model": os.environ.get("OPENAI_MODEL", "gpt-4.1-mini"),
+graphify/llm.py:157: "model_env_key": "GRAPHIFY_OPENAI_MODEL",
+graphify/llm.py:160: # Default (gpt-4.1-mini) accepts temperature=0. Reasoning models
+graphify/llm.py:162: # automatically by _resolve_temperature; GRAPHIFY_LLM_TEMPERATURE
+graphify/llm.py:172: "default_model": "deepseek-v4-flash",
+graphify/llm.py:174: "model_env_key": "GRAPHIFY_DEEPSEEK_MODEL",
+graphify/llm.py:181: # thinking ENABLED by default (verified against the live API, #1621) — set
+graphify/llm.py:182: # GRAPHIFY_DISABLE_THINKING=1 to turn it off (tradeoff documented on the flag).
+graphify/llm.py:190: # Optional: AZURE_OPENAI_API_VERSION (defaults to 2024-12-01-preview),
+graphify/llm.py:191: #           AZURE_OPENAI_DEPLOYMENT or GRAPHIFY_AZURE_MODEL (deployment name).
+graphify/llm.py:194: "default_model": os.environ.get("AZURE_OPENAI_DEPLOYMENT", os.environ.get("GRAPHIFY_AZURE_MODEL", "gpt-4o")),
+graphify/llm.py:196: "model_env_key": "GRAPHIFY_AZURE_MODEL",
+graphify/llm.py:202: "default_model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+graphify/llm.py:203: "model_env_key": "GRAPHIFY_BEDROCK_MODEL",
+graphify/llm.py:211: # `-p --output-format json`. Authenticates via the user's existing
+graphify/llm.py:214: "default_model": "claude-code-plan",
+graphify/llm.py:227: return Path.home() / ".graphify" / "providers.json"
+graphify/llm.py:228: return Path(".graphify") / "providers.json"
+... (12501 more matching lines not shown)
+
+==> graphify/llm.py:1-61 <==  (truncated at char cap; file has 3544 lines)
+     1	# Gemini, and OpenAI.
+     2	# Used by `graphify extract . --backend gemini` and the benchmark scripts.
+     3	# The default graphify pipeline uses Claude Code subagents via skill.md;
+     4	# this module provides a direct API path for non-Claude-Code environments.
+     5	from __future__ import annotations
+     6	
+     7	import base64
+     8	import hashlib
+     9	import json
+    10	import os
+    11	import re
+    12	import subprocess
+    13	import sys
+    14	import time
+    15	from collections.abc import Callable, Iterator
+    16	from concurrent.futures import ThreadPoolExecutor, as_completed
+    17	from dataclasses import dataclass, replace
+    18	from pathlib import Path
+    19	
+    20	from graphify.file_slice import (
+    21	    FileSlice,
+    22	    bisect_slice,
+    23	    expand_oversized_files,
+    24	    read_slice_text,
+    25	    unit_path,
+    26	)
+    27	
+    28	# `_read_files` truncates each file at this many characters before joining into
+    29	# the user message. Token estimates use the same cap so packing matches reality.
+    30	_FILE_CHAR_CAP = 20_000
+    31	# `_read_files` wraps each file in an `<untrusted_source path=... sha256=...>`
+    32	# delimiter block (see issue #1210); this is roughly the per-file overhead in
+    33	# characters that wrapper adds (open tag + 64-char sha + close tag + newlines).
+    34	_PER_FILE_OVERHEAD_CHARS = 160
+    35	# Coarse fallback used only when `tiktoken` is not installed. 1 token ≈ 4 chars
+    36	# is the standard heuristic for English/code on BPE tokenizers.
+    37	_CHARS_PER_TOKEN = 4
+    38	
+    39	
+    40	def _get_tokenizer():
+    41	    """Return a tiktoken encoder for accurate token counts, or None if tiktoken
+    42	    is not installed. We use `cl100k_base` (GPT-4 / GPT-3.5-turbo) as a proxy:
+    43	    Kimi-K2 ships a tiktoken-based tokenizer with very similar BPE behaviour,
+    44	    and Claude's tokenizer has a comparable token-to-char ratio for prose/code.
+    45	    Estimates only need to be within ~5%, not exact.
+    46	    """
+    47	    try:
+    48	        import tiktoken
+    49	    except ImportError:
+    50	        return None
+    51	    try:
+    52	        return tiktoken.get_encoding("cl100k_base")
+    53	    except Exception:  # network failure on first-use download, etc.
+    54	        return None
+    55	
+    56	
+    57	# Cached at import time. None if tiktoken is unavailable; consumers must handle.
+    58	_TOKENIZER = _get_tokenizer()
+    59	
+    60	
+    61	def _resolve_ollama_base_url(default: str) -> str:

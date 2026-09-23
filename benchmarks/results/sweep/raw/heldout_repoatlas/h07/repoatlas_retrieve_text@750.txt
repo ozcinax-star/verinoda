@@ -1,0 +1,26 @@
+# Where does RepoAtlas decide whether an experiment command needs a container?
+expanded: repo->repository (abbreviation)
+## repoatlas/experiments.py:365-550 def run( store: Store, repo: Path, argv: list[str] | str, *, hypothesis: str, expect: str = "pass", timeout: float | None = None, claim_id: str | None = None, isolation: str = "auto", commit: str | N…
+  doc: Run one experiment and record it (and its evidence) in the store.
+  calls: load_config@380, _strip_quotes@384, policy@392, container_runtime@393, new_id@402, now@405, ExperimentRefused@418, runs_dir@420, _copy_repo@426, _scrubbed_env@427, _container_argv@457, _posix_limits@473 (+8)
+  called by: _run_tests (repoatlas/analysis.py:1674); cmd_experiment (repoatlas/cli.py:402); observe (repoatlas/runtime/trace.py:559); verify (repoatlas/workflow.py:283); test_allowlisted_pytest_passes_in_a_copy_with_process_isolation (tests/test_experiments.py:143); test_parent_secrets_are_not_visible_to_the_child (tests/test_experiments.py:177); test_timeout_kills_the_process_tree_and_is_recorded (tests/test_experiments.py:200); test_non_allowlisted_command_is_refused_without_container (tests/test_experiments.py:222) (+10)
+  const repoatlas/experiments.py:87: KILL_DRAIN_TIMEOUT = 15  # seconds to collect output after killing a timed-out tree
+  const repoatlas/experiments.py:89: MAX_LOG_BYTES = 5 * 1024 * 1024
+  repoatlas/experiments.py:408-419
+        if isolation == "container" and not runtime:
+            reason = "container isolation was requested and no container runtime (docker/podman) is available"
+        else:
+            reason = (f"command classified '{kind}' and no container runtime (docker/podman) is available; "
+                      "RepoAtlas does not run non-allowlisted commands with process isolation only")
+        if why_risky:
+            reason = f"{reason} (why '{kind}': {why_risky})"
+        store.insert("experiments", {**base, "cwd": str(repo), "isolation": "none",
+                                     "status": "refused", "summary": reason,
+                                     "environment": {"policy": {"kind": kind, "reason": why_risky}}})
+        raise ExperimentRefused(reason)
+
+## tests/test_experiments.py:217-230 def test_non_allowlisted_command_is_refused_without_container(proj)
+  calls: container_runtime@219, run@222, runs_dir@230
+  const tests/test_experiments.py:33: PYTEST = ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+… 1321 more candidates not shown: tests/test_cli.py:227-247 def test_experiment_run_allowlisted_and_refused(repo); repoatlas/agents/templates/claude_SKILL.md:30-40 # RepoAtlas: evidence-first codebase analysis; repoatlas/mcp/server.py:311-327 def _check(self, need: str) -> None; repoatlas/agents/installer.py:212-216 def server_command(scope: str, project_dir: Path) -> list[str]
+next: repoatlas query "Where does RepoAtlas decide whether an experiment command needs a container?" --max-chars 6000

@@ -1,0 +1,252 @@
+Graph: graphify-out/graph.json (4092 nodes) | Traversal: BFS depth=2 | Start: ['graphify', 'Query logging for graphify — append-only JSONL, fail-silent.', 'graphify reference: query, path, explain', 'Estimate USD cost for a given token count using published pricing.', '.query()'] | 99 nodes found
+
+[i] Complete answer over budget: all 99 nodes and 149 edges shown (~9310 tokens vs the requested ~4000-token budget). Edges are never dropped once every node fits, so this is already the full answer — raising --budget further will not shrink it. Narrow with context_filter=['call'] or use get_node for a specific symbol to reduce size instead.
+
+NODE graphify [src=graphify/always_on/agents-md.md loc=L1 community=agents-md.md]
+NODE Query logging for graphify — append-only JSONL, fail-silent. [src=graphify/querylog.py loc=L1 community=test_querylog.py]
+NODE graphify reference: query, path, explain [src=graphify/skills/agents/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE Estimate USD cost for a given token count using published pricing. [src=graphify/llm.py loc=L3066 community=cli.py]
+NODE .query() [src=graphify/_minhash.py loc=L101 community=.query]
+NODE querylog.py [src=graphify/querylog.py loc=L1 community=test_querylog.py]
+NODE MinHash [src=graphify/_minhash.py loc=L36 community=_minhash.py]
+NODE MinHashLSH [src=graphify/_minhash.py loc=L84 community=.query]
+NODE estimate_cost() [src=graphify/llm.py loc=L3065 community=cli.py]
+NODE Interpreter guard for subcommands [src=graphify/skill-agents.md loc=L656 community=add]
+NODE Interpreter guard for subcommands [src=graphify/skill-amp.md loc=L656 community=What You Must Do When Invoked]
+NODE Interpreter guard for subcommands [src=graphify/skill-claw.md loc=L659 community=/graphify]
+NODE Interpreter guard for subcommands [src=graphify/skill-codex.md loc=L656 community=/graphify]
+NODE Interpreter guard for subcommands [src=graphify/skill-copilot.md loc=L659 community=add]
+NODE Interpreter guard for subcommands [src=graphify/skill-devin.md loc=L876 community=add]
+NODE Interpreter guard for subcommands [src=graphify/skill-droid.md loc=L656 community=What You Must Do When Invoked]
+NODE Interpreter guard for subcommands [src=graphify/skill.md loc=L659 community=What You Must Do When Invoked]
+NODE Interpreter guard for subcommands [src=graphify/skill-kilo.md loc=L659 community=What You Must Do When Invoked]
+NODE Interpreter guard for subcommands [src=graphify/skill-kiro.md loc=L659 community=What You Must Do When Invoked]
+NODE Interpreter guard for subcommands [src=graphify/skill-opencode.md loc=L651 community=/graphify]
+NODE Interpreter guard for subcommands [src=graphify/skill-pi.md loc=L659 community=add]
+NODE Interpreter guard for subcommands [src=graphify/skill-trae.md loc=L657 community=What You Must Do When Invoked]
+NODE Interpreter guard for subcommands [src=graphify/skill-vscode.md loc=L655 community=What You Must Do When Invoked]
+NODE Interpreter guard for subcommands [src=graphify/skill-windows.md loc=L686 community=add]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/agents/references/query.md loc=L23 community=graphify reference: query, path, explain]
+NODE Step 1 — Traversal [src=graphify/skills/agents/references/query.md loc=L61 community=graphify reference: query, path, explain]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/amp/references/query.md loc=L23 community=graphify reference: query, path, explain]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/claude/references/query.md loc=L23 community=graphify reference: query, path, explain]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/claw/references/query.md loc=L23 community=graphify reference: query, path, explain]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/codex/references/query.md loc=L23 community=graphify reference: query, path, explain]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/copilot/references/query.md loc=L23 community=graphify reference: query, path, explain]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/droid/references/query.md loc=L23 community=graphify reference: query, path, explain]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/kilo/references/query.md loc=L23 community=.query]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/kiro/references/query.md loc=L23 community=graphify reference: query, path, explain]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/opencode/references/query.md loc=L23 community=.query]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/pi/references/query.md loc=L23 community=graphify reference: query, path, explain]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/trae/references/query.md loc=L23 community=graphify reference: query, path, explain]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/vscode/references/query.md loc=L23 community=graphify reference: query, path, explain]
+NODE Step 0 — Constrained query expansion (REQUIRED before traversal) [src=graphify/skills/windows/references/query.md loc=L23 community=graphify reference: query, path, explain]
+NODE agents-md.md [src=graphify/always_on/agents-md.md loc=L1 community=agents-md.md]
+NODE agents/references/query.md [src=graphify/skills/agents/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE For /graphify explain [src=graphify/skills/agents/references/query.md loc=L254 community=graphify reference: query, path, explain]
+NODE For /graphify path [src=graphify/skills/agents/references/query.md loc=L186 community=graphify reference: query, path, explain]
+NODE cli.py [src=graphify/cli.py loc=L1 community=cli.py]
+NODE dispatch_command() [src=graphify/cli.py loc=L1064 community=cli.py]
+NODE llm.py [src=graphify/llm.py loc=L1 community=llm.py]
+NODE serve.py [src=graphify/serve.py loc=L1 community=serve.py]
+NODE pathlib [src= loc= community=_make_id]
+NODE re [src= loc= community=_make_id]
+NODE dedup.py [src=graphify/dedup.py loc=L1 community=dedup.py]
+NODE typing [src= loc= community=_make_id]
+NODE json [src= loc= community=json]
+NODE test_querylog.py [src=tests/test_querylog.py loc=L1 community=test_querylog.py]
+NODE deduplicate_entities() [src=graphify/dedup.py loc=L557 community=deduplicate_entities]
+NODE reflect() [src=graphify/reflect.py loc=L564 community=reflect]
+NODE os [src= loc= community=paths.py]
+NODE log_query() [src=graphify/querylog.py loc=L43 community=test_querylog.py]
+NODE add() [src=graphify/extract.py loc=L5845 community=add]
+NODE /graphify [src=graphify/skill-devin.md loc=L16 community=/graphify]
+NODE datetime [src= loc= community=reflect.py]
+NODE /graphify [src=graphify/skill-kilo.md loc=L6 community=What You Must Do When Invoked]
+NODE /graphify [src=graphify/skill-windows.md loc=L6 community=/graphify]
+NODE _minhash.py [src=graphify/_minhash.py loc=L1 community=_minhash.py]
+NODE /graphify [src=graphify/skill-agents.md loc=L6 community=add]
+NODE /graphify [src=graphify/skill-amp.md loc=L6 community=What You Must Do When Invoked]
+NODE /graphify [src=graphify/skill-claw.md loc=L6 community=/graphify]
+NODE /graphify [src=graphify/skill-codex.md loc=L6 community=/graphify]
+NODE /graphify [src=graphify/skill-copilot.md loc=L6 community=/graphify]
+NODE /graphify [src=graphify/skill-droid.md loc=L6 community=What You Must Do When Invoked]
+NODE /graphify [src=graphify/skill.md loc=L6 community=What You Must Do When Invoked]
+NODE /graphify [src=graphify/skill-kiro.md loc=L6 community=What You Must Do When Invoked]
+NODE /graphify [src=graphify/skill-opencode.md loc=L6 community=/graphify]
+NODE /graphify [src=graphify/skill-pi.md loc=L6 community=/graphify]
+NODE /graphify [src=graphify/skill-trae.md loc=L6 community=What You Must Do When Invoked]
+NODE /graphify [src=graphify/skill-vscode.md loc=L6 community=What You Must Do When Invoked]
+NODE _log_path() [src=graphify/querylog.py loc=L15 community=test_querylog.py]
+NODE nodes_from_result() [src=graphify/querylog.py loc=L38 community=test_querylog.py]
+NODE time [src= loc= community=cli.py]
+NODE graphify reference: query, path, explain [src=graphify/skills/amp/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE graphify reference: query, path, explain [src=graphify/skills/claude/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE graphify reference: query, path, explain [src=graphify/skills/claw/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE graphify reference: query, path, explain [src=graphify/skills/codex/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE graphify reference: query, path, explain [src=graphify/skills/copilot/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE graphify reference: query, path, explain [src=graphify/skills/droid/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE graphify reference: query, path, explain [src=graphify/skills/kilo/references/query.md loc=L1 community=.query]
+NODE graphify reference: query, path, explain [src=graphify/skills/kiro/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE graphify reference: query, path, explain [src=graphify/skills/opencode/references/query.md loc=L1 community=.query]
+NODE graphify reference: query, path, explain [src=graphify/skills/pi/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE graphify reference: query, path, explain [src=graphify/skills/trae/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE graphify reference: query, path, explain [src=graphify/skills/vscode/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE graphify reference: query, path, explain [src=graphify/skills/windows/references/query.md loc=L1 community=graphify reference: query, path, explain]
+NODE _make_minhash() [src=graphify/dedup.py loc=L48 community=dedup.py]
+NODE .__init__() [src=graphify/_minhash.py loc=L41 community=_minhash.py]
+NODE .__init__() [src=graphify/_minhash.py loc=L87 community=_minhash.py]
+NODE .insert() [src=graphify/_minhash.py loc=L92 community=.query]
+NODE _log_responses() [src=graphify/querylog.py loc=L34 community=test_querylog.py]
+NODE .update() [src=graphify/_minhash.py loc=L46 community=_minhash.py]
+NODE MinHash sketch — same API as datasketch.MinHash for the subset used here. [src=graphify/_minhash.py loc=L37 community=_minhash.py]
+NODE Band-hashing LSH — same API as datasketch.MinHashLSH for the subset used here. [src=graphify/_minhash.py loc=L85 community=.query]
+EDGE .query() --references [EXTRACTED context=parameter_type]--> MinHash at=graphify/_minhash.py:L101
+EDGE MinHashLSH --method [EXTRACTED]--> .query() at=graphify/_minhash.py:L101
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-agents.md:L658
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-amp.md:L658
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-claw.md:L661
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-codex.md:L658
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-copilot.md:L661
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-devin.md:L878
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-droid.md:L658
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill.md:L661
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-kilo.md:L661
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-kiro.md:L661
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-opencode.md:L653
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-pi.md:L661
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-trae.md:L659
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-vscode.md:L657
+EDGE Interpreter guard for subcommands --references [INFERRED context=query]--> .query() at=graphify/skill-windows.md:L688
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/agents/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/amp/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/claude/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/claw/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/codex/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/copilot/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/droid/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/kilo/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/kiro/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/opencode/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/pi/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/trae/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/vscode/references/query.md:L25
+EDGE Step 0 — Constrained query expansion (REQUIRED before traversal) --references [INFERRED context=query]--> .query() at=graphify/skills/windows/references/query.md:L25
+EDGE Estimate USD cost for a given token count using published pricing. --rationale_for [EXTRACTED]--> estimate_cost() at=graphify/llm.py:L3066
+EDGE agents-md.md --contains [EXTRACTED]--> graphify at=graphify/always_on/agents-md.md:L1
+EDGE Query logging for graphify — append-only JSONL, fail-silent. --rationale_for [EXTRACTED]--> querylog.py at=graphify/querylog.py:L1
+EDGE agents/references/query.md --contains [EXTRACTED]--> graphify reference: query, path, explain at=graphify/skills/agents/references/query.md:L1
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> For /graphify path at=graphify/skills/agents/references/query.md:L186
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/agents/references/query.md:L23
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> For /graphify explain at=graphify/skills/agents/references/query.md:L254
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 1 — Traversal at=graphify/skills/agents/references/query.md:L61
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-droid.md:L656
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-droid.md:L658
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-codex.md:L656
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-codex.md:L658
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> estimate_cost() at=graphify/cli.py:L4410
+EDGE cli.py --imports [EXTRACTED context=import]--> estimate_cost() at=graphify/cli.py:L3688
+EDGE llm.py --contains [EXTRACTED]--> estimate_cost() at=graphify/llm.py:L3065
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/trae/references/query.md:L23
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-pi.md:L659
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-pi.md:L661
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/pi/references/query.md:L23
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-agents.md:L656
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-agents.md:L658
+EDGE deduplicate_entities() --calls [EXTRACTED context=call]--> MinHashLSH at=graphify/dedup.py:L804
+EDGE dedup.py --imports [EXTRACTED context=import]--> MinHashLSH at=graphify/dedup.py:L14
+EDGE _minhash.py --contains [EXTRACTED]--> MinHashLSH at=graphify/_minhash.py:L84
+EDGE MinHashLSH --method [EXTRACTED]--> .__init__() at=graphify/_minhash.py:L87
+EDGE MinHashLSH --method [EXTRACTED]--> .insert() at=graphify/_minhash.py:L92
+EDGE Band-hashing LSH — same API as datasketch.MinHashLSH for the subset used here. --rationale_for [EXTRACTED]--> MinHashLSH at=graphify/_minhash.py:L85
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/claude/references/query.md:L23
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-trae.md:L657
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-trae.md:L659
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-devin.md:L876
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-devin.md:L878
+EDGE querylog.py --imports [EXTRACTED context=import]--> json at=graphify/querylog.py:L4
+EDGE querylog.py --imports [EXTRACTED context=import]--> os at=graphify/querylog.py:L5
+EDGE querylog.py --imports [EXTRACTED context=import]--> re at=graphify/querylog.py:L6
+EDGE querylog.py --imports [EXTRACTED context=import]--> time at=graphify/querylog.py:L7
+EDGE querylog.py --imports_from [EXTRACTED context=import]--> typing at=graphify/querylog.py:L10
+EDGE querylog.py --imports_from [EXTRACTED context=import]--> datetime at=graphify/querylog.py:L8
+EDGE querylog.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/querylog.py:L9
+EDGE test_querylog.py --imports_from [EXTRACTED context=import]--> querylog.py at=tests/test_querylog.py:L7
+EDGE cli.py --imports_from [EXTRACTED context=submodule_import]--> querylog.py at=graphify/cli.py:L1209
+EDGE serve.py --imports_from [EXTRACTED context=submodule_import]--> querylog.py at=graphify/serve.py:L2023
+EDGE querylog.py --contains [EXTRACTED]--> _log_path() at=graphify/querylog.py:L15
+EDGE querylog.py --contains [EXTRACTED]--> _log_responses() at=graphify/querylog.py:L34
+EDGE querylog.py --contains [EXTRACTED]--> nodes_from_result() at=graphify/querylog.py:L38
+EDGE querylog.py --contains [EXTRACTED]--> log_query() at=graphify/querylog.py:L43
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/vscode/references/query.md:L23
+EDGE Step 1 — Traversal --references [INFERRED context=reflect]--> reflect() at=graphify/skills/agents/references/query.md:L182
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-vscode.md:L655
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-vscode.md:L657
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-kiro.md:L659
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-kiro.md:L661
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-opencode.md:L651
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-opencode.md:L653
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill.md:L659
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill.md:L661
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/kiro/references/query.md:L23
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/opencode/references/query.md:L23
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-windows.md:L686
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-windows.md:L688
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/kilo/references/query.md:L23
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-claw.md:L659
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-claw.md:L661
+EDGE _make_minhash() --calls [EXTRACTED context=call]--> MinHash at=graphify/dedup.py:L50
+EDGE dedup.py --imports [EXTRACTED context=import]--> MinHash at=graphify/dedup.py:L14
+EDGE .insert() --references [EXTRACTED context=parameter_type]--> MinHash at=graphify/_minhash.py:L92
+EDGE _minhash.py --contains [EXTRACTED]--> MinHash at=graphify/_minhash.py:L36
+EDGE MinHash --method [EXTRACTED]--> .__init__() at=graphify/_minhash.py:L41
+EDGE MinHash --method [EXTRACTED]--> .update() at=graphify/_minhash.py:L46
+EDGE MinHash sketch — same API as datasketch.MinHash for the subset used here. --rationale_for [EXTRACTED]--> MinHash at=graphify/_minhash.py:L37
+EDGE deduplicate_entities() --uses [INFERRED]--> MinHash at=graphify/dedup.py:L805
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/copilot/references/query.md:L23
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/claw/references/query.md:L23
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/amp/references/query.md:L23
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/codex/references/query.md:L23
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/windows/references/query.md:L23
+EDGE graphify reference: query, path, explain --contains [EXTRACTED]--> Step 0 — Constrained query expansion (REQUIRED before traversal) at=graphify/skills/droid/references/query.md:L23
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-amp.md:L656
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-amp.md:L658
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-copilot.md:L659
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-copilot.md:L661
+EDGE /graphify --contains [EXTRACTED]--> Interpreter guard for subcommands at=graphify/skill-kilo.md:L659
+EDGE Interpreter guard for subcommands --references [INFERRED context=add]--> add() at=graphify/skill-kilo.md:L661
+EDGE reflect() --references [EXTRACTED context=parameter_type]--> datetime at=graphify/reflect.py:L564
+EDGE cli.py --imports [EXTRACTED context=import]--> os at=graphify/cli.py:L10
+EDGE cli.py --imports [EXTRACTED context=import]--> re at=graphify/cli.py:L11
+EDGE cli.py --imports [EXTRACTED context=import]--> time at=graphify/cli.py:L13
+EDGE cli.py --imports [EXTRACTED context=import]--> reflect() at=graphify/cli.py:L1512
+EDGE cli.py --imports [EXTRACTED context=import]--> json at=graphify/cli.py:L9
+EDGE cli.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/cli.py:L15
+EDGE cli.py --contains [EXTRACTED]--> dispatch_command() at=graphify/cli.py:L1064
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> log_query() at=graphify/cli.py:L1311
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> reflect() at=graphify/cli.py:L1534
+EDGE dedup.py --imports [EXTRACTED context=import]--> re at=graphify/dedup.py:L8
+EDGE dedup.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/dedup.py:L12
+EDGE dedup.py --imports_from [EXTRACTED context=import]--> _minhash.py at=graphify/dedup.py:L14
+EDGE dedup.py --contains [EXTRACTED]--> _make_minhash() at=graphify/dedup.py:L48
+EDGE dedup.py --contains [EXTRACTED]--> deduplicate_entities() at=graphify/dedup.py:L557
+EDGE deduplicate_entities() --calls [EXTRACTED context=call]--> _make_minhash() at=graphify/dedup.py:L816
+EDGE llm.py --imports [EXTRACTED context=import]--> os at=graphify/llm.py:L10
+EDGE llm.py --imports [EXTRACTED context=import]--> re at=graphify/llm.py:L11
+EDGE llm.py --imports [EXTRACTED context=import]--> time at=graphify/llm.py:L14
+EDGE llm.py --imports [EXTRACTED context=import]--> json at=graphify/llm.py:L9
+EDGE llm.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/llm.py:L18
+EDGE log_query() --calls [EXTRACTED context=call]--> _log_path() at=graphify/querylog.py:L55
+EDGE test_querylog.py --imports [EXTRACTED context=import]--> _log_path() at=tests/test_querylog.py:L191
+EDGE log_query() --calls [EXTRACTED context=call]--> nodes_from_result() at=graphify/querylog.py:L59
+EDGE log_query() --calls [EXTRACTED context=call]--> _log_responses() at=graphify/querylog.py:L74
+EDGE test_querylog.py --imports [EXTRACTED context=import]--> log_query() at=tests/test_querylog.py:L7
+EDGE test_querylog.py --imports [EXTRACTED context=import]--> nodes_from_result() at=tests/test_querylog.py:L7
+EDGE serve.py --imports [EXTRACTED context=import]--> json at=graphify/serve.py:L3
+EDGE serve.py --imports [EXTRACTED context=import]--> os at=graphify/serve.py:L5
+EDGE serve.py --imports [EXTRACTED context=import]--> re at=graphify/serve.py:L6
+EDGE serve.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/serve.py:L11
+EDGE serve.py --imports_from [EXTRACTED context=import]--> typing at=graphify/serve.py:L13
+EDGE test_querylog.py --imports [EXTRACTED context=import]--> json at=tests/test_querylog.py:L2
+EDGE test_querylog.py --imports [EXTRACTED context=import]--> os at=tests/test_querylog.py:L3
+EDGE test_querylog.py --imports_from [EXTRACTED context=import]--> pathlib at=tests/test_querylog.py:L5

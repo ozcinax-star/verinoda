@@ -1,0 +1,54 @@
+# Which functions does the graphify query command call to turn a question into graph context?
+expanded: context->ctx (abbreviation); function->func (corpus prefix)
+## graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+  calls: _custom_providers_path@1069, provider_base_url_ok@1140, cmd_prs@1184, install@1194, uninstall@1196, status@1198, _default_graph_path@1214, _enforce_graph_size_cap_or_exit@1251, graph_has_legacy_ids@1287, _query_graph_text@1302, log_query@1311, _touch_query_stamp@1321 (+107)
+  called by: _run_cli (graphify/__main__.py:751)
+  graphify/cli.py:1197-1210
+        elif subcmd == "status":
+            print(hook_status(Path(".")))
+        else:
+            print("Usage: graphify hook [install|uninstall|status]", file=sys.stderr)
+            sys.exit(1)
+    elif cmd == "query":
+        if len(sys.argv) < 3:
+            print("Usage: graphify query \"<question>\" [--dfs] [--context C] [--budget N] [--graph path]", file=sys.stderr)
+            sys.exit(1)
+        from graphify.serve import _query_graph_text
+        from graphify.security import sanitize_label
+        from networkx.readwrite import json_graph
+        from graphify import querylog
+
+  graphify/cli.py:1303-1316
+            G,
+            question,
+            mode=_mode,
+            depth=2,
+            token_budget=budget,
+            context_filters=context_filters,
+            graph_path=str(gp),
+        )
+        querylog.log_query(
+            kind="query",
+            question=question,
+            corpus=str(gp),
+            result=_result,
+            mode=_mode,
+## graphify/serve.py:2021-2049 def _tool_query_graph(arguments: dict) -> str
+  calls: _query_graph_text@2030
+  graphify/serve.py:2032-2045
+            question,
+            mode=mode,
+            depth=depth,
+            token_budget=budget,
+            context_filters=context_filter,
+            graph_path=str(active_graph_path),
+        )
+        querylog.log_query(
+            kind="mcp_query",
+            question=question,
+            corpus=str(active_graph_path),
+            result=result,
+            mode=mode,
+            depth=depth,
+… 2300 more candidates not shown: graphify/serve.py:1349-1408 def _query_graph_text( G: nx.Graph, question: str, *, mode: str = "bfs", depth: int = 3, tok; graphify/extractors/bash.py:235-279 def walk_calls(body_node, func_nid: str, seen_calls: set) -> None; graphify/install.py:1401-1412 if (input.tool === "bash"); graphify/extractors/bash.py:197-213 _bash_call_in_command_allowed
+next: repoatlas query "Which functions does the graphify query command call to turn a question into graph context?" --max-chars 6000

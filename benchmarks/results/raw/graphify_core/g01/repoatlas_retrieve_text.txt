@@ -1,0 +1,115 @@
+# Where is graphify query output cut to fit the token budget?
+## graphify/skill-aider.md:925-1050 ## For /graphify query
+  graphify/skill-aider.md:1012-1016
+
+# Token-budget aware output: rank by relevance, cut at budget (~4 chars/token)
+token_budget = BUDGET  # default 2000
+char_budget = token_budget * 4
+
+  graphify/skill-aider.md:1032-1039
+
+output = '\n'.join(lines)
+if len(output) > char_budget:
+    output = output[:char_budget] + f'\n... (truncated at ~{token_budget} token budget - use --budget N for more)'
+print(output)
+"
+```
+
+## graphify/skill-devin.md:1061-1184 ## For /graphify query
+  graphify/skill-devin.md:1148-1152
+
+# Token-budget aware output: rank by relevance, cut at budget (~4 chars/token)
+token_budget = BUDGET  # default 2000
+char_budget = token_budget * 4
+
+  graphify/skill-devin.md:1168-1175
+
+output = '\n'.join(lines)
+if len(output) > char_budget:
+    output = output[:char_budget] + f'\n... (truncated at ~{token_budget} token budget - use --budget N for more)'
+print(output)
+"
+```
+
+## graphify/serve.py:1259-1282 def _cut_lines_to_budget(lines: list[str], token_budget: int, narrow_hint: str) -> str
+  doc: Render pre-built lines under the same ~3-chars/token budget rule as _subgraph_to_text; over-budget output is cut at a line boundary with a count and a narrowin…
+  called by: _tool_get_neighbors (graphify/serve.py:2115); _tool_get_community (graphify/serve.py:2134)
+def _cut_lines_to_budget(lines: list[str], token_budget: int, narrow_hint: str) -> str:
+    """Render pre-built lines under the same ~3-chars/token budget rule as
+    _subgraph_to_text; over-budget output is cut at a line boundary with a count and a
+    narrowing hint instead of flooding the caller's context window."""
+    output = "\n".join(lines)
+    char_budget = token_budget * 3
+    if len(output) <= char_budget:
+        return output
+    cut_at = output[:char_budget].rfind("\n")
+    cut_at = cut_at if cut_at > 0 else char_budget
+    kept = output[:cut_at]
+    shown = kept.count("\n") + 1
+    cut_count = len(lines) - shown
+    # Announce truncation at the TOP as well, matching _subgraph_to_text — a
+    # bottom-only marker reads as silence/absence (the BUG-2 fix rationale). The
+    # notice sits outside char_budget by design (one bounded wrapper line).
+    return (
+        f"[!] TRUNCATED: showing {shown} of {len(lines)} lines "
+        f"(~{token_budget}-token budget). {narrow_hint}\n\n"
+        + kept
+        + f"\n... (truncated — {cut_count} more lines cut by ~{token_budget}-token budget. "
+        + narrow_hint
+        + ")"
+    )
+## graphify/serve.py:1075-1256 def _subgraph_to_text(G: nx.Graph, nodes: set[str], edges: list[tuple], token_budget: int = 2000, *, seeds: list[str] | None = None) -> str
+  graphify/serve.py:1249-1256
+            f"{cut_count} cut nodes — raise the token budget (CLI: --budget) or "
+            f"narrow the query (e.g. context_filter=['call'], or get_node for a "
+            f"specific symbol).\n\n"
+            + output[:cut_at]
+            + f"\n... (truncated — {cut_count} more nodes cut by ~{token_budget}-token budget."
+            f" Narrow with context_filter=['call'] or use get_node for a specific symbol)"
+        )
+    return output
+## graphify/serve.py:2119-2136 def _tool_get_community(arguments: dict) -> str
+    def _tool_get_community(arguments: dict) -> str:
+        cid = int(arguments["community_id"])
+        nodes = communities.get(cid, [])
+        if not nodes:
+            return f"Community {cid} not found."
+        header = _community_header(cid, G.nodes[nodes[0]].get("community_name"))
+        lines = [f"{header} ({len(nodes)} nodes):"]
+        for n in nodes:
+            d = G.nodes[n]
+            # Sanitise label and source_file (F-010).
+            lines.append(
+                f"  {sanitize_label(d.get('label', n))} "
+                f"[{sanitize_label(str(d.get('source_file', '')))}]"
+            )
+        budget = int(arguments.get("token_budget", 2000))
+        return _cut_lines_to_budget(
+            lines, budget, "Raise token_budget or use get_node for specific members"
+        )
+## graphify/serve.py:2081-2117 def _tool_get_neighbors(arguments: dict) -> str
+  graphify/serve.py:2107-2117
+            rel = d.get("relation", "")
+            if rel_filter and rel_filter not in rel.lower():
+                continue
+            lines.append(
+                f"  <-- {sanitize_label(G.nodes[nb].get('label', nb))} "
+                f"[{sanitize_label(str(rel))}] [{sanitize_label(str(d.get('confidence', '')))}]{_edge_at(d)}"
+            )
+        budget = int(arguments.get("token_budget", 2000))
+        return _cut_lines_to_budget(
+            lines, budget, "Narrow with relation_filter or use get_node for a specific symbol"
+        )
+## graphify/llm.py:2143-2186 def _pack_chunks_by_tokens( files: "list[Path | FileSlice]", token_budget: int, ) -> "list[list[Path | FileSlice]]"
+  graphify/llm.py:2143-2148
+def _pack_chunks_by_tokens(
+    files: "list[Path | FileSlice]",
+    token_budget: int,
+) -> "list[list[Path | FileSlice]]":
+    """Greedily pack files/slices into chunks that fit a token budget.
+
+graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+graphify/serve.py:2021-2049 def _tool_query_graph(arguments: dict) -> str
+graphify/llm.py:2550-2850 def extract_corpus_parallel( files: list[Path], backend: str = "kimi", api_key: str | None = None, model: str | None = …
+… 1588 more candidates not shown: graphify/paths.py:427-459 def stem_filename_budget(output_dir: "str | Path", *, reserve: int = 0, limit: int = 200) -> i; graphify/serve.py:1349-1408 def _query_graph_text( G: nx.Graph, question: str, *, mode: str = "bfs", depth: int = 3, tok; graphify/llm.py:1353-1492 def _call_openai_compat( base_url: str, api_key: str, model: str, user_message: str, temperatu;…
+next: repoatlas query "Where is graphify query output cut to fit the token budget?" --max-chars 12000

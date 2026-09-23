@@ -1,0 +1,35 @@
+$ grep -rniE 'graphify|query|log|unu|hangi|ortam|değişkenleri|kontrol|ediyor' .   # 7391 matching lines in 221 files
+graphify/build.py:171: "technology": "concept",
+graphify/build.py:179: # Hyperedge member lists are canonically keyed `nodes` (see graphify/llm.py
+graphify/build.py:207: f"[graphify] WARNING: hyperedge "
+graphify/build.py:216: f"[graphify] WARNING: hyperedge "
+graphify/build.py:217: f"'{he.get('id', '?')}' has an unusable member reference "
+graphify/build.py:250: f"[graphify] WARNING: hyperedge "
+graphify/build.py:269: ``norm_label == ""`` (invisible to query/explain), and is excluded from every
+graphify/build.py:270: label-keyed merge/dedup — a permanent ghost that ``graphify update``
+graphify/build.py:501: Prefers the committed ``graphify-out/.graphify_root`` marker — the authoritative
+graphify/build.py:502: scan root graphify records at build/watch time (#686/#1423) — then falls back to
+graphify/build.py:504: ``<root>/graphify-out/graph.json`` -> ``<root>``). The grandparent heuristic is
+graphify/build.py:505: applied only when ``graph.json``'s own directory actually looks like a graphify
+graphify/build.py:514: marker = parent / ".graphify_root"
+graphify/build.py:521: from .paths import GRAPHIFY_OUT
+graphify/build.py:524: parent.name == Path(GRAPHIFY_OUT).name
+graphify/build.py:525: or (parent / ".graphify_root").exists()
+graphify/build.py:576: layouts (``graph.json`` not under ``<root>/graphify-out/``), so every prune
+graphify/build.py:696: from graphify.extractors.base import _file_stem  # local: avoid import cost at module load
+graphify/build.py:732: # build, defeating the same_topology/no_change short-circuits. Mirrors the
+graphify/build.py:787: stem) rather than the full repo-relative path. Read-only consumers (query,
+graphify/build.py:798: from graphify.extractors.base import _file_stem
+graphify/build.py:846: the same document. A ``graphify update`` after a semantic build leaves both,
+graphify/build.py:912: f"[graphify] WARNING: node '{node_id}' uses field 'source' instead of "
+graphify/build.py:925: # graphify versions that didn't always populate file_type) don't
+graphify/build.py:965: f"[graphify] Extraction warning ({len(real_errors)} issues): {breakdown}",
+graphify/build.py:1043: f"[graphify] WARNING: skipping node with non-hashable id "
+graphify/build.py:1114: # saved graphify-out/memory/*.md query answer) mints a NEW
+graphify/build.py:1156: # document that only *mentions* a file (a saved graphify-out/memory/*.md
+graphify/build.py:1157: # query answer, a README, an ADR) stamps the file's own name as a new
+graphify/build.py:1226: from graphify.extractors.base import _file_stem as _fs
+graphify/build.py:1279: f"[graphify] WARNING: skipping edge with non-hashable endpoint "
+graphify/build.py:1321: # crashing modularity arithmetic with a TypeError (graspologic's Leiden
+graphify/build.py:1339: # flags and leaves query results with no file reference (#1279).
+... (7358 more matching lines not shown)

@@ -1,0 +1,37 @@
+# Grafik dosyası boyut sınırını ve ortam değişkeniyle aşılmasını hangi testler kapsıyor?
+expanded: dosyası->dos (turkish stem 'dos'); dosyası->dosomething (turkish stem 'dos'); sınırını->singl (turkish stem 'sin'); sınırını->sinc (turkish stem 'sin'); sınırını->singleton (turkish stem 'sin'); testler->test (turkish stem 'test')
+## graphify/security.py:35-66 def _max_graph_file_bytes() -> int
+  doc: Return the graph.json size cap in bytes.
+  called by: check_graph_file_size_cap (graphify/security.py:373); test_max_graph_bytes_default_when_unset (tests/test_security.py:243); test_max_graph_bytes_default_when_blank (tests/test_security.py:248); test_max_graph_bytes_plain_integer (tests/test_security.py:253); test_max_graph_bytes_mb_suffix_is_binary (tests/test_security.py:258); test_max_graph_bytes_gb_suffix_is_binary (tests/test_security.py:263); test_max_graph_bytes_suffix_is_case_insensitive (tests/test_security.py:268); test_max_graph_bytes_tolerates_space_before_suffix (tests/test_security.py:273) (+2)
+  const graphify/security.py:32: _MAX_GRAPH_FILE_BYTES = 512 * 1024 * 1024   # 512 MiB
+  graphify/security.py:37-45
+
+    Honors the ``GRAPHIFY_MAX_GRAPH_BYTES`` environment variable so users with
+    large codebases can raise the limit without editing source. The value may
+    be plain bytes (``671088640``) or carry an ``MB`` / ``GB`` suffix
+    (``640MB``, ``2GB`` — case-insensitive, binary multipliers: ``MB`` is
+    1024*1024 and ``GB`` is 1024*1024*1024, i.e. MiB / GiB).
+    Falls back to ``_MAX_GRAPH_FILE_BYTES`` (512 MiB) when the env var is unset,
+    blank, or unparseable.
+
+  graphify/security.py:57-66
+    elif text.endswith("MB"):
+        multiplier = 1024 * 1024
+        text = text[:-2].strip()
+    try:
+        value = int(text)
+    except ValueError:
+        return _MAX_GRAPH_FILE_BYTES
+    if value <= 0:
+        return _MAX_GRAPH_FILE_BYTES
+    return value * multiplier
+## tests/test_security.py:294-299 def test_graph_size_cap_over_limit_raises(monkeypatch, tmp_path)
+  calls: check_graph_file_size_cap@299
+def test_graph_size_cap_over_limit_raises(monkeypatch, tmp_path):
+    monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 16)
+    p = tmp_path / "graph.json"
+    p.write_text('{"nodes": [], "links": [], "padding": "x" * 50}', encoding="utf-8")
+    with pytest.raises(ValueError, match="exceeds"):
+        check_graph_file_size_cap(p)
+… 2371 more candidates not shown: graphify/security.py:357-383 def check_graph_file_size_cap(path: Path) -> None; graphify/exporters/html.py:17-30 _viz_node_limit; tests/test_security.py:288-291 test_graph_size_cap_under_limit_returns_none; graphify/llm.py:3157-3169 backend_detection_env_vars
+next: repoatlas query "Grafik dosyası boyut sınırını ve ortam değişkeniyle aşılmasını hangi testler kapsıyor?" --max-chars 6000

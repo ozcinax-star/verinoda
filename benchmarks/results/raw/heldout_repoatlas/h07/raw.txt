@@ -1,0 +1,422 @@
+$ grep -rniE 'repoatlas|decide|whether|experiment|command|needs|container' .   # 1877 matching lines in 103 files
+repoatlas/analysis.py:4: :mod:`repoatlas.question_plan`): the host agent's plan when one is given,
+repoatlas/analysis.py:11: 3. an invalid plan stops here (``status: invalid_plan``); a plan that needs
+repoatlas/analysis.py:13: (``status: needs_clarification``) and writes no claim
+repoatlas/analysis.py:31: A :class:`Budget` bounds wall time (index refresh and experiments included),
+repoatlas/analysis.py:51: from repoatlas import architecture_map as am
+repoatlas/analysis.py:52: from repoatlas import callsite
+repoatlas/analysis.py:53: from repoatlas import evidence as evmod
+repoatlas/analysis.py:54: from repoatlas import index, retrieval
+repoatlas/analysis.py:55: from repoatlas import question_plan as qp
+repoatlas/analysis.py:56: from repoatlas import textnorm as tn
+repoatlas/analysis.py:57: from repoatlas.claims import ORDER, VERIFIED, Claims
+repoatlas/analysis.py:58: from repoatlas.paths import load_config
+repoatlas/analysis.py:59: from repoatlas.snapshot import current_state, git
+repoatlas/analysis.py:60: from repoatlas.store import Store, new_id, now
+repoatlas/analysis.py:295: if str(d.get("_origin", "")).startswith("repoatlas"):
+repoatlas/analysis.py:638: "next_step": f"`repoatlas trace {qp._bare(g.label(src[0]))} {qp._bare(g.label(tgt[0]))} --mode any` "
+repoatlas/analysis.py:695: "next_step": "name the entry function and the storage function: `repoatlas trace A B`"})
+repoatlas/analysis.py:814: from repoatlas.runtime import trace as rt  # runtime track; optional
+repoatlas/analysis.py:826: "next_step": "run the tests with the runtime tracer (repoatlas runtime extra), or use "
+repoatlas/analysis.py:839: kw = {"timeout": min(float(ctx.cfg["experiments"]["default_timeout"]), ctx.budget.remaining_seconds()),
+repoatlas/analysis.py:864: cue_words = {"why", "neden", "nicin", "niye", "reason", "rationale", "decision", "decided", "gerekce", "karar"}
+repoatlas/analysis.py:937: "next_step": "search issue tracker/PR discussion; or `repoatlas research <reference>` "
+repoatlas/analysis.py:942: "next_step": "compare with code via `repoatlas challenge <claim>`"})
+repoatlas/analysis.py:974: "why": "a behaviour question needs a checkable proposition; the claims above only say "
+repoatlas/analysis.py:983: from repoatlas import feedback
+repoatlas/analysis.py:1070: sub.flags["not_supported"] = "reference comparison runs through `repoatlas research`/`compare`"
+repoatlas/analysis.py:1072: from repoatlas import references  # reference track; optional
+repoatlas/analysis.py:1093: "next_step": f"`repoatlas research {loc}`" + (f" at {spec}" if spec else "")
+repoatlas/analysis.py:1094: + " then `repoatlas compare`"})
+repoatlas/analysis.py:1102: "next_step": "`repoatlas map` for architecture views, or ask about a specific function"})
+repoatlas/analysis.py:1176: + (", or `repoatlas resolve` the reference" if c["kind"] == "version"
+repoatlas/analysis.py:1183: "next_step": "read that version with `repoatlas research <repository> --ref <version>` "
+repoatlas/analysis.py:1184: "(or `repoatlas resolve` the reference first)"})
+repoatlas/analysis.py:1221: "or run `repoatlas map` to browse"})
+repoatlas/analysis.py:1227: "next_step": "use the names the code uses (see `repoatlas map`), or research the "
+repoatlas/analysis.py:1408: from repoatlas import lexicon as lexmod
+repoatlas/analysis.py:1433: from repoatlas import critique, workflow
+repoatlas/analysis.py:1473: "next_step": "run `repoatlas scan --force`" + (f" ({res['hint']})" if res.get("hint") else "")})
+repoatlas/analysis.py:1514: if check_res["status"] == "invalid" or (check_res["status"] == "needs_clarification" and on_ambiguity == "ask"):
+repoatlas/analysis.py:1515: status = "invalid_plan" if check_res["status"] == "invalid" else "needs_clarification"
+... (1837 more matching lines not shown)
+
+==> repoatlas/analysis.py:1-378 <==  (truncated at char cap; file has 1699 lines)
+     1	"""Budgeted analysis loop: question -> plan -> claims with evidence -> critique -> answer.
+     2	
+     3	Every analysis runs through a question plan (docs/DESIGN.md D1-D9,
+     4	:mod:`repoatlas.question_plan`): the host agent's plan when one is given,
+     5	otherwise one drafted by rules. Order of work (cheapest reliable tool first):
+     6	
+     7	 1. refresh the index when the working tree changed (errors become unknowns)
+     8	 2. plan: draft (or parse) and check it - schema, integrity, grounding,
+     9	    versions, mention links; the plan and its check are stored
+    10	    (``question_plans``) and the analysis references it (``analyses.plan_id``)
+    11	 3. an invalid plan stops here (``status: invalid_plan``); a plan that needs
+    12	    clarification with ``on_ambiguity: ask`` returns the grounded questions
+    13	    (``status: needs_clarification``) and writes no claim
+    14	 4. per sub-question, in dependency order, with a share of the budget:
+    15	    retrieval seeded by the linked mentions (and by the symbols located for
+    16	    ``subject_from``) with lexicon / seed-dictionary expansions; items must
+    17	    pass a relevance test against the question's grounded words, otherwise the
+    18	    sub-question is an ``unknown`` with a next step - never a claim about
+    19	    unrelated code
+    20	 5. location and relation claims for the relevant items, then the handler of
+    21	    the sub-question's intent (and of its secondary intents): flow, dataflow,
+    22	    callers, config, tests (optional test run / runtime observation), why /
+    23	    history, impact, behaviour (a proposition check), reference comparison
+    24	 6. critique of each claim (confidence only goes down); a tests claim whose
+    25	    counter-probe refutes a listed test is superseded by a corrected claim
+    26	 7. each sub-question is judged against its ``done_when``: ``met``,
+    27	    ``met_with_inference``, ``unmet``, ``not_supported`` or
+    28	    ``blocked_by_clarification``; :func:`audit` recomputes the verdicts later
+    29	    and marks a sub-question ``stale`` when a claim it relies on went stale
+    30	
+    31	A :class:`Budget` bounds wall time (index refresh and experiments included),
+    32	tool calls and returned context. Every claim, unknown, step and critique entry
+    33	that is returned is charged to the context budget at its serialised size
+    34	(tokens estimated as chars/4). When the budget runs out no further claim is
+    35	produced: every sub-question that was skipped or cut short is reported as an
+    36	``unknown`` naming it, instead of being answered from guesses.
+    37	"""
+    38	
+    39	from __future__ import annotations
+    40	
+    41	import fnmatch
+    42	import inspect
+    43	import json
+    44	import re
+    45	import sys
+    46	import time
+    47	from collections import Counter, defaultdict
+    48	from dataclasses import dataclass, field
+    49	from pathlib import Path
+    50	
+    51	from repoatlas import architecture_map as am
+    52	from repoatlas import callsite
+    53	from repoatlas import evidence as evmod
+    54	from repoatlas import index, retrieval
+    55	from repoatlas import question_plan as qp
+    56	from repoatlas import textnorm as tn
+    57	from repoatlas.claims import ORDER, VERIFIED, Claims
+    58	from repoatlas.paths import load_config
+    59	from repoatlas.snapshot import current_state, git
+    60	from repoatlas.store import Store, new_id, now
+    61	
+    62	NEXT_BUDGET = "re-run with a larger --budget-* or a narrower question"
+    63	SUBQUESTIONS = {
+    64	    "location": "where is it defined?",
+    65	    "relations": "how are the retrieved symbols connected (calls/uses/inherits)?",
+    66	    "flow": "which path takes data from an entry point to persistence?",
+    67	    "callers": "which code calls it?",
+    68	    "config": "which configuration affects this?",
+    69	    "tests": "which tests statically reach it?",
+    70	    "why": "why is it built this way (decision records, history)?",
+    71	    "impact": "what does a change here affect?",
+    72	    "behaviour": "does the code behave as the question states?",
+    73	    "compare_reference": "how does it differ from the referenced version?",
+    74	}
+    75	# plan intent -> the legacy name kept in the ``intents`` output field
+    76	LEGACY_INTENT = {"locate": "location", "define": "location"}
+    77	LEGACY_ORDER = ("why", "flow", "dataflow", "config", "tests", "impact", "location", "callers", "behaviour",
+    78	                "history", "compare_reference", "performance", "architecture", "usage")
+    79	RELEVANCE_MIN = 0.25        # share of the grounded question words an item must carry
+    80	LOCATION_FIRST = {"locate", "define", "behaviour", "performance", "architecture", "usage"}
+    81	UNGROUNDED_MAJORITY = 0.5   # more than this share of content words absent from the repo -> unknown
+    82	MIN_STATUS_DEFAULT = "strong_inference"
+    83	PERSISTENCE_TARGET = "(persistence)"
+    84	
+    85	
+    86	@dataclass
+    87	class Budget:
+    88	    seconds: float = 60
+    89	    tool_calls: int = 40
+    90	    context_tokens: int = 6000
+    91	    started: float = field(default_factory=time.monotonic)
+    92	    calls: int = 0
+    93	    chars: int = 0
+    94	    exhausted_reason: str | None = None
+    95	
+    96	    def _check(self) -> None:
+    97	        if self.exhausted_reason is not None:
+    98	            return
+    99	        if time.monotonic() - self.started > self.seconds:
+   100	            self.exhausted_reason = f"time budget {self.seconds}s spent"
+   101	        elif self.calls > self.tool_calls:
+   102	            self.exhausted_reason = f"tool-call budget {self.tool_calls} spent"
+   103	        elif self.chars // 4 > self.context_tokens:
+   104	            self.exhausted_reason = f"context budget ~{self.context_tokens} tokens spent"
+   105	
+   106	    def spend(self, calls: int = 1, chars: int = 0) -> bool:
+   107	        self.calls += calls
+   108	        self.chars += chars
+   109	        self._check()
+   110	        return self.exhausted_reason is None
+   111	
+   112	    def fits(self, chars: int) -> bool:
+   113	        """True when ``chars`` more returned context stay within budget (nothing is charged)."""
+   114	        self._check()
+   115	        if self.exhausted_reason is not None:
+   116	            return False
+   117	        if (self.chars + chars) // 4 > self.context_tokens:
+   118	            self.exhausted_reason = f"context budget ~{self.context_tokens} tokens spent"
+   119	            return False
+   120	        return True
+   121	
+   122	    def work_ok(self) -> bool:
+   123	        """Time and one more tool call are still available (context aside)."""
+   124	        return time.monotonic() - self.started <= self.seconds and self.calls + 1 <= self.tool_calls
+   125	
+   126	    def remaining_seconds(self) -> float:
+   127	        return self.seconds - (time.monotonic() - self.started)
+   128	
+   129	    @property
+   130	    def ok(self) -> bool:
+   131	        self._check()
+   132	        return self.exhausted_reason is None
+   133	
+   134	    def usage(self) -> dict:
+   135	        return {"elapsed_s": round(time.monotonic() - self.started, 3), "tool_calls": self.calls,
+   136	                "context_chars": self.chars, "context_tokens_est": self.chars // 4,
+   137	                "token_count_method": "chars/4 estimate", "exhausted": self.exhausted_reason}
+   138	
+   139	
+   140	def _size(obj) -> int:
+   141	    return len(json.dumps(obj, ensure_ascii=False, default=str))
+   142	
+   143	
+   144	# -- intents (legacy entry points, now backed by the plan's cue tables) -----------------------------
+   145	
+   146	def fold_tr(text: str) -> str:
+   147	    """Lower-case, ASCII-folded Turkish (``İ``/``I``/``ı`` -> ``i``, ``ş`` -> ``s`` ...)."""
+   148	    return tn.fold_tr(tn.nfc(text)).replace("̇", "")
+   149	
+   150	
+   151	def _legacy(intents) -> list[str]:
+   152	    names = {LEGACY_INTENT.get(i, i) for i in intents}
+   153	    return [n for n in LEGACY_ORDER if n in names]
+   154	
+   155	
+   156	def turkish_intents(question: str) -> list[str]:
+   157	    """Intents found by the Turkish cue tables alone (legacy names)."""
+   158	    found = set()
+   159	    for cl in qp.segment(question):
+   160	        found.update(c["intent"] for c in qp.clause_cues(cl["text"]) if c["lang"] == "tr")
+   161	    return _legacy(found)
+   162	
+   163	
+   164	def intents_for(question: str, lexicon=None) -> list[str]:
+   165	    """Rule-based intents of a question in the legacy vocabulary (``location`` for locate/define)."""
+   166	    return _legacy(qp.intents_for(question, lexicon)) or ["location"]
+   167	
+   168	
+   169	# -- claims ---------------------------------------------------------------------------------------
+   170	
+   171	class _Recorder:
+   172	    """Creates claims within the context budget and the current sub-question's share of it.
+   173	
+   174	    A claim with the same text in the same snapshot is reused whatever its
+   175	    status (contradicted and stale included) - a repeated question never
+   176	    creates duplicates; reused claims are marked in the output.
+   177	    """
+   178	
+   179	    def __init__(self, store: Store, repo: Path, snapshot: dict, analysis_id: str, budget: Budget,
+   180	                 extra_uncertainties: list[str] | None = None):
+   181	        self.store, self.repo, self.snap, self.aid, self.budget = store, repo, snapshot, analysis_id, budget
+   182	        self.cl = Claims(store, repo)
+   183	        self.extra = list(extra_uncertainties or [])
+   184	        self.ids: list[str] = []
+   185	        self.reused: set[str] = set()
+   186	        self.charged: dict[str, int] = {}
+   187	        self.section = "location"
+   188	        self.skipped: Counter = Counter()
+   189	        self.sq: str | None = None
+   190	        self.by_sq: dict[str, list[str]] = defaultdict(list)
+   191	        self.sq_skipped: Counter = Counter()
+   192	        self.sq_cap: int | None = None
+   193	        self.sq_used = 0
+   194	        self.sq_extra: list[str] = []
+   195	        self.plan_ref: dict | None = None
+   196	        # uncertainties that come from this analysis' reading of the question (shown on reused claims too)
+   197	        self.context_unc: dict[str, list[str]] = defaultdict(list)
+   198	        try:  # evidence groups (claims.attach(..., grp=)) exist once the trust engine is installed
+   199	            self.groups_ok = "grp" in inspect.signature(Claims.attach).parameters
+   200	        except (TypeError, ValueError):
+   201	            self.groups_ok = False
+   202	
+   203	    def begin(self, sq_id: str, cap_chars: int | None, plan_ref: dict | None, extra: list[str]) -> None:
+   204	        self.sq, self.sq_cap, self.sq_used, self.plan_ref, self.sq_extra = sq_id, cap_chars, 0, plan_ref, extra
+   205	
+   206	    def _note(self, cid: str) -> None:
+   207	        if self.sq and cid not in self.by_sq[self.sq]:
+   208	            self.by_sq[self.sq].append(cid)
+   209	        for u in self.sq_extra:
+   210	            if u not in self.context_unc[cid]:
+   211	                self.context_unc[cid].append(u)
+   212	
+   213	    def claim(self, text: str, *, kind: str, status: str, evidence: list[tuple[dict | str | None, str]],
+   214	              subjects: list[str], spec: dict | None = None, uncertainties: list[str] | None = None) -> dict | None:
+   215	        unc = list(uncertainties or [])
+   216	        unc += [u for u in self.extra + self.sq_extra if u not in unc]
+   217	        prev = self.store.one(
+   218	            "SELECT id FROM claims WHERE text = ? AND snapshot_id = ? AND superseded_by IS NULL"
+   219	            " ORDER BY created_at LIMIT 1", (text, self.snap["id"]))
+   220	        if prev and prev["id"] in self.ids:
+   221	            self._note(prev["id"])
+   222	            return self.cl.get(prev["id"])
+   223	        est = _size({"id": "clm_000000000000", "text": text, "status": status, "confidence": 0.99,
+   224	                     "evidence": [f"supports:source_code:{(e[0] if isinstance(e[0], str) else e[0].get('locator'))}"
+   225	                                  for e in evidence if e[0]][:6], "uncertainties": unc, "reused": True})
+   226	        if not self.budget.fits(est) or (self.sq_cap is not None and self.sq_used + est > self.sq_cap):
+   227	            self.skipped[self.section] += 1
+   228	            self.sq_skipped[(self.sq, self.section)] += 1
+   229	            return None
+   230	        if prev:
+   231	            c = self.cl.get(prev["id"])
+   232	            self.reused.add(c["id"])
+   233	        else:
+   234	            if self.plan_ref:
+   235	                spec = {**(spec or {}), "plan": self.plan_ref}
+   236	            # (evidence, relation[, group]): the group is dropped where the claims module has none
+   237	            evs = [tuple(e) if self.groups_ok else tuple(e[:2]) for e in evidence if e[0]]
+   238	            c = self.cl.create(text, project=self.snap["project"], snapshot=self.snap, subjects=subjects,
+   239	                               status=status, evidence=evs, kind=kind, spec=spec,
+   240	                               uncertainties=unc, analysis_id=self.aid)
+   241	        self.ids.append(c["id"])
+   242	        self._note(c["id"])
+   243	        n = _size(self.record(c["id"]))
+   244	        self.charged[c["id"]] = n
+   245	        self.sq_used += n
+   246	        self.budget.spend(0, n)
+   247	        return c
+   248	
+   249	    def record(self, cid: str, not_challenged: str | None = None) -> dict:
+   250	        c = self.cl.get(cid)
+   251	        unc = list(c["uncertainties"] or [])
+   252	        unc += [u for u in self.extra + self.context_unc.get(cid, []) if u not in unc]
+   253	        return {
+   254	            "id": cid, "text": c["text"], "status": c["status"], "confidence": round(c["confidence"], 2),
+   255	            "evidence": [f"{e['relation']}:{e['source_type']}:{e['locator']}" for e in self.cl.evidence(cid)][:6],
+   256	            "uncertainties": unc,
+   257	            **({"reused": True} if cid in self.reused else {}),
+   258	            **({"challenged": False, "not_challenged_reason": not_challenged} if not_challenged else {}),
+   259	        }
+   260	
+   261	
+   262	def _line_mentions(repo: Path, at: str | None, name: str) -> tuple[bool, str | None]:
+   263	    """Does the cited line name ``name`` (directly or through a Python import alias)?"""
+   264	    ok, matched, _ = callsite.check(repo, at, name)
+   265	    return ok, matched
+   266	
+   267	
+   268	def _src_ev(repo: Path, path: str, a: int, b: int | None, commit: str | None, **meta) -> dict | None:
+   269	    return evmod.source_evidence(repo, path, a, b, commit=commit, meta=meta or None)
+   270	
+   271	
+   272	def _edge_claim(rec: _Recorder, g: index.Graph, u: str, v: str, d: dict, commit: str | None) -> dict | None:
+   273	    at = retrieval._at(d)
+   274	    mentions, matched = _line_mentions(rec.repo, at, g.label(v))
+   275	    rel = d.get("relation")
+   276	    evs: list[tuple[dict, str]] = [(evmod.graph_edge_evidence({"source": u, "target": v, **d},
+   277	                                                               graph_path=str(g.path), commit=commit), "supports")]
+   278	    unc = []
+   279	    extracted = d.get("confidence") == "EXTRACTED"
+   280	    if at and mentions:
+   281	        path, _, ln = at.rpartition(":")
+   282	        evs.append((_src_ev(rec.repo, path, int(ln), None, commit, check="call_site",
+   283	                            **({"alias": matched} if matched != callsite.target_token(g.label(v)) else {})),
+   284	                    "supports"))
+   285	        # The line names the target, but for an INFERRED edge *which* symbol of
+   286	        # that name is meant is the extractor's inference - not verified.
+   287	        status = "statically_verified" if extracted else "strong_inference"
+   288	        if matched and matched != callsite.target_token(g.label(v)):
+   289	            unc.append(f"{at} calls it through the import alias '{matched}'")
+   290	        if not extracted:
+   291	            unc.append(f"{at} names '{g.label(v)}', but resolving it to {g.file(v)} is INFERRED")
+   292	    else:
+   293	        status = "strong_inference" if extracted else "weak_inference"
+   294	        unc.append("call site line not confirmed to name the target")
+   295	    if str(d.get("_origin", "")).startswith("repoatlas"):
+   296	        unc.append(f"edge derived by {d['_origin']} (type-annotation resolution)")
+   297	    return rec.claim(
+   298	        f"`{g.label(u)}` {rel} `{g.label(v)}`" + (f" ({at})" if at else ""),
+   299	        kind="relation", status=status, evidence=evs,
+   300	        subjects=[f"{g.file(u)}::{g.label(u)}", f"{g.file(v)}::{g.label(v)}"],
+   301	        spec={"source": u, "target": v, "target_label": g.label(v), "relation": rel, "at": at,
+   302	              "confidence": d.get("confidence"), "origin": d.get("_origin")},
+   303	        uncertainties=unc,
+   304	    )
+   305	
+   306	
+   307	def _pytest_id(g: index.Graph, n: str) -> str:
+   308	    """``file::test`` or, for a method, ``file::Class::test`` (the class the method belongs to)."""
+   309	    name = g.label(n).strip().lstrip(".").split("(")[0]
+   310	    cls = next((u for u, _ in g.in_edges(n, {"method"}) if g.file(u) == g.file(n)), None)
+   311	    return f"{g.file(n)}::{g.label(cls).strip()}::{name}" if cls else f"{g.file(n)}::{name}"
+   312	
+   313	
+   314	# -- analysis context -------------------------------------------------------------------------------
+   315	
+   316	@dataclass
+   317	class _Ctx:
+   318	    store: Store
+   319	    repo: Path
+   320	    g: index.Graph
+   321	    lex: object
+   322	    snap: dict
+   323	    commit: str | None
+   324	    budget: Budget
+   325	    rec: _Recorder
+   326	    step: object
+   327	    unknown: object
+   328	    cfg: dict
+   329	    plan: dict
+   330	    check: dict
+   331	    plan_id: str
+   332	    run_tests: bool
+   333	    observe: bool
+   334	    views: dict = field(default_factory=dict)
+   335	    located: dict = field(default_factory=dict)   # sub-question id -> {node: reason}
+   336	    started: set = field(default_factory=set)
+   337	
+   338	    def view(self, name: str):
+   339	        if name not in self.views:
+   340	            fn = {"dataflow": am.dataflow, "config": am.config, "tests": am.tests_view, "history": am.history}[name]
+   341	            self.views[name] = fn(self.g)
+   342	        return self.views[name]
+   343	
+   344	
+   345	@dataclass
+   346	class _Sub:
+   347	    """What one sub-question has to work with."""
+   348	
+   349	    sq: dict
+   350	    links: list[dict]
+   351	    items: list[dict]          # relevant retrieved items
+   352	    prod: list[dict]           # relevant items outside test files
+   353	    seeds: dict
+   354	    words: list[str]           # grounded words and expansions used for relevance and ranking
+   355	    subject_nodes: dict
+   356	    flags: dict = field(default_factory=dict)
+   357	    unknowns: list[dict] = field(default_factory=list)
+   358	    extra: dict = field(default_factory=dict)
+   359	
+   360	
+   361	def _begin(ctx: _Ctx, sub: _Sub, section: str) -> bool:
+   362	    """Start a handler section, or report it as unknown when the budget is gone."""
+   363	    ctx.rec.section = section
+   364	    if ctx.budget.ok:
+   365	        ctx.started.add((sub.sq["id"], section))
+   366	        return True
+   367	    _unknown(ctx, sub, {"question": SUBQUESTIONS.get(section, section), "why": ctx.budget.exhausted_reason,
+   368	                        "next_step": NEXT_BUDGET})
+   369	    return False
+   370	
+   371	
+   372	def _unknown(ctx: _Ctx, sub: _Sub | None, u: dict) -> None:
+   373	    if sub is not None:
+   374	        u = {**u, "sub_question": sub.sq["id"]}
+   375	        sub.unknowns.append(u)
+   376	    ctx.unknown(u)
+   377	
+   378	

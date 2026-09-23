@@ -1,0 +1,32 @@
+$ grep -rniE 'repoatlas|decide|whether|experiment|command|needs|container' .   # 1877 matching lines in 103 files
+repoatlas/analysis.py:4: :mod:`repoatlas.question_plan`): the host agent's plan when one is given,
+repoatlas/analysis.py:11: 3. an invalid plan stops here (``status: invalid_plan``); a plan that needs
+repoatlas/analysis.py:13: (``status: needs_clarification``) and writes no claim
+repoatlas/analysis.py:31: A :class:`Budget` bounds wall time (index refresh and experiments included),
+repoatlas/analysis.py:51: from repoatlas import architecture_map as am
+repoatlas/analysis.py:52: from repoatlas import callsite
+repoatlas/analysis.py:53: from repoatlas import evidence as evmod
+repoatlas/analysis.py:54: from repoatlas import index, retrieval
+repoatlas/analysis.py:55: from repoatlas import question_plan as qp
+repoatlas/analysis.py:56: from repoatlas import textnorm as tn
+repoatlas/analysis.py:57: from repoatlas.claims import ORDER, VERIFIED, Claims
+repoatlas/analysis.py:58: from repoatlas.paths import load_config
+repoatlas/analysis.py:59: from repoatlas.snapshot import current_state, git
+repoatlas/analysis.py:60: from repoatlas.store import Store, new_id, now
+repoatlas/analysis.py:295: if str(d.get("_origin", "")).startswith("repoatlas"):
+repoatlas/analysis.py:638: "next_step": f"`repoatlas trace {qp._bare(g.label(src[0]))} {qp._bare(g.label(tgt[0]))} --mode any` "
+repoatlas/analysis.py:695: "next_step": "name the entry function and the storage function: `repoatlas trace A B`"})
+repoatlas/analysis.py:814: from repoatlas.runtime import trace as rt  # runtime track; optional
+repoatlas/analysis.py:826: "next_step": "run the tests with the runtime tracer (repoatlas runtime extra), or use "
+repoatlas/analysis.py:839: kw = {"timeout": min(float(ctx.cfg["experiments"]["default_timeout"]), ctx.budget.remaining_seconds()),
+repoatlas/analysis.py:864: cue_words = {"why", "neden", "nicin", "niye", "reason", "rationale", "decision", "decided", "gerekce", "karar"}
+repoatlas/analysis.py:937: "next_step": "search issue tracker/PR discussion; or `repoatlas research <reference>` "
+repoatlas/analysis.py:942: "next_step": "compare with code via `repoatlas challenge <claim>`"})
+repoatlas/analysis.py:974: "why": "a behaviour question needs a checkable proposition; the claims above only say "
+repoatlas/analysis.py:983: from repoatlas import feedback
+repoatlas/analysis.py:1070: sub.flags["not_supported"] = "reference comparison runs through `repoatlas research`/`compare`"
+repoatlas/analysis.py:1072: from repoatlas import references  # reference track; optional
+repoatlas/analysis.py:1093: "next_step": f"`repoatlas research {loc}`" + (f" at {spec}" if spec else "")
+repoatlas/analysis.py:1094: + " then `repoatlas compare`"})
+repoatlas/analysis.py:1102: "next_step": "`repoatlas map` for architecture views, or ask about a specific function"})
+... (1847 more matching lines not shown)

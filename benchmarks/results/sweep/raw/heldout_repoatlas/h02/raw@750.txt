@@ -1,0 +1,31 @@
+$ grep -rniE 'environment|variables|passed|experiment|commands|decided' .   # 457 matching lines in 56 files
+repoatlas/experiments.py:1: """Targeted experiments with real, stated isolation.
+repoatlas/experiments.py:11: * environment rebuilt from an allowlist - API keys, tokens and other
+repoatlas/experiments.py:12: secrets from the caller's environment are not passed;
+repoatlas/experiments.py:22: the container is named ``repoatlas-<experiment id>`` and killed by name on
+repoatlas/experiments.py:25: Policy (:func:`policy`): only commands matching the configured test-runner
+repoatlas/experiments.py:36: ``container`` isolation; without it the experiment is *refused*, not run, and
+repoatlas/experiments.py:37: the refusal names the offending argument. Commands are never passed through a
+repoatlas/experiments.py:44: environment variables (``env_extra``), and collect files the child writes to
+repoatlas/experiments.py:83: r"(=+ .*(passed|failed|error).* =+"
+repoatlas/experiments.py:84: # pytest -q prints the bare summary: "3 passed in 0.17s", "1 failed, 2 passed in ..."
+repoatlas/experiments.py:85: r"|^\d+ (passed|failed|errors?|skipped|xfailed|xpassed|deselected)\b.*\bin [\d.]+s.*$"
+repoatlas/experiments.py:93: ARGS_CONFINED = "allowlisted commands may only name paths inside the repository copy"
+repoatlas/experiments.py:110: class ExperimentRefused(RuntimeError):
+repoatlas/experiments.py:257: "NO_COLOR": "1", "REPOATLAS_EXPERIMENT": "1"})
+repoatlas/experiments.py:371: """Run one experiment and record it (and its evidence) in the store.
+repoatlas/experiments.py:375: them with ``-p <module>``). ``env_extra`` adds ``REPOATLAS_*`` variables
+repoatlas/experiments.py:380: cfg = load_config(repo)["experiments"]
+repoatlas/experiments.py:390: raise ValueError(f"env_extra may only set REPOATLAS_* variables, not {key!r}")
+repoatlas/experiments.py:412: "RepoAtlas does not run non-allowlisted commands with process isolation only")
+repoatlas/experiments.py:415: store.insert("experiments", {**base, "cwd": str(repo), "isolation": "none",
+repoatlas/experiments.py:417: "environment": {"policy": {"kind": kind, "reason": why_risky}}})
+repoatlas/experiments.py:418: raise ExperimentRefused(reason)
+repoatlas/experiments.py:479: store.insert("experiments", {**base, "cwd": str(copy), "isolation": level, "status": "error",
+repoatlas/experiments.py:480: "summary": f"could not start: {exc}", "environment": guarantees})
+repoatlas/experiments.py:510: "source_type": "test_result" if is_test else "experiment",
+repoatlas/experiments.py:515: "meta": {"experiment_id": eid,
+repoatlas/experiments.py:522: store.insert("experiments", {
+repoatlas/experiments.py:524: "environment": {"guarantees": guarantees, "limits": limits, "python": sys.version.split()[0],
+repoatlas/experiments.py:537: note=f"experiment {eid}: expected {expect}, got {outcome}"
+... (428 more matching lines not shown)

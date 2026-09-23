@@ -1,0 +1,161 @@
+# Which functions does the graphify query command call to turn a question into graph context?
+expanded: context->ctx (abbreviation); function->func (corpus prefix)
+## graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+  calls: _custom_providers_path@1069, provider_base_url_ok@1140, cmd_prs@1184, install@1194, uninstall@1196, status@1198, _default_graph_path@1214, _enforce_graph_size_cap_or_exit@1251, graph_has_legacy_ids@1287, _query_graph_text@1302, log_query@1311, _touch_query_stamp@1321 (+107)
+  called by: _run_cli (graphify/__main__.py:751)
+  graphify/cli.py:1197-1210
+        elif subcmd == "status":
+            print(hook_status(Path(".")))
+        else:
+            print("Usage: graphify hook [install|uninstall|status]", file=sys.stderr)
+            sys.exit(1)
+    elif cmd == "query":
+        if len(sys.argv) < 3:
+            print("Usage: graphify query \"<question>\" [--dfs] [--context C] [--budget N] [--graph path]", file=sys.stderr)
+            sys.exit(1)
+        from graphify.serve import _query_graph_text
+        from graphify.security import sanitize_label
+        from networkx.readwrite import json_graph
+        from graphify import querylog
+
+  graphify/cli.py:1303-1316
+            G,
+            question,
+            mode=_mode,
+            depth=2,
+            token_budget=budget,
+            context_filters=context_filters,
+            graph_path=str(gp),
+        )
+        querylog.log_query(
+            kind="query",
+            question=question,
+            corpus=str(gp),
+            result=_result,
+            mode=_mode,
+## graphify/serve.py:2021-2049 def _tool_query_graph(arguments: dict) -> str
+  calls: _query_graph_text@2030
+  graphify/serve.py:2032-2045
+            question,
+            mode=mode,
+            depth=depth,
+            token_budget=budget,
+            context_filters=context_filter,
+            graph_path=str(active_graph_path),
+        )
+        querylog.log_query(
+            kind="mcp_query",
+            question=question,
+            corpus=str(active_graph_path),
+            result=result,
+            mode=mode,
+            depth=depth,
+## graphify/serve.py:1349-1408 def _query_graph_text( G: nx.Graph, question: str, *, mode: str = "bfs", depth: int = 3, token_budget: int = 2000, context_filters: list[str] | None = None, graph_path: str | None = None,
+  calls: _query_terms@1359, _score_query@1366, _pick_seeds@1380, _resolve_context_filters@1383, _filter_graph_by_context@1384, _traversal_view@1384, _bfs@1385, _dfs@1385, _display_graph_path@1399, _subgraph_to_text@1408
+  called by: dispatch_command (graphify/cli.py:1302); _tool_query_graph (graphify/serve.py:2030)
+  const graphify/serve.py:851: _RELATIONAL_INTENT_TERMS: frozenset[str] = frozenset({
+  graphify/serve.py:1349-1361
+def _query_graph_text(
+    G: nx.Graph,
+    question: str,
+    *,
+    mode: str = "bfs",
+    depth: int = 3,
+    token_budget: int = 2000,
+    context_filters: list[str] | None = None,
+    graph_path: str | None = None,
+) -> str:
+    terms = _query_terms(question)
+    # One graph scoring pass produces both the combined ranking (used to drive
+    # the gap-based seed selection below) and the per-token singleton winners
+  graphify/serve.py:1378-1391
+            t: nid for t, nid in best_seed_by_term.items() if t not in intent
+        }
+    start_nodes = _pick_seeds(qs.ranked, G=G, best_seed_by_term=best_seed_by_term)
+    if not start_nodes:
+        return "No matching nodes found."
+    resolved_filters, filter_source = _resolve_context_filters(question, context_filters)
+    traversal_graph = _filter_graph_by_context(_traversal_view(G), resolved_filters)
+    nodes, edges = _dfs(traversal_graph, start_nodes, depth) if mode == "dfs" else _bfs(traversal_graph, start_nodes, depth)
+    header_parts = [
+        f"Traversal: {mode.upper()} depth={depth}",
+        f"Start: {[G.nodes[n].get('label', n) for n in start_nodes]}",
+    ]
+    # Name the graph this answer came from. `graphify-out/` resolves against the
+    # CWD, so running a query from a parent project while thinking about a
+## graphify/extractors/bash.py:235-279 def walk_calls(body_node, func_nid: str, seen_calls: set) -> None
+  calls: _bash_call_in_command_allowed@244, literal@249, _make_id@254, add_edge@258, walk_calls@279
+  called by: walk_calls (graphify/extractors/bash.py:279)
+  graphify/extractors/bash.py:258-271
+                            add_edge(func_nid, tgt, "calls",
+                                     child.start_point[0] + 1,
+                                     confidence="EXTRACTED", context="call")
+                    elif (name and name not in _BASH_SOURCE_COMMANDS
+                          and name not in _BASH_SCRIPT_RUNNERS):
+                        # Callee isn't defined in this file — it may be a function
+                        # from a sourced library. Record an unresolved raw_call for
+                        # resolve_bash_source_edges to bind against the files this
+                        # script `source`s. A callee that is not a sourced function
+                        # (a genuine external command) matches nothing there and
+                        # yields no edge, so this can't over-connect the graph (#2141).
+                        raw_key = (func_nid, name)
+                        if raw_key not in raw_seen:
+                            raw_seen.add(raw_key)
+## graphify/install.py:1401-1412 if (input.tool === "bash")
+      if (input.tool === "bash") {
+        // ';' not '&&' — Windows PowerShell 5.1 rejects '&&' as a statement
+        // separator, breaking the first bash command of the session (#1646).
+        output.args.command =
+          'echo "[graphify] knowledge graph at graphify-out/. For focused questions, run graphify query with your question (scoped subgraph, usually much small…
+          output.args.command;
+        reminded = true;
+      }
+    },
+  };
+};
+"""
+## graphify/extractors/bash.py:197-213 def _bash_call_in_command_allowed(cmd_node) -> bool
+  called by: walk_calls (graphify/extractors/bash.py:244)
+    def _bash_call_in_command_allowed(cmd_node) -> bool:
+        """Whether a command node should emit call edges.
+
+        Bare ``$(fn)`` at script level and process substitutions stay suppressed
+        (#2141). Value capture via ``x=$(fn)`` is a real invocation (#2978).
+        """
+        parent = cmd_node.parent
+        saw_command_substitution = False
+        while parent is not None:
+            if parent.type == "process_substitution":
+                return False
+            if parent.type == "command_substitution":
+                saw_command_substitution = True
+            if parent.type == "variable_assignment" and saw_command_substitution:
+                return True
+            parent = parent.parent
+        return not saw_command_substitution
+## graphify/always_on/kiro-steering.md:1-5 ---
+---
+inclusion: always
+---
+
+graphify: A knowledge graph of this project lives in `graphify-out/`. For codebase, architecture, or dependency questions, when `graphify-out/graph.json` exist…
+graphify/skill-agents.md:1-4 ---
+graphify/benchmark.py:37-73 def _query_subgraph_tokens(G: nx.Graph, question: str, depth: int = 3) -> int
+graphify/serve.py:281-300 def _query_terms(question: str) -> list[str]
+graphify/serve.py:940-947 def _resolve_context_filters(question: str, explicit_filters: list[str] | None = None) -> tuple[list[str], str | None]
+graphify/cli.py:78-81 '`graphify query "<question>"` (scoped subgraph, usually much smaller than '
+graphify/extractors/engine.py:5841-6705 def walk_calls( node, caller_nid: str, # Java: flat name -> type. C#: the (scoped bindings, field base) pair # from _cs…
+graphify/serve.py:1075-1256 def _subgraph_to_text(G: nx.Graph, nodes: set[str], edges: list[tuple], token_budget: int = 2000, *, seeds: list[str] |…
+graphify/serve.py:1306-1347 def _traversal_view(G: nx.Graph) -> nx.Graph
+graphify/__main__.py:509-751 def _run_cli() -> None
+graphify/watch.py:1355-2223 def _rebuild_code( watch_path: Path, *, changed_paths: list[Path] | None = None, follow_symlinks: bool = False, force: …
+graphify/extract.py:6787-8247 def extract( paths: list[Path], cache_root: Path | None = None, *, root: Path | None = None, parallel: bool = True, max…
+graphify/serve.py:1823-1831 def _load_ctx(path: str)
+graphify/serve.py:542-722 def _score_query( G: nx.Graph, terms: list[str], *, collect_per_term_seeds: bool ) -> _QueryScores
+graphify/serve.py:950-964 def _filter_graph_by_context(G: nx.Graph, context_filters: list[str] | None) -> nx.Graph
+graphify/serve.py:1866-2019 async def list_tools() -> list[types.Tool]
+graphify/serve.py:928-937 def _infer_context_filters(question: str) -> list[str]
+graphify/extractors/rust.py:498-562 def walk_calls( node, caller_nid: str, self_type: str | None = None, self_impl_key: str | None = None, ) -> None
+(calls / called by: static call graph, '?' = inferred edge; may be incomplete)
+… 2242 more candidates not shown
+next: repoatlas query "Which functions does the graphify query command call to turn a question into graph context?" --max-chars 24000

@@ -1,0 +1,30 @@
+Graph: graphify-out/graph.json (41 nodes) | Traversal: BFS depth=2 | Start: ['test_no_discount_below_threshold()', 'test_discount_applies_above_threshold()', 'apply_discount()'] | 10 nodes found
+
+NODE test_no_discount_below_threshold() [src=tests/test_pricing.py loc=L8 community=compute_total]
+NODE test_discount_applies_above_threshold() [src=tests/test_pricing.py loc=L4 community=compute_total]
+NODE apply_discount() [src=orders/pricing.py loc=L11 community=compute_total]
+NODE compute_total() [src=orders/pricing.py loc=L6 community=compute_total]
+NODE test_pricing.py [src=tests/test_pricing.py loc=L1 community=compute_total]
+NODE pricing.py [src=orders/pricing.py loc=L1 community=compute_total]
+NODE service.py [src=orders/service.py loc=L1 community=service.py]
+NODE place_order() [src=orders/service.py loc=L19 community=service.py]
+NODE config.py [src=orders/config.py loc=L1 community=repository.py]
+NODE test_compute_total() [src=tests/test_pricing.py loc=L12 community=compute_total]
+EDGE test_pricing.py --contains [EXTRACTED]--> test_no_discount_below_threshold() at=tests/test_pricing.py:L8
+EDGE test_pricing.py --contains [EXTRACTED]--> test_discount_applies_above_threshold() at=tests/test_pricing.py:L4
+EDGE compute_total() --calls [EXTRACTED context=call]--> apply_discount() at=orders/pricing.py:L8
+EDGE test_pricing.py --imports [EXTRACTED context=import]--> apply_discount() at=tests/test_pricing.py:L1
+EDGE pricing.py --contains [EXTRACTED]--> apply_discount() at=orders/pricing.py:L11
+EDGE test_pricing.py --contains [EXTRACTED]--> test_compute_total() at=tests/test_pricing.py:L12
+EDGE pricing.py --imports_from [EXTRACTED context=import]--> config.py at=orders/pricing.py:L3
+EDGE service.py --imports_from [EXTRACTED context=import]--> pricing.py at=orders/service.py:L4
+EDGE place_order() --calls [EXTRACTED context=call]--> compute_total() at=orders/service.py:L21
+EDGE test_compute_total() --calls [EXTRACTED context=call]--> compute_total() at=tests/test_pricing.py:L13
+EDGE service.py --imports [EXTRACTED context=import]--> compute_total() at=orders/service.py:L4
+EDGE service.py --imports_from [EXTRACTED context=import]--> config.py at=orders/service.py:L3
+EDGE test_pricing.py --imports_from [EXTRACTED context=import]--> pricing.py at=tests/test_pricing.py:L1
+EDGE pricing.py --contains [EXTRACTED]--> compute_total() at=orders/pricing.py:L6
+EDGE test_discount_applies_above_threshold() --calls [EXTRACTED context=call]--> apply_discount() at=tests/test_pricing.py:L5
+EDGE test_no_discount_below_threshold() --calls [EXTRACTED context=call]--> apply_discount() at=tests/test_pricing.py:L9
+EDGE test_pricing.py --imports [EXTRACTED context=import]--> compute_total() at=tests/test_pricing.py:L1
+EDGE service.py --contains [EXTRACTED]--> place_order() at=orders/service.py:L19

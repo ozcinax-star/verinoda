@@ -1,0 +1,24 @@
+{
+ "schema": "verinoda.http_cassette/1",
+ "key": "c4f3f2f937d5fc4f78e1e7e465d002479e645110",
+ "request": {
+  "method": "GET",
+  "url": "https://pypi.org/pypi/this-package-does-not-exist-repoatlas/json",
+  "headers": {
+   "User-Agent": "<redacted>"
+  }
+ },
+ "response": {
+  "status": 404,
+  "headers": {
+   "content-type": "application/json"
+  },
+  "final_url": "https://pypi.org/pypi/this-package-does-not-exist-repoatlas/json",
+  "body_sha256": "b82014934f66beeb9e05a37f65357c4b50db0349d25d68d818ed0319dd4feb40",
+  "body_text": "{\"message\": \"Not Found\"}",
+  "body_b64": null,
+  "trimmed": false
+ },
+ "recorded_at": "2026-09-22T23:15:31Z",
+ "recorder": "tools/record_reference_cassettes.py/1"
+}

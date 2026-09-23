@@ -1,0 +1,3 @@
+# Keep bytes identical on every platform: upstream fixtures and content hashes
+# depend on exact line endings.
+* -text

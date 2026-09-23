@@ -1,0 +1,203 @@
+$ grep -rniE 'graphify|query|log|unu|hangi|ortam|değişkenleri|kontrol|ediyor' .   # 7391 matching lines in 221 files
+graphify/build.py:171: "technology": "concept",
+graphify/build.py:179: # Hyperedge member lists are canonically keyed `nodes` (see graphify/llm.py
+graphify/build.py:207: f"[graphify] WARNING: hyperedge "
+graphify/build.py:216: f"[graphify] WARNING: hyperedge "
+graphify/build.py:217: f"'{he.get('id', '?')}' has an unusable member reference "
+graphify/build.py:250: f"[graphify] WARNING: hyperedge "
+graphify/build.py:269: ``norm_label == ""`` (invisible to query/explain), and is excluded from every
+graphify/build.py:270: label-keyed merge/dedup — a permanent ghost that ``graphify update``
+graphify/build.py:501: Prefers the committed ``graphify-out/.graphify_root`` marker — the authoritative
+graphify/build.py:502: scan root graphify records at build/watch time (#686/#1423) — then falls back to
+graphify/build.py:504: ``<root>/graphify-out/graph.json`` -> ``<root>``). The grandparent heuristic is
+graphify/build.py:505: applied only when ``graph.json``'s own directory actually looks like a graphify
+graphify/build.py:514: marker = parent / ".graphify_root"
+graphify/build.py:521: from .paths import GRAPHIFY_OUT
+graphify/build.py:524: parent.name == Path(GRAPHIFY_OUT).name
+graphify/build.py:525: or (parent / ".graphify_root").exists()
+graphify/build.py:576: layouts (``graph.json`` not under ``<root>/graphify-out/``), so every prune
+graphify/build.py:696: from graphify.extractors.base import _file_stem  # local: avoid import cost at module load
+graphify/build.py:732: # build, defeating the same_topology/no_change short-circuits. Mirrors the
+graphify/build.py:787: stem) rather than the full repo-relative path. Read-only consumers (query,
+graphify/build.py:798: from graphify.extractors.base import _file_stem
+graphify/build.py:846: the same document. A ``graphify update`` after a semantic build leaves both,
+graphify/build.py:912: f"[graphify] WARNING: node '{node_id}' uses field 'source' instead of "
+graphify/build.py:925: # graphify versions that didn't always populate file_type) don't
+graphify/build.py:965: f"[graphify] Extraction warning ({len(real_errors)} issues): {breakdown}",
+graphify/build.py:1043: f"[graphify] WARNING: skipping node with non-hashable id "
+graphify/build.py:1114: # saved graphify-out/memory/*.md query answer) mints a NEW
+graphify/build.py:1156: # document that only *mentions* a file (a saved graphify-out/memory/*.md
+graphify/build.py:1157: # query answer, a README, an ADR) stamps the file's own name as a new
+graphify/build.py:1226: from graphify.extractors.base import _file_stem as _fs
+graphify/build.py:1279: f"[graphify] WARNING: skipping edge with non-hashable endpoint "
+graphify/build.py:1321: # crashing modularity arithmetic with a TypeError (graspologic's Leiden
+graphify/build.py:1339: # flags and leaves query results with no file reference (#1279).
+graphify/build.py:1408: # `calls` and `uses` after everything. On graphify's own corpus that
+graphify/build.py:1455: f"[graphify] WARNING: dropping hyperedge "
+graphify/build.py:1474: f"[graphify] WARNING: all {len(hyperedges)} hyperedge(s) were "
+graphify/build.py:1513: from graphify.dedup import deduplicate_entities
+graphify/build.py:1604: print(f"[graphify] Deduplicated {len(remap)} duplicate node(s) by label.", file=sys.stderr)
+graphify/build.py:1634: from graphify.security import check_graph_file_size_cap
+graphify/build.py:2012: f"[graphify] Replaced {replaced_n} node(s) from re-extracted "
+... (7351 more matching lines not shown)
+
+==> graphify/build.py:1-159 <==  (truncated at char cap; file has 2414 lines)
+     1	# assemble node+edge dicts into a NetworkX graph, preserving edge direction
+     2	#
+     3	# Node deduplication — three layers:
+     4	#
+     5	# 1. Within a file (AST): each extractor tracks a `seen_ids` set. A node ID is
+     6	#    emitted at most once per file, so duplicate class/function definitions in
+     7	#    the same source file are collapsed to the first occurrence.
+     8	#
+     9	# 2. Between files (build): NetworkX G.add_node() is idempotent — calling it
+    10	#    twice with the same ID overwrites the attributes with the second call's
+    11	#    values. Nodes are added in extraction order (AST first, then semantic),
+    12	#    so if the same entity is extracted by both passes the semantic node
+    13	#    silently overwrites the AST node. This is intentional: semantic nodes
+    14	#    carry richer labels and cross-file context, while AST nodes have precise
+    15	#    source_location. If you need to change the priority, reorder extractions
+    16	#    passed to build().
+    17	#
+    18	# 3. Semantic merge (skill): before calling build(), the skill merges cached
+    19	#    and new semantic results using an explicit `seen` set keyed on node["id"],
+    20	#    so duplicates across cache hits and new extractions are resolved there
+    21	#    before any graph construction happens.
+    22	#
+    23	from __future__ import annotations
+    24	import json
+    25	import math
+    26	import os
+    27	import re
+    28	import sys
+    29	import unicodedata
+    30	from collections.abc import Iterable
+    31	from pathlib import Path
+    32	import networkx as nx
+    33	from .ids import make_id, normalize_id as _normalize_id
+    34	from .paths import default_graph_json as _default_graph_json
+    35	from .paths import is_absolute_any_platform as _is_abs
+    36	from .validate import validate_extraction
+    37	
+    38	
+    39	# Deterministic (AST) extractors emit source_location "L<line>"; the semantic
+    40	# extraction spec emits null. Used by _is_ast_tier as a shape fallback for
+    41	# legacy items that predate the _origin marker (#2334).
+    42	_AST_LOC_RE = re.compile(r"^L\d")
+    43	
+    44	
+    45	def _is_ast_tier(item: dict) -> bool:
+    46	    """AST vs semantic tier. _origin wins when present; unstamped legacy items
+    47	    (pre-0.9.16) fall back to shape: deterministic extractors emit
+    48	    source_location 'L<line>', the semantic spec emits null (#2334)."""
+    49	    o = item.get("_origin")
+    50	    if o is not None:
+    51	        return o == "ast"
+    52	    loc = item.get("source_location")
+    53	    return isinstance(loc, str) and bool(_AST_LOC_RE.match(loc))
+    54	
+    55	
+    56	# Relations that say only "these two symbols appear together", with no claim about
+    57	# HOW. An extractor that finds a specific fact for a pair — a call, an import, an
+    58	# inheritance — routinely emits one of these for the same pair as well, so when the
+    59	# simple graph collapses the pair to one edge, the generic one must never be the
+    60	# survivor. Deliberately a small denylist rather than a full precedence order over
+    61	# every relation: ranking `contains` against `calls` would be inventing a
+    62	# cross-axis judgement, whereas "specific beats generic" is the only comparison
+    63	# this collapse actually needs.
+    64	_GENERIC_RELATIONS: frozenset[str] = frozenset({"references", "uses", "mentions"})
+    65	
+    66	# Import-family relations whose target may legitimately be a module OUTSIDE the
+    67	# graph (stdlib, a third-party dependency, another repo). Historically the edge
+    68	# to such a target was dropped, which left the in-memory graph clean but let the
+    69	# on-disk graph.json (written by the incremental update path) keep the edge with
+    70	# no matching node — an undeclared endpoint every loader materialises as an
+    71	# attribute-less phantom (#2873). For these relations we instead mint a typed
+    72	# external stub node so every edge endpoint resolves. Deliberately NOT `calls`:
+    73	# a sourceless external call target is suppressed on purpose (#3156) to avoid a
+    74	# phantom god-node, and that policy is unchanged here.
+    75	_EXTERNAL_STUB_RELATIONS: frozenset[str] = frozenset(
+    76	    {"imports", "imports_from", "re_exports"}
+    77	)
+    78	
+    79	
+    80	def _mint_external_stub(G: "nx.Graph", node_set: set, nid: str) -> None:
+    81	    """Add a leaf node for an external import target so the edge is not dangling.
+    82	
+    83	    The node is tagged ``external`` (and ``file_type='concept'`` so the schema
+    84	    validator and community/report code treat it as a non-source concept rather
+    85	    than warning on a missing ``file_type``). ``merge-graphs`` reads the
+    86	    ``external`` flag to keep these ids global instead of namespacing them per
+    87	    repo, so the same stdlib/dependency module unifies across repos (#2873).
+    88	    """
+    89	    if nid in node_set:
+    90	        return
+    91	    G.add_node(
+    92	        nid,
+    93	        label=nid,
+    94	        file_type="concept",
+    95	        type="external",
+    96	        external=True,
+    97	        source_file="",
+    98	    )
+    99	    node_set.add(nid)
+   100	
+   101	
+   102	def mint_external_stubs_in_data(data: dict) -> None:
+   103	    """Mint external stub nodes for import-family links with an undeclared target.
+   104	
+   105	    The ``--no-cluster`` / incremental write path serializes the raw merged
+   106	    extraction directly rather than going through :func:`build_from_json`, so it
+   107	    needs the same stubbing to keep the on-disk graph.json free of undeclared
+   108	    edge endpoints (#2873). Idempotent: a graph already carrying its stubs (from
+   109	    a prior run or the clustered path) is left unchanged.
+   110	    """
+   111	    nodes = data.get("nodes")
+   112	    links = data.get("links")
+   113	    if not isinstance(links, list):
+   114	        links = data.get("edges")
+   115	    if not isinstance(nodes, list) or not isinstance(links, list):
+   116	        return
+   117	    declared = {n.get("id") for n in nodes if isinstance(n, dict)}
+   118	    minted: set[str] = set()
+   119	    for e in links:
+   120	        if not isinstance(e, dict) or e.get("relation") not in _EXTERNAL_STUB_RELATIONS:
+   121	            continue
+   122	        src, tgt = e.get("source"), e.get("target")
+   123	        if (
+   124	            src in declared
+   125	            and isinstance(tgt, str)
+   126	            and tgt not in declared
+   127	            and tgt not in minted
+   128	        ):
+   129	            nodes.append({
+   130	                "id": tgt,
+   131	                "label": tgt,
+   132	                "file_type": "concept",
+   133	                "type": "external",
+   134	                "external": True,
+   135	                "source_file": "",
+   136	            })
+   137	            minted.add(tgt)
+   138	
+   139	# Language interop families, keyed by extension, for the cross-language phantom-edge
+   140	# guard in the edge loop below. Families group by REAL interop (JS/TS share a module
+   141	# graph; C/C++/ObjC share a compilation unit via headers; JVM langs share bytecode),
+   142	# so a legitimate TS->JS import or C impl->header call survives, while a Python
+   143	# `import time` binding to a `time.ts` (#1749) or a cross-language INFERRED `calls`
+   144	# edge (#1547/#1556) is dropped. Kept local to build.py (not imported from extract.py,
+   145	# which imports build.py — a cycle) and deliberately mirrors extract._LANG_FAMILY_BY_EXT.
+   146	_EDGE_LANG_FAMILY: dict[str, str] = {
+   147	    ".py": "py", ".pyi": "py",
+   148	    ".js": "js", ".mjs": "js", ".cjs": "js", ".jsx": "js",
+   149	    ".ts": "js", ".tsx": "js", ".mts": "js", ".cts": "js",
+   150	    ".go": "go", ".rs": "rs",
+   151	    ".java": "jvm", ".kt": "jvm", ".scala": "jvm", ".groovy": "jvm",
+   152	    ".c": "c", ".h": "c", ".cc": "c", ".cpp": "c", ".hpp": "c",
+   153	    ".cxx": "c", ".hh": "c", ".hxx": "c",
+   154	    ".cu": "c", ".cuh": "c", ".metal": "c", ".m": "c", ".mm": "c",
+   155	    ".rb": "rb", ".rake": "rb", ".php": "php", ".cs": "cs", ".swift": "swift", ".lua": "lua",
+   156	}
+   157	
+   158	
+   159	# Synonym mapper for known invalid file_type values that LLM subagents commonly

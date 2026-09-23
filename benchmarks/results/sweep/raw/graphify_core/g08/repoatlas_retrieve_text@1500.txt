@@ -1,0 +1,99 @@
+# How does graphify update rebuild the code graph without an LLM?
+## graphify/skill-aider.md:1224-1243 ## For --watch
+## For --watch
+
+Start a background watcher that monitors a folder and auto-updates the graph when files change.
+
+```bash
+python3 -m graphify.watch INPUT_PATH --debounce 3
+```
+
+Replace INPUT_PATH with the folder to watch. Behavior depends on what changed:
+
+- **Code files only (.py, .ts, .go, etc.):** re-runs AST extraction + rebuild + cluster immediately, no LLM needed. `graph.json` and `GRAPH_REPORT.md` are upda…
+- **Docs, papers, or images:** writes a `graphify-out/needs_update` flag and prints a notification to run `/graphify --update` (LLM semantic re-extraction requ…
+
+Debounce (default 3s): waits until file activity stops before triggering, so a wave of parallel agent writes doesn't trigger a rebuild per file.
+
+Press Ctrl+C to stop.
+
+For agentic workflows: run `--watch` in a background terminal. Code changes from agent waves are picked up automatically between waves. If agents are also writ…
+
+---
+## graphify/skill-devin.md:1356-1373 ## For --watch
+## For --watch
+
+Start a background watcher that monitors a folder and auto-updates the graph when files change.
+
+```bash
+python3 -m graphify.watch INPUT_PATH --debounce 3
+```
+
+Replace INPUT_PATH with the folder to watch. Behavior depends on what changed:
+
+- **Code files only (.py, .ts, .go, etc.):** re-runs AST extraction + rebuild + cluster immediately, no LLM needed. `graph.json` and `GRAPH_REPORT.md` are upda…
+- **Docs, papers, or images:** writes a `graphify-out/needs_update` flag and prints a notification to run `/graphify --update` (LLM semantic re-extraction requ…
+
+Debounce (default 3s): waits until file activity stops before triggering, so a wave of parallel agent writes doesn't trigger a rebuild per file.
+
+Press Ctrl+C to stop.
+
+---
+## graphify/watch.py:1355-2223 def _rebuild_code( watch_path: Path, *, changed_paths: list[Path] | None = None, follow_symlinks: bool = False, force: bool = False, no_cluster: bool = False, acquire_lock: bool = True, block_on_lock…
+  doc: Re-run AST extraction + build + optional cluster + report for code files. No LLM needed.
+  calls: _stabilize_rebuild_cwd@1388, _queue_pending@1400, _rebuild_lock@1401, _drain_pending@1411, _merge_changed_paths@1411, _rebuild_code@1416, _report_root_label@1449, _read_build_excludes@1463, _read_build_gitignore@1464, detect@1465, ignored_predicate@1495, _get_extractor@1506 (+42)
+  called by: dispatch_command (graphify/cli.py:2445); _rebuild_code (graphify/watch.py:1416); watch (graphify/watch.py:2379)
+  const graphify/watch.py:23: _PENDING_DRAIN_MAX_PASSES = 20
+  graphify/watch.py:1514-1527
+
+        # #1915: a document that already carries SEMANTIC (LLM) nodes in the
+        # existing graph must not ALSO be AST-quick-scanned — otherwise every
+        # rebuild mints heading nodes on top of the preserved semantic nodes
+        # and the doc is represented twice (~4x graph bloat vs the CLI update
+        # path, which AST-extracts only code). A semantic-backed doc is never
+        # re-quick-scanned, and any AST layer it already carries coexists and
+        # is preserved rather than regenerated (#2333, COEXIST); the
+        # quick-scan stays as a fallback for docs with no semantic layer (the
+        # no-LLM doc-structure feature, #09b33b7) and for brand-new docs the
+        # graph has never seen. These docs stay in ``code_files`` so
+        # corpus membership (#1795 fail-closed deletion evidence) and the
+        # shrink accounting below still cover them — a previously-bloated
+        # graph must be allowed to self-heal on a full rebuild without the
+  graphify/watch.py:1973-1984
+
+            if same_graph:
+                print("[graphify watch] No code-graph changes detected (--no-cluster); outputs left untouched.")
+            else:
+                print(
+                    "[graphify watch] Rebuilt (no clustering): "
+                    f"{len(candidate_graph_data.get('nodes', []))} nodes, "
+                    f"{len(candidate_graph_data.get('links', []))} edges"
+                )
+                print(f"[graphify watch] graph.json updated in {out}")
+            return True
+
+## graphify/watch.py:2256-2267 def _batch_triggers_rebuild(batch: list[Path]) -> bool
+  called by: watch (graphify/watch.py:2378)
+def _batch_triggers_rebuild(batch: list[Path]) -> bool:
+    """True when a debounced watch batch needs an immediate rebuild.
+
+    Code changes always rebuild (AST extraction needs no LLM). Deletions of
+    ANY watched file also rebuild: eviction needs no LLM either — the full
+    corpus reconcile drops nodes whose source is gone from disk. Without
+    this, a doc-only deletion batch would sit behind the needs_update flag
+    until the next code event or a manual `graphify update` (#2580).
+    """
+    has_code = any(p.suffix.lower() in _CODE_EXTENSIONS for p in batch)
+    has_deletion = any(not p.exists() for p in batch)
+    return has_code or has_deletion
+## graphify/watch.py:2298-2386 def watch(watch_path: Path, debounce: float = 3.0) -> None
+  calls: _load_graphifyignore@2327, _read_build_gitignore@2329, _is_ignored@2343, _batch_triggers_rebuild@2378, _rebuild_code@2379, _batch_needs_llm_flag@2380, _notify_only@2381
+  called by: dispatch_command (graphify/cli.py:1990)
+  graphify/watch.py:2301-2305
+
+    For code-only changes: re-runs AST extraction + rebuild immediately (no LLM).
+    For doc/paper/image changes: writes a needs_update flag and notifies the user
+    to run /graphify --update (LLM extraction required).
+
+… 1849 more candidates not shown: graphify/watch.py:2288-2295 def _batch_needs_llm_flag(batch: list[Path]) -> bool; graphify/__main__.py:509-751 def _run_cli() -> None; graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None; graphify/watch.py:2241-2249 _notify_only
+next: repoatlas query "How does graphify update rebuild the code graph without an LLM?" --max-chars 12000

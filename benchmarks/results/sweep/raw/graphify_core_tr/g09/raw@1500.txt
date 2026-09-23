@@ -1,0 +1,132 @@
+$ grep -rniE 'grafik|dosyası|boyut|sınırını|ortam|değişkeniyle|aşılmasını|hangi|testler|kapsıyor' .   # 2 matching lines in 2 files
+graphify/_minhash.py:6: that in turn spawns cmd.exe via subprocess, hanging for minutes under EDR
+graphify/extract.py:5895: # instead of hanging.
+
+==> graphify/_minhash.py:1-107 <==
+     1	"""MinHash + band-LSH — datasketch-compatible drop-in (no scipy).
+     2	
+     3	datasketch.lsh has `from scipy.integrate import quad` at module level.
+     4	scipy's array_api_compat layer then lazily loads numpy.testing, which calls
+     5	platform.machine() at import time to set test-skip decorator constants — and
+     6	that in turn spawns cmd.exe via subprocess, hanging for minutes under EDR
+     7	software in corporate Windows environments.
+     8	
+     9	Covers the exact MinHash/MinHashLSH API surface used by dedup.py.
+    10	Hash family (Mersenne-prime permutations) and LSH band structure are
+    11	equivalent to datasketch so dedup quality is unchanged.
+    12	"""
+    13	from __future__ import annotations
+    14	import hashlib
+    15	import struct
+    16	
+    17	import numpy as np
+    18	
+    19	
+    20	_MP = np.uint64((1 << 61) - 1)  # Mersenne prime for the hash family
+    21	_MH = np.uint64(0xFFFF_FFFF)    # mask to 32-bit values
+    22	
+    23	# One (a, b) coefficient array per num_perm, shared across all instances.
+    24	_MH_COEFFS: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+    25	
+    26	
+    27	def _mh_coeffs(num_perm: int) -> tuple[np.ndarray, np.ndarray]:
+    28	    if num_perm not in _MH_COEFFS:
+    29	        rng = np.random.RandomState(1)
+    30	        a = rng.randint(1, int(_MP), num_perm, dtype=np.uint64)
+    31	        b = rng.randint(0, int(_MP), num_perm, dtype=np.uint64)
+    32	        _MH_COEFFS[num_perm] = (a, b)
+    33	    return _MH_COEFFS[num_perm]
+    34	
+    35	
+    36	class MinHash:
+    37	    """MinHash sketch — same API as datasketch.MinHash for the subset used here."""
+    38	
+    39	    __slots__ = ("num_perm", "hashvalues", "_a", "_b")
+    40	
+    41	    def __init__(self, num_perm: int = 128) -> None:
+    42	        self.num_perm = num_perm
+    43	        self.hashvalues = np.full(num_perm, int(_MH), dtype=np.uint64)
+    44	        self._a, self._b = _mh_coeffs(num_perm)
+    45	
+    46	    def update(self, v: bytes) -> None:
+    47	        hv = np.uint64(struct.unpack("<I", hashlib.sha1(v).digest()[:4])[0])
+    48	        phv = np.bitwise_and((self._a * hv + self._b) % _MP, _MH)
+    49	        self.hashvalues = np.minimum(self.hashvalues, phv)
+    50	
+    51	
+    52	def _lsh_integrate(f, lo: float, hi: float, n: int = 128) -> float:
+    53	    """Numerical integration — replaces scipy.integrate.quad for LSH param search."""
+    54	    h = (hi - lo) / n
+    55	    return h * sum(f(lo + i * h) for i in range(n))
+    56	
+    57	
+    58	_LSH_PARAMS_CACHE: dict[tuple[float, int], tuple[int, int]] = {}
+    59	
+    60	
+    61	def _optimal_lsh_params(threshold: float, num_perm: int) -> tuple[int, int]:
+    62	    """Find (bands, rows) that minimise weighted FP+FN error, without scipy."""
+    63	    key = (threshold, num_perm)
+    64	    if key in _LSH_PARAMS_CACHE:
+    65	        return _LSH_PARAMS_CACHE[key]
+    66	    best_err, best = float("inf"), (1, 1)
+    67	    for b in range(1, num_perm + 1):
+    68	        for r in range(1, num_perm // b + 1):
+    69	            fp = _lsh_integrate(
+    70	                lambda s, _b=float(b), _r=float(r): 1 - (1 - s ** _r) ** _b,
+    71	                0.0, threshold,
+    72	            )
+    73	            fn = _lsh_integrate(
+    74	                lambda s, _b=float(b), _r=float(r): 1 - (1 - (1 - s ** _r) ** _b),
+    75	                threshold, 1.0,
+    76	            )
+    77	            err = 0.5 * fp + 0.5 * fn
+    78	            if err < best_err:
+    79	                best_err, best = err, (b, r)
+    80	    _LSH_PARAMS_CACHE[key] = best
+    81	    return best
+    82	
+    83	
+    84	class MinHashLSH:
+    85	    """Band-hashing LSH — same API as datasketch.MinHashLSH for the subset used here."""
+    86	
+    87	    def __init__(self, threshold: float = 0.5, num_perm: int = 128) -> None:
+    88	        self.b, self.r = _optimal_lsh_params(threshold, num_perm)
+    89	        self._tables: list[dict[bytes, list[str]]] = [{} for _ in range(self.b)]
+    90	        self._keys: set[str] = set()
+    91	
+    92	    def insert(self, key: str, minhash: MinHash) -> None:
+    93	        if key in self._keys:
+    94	            raise ValueError(f"Key {key!r} already exists in MinHashLSH")
+    95	        self._keys.add(key)
+    96	        hv = minhash.hashvalues
+    97	        for i, table in enumerate(self._tables):
+    98	            band = hv[i * self.r : (i + 1) * self.r].tobytes()
+    99	            table.setdefault(band, []).append(key)
+   100	
+   101	    def query(self, minhash: MinHash) -> list[str]:
+   102	        hv = minhash.hashvalues
+   103	        candidates: set[str] = set()
+   104	        for i, table in enumerate(self._tables):
+   105	            band = hv[i * self.r : (i + 1) * self.r].tobytes()
+   106	            candidates.update(table.get(band, []))
+   107	        return list(candidates)
+
+==> graphify/extract.py:1-18 <==  (truncated at char cap; file has 8322 lines)
+     1	"""Deterministic structural extraction from source code using tree-sitter. Outputs nodes+edges dicts."""
+     2	from __future__ import annotations
+     3	
+     4	import hashlib
+     5	import importlib
+     6	import json
+     7	import os
+     8	import re
+     9	import sys
+    10	import textwrap
+    11	from bisect import bisect_right
+    12	from collections import Counter
+    13	from dataclasses import dataclass, field
+    14	from pathlib import Path, PurePath
+    15	from typing import Any, Callable
+    16	
+    17	from .cache import load_cached, save_cached
+    18	from .mcp_ingest import extract_mcp_config, is_mcp_config_path

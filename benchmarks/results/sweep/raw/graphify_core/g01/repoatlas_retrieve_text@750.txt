@@ -1,0 +1,38 @@
+# Where is graphify query output cut to fit the token budget?
+## graphify/skill-aider.md:925-1050 ## For /graphify query
+  graphify/skill-aider.md:1012-1016
+
+# Token-budget aware output: rank by relevance, cut at budget (~4 chars/token)
+token_budget = BUDGET  # default 2000
+char_budget = token_budget * 4
+
+  graphify/skill-aider.md:1032-1039
+
+output = '\n'.join(lines)
+if len(output) > char_budget:
+    output = output[:char_budget] + f'\n... (truncated at ~{token_budget} token budget - use --budget N for more)'
+print(output)
+"
+```
+
+## graphify/skill-devin.md:1061-1184 ## For /graphify query
+  graphify/skill-devin.md:1148-1152
+
+# Token-budget aware output: rank by relevance, cut at budget (~4 chars/token)
+token_budget = BUDGET  # default 2000
+char_budget = token_budget * 4
+
+  graphify/skill-devin.md:1168-1175
+
+output = '\n'.join(lines)
+if len(output) > char_budget:
+    output = output[:char_budget] + f'\n... (truncated at ~{token_budget} token budget - use --budget N for more)'
+print(output)
+"
+```
+
+## graphify/serve.py:1259-1282 def _cut_lines_to_budget(lines: list[str], token_budget: int, narrow_hint: str) -> str
+  doc: Render pre-built lines under the same ~3-chars/token budget rule as _subgraph_to_text; over-budget output is cut at a line boundary with a count and a narrowin…
+  called by: _tool_get_neighbors (graphify/serve.py:2115); _tool_get_community (graphify/serve.py:2134)
+… 1595 more candidates not shown: graphify/serve.py:1075-1256 def _subgraph_to_text(G: nx.Graph, nodes: set[str], edges: list[tuple], token_budget: int = ; graphify/serve.py:2119-2136 def _tool_get_community(arguments: dict) -> str; graphify/serve.py:2081-2117 def _tool_get_neighbors(arguments: dict) -> str; graphify/llm.py:2143-2186 _pack_chunks_by_tokens
+next: repoatlas query "Where is graphify query output cut to fit the token budget?" --max-chars 6000

@@ -1,0 +1,77 @@
+$ grep -rniE 'graphify|query|komutu|bir|soruyu|graf|bağlamına|çevirmek|için|hangi|fonksiyonları|çağırıyor' .   # 7178 matching lines in 220 files
+graphify/extractors/sql.py:1: """Sql extractor. Moved verbatim from graphify/extract.py."""
+graphify/extractors/sql.py:7: from graphify.extractors.base import _file_stem, _make_id
+graphify/extractors/sql.py:407: # Dialect-specific syntax (e.g. Firebird COMPUTED BY) causes ERROR
+graphify/extractors/sql.py:585: Scoping matters: a CTE is visible only inside the query that declares it,
+graphify/extractors/sql.py:586: and a `WITH` inside a subquery is scoped to that subquery alone. So the
+graphify/extractors/sql.py:588: children (`create_query` for a statement-level WITH, `subquery` for a
+graphify/extractors/sql.py:591: to a real table that merely shares a subquery-CTE's name
+graphify/extractors/sql.py:661: # (e.g. Firebird COMPUTED BY columns push constraints out of the tree entirely).
+graphify/cli.py:1: """graphify command dispatch — every non-install subcommand.
+graphify/cli.py:5: module. The path-redirect (`graphify <path>` -> extract) re-enters via a lazy
+graphify/cli.py:14: from graphify.paths import GRAPHIFY_OUT as _GRAPHIFY_OUT
+graphify/cli.py:22: 'MANDATORY: graphify-out/graph.json exists. You MUST run '
+graphify/cli.py:23: '`graphify query "<question>"` before grepping raw files. Only grep '
+graphify/cli.py:24: 'after graphify has oriented you, or to modify/debug specific lines.'
+graphify/cli.py:32: 'MANDATORY: graphify-out/graph.json exists. You MUST run graphify '
+graphify/cli.py:33: 'before reading source files. Use: `graphify query "<question>"` '
+graphify/cli.py:34: '(scoped subgraph), `graphify explain "<concept>"`, or '
+graphify/cli.py:35: '`graphify path "<A>" "<B>"`. Only read raw files after graphify has '
+graphify/cli.py:46: 'graphify-out/graph.json exists but may be STALE for this file (the file '
+graphify/cli.py:47: 'changed after the last build). Prefer `graphify query "<question>"` for '
+graphify/cli.py:48: 'orientation, and run `graphify update` to refresh the graph. Reading the '
+graphify/cli.py:62: 'graphify strict mode: this project has a fresh knowledge graph that covers '
+graphify/cli.py:63: 'this file. Run `graphify query "<your question>"` (or `graphify explain` / '
+graphify/cli.py:64: '`graphify path`) FIRST to orient yourself, then re-issue this Read — it '
+graphify/cli.py:66: 'files to modify or debug specific lines is fine after one query. Apply the '
+graphify/cli.py:77: 'graphify: knowledge graph at graphify-out/. For focused questions, run '
+graphify/cli.py:78: '`graphify query "<question>"` (scoped subgraph, usually much smaller than '
+graphify/cli.py:85: return str(Path(_GRAPHIFY_OUT) / "graph.json")
+graphify/cli.py:117: Mirrors the #1890 path normalization in graphify.llm.
+graphify/cli.py:213: f"[graphify extract] semantic extraction is incomplete: unverified semantic "
+graphify/cli.py:232: (.graphifyignore/.gitignore/--exclude changed) without being listed in the
+graphify/cli.py:265: from graphify.paths import nfc
+graphify/cli.py:276: # <out>/graphify-out/graph.json — relative source_files may be anchored here.
+graphify/cli.py:337: from graphify.detect import _is_sensitive as _det_sensitive
+graphify/cli.py:397: f"[graphify] fail-closed: kept node(s) from {len(kept_alive)} "
+graphify/cli.py:417: documented recovery was deleting graphify-out/. A stamped file that the
+graphify/cli.py:429: from graphify.paths import nfc
+graphify/cli.py:440: # <out>/graphify-out/graph.json — legacy relative source_files may be
+graphify/cli.py:467: from graphify.extract import _get_extractor
+graphify/cli.py:508: from graphify.paths import nfc
+... (7138 more matching lines not shown)
+
+==> graphify/extractors/sql.py:1-33 <==  (truncated at char cap; file has 720 lines)
+     1	"""Sql extractor. Moved verbatim from graphify/extract.py."""
+     2	from __future__ import annotations
+     3	
+     4	import re
+     5	
+     6	from pathlib import Path
+     7	from graphify.extractors.base import _file_stem, _make_id
+     8	
+     9	# Recovers CREATE FUNCTION/PROCEDURE statements the grammar could not parse
+    10	# structurally. Used by BOTH recovery sites — the walk-time ERROR-node scan and
+    11	# the whole-file has_error fallback (#2180). They MUST share one pattern: when
+    12	# they disagreed, the same statement produced two nodes with different names
+    13	# (the ERROR scan captured `dbo.[usp_Mixed]`, the fallback stopped at `dbo`,
+    14	# and _add_node's id-dedupe never fired because the ids differed).
+    15	#
+    16	# Each name part is a bare identifier, a double-quoted (delimited) one, or a
+    17	# T-SQL bracket-delimited one, so CREATE OR REPLACE FUNCTION "public"."fn"(...)
+    18	# and CREATE PROCEDURE [dbo].[usp_Load] ... are both recovered. A bare [\w$.]+
+    19	# stops dead at the leading delimiter, which silently dropped every quoted
+    20	# PL/pgSQL routine (#2180) and every bracket-named T-SQL procedure. T-SQL's
+    21	# AS BEGIN...END body idiom always lands in recovery — the grammar has no
+    22	# create_procedure parse for it — and T-SQL spells re-creation CREATE OR ALTER
+    23	# (it has no OR REPLACE), so accept that form too, mirroring fb_proc_or_trigger.
+    24	# Inside a bracket-delimited part, a literal ] is escaped by doubling
+    25	# ([a]]b] names the identifier a]b), so consume ]] before treating a
+    26	# lone ] as the closing delimiter — stopping at the first ] truncated
+    27	# the name and minted a phantom that could collide with a real [a].
+    28	# PROC is T-SQL's official shorthand for PROCEDURE and equally common in the
+    29	# wild; the optional (?:EDURE)? still requires trailing whitespace, so a word
+    30	# that merely starts with PROC cannot match.
+    31	# \bCREATE: without the boundary, CREATE matched inside a bare word, so
+    32	# 'SELECT AUTOCREATE PROCEDURE x FROM t;' in an error-bearing file minted a
+    33	# phantom routine x() (delimited identifiers are span-skipped at the scan

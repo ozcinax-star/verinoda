@@ -1,0 +1,69 @@
+$ grep -rniE 'needs|retesting|orderrepository|save|changes' .   # 13 matching lines in 5 files
+orders/service.py:5: from orders.repository import OrderRepository
+orders/service.py:19: def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+orders/service.py:22: return repo.save(customer, total)
+orders/service.py:25: def fetch_order(repo: OrderRepository, order_id: int):
+orders/repository.py:8: class OrderRepository:
+orders/repository.py:15: def save(self, customer: str, total: float) -> int:
+orders/api.py:3: from orders.repository import OrderRepository
+orders/api.py:9: def get_repo() -> OrderRepository:
+orders/api.py:12: _repo = OrderRepository()
+tests/test_service.py:3: from orders.repository import OrderRepository
+tests/test_service.py:8: repo = OrderRepository(":memory:")
+tests/test_service.py:15: place_order(OrderRepository(":memory:"), "ada", [])
+docs/adr/0001-sqlite-persistence.md:5: We persist orders in SQLite through `OrderRepository` only. No other module
+
+==> orders/service.py:1-26 <==
+     1	"""Business logic between the HTTP layer and the repository."""
+     2	
+     3	from orders.config import MAX_ITEMS_PER_ORDER
+     4	from orders.pricing import compute_total
+     5	from orders.repository import OrderRepository
+     6	
+     7	
+     8	class ValidationError(ValueError):
+     9	    pass
+    10	
+    11	
+    12	def validate_items(items: list[dict]) -> None:
+    13	    if not items:
+    14	        raise ValidationError("order has no items")
+    15	    if len(items) > MAX_ITEMS_PER_ORDER:
+    16	        raise ValidationError("too many items")
+    17	
+    18	
+    19	def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+    20	    validate_items(items)
+    21	    total = compute_total(items)
+    22	    return repo.save(customer, total)
+    23	
+    24	
+    25	def fetch_order(repo: OrderRepository, order_id: int):
+    26	    return repo.get(order_id)
+
+==> orders/repository.py:1-25 <==  (truncated at char cap; file has 26 lines)
+     1	"""Persistence layer: the only module that talks to SQLite."""
+     2	
+     3	import sqlite3
+     4	
+     5	from orders.config import DATABASE_URL
+     6	
+     7	
+     8	class OrderRepository:
+     9	    def __init__(self, url: str = DATABASE_URL):
+    10	        self.conn = sqlite3.connect(url)
+    11	        self.conn.execute(
+    12	            "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+    13	        )
+    14	
+    15	    def save(self, customer: str, total: float) -> int:
+    16	        cur = self.conn.execute(
+    17	            "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+    18	        )
+    19	        self.conn.commit()
+    20	        return cur.lastrowid
+    21	
+    22	    def get(self, order_id: int):
+    23	        row = self.conn.execute(
+    24	            "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+    25	        ).fetchone()

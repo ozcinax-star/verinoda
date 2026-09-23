@@ -1,0 +1,75 @@
+# What happens when an order is submitted with no items?
+## orders/service.py:12-16 def validate_items(items: list[dict]) -> None
+  calls: ValidationError@14
+  called by: place_order (orders/service.py:20)
+def validate_items(items: list[dict]) -> None:
+    if not items:
+        raise ValidationError("order has no items")
+    if len(items) > MAX_ITEMS_PER_ORDER:
+        raise ValidationError("too many items")
+## orders/service.py:19-22 def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int
+  calls: validate_items@20, compute_total@21, save@22?
+  called by: create_order_handler (orders/api.py:18); test_empty_order_rejected (tests/test_service.py:15); test_place_and_fetch_roundtrip (tests/test_service.py:9)
+def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+    validate_items(items)
+    total = compute_total(items)
+    return repo.save(customer, total)
+## orders/pricing.py:6-8 def compute_total(items: list[dict]) -> float
+  calls: apply_discount@8
+  called by: place_order (orders/service.py:21); test_compute_total (tests/test_pricing.py:13)
+def compute_total(items: list[dict]) -> float:
+    subtotal = sum(i["price"] * i["qty"] for i in items)
+    return apply_discount(subtotal)
+## orders/config.py:10-15 def load_settings() -> dict
+def load_settings() -> dict:
+    return {
+        "database_url": DATABASE_URL,
+        "max_items": MAX_ITEMS_PER_ORDER,
+        "discount_threshold": DISCOUNT_THRESHOLD,
+    }
+## orders/config.py:5-7 DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+MAX_ITEMS_PER_ORDER = int(os.environ.get("ORDERS_MAX_ITEMS", "50"))
+DISCOUNT_THRESHOLD = float(os.environ.get("ORDERS_DISCOUNT_THRESHOLD", "100.0"))
+## orders/api.py:16-21 def create_order_handler(payload: dict) -> tuple[int, dict]
+def create_order_handler(payload: dict) -> tuple[int, dict]:
+    try:
+        order_id = place_order(get_repo(), payload["customer"], payload["items"])
+    except ValidationError as exc:
+        return 400, {"error": str(exc)}
+    return 201, {"id": order_id}
+## orders/repository.py:8-26 class OrderRepository
+class OrderRepository:
+    def __init__(self, url: str = DATABASE_URL):
+        self.conn = sqlite3.connect(url)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+        )
+
+    def save(self, customer: str, total: float) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+        )
+        self.conn.commit()
+        return cur.lastrowid
+
+    def get(self, order_id: int):
+        row = self.conn.execute(
+            "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+        ).fetchone()
+        return None if row is None else {"id": row[0], "customer": row[1], "total": row[2]}
+orders/service.py:8-9 class ValidationError(ValueError)
+tests/test_service.py:13-15 def test_empty_order_rejected()
+orders/pricing.py:11-15 def apply_discount(subtotal: float) -> float
+tests/test_service.py:7-10 def test_place_and_fetch_roundtrip()
+orders/api.py:9-13 def get_repo() -> OrderRepository
+orders/service.py:25-26 def fetch_order(repo: OrderRepository, order_id: int)
+tests/test_pricing.py:12-13 def test_compute_total()
+orders/api.py:24-28 def get_order_handler(order_id: int) -> tuple[int, dict]
+tests/test_pricing.py:4-5 def test_discount_applies_above_threshold()
+tests/test_pricing.py:8-9 def test_no_discount_below_threshold()
+docs/adr/0001-sqlite-persistence.md:1-7 # ADR 0001: SQLite for order persistence
+pyproject.toml:1-8 [project] name = "orders-app" version = "0.1.0" requires-python = ">=3.10" [tool.pytest.ini_options] testpaths = ["test…
+README.md:1-5 # orders_app
+orders/__init__.py:1-1 """Tiny order service used as the RepoAtlas end-to-end example."""
+(calls / called by: static call graph, '?' = inferred edge; may be incomplete)

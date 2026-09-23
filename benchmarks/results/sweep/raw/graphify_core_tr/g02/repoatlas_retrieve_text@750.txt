@@ -1,0 +1,40 @@
+# graphify query komutu bir soruyu graf bağlamına çevirmek için hangi fonksiyonları çağırıyor?
+expanded: graphify->install (lexicon); graphify->uninstall (lexicon); graphify->hook (lexicon); query->shortest (lexicon); query->graph (lexicon); baglamina->bind (lexicon)
+## graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+  calls: _custom_providers_path@1069, provider_base_url_ok@1140, cmd_prs@1184, install@1194, uninstall@1196, status@1198, _default_graph_path@1214, _enforce_graph_size_cap_or_exit@1251, graph_has_legacy_ids@1287, _query_graph_text@1302, log_query@1311, _touch_query_stamp@1321 (+107)
+  called by: _run_cli (graphify/__main__.py:751)
+  graphify/cli.py:1177-1190
+
+        else:
+            print("Usage: graphify provider [add|list|show|remove]", file=sys.stderr)
+            if subcmd:
+                sys.exit(1)
+    elif cmd == "prs":
+        from graphify.prs import cmd_prs
+        cmd_prs(sys.argv[2:])
+    elif cmd == "hook":
+        from graphify.hooks import (
+            install as hook_install,
+            uninstall as hook_uninstall,
+            status as hook_status,
+        )
+  graphify/cli.py:1191-1204
+
+        subcmd = sys.argv[2] if len(sys.argv) > 2 else ""
+        if subcmd == "install":
+            print(hook_install(Path(".")))
+        elif subcmd == "uninstall":
+            print(hook_uninstall(Path(".")))
+        elif subcmd == "status":
+            print(hook_status(Path(".")))
+        else:
+            print("Usage: graphify hook [install|uninstall|status]", file=sys.stderr)
+            sys.exit(1)
+    elif cmd == "query":
+        if len(sys.argv) < 3:
+            print("Usage: graphify query \"<question>\" [--dfs] [--context C] [--budget N] [--graph path]", file=sys.stderr)
+## graphify/extractors/bash.py:235-279 def walk_calls(body_node, func_nid: str, seen_calls: set) -> None
+  calls: _bash_call_in_command_allowed@244, literal@249, _make_id@254, add_edge@258, walk_calls@279
+  called by: walk_calls (graphify/extractors/bash.py:279)
+… 2239 more candidates not shown: graphify/skills/agents/references/hooks.md:5-19 ## For git commit hook; graphify/skills/amp/references/hooks.md:5-19 For git commit hook; graphify/skills/claude/references/hooks.md:5-19 For git commit hook; graphify/skills/claw/references/hooks.md:5-19 For git commit hook
+next: repoatlas query "graphify query komutu bir soruyu graf bağlamına çevirmek için hangi fonksiyonları çağırıyor?" --max-chars 6000

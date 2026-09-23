@@ -1,0 +1,26 @@
+{
+ "schema": "verinoda.http_cassette/1",
+ "key": "b5f1b247c282421bad41c48a3c26263546cb2881",
+ "request": {
+  "method": "GET",
+  "url": "https://docs.python.org/3/library/asyncio-task.html",
+  "headers": {
+   "User-Agent": "<redacted>"
+  }
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "text/html",
+   "last-modified": "Tue, 22 Sep 2026 19:59:19 GMT",
+   "etag": "\"6ab2de17-2b5e7\""
+  },
+  "final_url": "https://docs.python.org/3/library/asyncio-task.html",
+  "body_sha256": "4c8be562f6871d8682e3209dfeebbcb2e6708b057899b7f86de10cded7a9ab11",
+  "body_text": "<!DOCTYPE html>\n\n<html lang=\"en\" data-content_root=\"../\">\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n<meta property=\"og:title\" content=\"Coroutines and tasks\" />\n<meta property=\"og:type\" content=\"website\" />\n<meta property=\"og:url\" content=\"https://docs.python.org/3/library/asyncio-task.html\" />\n<meta property=\"og:site_name\" content=\"Python documentation\" />\n<meta property=\"og:description\" content=\"This section outlines high-level asyncio APIs to work with coroutines and Tasks. Coroutines, Awaitables, Creating tasks, Task cancellation, Task groups, Sleeping, Running tasks concurrently, Eager ...\" />\n<meta property=\"og:image:width\" content=\"1146\" />\n<meta property=\"og:image:height\" content=\"600\" />\n<meta property=\"og:image\" content=\"https://docs.python.org/3.14/_images/social_previews/summary_library_asyncio-task_304fcdb3.png\" />\n<meta property=\"og:image:alt\" content=\"This section outlines high-level asyncio APIs to work with coroutines and Tasks. Coroutines, Awaitables, Creating tasks, Task cancellation, Task groups, Sleeping, Running tasks concurrently, Eager ...\" />\n<meta name=\"description\" content=\"This section outlines high-level asyncio APIs to work with coroutines and Tasks. Coroutines, Awaitables, Creating tasks, Task cancellation, Task groups, Sleeping, Running tasks concurrently, Eager ...\" />\n<meta name=\"twitter:card\" content=\"summary_large_image\" />\n<meta name=\"theme-color\" content=\"#3776ab\">\n\n    <title>Coroutines and tasks &#8212; Python 3.14.7 documentation</title>\n</head><body>(trimmed by the recorder)</body></html>\n",
+  "body_b64": null,
+  "trimmed": true
+ },
+ "recorded_at": "2026-09-22T23:15:35Z",
+ "recorder": "tools/record_reference_cassettes.py/1"
+}

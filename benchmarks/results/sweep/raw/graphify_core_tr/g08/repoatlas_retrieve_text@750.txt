@@ -1,0 +1,37 @@
+# graphify update kod grafiğini LLM olmadan nasıl yeniden oluşturuyor?
+expanded: graphify->install (lexicon); graphify->uninstall (lexicon); graphify->hook (lexicon); update->only (lexicon); update->answ (lexicon); llm->batch (lexicon)
+## graphify/watch.py:2288-2295 def _batch_needs_llm_flag(batch: list[Path]) -> bool
+  doc: True when the batch contains a non-code file that still exists on disk.
+  calls: _has_non_code@2295
+  called by: watch (graphify/watch.py:2380)
+def _batch_needs_llm_flag(batch: list[Path]) -> bool:
+    """True when the batch contains a non-code file that still exists on disk.
+
+    Only surviving non-code files need the needs_update flag (LLM-backed
+    re-extraction); deleted ones are already handled by the rebuild's
+    reconcile sweep, so a pure-deletion batch must not leave a stale flag.
+    """
+    return _has_non_code([p for p in batch if p.exists()])
+## graphify/watch.py:2256-2267 def _batch_triggers_rebuild(batch: list[Path]) -> bool
+  doc: True when a debounced watch batch needs an immediate rebuild.
+  called by: watch (graphify/watch.py:2378)
+  const graphify/watch.py:283: _CODE_EXTENSIONS = CODE_EXTENSIONS
+def _batch_triggers_rebuild(batch: list[Path]) -> bool:
+    """True when a debounced watch batch needs an immediate rebuild.
+
+    Code changes always rebuild (AST extraction needs no LLM). Deletions of
+    ANY watched file also rebuild: eviction needs no LLM either — the full
+    corpus reconcile drops nodes whose source is gone from disk. Without
+    this, a doc-only deletion batch would sit behind the needs_update flag
+    until the next code event or a manual `graphify update` (#2580).
+    """
+    has_code = any(p.suffix.lower() in _CODE_EXTENSIONS for p in batch)
+    has_deletion = any(not p.exists() for p in batch)
+    return has_code or has_deletion
+## graphify/watch.py:2298-2386 def watch(watch_path: Path, debounce: float = 3.0) -> None
+  doc: Watch watch_path for new or modified files and auto-update the graph.
+  calls: _load_graphifyignore@2327, _read_build_gitignore@2329, _is_ignored@2343, _batch_triggers_rebuild@2378, _rebuild_code@2379, _batch_needs_llm_flag@2380, _notify_only@2381
+  called by: dispatch_command (graphify/cli.py:1990)
+  const graphify/watch.py:282: _WATCHED_EXTENSIONS = CODE_EXTENSIONS | DOC_EXTENSIONS | PAPER_EXTENSIONS | IMAGE_EXTENSIONS
+… 2237 more candidates not shown: graphify/skills/agents/references/update.md:5-200 ## For --update (incremental re-extraction); graphify/skills/amp/references/update.md:5-200 ## For --update (incremental re-extraction); graphify/dedup.py:1090-1220 _llm_tiebreak; graphify/watch.py:2241-2249 _notify_only
+next: repoatlas query "graphify update kod grafiğini LLM olmadan nasıl yeniden oluşturuyor?" --max-chars 6000

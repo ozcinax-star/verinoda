@@ -1,0 +1,152 @@
+$ grep -rniE 'call|path|create|order|http|handler|database|write' .   # 54 matching lines in 11 files
+orders/api.py:1: """HTTP-style entry points (framework-free handlers)."""
+orders/api.py:3: from orders.repository import OrderRepository
+orders/api.py:4: from orders.service import ValidationError, fetch_order, place_order
+orders/api.py:9: def get_repo() -> OrderRepository:
+orders/api.py:12: _repo = OrderRepository()
+orders/api.py:16: def create_order_handler(payload: dict) -> tuple[int, dict]:
+orders/api.py:18: order_id = place_order(get_repo(), payload["customer"], payload["items"])
+orders/api.py:21: return 201, {"id": order_id}
+orders/api.py:24: def get_order_handler(order_id: int) -> tuple[int, dict]:
+orders/api.py:25: order = fetch_order(get_repo(), order_id)
+orders/api.py:26: if order is None:
+orders/api.py:28: return 200, order
+orders/repository.py:5: from orders.config import DATABASE_URL
+orders/repository.py:8: class OrderRepository:
+orders/repository.py:9: def __init__(self, url: str = DATABASE_URL):
+orders/repository.py:12: "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+orders/repository.py:17: "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+orders/repository.py:22: def get(self, order_id: int):
+orders/repository.py:24: "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+README.md:1: # orders_app
+README.md:3: Example service for RepoAtlas. `orders/api.py` handlers call `orders/service.py`,
+README.md:4: which prices orders via `orders/pricing.py` and persists them through
+README.md:5: `orders/repository.py` (SQLite, see docs/adr/0001-sqlite-persistence.md).
+orders/service.py:1: """Business logic between the HTTP layer and the repository."""
+orders/service.py:3: from orders.config import MAX_ITEMS_PER_ORDER
+orders/service.py:4: from orders.pricing import compute_total
+orders/service.py:5: from orders.repository import OrderRepository
+orders/service.py:14: raise ValidationError("order has no items")
+orders/service.py:15: if len(items) > MAX_ITEMS_PER_ORDER:
+orders/service.py:19: def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+orders/service.py:25: def fetch_order(repo: OrderRepository, order_id: int):
+orders/service.py:26: return repo.get(order_id)
+orders/config.py:5: DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+orders/config.py:6: MAX_ITEMS_PER_ORDER = int(os.environ.get("ORDERS_MAX_ITEMS", "50"))
+orders/config.py:7: DISCOUNT_THRESHOLD = float(os.environ.get("ORDERS_DISCOUNT_THRESHOLD", "100.0"))
+orders/config.py:12: "database_url": DATABASE_URL,
+orders/config.py:13: "max_items": MAX_ITEMS_PER_ORDER,
+docs/adr/0001-sqlite-persistence.md:1: # ADR 0001: SQLite for order persistence
+docs/adr/0001-sqlite-persistence.md:5: We persist orders in SQLite through `OrderRepository` only. No other module
+docs/adr/0001-sqlite-persistence.md:6: may open a database connection. Chosen for zero-ops local development; a
+... (14 more matching lines not shown)
+
+==> orders/api.py:1-28 <==
+     1	"""HTTP-style entry points (framework-free handlers)."""
+     2	
+     3	from orders.repository import OrderRepository
+     4	from orders.service import ValidationError, fetch_order, place_order
+     5	
+     6	_repo = None
+     7	
+     8	
+     9	def get_repo() -> OrderRepository:
+    10	    global _repo
+    11	    if _repo is None:
+    12	        _repo = OrderRepository()
+    13	    return _repo
+    14	
+    15	
+    16	def create_order_handler(payload: dict) -> tuple[int, dict]:
+    17	    try:
+    18	        order_id = place_order(get_repo(), payload["customer"], payload["items"])
+    19	    except ValidationError as exc:
+    20	        return 400, {"error": str(exc)}
+    21	    return 201, {"id": order_id}
+    22	
+    23	
+    24	def get_order_handler(order_id: int) -> tuple[int, dict]:
+    25	    order = fetch_order(get_repo(), order_id)
+    26	    if order is None:
+    27	        return 404, {"error": "not found"}
+    28	    return 200, order
+
+==> orders/repository.py:1-26 <==
+     1	"""Persistence layer: the only module that talks to SQLite."""
+     2	
+     3	import sqlite3
+     4	
+     5	from orders.config import DATABASE_URL
+     6	
+     7	
+     8	class OrderRepository:
+     9	    def __init__(self, url: str = DATABASE_URL):
+    10	        self.conn = sqlite3.connect(url)
+    11	        self.conn.execute(
+    12	            "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+    13	        )
+    14	
+    15	    def save(self, customer: str, total: float) -> int:
+    16	        cur = self.conn.execute(
+    17	            "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+    18	        )
+    19	        self.conn.commit()
+    20	        return cur.lastrowid
+    21	
+    22	    def get(self, order_id: int):
+    23	        row = self.conn.execute(
+    24	            "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+    25	        ).fetchone()
+    26	        return None if row is None else {"id": row[0], "customer": row[1], "total": row[2]}
+
+==> README.md:1-5 <==
+     1	# orders_app
+     2	
+     3	Example service for RepoAtlas. `orders/api.py` handlers call `orders/service.py`,
+     4	which prices orders via `orders/pricing.py` and persists them through
+     5	`orders/repository.py` (SQLite, see docs/adr/0001-sqlite-persistence.md).
+
+==> orders/service.py:1-26 <==
+     1	"""Business logic between the HTTP layer and the repository."""
+     2	
+     3	from orders.config import MAX_ITEMS_PER_ORDER
+     4	from orders.pricing import compute_total
+     5	from orders.repository import OrderRepository
+     6	
+     7	
+     8	class ValidationError(ValueError):
+     9	    pass
+    10	
+    11	
+    12	def validate_items(items: list[dict]) -> None:
+    13	    if not items:
+    14	        raise ValidationError("order has no items")
+    15	    if len(items) > MAX_ITEMS_PER_ORDER:
+    16	        raise ValidationError("too many items")
+    17	
+    18	
+    19	def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+    20	    validate_items(items)
+    21	    total = compute_total(items)
+    22	    return repo.save(customer, total)
+    23	
+    24	
+    25	def fetch_order(repo: OrderRepository, order_id: int):
+    26	    return repo.get(order_id)
+
+==> orders/config.py:1-15 <==
+     1	"""Runtime configuration read from the environment."""
+     2	
+     3	import os
+     4	
+     5	DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+     6	MAX_ITEMS_PER_ORDER = int(os.environ.get("ORDERS_MAX_ITEMS", "50"))
+     7	DISCOUNT_THRESHOLD = float(os.environ.get("ORDERS_DISCOUNT_THRESHOLD", "100.0"))
+     8	
+     9	
+    10	def load_settings() -> dict:
+    11	    return {
+    12	        "database_url": DATABASE_URL,
+    13	        "max_items": MAX_ITEMS_PER_ORDER,
+    14	        "discount_threshold": DISCOUNT_THRESHOLD,
+    15	    }

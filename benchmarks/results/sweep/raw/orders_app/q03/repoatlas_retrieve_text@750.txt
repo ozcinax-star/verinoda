@@ -1,0 +1,45 @@
+# Which environment variables configure the orders service and where are they read?
+## orders/config.py:1-1 """Runtime configuration read from the environment."""
+"""Runtime configuration read from the environment."""
+## orders/pricing.py:11-15 def apply_discount(subtotal: float) -> float
+  called by: compute_total (orders/pricing.py:8); test_discount_applies_above_threshold (tests/test_pricing.py:5); test_no_discount_below_threshold (tests/test_pricing.py:9)
+def apply_discount(subtotal: float) -> float:
+    # 10% off above the configured threshold.
+    if subtotal > DISCOUNT_THRESHOLD:
+        return round(subtotal * 0.9, 2)
+    return subtotal
+## README.md:1-5 # orders_app
+# orders_app
+
+Example service for RepoAtlas. `orders/api.py` handlers call `orders/service.py`,
+which prices orders via `orders/pricing.py` and persists them through
+`orders/repository.py` (SQLite, see docs/adr/0001-sqlite-persistence.md).
+## orders/service.py:19-22 def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int
+def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+    validate_items(items)
+    total = compute_total(items)
+    return repo.save(customer, total)
+## orders/service.py:25-26 def fetch_order(repo: OrderRepository, order_id: int)
+def fetch_order(repo: OrderRepository, order_id: int):
+    return repo.get(order_id)
+## tests/test_service.py:13-15 def test_empty_order_rejected()
+def test_empty_order_rejected():
+    with pytest.raises(ValidationError):
+        place_order(OrderRepository(":memory:"), "ada", [])
+## orders/pricing.py:6-8 def compute_total(items: list[dict]) -> float
+def compute_total(items: list[dict]) -> float:
+    subtotal = sum(i["price"] * i["qty"] for i in items)
+    return apply_discount(subtotal)
+orders/config.py:5-7 DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+tests/test_pricing.py:4-5 def test_discount_applies_above_threshold()
+tests/test_pricing.py:8-9 def test_no_discount_below_threshold()
+orders/repository.py:8-26 class OrderRepository
+tests/test_service.py:7-10 def test_place_and_fetch_roundtrip()
+orders/service.py:12-16 def validate_items(items: list[dict]) -> None
+tests/test_pricing.py:12-13 def test_compute_total()
+orders/repository.py:22-26 def get(self, order_id: int)
+orders/api.py:9-13 def get_repo() -> OrderRepository
+orders/api.py:16-21 def create_order_handler(payload: dict) -> tuple[int, dict]
+orders/api.py:24-28 def get_order_handler(order_id: int) -> tuple[int, dict]
+… 7 more candidates not shown: orders/service.py:8-9 class ValidationError(ValueError); orders/repository.py:15-20 def save(self, customer: str, total: float) -> int; orders/__init__.py:1-1 """Tiny order service used as the RepoAtlas end-to-end example."""; orders/repository.py:9-13 def __init__(self, url: str = DATABASE_URL)
+next: repoatlas query "Which environment variables configure the orders service and where are they read?" --max-chars 6000

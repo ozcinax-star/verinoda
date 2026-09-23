@@ -1,0 +1,31 @@
+Graph: .repoatlas/index/graph.json (41 nodes) | Traversal: BFS depth=3 | Start: ['create_order_handler()', 'HTTP-style entry points (framework-free handlers).', 'OrderRepository'] | Context: call (heuristic) | 14 nodes found
+
+NODE create_order_handler() [src=orders/api.py loc=L16 community=api.py]
+NODE HTTP-style entry points (framework-free handlers). [src=orders/api.py loc=L1 community=api.py]
+NODE OrderRepository [src=orders/repository.py loc=L8 community=OrderRepository]
+NODE place_order() [src=orders/service.py loc=L19 community=service.py]
+NODE get_repo() [src=orders/api.py loc=L9 community=api.py]
+NODE test_place_and_fetch_roundtrip() [src=tests/test_service.py loc=L7 community=service.py]
+NODE test_empty_order_rejected() [src=tests/test_service.py loc=L13 community=service.py]
+NODE compute_total() [src=orders/pricing.py loc=L6 community=compute_total]
+NODE get_order_handler() [src=orders/api.py loc=L24 community=api.py]
+NODE fetch_order() [src=orders/service.py loc=L25 community=api.py]
+NODE validate_items() [src=orders/service.py loc=L12 community=service.py]
+NODE apply_discount() [src=orders/pricing.py loc=L11 community=compute_total]
+NODE ValidationError [src=orders/service.py loc=L8 community=service.py]
+NODE test_compute_total() [src=tests/test_pricing.py loc=L12 community=compute_total]
+EDGE test_empty_order_rejected() --calls [EXTRACTED context=call]--> OrderRepository at=tests/test_service.py:L15
+EDGE test_place_and_fetch_roundtrip() --calls [EXTRACTED context=call]--> OrderRepository at=tests/test_service.py:L8
+EDGE get_repo() --calls [EXTRACTED context=call]--> OrderRepository at=orders/api.py:L12
+EDGE create_order_handler() --calls [EXTRACTED context=call]--> place_order() at=orders/api.py:L18
+EDGE create_order_handler() --calls [EXTRACTED context=call]--> get_repo() at=orders/api.py:L18
+EDGE test_place_and_fetch_roundtrip() --calls [EXTRACTED context=call]--> fetch_order() at=tests/test_service.py:L10
+EDGE get_order_handler() --calls [EXTRACTED context=call]--> get_repo() at=orders/api.py:L25
+EDGE place_order() --calls [EXTRACTED context=call]--> validate_items() at=orders/service.py:L20
+EDGE place_order() --calls [EXTRACTED context=call]--> compute_total() at=orders/service.py:L21
+EDGE validate_items() --calls [EXTRACTED context=call]--> ValidationError at=orders/service.py:L14
+EDGE compute_total() --calls [EXTRACTED context=call]--> apply_discount() at=orders/pricing.py:L8
+EDGE test_compute_total() --calls [EXTRACTED context=call]--> compute_total() at=tests/test_pricing.py:L13
+EDGE get_order_handler() --calls [EXTRACTED context=call]--> fetch_order() at=orders/api.py:L25
+EDGE test_empty_order_rejected() --calls [EXTRACTED context=call]--> place_order() at=tests/test_service.py:L15
+EDGE test_place_and_fetch_roundtrip() --calls [EXTRACTED context=call]--> place_order() at=tests/test_service.py:L9

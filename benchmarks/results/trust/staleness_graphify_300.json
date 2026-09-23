@@ -1,0 +1,294 @@
+{
+  "args": {
+    "cap": 40,
+    "commits": 300,
+    "pathspec": "graphify/*.py"
+  },
+  "by_kind": {
+    "config": {
+      "claims": 1233,
+      "file_mode": {
+        "false_stale_rate": 1.0,
+        "missed": 0,
+        "precision": 0.0,
+        "recall": 1.0,
+        "stale": 1233
+      },
+      "symbol_mode": {
+        "false_stale_rate": 0.3633,
+        "missed": 0,
+        "precision": 0.0,
+        "recall": 1.0,
+        "stale": 448
+      },
+      "truth_changed": 0,
+      "verified_at_parent": 1233
+    },
+    "location": {
+      "claims": 12094,
+      "file_mode": {
+        "false_stale_rate": 1.0,
+        "missed": 0,
+        "precision": 0.0314,
+        "recall": 1.0,
+        "stale": 12094
+      },
+      "symbol_mode": {
+        "false_stale_rate": 0.0,
+        "missed": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "stale": 380
+      },
+      "truth_changed": 380,
+      "verified_at_parent": 12094
+    },
+    "relation": {
+      "claims": 12770,
+      "file_mode": {
+        "false_stale_rate": 1.0,
+        "missed": 0,
+        "precision": 0.0054,
+        "recall": 1.0,
+        "stale": 12770
+      },
+      "symbol_mode": {
+        "false_stale_rate": 0.2105,
+        "missed": 0,
+        "precision": 0.0252,
+        "recall": 1.0,
+        "stale": 2743
+      },
+      "truth_changed": 69,
+      "verified_at_parent": 12770
+    }
+  },
+  "cap_per_kind_per_file": 40,
+  "claim_recording_s_per_commit": 2.724,
+  "commits_replayed": 300,
+  "commits_requested": 300,
+  "corpus": "upstream-graphify",
+  "corpus_head": "20a20d30d8e7eef77675651f0199d87f913bd3e7",
+  "environment": {
+    "cpu_count": 6,
+    "date_utc": "2026-09-23T01:22:04+00:00",
+    "git": "git version 2.53.0.windows.1",
+    "graphify_cli": null,
+    "machine": "AMD64",
+    "os": "Windows-11-10.0.26200-SP0",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "python": "3.12.0",
+    "python_impl": "CPython",
+    "repoatlas_package_changes_vs_commit": [
+      "M repoatlas/agents/templates/claude_SKILL.md",
+      "M repoatlas/agents/templates/codex_SKILL.md",
+      "M repoatlas/analysis.py",
+      "M repoatlas/benchmark/__main__.py",
+      "M repoatlas/benchmark/approaches.py",
+      "M repoatlas/benchmark/critique_eval.py",
+      "M repoatlas/benchmark/metrics.py",
+      "M repoatlas/benchmark/questions/graphify_core.json",
+      "M repoatlas/benchmark/questions/orders_app.json",
+      "M repoatlas/benchmark/report.py",
+      "M repoatlas/benchmark/runner.py",
+      "M repoatlas/benchmark/sanitize.py",
+      "M repoatlas/benchmark/staleness.py",
+      "M repoatlas/cli.py",
+      "M repoatlas/doctor.py",
+      "M repoatlas/feedback.py",
+      "M repoatlas/mcp/__init__.py",
+      "M repoatlas/mcp/server.py",
+      "M repoatlas/paths.py",
+      "M repoatlas/workflow.py",
+      "?? repoatlas/benchmark/questions/graphify_core_tr.json",
+      "?? repoatlas/benchmark/questions/heldout_repoatlas.json",
+      "?? repoatlas/benchmark/questions/orders_app_tr.json"
+    ],
+    "repoatlas_package_diff_sha256": "1a8dd47e680d8a7333ce15c25b0b9e14d8789cfc6fa066e1d476e3973b34f764",
+    "repoatlas_source_commit": "73719901c9dea49c2e87120ca040c6b998298fe3",
+    "repoatlas_version": "0.1.0.dev0",
+    "vendored_graphify_commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7"
+  },
+  "false_stale_examples": [
+    {
+      "claim": "`to_html()` calls `_node_community_map()` (graphify/exporters/html.py:481)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `write_text_atomic()` (graphify/exporters/html.py:636)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `_viz_node_limit()` (graphify/exporters/html.py:420)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `sanitize_label()` (graphify/exporters/html.py:506)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `sanitize_label()` (graphify/exporters/html.py:598)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `to_html()` (graphify/exporters/html.py:468)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `sanitize_label()` (graphify/exporters/html.py:524)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `sanitize_label()` (graphify/exporters/html.py:525)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `sanitize_label()` (graphify/exporters/html.py:533)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `sanitize_label()` (graphify/exporters/html.py:586)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `_html_document_title()` (graphify/exporters/html.py:598)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `_html_styles()` (graphify/exporters/html.py:609)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `_html_script()` (graphify/exporters/html.py:631)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`to_html()` calls `_hyperedge_script()` (graphify/exporters/html.py:632)",
+      "commit": "785ee5a426a8",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/exporters/html.py::to_html",
+        "cited lines changed"
+      ]
+    },
+    {
+      "claim": "`_reconcile_existing_graph()` calls `_StoredSourcePaths()` (graphify/watch.py:815)",
+      "commit": "87a82770eb5d",
+      "kind": "relation",
+      "why": [
+        "sym:graphify/watch.py::_reconcile_existing_graph",
+        "cited lines changed"
+      ]
+    }
+  ],
+  "file_versions": 388,
+  "invalidation_ms": {
+    "max": 803.3,
+    "p50": 109.9,
+    "p95": 355.8
+  },
+  "overall": {
+    "claims": 26097,
+    "file_mode": {
+      "false_stale_rate": 1.0,
+      "missed": 0,
+      "precision": 0.0172,
+      "recall": 1.0,
+      "stale": 26097
+    },
+    "symbol_mode": {
+      "false_stale_rate": 0.1217,
+      "missed": 0,
+      "precision": 0.1257,
+      "recall": 1.0,
+      "stale": 3571
+    },
+    "truth_changed": 449,
+    "verified_at_parent": 26097
+  },
+  "paths_sanitized": {
+    "placeholders": [],
+    "rule": "absolute home / temp / checkout paths replaced when written; see repoatlas/benchmark/sanitize.py"
+  },
+  "pathspec": "graphify/*.py",
+  "rebound": 22526,
+  "recall_ok": true,
+  "relocation": {
+    "accuracy": 1.0,
+    "exact": 10259,
+    "moved": 10259,
+    "wilson95": [
+      0.9996,
+      1.0
+    ]
+  },
+  "schema": "repoatlas.staleness_replay/1",
+  "silent_wrong": 0,
+  "silent_wrong_examples": [],
+  "silent_wrong_ok": true
+}

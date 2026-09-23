@@ -1,0 +1,195 @@
+$ grep -rniE 'repoatlas|decide|whether|experiment|command|needs|container' .   # 1877 matching lines in 103 files
+repoatlas/analysis.py:4: :mod:`repoatlas.question_plan`): the host agent's plan when one is given,
+repoatlas/analysis.py:11: 3. an invalid plan stops here (``status: invalid_plan``); a plan that needs
+repoatlas/analysis.py:13: (``status: needs_clarification``) and writes no claim
+repoatlas/analysis.py:31: A :class:`Budget` bounds wall time (index refresh and experiments included),
+repoatlas/analysis.py:51: from repoatlas import architecture_map as am
+repoatlas/analysis.py:52: from repoatlas import callsite
+repoatlas/analysis.py:53: from repoatlas import evidence as evmod
+repoatlas/analysis.py:54: from repoatlas import index, retrieval
+repoatlas/analysis.py:55: from repoatlas import question_plan as qp
+repoatlas/analysis.py:56: from repoatlas import textnorm as tn
+repoatlas/analysis.py:57: from repoatlas.claims import ORDER, VERIFIED, Claims
+repoatlas/analysis.py:58: from repoatlas.paths import load_config
+repoatlas/analysis.py:59: from repoatlas.snapshot import current_state, git
+repoatlas/analysis.py:60: from repoatlas.store import Store, new_id, now
+repoatlas/analysis.py:295: if str(d.get("_origin", "")).startswith("repoatlas"):
+repoatlas/analysis.py:638: "next_step": f"`repoatlas trace {qp._bare(g.label(src[0]))} {qp._bare(g.label(tgt[0]))} --mode any` "
+repoatlas/analysis.py:695: "next_step": "name the entry function and the storage function: `repoatlas trace A B`"})
+repoatlas/analysis.py:814: from repoatlas.runtime import trace as rt  # runtime track; optional
+repoatlas/analysis.py:826: "next_step": "run the tests with the runtime tracer (repoatlas runtime extra), or use "
+repoatlas/analysis.py:839: kw = {"timeout": min(float(ctx.cfg["experiments"]["default_timeout"]), ctx.budget.remaining_seconds()),
+repoatlas/analysis.py:864: cue_words = {"why", "neden", "nicin", "niye", "reason", "rationale", "decision", "decided", "gerekce", "karar"}
+repoatlas/analysis.py:937: "next_step": "search issue tracker/PR discussion; or `repoatlas research <reference>` "
+repoatlas/analysis.py:942: "next_step": "compare with code via `repoatlas challenge <claim>`"})
+repoatlas/analysis.py:974: "why": "a behaviour question needs a checkable proposition; the claims above only say "
+repoatlas/analysis.py:983: from repoatlas import feedback
+repoatlas/analysis.py:1070: sub.flags["not_supported"] = "reference comparison runs through `repoatlas research`/`compare`"
+repoatlas/analysis.py:1072: from repoatlas import references  # reference track; optional
+repoatlas/analysis.py:1093: "next_step": f"`repoatlas research {loc}`" + (f" at {spec}" if spec else "")
+repoatlas/analysis.py:1094: + " then `repoatlas compare`"})
+repoatlas/analysis.py:1102: "next_step": "`repoatlas map` for architecture views, or ask about a specific function"})
+repoatlas/analysis.py:1176: + (", or `repoatlas resolve` the reference" if c["kind"] == "version"
+repoatlas/analysis.py:1183: "next_step": "read that version with `repoatlas research <repository> --ref <version>` "
+repoatlas/analysis.py:1184: "(or `repoatlas resolve` the reference first)"})
+repoatlas/analysis.py:1221: "or run `repoatlas map` to browse"})
+repoatlas/analysis.py:1227: "next_step": "use the names the code uses (see `repoatlas map`), or research the "
+repoatlas/analysis.py:1408: from repoatlas import lexicon as lexmod
+repoatlas/analysis.py:1433: from repoatlas import critique, workflow
+repoatlas/analysis.py:1473: "next_step": "run `repoatlas scan --force`" + (f" ({res['hint']})" if res.get("hint") else "")})
+repoatlas/analysis.py:1514: if check_res["status"] == "invalid" or (check_res["status"] == "needs_clarification" and on_ambiguity == "ask"):
+repoatlas/analysis.py:1515: status = "invalid_plan" if check_res["status"] == "invalid" else "needs_clarification"
+... (1837 more matching lines not shown)
+
+==> repoatlas/analysis.py:1-151 <==  (truncated at char cap; file has 1699 lines)
+     1	"""Budgeted analysis loop: question -> plan -> claims with evidence -> critique -> answer.
+     2	
+     3	Every analysis runs through a question plan (docs/DESIGN.md D1-D9,
+     4	:mod:`repoatlas.question_plan`): the host agent's plan when one is given,
+     5	otherwise one drafted by rules. Order of work (cheapest reliable tool first):
+     6	
+     7	 1. refresh the index when the working tree changed (errors become unknowns)
+     8	 2. plan: draft (or parse) and check it - schema, integrity, grounding,
+     9	    versions, mention links; the plan and its check are stored
+    10	    (``question_plans``) and the analysis references it (``analyses.plan_id``)
+    11	 3. an invalid plan stops here (``status: invalid_plan``); a plan that needs
+    12	    clarification with ``on_ambiguity: ask`` returns the grounded questions
+    13	    (``status: needs_clarification``) and writes no claim
+    14	 4. per sub-question, in dependency order, with a share of the budget:
+    15	    retrieval seeded by the linked mentions (and by the symbols located for
+    16	    ``subject_from``) with lexicon / seed-dictionary expansions; items must
+    17	    pass a relevance test against the question's grounded words, otherwise the
+    18	    sub-question is an ``unknown`` with a next step - never a claim about
+    19	    unrelated code
+    20	 5. location and relation claims for the relevant items, then the handler of
+    21	    the sub-question's intent (and of its secondary intents): flow, dataflow,
+    22	    callers, config, tests (optional test run / runtime observation), why /
+    23	    history, impact, behaviour (a proposition check), reference comparison
+    24	 6. critique of each claim (confidence only goes down); a tests claim whose
+    25	    counter-probe refutes a listed test is superseded by a corrected claim
+    26	 7. each sub-question is judged against its ``done_when``: ``met``,
+    27	    ``met_with_inference``, ``unmet``, ``not_supported`` or
+    28	    ``blocked_by_clarification``; :func:`audit` recomputes the verdicts later
+    29	    and marks a sub-question ``stale`` when a claim it relies on went stale
+    30	
+    31	A :class:`Budget` bounds wall time (index refresh and experiments included),
+    32	tool calls and returned context. Every claim, unknown, step and critique entry
+    33	that is returned is charged to the context budget at its serialised size
+    34	(tokens estimated as chars/4). When the budget runs out no further claim is
+    35	produced: every sub-question that was skipped or cut short is reported as an
+    36	``unknown`` naming it, instead of being answered from guesses.
+    37	"""
+    38	
+    39	from __future__ import annotations
+    40	
+    41	import fnmatch
+    42	import inspect
+    43	import json
+    44	import re
+    45	import sys
+    46	import time
+    47	from collections import Counter, defaultdict
+    48	from dataclasses import dataclass, field
+    49	from pathlib import Path
+    50	
+    51	from repoatlas import architecture_map as am
+    52	from repoatlas import callsite
+    53	from repoatlas import evidence as evmod
+    54	from repoatlas import index, retrieval
+    55	from repoatlas import question_plan as qp
+    56	from repoatlas import textnorm as tn
+    57	from repoatlas.claims import ORDER, VERIFIED, Claims
+    58	from repoatlas.paths import load_config
+    59	from repoatlas.snapshot import current_state, git
+    60	from repoatlas.store import Store, new_id, now
+    61	
+    62	NEXT_BUDGET = "re-run with a larger --budget-* or a narrower question"
+    63	SUBQUESTIONS = {
+    64	    "location": "where is it defined?",
+    65	    "relations": "how are the retrieved symbols connected (calls/uses/inherits)?",
+    66	    "flow": "which path takes data from an entry point to persistence?",
+    67	    "callers": "which code calls it?",
+    68	    "config": "which configuration affects this?",
+    69	    "tests": "which tests statically reach it?",
+    70	    "why": "why is it built this way (decision records, history)?",
+    71	    "impact": "what does a change here affect?",
+    72	    "behaviour": "does the code behave as the question states?",
+    73	    "compare_reference": "how does it differ from the referenced version?",
+    74	}
+    75	# plan intent -> the legacy name kept in the ``intents`` output field
+    76	LEGACY_INTENT = {"locate": "location", "define": "location"}
+    77	LEGACY_ORDER = ("why", "flow", "dataflow", "config", "tests", "impact", "location", "callers", "behaviour",
+    78	                "history", "compare_reference", "performance", "architecture", "usage")
+    79	RELEVANCE_MIN = 0.25        # share of the grounded question words an item must carry
+    80	LOCATION_FIRST = {"locate", "define", "behaviour", "performance", "architecture", "usage"}
+    81	UNGROUNDED_MAJORITY = 0.5   # more than this share of content words absent from the repo -> unknown
+    82	MIN_STATUS_DEFAULT = "strong_inference"
+    83	PERSISTENCE_TARGET = "(persistence)"
+    84	
+    85	
+    86	@dataclass
+    87	class Budget:
+    88	    seconds: float = 60
+    89	    tool_calls: int = 40
+    90	    context_tokens: int = 6000
+    91	    started: float = field(default_factory=time.monotonic)
+    92	    calls: int = 0
+    93	    chars: int = 0
+    94	    exhausted_reason: str | None = None
+    95	
+    96	    def _check(self) -> None:
+    97	        if self.exhausted_reason is not None:
+    98	            return
+    99	        if time.monotonic() - self.started > self.seconds:
+   100	            self.exhausted_reason = f"time budget {self.seconds}s spent"
+   101	        elif self.calls > self.tool_calls:
+   102	            self.exhausted_reason = f"tool-call budget {self.tool_calls} spent"
+   103	        elif self.chars // 4 > self.context_tokens:
+   104	            self.exhausted_reason = f"context budget ~{self.context_tokens} tokens spent"
+   105	
+   106	    def spend(self, calls: int = 1, chars: int = 0) -> bool:
+   107	        self.calls += calls
+   108	        self.chars += chars
+   109	        self._check()
+   110	        return self.exhausted_reason is None
+   111	
+   112	    def fits(self, chars: int) -> bool:
+   113	        """True when ``chars`` more returned context stay within budget (nothing is charged)."""
+   114	        self._check()
+   115	        if self.exhausted_reason is not None:
+   116	            return False
+   117	        if (self.chars + chars) // 4 > self.context_tokens:
+   118	            self.exhausted_reason = f"context budget ~{self.context_tokens} tokens spent"
+   119	            return False
+   120	        return True
+   121	
+   122	    def work_ok(self) -> bool:
+   123	        """Time and one more tool call are still available (context aside)."""
+   124	        return time.monotonic() - self.started <= self.seconds and self.calls + 1 <= self.tool_calls
+   125	
+   126	    def remaining_seconds(self) -> float:
+   127	        return self.seconds - (time.monotonic() - self.started)
+   128	
+   129	    @property
+   130	    def ok(self) -> bool:
+   131	        self._check()
+   132	        return self.exhausted_reason is None
+   133	
+   134	    def usage(self) -> dict:
+   135	        return {"elapsed_s": round(time.monotonic() - self.started, 3), "tool_calls": self.calls,
+   136	                "context_chars": self.chars, "context_tokens_est": self.chars // 4,
+   137	                "token_count_method": "chars/4 estimate", "exhausted": self.exhausted_reason}
+   138	
+   139	
+   140	def _size(obj) -> int:
+   141	    return len(json.dumps(obj, ensure_ascii=False, default=str))
+   142	
+   143	
+   144	# -- intents (legacy entry points, now backed by the plan's cue tables) -----------------------------
+   145	
+   146	def fold_tr(text: str) -> str:
+   147	    """Lower-case, ASCII-folded Turkish (``İ``/``I``/``ı`` -> ``i``, ``ş`` -> ``s`` ...)."""
+   148	    return tn.fold_tr(tn.nfc(text)).replace("̇", "")
+   149	
+   150	
+   151	def _legacy(intents) -> list[str]:

@@ -1,0 +1,210 @@
+$ grep -rniE 'experiment|process|tree|killed|times|out' .   # 2757 matching lines in 102 files
+tests/test_experiments.py:1: """Experiments: real isolated runs on a git-committed copy of examples/orders_app.
+tests/test_experiments.py:3: Every test runs a real child process (no mocks of experiments.run): allowlisted
+tests/test_experiments.py:4: pytest in a throw-away copy with a scrubbed environment, timeouts that kill the
+tests/test_experiments.py:5: whole process tree, refusal of non-allowlisted commands, logs on disk with only
+tests/test_experiments.py:13: os.environ.setdefault("GRAPHIFY_OUT", ".repoatlas/index")
+tests/test_experiments.py:18: import subprocess  # noqa: E402
+tests/test_experiments.py:26: from repoatlas import experiments  # noqa: E402
+tests/test_experiments.py:36: pytestmark = [pytest.mark.experiment,
+tests/test_experiments.py:41: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.autocrlf=false", *args],
+tests/test_experiments.py:42: cwd=cwd, check=True, capture_output=True)
+tests/test_experiments.py:46: shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".repoatlas", "__pycache__", "*.pyc",
+tests/test_experiments.py:54: def _tree_digest(repo: Path) -> dict[str, str]:
+tests/test_experiments.py:55: """Every file outside .repoatlas (where run logs legitimately go)."""
+tests/test_experiments.py:56: out = {}
+tests/test_experiments.py:60: out[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
+tests/test_experiments.py:61: return out
+tests/test_experiments.py:69: h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+tests/test_experiments.py:73: k32.GetExitCodeProcess(h, ctypes.byref(code))
+tests/test_experiments.py:78: except ProcessLookupError:
+tests/test_experiments.py:117: assert experiments.classify(argv, DEFAULT_CONFIG["experiments"]["process_isolation_allowlist"]) == expected
+tests/test_experiments.py:124: env = experiments._scrubbed_env(tmp_path)
+tests/test_experiments.py:129: assert env["REPOATLAS_EXPERIMENT"] == "1"
+tests/test_experiments.py:134: def test_allowlisted_pytest_passes_in_a_copy_with_process_isolation(proj):
+tests/test_experiments.py:140: "    Path('WRITTEN_BY_EXPERIMENT.txt').write_text('x')\n"
+tests/test_experiments.py:142: before = _tree_digest(repo)
+tests/test_experiments.py:143: res = experiments.run(st, repo, [*PYTEST, "-s", "tests/test_pricing.py", probe],
+tests/test_experiments.py:145: assert res["isolation"] == "process" and res["outcome"] == "pass" and res["matches_expectation"]
+tests/test_experiments.py:147: assert g["separate_process"] and g["cwd_is_copy"] and g["env_allowlisted"] and g["timeout_kills_tree"]
+tests/test_experiments.py:149: # The original tree is untouched: nothing written, nothing changed.
+tests/test_experiments.py:150: assert _tree_digest(repo) == before
+tests/test_experiments.py:151: assert not (repo / "WRITTEN_BY_EXPERIMENT.txt").exists() and not (repo / ".pytest_cache").exists()
+tests/test_experiments.py:152: log = Path(res["logs"]["stdout"]).read_text(encoding="utf-8")
+tests/test_experiments.py:155: # Recorded: experiment row + test_result evidence that can verify a claim.
+tests/test_experiments.py:156: row = st.get("experiments", res["id"])
+tests/test_experiments.py:157: assert row["status"] == "pass" and row["isolation"] == "process" and row["exit_code"] == 0
+tests/test_experiments.py:160: assert ev["source_type"] == "test_result" and ev["meta"]["outcome"] == "pass"
+tests/test_experiments.py:161: assert ev["meta"]["isolation"] == "process" and ev["commit_sha"] == "abc"
+tests/test_experiments.py:175: "    assert os.environ.get('REPOATLAS_EXPERIMENT') == '1'\n"
+tests/test_experiments.py:177: res = experiments.run(st, repo, [*PYTEST, absent], hypothesis="secrets are scrubbed")
+tests/test_experiments.py:178: assert res["outcome"] == "pass", Path(res["logs"]["stdout"]).read_text(encoding="utf-8")[-2000:]
+... (2717 more matching lines not shown)
+
+==> tests/test_experiments.py:1-166 <==  (truncated at char cap; file has 580 lines)
+     1	"""Experiments: real isolated runs on a git-committed copy of examples/orders_app.
+     2	
+     3	Every test runs a real child process (no mocks of experiments.run): allowlisted
+     4	pytest in a throw-away copy with a scrubbed environment, timeouts that kill the
+     5	whole process tree, refusal of non-allowlisted commands, logs on disk with only
+     6	a summary returned.
+     7	"""
+     8	
+     9	from __future__ import annotations
+    10	
+    11	import os
+    12	
+    13	os.environ.setdefault("GRAPHIFY_OUT", ".repoatlas/index")
+    14	
+    15	import hashlib  # noqa: E402
+    16	import json  # noqa: E402
+    17	import shutil  # noqa: E402
+    18	import subprocess  # noqa: E402
+    19	import sys  # noqa: E402
+    20	import time  # noqa: E402
+    21	from pathlib import Path  # noqa: E402
+    22	
+    23	import pytest  # noqa: E402
+    24	
+    25	from repoatlas import evidence as evmod  # noqa: E402
+    26	from repoatlas import experiments  # noqa: E402
+    27	from repoatlas.claims import Claims  # noqa: E402
+    28	from repoatlas.paths import DEFAULT_CONFIG, runs_dir  # noqa: E402
+    29	from repoatlas.store import open_store  # noqa: E402
+    30	
+    31	ROOT = Path(__file__).resolve().parents[1]
+    32	EXAMPLE = ROOT / "examples" / "orders_app"
+    33	PYTEST = ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+    34	FAKE_SECRET = "sk-ant-FAKE-0123456789-not-a-real-key"
+    35	
+    36	pytestmark = [pytest.mark.experiment,
+    37	              pytest.mark.skipif(shutil.which("git") is None, reason="git not available")]
+    38	
+    39	
+    40	def _git(cwd: Path, *args: str) -> None:
+    41	    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.autocrlf=false", *args],
+    42	                   cwd=cwd, check=True, capture_output=True)
+    43	
+    44	
+    45	def _copy_example(dst: Path) -> Path:
+    46	    shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".repoatlas", "__pycache__", "*.pyc",
+    47	                                                                ".pytest_cache", "*.db"))
+    48	    _git(dst, "init", "-q")
+    49	    _git(dst, "add", "-A")
+    50	    _git(dst, "commit", "-q", "-m", "init")
+    51	    return dst
+    52	
+    53	
+    54	def _tree_digest(repo: Path) -> dict[str, str]:
+    55	    """Every file outside .repoatlas (where run logs legitimately go)."""
+    56	    out = {}
+    57	    for p in sorted(repo.rglob("*")):
+    58	        rel = p.relative_to(repo).as_posix()
+    59	        if p.is_file() and not rel.startswith((".repoatlas/", ".git/")):
+    60	            out[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
+    61	    return out
+    62	
+    63	
+    64	def _alive(pid: int) -> bool:
+    65	    if os.name == "nt":
+    66	        import ctypes
+    67	
+    68	        k32 = ctypes.windll.kernel32
+    69	        h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    70	        if not h:
+    71	            return False
+    72	        code = ctypes.c_ulong()
+    73	        k32.GetExitCodeProcess(h, ctypes.byref(code))
+    74	        k32.CloseHandle(h)
+    75	        return code.value == 259  # STILL_ACTIVE
+    76	    try:  # pragma: no cover - POSIX
+    77	        os.kill(pid, 0)
+    78	    except ProcessLookupError:
+    79	        return False
+    80	    except PermissionError:
+    81	        return True
+    82	    return True
+    83	
+    84	
+    85	@pytest.fixture
+    86	def proj(tmp_path):
+    87	    repo = _copy_example(tmp_path / "orders_app")
+    88	    st = open_store(repo)
+    89	    yield repo, st
+    90	    st.close()
+    91	
+    92	
+    93	def _probe(repo: Path, name: str, body: str) -> str:
+    94	    (repo / "tests" / name).write_text(body, encoding="utf-8")
+    95	    return f"tests/{name}"
+    96	
+    97	
+    98	# -- policy ----------------------------------------------------------------------------------
+    99	
+   100	@pytest.mark.parametrize("argv,expected", [
+   101	    (["pytest"], "allowlisted"),
+   102	    (["pytest", "-q", "tests/test_pricing.py"], "allowlisted"),
+   103	    (["python", "-m", "pytest", "-q"], "allowlisted"),
+   104	    ([r"C:\Python312\python.exe", "-m", "pytest"], "allowlisted"),
+   105	    (["py", "-m", "pytest", "-x"], "allowlisted"),
+   106	    (["go", "test", "./..."], "allowlisted"),
+   107	    (["python", "-c", "print(1)"], "risky"),
+   108	    (["python", "-m", "pip", "install", "x"], "risky"),
+   109	    (["pytest-evil"], "risky"),
+   110	    (["pytest", "tests;", "rm", "-rf", "/"], "risky"),
+   111	    (["pytest", "$(whoami)"], "risky"),
+   112	    (["pytest", "a|b"], "risky"),
+   113	    (["bash", "-c", "pytest"], "risky"),
+   114	    ([], "risky"),
+   115	])
+   116	def test_classify(argv, expected):
+   117	    assert experiments.classify(argv, DEFAULT_CONFIG["experiments"]["process_isolation_allowlist"]) == expected
+   118	
+   119	
+   120	def test_scrubbed_env_drops_secrets_and_keeps_interpreter(monkeypatch, tmp_path):
+   121	    monkeypatch.setenv("ANTHROPIC_API_KEY", FAKE_SECRET)
+   122	    monkeypatch.setenv("GITHUB_TOKEN", "ghp_fake")
+   123	    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "fake")
+   124	    env = experiments._scrubbed_env(tmp_path)
+   125	    assert not {"ANTHROPIC_API_KEY", "GITHUB_TOKEN", "AWS_SECRET_ACCESS_KEY"} & set(env)
+   126	    assert FAKE_SECRET not in json.dumps(env)
+   127	    assert env["PATH"].split(os.pathsep)[0] == str(Path(sys.executable).parent)
+   128	    assert env["HOME"] == env["USERPROFILE"] == env["TEMP"] == str(tmp_path)
+   129	    assert env["REPOATLAS_EXPERIMENT"] == "1"
+   130	
+   131	
+   132	# -- real runs ---------------------------------------------------------------------------------
+   133	
+   134	def test_allowlisted_pytest_passes_in_a_copy_with_process_isolation(proj):
+   135	    repo, st = proj
+   136	    probe = _probe(repo, "test_probe_cwd.py", (
+   137	        "import os\nfrom pathlib import Path\n\n"
+   138	        "def test_runs_in_a_copy():\n"
+   139	        f"    assert Path.cwd().resolve() != Path(r'{repo.resolve()}')\n"
+   140	        "    Path('WRITTEN_BY_EXPERIMENT.txt').write_text('x')\n"
+   141	        "    print('CWD=' + os.getcwd())\n"))
+   142	    before = _tree_digest(repo)
+   143	    res = experiments.run(st, repo, [*PYTEST, "-s", "tests/test_pricing.py", probe],
+   144	                          hypothesis="pricing tests pass", commit="abc")
+   145	    assert res["isolation"] == "process" and res["outcome"] == "pass" and res["matches_expectation"]
+   146	    g = res["guarantees"]
+   147	    assert g["separate_process"] and g["cwd_is_copy"] and g["env_allowlisted"] and g["timeout_kills_tree"]
+   148	    assert g["network_isolated"] is False and g["fs_reads_confined"] is False  # stated honestly
+   149	    # The original tree is untouched: nothing written, nothing changed.
+   150	    assert _tree_digest(repo) == before
+   151	    assert not (repo / "WRITTEN_BY_EXPERIMENT.txt").exists() and not (repo / ".pytest_cache").exists()
+   152	    log = Path(res["logs"]["stdout"]).read_text(encoding="utf-8")
+   153	    assert "CWD=" in log and str(repo.resolve()) not in log.split("CWD=")[1].splitlines()[0]
+   154	    assert "4 passed" in log
+   155	    # Recorded: experiment row + test_result evidence that can verify a claim.
+   156	    row = st.get("experiments", res["id"])
+   157	    assert row["status"] == "pass" and row["isolation"] == "process" and row["exit_code"] == 0
+   158	    assert row["cwd"].startswith("copy of ") and row["command"][:3] == ["python", "-m", "pytest"]
+   159	    ev = st.evidence(res["evidence_id"])
+   160	    assert ev["source_type"] == "test_result" and ev["meta"]["outcome"] == "pass"
+   161	    assert ev["meta"]["isolation"] == "process" and ev["commit_sha"] == "abc"
+   162	    assert any("4 passed" in s for s in res["summary"]["summary_lines"])
+   163	
+   164	
+   165	def test_parent_secrets_are_not_visible_to_the_child(proj, monkeypatch):
+   166	    repo, st = proj

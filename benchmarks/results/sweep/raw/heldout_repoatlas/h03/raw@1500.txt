@@ -1,0 +1,94 @@
+$ grep -rniE 'repoatlas|scan|call|build|index|invalidate|stale|claims' .   # 4242 matching lines in 103 files
+tests/test_snapshot_stale.py:1: """Snapshots and stale invalidation on a scanned, git-committed copy of examples/orders_app.
+tests/test_snapshot_stale.py:3: Covers: modify / commit / delete a cited file -> exactly the dependent claims go
+tests/test_snapshot_stale.py:4: stale; revert + verify restores up to the ceiling and re-binds to a snapshot of
+tests/test_snapshot_stale.py:5: the current tree; memories derived from stale claims are invalidated, never
+tests/test_snapshot_stale.py:13: os.environ.setdefault("GRAPHIFY_OUT", ".repoatlas/index")
+tests/test_snapshot_stale.py:21: from repoatlas import evidence as evmod  # noqa: E402
+tests/test_snapshot_stale.py:22: from repoatlas import index, workflow  # noqa: E402
+tests/test_snapshot_stale.py:23: from repoatlas.claims import CONFIDENCE_CAP, Claims  # noqa: E402
+tests/test_snapshot_stale.py:24: from repoatlas.memory import Memory  # noqa: E402
+tests/test_snapshot_stale.py:25: from repoatlas.snapshot import (  # noqa: E402
+tests/test_snapshot_stale.py:33: from repoatlas.store import open_store  # noqa: E402
+tests/test_snapshot_stale.py:48: shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".repoatlas", "__pycache__", "*.pyc",
+tests/test_snapshot_stale.py:74: workflow.scan(st, repo)
+tests/test_snapshot_stale.py:76: cl = Claims(st, repo)
+tests/test_snapshot_stale.py:78: def claim(text, rel, a, b=None, status="statically_verified", subjects=None):
+tests/test_snapshot_stale.py:85: claims = {
+tests/test_snapshot_stale.py:89: "service": claim("place_order calls validate_items", "orders/service.py",
+tests/test_snapshot_stale.py:96: yield repo, st, cl, claims
+tests/test_snapshot_stale.py:100: def _status(cl, claims) -> dict:
+tests/test_snapshot_stale.py:101: return {k: cl.get(c["id"])["status"] for k, c in claims.items()}
+tests/test_snapshot_stale.py:104: def _hist_len(cl, claims) -> dict:
+tests/test_snapshot_stale.py:105: return {k: len(cl.show(c["id"])["history"]) for k, c in claims.items()}
+tests/test_snapshot_stale.py:111: repo, st, cl, claims = proj
+tests/test_snapshot_stale.py:117: assert "orders/pricing.py" in files and not any(f.startswith(".repoatlas") for f in files)
+tests/test_snapshot_stale.py:131: for junk in (".repoatlas", "__pycache__", ".venv", "node_modules"):
+tests/test_snapshot_stale.py:138: # -- stale invalidation ----------------------------------------------------------------------
+tests/test_snapshot_stale.py:140: def test_modifying_a_cited_file_marks_exactly_its_claims_stale(proj):
+tests/test_snapshot_stale.py:141: repo, st, cl, claims = proj
+tests/test_snapshot_stale.py:142: hist = _hist_len(cl, claims)
+tests/test_snapshot_stale.py:146: stale_ids = {s["id"] for s in res["stale"]}
+tests/test_snapshot_stale.py:147: assert stale_ids == {claims["pricing"]["id"], claims["pricing_inference"]["id"]}
+tests/test_snapshot_stale.py:148: for s in res["stale"]:
+tests/test_snapshot_stale.py:150: st_now = _status(cl, claims)
+tests/test_snapshot_stale.py:151: assert st_now["pricing"] == st_now["pricing_inference"] == "stale"
+tests/test_snapshot_stale.py:152: assert st_now["service"] == st_now["repository"] == st_now["config"] == "statically_verified"
+tests/test_snapshot_stale.py:153: after = _hist_len(cl, claims)
+tests/test_snapshot_stale.py:156: h = cl.show(claims["pricing"]["id"])["history"][-1]
+tests/test_snapshot_stale.py:157: assert h["to_status"] == "stale" and "changed since snapshot" in h["reason"]
+tests/test_snapshot_stale.py:158: assert cl.get(claims["pricing"]["id"])["confidence"] == CONFIDENCE_CAP["stale"]
+tests/test_snapshot_stale.py:161: assert _hist_len(cl, claims) == after
+... (4202 more matching lines not shown)
+
+==> tests/test_snapshot_stale.py:1-50 <==  (truncated at char cap; file has 531 lines)
+     1	"""Snapshots and stale invalidation on a scanned, git-committed copy of examples/orders_app.
+     2	
+     3	Covers: modify / commit / delete a cited file -> exactly the dependent claims go
+     4	stale; revert + verify restores up to the ceiling and re-binds to a snapshot of
+     5	the current tree; memories derived from stale claims are invalidated, never
+     6	deleted; an added (restored) file re-resolves its dependents' edges.
+     7	"""
+     8	
+     9	from __future__ import annotations
+    10	
+    11	import os
+    12	
+    13	os.environ.setdefault("GRAPHIFY_OUT", ".repoatlas/index")
+    14	
+    15	import shutil  # noqa: E402
+    16	import subprocess  # noqa: E402
+    17	from pathlib import Path  # noqa: E402
+    18	
+    19	import pytest  # noqa: E402
+    20	
+    21	from repoatlas import evidence as evmod  # noqa: E402
+    22	from repoatlas import index, workflow  # noqa: E402
+    23	from repoatlas.claims import CONFIDENCE_CAP, Claims  # noqa: E402
+    24	from repoatlas.memory import Memory  # noqa: E402
+    25	from repoatlas.snapshot import (  # noqa: E402
+    26	    changed_files,
+    27	    current_state,
+    28	    git_info,
+    29	    hash_files,
+    30	    list_files,
+    31	    take_snapshot,
+    32	)
+    33	from repoatlas.store import open_store  # noqa: E402
+    34	
+    35	ROOT = Path(__file__).resolve().parents[1]
+    36	EXAMPLE = ROOT / "examples" / "orders_app"
+    37	
+    38	pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
+    39	
+    40	
+    41	def _git(cwd: Path, *args: str) -> str:
+    42	    r = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.autocrlf=false", *args],
+    43	                       cwd=cwd, check=True, capture_output=True, text=True, encoding="utf-8")
+    44	    return r.stdout
+    45	
+    46	
+    47	def _copy_example(dst: Path) -> Path:
+    48	    shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".repoatlas", "__pycache__", "*.pyc",
+    49	                                                                ".pytest_cache", "*.db"))
+    50	    _git(dst, "init", "-q")

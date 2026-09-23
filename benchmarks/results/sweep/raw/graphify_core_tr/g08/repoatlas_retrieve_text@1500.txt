@@ -1,0 +1,94 @@
+# graphify update kod grafiğini LLM olmadan nasıl yeniden oluşturuyor?
+expanded: graphify->install (lexicon); graphify->uninstall (lexicon); graphify->hook (lexicon); update->only (lexicon); update->answ (lexicon); llm->batch (lexicon)
+## graphify/watch.py:2288-2295 def _batch_needs_llm_flag(batch: list[Path]) -> bool
+  doc: True when the batch contains a non-code file that still exists on disk.
+  calls: _has_non_code@2295
+  called by: watch (graphify/watch.py:2380)
+def _batch_needs_llm_flag(batch: list[Path]) -> bool:
+    """True when the batch contains a non-code file that still exists on disk.
+
+    Only surviving non-code files need the needs_update flag (LLM-backed
+    re-extraction); deleted ones are already handled by the rebuild's
+    reconcile sweep, so a pure-deletion batch must not leave a stale flag.
+    """
+    return _has_non_code([p for p in batch if p.exists()])
+## graphify/watch.py:2256-2267 def _batch_triggers_rebuild(batch: list[Path]) -> bool
+  doc: True when a debounced watch batch needs an immediate rebuild.
+  called by: watch (graphify/watch.py:2378)
+  const graphify/watch.py:283: _CODE_EXTENSIONS = CODE_EXTENSIONS
+def _batch_triggers_rebuild(batch: list[Path]) -> bool:
+    """True when a debounced watch batch needs an immediate rebuild.
+
+    Code changes always rebuild (AST extraction needs no LLM). Deletions of
+    ANY watched file also rebuild: eviction needs no LLM either — the full
+    corpus reconcile drops nodes whose source is gone from disk. Without
+    this, a doc-only deletion batch would sit behind the needs_update flag
+    until the next code event or a manual `graphify update` (#2580).
+    """
+    has_code = any(p.suffix.lower() in _CODE_EXTENSIONS for p in batch)
+    has_deletion = any(not p.exists() for p in batch)
+    return has_code or has_deletion
+## graphify/watch.py:2298-2386 def watch(watch_path: Path, debounce: float = 3.0) -> None
+  doc: Watch watch_path for new or modified files and auto-update the graph.
+  calls: _load_graphifyignore@2327, _read_build_gitignore@2329, _is_ignored@2343, _batch_triggers_rebuild@2378, _rebuild_code@2379, _batch_needs_llm_flag@2380, _notify_only@2381
+  called by: dispatch_command (graphify/cli.py:1990)
+  const graphify/watch.py:282: _WATCHED_EXTENSIONS = CODE_EXTENSIONS | DOC_EXTENSIONS | PAPER_EXTENSIONS | IMAGE_EXTENSIONS
+  graphify/watch.py:2301-2305
+
+    For code-only changes: re-runs AST extraction + rebuild immediately (no LLM).
+    For doc/paper/image changes: writes a needs_update flag and notifies the user
+    to run /graphify --update (LLM extraction required).
+
+  graphify/watch.py:2375-2386
+                batch = list(changed)
+                changed.clear()
+                print(f"\n[graphify watch] {len(batch)} file(s) changed")
+                if _batch_triggers_rebuild(batch):
+                    _rebuild_code(watch_path)
+                if _batch_needs_llm_flag(batch):
+                    _notify_only(watch_path)
+    except KeyboardInterrupt:
+        print("\n[graphify watch] Stopped.")
+    finally:
+        observer.stop()
+        observer.join()
+## graphify/skills/agents/references/update.md:5-200 ## For --update (incremental re-extraction)
+  graphify/skills/agents/references/update.md:63-65
+
+If `code_only` is True: print `[graphify update] Code-only changes detected - skipping semantic extraction (no LLM needed)`, run only Step 3A (AST) on the chan…
+
+## graphify/skills/amp/references/update.md:5-200 ## For --update (incremental re-extraction)
+  graphify/skills/amp/references/update.md:63-65
+
+If `code_only` is True: print `[graphify update] Code-only changes detected - skipping semantic extraction (no LLM needed)`, run only Step 3A (AST) on the chan…
+
+## graphify/dedup.py:1090-1220 def _llm_tiebreak( candidates: list[dict], uf: _UF, communities: dict[str, int], *, backend: str, batch_size: int = 30, low: float = 75.0, high: float = 92.0,
+  graphify/dedup.py:1172-1185
+
+    for batch_start in range(0, len(ambiguous), batch_size):
+        batch = ambiguous[batch_start : batch_start + batch_size]
+        pairs_text = "\n".join(
+            f"{i+1}. \"{a['label']}\" vs \"{b['label']}\""
+            for i, (a, b, _) in enumerate(batch)
+        )
+        prompt = (
+            "For each pair below, answer only 'yes' or 'no': are they the same real-world concept?\n\n"
+            f"{pairs_text}\n\n"
+            "Reply with one line per pair: '1. yes', '2. no', etc."
+        )
+        try:
+            response = _call_llm(prompt, backend=backend, max_tokens=200)
+## graphify/watch.py:2241-2249 def _notify_only(watch_path: Path) -> None
+def _notify_only(watch_path: Path) -> None:
+    """Write a flag file and print a notification (fallback for non-code-only corpora)."""
+    flag = watch_path / _GRAPHIFY_OUT / "needs_update"
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.write_text("1", encoding="utf-8")
+    print(f"\n[graphify watch] New or changed files detected in {watch_path}")
+    print("[graphify watch] Non-code files changed - semantic re-extraction requires LLM.")
+    print("[graphify watch] Run `/graphify --update` in Claude Code to update the graph.")
+    print(f"[graphify watch] Flag written to {flag}")
+graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+graphify/hooks.py:659-677 def _uninstall_hook(hooks_dir: Path, name: str, marker: str, marker_end: str) -> str
+… 2203 more candidates not shown: graphify/watch.py:1355-2223 def _rebuild_code( watch_path: Path, *, changed_paths: list[Path] | None = None, follow_syml; graphify/watch.py:2226-2238 def check_update(watch_path: Path) -> bool; graphify/hooks.py:628-656 def _install_hook( hooks_dir: Path, name: str, script: str, marker: str, marker_end: str = "",; graphify/install.py:1837-1846 def _uninstall_clau…
+next: repoatlas query "graphify update kod grafiğini LLM olmadan nasıl yeniden oluşturuyor?" --max-chars 12000

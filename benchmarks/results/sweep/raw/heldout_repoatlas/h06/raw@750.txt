@@ -1,0 +1,32 @@
+$ grep -rniE 'claim|deleted|store' .   # 2212 matching lines in 75 files
+repoatlas/feedback.py:1: """User critique of earlier claims, processed as a hypothesis - never auto-accepted.
+repoatlas/feedback.py:6: evidence linked to the claim with relation ``qualifies``: it is traceable but
+repoatlas/feedback.py:11: ``process`` runs the verification protocol and stores every step's result in
+repoatlas/feedback.py:14: 1   prior claim and its evidence (``Claims.show``)
+repoatlas/feedback.py:19: 4-6 the mechanism traced (topic given or derived from the claim), its data
+repoatlas/feedback.py:23: 8   the claim re-challenged (``critique.challenge``) and the checkable
+repoatlas/feedback.py:26: 9   claim updates go through :class:`repoatlas.claims.Claims` (history is
+repoatlas/feedback.py:27: append-only, nothing is deleted); the row becomes ``processed``.
+repoatlas/feedback.py:30: claim's best support - the rule ``claims.check_status`` uses to block verified
+repoatlas/feedback.py:40: corrected need at least one existing, usable evidence id, and the same claim
+repoatlas/feedback.py:41: updates apply (corrected + correction text => ``Claims.supersede``).
+repoatlas/feedback.py:43: claim or produced by this feedback's own protocol runs, and never raise the
+repoatlas/feedback.py:44: claim: foreign evidence cannot vouch for a claim it was never checked against.
+repoatlas/feedback.py:55: from repoatlas.claims import ORDER, VERIFIED, ClaimRuleError, Claims
+repoatlas/feedback.py:56: from repoatlas.store import Store, new_id, now
+repoatlas/feedback.py:60: # they are grounded by the question plan and checked by the claim re-check, never pinned to another version.
+repoatlas/feedback.py:72: # Differences that do not bound a claim's validity by themselves (literal shapes, parameter annotations).
+repoatlas/feedback.py:80: def _row(store: Store, fid: str) -> dict:
+repoatlas/feedback.py:81: row = store.get("feedback", fid)
+repoatlas/feedback.py:98: def _claim_brief(c: dict | None) -> dict | None:
+repoatlas/feedback.py:105: def _derive_topic(claim: dict | None, text: str) -> str:
+repoatlas/feedback.py:106: """Topic from the claim's pattern, subjects and text (fallback: feedback text)."""
+repoatlas/feedback.py:108: if claim:
+repoatlas/feedback.py:109: spec = claim.get("spec") or {}
+repoatlas/feedback.py:115: for s in claim.get("subjects") or []:
+repoatlas/feedback.py:126: parts += terms_for(claim.get("text") or "")[:4] if claim else []
+repoatlas/feedback.py:161: def _eval_proposition(store: Store, root: Path, pattern: str, glob: str | None, *, commit: str | None,
+repoatlas/feedback.py:175: "evidence_id": rs.record_evidence(store, ev)})
+repoatlas/feedback.py:180: def _exclusive_correction(store: Store, repo: Path, claim: dict, correction: str, commit: str | None) -> dict:
+repoatlas/feedback.py:181: """Formalize a correction of an exclusive claim ("only F calls P") and check it.
+... (2182 more matching lines not shown)

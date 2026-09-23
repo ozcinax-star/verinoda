@@ -1,0 +1,60 @@
+$ grep -rniE '_query_terms|değişirse|etkilenir' .   # 6 matching lines in 2 files
+graphify/serve.py:244: # in _query_terms and the unfiltered find_node path keep an English "die"/"hat"
+graphify/serve.py:281: def _query_terms(question: str) -> list[str]:
+graphify/serve.py:842: # X", "what uses Y") rather than a symbol to look up. `_query_terms` keeps them
+graphify/serve.py:1359: terms = _query_terms(question)
+graphify/benchmark.py:7: from graphify.serve import _query_terms
+graphify/benchmark.py:39: terms = _query_terms(question)
+
+==> graphify/serve.py:1-51 <==  (truncated at char cap; file has 2689 lines)
+     1	# MCP stdio server - exposes graph query tools to Claude and other agents
+     2	from __future__ import annotations
+     3	import json
+     4	import math
+     5	import os
+     6	import re
+     7	import sys
+     8	import warnings
+     9	from array import array
+    10	from collections import OrderedDict
+    11	from pathlib import Path
+    12	import threading
+    13	from typing import NamedTuple
+    14	import networkx as nx
+    15	from networkx.readwrite import json_graph
+    16	from graphify.security import sanitize_label, check_graph_file_size_cap, _CONTROL_CHAR_RE
+    17	from graphify.build import edge_data, edge_datas
+    18	from graphify.paths import default_graph_json as _default_graph_json
+    19	
+    20	try:
+    21	    with warnings.catch_warnings():
+    22	        # jieba/jieba-py carry invalid regex escapes that emit a SyntaxWarning on
+    23	        # compile; the message and line moved across Python versions (3.12 also
+    24	        # reworded it), so ignore the category wholesale here rather than pinning
+    25	        # a message/lineno. Under `-W error::SyntaxWarning` this keeps the import
+    26	        # from escalating to a fatal SyntaxError.
+    27	        warnings.simplefilter("ignore", SyntaxWarning)
+    28	        import jieba as _jieba  # type: ignore[import-untyped]
+    29	except (ImportError, SyntaxError):
+    30	    # A stray/broken jieba must never take down the whole server import.
+    31	    _jieba = None
+    32	
+    33	
+    34	class ToolError(Exception):
+    35	    """Raised by a tool handler to signal an error result.
+    36	
+    37	    A normal string return is sent as an ordinary (successful) text result. A
+    38	    ToolError is instead turned into a tool result with ``isError: true`` so a
+    39	    client that only checks ``isError`` can tell a genuine failure — e.g. the
+    40	    ``gh`` CLI missing or a PR that cannot be resolved — from success.
+    41	    """
+    42	
+    43	
+    44	def _load_graph(graph_path: str) -> nx.Graph:
+    45	    try:
+    46	        resolved = Path(graph_path).resolve()
+    47	        if resolved.suffix != ".json":
+    48	            raise ValueError(f"Graph path must be a .json file, got: {graph_path!r}")
+    49	        if not resolved.exists():
+    50	            raise FileNotFoundError(f"Graph file not found: {resolved}")
+    51	        check_graph_file_size_cap(resolved)

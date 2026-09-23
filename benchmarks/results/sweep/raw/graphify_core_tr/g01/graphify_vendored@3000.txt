@@ -1,0 +1,444 @@
+Graph: .repoatlas/index/graph.json (4092 nodes) | Traversal: BFS depth=3 | Start: ['graphify', 'Token-reduction benchmark - measures how much context graphify saves vs naive…', 'Estimate USD cost for a given token count using published pricing.'] | 99 nodes found
+
+[i] Complete answer over budget: all 99 nodes and 341 edges shown (~13623 tokens vs the requested ~4000-token budget). Edges are never dropped once every node fits, so this is already the full answer — raising --budget further will not shrink it. Narrow with context_filter=['call'] or use get_node for a specific symbol to reduce size instead.
+
+NODE graphify [src=graphify/always_on/agents-md.md loc=L1 community=agents-md.md]
+NODE Token-reduction benchmark - measures how much context graphify saves vs naive… [src=graphify/benchmark.py loc=L1 community=sys]
+NODE Estimate USD cost for a given token count using published pricing. [src=graphify/llm.py loc=L3066 community=cli.py]
+NODE benchmark.py [src=graphify/benchmark.py loc=L1 community=sys]
+NODE estimate_cost() [src=graphify/llm.py loc=L3065 community=cli.py]
+NODE agents-md.md [src=graphify/always_on/agents-md.md loc=L1 community=agents-md.md]
+NODE cli.py [src=graphify/cli.py loc=L1 community=cli.py]
+NODE dispatch_command() [src=graphify/cli.py loc=L1064 community=cli.py]
+NODE llm.py [src=graphify/llm.py loc=L1 community=llm.py]
+NODE serve.py [src=graphify/serve.py loc=L1 community=serve.py]
+NODE build.py [src=graphify/build.py loc=L1 community=build.py]
+NODE paths.py [src=graphify/paths.py loc=L1 community=paths.py]
+NODE sys [src= loc= community=sys]
+NODE edge_data() [src=graphify/build.py loc=L608 community=sys]
+NODE networkx [src= loc= community=networkx]
+NODE default_graph_json() [src=graphify/paths.py loc=L368 community=default_graph_json]
+NODE load_node_link_graph() [src=graphify/paths.py loc=L474 community=sys]
+NODE _query_terms() [src=graphify/serve.py loc=L281 community=_query_terms]
+NODE _query_subgraph_tokens() [src=graphify/benchmark.py loc=L37 community=sys]
+NODE run_benchmark() [src=graphify/benchmark.py loc=L85 community=sys]
+NODE print_benchmark() [src=graphify/benchmark.py loc=L136 community=sys]
+NODE _hr() [src=graphify/benchmark.py loc=L28 community=sys]
+NODE _safe() [src=graphify/benchmark.py loc=L14 community=sys]
+NODE _estimate_tokens() [src=graphify/benchmark.py loc=L33 community=sys]
+NODE extract.py [src=graphify/extract.py loc=L1 community=extract.py]
+NODE resolution.py [src=graphify/extractors/resolution.py loc=L1 community=resolution.py]
+NODE __main__.py [src=graphify/__main__.py loc=L1 community=__main__.py]
+NODE install.py [src=graphify/install.py loc=L1 community=install.py]
+NODE watch.py [src=graphify/watch.py loc=L1 community=watch.py]
+NODE callflow_html.py [src=graphify/callflow_html.py loc=L1 community=callflow_html.py]
+NODE detect.py [src=graphify/detect.py loc=L1 community=detect.py]
+NODE pathlib [src= loc= community=_make_id]
+NODE cache.py [src=graphify/cache.py loc=L1 community=cache.py]
+NODE export.py [src=graphify/export.py loc=L1 community=export.py]
+NODE prs.py [src=graphify/prs.py loc=L1 community=prs.py]
+NODE re [src= loc= community=_make_id]
+NODE build_from_json() [src=graphify/build.py loc=L872 community=build_from_json]
+NODE security.py [src=graphify/security.py loc=L1 community=security.py]
+NODE dedup.py [src=graphify/dedup.py loc=L1 community=dedup.py]
+NODE _build_server() [src=graphify/serve.py loc=L1795 community=_build_server]
+NODE reflect.py [src=graphify/reflect.py loc=L1 community=reflect.py]
+NODE check_graph_file_size_cap() [src=graphify/security.py loc=L357 community=cli.py]
+NODE symbol_resolution.py [src=graphify/symbol_resolution.py loc=L1 community=symbol_resolution.py]
+NODE json [src= loc= community=json]
+NODE analyze.py [src=graphify/analyze.py loc=L1 community=god_nodes]
+NODE os [src= loc= community=paths.py]
+NODE diagnostics.py [src=graphify/diagnostics.py loc=L1 community=diagnostics.py]
+NODE hooks.py [src=graphify/hooks.py loc=L1 community=hooks.py]
+NODE html.py [src=graphify/exporters/html.py loc=L1 community=json]
+NODE global_graph.py [src=graphify/global_graph.py loc=L1 community=cli.py]
+NODE multigraph_compat.py [src=graphify/multigraph_compat.py loc=L1 community=multigraph_compat.py]
+NODE build_merge() [src=graphify/build.py loc=L1876 community=_norm_source_file]
+NODE to_obsidian() [src=graphify/export.py loc=L686 community=export.py]
+NODE affected.py [src=graphify/affected.py loc=L1 community=diagnostics.py]
+NODE cluster.py [src=graphify/cluster.py loc=L1 community=sys]
+NODE report.py [src=graphify/report.py loc=L1 community=report.py]
+NODE _query_graph_text() [src=graphify/serve.py loc=L1349 community=serve.py]
+NODE wiki.py [src=graphify/wiki.py loc=L1 community=diagnostics.py]
+NODE cross_repo_calls.py [src=graphify/cross_repo_calls.py loc=L1 community=cross_repo_calls.py]
+NODE os_replace_with_fallback() [src=graphify/paths.py loc=L29 community=watch.py]
+NODE write_json_atomic() [src=graphify/paths.py loc=L160 community=cli.py]
+NODE cmd_prs() [src=graphify/prs.py loc=L690 community=prs.py]
+NODE transcribe.py [src=graphify/transcribe.py loc=L1 community=transcribe.py]
+NODE is_absolute_any_platform() [src=graphify/paths.py loc=L378 community=graph_has_legacy_ids]
+NODE out_path() [src=graphify/paths.py loc=L359 community=_run_hook_guard]
+NODE write_text_atomic() [src=graphify/paths.py loc=L155 community=export.py]
+NODE _reconcile_graph_html() [src=graphify/watch.py loc=L1273 community=watch.py]
+NODE _cross_community_surprises() [src=graphify/analyze.py loc=L355 community=god_nodes]
+NODE graphdb.py [src=graphify/exporters/graphdb.py loc=L1 community=networkx]
+NODE disambiguate_ambiguous_candidates() [src=graphify/paths.py loc=L295 community=paths.py]
+NODE nfc() [src=graphify/paths.py loc=L462 community=cli.py]
+NODE Graph [src= loc= community=build_from_json]
+NODE stem_filename_budget() [src=graphify/paths.py loc=L427 community=export.py]
+NODE serve() [src=graphify/serve.py loc=L2403 community=default_graph_json]
+NODE _tool_get_neighbors() [src=graphify/serve.py loc=L2081 community=sanitize_label]
+NODE cross_repo_types.py [src=graphify/cross_repo_types.py loc=L1 community=diagnostics.py]
+NODE _atomic_replace() [src=graphify/paths.py loc=L101 community=paths.py]
+NODE serve_http() [src=graphify/serve.py loc=L2561 community=default_graph_json]
+NODE _god_node_article() [src=graphify/wiki.py loc=L185 community=diagnostics.py]
+NODE _node_link_payload() [src=graphify/callflow_html.py loc=L222 community=write_callflow_html]
+NODE _path_proximity_winner() [src=graphify/paths.py loc=L233 community=paths.py]
+NODE _main() [src=graphify/serve.py loc=L2619 community=default_graph_json]
+NODE _is_test_path() [src=graphify/paths.py loc=L197 community=paths.py]
+NODE _is_searchable() [src=graphify/serve.py loc=L220 community=_query_terms]
+NODE _segment_chinese() [src=graphify/serve.py loc=L209 community=_query_terms]
+NODE stat [src= loc= community=detect.py]
+NODE tempfile [src= loc= community=google_workspace.py]
+NODE _has_chinese() [src=graphify/serve.py loc=L205 community=_query_terms]
+NODE Graph [src= loc= community=sys]
+NODE Print a human-readable benchmark report. [src=graphify/benchmark.py loc=L137 community=sys]
+NODE Return unicode_char if stdout can encode it, else ascii_fallback. Windows… [src=graphify/benchmark.py loc=L15 community=sys]
+NODE Horizontal rule that survives non-UTF-8 stdout (e.g. Windows cp1252 console). [src=graphify/benchmark.py loc=L29 community=sys]
+NODE Run BFS from best-matching nodes and return estimated tokens in the subgraph… [src=graphify/benchmark.py loc=L38 community=sys]
+NODE Measure token reduction: corpus tokens vs graphify query tokens. Args:… [src=graphify/benchmark.py loc=L90 community=sys]
+NODE Return one edge attribute dict for (u, v), tolerating MultiGraph. For… [src=graphify/build.py loc=L609 community=sys]
+NODE Single source of truth for the graphify output-directory name. The output… [src=graphify/paths.py loc=L1 community=paths.py]
+NODE Default ``graph.json`` path under the configured output dir. The package-wide… [src=graphify/paths.py loc=L369 community=default_graph_json]
+NODE Load a graphify graph.json into a networkx graph, accepting both writers. The… [src=graphify/paths.py loc=L475 community=sys]
+NODE Split a query into searchable terms, segmenting Chinese text, then drop… [src=graphify/serve.py loc=L282 community=_query_terms]
+EDGE Estimate USD cost for a given token count using published pricing. --rationale_for [EXTRACTED]--> estimate_cost() at=graphify/llm.py:L3066
+EDGE agents-md.md --contains [EXTRACTED]--> graphify at=graphify/always_on/agents-md.md:L1
+EDGE Token-reduction benchmark - measures how much context graphify saves vs naive… --rationale_for [EXTRACTED]--> benchmark.py at=graphify/benchmark.py:L1
+EDGE benchmark.py --imports [EXTRACTED context=import]--> load_node_link_graph() at=graphify/benchmark.py:L103
+EDGE benchmark.py --imports [EXTRACTED context=import]--> sys at=graphify/benchmark.py:L3
+EDGE benchmark.py --imports [EXTRACTED context=import]--> networkx at=graphify/benchmark.py:L4
+EDGE benchmark.py --imports [EXTRACTED context=import]--> edge_data() at=graphify/benchmark.py:L6
+EDGE benchmark.py --imports [EXTRACTED context=import]--> _query_terms() at=graphify/benchmark.py:L7
+EDGE benchmark.py --imports [EXTRACTED context=import]--> default_graph_json() at=graphify/benchmark.py:L8
+EDGE benchmark.py --imports_from [EXTRACTED context=import]--> build.py at=graphify/benchmark.py:L6
+EDGE benchmark.py --imports_from [EXTRACTED context=import]--> serve.py at=graphify/benchmark.py:L7
+EDGE benchmark.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/benchmark.py:L8
+EDGE benchmark.py --contains [EXTRACTED]--> print_benchmark() at=graphify/benchmark.py:L136
+EDGE benchmark.py --contains [EXTRACTED]--> _safe() at=graphify/benchmark.py:L14
+EDGE benchmark.py --contains [EXTRACTED]--> _hr() at=graphify/benchmark.py:L28
+EDGE benchmark.py --contains [EXTRACTED]--> _estimate_tokens() at=graphify/benchmark.py:L33
+EDGE benchmark.py --contains [EXTRACTED]--> _query_subgraph_tokens() at=graphify/benchmark.py:L37
+EDGE benchmark.py --contains [EXTRACTED]--> run_benchmark() at=graphify/benchmark.py:L85
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> estimate_cost() at=graphify/cli.py:L4410
+EDGE llm.py --contains [EXTRACTED]--> estimate_cost() at=graphify/llm.py:L3065
+EDGE cli.py --imports [EXTRACTED context=import]--> estimate_cost() at=graphify/cli.py:L3688
+EDGE Horizontal rule that survives non-UTF-8 stdout (e.g. Windows cp1252 console). --rationale_for [EXTRACTED]--> _hr() at=graphify/benchmark.py:L29
+EDGE _query_terms() --calls [EXTRACTED context=call]--> _has_chinese() at=graphify/serve.py:L289
+EDGE _query_terms() --calls [EXTRACTED context=call]--> _segment_chinese() at=graphify/serve.py:L290
+EDGE _query_terms() --calls [EXTRACTED context=call]--> _is_searchable() at=graphify/serve.py:L292
+EDGE _query_graph_text() --calls [EXTRACTED context=call]--> _query_terms() at=graphify/serve.py:L1359
+EDGE Split a query into searchable terms, segmenting Chinese text, then drop… --rationale_for [EXTRACTED]--> _query_terms() at=graphify/serve.py:L282
+EDGE _tool_get_neighbors() --calls [EXTRACTED context=call]--> edge_data() at=graphify/serve.py:L2097
+EDGE to_obsidian() --calls [EXTRACTED context=call]--> edge_data() at=graphify/export.py:L811
+EDGE edge_data() --references [EXTRACTED context=parameter_type]--> Graph at=graphify/build.py:L608
+EDGE _build_server() --calls [EXTRACTED context=call]--> edge_data() at=graphify/serve.py:L2097
+EDGE _cross_community_surprises() --calls [EXTRACTED context=call]--> edge_data() at=graphify/analyze.py:L377
+EDGE _god_node_article() --calls [EXTRACTED context=call]--> edge_data() at=graphify/wiki.py:L204
+EDGE build_from_json() --calls [EXTRACTED context=call]--> edge_data() at=graphify/build.py:L1399
+EDGE export.py --imports [EXTRACTED context=import]--> edge_data() at=graphify/export.py:L18
+EDGE Return one edge attribute dict for (u, v), tolerating MultiGraph. For… --rationale_for [EXTRACTED]--> edge_data() at=graphify/build.py:L609
+EDGE analyze.py --imports [EXTRACTED context=import]--> edge_data() at=graphify/analyze.py:L6
+EDGE wiki.py --imports [EXTRACTED context=import]--> edge_data() at=graphify/wiki.py:L9
+EDGE export.py --imports [EXTRACTED context=import]--> networkx at=graphify/export.py:L14
+EDGE graphdb.py --imports [EXTRACTED context=import]--> networkx at=graphify/exporters/graphdb.py:L5
+EDGE report.py --imports [EXTRACTED context=import]--> networkx at=graphify/report.py:L6
+EDGE prs.py --imports [EXTRACTED context=import]--> networkx at=graphify/prs.py:L31
+EDGE cluster.py --imports [EXTRACTED context=import]--> networkx at=graphify/cluster.py:L8
+EDGE analyze.py --imports [EXTRACTED context=import]--> networkx at=graphify/analyze.py:L4
+EDGE global_graph.py --imports [EXTRACTED context=import]--> networkx at=graphify/global_graph.py:L7
+EDGE affected.py --imports [EXTRACTED context=import]--> networkx at=graphify/affected.py:L9
+EDGE cross_repo_types.py --imports [EXTRACTED context=import]--> networkx at=graphify/cross_repo_types.py:L27
+EDGE diagnostics.py --imports [EXTRACTED context=import]--> networkx at=graphify/diagnostics.py:L12
+EDGE wiki.py --imports [EXTRACTED context=import]--> networkx at=graphify/wiki.py:L7
+EDGE multigraph_compat.py --imports [EXTRACTED context=import]--> networkx at=graphify/multigraph_compat.py:L20
+EDGE html.py --imports [EXTRACTED context=import]--> networkx at=graphify/exporters/html.py:L10
+EDGE cross_repo_calls.py --imports [EXTRACTED context=import]--> networkx at=graphify/cross_repo_calls.py:L32
+EDGE Return unicode_char if stdout can encode it, else ascii_fallback. Windows… --rationale_for [EXTRACTED]--> _safe() at=graphify/benchmark.py:L15
+EDGE Print a human-readable benchmark report. --rationale_for [EXTRACTED]--> print_benchmark() at=graphify/benchmark.py:L137
+EDGE export.py --imports [EXTRACTED context=import]--> sys at=graphify/export.py:L10
+EDGE dedup.py --imports [EXTRACTED context=import]--> sys at=graphify/dedup.py:L9
+EDGE hooks.py --imports [EXTRACTED context=import]--> sys at=graphify/hooks.py:L5
+EDGE prs.py --imports [EXTRACTED context=import]--> sys at=graphify/prs.py:L22
+EDGE cluster.py --imports [EXTRACTED context=import]--> sys at=graphify/cluster.py:L7
+EDGE resolution.py --imports [EXTRACTED context=import]--> sys at=graphify/extractors/resolution.py:L18
+EDGE global_graph.py --imports [EXTRACTED context=import]--> sys at=graphify/global_graph.py:L4
+EDGE extract.py --imports [EXTRACTED context=import]--> sys at=graphify/extract.py:L9
+EDGE watch.py --imports [EXTRACTED context=import]--> sys at=graphify/watch.py:L9
+EDGE callflow_html.py --imports [EXTRACTED context=import]--> sys at=graphify/callflow_html.py:L26
+EDGE __main__.py --imports [EXTRACTED context=import]--> sys at=graphify/__main__.py:L11
+EDGE install.py --imports [EXTRACTED context=import]--> sys at=graphify/install.py:L21
+EDGE multigraph_compat.py --imports [EXTRACTED context=import]--> sys at=graphify/multigraph_compat.py:L17
+EDGE load_node_link_graph() --calls [EXTRACTED context=call]--> check_graph_file_size_cap() at=graphify/paths.py:L493
+EDGE _node_link_payload() --calls [EXTRACTED context=call]--> load_node_link_graph() at=graphify/callflow_html.py:L245
+EDGE _reconcile_graph_html() --calls [EXTRACTED context=call]--> load_node_link_graph() at=graphify/watch.py:L1324
+EDGE Load a graphify graph.json into a networkx graph, accepting both writers. The… --rationale_for [EXTRACTED]--> load_node_link_graph() at=graphify/paths.py:L475
+EDGE watch.py --imports [EXTRACTED context=import]--> load_node_link_graph() at=graphify/watch.py:L1322
+EDGE callflow_html.py --imports [EXTRACTED context=import]--> load_node_link_graph() at=graphify/callflow_html.py:L234
+EDGE _query_subgraph_tokens() --references [EXTRACTED context=parameter_type]--> Graph at=graphify/benchmark.py:L37
+EDGE Run BFS from best-matching nodes and return estimated tokens in the subgraph… --rationale_for [EXTRACTED]--> _query_subgraph_tokens() at=graphify/benchmark.py:L38
+EDGE cmd_prs() --calls [EXTRACTED context=call]--> default_graph_json() at=graphify/prs.py:L698
+EDGE build_merge() --calls [EXTRACTED context=call]--> default_graph_json() at=graphify/build.py:L1913
+EDGE default_graph_json() --calls [EXTRACTED context=call]--> out_path() at=graphify/paths.py:L375
+EDGE _main() --calls [EXTRACTED context=call]--> default_graph_json() at=graphify/serve.py:L2671
+EDGE serve() --calls [EXTRACTED context=call]--> default_graph_json() at=graphify/serve.py:L2405
+EDGE serve_http() --calls [EXTRACTED context=call]--> default_graph_json() at=graphify/serve.py:L2583
+EDGE prs.py --imports [EXTRACTED context=import]--> default_graph_json() at=graphify/prs.py:L33
+EDGE Default ``graph.json`` path under the configured output dir. The package-wide… --rationale_for [EXTRACTED]--> default_graph_json() at=graphify/paths.py:L369
+EDGE export.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/export.py:L19
+EDGE paths.py --imports [EXTRACTED context=import]--> json at=graphify/paths.py:L19
+EDGE paths.py --imports [EXTRACTED context=import]--> os at=graphify/paths.py:L20
+EDGE paths.py --imports [EXTRACTED context=import]--> re at=graphify/paths.py:L21
+EDGE paths.py --imports [EXTRACTED context=import]--> stat at=graphify/paths.py:L22
+EDGE paths.py --imports [EXTRACTED context=import]--> tempfile at=graphify/paths.py:L23
+EDGE paths.py --imports [EXTRACTED context=import]--> check_graph_file_size_cap() at=graphify/paths.py:L492
+EDGE paths.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/paths.py:L24
+EDGE paths.py --contains [EXTRACTED]--> _atomic_replace() at=graphify/paths.py:L101
+EDGE paths.py --contains [EXTRACTED]--> write_text_atomic() at=graphify/paths.py:L155
+EDGE paths.py --contains [EXTRACTED]--> write_json_atomic() at=graphify/paths.py:L160
+EDGE paths.py --contains [EXTRACTED]--> _is_test_path() at=graphify/paths.py:L197
+EDGE paths.py --contains [EXTRACTED]--> _path_proximity_winner() at=graphify/paths.py:L233
+EDGE paths.py --contains [EXTRACTED]--> os_replace_with_fallback() at=graphify/paths.py:L29
+EDGE paths.py --contains [EXTRACTED]--> disambiguate_ambiguous_candidates() at=graphify/paths.py:L295
+EDGE paths.py --contains [EXTRACTED]--> out_path() at=graphify/paths.py:L359
+EDGE paths.py --contains [EXTRACTED]--> is_absolute_any_platform() at=graphify/paths.py:L378
+EDGE paths.py --contains [EXTRACTED]--> stem_filename_budget() at=graphify/paths.py:L427
+EDGE paths.py --contains [EXTRACTED]--> nfc() at=graphify/paths.py:L462
+EDGE Single source of truth for the graphify output-directory name. The output… --rationale_for [EXTRACTED]--> paths.py at=graphify/paths.py:L1
+EDGE detect.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/detect.py:L22
+EDGE prs.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/prs.py:L33
+EDGE symbol_resolution.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/symbol_resolution.py:L14
+EDGE reflect.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/reflect.py:L38
+EDGE extract.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/extract.py:L65
+EDGE watch.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/watch.py:L15
+EDGE security.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/security.py:L18
+EDGE cache.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/cache.py:L20
+EDGE callflow_html.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/callflow_html.py:L33
+EDGE __main__.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/__main__.py:L25
+EDGE wiki.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/wiki.py:L10
+EDGE install.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/install.py:L33
+EDGE html.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/exporters/html.py:L8
+EDGE transcribe.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/transcribe.py:L8
+EDGE Measure token reduction: corpus tokens vs graphify query tokens. Args:… --rationale_for [EXTRACTED]--> run_benchmark() at=graphify/benchmark.py:L90
+EDGE affected.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/affected.py:L5
+EDGE export.py --imports_from [EXTRACTED context=import]--> analyze.py at=graphify/export.py:L17
+EDGE graphdb.py --imports_from [EXTRACTED context=import]--> analyze.py at=graphify/exporters/graphdb.py:L4
+EDGE analyze.py --imports_from [EXTRACTED context=import]--> detect.py at=graphify/analyze.py:L199
+EDGE analyze.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/analyze.py:L3
+EDGE analyze.py --imports_from [EXTRACTED context=import]--> build.py at=graphify/analyze.py:L6
+EDGE analyze.py --contains [EXTRACTED]--> _cross_community_surprises() at=graphify/analyze.py:L355
+EDGE html.py --imports_from [EXTRACTED context=import]--> analyze.py at=graphify/exporters/html.py:L7
+EDGE _query_subgraph_tokens() --calls [EXTRACTED context=call]--> _estimate_tokens() at=graphify/benchmark.py:L73
+EDGE _hr() --calls [EXTRACTED context=call]--> _safe() at=graphify/benchmark.py:L30
+EDGE print_benchmark() --calls [EXTRACTED context=call]--> _hr() at=graphify/benchmark.py:L143
+EDGE print_benchmark() --calls [EXTRACTED context=call]--> _safe() at=graphify/benchmark.py:L144
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> print_benchmark() at=graphify/cli.py:L3150
+EDGE cli.py --imports [EXTRACTED context=import]--> print_benchmark() at=graphify/cli.py:L3136
+EDGE _query_subgraph_tokens() --calls [EXTRACTED context=call]--> _query_terms() at=graphify/benchmark.py:L39
+EDGE _query_subgraph_tokens() --calls [EXTRACTED context=call]--> edge_data() at=graphify/benchmark.py:L70
+EDGE run_benchmark() --calls [EXTRACTED context=call]--> _query_subgraph_tokens() at=graphify/benchmark.py:L115
+EDGE run_benchmark() --calls [EXTRACTED context=call]--> load_node_link_graph() at=graphify/benchmark.py:L104
+EDGE run_benchmark() --calls [EXTRACTED context=call]--> default_graph_json() at=graphify/benchmark.py:L99
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> run_benchmark() at=graphify/cli.py:L3149
+EDGE cli.py --imports [EXTRACTED context=import]--> run_benchmark() at=graphify/cli.py:L3136
+EDGE export.py --imports_from [EXTRACTED context=import]--> build.py at=graphify/export.py:L18
+EDGE build.py --imports [EXTRACTED context=import]--> check_graph_file_size_cap() at=graphify/build.py:L1634
+EDGE build.py --imports [EXTRACTED context=import]--> json at=graphify/build.py:L24
+EDGE build.py --imports [EXTRACTED context=import]--> os at=graphify/build.py:L26
+EDGE build.py --imports [EXTRACTED context=import]--> re at=graphify/build.py:L27
+EDGE build.py --imports [EXTRACTED context=import]--> sys at=graphify/build.py:L28
+EDGE build.py --imports [EXTRACTED context=import]--> networkx at=graphify/build.py:L32
+EDGE build.py --imports [EXTRACTED context=import]--> default_graph_json() at=graphify/build.py:L34
+EDGE build.py --imports [EXTRACTED context=import]--> is_absolute_any_platform() at=graphify/build.py:L35
+EDGE build.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/build.py:L31
+EDGE build.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/build.py:L35
+EDGE build.py --contains [EXTRACTED]--> build_merge() at=graphify/build.py:L1876
+EDGE build.py --contains [EXTRACTED]--> edge_data() at=graphify/build.py:L608
+EDGE build.py --contains [EXTRACTED]--> build_from_json() at=graphify/build.py:L872
+EDGE wiki.py --imports_from [EXTRACTED context=import]--> build.py at=graphify/wiki.py:L9
+EDGE serve.py --imports_from [EXTRACTED context=import]--> build.py at=graphify/serve.py:L17
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> build_from_json() at=graphify/cli.py:L2101
+EDGE build_from_json() --calls [EXTRACTED context=call]--> is_absolute_any_platform() at=graphify/build.py:L1234
+EDGE build_from_json() --references [EXTRACTED context=return_type]--> Graph at=graphify/build.py:L872
+EDGE cli.py --imports [EXTRACTED context=import]--> build_from_json() at=graphify/cli.py:L2071
+EDGE watch.py --imports [EXTRACTED context=import]--> build_from_json() at=graphify/watch.py:L1453
+EDGE diagnostics.py --imports [EXTRACTED context=import]--> build_from_json() at=graphify/diagnostics.py:L170
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> build_merge() at=graphify/cli.py:L4465
+EDGE build_merge() --references [EXTRACTED context=return_type]--> Graph at=graphify/build.py:L1876
+EDGE cli.py --imports [EXTRACTED context=import]--> build_merge() at=graphify/cli.py:L4446
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> edge_data() at=graphify/cli.py:L1799
+EDGE cli.py --imports [EXTRACTED context=import]--> edge_data() at=graphify/cli.py:L1792
+EDGE serve.py --imports [EXTRACTED context=import]--> edge_data() at=graphify/serve.py:L17
+EDGE detect.py --imports_from [EXTRACTED context=submodule_import]--> cache.py at=graphify/detect.py:L1777
+EDGE extract.py --imports_from [EXTRACTED context=import]--> cache.py at=graphify/extract.py:L17
+EDGE cache.py --imports [EXTRACTED context=import]--> os_replace_with_fallback() at=graphify/cache.py:L20
+EDGE cache.py --imports [EXTRACTED context=import]--> json at=graphify/cache.py:L6
+EDGE cache.py --imports [EXTRACTED context=import]--> os at=graphify/cache.py:L7
+EDGE cache.py --imports [EXTRACTED context=import]--> re at=graphify/cache.py:L8
+EDGE cache.py --imports [EXTRACTED context=import]--> tempfile at=graphify/cache.py:L9
+EDGE cache.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/cache.py:L13
+EDGE callflow_html.py --imports [EXTRACTED context=import]--> json at=graphify/callflow_html.py:L22
+EDGE callflow_html.py --imports [EXTRACTED context=import]--> os at=graphify/callflow_html.py:L24
+EDGE callflow_html.py --imports [EXTRACTED context=import]--> re at=graphify/callflow_html.py:L25
+EDGE callflow_html.py --imports [EXTRACTED context=import]--> check_graph_file_size_cap() at=graphify/callflow_html.py:L268
+EDGE callflow_html.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/callflow_html.py:L28
+EDGE callflow_html.py --imports_from [EXTRACTED context=import]--> html.py at=graphify/callflow_html.py:L31
+EDGE callflow_html.py --contains [EXTRACTED]--> _node_link_payload() at=graphify/callflow_html.py:L222
+EDGE cli.py --imports [EXTRACTED context=import]--> os at=graphify/cli.py:L10
+EDGE cli.py --imports [EXTRACTED context=import]--> re at=graphify/cli.py:L11
+EDGE cli.py --imports [EXTRACTED context=import]--> cmd_prs() at=graphify/cli.py:L1183
+EDGE cli.py --imports [EXTRACTED context=import]--> sys at=graphify/cli.py:L12
+EDGE cli.py --imports [EXTRACTED context=import]--> _query_graph_text() at=graphify/cli.py:L1206
+EDGE cli.py --imports [EXTRACTED context=import]--> load_node_link_graph() at=graphify/cli.py:L2582
+EDGE cli.py --imports [EXTRACTED context=import]--> nfc() at=graphify/cli.py:L265
+EDGE cli.py --imports [EXTRACTED context=import]--> to_obsidian() at=graphify/cli.py:L3069
+EDGE cli.py --imports [EXTRACTED context=import]--> write_json_atomic() at=graphify/cli.py:L629
+EDGE cli.py --imports [EXTRACTED context=import]--> check_graph_file_size_cap() at=graphify/cli.py:L669
+EDGE cli.py --imports [EXTRACTED context=import]--> write_text_atomic() at=graphify/cli.py:L691
+EDGE cli.py --imports [EXTRACTED context=import]--> out_path() at=graphify/cli.py:L702
+EDGE cli.py --imports [EXTRACTED context=import]--> json at=graphify/cli.py:L9
+EDGE cli.py --imports_from [EXTRACTED context=import]--> paths.py at=graphify/cli.py:L14
+EDGE cli.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/cli.py:L15
+EDGE cli.py --contains [EXTRACTED]--> dispatch_command() at=graphify/cli.py:L1064
+EDGE __main__.py --imports_from [EXTRACTED context=import]--> cli.py at=graphify/__main__.py:L120
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> cmd_prs() at=graphify/cli.py:L1184
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> _query_graph_text() at=graphify/cli.py:L1302
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> check_graph_file_size_cap() at=graphify/cli.py:L2088
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> write_json_atomic() at=graphify/cli.py:L2345
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> load_node_link_graph() at=graphify/cli.py:L2583
+EDGE dispatch_command() --calls [EXTRACTED context=call]--> to_obsidian() at=graphify/cli.py:L3070
+EDGE __main__.py --imports [EXTRACTED context=import]--> dispatch_command() at=graphify/__main__.py:L120
+EDGE cluster.py --imports [EXTRACTED context=import]--> json at=graphify/cluster.py:L6
+EDGE cross_repo_calls.py --imports [EXTRACTED context=import]--> os at=graphify/cross_repo_calls.py:L27
+EDGE dedup.py --imports [EXTRACTED context=import]--> re at=graphify/dedup.py:L8
+EDGE dedup.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/dedup.py:L12
+EDGE detect.py --imports [EXTRACTED context=import]--> out_path() at=graphify/detect.py:L22
+EDGE detect.py --imports [EXTRACTED context=import]--> write_json_atomic() at=graphify/detect.py:L2415
+EDGE detect.py --imports [EXTRACTED context=import]--> json at=graphify/detect.py:L4
+EDGE detect.py --imports [EXTRACTED context=import]--> os at=graphify/detect.py:L5
+EDGE detect.py --imports [EXTRACTED context=import]--> re at=graphify/detect.py:L6
+EDGE detect.py --imports [EXTRACTED context=import]--> stat at=graphify/detect.py:L8
+EDGE detect.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/detect.py:L14
+EDGE watch.py --imports_from [EXTRACTED context=import]--> detect.py at=graphify/watch.py:L273
+EDGE diagnostics.py --imports [EXTRACTED context=import]--> check_graph_file_size_cap() at=graphify/diagnostics.py:L297
+EDGE diagnostics.py --imports [EXTRACTED context=import]--> json at=graphify/diagnostics.py:L5
+EDGE diagnostics.py --imports [EXTRACTED context=import]--> re at=graphify/diagnostics.py:L6
+EDGE diagnostics.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/diagnostics.py:L9
+EDGE export.py --imports [EXTRACTED context=import]--> os_replace_with_fallback() at=graphify/export.py:L19
+EDGE export.py --imports [EXTRACTED context=import]--> stem_filename_budget() at=graphify/export.py:L19
+EDGE export.py --imports [EXTRACTED context=import]--> write_json_atomic() at=graphify/export.py:L19
+EDGE export.py --imports [EXTRACTED context=import]--> write_text_atomic() at=graphify/export.py:L19
+EDGE export.py --imports [EXTRACTED context=import]--> check_graph_file_size_cap() at=graphify/export.py:L247
+EDGE export.py --imports [EXTRACTED context=import]--> html.py at=graphify/export.py:L4
+EDGE export.py --imports [EXTRACTED context=import]--> json at=graphify/export.py:L5
+EDGE export.py --imports [EXTRACTED context=import]--> os at=graphify/export.py:L7
+EDGE export.py --imports [EXTRACTED context=import]--> re at=graphify/export.py:L8
+EDGE export.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/export.py:L13
+EDGE export.py --imports_from [EXTRACTED context=import]--> security.py at=graphify/export.py:L16
+EDGE export.py --imports_from [EXTRACTED context=import]--> graphdb.py at=graphify/export.py:L26
+EDGE export.py --contains [EXTRACTED]--> to_obsidian() at=graphify/export.py:L686
+EDGE to_obsidian() --calls [EXTRACTED context=call]--> write_text_atomic() at=graphify/export.py:L734
+EDGE to_obsidian() --calls [EXTRACTED context=call]--> stem_filename_budget() at=graphify/export.py:L743
+EDGE graphdb.py --imports [EXTRACTED context=import]--> re at=graphify/exporters/graphdb.py:L6
+EDGE security.py --imports [EXTRACTED context=import]--> html.py at=graphify/security.py:L4
+EDGE html.py --imports [EXTRACTED context=import]--> write_text_atomic() at=graphify/exporters/html.py:L8
+EDGE html.py --imports [EXTRACTED context=import]--> json at=graphify/exporters/html.py:L9
+EDGE html.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/exporters/html.py:L5
+EDGE extract.py --imports [EXTRACTED context=import]--> json at=graphify/extract.py:L6
+EDGE extract.py --imports [EXTRACTED context=import]--> disambiguate_ambiguous_candidates() at=graphify/extract.py:L65
+EDGE extract.py --imports [EXTRACTED context=import]--> os at=graphify/extract.py:L7
+EDGE extract.py --imports [EXTRACTED context=import]--> re at=graphify/extract.py:L8
+EDGE extract.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/extract.py:L14
+EDGE extract.py --imports_from [EXTRACTED context=import]--> symbol_resolution.py at=graphify/extract.py:L152
+EDGE extract.py --imports_from [EXTRACTED context=import]--> security.py at=graphify/extract.py:L64
+EDGE extract.py --imports_from [EXTRACTED context=import]--> resolution.py at=graphify/extract.py:L69
+EDGE resolution.py --imports [EXTRACTED context=import]--> json at=graphify/extractors/resolution.py:L15
+EDGE resolution.py --imports [EXTRACTED context=import]--> os at=graphify/extractors/resolution.py:L16
+EDGE resolution.py --imports [EXTRACTED context=import]--> re at=graphify/extractors/resolution.py:L17
+EDGE resolution.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/extractors/resolution.py:L5
+EDGE global_graph.py --imports [EXTRACTED context=import]--> json at=graphify/global_graph.py:L2
+EDGE global_graph.py --imports [EXTRACTED context=import]--> write_json_atomic() at=graphify/global_graph.py:L45
+EDGE global_graph.py --imports [EXTRACTED context=import]--> check_graph_file_size_cap() at=graphify/global_graph.py:L51
+EDGE global_graph.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/global_graph.py:L6
+EDGE hooks.py --imports [EXTRACTED context=import]--> os at=graphify/hooks.py:L3
+EDGE hooks.py --imports [EXTRACTED context=import]--> re at=graphify/hooks.py:L4
+EDGE hooks.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/hooks.py:L6
+EDGE __main__.py --imports_from [EXTRACTED context=import]--> install.py at=graphify/__main__.py:L29
+EDGE install.py --imports [EXTRACTED context=import]--> json at=graphify/install.py:L15
+EDGE install.py --imports [EXTRACTED context=import]--> os at=graphify/install.py:L16
+EDGE install.py --imports [EXTRACTED context=import]--> re at=graphify/install.py:L18
+EDGE install.py --imports [EXTRACTED context=import]--> stat at=graphify/install.py:L20
+EDGE install.py --imports [EXTRACTED context=import]--> os_replace_with_fallback() at=graphify/install.py:L33
+EDGE install.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/install.py:L22
+EDGE llm.py --imports [EXTRACTED context=import]--> os at=graphify/llm.py:L10
+EDGE llm.py --imports [EXTRACTED context=import]--> re at=graphify/llm.py:L11
+EDGE llm.py --imports [EXTRACTED context=import]--> sys at=graphify/llm.py:L13
+EDGE llm.py --imports [EXTRACTED context=import]--> json at=graphify/llm.py:L9
+EDGE llm.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/llm.py:L18
+EDGE __main__.py --imports [EXTRACTED context=import]--> json at=graphify/__main__.py:L6
+EDGE __main__.py --imports [EXTRACTED context=import]--> os at=graphify/__main__.py:L7
+EDGE __main__.py --imports [EXTRACTED context=import]--> re at=graphify/__main__.py:L9
+EDGE __main__.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/__main__.py:L12
+EDGE paths.py --contains [EXTRACTED]--> default_graph_json() at=graphify/paths.py:L368
+EDGE paths.py --contains [EXTRACTED]--> load_node_link_graph() at=graphify/paths.py:L474
+EDGE serve.py --imports_from [EXTRACTED context=submodule_import]--> paths.py at=graphify/serve.py:L1815
+EDGE write_text_atomic() --calls [EXTRACTED context=call]--> _atomic_replace() at=graphify/paths.py:L157
+EDGE _atomic_replace() --calls [EXTRACTED context=call]--> os_replace_with_fallback() at=graphify/paths.py:L138
+EDGE write_json_atomic() --calls [EXTRACTED context=call]--> _atomic_replace() at=graphify/paths.py:L165
+EDGE serve.py --imports [EXTRACTED context=import]--> default_graph_json() at=graphify/serve.py:L18
+EDGE disambiguate_ambiguous_candidates() --calls [EXTRACTED context=call]--> _is_test_path() at=graphify/paths.py:L322
+EDGE disambiguate_ambiguous_candidates() --calls [EXTRACTED context=call]--> _path_proximity_winner() at=graphify/paths.py:L349
+EDGE symbol_resolution.py --imports [EXTRACTED context=import]--> disambiguate_ambiguous_candidates() at=graphify/symbol_resolution.py:L14
+EDGE watch.py --imports [EXTRACTED context=import]--> is_absolute_any_platform() at=graphify/watch.py:L15
+EDGE watch.py --imports [EXTRACTED context=import]--> os_replace_with_fallback() at=graphify/watch.py:L15
+EDGE transcribe.py --imports [EXTRACTED context=import]--> out_path() at=graphify/transcribe.py:L8
+EDGE wiki.py --imports [EXTRACTED context=import]--> stem_filename_budget() at=graphify/wiki.py:L10
+EDGE prs.py --imports [EXTRACTED context=import]--> json at=graphify/prs.py:L18
+EDGE prs.py --imports [EXTRACTED context=import]--> os at=graphify/prs.py:L19
+EDGE prs.py --imports [EXTRACTED context=import]--> re at=graphify/prs.py:L20
+EDGE prs.py --imports [EXTRACTED context=import]--> check_graph_file_size_cap() at=graphify/prs.py:L339
+EDGE prs.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/prs.py:L27
+EDGE prs.py --contains [EXTRACTED]--> cmd_prs() at=graphify/prs.py:L690
+EDGE reflect.py --imports [EXTRACTED context=import]--> json at=graphify/reflect.py:L30
+EDGE reflect.py --imports [EXTRACTED context=import]--> re at=graphify/reflect.py:L31
+EDGE reflect.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/reflect.py:L34
+EDGE report.py --imports [EXTRACTED context=import]--> re at=graphify/report.py:L3
+EDGE report.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/report.py:L5
+EDGE symbol_resolution.py --imports_from [EXTRACTED context=import]--> security.py at=graphify/symbol_resolution.py:L15
+EDGE security.py --imports [EXTRACTED context=import]--> os at=graphify/security.py:L6
+EDGE security.py --imports [EXTRACTED context=import]--> re at=graphify/security.py:L7
+EDGE security.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/security.py:L12
+EDGE security.py --contains [EXTRACTED]--> check_graph_file_size_cap() at=graphify/security.py:L357
+EDGE serve.py --imports_from [EXTRACTED context=import]--> security.py at=graphify/serve.py:L16
+EDGE watch.py --imports [EXTRACTED context=import]--> check_graph_file_size_cap() at=graphify/watch.py:L1458
+EDGE serve.py --imports [EXTRACTED context=import]--> check_graph_file_size_cap() at=graphify/serve.py:L16
+EDGE serve.py --imports [EXTRACTED context=import]--> networkx at=graphify/serve.py:L14
+EDGE serve.py --imports [EXTRACTED context=import]--> json at=graphify/serve.py:L3
+EDGE serve.py --imports [EXTRACTED context=import]--> os at=graphify/serve.py:L5
+EDGE serve.py --imports [EXTRACTED context=import]--> re at=graphify/serve.py:L6
+EDGE serve.py --imports [EXTRACTED context=import]--> sys at=graphify/serve.py:L7
+EDGE serve.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/serve.py:L11
+EDGE serve.py --contains [EXTRACTED]--> _query_graph_text() at=graphify/serve.py:L1349
+EDGE serve.py --contains [EXTRACTED]--> _build_server() at=graphify/serve.py:L1795
+EDGE serve.py --contains [EXTRACTED]--> _has_chinese() at=graphify/serve.py:L205
+EDGE serve.py --contains [EXTRACTED]--> _segment_chinese() at=graphify/serve.py:L209
+EDGE serve.py --contains [EXTRACTED]--> _is_searchable() at=graphify/serve.py:L220
+EDGE serve.py --contains [EXTRACTED]--> serve() at=graphify/serve.py:L2403
+EDGE serve.py --contains [EXTRACTED]--> serve_http() at=graphify/serve.py:L2561
+EDGE serve.py --contains [EXTRACTED]--> _main() at=graphify/serve.py:L2619
+EDGE serve.py --contains [EXTRACTED]--> _query_terms() at=graphify/serve.py:L281
+EDGE _build_server() --indirect_call [INFERRED context=collection]--> _tool_get_neighbors() at=graphify/serve.py:L2252
+EDGE serve() --calls [EXTRACTED context=call]--> _build_server() at=graphify/serve.py:L2412
+EDGE _main() --calls [EXTRACTED context=call]--> serve_http() at=graphify/serve.py:L2674
+EDGE _main() --calls [EXTRACTED context=call]--> serve() at=graphify/serve.py:L2685
+EDGE symbol_resolution.py --imports [EXTRACTED context=import]--> re at=graphify/symbol_resolution.py:L6
+EDGE symbol_resolution.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/symbol_resolution.py:L9
+EDGE transcribe.py --imports [EXTRACTED context=import]--> os at=graphify/transcribe.py:L5
+EDGE transcribe.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/transcribe.py:L6
+EDGE watch.py --imports [EXTRACTED context=import]--> json at=graphify/watch.py:L4
+EDGE watch.py --imports [EXTRACTED context=import]--> os at=graphify/watch.py:L6
+EDGE watch.py --imports [EXTRACTED context=import]--> re at=graphify/watch.py:L8
+EDGE watch.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/watch.py:L11
+EDGE watch.py --contains [EXTRACTED]--> _reconcile_graph_html() at=graphify/watch.py:L1273
+EDGE wiki.py --imports [EXTRACTED context=import]--> re at=graphify/wiki.py:L6
+EDGE wiki.py --imports_from [EXTRACTED context=import]--> pathlib at=graphify/wiki.py:L5
+EDGE wiki.py --contains [EXTRACTED]--> _god_node_article() at=graphify/wiki.py:L185

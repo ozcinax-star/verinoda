@@ -1,0 +1,90 @@
+$ grep -rniE 'graphify|update|rebuild|code|graph|llm' .   # 11889 matching lines in 222 files
+graphify/cli.py:1: """graphify command dispatch — every non-install subcommand.
+graphify/cli.py:5: module. The path-redirect (`graphify <path>` -> extract) re-enters via a lazy
+graphify/cli.py:14: from graphify.paths import GRAPHIFY_OUT as _GRAPHIFY_OUT
+graphify/cli.py:22: 'MANDATORY: graphify-out/graph.json exists. You MUST run '
+graphify/cli.py:23: '`graphify query "<question>"` before grepping raw files. Only grep '
+graphify/cli.py:24: 'after graphify has oriented you, or to modify/debug specific lines.'
+graphify/cli.py:32: 'MANDATORY: graphify-out/graph.json exists. You MUST run graphify '
+graphify/cli.py:33: 'before reading source files. Use: `graphify query "<question>"` '
+graphify/cli.py:34: '(scoped subgraph), `graphify explain "<concept>"`, or '
+graphify/cli.py:35: '`graphify path "<A>" "<B>"`. Only read raw files after graphify has '
+graphify/cli.py:37: 'subagents too — include it in every subagent prompt involving code '
+graphify/cli.py:46: 'graphify-out/graph.json exists but may be STALE for this file (the file '
+graphify/cli.py:47: 'changed after the last build). Prefer `graphify query "<question>"` for '
+graphify/cli.py:48: 'orientation, and run `graphify update` to refresh the graph. Reading the '
+graphify/cli.py:53: # Strict-mode block (opt-in). Claude Code PreToolUse honors
+graphify/cli.py:62: 'graphify strict mode: this project has a fresh knowledge graph that covers '
+graphify/cli.py:63: 'this file. Run `graphify query "<your question>"` (or `graphify explain` / '
+graphify/cli.py:64: '`graphify path`) FIRST to orient yourself, then re-issue this Read — it '
+graphify/cli.py:67: 'same rule in any subagent prompt that explores code.'
+graphify/cli.py:77: 'graphify: knowledge graph at graphify-out/. For focused questions, run '
+graphify/cli.py:78: '`graphify query "<question>"` (scoped subgraph, usually much smaller than '
+graphify/cli.py:79: 'GRAPH_REPORT.md) instead of grepping raw files. Read GRAPH_REPORT.md only '
+graphify/cli.py:84: def _default_graph_path() -> str:
+graphify/cli.py:85: return str(Path(_GRAPHIFY_OUT) / "graph.json")
+graphify/cli.py:117: Mirrors the #1890 path normalization in graphify.llm.
+graphify/cli.py:126: ``failed_ast_sources`` (#2543): code files whose AST extractor errored
+graphify/cli.py:143: # the manifest. An edge-only result has no entity representation in the graph
+graphify/cli.py:184: from — ``merged`` vs ``G.graph``). Always prints the actionable notice.
+graphify/cli.py:213: f"[graphify extract] semantic extraction is incomplete: unverified semantic "
+graphify/cli.py:215: "pass --allow-partial to overwrite a larger existing graph anyway.",
+graphify/cli.py:221: def _stale_graph_sources(
+graphify/cli.py:222: graph_path: Path,
+graphify/cli.py:227: """Source files graph.json still references but the current scan no longer
+graphify/cli.py:232: (.graphifyignore/.gitignore/--exclude changed) without being listed in the
+graphify/cli.py:233: manifest kept its stale nodes in graph.json forever. Derive prune
+graphify/cli.py:234: candidates from the graph's own node ``source_file``s instead: anything
+graphify/cli.py:235: the graph references that the post-exclude detect corpus no longer
+graphify/cli.py:242: graph's own output root; only anchors that land inside the scan root
+graphify/cli.py:245: for graphs written by <=0.9.16, which stored them relative to the OUT root
+graphify/cli.py:252: filenames while graph ``source_file`` entries are typically NFC, and a
+... (11849 more matching lines not shown)
+
+==> graphify/cli.py:1-46 <==  (truncated at char cap; file has 4842 lines)
+     1	"""graphify command dispatch — every non-install subcommand.
+     2	
+     3	Extracted verbatim from __main__.main(); __main__ now calls dispatch_command(cmd)
+     4	after the install/platform dispatch. Kept out of __main__ to shrink the CLI entry
+     5	module. The path-redirect (`graphify <path>` -> extract) re-enters via a lazy
+     6	import of main to avoid a cli<->__main__ import cycle.
+     7	"""
+     8	from __future__ import annotations
+     9	import json
+    10	import os
+    11	import re
+    12	import sys
+    13	import time
+    14	from graphify.paths import GRAPHIFY_OUT as _GRAPHIFY_OUT
+    15	from pathlib import Path, PurePosixPath, PureWindowsPath
+    16	
+    17	
+    18	_SEARCH_NUDGE = json.dumps({
+    19	    "hookSpecificOutput": {
+    20	        "hookEventName": "PreToolUse",
+    21	        "additionalContext": (
+    22	            'MANDATORY: graphify-out/graph.json exists. You MUST run '
+    23	            '`graphify query "<question>"` before grepping raw files. Only grep '
+    24	            'after graphify has oriented you, or to modify/debug specific lines.'
+    25	        ),
+    26	    }
+    27	}, ensure_ascii=False, separators=(",", ":")) + "\n"
+    28	_READ_NUDGE = json.dumps({
+    29	    "hookSpecificOutput": {
+    30	        "hookEventName": "PreToolUse",
+    31	        "additionalContext": (
+    32	            'MANDATORY: graphify-out/graph.json exists. You MUST run graphify '
+    33	            'before reading source files. Use: `graphify query "<question>"` '
+    34	            '(scoped subgraph), `graphify explain "<concept>"`, or '
+    35	            '`graphify path "<A>" "<B>"`. Only read raw files after graphify has '
+    36	            'oriented you, or to modify/debug specific lines. This rule applies to '
+    37	            'subagents too — include it in every subagent prompt involving code '
+    38	            'exploration.'
+    39	        ),
+    40	    }
+    41	}, ensure_ascii=False, separators=(",", ":")) + "\n"
+    42	_READ_NUDGE_STALE = json.dumps({
+    43	    "hookSpecificOutput": {
+    44	        "hookEventName": "PreToolUse",
+    45	        "additionalContext": (
+    46	            'graphify-out/graph.json exists but may be STALE for this file (the file '

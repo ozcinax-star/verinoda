@@ -1,0 +1,189 @@
+$ grep -rniE 'claim|marked|stale|cited|files|change' .   # 2848 matching lines in 86 files
+repoatlas/claims.py:1: """Claims: every important conclusion, its status, confidence and evidence.
+repoatlas/claims.py:3: Status rules (enforced by :func:`check_status`, tested in tests/test_claims.py):
+repoatlas/claims.py:6: fresh (cited lines still match, relocated through their anchor when they
+repoatlas/claims.py:8: mechanically state the claim, not merely exist. Documentary kinds
+repoatlas/claims.py:11: states what the claim attributes to it).
+repoatlas/claims.py:20: feedback (a graph edge between the claimed endpoints is enough here - that is
+repoatlas/claims.py:23: * ``unknown``               nothing: a claim without evidence is unknown.
+repoatlas/claims.py:26: "heuristic"``) never contradicts: it lowers the claim one step
+repoatlas/claims.py:28: * ``stale``                 is set only by invalidation (``create`` refuses it).
+repoatlas/claims.py:30: Evidence groups (FEVER evidence sets): ``claim_evidence.grp`` names a group;
+repoatlas/claims.py:31: without one each evidence is its own group, except a flow claim's hop and sink
+repoatlas/claims.py:34: Every claim records two levels in ``spec``: ``assessed`` - the status its
+repoatlas/claims.py:42: in the claim's history before the error is raised.
+repoatlas/claims.py:44: Invalidation (docs/DESIGN.md D24) works on *claim dependencies* recorded at
+repoatlas/claims.py:47: :mod:`repoatlas.anchors`, falling back to whole files where no facts exist.
+repoatlas/claims.py:48: An update marks a claim stale only when a facet it depends on changed or its
+repoatlas/claims.py:49: cited evidence no longer relocates to identical text; a claim whose files
+repoatlas/claims.py:50: changed but whose facets did not is re-bound to the new snapshot (backdated)
+repoatlas/claims.py:51: without a status change, and the history says so.
+repoatlas/claims.py:67: "strong_inference", "weak_inference", "unknown", "contradicted", "stale",
+repoatlas/claims.py:77: "unknown": 0.0, "contradicted": 0.05, "stale": 0.3,
+repoatlas/claims.py:83: # Evidence whose cited lines are re-read before any status decision.
+repoatlas/claims.py:94: class ClaimRuleError(ValueError):
+repoatlas/claims.py:121: A cited block that no longer matches (changed, deleted, or moved without an
+repoatlas/claims.py:168: stale = [e for e in members if not ctx.live(e)]
+repoatlas/claims.py:169: if stale:
+repoatlas/claims.py:170: return f"{len(stale)} cited source block(s) no longer match"
+repoatlas/claims.py:173: return (f"it does not {'state' if need == 'full' else 'attribute'} the claim "
+repoatlas/claims.py:185: return "no cited source lines in it"
+repoatlas/claims.py:203: stale = [e for e in _supports(ctx.evs) if not ctx.live(e)]
+repoatlas/claims.py:205: + (f" ({len(stale)} cited source block(s) no longer match)" if stale else ""))
+repoatlas/claims.py:220: return f"{base} and states the claim; best group: {sorted(problems, key=len)[0]}"
+repoatlas/claims.py:229: return "strong_inference requires relevant evidence; the supporting evidence is not about the claim"
+repoatlas/claims.py:232: return "weak_inference requires at least one supporting evidence (a claim without evidence is unknown)"
+repoatlas/claims.py:249: claim: dict | None = None, repo: Path | None = None, grades: dict[str, str] | None = None
+repoatlas/claims.py:253: ``claim`` (with ``repo``) grades the evidence for relevance (or pass
+repoatlas/claims.py:256: status that reaches the store goes through :meth:`Claims.set_status`,
+repoatlas/claims.py:257: which always passes the claim, so irrelevant evidence cannot verify a
+repoatlas/claims.py:258: stored claim on any path.
+repoatlas/claims.py:260: if grades is None and claim is not None:
+... (2808 more matching lines not shown)
+
+==> repoatlas/claims.py:1-145 <==  (truncated at char cap; file has 1092 lines)
+     1	"""Claims: every important conclusion, its status, confidence and evidence.
+     2	
+     3	Status rules (enforced by :func:`check_status`, tested in tests/test_claims.py):
+     4	
+     5	* Every ``*_verified`` status needs one *evidence group* that is verifying,
+     6	  fresh (cited lines still match, relocated through their anchor when they
+     7	  only moved) and fully graded by :mod:`repoatlas.entail` - the evidence must
+     8	  mechanically state the claim, not merely exist. Documentary kinds
+     9	  (``decision``, ``history``) can never be entailed mechanically; for them
+    10	  ``primary_source_verified`` needs their best grade, attribution (the record
+    11	  states what the claim attributes to it).
+    12	* ``experiment_verified``   such a group with an experiment/test run that passed.
+    13	* ``statically_verified``   such a group of source lines (or a static resolver's
+    14	  definitive answer) that re-check OK now.
+    15	* ``primary_source_verified`` such a group with a primary source (docs, standard,
+    16	  design doc, git history, dependency/reference source at a pinned version).
+    17	* ``observed``              any such group.
+    18	* ``strong_inference``      at least one relevant (graded ``partial`` or better)
+    19	  supporting evidence that is not a search result, model summary or user
+    20	  feedback (a graph edge between the claimed endpoints is enough here - that is
+    21	  what inference means; a search hit or a summary is not).
+    22	* ``weak_inference``        at least one supporting evidence of any kind.
+    23	* ``unknown``               nothing: a claim without evidence is unknown.
+    24	* ``contradicted``          at least one *definitive* refutation (an exhaustive
+    25	  check within a stated scope). A *heuristic* refutation (``meta.strength =
+    26	  "heuristic"``) never contradicts: it lowers the claim one step
+    27	  (verified -> strong_inference -> weak_inference -> unknown).
+    28	* ``stale``                 is set only by invalidation (``create`` refuses it).
+    29	
+    30	Evidence groups (FEVER evidence sets): ``claim_evidence.grp`` names a group;
+    31	without one each evidence is its own group, except a flow claim's hop and sink
+    32	lines, which form one group - a flow is verified only when every hop is.
+    33	
+    34	Every claim records two levels in ``spec``: ``assessed`` - the status its
+    35	creator asked for (or ``strong_inference`` for a request outside the ordered
+    36	list), fixed at creation and raised only by an explicit, rule-checked
+    37	``set_status(..., downgrade=False)`` - and ``ceiling`` - the highest status
+    38	re-verification may restore it to, which critique only ever lowers. Critique
+    39	also stores its confidence ``penalty``; re-verification applies it, so a
+    40	verify never raises confidence back above what critique left. Confidences are
+    41	stored rounded to two decimals. A rejected explicit status request is recorded
+    42	in the claim's history before the error is raised.
+    43	
+    44	Invalidation (docs/DESIGN.md D24) works on *claim dependencies* recorded at
+    45	creation (:func:`derive_deps`): symbol facets (signature, body), import
+    46	bindings, module statements and document sections from
+    47	:mod:`repoatlas.anchors`, falling back to whole files where no facts exist.
+    48	An update marks a claim stale only when a facet it depends on changed or its
+    49	cited evidence no longer relocates to identical text; a claim whose files
+    50	changed but whose facets did not is re-bound to the new snapshot (backdated)
+    51	without a status change, and the history says so.
+    52	"""
+    53	
+    54	from __future__ import annotations
+    55	
+    56	import hashlib
+    57	import json
+    58	import re
+    59	from pathlib import Path
+    60	
+    61	from repoatlas import anchors, entail
+    62	from repoatlas import evidence as evmod
+    63	from repoatlas.store import Store, new_id, now
+    64	
+    65	STATUSES = (
+    66	    "observed", "experiment_verified", "statically_verified", "primary_source_verified",
+    67	    "strong_inference", "weak_inference", "unknown", "contradicted", "stale",
+    68	)
+    69	VERIFIED = {"observed", "experiment_verified", "statically_verified", "primary_source_verified"}
+    70	ORDER = [  # strongest first; used to find the best status the evidence allows
+    71	    "experiment_verified", "statically_verified", "primary_source_verified", "observed",
+    72	    "strong_inference", "weak_inference", "unknown",
+    73	]
+    74	CONFIDENCE_CAP = {
+    75	    "experiment_verified": 0.95, "statically_verified": 0.9, "observed": 0.9,
+    76	    "primary_source_verified": 0.85, "strong_inference": 0.7, "weak_inference": 0.4,
+    77	    "unknown": 0.0, "contradicted": 0.05, "stale": 0.3,
+    78	}
+    79	PRIMARY_TYPES = {"official_doc", "standard", "design_doc", "git_history", "dependency_source",
+    80	                 "reference_repo", "paper"}
+    81	SOURCE_LINE_TYPES = ("source_code", "dependency_source", "reference_repo")
+    82	STATIC_TYPES = SOURCE_LINE_TYPES + ("static_resolution",)
+    83	# Evidence whose cited lines are re-read before any status decision.
+    84	RECHECK_TYPES = evmod.FILE_TYPES + ("static_resolution",)
+    85	# Not even inference: a search hit, a model's summary or a user's say-so is a
+    86	# pointer to evidence, never support by itself.
+    87	NOT_INFERENCE_SUPPORT = evmod.NOT_SUPPORT
+    88	# A requested status outside ORDER (contradicted, a typo) never earns more than this.
+    89	DEFAULT_CEILING = "strong_inference"
+    90	CODE_SUFFIXES = (".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".rb", ".php", ".cs", ".kt",
+    91	                 ".scala", ".swift", ".c", ".cc", ".cpp", ".h", ".hpp", ".lua")
+    92	
+    93	
+    94	class ClaimRuleError(ValueError):
+    95	    pass
+    96	
+    97	
+    98	def step_down(status: str) -> str:
+    99	    """One step weaker: any verified status -> strong_inference -> weak_inference -> unknown."""
+   100	    if status in VERIFIED:
+   101	        return "strong_inference"
+   102	    return {"strong_inference": "weak_inference", "weak_inference": "unknown"}.get(status, status)
+   103	
+   104	
+   105	def _supports(evs: list[dict]) -> list[dict]:
+   106	    return [e for e in evs if e.get("relation") == "supports"]
+   107	
+   108	
+   109	def _refutes(evs: list[dict]) -> list[dict]:
+   110	    return [e for e in evs if e.get("relation") == "refutes"]
+   111	
+   112	
+   113	def strength(ev: dict) -> str:
+   114	    """``definitive`` (the default for refutations recorded before strengths existed) or ``heuristic``."""
+   115	    return "heuristic" if (ev.get("meta") or {}).get("strength") == "heuristic" else "definitive"
+   116	
+   117	
+   118	def _live(evs: list[dict], source_checks: dict[str, bool]) -> list[dict]:
+   119	    """Evidence minus file/line records whose re-check against the tree failed.
+   120	
+   121	    A cited block that no longer matches (changed, deleted, or moved without an
+   122	    anchor to prove it is the same code) is not support - nor refutation - for
+   123	    the *current* code any more.
+   124	    """
+   125	    return [e for e in evs if source_checks.get(e.get("id"), True)]
+   126	
+   127	
+   128	def groups(evs: list[dict], kind: str | None = None) -> dict[str, list[dict]]:
+   129	    """Supporting evidence by group (see the module docstring)."""
+   130	    out: dict[str, list[dict]] = {}
+   131	    for e in _supports(evs):
+   132	        g = e.get("grp")
+   133	        meta = e.get("meta") or {}
+   134	        if not g and kind == "flow" and (meta.get("hop") or meta.get("sink")):
+   135	            g = "flow"
+   136	        out.setdefault(g or f"ev:{e.get('id') or e.get('locator')}", []).append(e)
+   137	    return out
+   138	
+   139	
+   140	class _Ctx:
+   141	    def __init__(self, evs: list[dict], checks: dict[str, bool] | None, grades: dict[str, str] | None,
+   142	                 kind: str | None):
+   143	        self.evs = evs
+   144	        self.checks = checks or {}
+   145	        self.grades = grades

@@ -1,0 +1,68 @@
+# SQLite bağlantısı nerede açılıyor ve veritabanı dosyasını ne belirliyor?
+expanded: baglantisi->connection (lexicon); baglantisi->connect (lexicon); baglantisi->conn (lexicon); aciliyor->open (lexicon); veritabani->databas (lexicon); veritabani->db (lexicon)
+## docs/adr/0001-sqlite-persistence.md:1-7 # ADR 0001: SQLite for order persistence
+# ADR 0001: SQLite for order persistence
+
+Status: accepted
+
+We persist orders in SQLite through `OrderRepository` only. No other module
+may open a database connection. Chosen for zero-ops local development; a
+server database can replace it behind the same repository interface.
+## README.md:1-5 # orders_app
+# orders_app
+
+Example service for RepoAtlas. `orders/api.py` handlers call `orders/service.py`,
+which prices orders via `orders/pricing.py` and persists them through
+`orders/repository.py` (SQLite, see docs/adr/0001-sqlite-persistence.md).
+## orders/repository.py:9-13 def __init__(self, url: str = DATABASE_URL)
+    def __init__(self, url: str = DATABASE_URL):
+        self.conn = sqlite3.connect(url)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+        )
+## orders/repository.py:1-1 """Persistence layer: the only module that talks to SQLite."""
+"""Persistence layer: the only module that talks to SQLite."""
+## orders/repository.py:8-26 class OrderRepository
+class OrderRepository:
+    def __init__(self, url: str = DATABASE_URL):
+        self.conn = sqlite3.connect(url)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+        )
+
+    def save(self, customer: str, total: float) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+        )
+        self.conn.commit()
+        return cur.lastrowid
+
+    def get(self, order_id: int):
+        row = self.conn.execute(
+            "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+        ).fetchone()
+        return None if row is None else {"id": row[0], "customer": row[1], "total": row[2]}
+## orders/service.py:19-22 def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int
+def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+    validate_items(items)
+    total = compute_total(items)
+    return repo.save(customer, total)
+## tests/test_service.py:7-10 def test_place_and_fetch_roundtrip()
+def test_place_and_fetch_roundtrip():
+    repo = OrderRepository(":memory:")
+    oid = place_order(repo, "ada", [{"price": 5.0, "qty": 1}])
+    assert fetch_order(repo, oid)["total"] == 5.0
+orders/api.py:9-13 def get_repo() -> OrderRepository
+tests/test_service.py:13-15 def test_empty_order_rejected()
+orders/service.py:25-26 def fetch_order(repo: OrderRepository, order_id: int)
+orders/config.py:5-7 DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+orders/config.py:10-15 def load_settings() -> dict
+orders/api.py:24-28 def get_order_handler(order_id: int) -> tuple[int, dict]
+orders/api.py:16-21 def create_order_handler(payload: dict) -> tuple[int, dict]
+orders/service.py:12-16 def validate_items(items: list[dict]) -> None
+orders/service.py:8-9 class ValidationError(ValueError)
+orders/pricing.py:6-8 def compute_total(items: list[dict]) -> float
+orders/pricing.py:11-15 def apply_discount(subtotal: float) -> float
+tests/test_pricing.py:12-13 def test_compute_total()
+tests/test_pricing.py:4-5 def test_discount_applies_above_threshold()
+tests/test_pricing.py:8-9 def test_no_discount_below_threshold()

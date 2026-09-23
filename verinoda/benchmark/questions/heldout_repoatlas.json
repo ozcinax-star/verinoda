@@ -1,0 +1,1125 @@
+{
+  "schema": 1,
+  "name": "heldout_repoatlas",
+  "description": "Held-out set on RepoAtlas's own source at commit 7371990 (the repoatlas package without the vendored project_index and the benchmark question files, plus tests/ without fixtures): 8 questions, where x2, config, flow, impact, behaviour, why, tests. Questions and gold as written by the retrieval research agent; gold re-anchored to 7371990.",
+  "verified_by": "Gold facts were written by the retrieval research agent by reading the RepoAtlas source of its research snapshot; for this set every fact was re-read at commit 7371990 by the measurement agent, its locators re-pointed to the same code (3 facts restated where the code was restructured, see each fact's review), and each source.at/source.contains pair is re-checked against the benchmark copy before scoring (metrics.validate_gold).",
+  "provenance": {
+    "questions_written_by": "retrieval research agent (round-3 research), after its prototype was built and before the prototype was run on this corpus",
+    "gold_written_by": "retrieval research agent, same time",
+    "gold_reviewed_by": "measurement agent (round-3 measurement step): every fact re-read and re-anchored to commit 7371990; no fact added or removed, question wording unchanged",
+    "in_sample": false,
+    "caveat": "held out from RepoAtlas design, not unseen: the search track ran it during development and reports it was not used for tuning",
+    "original_file": "retrieval_track/heldout.json (research scratch, not in the repository)"
+  },
+  "corpus": {
+    "snapshot_dir": "benchmarks/corpora/heldout_repoatlas_7371990",
+    "source_commit": "73719901c9dea49c2e87120ca040c6b998298fe3",
+    "note": "The product was renamed from RepoAtlas to Verinoda after this set was written. The corpus is the RepoAtlas package at commit 7371990 of the pre-rename (private) history, shipped as a snapshot because that history is not in this repository. Run with --repo benchmarks/corpora/heldout_repoatlas_7371990. Gold locators name the old paths (repoatlas/...) on purpose: they refer to that snapshot.",
+    "include": [
+      "repoatlas",
+      "tests"
+    ],
+    "exclude": [
+      "repoatlas/project_index/*",
+      "repoatlas/benchmark/questions/*",
+      "tests/fixtures/*",
+      "*/__pycache__/*"
+    ]
+  },
+  "questions": [
+    {
+      "id": "h01",
+      "category": "where",
+      "question": "Where is an experiment's process tree killed when it times out?",
+      "facts": [
+        {
+          "id": "h01.kill",
+          "fact": "_kill_tree uses taskkill /T /F on Windows and killpg on POSIX",
+          "source": {
+            "at": "repoatlas/experiments.py:322",
+            "contains": "taskkill"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/experiments.py:318-326"
+            },
+            {
+              "text": "taskkill"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/experiments.py:211",
+              "contains": "taskkill",
+              "match_any": [
+                {
+                  "loc": "repoatlas/experiments.py:207-214"
+                },
+                {
+                  "text": "taskkill"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h01.call",
+          "fact": "run() calls _kill_tree on TimeoutExpired",
+          "source": {
+            "at": "repoatlas/experiments.py:488",
+            "contains": "_kill_tree(proc)"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/experiments.py:484-488"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/experiments.py:313",
+              "contains": "_kill_tree(proc)",
+              "match_any": [
+                {
+                  "loc": "repoatlas/experiments.py:309-313"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h01.container",
+          "fact": "a container is stopped with `<runtime> kill` via _kill_container",
+          "source": {
+            "at": "repoatlas/experiments.py:291",
+            "contains": "kill"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/experiments.py:288-293"
+            },
+            {
+              "loc": "repoatlas/experiments.py:487"
+            },
+            {
+              "text": "_kill_container"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/experiments.py:180",
+              "contains": "kill",
+              "match_any": [
+                {
+                  "loc": "repoatlas/experiments.py:177-182"
+                },
+                {
+                  "loc": "repoatlas/experiments.py:312"
+                },
+                {
+                  "text": "_kill_container"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h01.drain",
+          "fact": "output is drained for KILL_DRAIN_TIMEOUT = 15 s after the kill",
+          "source": {
+            "at": "repoatlas/experiments.py:87",
+            "contains": "KILL_DRAIN_TIMEOUT = 15"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/experiments.py:87"
+            },
+            {
+              "loc": "repoatlas/experiments.py:490"
+            },
+            {
+              "text": "KILL_DRAIN_TIMEOUT"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/experiments.py:68",
+              "contains": "KILL_DRAIN_TIMEOUT = 15",
+              "match_any": [
+                {
+                  "loc": "repoatlas/experiments.py:68"
+                },
+                {
+                  "loc": "repoatlas/experiments.py:315"
+                },
+                {
+                  "text": "KILL_DRAIN_TIMEOUT"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "h02",
+      "category": "config",
+      "question": "Which environment variables are passed to experiment commands, and where is that decided?",
+      "facts": [
+        {
+          "id": "h02.allow",
+          "fact": "ENV_ALLOW lists the inherited variables",
+          "source": {
+            "at": "repoatlas/experiments.py:80",
+            "contains": "ENV_ALLOW = {"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/experiments.py:80-81"
+            },
+            {
+              "text": "ENV_ALLOW"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/experiments.py:61",
+              "contains": "ENV_ALLOW = {",
+              "match_any": [
+                {
+                  "loc": "repoatlas/experiments.py:61-62"
+                },
+                {
+                  "text": "ENV_ALLOW"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h02.scrub",
+          "fact": "_scrubbed_env keeps only ENV_ALLOW keys from os.environ",
+          "source": {
+            "at": "repoatlas/experiments.py:254",
+            "contains": "ENV_ALLOW"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/experiments.py:253-255"
+            },
+            {
+              "text": "_scrubbed_env"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/experiments.py:143",
+              "contains": "ENV_ALLOW",
+              "match_any": [
+                {
+                  "loc": "repoatlas/experiments.py:142-144"
+                },
+                {
+                  "text": "_scrubbed_env"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h02.set",
+          "fact": "HOME/USERPROFILE/TMP/TEMP point at the throw-away home; PYTHONDONTWRITEBYTECODE, CI, REPOATLAS_EXPERIMENT are set",
+          "source": {
+            "at": "repoatlas/experiments.py:257",
+            "contains": "REPOATLAS_EXPERIMENT"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/experiments.py:255-257"
+            },
+            {
+              "text": "REPOATLAS_EXPERIMENT"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/experiments.py:146",
+              "contains": "REPOATLAS_EXPERIMENT",
+              "match_any": [
+                {
+                  "loc": "repoatlas/experiments.py:144-146"
+                },
+                {
+                  "text": "REPOATLAS_EXPERIMENT"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h02.path",
+          "fact": "PATH is prefixed with the running interpreter's directory",
+          "source": {
+            "at": "repoatlas/experiments.py:259",
+            "contains": "env[\"PATH\"]"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/experiments.py:259"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/experiments.py:148",
+              "contains": "env[\"PATH\"]",
+              "match_any": [
+                {
+                  "loc": "repoatlas/experiments.py:148"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "h03",
+      "category": "flow",
+      "question": "What does repoatlas scan call to build the index and invalidate stale claims?",
+      "facts": [
+        {
+          "id": "h03.cli",
+          "fact": "cmd_scan calls workflow.scan",
+          "source": {
+            "at": "repoatlas/cli.py:174",
+            "contains": "workflow.scan("
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/cli.py:174"
+            },
+            {
+              "text": "cmd_scan"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/cli.py:173",
+              "contains": "workflow.scan(",
+              "match_any": [
+                {
+                  "loc": "repoatlas/cli.py:173"
+                },
+                {
+                  "text": "cmd_scan"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h03.build",
+          "fact": "scan calls index.build",
+          "source": {
+            "at": "repoatlas/workflow.py:138",
+            "contains": "index.build("
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/workflow.py:138"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/workflow.py:59",
+              "contains": "index.build(",
+              "match_any": [
+                {
+                  "loc": "repoatlas/workflow.py:59"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h03.rebuild",
+          "fact": "index.build runs the vendored watch._rebuild_code",
+          "source": {
+            "at": "repoatlas/index.py:72",
+            "contains": "_rebuild_code("
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/index.py:72"
+            },
+            {
+              "text": "_rebuild_code"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/index.py:39",
+              "contains": "_rebuild_code(",
+              "match_any": [
+                {
+                  "loc": "repoatlas/index.py:39"
+                },
+                {
+                  "text": "_rebuild_code"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h03.snapshot",
+          "fact": "scan records a snapshot with take_snapshot",
+          "source": {
+            "at": "repoatlas/workflow.py:143",
+            "contains": "take_snapshot("
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/workflow.py:143"
+            },
+            {
+              "text": "take_snapshot"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/workflow.py:63",
+              "contains": "take_snapshot(",
+              "match_any": [
+                {
+                  "loc": "repoatlas/workflow.py:63"
+                },
+                {
+                  "text": "take_snapshot"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h03.stale",
+          "fact": "scan calls invalidate_stale",
+          "source": {
+            "at": "repoatlas/workflow.py:144",
+            "contains": "invalidate_stale("
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/workflow.py:144"
+            },
+            {
+              "text": "invalidate_stale"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/workflow.py:64",
+              "contains": "invalidate_stale(",
+              "match_any": [
+                {
+                  "loc": "repoatlas/workflow.py:64"
+                },
+                {
+                  "text": "invalidate_stale"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "h04",
+      "category": "impact",
+      "question": "What is affected if evidence.content_hash changes?",
+      "facts": [
+        {
+          "id": "h04.source",
+          "fact": "source_evidence stores content_hash of the cited lines",
+          "source": {
+            "at": "repoatlas/evidence.py:175",
+            "contains": "content_hash(text)"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/evidence.py:175"
+            },
+            {
+              "text": "source_evidence"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/evidence.py:100",
+              "contains": "content_hash(text)",
+              "match_any": [
+                {
+                  "loc": "repoatlas/evidence.py:100"
+                },
+                {
+                  "text": "source_evidence"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h04.check",
+          "fact": "check_source re-hashes the cited lines and, for unanchored evidence, searches for the moved block by hash (_legacy_search)",
+          "source": {
+            "at": "repoatlas/evidence.py:215",
+            "contains": "content_hash(cur_text)"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/evidence.py:213-238"
+            },
+            {
+              "loc": "repoatlas/evidence.py:181-191"
+            },
+            {
+              "text": "check_source"
+            }
+          ],
+          "fact_original": "check_source re-hashes cited lines and searches for moved blocks",
+          "review": {
+            "status": "restated",
+            "note": "restated: at 7371990 the moved-block search moved out of check_source into _legacy_search (evidence.py:181-191, called at 235); both locations are accepted",
+            "original": {
+              "at": "repoatlas/evidence.py:116",
+              "contains": "content_hash(text)",
+              "match_any": [
+                {
+                  "loc": "repoatlas/evidence.py:116-126"
+                },
+                {
+                  "text": "check_source"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h04.url",
+          "fact": "url_evidence hashes fetched documents",
+          "source": {
+            "at": "repoatlas/evidence.py:301",
+            "contains": "content_hash(text)"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/evidence.py:301"
+            },
+            {
+              "text": "url_evidence"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/evidence.py:159",
+              "contains": "content_hash(text)",
+              "match_any": [
+                {
+                  "loc": "repoatlas/evidence.py:159"
+                },
+                {
+                  "text": "url_evidence"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h04.feedback",
+          "fact": "feedback.add hashes user feedback text",
+          "source": {
+            "at": "repoatlas/feedback.py:635",
+            "contains": "content_hash(text)"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/feedback.py:635"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/feedback.py:466",
+              "contains": "content_hash(text)",
+              "match_any": [
+                {
+                  "loc": "repoatlas/feedback.py:466"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h04.research",
+          "fact": "research._research_document hashes documents",
+          "source": {
+            "at": "repoatlas/research.py:794",
+            "contains": "content_hash(text)"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/research.py:794"
+            },
+            {
+              "text": "_research_document"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/research.py:809",
+              "contains": "content_hash(text)",
+              "match_any": [
+                {
+                  "loc": "repoatlas/research.py:809"
+                },
+                {
+                  "text": "_research_document"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "h05",
+      "category": "behaviour",
+      "question": "How is a claim marked stale when its cited files change?",
+      "facts": [
+        {
+          "id": "h05.inv",
+          "fact": "invalidate_stale sets status 'stale' for claims with touched files",
+          "source": {
+            "at": "repoatlas/claims.py:1063",
+            "contains": "cl.set_status("
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/claims.py:1059-1064"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/claims.py:421",
+              "contains": "cl.set_status(",
+              "match_any": [
+                {
+                  "loc": "repoatlas/claims.py:419-423"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h05.changed",
+          "fact": "invalidate_stale calls assess_change, which compares the claim's files between the snapshot file maps (changed_claim_files, the file rule for claims without recorded dependencies)",
+          "source": {
+            "at": "repoatlas/claims.py:975",
+            "contains": "for f in sorted(claim_files(store, claim)):"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/claims.py:975-977"
+            },
+            {
+              "loc": "repoatlas/claims.py:996-1001"
+            },
+            {
+              "text": "changed_claim_files"
+            }
+          ],
+          "fact_original": "changed_claim_files compares the claim's files between snapshot file maps",
+          "review": {
+            "status": "restated",
+            "note": "restated: at 7371990 invalidate_stale calls assess_change (claims.py:1056), which uses changed_claim_files for claims without recorded dependencies and facet dependencies otherwise; the assess_change lines that compute the changed files are accepted too",
+            "original": {
+              "at": "repoatlas/claims.py:384",
+              "contains": "for f in sorted(claim_files(store, claim)):",
+              "match_any": [
+                {
+                  "loc": "repoatlas/claims.py:384-386"
+                },
+                {
+                  "text": "changed_claim_files"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h05.files",
+          "fact": "claim_files = evidence paths + file subjects",
+          "source": {
+            "at": "repoatlas/claims.py:948",
+            "contains": "def claim_files("
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/claims.py:948-957"
+            },
+            {
+              "text": "claim_files"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/claims.py:358",
+              "contains": "def claim_files(",
+              "match_any": [
+                {
+                  "loc": "repoatlas/claims.py:358-367"
+                },
+                {
+                  "text": "claim_files"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h05.caller",
+          "fact": "scan/update call invalidate_stale after a snapshot",
+          "source": {
+            "at": "repoatlas/workflow.py:144",
+            "contains": "invalidate_stale(store, snap)"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/workflow.py:144"
+            },
+            {
+              "loc": "repoatlas/workflow.py:210"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/workflow.py:64",
+              "contains": "invalidate_stale(store, snap)",
+              "match_any": [
+                {
+                  "loc": "repoatlas/workflow.py:64"
+                },
+                {
+                  "loc": "repoatlas/workflow.py:111"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "h06",
+      "category": "why",
+      "question": "Why can a claim not be deleted from the store?",
+      "facts": [
+        {
+          "id": "h06.trigger",
+          "fact": "trigger no_delete_claims aborts DELETE on claims",
+          "source": {
+            "at": "repoatlas/store.py:192",
+            "contains": "no_delete_claims"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/store.py:192-193"
+            },
+            {
+              "text": "no_delete_claims"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/store.py:190",
+              "contains": "no_delete_claims",
+              "match_any": [
+                {
+                  "loc": "repoatlas/store.py:190-191"
+                },
+                {
+                  "text": "no_delete_claims"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h06.rule",
+          "fact": "design rule: nothing is deleted; claims change status",
+          "source": {
+            "at": "repoatlas/store.py:5",
+            "contains": "Nothing is deleted"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/store.py:5"
+            },
+            {
+              "text": "Nothing is deleted"
+            }
+          ],
+          "review": {
+            "status": "unchanged",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/store.py:5",
+              "contains": "Nothing is deleted",
+              "match_any": [
+                {
+                  "loc": "repoatlas/store.py:5"
+                },
+                {
+                  "text": "Nothing is deleted"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "h07",
+      "category": "where",
+      "question": "Where does RepoAtlas decide whether an experiment command needs a container?",
+      "facts": [
+        {
+          "id": "h07.level",
+          "fact": "run() picks isolation level process/container/None",
+          "source": {
+            "at": "repoatlas/experiments.py:397",
+            "contains": "level = \"process\""
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/experiments.py:394-401"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/experiments.py:252",
+              "contains": "level = \"process\"",
+              "match_any": [
+                {
+                  "loc": "repoatlas/experiments.py:249-256"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h07.classify",
+          "fact": "policy() (wrapped by classify()) returns allowlisted, or risky with the reason",
+          "source": {
+            "at": "repoatlas/experiments.py:215",
+            "contains": "def policy("
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/experiments.py:215-245"
+            },
+            {
+              "loc": "repoatlas/experiments.py:248-250"
+            },
+            {
+              "text": "classify"
+            }
+          ],
+          "fact_original": "classify() returns allowlisted or risky",
+          "review": {
+            "status": "restated",
+            "note": "restated: at 7371990 the allowlist decision lives in policy() (experiments.py:215-245), which run() calls at 392; classify() (248-250) is a wrapper returning policy()[0]",
+            "original": {
+              "at": "repoatlas/experiments.py:128",
+              "contains": "def classify(",
+              "match_any": [
+                {
+                  "loc": "repoatlas/experiments.py:128-139"
+                },
+                {
+                  "text": "classify"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h07.runtime",
+          "fact": "container_runtime() probes docker/podman info",
+          "source": {
+            "at": "repoatlas/experiments.py:153",
+            "contains": "def container_runtime("
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/experiments.py:153-162"
+            },
+            {
+              "text": "container_runtime"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/experiments.py:116",
+              "contains": "def container_runtime(",
+              "match_any": [
+                {
+                  "loc": "repoatlas/experiments.py:116-125"
+                },
+                {
+                  "text": "container_runtime"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h07.refuse",
+          "fact": "without a level the command is refused (ExperimentRefused)",
+          "source": {
+            "at": "repoatlas/experiments.py:418",
+            "contains": "raise ExperimentRefused(reason)"
+          },
+          "match_any": [
+            {
+              "loc": "repoatlas/experiments.py:407-418"
+            }
+          ],
+          "review": {
+            "status": "reanchored",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "repoatlas/experiments.py:267",
+              "contains": "raise ExperimentRefused(reason)",
+              "match_any": [
+                {
+                  "loc": "repoatlas/experiments.py:262-267"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "h08",
+      "category": "tests",
+      "question": "Which tests cover stale claim invalidation?",
+      "facts": [
+        {
+          "id": "h08.modify",
+          "fact": "test_modifying_a_cited_file_marks_exactly_its_claims_stale",
+          "source": {
+            "at": "tests/test_snapshot_stale.py:140",
+            "contains": "def test_modifying_a_cited_file_marks_exactly_its_claims_stale"
+          },
+          "match_any": [
+            {
+              "loc": "tests/test_snapshot_stale.py:140"
+            },
+            {
+              "text": "test_modifying_a_cited_file_marks_exactly_its_claims_stale"
+            }
+          ],
+          "review": {
+            "status": "unchanged",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "tests/test_snapshot_stale.py:140",
+              "contains": "def test_modifying_a_cited_file_marks_exactly_its_claims_stale",
+              "match_any": [
+                {
+                  "loc": "tests/test_snapshot_stale.py:140"
+                },
+                {
+                  "text": "test_modifying_a_cited_file_marks_exactly_its_claims_stale"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h08.commit",
+          "fact": "test_a_new_commit_that_changes_a_file_marks_its_claims_stale",
+          "source": {
+            "at": "tests/test_snapshot_stale.py:164",
+            "contains": "def test_a_new_commit_that_changes_a_file_marks_its_claims_stale"
+          },
+          "match_any": [
+            {
+              "loc": "tests/test_snapshot_stale.py:164"
+            },
+            {
+              "text": "test_a_new_commit_that_changes_a_file_marks_its_claims_stale"
+            }
+          ],
+          "review": {
+            "status": "unchanged",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "tests/test_snapshot_stale.py:164",
+              "contains": "def test_a_new_commit_that_changes_a_file_marks_its_claims_stale",
+              "match_any": [
+                {
+                  "loc": "tests/test_snapshot_stale.py:164"
+                },
+                {
+                  "text": "test_a_new_commit_that_changes_a_file_marks_its_claims_stale"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h08.delete",
+          "fact": "test_deleting_a_cited_file_marks_its_claims_stale",
+          "source": {
+            "at": "tests/test_snapshot_stale.py:181",
+            "contains": "def test_deleting_a_cited_file_marks_its_claims_stale"
+          },
+          "match_any": [
+            {
+              "loc": "tests/test_snapshot_stale.py:181"
+            },
+            {
+              "text": "test_deleting_a_cited_file_marks_its_claims_stale"
+            }
+          ],
+          "review": {
+            "status": "unchanged",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "tests/test_snapshot_stale.py:181",
+              "contains": "def test_deleting_a_cited_file_marks_its_claims_stale",
+              "match_any": [
+                {
+                  "loc": "tests/test_snapshot_stale.py:181"
+                },
+                {
+                  "text": "test_deleting_a_cited_file_marks_its_claims_stale"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h08.watch",
+          "fact": "test_watch_tests_claims_go_stale_when_a_test_file_is_added_changed_or_removed",
+          "source": {
+            "at": "tests/test_snapshot_stale.py:305",
+            "contains": "def test_watch_tests_claims_go_stale"
+          },
+          "match_any": [
+            {
+              "loc": "tests/test_snapshot_stale.py:305"
+            },
+            {
+              "text": "test_watch_tests_claims_go_stale_when_a_test_file_is_added_changed_or_removed"
+            }
+          ],
+          "review": {
+            "status": "unchanged",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "tests/test_snapshot_stale.py:305",
+              "contains": "def test_watch_tests_claims_go_stale",
+              "match_any": [
+                {
+                  "loc": "tests/test_snapshot_stale.py:305"
+                },
+                {
+                  "text": "test_watch_tests_claims_go_stale_when_a_test_file_is_added_changed_or_removed"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "h08.cli",
+          "fact": "test_update_after_edit_marks_claim_stale_via_cli",
+          "source": {
+            "at": "tests/test_cli.py:250",
+            "contains": "def test_update_after_edit_marks_claim_stale_via_cli"
+          },
+          "match_any": [
+            {
+              "loc": "tests/test_cli.py:250"
+            },
+            {
+              "text": "test_update_after_edit_marks_claim_stale_via_cli"
+            }
+          ],
+          "review": {
+            "status": "unchanged",
+            "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+            "original": {
+              "at": "tests/test_cli.py:250",
+              "contains": "def test_update_after_edit_marks_claim_stale_via_cli",
+              "match_any": [
+                {
+                  "loc": "tests/test_cli.py:250"
+                },
+                {
+                  "text": "test_update_after_edit_marks_claim_stale_via_cli"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

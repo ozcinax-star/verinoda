@@ -1,0 +1,68 @@
+$ grep -rniE 'affected|evidence|content_hash|changes' .   # 1060 matching lines in 59 files
+repoatlas/mcp/server.py:57: "evidence_inspect",
+repoatlas/mcp/server.py:132: numbers (e.g. ``env_vars``, ``affected_files``, ``churn``). Records - hops,
+repoatlas/mcp/server.py:133: evidence rows, claims - mix value types or hold strings and are never cut
+repoatlas/mcp/server.py:351: "evidence ids from claim_inspect"}
+repoatlas/mcp/server.py:374: """The loaded graph, cached until graph.json changes."""
+repoatlas/mcp/server.py:499: source = "git working-tree changes (HEAD + untracked)"
+repoatlas/mcp/server.py:548: def evidence_inspect(self, evidence_id: str) -> dict:
+repoatlas/mcp/server.py:550: from repoatlas import evidence as evmod
+repoatlas/mcp/server.py:552: eid = _text(evidence_id, "evidence_id")
+repoatlas/mcp/server.py:554: ev = st.evidence(eid)
+repoatlas/mcp/server.py:556: raise ToolFailure("not_found", f"no evidence {eid}",
+repoatlas/mcp/server.py:557: "evidence ids are listed by claim_inspect (supporting/refuting/qualifying)")
+repoatlas/mcp/server.py:558: cited_by = st.claims_for_evidence(eid)
+repoatlas/mcp/server.py:561: "evidence": {k: ev.get(k) for k in ("id", "source_type", "locator", "path", "line_start", "line_end",
+repoatlas/mcp/server.py:562: "url", "commit_sha", "version", "content_hash", "excerpt",
+repoatlas/mcp/server.py:571: out["note"] = f"{stype} evidence is recorded for traceability and never verifies a claim by itself"
+repoatlas/mcp/server.py:577: if ev.get("content_hash"):
+repoatlas/mcp/server.py:581: "reason": "no content hash was recorded for this evidence (e.g. a graph edge), "
+repoatlas/mcp/server.py:588: "reason": f"not file/line evidence (source_type={stype}); "
+repoatlas/mcp/server.py:593: return self._run("evidence_inspect", go)
+repoatlas/mcp/server.py:659: def feedback_resolve(self, feedback_id: str, verdict: str, reason: str, evidence_ids: list[str] | None = None,
+repoatlas/mcp/server.py:666: ids = [evidence_ids] if isinstance(evidence_ids, str) else list(evidence_ids or [])
+repoatlas/mcp/server.py:670: evidence_ids=[str(i) for i in ids if str(i).strip()],
+repoatlas/mcp/server.py:698: return "the evidence does not allow that status; inspect the claim with claim_inspect"
+repoatlas/mcp/server.py:707: INSTRUCTIONS = """RepoAtlas: evidence-first analysis of the repository {repo}.
+repoatlas/mcp/server.py:713: - analyze: answer a question as recorded claims with evidence, critique and unknowns.
+repoatlas/mcp/server.py:714: - claim_inspect / claim_list / evidence_inspect / claim_verify / claim_challenge: audit claims.
+repoatlas/mcp/server.py:717: - index_update: re-index after editing files (marks affected claims stale).
+repoatlas/mcp/server.py:722: When evidence is missing the answer is 'unknown' plus a next step - do not fill the gap by guessing.
+repoatlas/mcp/server.py:752: "changes are used. Large views are truncated."),
+repoatlas/mcp/server.py:754: "Answer a question as claims with evidence: retrieves code, re-checks cited lines, uses git "
+repoatlas/mcp/server.py:757: "evidence, uncertainties), challenges each claim and lists unknowns with the next verification "
+repoatlas/mcp/server.py:762: "supporting/refuting/qualifying evidence (id, type, file:line or URL, hash) and its complete "
+repoatlas/mcp/server.py:767: "evidence_inspect": (
+repoatlas/mcp/server.py:768: "One evidence record (source type, locator, commit, content hash, excerpt, metadata), whether that "
+repoatlas/mcp/server.py:769: "source type can verify a claim, the claims citing it, and a live re-check: file/line evidence is "
+repoatlas/mcp/server.py:774: "unchanged evidence keeps (or restores up to its assessed ceiling) the status, changed evidence "
+repoatlas/mcp/server.py:780: "'only X does Y' pattern occur elsewhere, did the files change. Failures attach refuting evidence; "
+repoatlas/mcp/server.py:785: "with its pinned commit/hash as evidence. May use the network (git clone / HTTP) and write under "
+repoatlas/mcp/server.py:789: "document pinned at ref; findings are recorded with evidence from both sides. May use the network."),
+... (1020 more matching lines not shown)
+
+==> repoatlas/mcp/server.py:1-24 <==  (truncated at char cap; file has 1085 lines)
+     1	"""RepoAtlas MCP server: the CLI's core operations as tools for coding agents.
+     2	
+     3	Design rules
+     4	------------
+     5	* One implementation: every tool calls the same core function as the matching
+     6	  CLI command (``repoatlas query`` -> :func:`repoatlas.retrieval.retrieve`,
+     7	  ``analyze`` -> :func:`repoatlas.analysis.analyze`, ...). :class:`AtlasTools`
+     8	  holds those adapters and has no MCP SDK dependency, so it is testable and
+     9	  usable in-process; :func:`build_server` only registers them with the SDK.
+    10	* Small, structured answers: every response is a JSON object capped at
+    11	  ``MAX_RESPONSE_CHARS`` (compact JSON, env ``REPOATLAS_MCP_MAX_CHARS``). Long
+    12	  lists/maps are cut and the response is marked ``"truncated": true`` with a
+    13	  ``truncation`` note naming what was cut (``kept``/``total``). A view's
+    14	  ``coverage`` (method + limits) is never cut; if that alone exceeds the cap,
+    15	  ``truncation.over_limit`` says so.
+    16	* Errors never crash the server: they come back as
+    17	  ``{"error": <code>, "message": ..., "hint": <next step>, "tool": ...}``
+    18	  (flagged ``isError`` on mcp 2.x). A repository that was never scanned (no
+    19	  ``.repoatlas/``) yields ``error="not_initialised"``; the server never creates
+    20	  ``.repoatlas/`` itself. Argument *type* violations are rejected by the SDK
+    21	  before a tool runs (plain-text ``isError`` result).
+    22	* The repository is resolved once at startup; the SQLite store is opened per
+    23	  call (and closed after it), so no connection crosses threads. Tool calls are
+    24	  serialised with a lock (index rebuilds and stdout redirection are global),

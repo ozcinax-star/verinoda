@@ -1,0 +1,80 @@
+# Which environment variable raises the maximum graph.json size, and what is the default limit?
+expanded: environ->env (abbreviation); maximum->max (corpus prefix); variabl->var (corpus prefix)
+## tests/test_security.py:294-299 def test_graph_size_cap_over_limit_raises(monkeypatch, tmp_path)
+  calls: check_graph_file_size_cap@299
+def test_graph_size_cap_over_limit_raises(monkeypatch, tmp_path):
+    monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 16)
+    p = tmp_path / "graph.json"
+    p.write_text('{"nodes": [], "links": [], "padding": "x" * 50}', encoding="utf-8")
+    with pytest.raises(ValueError, match="exceeds"):
+        check_graph_file_size_cap(p)
+## graphify/security.py:35-66 def _max_graph_file_bytes() -> int
+  doc: Return the graph.json size cap in bytes.
+  called by: check_graph_file_size_cap (graphify/security.py:373); test_max_graph_bytes_default_when_unset (tests/test_security.py:243); test_max_graph_bytes_default_when_blank (tests/test_security.py:248); test_max_graph_bytes_plain_integer (tests/test_security.py:253); test_max_graph_bytes_mb_suffix_is_binary (tests/test_security.py:258); test_max_graph_bytes_gb_suffix_is_binary (tests/test_security.py:263); test_max_graph_bytes_suffix_is_case_insensitive (tests/test_security.py:268); test_max_graph_bytes_tolerates_space_before_suffix (tests/test_security.py:273) (+2)
+  const graphify/security.py:32: _MAX_GRAPH_FILE_BYTES = 512 * 1024 * 1024   # 512 MiB
+  graphify/security.py:37-45
+
+    Honors the ``GRAPHIFY_MAX_GRAPH_BYTES`` environment variable so users with
+    large codebases can raise the limit without editing source. The value may
+    be plain bytes (``671088640``) or carry an ``MB`` / ``GB`` suffix
+    (``640MB``, ``2GB`` — case-insensitive, binary multipliers: ``MB`` is
+    1024*1024 and ``GB`` is 1024*1024*1024, i.e. MiB / GiB).
+    Falls back to ``_MAX_GRAPH_FILE_BYTES`` (512 MiB) when the env var is unset,
+    blank, or unparseable.
+
+  graphify/security.py:57-66
+    elif text.endswith("MB"):
+        multiplier = 1024 * 1024
+        text = text[:-2].strip()
+    try:
+        value = int(text)
+    except ValueError:
+        return _MAX_GRAPH_FILE_BYTES
+    if value <= 0:
+        return _MAX_GRAPH_FILE_BYTES
+    return value * multiplier
+## graphify/security.py:357-383 def check_graph_file_size_cap(path: Path) -> None
+  doc: Reject *path* if its size exceeds the configured graph-file cap.
+  calls: _max_graph_file_bytes@373
+  called by: _load_existing_graph (graphify/build.py:1635); load_graph (graphify/callflow_html.py:270); dispatch_command (graphify/cli.py:2088); _enforce_graph_size_cap_or_exit (graphify/cli.py:671); _read_json_file (graphify/diagnostics.py:300); existing_graph_node_count (graphify/export.py:249); to_json (graphify/export.py:277); global_add (graphify/global_graph.py:109) (+12)
+  graphify/security.py:364-368
+
+    The cap is resolved on every call via :func:`_max_graph_file_bytes`, so the
+    ``GRAPHIFY_MAX_GRAPH_BYTES`` env var can be set before import and still
+    apply.
+
+  graphify/security.py:374-383
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return
+    if size > cap:
+        raise ValueError(
+            f"graph file {path} is {size:_d} bytes, exceeds {cap:_d}-byte cap\n"
+            f"(set GRAPHIFY_MAX_GRAPH_BYTES=<bytes> or "
+            f"GRAPHIFY_MAX_GRAPH_BYTES=<N>GB to raise the limit)"
+        )
+## tests/test_security.py:288-291 def test_graph_size_cap_under_limit_returns_none(tmp_path)
+def test_graph_size_cap_under_limit_returns_none(tmp_path):
+    p = tmp_path / "graph.json"
+    p.write_text('{"nodes": [], "links": []}', encoding="utf-8")
+    assert check_graph_file_size_cap(p) is None
+## graphify/cli.py:2569-2583 def _load_graph(p: str)
+        def _load_graph(p: str):
+            path_obj = Path(p)
+            try:
+                size = path_obj.stat().st_size
+            except OSError as exc:
+                raise RuntimeError(f"cannot stat {p}: {exc}") from exc
+            if size > _MERGE_MAX_BYTES:
+                raise RuntimeError(
+                    f"graph.json {p} is {size} bytes, exceeds {_MERGE_MAX_BYTES}-byte cap"
+                )
+            data = json.loads(path_obj.read_text(encoding="utf-8"))
+            # A committed raw (--no-cluster) graph stores edges under "edges";
+            # parse via the shared links/edges-normalizing loader (#2212).
+            from graphify.paths import load_node_link_graph as _lnlg
+            return _lnlg(data), data
+## graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+… 1804 more candidates not shown: graphify/exporters/html.py:17-30 def _viz_node_limit() -> int; tests/test_security.py:99-115 def test_safe_fetch_raises_on_size_exceeded(); graphify/security.py:258-299 def safe_fetch(url: str, max_bytes: int = _MAX_FETCH_BYTES, timeout: int = 30) -> bytes; graphify/exporters/html.py:402-652 def to_html( G: nx.Graph, communities: dict[int, list[str]], output_path…
+next: repoatlas query "Which environment variable raises the maximum graph.json size, and what is the default limit?" --max-chars 12000

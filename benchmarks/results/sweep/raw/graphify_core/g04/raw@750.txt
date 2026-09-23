@@ -1,0 +1,33 @@
+$ grep -rniE 'graphify|store|ast|extraction|cache|entry|keyed' .   # 10116 matching lines in 225 files
+graphify/cli.py:1: """graphify command dispatch — every non-install subcommand.
+graphify/cli.py:4: after the install/platform dispatch. Kept out of __main__ to shrink the CLI entry
+graphify/cli.py:5: module. The path-redirect (`graphify <path>` -> extract) re-enters via a lazy
+graphify/cli.py:14: from graphify.paths import GRAPHIFY_OUT as _GRAPHIFY_OUT
+graphify/cli.py:22: 'MANDATORY: graphify-out/graph.json exists. You MUST run '
+graphify/cli.py:23: '`graphify query "<question>"` before grepping raw files. Only grep '
+graphify/cli.py:24: 'after graphify has oriented you, or to modify/debug specific lines.'
+graphify/cli.py:32: 'MANDATORY: graphify-out/graph.json exists. You MUST run graphify '
+graphify/cli.py:33: 'before reading source files. Use: `graphify query "<question>"` '
+graphify/cli.py:34: '(scoped subgraph), `graphify explain "<concept>"`, or '
+graphify/cli.py:35: '`graphify path "<A>" "<B>"`. Only read raw files after graphify has '
+graphify/cli.py:46: 'graphify-out/graph.json exists but may be STALE for this file (the file '
+graphify/cli.py:47: 'changed after the last build). Prefer `graphify query "<question>"` for '
+graphify/cli.py:48: 'orientation, and run `graphify update` to refresh the graph. Reading the '
+graphify/cli.py:62: 'graphify strict mode: this project has a fresh knowledge graph that covers '
+graphify/cli.py:63: 'this file. Run `graphify query "<your question>"` (or `graphify explain` / '
+graphify/cli.py:64: '`graphify path`) FIRST to orient yourself, then re-issue this Read — it '
+graphify/cli.py:72: '.py', '.js', '.cjs', '.ts', '.tsx', '.jsx', '.astro', '.vue', '.svelte', '.go',
+graphify/cli.py:77: 'graphify: knowledge graph at graphify-out/. For focused questions, run '
+graphify/cli.py:78: '`graphify query "<question>"` (scoped subgraph, usually much smaller than '
+graphify/cli.py:85: return str(Path(_GRAPHIFY_OUT) / "graph.json")
+graphify/cli.py:93: failed_ast_sources: "set[str] | list[str] | None" = None,
+graphify/cli.py:97: produced output (cache hit or fresh extraction). Files whose chunk failed
+graphify/cli.py:98: have no source_file entry in sem_result — leaving their semantic_hash
+graphify/cli.py:107: ``unverified_semantic_sources`` (#3203): files whose semantic extraction
+graphify/cli.py:114: root-relative on a fresh extraction while ``files_by_type`` entries are
+graphify/cli.py:117: Mirrors the #1890 path normalization in graphify.llm.
+graphify/cli.py:121: the semantic cache persists per-``source_file`` — omitting it here left the
+graphify/cli.py:123: condition mirrors the cache-write keying (a hyperedge carries its own
+graphify/cli.py:126: ``failed_ast_sources`` (#2543): code files whose AST extractor errored
+graphify/cli.py:152: failed_ast_resolved = {_resolve(p) for p in (failed_ast_sources or [])}
+... (10085 more matching lines not shown)

@@ -1,0 +1,17 @@
+# What is affected if evidence.content_hash changes?
+## repoatlas/schemas/question_plan.v1.json:359-364 "evidence"
+       "evidence": {
+        "type": "string",
+        "description": "The user's verbatim words that fix the version ('v0.3', 'eski sürüm', 'kullandığımız')."
+       }
+      }
+     },
+## repoatlas/evidence.py:71-73 def content_hash(text: str) -> str
+  called by: _h_why (repoatlas/analysis.py:929); source_evidence (repoatlas/evidence.py:175) <- _src_ev (repoatlas/analysis.py:269), _h_why (repoatlas/analysis.py:902), _create (repoatlas/benchmark/critique_eval.py:209), replay (repoatlas/benchmark/staleness.py:385) (+62); _legacy_search (repoatlas/evidence.py:191) <- check_source (repoatlas/evidence.py:235); check_source (repoatlas/evidence.py:215) <- replay (repoatlas/benchmark/staleness.py:452), _evidence_changes (repoatlas/claims.py:932), challenge (repoatlas/critique.py:399), _cited_range (repoatlas/entail.py:308) (+20); url_evidence (repoatlas/evidence.py:301) <- _research_issue (repoatlas/research.py:1741), _research_document (repoatlas/research.py:803), test_url_evidence_hashes_the_text (tests/test_evidence.py:235); add (repoatlas/feedback.py:635) <- cmd_feedback (repoatlas/cli.py:372), test_wrong_critique_is_recorded_but_claim_confirmed (tests/test_feedback.py:112), test_valid_critique_with_correction_supersedes (tests/test_feedback.py:143), test_valid_critique_without_correction_contradicts_and_leaves_statement_unknown (tests/test_feedback.py:179) (+20); resolution_evidence (repoatlas/precise.py:544) <- test_resolution_evidence_is_anchored_on_the_call_line (tests/test_precise.py:241); _site_hash (repoatlas/question_plan.py:685) <- _cand (repoatlas/question_plan.py:799) (+8)
+def content_hash(text: str) -> str:
+    norm = "\n".join(line.rstrip() for line in text.replace("\r\n", "\n").split("\n"))
+    return "sha256:" + hashlib.sha256(norm.encode("utf-8")).hexdigest()
+## tests/test_evidence.py:40-46 def test_content_hash_is_stable_across_crlf_lf_and_trailing_whitespace()
+  calls: content_hash@42
+… 873 more candidates not shown: repoatlas/claims.py:406-407 def evidence(self, cid: str) -> list[dict]; repoatlas/store.py:501-502 def evidence(self, eid: str) -> dict | None; repoatlas/evidence.py:125-178 def source_evidence( repo: Path, path: str, start: int, end: int | None = None, *, commit:; tests/test_research.py:425-453 def test_document_research_records_versioned_evidence(analysed, monke…
+next: repoatlas query "What is affected if evidence.content_hash changes?" --max-chars 6000

@@ -1,0 +1,408 @@
+$ grep -rniE 'hangi|ortam|değişkeni|büyük|graph|json|boyutunu|artırıyor|varsayılan|sınır|nedir' .   # 11220 matching lines in 222 files
+graphify/extract.py:6: import json
+graphify/extract.py:30: # --- migrated to graphify/extractors/ (see graphify/extractors/MIGRATION.md) ---
+graphify/extract.py:31: from graphify.extractors.base import (  # noqa: F401
+graphify/extract.py:37: from graphify.extractors.apex import extract_apex  # noqa: F401
+graphify/extract.py:38: from graphify.extractors.bash import extract_bash  # noqa: F401
+graphify/extract.py:39: from graphify.extractors.blade import extract_blade  # noqa: F401
+graphify/extract.py:40: from graphify.extractors.csharp import (
+graphify/extract.py:45: from graphify.extractors.dart import extract_dart  # noqa: F401
+graphify/extract.py:46: from graphify.extractors.dm import extract_dm, extract_dmf, extract_dmi, extract_dmm  # noqa: F401
+graphify/extract.py:47: from graphify.extractors.elixir import extract_elixir  # noqa: F401
+graphify/extract.py:48: from graphify.extractors.fortran import _cpp_preprocess, extract_fortran  # noqa: F401
+graphify/extract.py:49: from graphify.extractors.go import _GO_PREDECLARED_FUNCS, extract_go  # noqa: F401
+graphify/extract.py:50: from graphify.extractors.json_config import extract_json  # noqa: F401
+graphify/extract.py:51: from graphify.extractors.commonlisp import extract_commonlisp  # noqa: F401
+graphify/extract.py:52: from graphify.extractors.markdown import extract_markdown, _MD_LINK_INDEX_CACHE  # noqa: F401
+graphify/extract.py:53: from graphify.extractors.ocaml import extract_ocaml  # noqa: F401
+graphify/extract.py:54: from graphify.extractors.pascal_forms import extract_delphi_form, extract_lazarus_form  # noqa: F401
+graphify/extract.py:55: from graphify.extractors.powershell import extract_powershell, extract_powershell_manifest  # noqa: F401
+graphify/extract.py:56: from graphify.extractors.razor import extract_razor  # noqa: F401
+graphify/extract.py:57: from graphify.extractors.robot import extract_robot  # noqa: F401
+graphify/extract.py:58: from graphify.extractors.rust import extract_rust  # noqa: F401
+graphify/extract.py:59: from graphify.extractors.sln import extract_sln  # noqa: F401
+graphify/extract.py:60: from graphify.extractors.sql import extract_sql  # noqa: F401
+graphify/extract.py:61: from graphify.extractors.terraform import extract_terraform, prepare_terraform, resolve_terraform_modules  # noqa: F401
+graphify/extract.py:62: from graphify.extractors.verilog import extract_verilog  # noqa: F401
+graphify/extract.py:63: from graphify.extractors.zig import extract_zig  # noqa: F401
+graphify/extract.py:64: from graphify.security import sanitize_metadata
+graphify/extract.py:65: from graphify.paths import disambiguate_ambiguous_candidates
+graphify/extract.py:67: from graphify.extractors.models import LanguageConfig, _JS_CACHE_BYPASS_SUFFIXES, _NamespaceExportFact, _StarExportFact, _SymbolAliasFact, _SymbolDeclarationFac
+graphify/extract.py:69: from graphify.extractors.resolution import (  # noqa: E402,F401
+graphify/extract.py:142: _strip_jsonc,
+graphify/extract.py:152: from graphify.symbol_resolution import resolve_bash_source_edges  # noqa: E402
+graphify/extract.py:154: from graphify.extractors.engine import REFERENCE_CONTEXTS, _CSHARP_TYPE_PARAMETER_SCOPE_DECLARATIONS, _C_PRIMITIVE_TYPE_NODES, _JAVA_BUILTIN_TYPES, _JAVA_TYPE_P
+graphify/extract.py:156: from graphify.extractors.pascal import _PAS_BEGIN_END_TOKEN_RE, _PAS_CALL_RE, _PAS_END_SEMI_RE, _PAS_IMPL_HEADER_RE, _PAS_KEYWORDS, _PAS_METHOD_DECL_RE, _PAS_MO
+graphify/extract.py:158: from graphify.extractors.objc import _objc_local_var_types, extract_objc  # noqa: E402,F401
+graphify/extract.py:160: from graphify.extractors.julia import extract_julia  # noqa: E402,F401
+graphify/extract.py:183: if os.environ.get("GRAPHIFY_DEBUG"):
+graphify/extract.py:207: the edge dangles and is silently dropped — the graph loses most ``imports``
+graphify/extract.py:395: # no useful semantic meaning as graph nodes (#1147). Suppressed at the annotation
+graphify/extract.py:472: # _resolve_python_module_path) resolves `graphs` -> graphs/__init__.py
+... (11180 more matching lines not shown)
+
+==> graphify/extract.py:1-364 <==  (truncated at char cap; file has 8322 lines)
+     1	"""Deterministic structural extraction from source code using tree-sitter. Outputs nodes+edges dicts."""
+     2	from __future__ import annotations
+     3	
+     4	import hashlib
+     5	import importlib
+     6	import json
+     7	import os
+     8	import re
+     9	import sys
+    10	import textwrap
+    11	from bisect import bisect_right
+    12	from collections import Counter
+    13	from dataclasses import dataclass, field
+    14	from pathlib import Path, PurePath
+    15	from typing import Any, Callable
+    16	
+    17	from .cache import load_cached, save_cached
+    18	from .mcp_ingest import extract_mcp_config, is_mcp_config_path
+    19	from .manifest_ingest import extract_package_manifest, is_package_manifest_path
+    20	from .resolver_registry import (
+    21	    LanguageResolver,
+    22	    register as register_language_resolver,
+    23	    run_language_resolvers,
+    24	)
+    25	from .ruby_resolution import resolve_ruby_member_calls
+    26	from .csharp_dispatch import resolve_csharp_interface_dispatch
+    27	from .pascal_resolution import resolve_pascal_inherited_calls
+    28	from .markdown_resolution import MARKDOWN_MENTION_SUFFIXES, resolve_markdown_mentions
+    29	
+    30	# --- migrated to graphify/extractors/ (see graphify/extractors/MIGRATION.md) ---
+    31	from graphify.extractors.base import (  # noqa: F401
+    32	    _LANGUAGE_BUILTIN_GLOBALS,
+    33	    _file_stem,
+    34	    _make_id,
+    35	    _read_text,
+    36	)
+    37	from graphify.extractors.apex import extract_apex  # noqa: F401
+    38	from graphify.extractors.bash import extract_bash  # noqa: F401
+    39	from graphify.extractors.blade import extract_blade  # noqa: F401
+    40	from graphify.extractors.csharp import (
+    41	    CsharpNameResolver,
+    42	    _resolve_cross_file_csharp_imports,
+    43	    _resolve_csharp_type_references,
+    44	)
+    45	from graphify.extractors.dart import extract_dart  # noqa: F401
+    46	from graphify.extractors.dm import extract_dm, extract_dmf, extract_dmi, extract_dmm  # noqa: F401
+    47	from graphify.extractors.elixir import extract_elixir  # noqa: F401
+    48	from graphify.extractors.fortran import _cpp_preprocess, extract_fortran  # noqa: F401
+    49	from graphify.extractors.go import _GO_PREDECLARED_FUNCS, extract_go  # noqa: F401
+    50	from graphify.extractors.json_config import extract_json  # noqa: F401
+    51	from graphify.extractors.commonlisp import extract_commonlisp  # noqa: F401
+    52	from graphify.extractors.markdown import extract_markdown, _MD_LINK_INDEX_CACHE  # noqa: F401
+    53	from graphify.extractors.ocaml import extract_ocaml  # noqa: F401
+    54	from graphify.extractors.pascal_forms import extract_delphi_form, extract_lazarus_form  # noqa: F401
+    55	from graphify.extractors.powershell import extract_powershell, extract_powershell_manifest  # noqa: F401
+    56	from graphify.extractors.razor import extract_razor  # noqa: F401
+    57	from graphify.extractors.robot import extract_robot  # noqa: F401
+    58	from graphify.extractors.rust import extract_rust  # noqa: F401
+    59	from graphify.extractors.sln import extract_sln  # noqa: F401
+    60	from graphify.extractors.sql import extract_sql  # noqa: F401
+    61	from graphify.extractors.terraform import extract_terraform, prepare_terraform, resolve_terraform_modules  # noqa: F401
+    62	from graphify.extractors.verilog import extract_verilog  # noqa: F401
+    63	from graphify.extractors.zig import extract_zig  # noqa: F401
+    64	from graphify.security import sanitize_metadata
+    65	from graphify.paths import disambiguate_ambiguous_candidates
+    66	
+    67	from graphify.extractors.models import LanguageConfig, _JS_CACHE_BYPASS_SUFFIXES, _NamespaceExportFact, _StarExportFact, _SymbolAliasFact, _SymbolDeclarationFact, _SymbolExportFact, _SymbolImportFact, _SymbolResolutionFacts, _SymbolUseFact, _WORKSPACE_PACKAGE_CACHE  # noqa: E402,F401
+    68	
+    69	from graphify.extractors.resolution import (  # noqa: E402,F401
+    70	    _DECLDEF_HEADER_SUFFIXES,
+    71	    _DECLDEF_IMPL_SUFFIXES,
+    72	    _EXPORT_CONDITION_PRIORITY,
+    73	    _JS_INDEX_FILES,
+    74	    _JS_PRIMITIVE_TYPES,
+    75	    _JS_RESOLVE_EXTS,
+    76	    _PACKAGE_IMPORTS_CACHE,
+    77	    _TSCONFIG_ALIAS_CACHE,
+    78	    _TSCONFIG_BASEURL_CACHE,
+    79	    _VUE_SCRIPT_LANG_RE,
+    80	    _VUE_SCRIPT_RE,
+    81	    _WORKSPACE_MANIFEST_NAMES,
+    82	    _apply_symbol_resolution_facts,
+    83	    _augment_symbol_resolution_edges,
+    84	    _cached_realpath,
+    85	    _cached_source_key,
+    86	    _collect_js_symbol_resolution_facts,
+    87	    _collect_python_symbol_resolution_facts,
+    88	    _contained_in_package,
+    89	    _decldef_class_stem,
+    90	    _disambiguate_colliding_node_ids,
+    91	    _find_workspace_root,
+    92	    _go_import_path_for_file,
+    93	    _is_type_like_definition,
+    94	    _js_call_identifier,
+    95	    _js_default_export_name,
+    96	    _js_default_import_name,
+    97	    _js_export_clause,
+    98	    _js_export_statement_is_star,
+    99	    _js_exported_declaration_names,
+   100	    _js_lexical_aliases,
+   101	    _js_module_specifier,
+   102	    _js_named_specifiers,
+   103	    _js_namespace_export_name,
+   104	    _js_source_path,
+   105	    _js_top_level_function_bodies,
+   106	    _load_tsconfig_aliases,
+   107	    _load_tsconfig_base_url,
+   108	    _load_workspace_packages,
+   109	    _match_tsconfig_alias,
+   110	    _merge_decl_def_classes,
+   111	    _node_disambiguation_source_key,
+   112	    _package_entry_candidates,
+   113	    _parse_js_tree,
+   114	    _parse_python_tree,
+   115	    _pascal_class_stem_cache,
+   116	    _pascal_project_root,
+   117	    _pascal_resolve_class,
+   118	    _pascal_resolve_unit,
+   119	    _pascal_unit_cache,
+   120	    _pnpm_workspace_globs,
+   121	    _python_call_identifier,
+   122	    _python_import_from_module,
+   123	    _python_imported_names,
+   124	    _python_top_level_function_bodies,
+   125	    _read_tsconfig_aliases,
+   126	    _resolve_c_include_path,
+   127	    _resolve_cross_file_imports,
+   128	    _resolve_cross_file_java_imports,
+   129	    _resolve_export_target,
+   130	    _resolve_go_type_references,
+   131	    _resolve_java_type_references,
+   132	    _resolve_php_type_references,
+   133	    _resolve_js_import_path,
+   134	    _resolve_js_import_target,
+   135	    _resolve_js_module_path,
+   136	    _resolve_lua_import_target,
+   137	    _probe_python_module_candidate,
+   138	    _resolve_python_module_path,
+   139	    _resolve_tsconfig_alias,
+   140	    _resolve_workspace_import,
+   141	    _source_key,
+   142	    _strip_jsonc,
+   143	    _ts_collect_type_refs,
+   144	    _ts_heritage_clause_entries,
+   145	    _ts_walk_class_members,
+   146	    _vue_mask_non_script,
+   147	    _walk_js_tree,
+   148	    _walk_python_tree,
+   149	    _workspace_globs,
+   150	)
+   151	
+   152	from graphify.symbol_resolution import resolve_bash_source_edges  # noqa: E402
+   153	
+   154	from graphify.extractors.engine import REFERENCE_CONTEXTS, _CSHARP_TYPE_PARAMETER_SCOPE_DECLARATIONS, _C_PRIMITIVE_TYPE_NODES, _JAVA_BUILTIN_TYPES, _JAVA_TYPE_PARAMETER_SCOPE_DECLARATIONS, _JS_FUNCTION_VALUE_TYPES, _JS_SCOPE_BOUNDARY, _PYTHON_ANNOTATION_NOISE, _PYTHON_TYPE_CONTAINERS, _RUBY_CLASS_FACTORIES, _c_collect_type_refs, _cpp_collect_type_refs, _cpp_declarator_name, _cpp_local_var_types, _csharp_attribute_names, _csharp_classify_base, _csharp_collect_type_refs, _csharp_extra_walk, _csharp_namespace_id, _csharp_namespace_name, _csharp_pre_scan_interfaces, _csharp_type_parameters_in_scope, _dynamic_import_js, _extract_generic, _find_body, _find_require_call, _get_cpp_func_name, _java_annotation_names, _java_collect_type_refs, _java_extra_walk, _java_type_parameters_in_scope, _js_collect_pattern_idents, _js_dispatch_value_idents, _js_extra_walk, _js_local_bound_names, _js_member_assignment_target, _js_module_bound_names, _kotlin_collect_type_refs, _kotlin_function_return_type_node, _kotlin_property_type_node, _kotlin_user_type_name, _php_collect_type_refs, _php_method_return_type_node, _php_name_text, _python_collect_assignment_targets, _python_collect_param_refs, _python_collect_type_refs, _python_local_bound_names, _python_module_bound_names, _python_param_names, _read_csharp_type_name, _require_imports_js, _ruby_const_last_name, _ruby_extra_walk, _ruby_local_class_bindings, _ruby_new_class_name, _scala_collect_type_refs, _semantic_reference_edge, _source_location, _swift_classify_base, _swift_collect_type_refs, _swift_constructor_type, _swift_declaration_keyword, _swift_extra_walk, _swift_local_var_types, _swift_pre_scan, _swift_property_name, _swift_property_type_node, _swift_receiver_name, _swift_user_type_name, _ts_decorator_name, _ts_descendant_decorators, _ts_emit_decorator_edges, _ts_extra_walk, _ts_method_name, _ts_receiver_type_table  # noqa: E402,F401
+   155	
+   156	from graphify.extractors.pascal import _PAS_BEGIN_END_TOKEN_RE, _PAS_CALL_RE, _PAS_END_SEMI_RE, _PAS_IMPL_HEADER_RE, _PAS_KEYWORDS, _PAS_METHOD_DECL_RE, _PAS_MODULE_RE, _PAS_TOKEN_RE, _PAS_TYPE_HEADER_RE, _PAS_USES_RE, _extract_pascal_regex, _pascal_find_body, _pascal_split_bases, _pascal_split_sections, _pascal_split_uses, _pascal_strip_comments, extract_pascal  # noqa: E402,F401
+   157	
+   158	from graphify.extractors.objc import _objc_local_var_types, extract_objc  # noqa: E402,F401
+   159	
+   160	from graphify.extractors.julia import extract_julia  # noqa: E402,F401
+   161	
+   162	_RECURSION_LIMIT = 10_000
+   163	
+   164	# Language built-in globals that AST may classify as call targets when used as
+   165	# constructors or coercion functions (e.g. String(x), Number(x), Boolean(x)).
+   166	# Without this filter they become god-nodes accumulating spurious edges from
+   167	# every call site. Filter applied at same-file and cross-file resolution.
+   168	# See issue #726.
+   169	
+   170	
+   171	def _raise_recursion_limit() -> None:
+   172	    if sys.getrecursionlimit() < _RECURSION_LIMIT:
+   173	        sys.setrecursionlimit(_RECURSION_LIMIT)
+   174	
+   175	
+   176	def _safe_extract(extractor: Callable, path: Path) -> dict:
+   177	    try:
+   178	        return extractor(path)
+   179	    except RecursionError:
+   180	        print(f"  warning: skipped {path} (recursion limit exceeded)", file=sys.stderr, flush=True)
+   181	        return {"nodes": [], "edges": [], "error": "recursion_limit_exceeded"}
+   182	    except Exception as e:
+   183	        if os.environ.get("GRAPHIFY_DEBUG"):
+   184	            import traceback
+   185	            traceback.print_exc(file=sys.stderr)
+   186	        print(f"  warning: skipped {path} ({type(e).__name__}: {e})", file=sys.stderr, flush=True)
+   187	        return {"nodes": [], "edges": [], "error": f"{type(e).__name__}: {e}"}
+   188	
+   189	
+   190	def _file_node_id(rel_path: Path) -> str:
+   191	    """File-level node ID matching the skill.md spec: ``{parent_dir}_{stem}`` —
+   192	    one parent directory level, no extension. ``rel_path`` MUST be relative to
+   193	    the project root so top-level files collapse to a bare stem (``setup.py`` ->
+   194	    ``setup``) instead of picking up the root directory name. This must equal the
+   195	    ID semantic subagents generate, or AST and semantic extraction split a file
+   196	    into two disconnected ghost nodes (#1033)."""
+   197	    return _make_id(_file_stem(rel_path))
+   198	
+   199	
+   200	def _repoint_python_package_imports(paths, all_nodes, all_edges, root) -> None:
+   201	    """Repoint Python absolute-import edges to the real file node under a nested
+   202	    (e.g. ``src/``) package root (#2072).
+   203	
+   204	    Absolute imports target an id derived from the dotted module path
+   205	    (``_make_id('pkg.mod')`` -> ``pkg_mod``), but file-node ids are
+   206	    scan-root-relative (``src_pkg_mod`` when the code lives under ``src/``), so
+   207	    the edge dangles and is silently dropped — the graph loses most ``imports``
+   208	    edges purely because of where the scan started. Build an alias map from the
+   209	    dotted-module id to the real file-node id by detecting each ``.py`` file's
+   210	    package root (the contiguous run of ancestor dirs carrying ``__init__.py``)
+   211	    and rewrite matching ``imports``/``imports_from`` edge targets. Guards: never
+   212	    shadow an existing node id, and drop an alias claimed by more than one file
+   213	    (ambiguous -> leave dangling, as before). Files whose package root IS the
+   214	    scan root are skipped (ids already coincide)."""
+   215	    try:
+   216	        root = Path(root).resolve()
+   217	    except OSError:
+   218	        root = Path(root)
+   219	    node_ids = {n.get("id") for n in all_nodes if isinstance(n, dict)}
+   220	    alias_to_files: dict[str, set[str]] = {}
+   221	    for p in paths:
+   222	        if p.suffix.lower() not in (".py", ".pyi"):
+   223	            continue
+   224	        try:
+   225	            rel = Path(p).resolve().relative_to(root)
+   226	        except (ValueError, OSError):
+   227	            continue
+   228	        parts = rel.parts
+   229	        if len(parts) < 2:
+   230	            continue  # top-level file: scan-root-relative id already matches
+   231	        d = Path(p).resolve().parent
+   232	        levels = 0
+   233	        # Bounded by the number of dirs between the file and the scan root, so a
+   234	        # pathological `/__init__.py` chain can't loop forever.
+   235	        while levels < len(parts) - 1 and (d / "__init__.py").is_file():
+   236	            levels += 1
+   237	            d = d.parent
+   238	        if levels == 0:
+   239	            continue  # not inside a package (namespace pkg / loose module)
+   240	        mod_parts = parts[-(levels + 1):]  # package dirs + the file itself
+   241	        if len(mod_parts) == len(parts):
+   242	            continue  # package root == scan root: file-node id already coincides
+   243	        file_node = _file_node_id(rel)
+   244	        alias = _make_id(str(Path(*mod_parts).with_suffix("")))
+   245	        alias_to_files.setdefault(alias, set()).add(file_node)
+   246	        if p.name in ("__init__.py", "__init__.pyi") and len(mod_parts) > 1:
+   247	            # `import pkg` / `from pkg import x` targets the package-dir id.
+   248	            pkg_alias = _make_id(str(Path(*mod_parts[:-1])))
+   249	            alias_to_files.setdefault(pkg_alias, set()).add(file_node)
+   250	    alias_map = {
+   251	        a: next(iter(fs))
+   252	        for a, fs in alias_to_files.items()
+   253	        if len(fs) == 1 and a not in node_ids
+   254	    }
+   255	    if not alias_map:
+   256	        return
+   257	    for e in all_edges:
+   258	        # Only repoint edges emitted from a Python file: a non-Python import edge
+   259	        # (e.g. C# `using Pkg.Mod;`, Java/Go dotted imports) can have a dangling
+   260	        # target string that coincides with a Python alias, and repointing it
+   261	        # would fabricate a cross-language import edge (#2072 review).
+   262	        if (
+   263	            isinstance(e, dict)
+   264	            and e.get("relation") in ("imports", "imports_from")
+   265	            and str(e.get("source_file", "")).lower().endswith((".py", ".pyi"))
+   266	        ):
+   267	            tgt = e.get("target")
+   268	            if tgt in alias_map:
+   269	                e["target"] = alias_map[tgt]
+   270	
+   271	
+   272	def _repoint_python_sibling_imports(paths, all_nodes, all_edges, root) -> None:
+   273	    """Repoint Python sibling-import edges to the real file node in directories
+   274	    without an __init__.py (#3430).
+   275	
+   276	    When a Python file below the scan root lives in a non-package directory
+   277	    (no __init__.py in its immediate parent), plain imports of same-directory
+   278	    modules (e.g. `scripts/main.py: import greeter`) target a bare name (`greeter`),
+   279	    while the real file node is scan-root-relative (`scripts_greeter`). Because
+   280	    the directory is not a package, `_repoint_python_package_imports` skips it
+   281	    (levels == 0), leaving the edge dangling and causing downstream member calls
+   282	    (`greeter.greet()`) to be dropped.
+   283	
+   284	    This pass is strictly importer-directory-local:
+   285	    - Only applies when the importing file's parent directory has no __init__.py.
+   286	    - Resolves only to unambiguous same-directory candidate modules in the scanned corpus.
+   287	    - Never builds a global alias map and never searches outside the importer's directory.
+   288	    - Preserves local aliases (e.g. `import greeter as g`).
+   289	    """
+   290	    try:
+   291	        root = Path(root).resolve()
+   292	    except OSError:
+   293	        root = Path(root)
+   294	
+   295	    node_ids = {n.get("id") for n in all_nodes if isinstance(n, dict)}
+   296	
+   297	    # Index corpus modules by directory for non-package directories only.
+   298	    # dir_path -> {module_name_id: set_of_file_node_ids}
+   299	    dir_siblings: dict[Path, dict[str, set[str]]] = {}
+   300	    for p in paths:
+   301	        if p.suffix.lower() not in (".py", ".pyi"):
+   302	            continue
+   303	        try:
+   304	            p_res = Path(p).resolve()
+   305	            rel = p_res.relative_to(root)
+   306	        except (ValueError, OSError):
+   307	            continue
+   308	
+   309	        file_node = _file_node_id(rel)
+   310	        if file_node not in node_ids:
+   311	            continue
+   312	
+   313	        if p_res.name in ("__init__.py", "__init__.pyi"):
+   314	            # Sibling package directory inside parent_dir (parent_dir / subpkg / __init__.py)
+   315	            pkg_dir = p_res.parent
+   316	            parent_dir = pkg_dir.parent
+   317	            if not (parent_dir / "__init__.py").is_file() and not (parent_dir / "__init__.pyi").is_file():
+   318	                mod_key = _make_id(pkg_dir.name)
+   319	                dir_siblings.setdefault(parent_dir, {}).setdefault(mod_key, set()).add(file_node)
+   320	            continue
+   321	
+   322	        d = p_res.parent
+   323	        # PEP 328 guard: if the directory is a package, implicit relative imports
+   324	        # are forbidden in Python 3. Do not index packages as loose sibling directories.
+   325	        if (d / "__init__.py").is_file() or (d / "__init__.pyi").is_file():
+   326	            continue
+   327	
+   328	        mod_key = _make_id(p_res.stem)
+   329	        dir_siblings.setdefault(d, {}).setdefault(mod_key, set()).add(file_node)
+   330	
+   331	    # Require an unambiguous single candidate per module name in that directory.
+   332	    dir_alias_map: dict[Path, dict[str, str]] = {
+   333	        d: {
+   334	            mod: next(iter(fns))
+   335	            for mod, fns in mod_map.items()
+   336	            if len(fns) == 1
+   337	        }
+   338	        for d, mod_map in dir_siblings.items()
+   339	    }
+   340	
+   341	    if not dir_alias_map:
+   342	        return
+   343	
+   344	    for e in all_edges:
+   345	        if not (
+   346	            isinstance(e, dict)
+   347	            and e.get("relation") in ("imports", "imports_from")
+   348	            and str(e.get("source_file", "")).lower().endswith((".py", ".pyi"))
+   349	        ):
+   350	            continue
+   351	
+   352	        sf = e.get("source_file")
+   353	        if not sf:
+   354	            continue
+   355	        try:
+   356	            sf_path = Path(sf)
+   357	            if not sf_path.is_absolute():
+   358	                sf_path = (root / sf_path).resolve()
+   359	            else:
+   360	                sf_path = sf_path.resolve()
+   361	        except OSError:
+   362	            continue
+   363	
+   364	        imp_dir = sf_path.parent

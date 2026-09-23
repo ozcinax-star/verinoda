@@ -1,0 +1,135 @@
+# Why does graphify drop stopwords from query terms?
+## graphify/serve.py:281-300 def _query_terms(question: str) -> list[str]
+  doc: Split a query into searchable terms, segmenting Chinese text, then drop question/filler words (`_QUERY_STOPWORDS`, English plus common German/ Romance-language…
+  calls: _has_chinese@289, _segment_chinese@290, _is_searchable@292
+  called by: _query_subgraph_tokens (graphify/benchmark.py:39); _query_graph_text (graphify/serve.py:1359)
+  const graphify/serve.py:249: _QUERY_STOPWORDS = frozenset({
+def _query_terms(question: str) -> list[str]:
+    """Split a query into searchable terms, segmenting Chinese text, then drop
+    question/filler words (`_QUERY_STOPWORDS`, English plus common German/
+    Romance-language fillers) so content words drive seeding. Falls back to the
+    unfiltered terms if the query is all stopwords, so a question like "how does
+    it work" or "wie funktioniert das" still seeds on something."""
+    terms: list[str] = []
+    for raw in question.split():
+        if _has_chinese(raw):
+            for seg in _segment_chinese(raw.lower().strip()):
+                seg = seg.strip()
+                if seg and _is_searchable(seg):
+                    terms.append(seg)
+        else:
+            # Strip punctuation without touching Unicode characters (avoid NFKD mangling non-Latin scripts)
+            for tok in re.findall(r"\w+", raw.lower()):
+                if _is_searchable(tok):
+                    terms.append(tok)
+    content = [t for t in terms if t not in _QUERY_STOPWORDS]
+    return content or terms
+## graphify/serve.py:1349-1408 def _query_graph_text( G: nx.Graph, question: str, *, mode: str = "bfs", depth: int = 3, token_budget: int = 2000, context_filters: list[str] | None = None, graph_path: str | None = None,
+  calls: _query_terms@1359, _score_query@1366, _pick_seeds@1380, _resolve_context_filters@1383, _filter_graph_by_context@1384, _traversal_view@1384, _bfs@1385, _dfs@1385, _display_graph_path@1399, _subgraph_to_text@1408
+  called by: dispatch_command (graphify/cli.py:1302); _tool_query_graph (graphify/serve.py:2030)
+  const graphify/serve.py:851: _RELATIONAL_INTENT_TERMS: frozenset[str] = frozenset({
+  graphify/serve.py:1349-1361
+def _query_graph_text(
+    G: nx.Graph,
+    question: str,
+    *,
+    mode: str = "bfs",
+    depth: int = 3,
+    token_budget: int = 2000,
+    context_filters: list[str] | None = None,
+    graph_path: str | None = None,
+) -> str:
+    terms = _query_terms(question)
+    # One graph scoring pass produces both the combined ranking (used to drive
+    # the gap-based seed selection below) and the per-token singleton winners
+  graphify/serve.py:1366-1379
+    qs = _score_query(G, terms, collect_per_term_seeds=True)
+    # Relational-intent verbs ("calls", "uses", ...) describe the relation the
+    # question asks about, not a symbol to seed from; drop them from the
+    # per-term seed GUARANTEE so an incidental verb match cannot seat a decoy
+    # BFS root (#2507). They keep their place in `qs.ranked`, so a genuine
+    # identifier named after a verb can still win a seat on merit via the gap
+    # window — and when the query consists ONLY of intent words (bare "calls"),
+    # the guarantee is left intact so such an identifier stays reachable.
+    best_seed_by_term = qs.best_seed_by_term
+    intent = {t for t in best_seed_by_term if t in _RELATIONAL_INTENT_TERMS}
+    if intent and any(t not in _RELATIONAL_INTENT_TERMS for t in terms):
+        best_seed_by_term = {
+            t: nid for t, nid in best_seed_by_term.items() if t not in intent
+        }
+## graphify/serve.py:239-250 # set of question/filler words. Diacritics are kept intact (the query tokenizer
+# set of question/filler words. Diacritics are kept intact (the query tokenizer
+# does not NFKD-strip).
+#
+# Collision tradeoff: a few foreign stopwords are also English content words.
+# We include high-German-value ones like "die"/"hat" (the all-stopword fallback
+# in _query_terms and the unfiltered find_node path keep an English "die"/"hat"
+# query workable), but deliberately OMIT "war"/"bald" (German was/soon) so
+# English queries about "war" or "bald" are not clobbered. On the Romance side
+# we likewise omit "comment" (FR how), "come" (IT how), "son"/"sin"/"con" (ES),
+# and "pour"/"des" (FR) — all too common as English/code terms.
+_QUERY_STOPWORDS = frozenset({
+    # English
+## graphify/skill-aider.md:925-1050 ## For /graphify query
+  graphify/skill-aider.md:976-980
+
+if not start_nodes:
+    print('No matching nodes found for query terms:', terms)
+    sys.exit(0)
+
+## graphify/skill-devin.md:1061-1184 ## For /graphify query
+  graphify/skill-devin.md:1112-1116
+
+if not start_nodes:
+    print('No matching nodes found for query terms:', terms)
+    sys.exit(0)
+
+## graphify/serve.py:542-722 def _score_query( G: nx.Graph, terms: list[str], *, collect_per_term_seeds: bool ) -> _QueryScores
+  graphify/serve.py:570-583
+    """
+    scored: list[tuple[float, str]] = []
+    # Dedupe tokens, order-preserving (as _pick_seeds already does): a repeated
+    # query word must not double-count every tier, and with coverage scaling
+    # below it would also inflate the matched-term ratio (#1602).
+    norm_terms = list(dict.fromkeys(tok for t in terms for tok in _search_tokens(t)))
+    n_terms = len(norm_terms)
+    idf = _compute_idf(G, norm_terms)
+    # Whole-query string for full-label matching (mirrors _find_node's `term`).
+    joined = " ".join(norm_terms)
+    # Weight the full-query bonus by the rarest constituent term so a specific
+    # multi-word label still outweighs common-token noise; floor at 1.0.
+    joined_w = max((idf.get(t, 1.0) for t in norm_terms), default=1.0)
+    # Trigram prefilter: score only nodes whose text could match a term, falling
+## graphify/serve.py:1489-1585 def _find_node_tiers( G: nx.Graph, label: str ) -> tuple[list[str], list[str], list[str], list[str]]
+  graphify/serve.py:1553-1566
+            source_exact.append(nid)
+        elif (
+            term == norm_label or term == bare_label or term == label_tokens or term == nid_lower
+            or norm_query == norm_label or norm_query == bare_label or norm_query == nid_norm
+        ):
+            exact.append(nid)
+        elif (
+            norm_label.startswith(term)
+            or bare_label.startswith(term)
+            or label_tokens.startswith(term)
+            or nid_lower.startswith(term)
+            or norm_label.startswith(norm_query)
+            or bare_label.startswith(norm_query)
+        ):
+graphify/benchmark.py:37-73 def _query_subgraph_tokens(G: nx.Graph, question: str, depth: int = 3) -> int
+graphify/serve.py:220-224 def _is_searchable(term: str) -> bool
+graphify/serve.py:1411-1457 def _resolve_path_scoped_symbol(G: nx.Graph, path_part: str, symbol_part: str) -> list[str]
+graphify/serve.py:749-838 def _pick_seeds( scored: list[tuple[float, str]], max_k: int = 3, gap_ratio: float = 0.2, *, G: "nx.Graph | None" = Non…
+graphify/serve.py:515-528 class _QueryScores(NamedTuple)
+graphify/serve.py:346-368 def _compute_idf(G: nx.Graph, terms: list[str]) -> dict[str, float]
+graphify/serve.py:1460-1486 def _label_has_literal_exact_match(G: nx.Graph, term: str, norm_query: str) -> bool
+graphify/dedup.py:118-124 # Function words. A restatement of one entity is what inserts or swaps these
+graphify/serve.py:531-539 def _score_nodes(G: nx.Graph, terms: list[str]) -> list[tuple[float, str]]
+graphify/serve.py:841-852 # Verb-shaped tokens that express the RELATION a query asks about ("who calls
+graphify/dedup.py:150-190 def _content_token_swap(a: str, b: str) -> bool
+graphify/serve.py:392-436 def _node_search_text(data: dict, nid: str) -> str
+graphify/serve.py:209-217 def _segment_chinese(text: str) -> list[str]
+graphify/cli.py:752-811 def _bash_invokes_search(cmd_str: str) -> bool
+(calls / called by: static call graph, '?' = inferred edge; may be incomplete)
+… 1441 more candidates not shown
+next: repoatlas query "Why does graphify drop stopwords from query terms?" --max-chars 24000

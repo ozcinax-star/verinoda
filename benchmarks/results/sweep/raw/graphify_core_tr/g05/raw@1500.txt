@@ -1,0 +1,84 @@
+$ grep -rniE 'hangi|ortam|değişkeni|büyük|graph|json|boyutunu|artırıyor|varsayılan|sınır|nedir' .   # 11220 matching lines in 222 files
+graphify/extract.py:6: import json
+graphify/extract.py:30: # --- migrated to graphify/extractors/ (see graphify/extractors/MIGRATION.md) ---
+graphify/extract.py:31: from graphify.extractors.base import (  # noqa: F401
+graphify/extract.py:37: from graphify.extractors.apex import extract_apex  # noqa: F401
+graphify/extract.py:38: from graphify.extractors.bash import extract_bash  # noqa: F401
+graphify/extract.py:39: from graphify.extractors.blade import extract_blade  # noqa: F401
+graphify/extract.py:40: from graphify.extractors.csharp import (
+graphify/extract.py:45: from graphify.extractors.dart import extract_dart  # noqa: F401
+graphify/extract.py:46: from graphify.extractors.dm import extract_dm, extract_dmf, extract_dmi, extract_dmm  # noqa: F401
+graphify/extract.py:47: from graphify.extractors.elixir import extract_elixir  # noqa: F401
+graphify/extract.py:48: from graphify.extractors.fortran import _cpp_preprocess, extract_fortran  # noqa: F401
+graphify/extract.py:49: from graphify.extractors.go import _GO_PREDECLARED_FUNCS, extract_go  # noqa: F401
+graphify/extract.py:50: from graphify.extractors.json_config import extract_json  # noqa: F401
+graphify/extract.py:51: from graphify.extractors.commonlisp import extract_commonlisp  # noqa: F401
+graphify/extract.py:52: from graphify.extractors.markdown import extract_markdown, _MD_LINK_INDEX_CACHE  # noqa: F401
+graphify/extract.py:53: from graphify.extractors.ocaml import extract_ocaml  # noqa: F401
+graphify/extract.py:54: from graphify.extractors.pascal_forms import extract_delphi_form, extract_lazarus_form  # noqa: F401
+graphify/extract.py:55: from graphify.extractors.powershell import extract_powershell, extract_powershell_manifest  # noqa: F401
+graphify/extract.py:56: from graphify.extractors.razor import extract_razor  # noqa: F401
+graphify/extract.py:57: from graphify.extractors.robot import extract_robot  # noqa: F401
+graphify/extract.py:58: from graphify.extractors.rust import extract_rust  # noqa: F401
+graphify/extract.py:59: from graphify.extractors.sln import extract_sln  # noqa: F401
+graphify/extract.py:60: from graphify.extractors.sql import extract_sql  # noqa: F401
+graphify/extract.py:61: from graphify.extractors.terraform import extract_terraform, prepare_terraform, resolve_terraform_modules  # noqa: F401
+graphify/extract.py:62: from graphify.extractors.verilog import extract_verilog  # noqa: F401
+graphify/extract.py:63: from graphify.extractors.zig import extract_zig  # noqa: F401
+graphify/extract.py:64: from graphify.security import sanitize_metadata
+graphify/extract.py:65: from graphify.paths import disambiguate_ambiguous_candidates
+graphify/extract.py:67: from graphify.extractors.models import LanguageConfig, _JS_CACHE_BYPASS_SUFFIXES, _NamespaceExportFact, _StarExportFact, _SymbolAliasFact, _SymbolDeclarationFac
+graphify/extract.py:69: from graphify.extractors.resolution import (  # noqa: E402,F401
+graphify/extract.py:142: _strip_jsonc,
+graphify/extract.py:152: from graphify.symbol_resolution import resolve_bash_source_edges  # noqa: E402
+graphify/extract.py:154: from graphify.extractors.engine import REFERENCE_CONTEXTS, _CSHARP_TYPE_PARAMETER_SCOPE_DECLARATIONS, _C_PRIMITIVE_TYPE_NODES, _JAVA_BUILTIN_TYPES, _JAVA_TYPE_P
+graphify/extract.py:156: from graphify.extractors.pascal import _PAS_BEGIN_END_TOKEN_RE, _PAS_CALL_RE, _PAS_END_SEMI_RE, _PAS_IMPL_HEADER_RE, _PAS_KEYWORDS, _PAS_METHOD_DECL_RE, _PAS_MO
+graphify/extract.py:158: from graphify.extractors.objc import _objc_local_var_types, extract_objc  # noqa: E402,F401
+graphify/extract.py:160: from graphify.extractors.julia import extract_julia  # noqa: E402,F401
+graphify/extract.py:183: if os.environ.get("GRAPHIFY_DEBUG"):
+graphify/extract.py:207: the edge dangles and is silently dropped — the graph loses most ``imports``
+graphify/extract.py:395: # no useful semantic meaning as graph nodes (#1147). Suppressed at the annotation
+graphify/extract.py:472: # _resolve_python_module_path) resolves `graphs` -> graphs/__init__.py
+... (11180 more matching lines not shown)
+
+==> graphify/extract.py:1-40 <==  (truncated at char cap; file has 8322 lines)
+     1	"""Deterministic structural extraction from source code using tree-sitter. Outputs nodes+edges dicts."""
+     2	from __future__ import annotations
+     3	
+     4	import hashlib
+     5	import importlib
+     6	import json
+     7	import os
+     8	import re
+     9	import sys
+    10	import textwrap
+    11	from bisect import bisect_right
+    12	from collections import Counter
+    13	from dataclasses import dataclass, field
+    14	from pathlib import Path, PurePath
+    15	from typing import Any, Callable
+    16	
+    17	from .cache import load_cached, save_cached
+    18	from .mcp_ingest import extract_mcp_config, is_mcp_config_path
+    19	from .manifest_ingest import extract_package_manifest, is_package_manifest_path
+    20	from .resolver_registry import (
+    21	    LanguageResolver,
+    22	    register as register_language_resolver,
+    23	    run_language_resolvers,
+    24	)
+    25	from .ruby_resolution import resolve_ruby_member_calls
+    26	from .csharp_dispatch import resolve_csharp_interface_dispatch
+    27	from .pascal_resolution import resolve_pascal_inherited_calls
+    28	from .markdown_resolution import MARKDOWN_MENTION_SUFFIXES, resolve_markdown_mentions
+    29	
+    30	# --- migrated to graphify/extractors/ (see graphify/extractors/MIGRATION.md) ---
+    31	from graphify.extractors.base import (  # noqa: F401
+    32	    _LANGUAGE_BUILTIN_GLOBALS,
+    33	    _file_stem,
+    34	    _make_id,
+    35	    _read_text,
+    36	)
+    37	from graphify.extractors.apex import extract_apex  # noqa: F401
+    38	from graphify.extractors.bash import extract_bash  # noqa: F401
+    39	from graphify.extractors.blade import extract_blade  # noqa: F401
+    40	from graphify.extractors.csharp import (

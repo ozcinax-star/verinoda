@@ -1,0 +1,115 @@
+Graph: .repoatlas/index/graph.json (41 nodes) | Traversal: BFS depth=3 | Start: ['service.py', 'README.md', 'orders_app', 'Runtime configuration read from the environment.'] | 38 nodes found
+
+[i] Complete answer over budget: all 38 nodes and 73 edges shown (~3395 tokens vs the requested ~2000-token budget). Edges are never dropped once every node fits, so this is already the full answer — raising --budget further will not shrink it. Narrow with context_filter=['call'] or use get_node for a specific symbol to reduce size instead.
+
+NODE service.py [src=orders/service.py loc=L1 community=service.py]
+NODE README.md [src=README.md loc=L1 community=README.md]
+NODE orders_app [src=README.md loc=L1 community=README.md]
+NODE Runtime configuration read from the environment. [src=orders/config.py loc=L1 community=repository.py]
+NODE OrderRepository [src=orders/repository.py loc=L8 community=OrderRepository]
+NODE api.py [src=orders/api.py loc=L1 community=api.py]
+NODE place_order() [src=orders/service.py loc=L19 community=service.py]
+NODE test_service.py [src=tests/test_service.py loc=L1 community=service.py]
+NODE repository.py [src=orders/repository.py loc=L1 community=repository.py]
+NODE ValidationError [src=orders/service.py loc=L8 community=service.py]
+NODE config.py [src=orders/config.py loc=L1 community=repository.py]
+NODE compute_total() [src=orders/pricing.py loc=L6 community=compute_total]
+NODE fetch_order() [src=orders/service.py loc=L25 community=api.py]
+NODE pricing.py [src=orders/pricing.py loc=L1 community=compute_total]
+NODE validate_items() [src=orders/service.py loc=L12 community=service.py]
+NODE Business logic between the HTTP layer and the repository. [src=orders/service.py loc=L1 community=service.py]
+NODE test_pricing.py [src=tests/test_pricing.py loc=L1 community=compute_total]
+NODE apply_discount() [src=orders/pricing.py loc=L11 community=compute_total]
+NODE create_order_handler() [src=orders/api.py loc=L16 community=api.py]
+NODE get_repo() [src=orders/api.py loc=L9 community=api.py]
+NODE test_empty_order_rejected() [src=tests/test_service.py loc=L13 community=service.py]
+NODE test_place_and_fetch_roundtrip() [src=tests/test_service.py loc=L7 community=service.py]
+NODE get_order_handler() [src=orders/api.py loc=L24 community=api.py]
+NODE ADR 0001: SQLite for order persistence [src=docs/adr/0001-sqlite-persistence.md loc=L1 community=OrderRepository]
+NODE test_compute_total() [src=tests/test_pricing.py loc=L12 community=compute_total]
+NODE HTTP-style entry points (framework-free handlers). [src=orders/api.py loc=L1 community=api.py]
+NODE load_settings() [src=orders/config.py loc=L10 community=repository.py]
+NODE .get() [src=orders/repository.py loc=L22 community=OrderRepository]
+NODE .__init__() [src=orders/repository.py loc=L9 community=OrderRepository]
+NODE .save() [src=orders/repository.py loc=L15 community=OrderRepository]
+NODE Persistence layer: the only module that talks to SQLite. [src=orders/repository.py loc=L1 community=repository.py]
+NODE os [src= loc= community=repository.py]
+NODE pytest [src= loc= community=service.py]
+NODE sqlite3 [src= loc= community=repository.py]
+NODE ValueError [src= loc= community=service.py]
+NODE test_discount_applies_above_threshold() [src=tests/test_pricing.py loc=L4 community=compute_total]
+NODE test_no_discount_below_threshold() [src=tests/test_pricing.py loc=L8 community=compute_total]
+NODE 0001-sqlite-persistence.md [src=docs/adr/0001-sqlite-persistence.md loc=L1 community=OrderRepository]
+EDGE service.py --imports [EXTRACTED context=import]--> compute_total() at=orders/service.py:L4
+EDGE service.py --imports [EXTRACTED context=import]--> OrderRepository at=orders/service.py:L5
+EDGE service.py --imports_from [EXTRACTED context=import]--> config.py at=orders/service.py:L3
+EDGE service.py --imports_from [EXTRACTED context=import]--> pricing.py at=orders/service.py:L4
+EDGE service.py --imports_from [EXTRACTED context=import]--> repository.py at=orders/service.py:L5
+EDGE service.py --contains [EXTRACTED]--> validate_items() at=orders/service.py:L12
+EDGE service.py --contains [EXTRACTED]--> place_order() at=orders/service.py:L19
+EDGE service.py --contains [EXTRACTED]--> fetch_order() at=orders/service.py:L25
+EDGE service.py --contains [EXTRACTED]--> ValidationError at=orders/service.py:L8
+EDGE test_service.py --imports_from [EXTRACTED context=import]--> service.py at=tests/test_service.py:L4
+EDGE Business logic between the HTTP layer and the repository. --rationale_for [EXTRACTED]--> service.py at=orders/service.py:L1
+EDGE api.py --imports_from [EXTRACTED context=import]--> service.py at=orders/api.py:L4
+EDGE Runtime configuration read from the environment. --rationale_for [EXTRACTED]--> config.py at=orders/config.py:L1
+EDGE test_empty_order_rejected() --calls [EXTRACTED context=call]--> place_order() at=tests/test_service.py:L15
+EDGE test_place_and_fetch_roundtrip() --calls [EXTRACTED context=call]--> place_order() at=tests/test_service.py:L9
+EDGE create_order_handler() --calls [EXTRACTED context=call]--> place_order() at=orders/api.py:L18
+EDGE config.py --imports [EXTRACTED context=import]--> os at=orders/config.py:L3
+EDGE config.py --contains [EXTRACTED]--> load_settings() at=orders/config.py:L10
+EDGE test_place_and_fetch_roundtrip() --calls [EXTRACTED context=call]--> fetch_order() at=tests/test_service.py:L10
+EDGE get_order_handler() --calls [EXTRACTED context=call]--> fetch_order() at=orders/api.py:L25
+EDGE test_service.py --imports [EXTRACTED context=import]--> pytest at=tests/test_service.py:L1
+EDGE test_service.py --contains [EXTRACTED]--> test_empty_order_rejected() at=tests/test_service.py:L13
+EDGE test_service.py --contains [EXTRACTED]--> test_place_and_fetch_roundtrip() at=tests/test_service.py:L7
+EDGE OrderRepository --method [EXTRACTED]--> .save() at=orders/repository.py:L15
+EDGE OrderRepository --method [EXTRACTED]--> .get() at=orders/repository.py:L22
+EDGE OrderRepository --method [EXTRACTED]--> .__init__() at=orders/repository.py:L9
+EDGE test_empty_order_rejected() --calls [EXTRACTED context=call]--> OrderRepository at=tests/test_service.py:L15
+EDGE test_place_and_fetch_roundtrip() --calls [EXTRACTED context=call]--> OrderRepository at=tests/test_service.py:L8
+EDGE get_repo() --calls [EXTRACTED context=call]--> OrderRepository at=orders/api.py:L12
+EDGE ADR 0001: SQLite for order persistence --references [INFERRED context=OrderRepository]--> OrderRepository at=docs/adr/0001-sqlite-persistence.md:L5
+EDGE ValidationError --inherits [EXTRACTED]--> ValueError at=orders/service.py:L8
+EDGE test_empty_order_rejected() --uses [INFERRED]--> ValidationError at=tests/test_service.py:L14
+EDGE create_order_handler() --uses [INFERRED]--> ValidationError at=orders/api.py:L19
+EDGE compute_total() --calls [EXTRACTED context=call]--> apply_discount() at=orders/pricing.py:L8
+EDGE test_compute_total() --calls [EXTRACTED context=call]--> compute_total() at=tests/test_pricing.py:L13
+EDGE test_pricing.py --imports [EXTRACTED context=import]--> compute_total() at=tests/test_pricing.py:L1
+EDGE pricing.py --contains [EXTRACTED]--> apply_discount() at=orders/pricing.py:L11
+EDGE test_pricing.py --imports_from [EXTRACTED context=import]--> pricing.py at=tests/test_pricing.py:L1
+EDGE repository.py --imports [EXTRACTED context=import]--> sqlite3 at=orders/repository.py:L3
+EDGE Persistence layer: the only module that talks to SQLite. --rationale_for [EXTRACTED]--> repository.py at=orders/repository.py:L1
+EDGE api.py --contains [EXTRACTED]--> create_order_handler() at=orders/api.py:L16
+EDGE api.py --contains [EXTRACTED]--> get_order_handler() at=orders/api.py:L24
+EDGE api.py --contains [EXTRACTED]--> get_repo() at=orders/api.py:L9
+EDGE HTTP-style entry points (framework-free handlers). --rationale_for [EXTRACTED]--> api.py at=orders/api.py:L1
+EDGE test_discount_applies_above_threshold() --calls [EXTRACTED context=call]--> apply_discount() at=tests/test_pricing.py:L5
+EDGE test_no_discount_below_threshold() --calls [EXTRACTED context=call]--> apply_discount() at=tests/test_pricing.py:L9
+EDGE 0001-sqlite-persistence.md --contains [EXTRACTED]--> ADR 0001: SQLite for order persistence at=docs/adr/0001-sqlite-persistence.md:L1
+EDGE test_pricing.py --contains [EXTRACTED]--> test_discount_applies_above_threshold() at=tests/test_pricing.py:L4
+EDGE test_pricing.py --contains [EXTRACTED]--> test_no_discount_below_threshold() at=tests/test_pricing.py:L8
+EDGE api.py --imports [EXTRACTED context=import]--> OrderRepository at=orders/api.py:L3
+EDGE api.py --imports [EXTRACTED context=import]--> fetch_order() at=orders/api.py:L4
+EDGE api.py --imports [EXTRACTED context=import]--> place_order() at=orders/api.py:L4
+EDGE api.py --imports [EXTRACTED context=import]--> ValidationError at=orders/api.py:L4
+EDGE api.py --imports_from [EXTRACTED context=import]--> repository.py at=orders/api.py:L3
+EDGE create_order_handler() --calls [EXTRACTED context=call]--> get_repo() at=orders/api.py:L18
+EDGE get_order_handler() --calls [EXTRACTED context=call]--> get_repo() at=orders/api.py:L25
+EDGE repository.py --imports_from [EXTRACTED context=import]--> config.py at=orders/repository.py:L5
+EDGE pricing.py --imports_from [EXTRACTED context=import]--> config.py at=orders/pricing.py:L3
+EDGE pricing.py --contains [EXTRACTED]--> compute_total() at=orders/pricing.py:L6
+EDGE test_pricing.py --imports [EXTRACTED context=import]--> apply_discount() at=tests/test_pricing.py:L1
+EDGE place_order() --calls [EXTRACTED context=call]--> compute_total() at=orders/service.py:L21
+EDGE test_service.py --imports_from [EXTRACTED context=import]--> repository.py at=tests/test_service.py:L3
+EDGE repository.py --contains [EXTRACTED]--> OrderRepository at=orders/repository.py:L8
+EDGE place_order() --uses [INFERRED context=parameter_type]--> OrderRepository at=orders/service.py:L19
+EDGE fetch_order() --uses [INFERRED context=parameter_type]--> OrderRepository at=orders/service.py:L25
+EDGE test_service.py --imports [EXTRACTED context=import]--> OrderRepository at=tests/test_service.py:L3
+EDGE test_service.py --imports [EXTRACTED context=import]--> fetch_order() at=tests/test_service.py:L4
+EDGE place_order() --calls [EXTRACTED context=call]--> validate_items() at=orders/service.py:L20
+EDGE test_service.py --imports [EXTRACTED context=import]--> place_order() at=tests/test_service.py:L4
+EDGE validate_items() --calls [EXTRACTED context=call]--> ValidationError at=orders/service.py:L14
+EDGE test_service.py --imports [EXTRACTED context=import]--> ValidationError at=tests/test_service.py:L4
+EDGE README.md --contains [EXTRACTED]--> orders_app at=README.md:L1
+EDGE test_pricing.py --contains [EXTRACTED]--> test_compute_total() at=tests/test_pricing.py:L12

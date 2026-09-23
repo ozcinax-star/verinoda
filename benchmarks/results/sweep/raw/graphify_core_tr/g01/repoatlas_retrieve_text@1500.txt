@@ -1,0 +1,109 @@
+# Graphify sorgu çıktısı token bütçesine sığmak için nerede kesiliyor?
+expanded: sığmak->signal (turkish stem 'sig'); sığmak->signatur (turkish stem 'sig'); sığmak->significant (turkish stem 'sig'); sigmak->sig (corpus prefix); graphify->install (lexicon); graphify->uninstall (lexicon)
+## graphify/benchmark.py:85-133 def run_benchmark( graph_path: str | None = None, corpus_words: int | None = None, questions: list[str] | None = None, ) -> dict
+  doc: Measure token reduction: corpus tokens vs graphify query tokens.
+  calls: default_graph_json@99, load_node_link_graph@104, _query_subgraph_tokens@115
+  called by: dispatch_command (graphify/cli.py:3149)
+  const graphify/benchmark.py:76: _SAMPLE_QUESTIONS = [
+  graphify/benchmark.py:111-118
+
+    qs = questions or _SAMPLE_QUESTIONS
+    per_question = []
+    for q in qs:
+        qt = _query_subgraph_tokens(G, q)
+        if qt > 0:
+            per_question.append({"question": q, "query_tokens": qt, "reduction": round(corpus_tokens / qt, 1)})
+
+  graphify/benchmark.py:121-124
+
+    avg_query_tokens = sum(p["query_tokens"] for p in per_question) // len(per_question)
+    reduction_ratio = round(corpus_tokens / avg_query_tokens, 1) if avg_query_tokens > 0 else 0
+
+## graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+  calls: _custom_providers_path@1069, provider_base_url_ok@1140, cmd_prs@1184, install@1194, uninstall@1196, status@1198, _default_graph_path@1214, _enforce_graph_size_cap_or_exit@1251, graph_has_legacy_ids@1287, _query_graph_text@1302, log_query@1311, _touch_query_stamp@1321 (+107)
+  called by: _run_cli (graphify/__main__.py:751)
+  graphify/cli.py:1177-1190
+
+        else:
+            print("Usage: graphify provider [add|list|show|remove]", file=sys.stderr)
+            if subcmd:
+                sys.exit(1)
+    elif cmd == "prs":
+        from graphify.prs import cmd_prs
+        cmd_prs(sys.argv[2:])
+    elif cmd == "hook":
+        from graphify.hooks import (
+            install as hook_install,
+            uninstall as hook_uninstall,
+            status as hook_status,
+        )
+  graphify/cli.py:1191-1204
+
+        subcmd = sys.argv[2] if len(sys.argv) > 2 else ""
+        if subcmd == "install":
+            print(hook_install(Path(".")))
+        elif subcmd == "uninstall":
+            print(hook_uninstall(Path(".")))
+        elif subcmd == "status":
+            print(hook_status(Path(".")))
+        else:
+            print("Usage: graphify hook [install|uninstall|status]", file=sys.stderr)
+            sys.exit(1)
+    elif cmd == "query":
+        if len(sys.argv) < 3:
+            print("Usage: graphify query \"<question>\" [--dfs] [--context C] [--budget N] [--graph path]", file=sys.stderr)
+## graphify/benchmark.py:136-152 def print_benchmark(result: dict) -> None
+  doc: Print a human-readable benchmark report.
+  calls: _hr@143, _safe@144
+  called by: dispatch_command (graphify/cli.py:3150)
+def print_benchmark(result: dict) -> None:
+    """Print a human-readable benchmark report."""
+    if "error" in result:
+        print(f"Benchmark error: {result['error']}")
+        return
+
+    print(f"\ngraphify token reduction benchmark")
+    print(_hr(50))
+    arrow = _safe("→", "->")
+    print(f"  Corpus:          {result['corpus_words']:,} words {arrow} ~{result['corpus_tokens']:,} tokens (naive)")
+    print(f"  Graph:           {result['nodes']:,} nodes, {result['edges']:,} edges")
+    print(f"  Avg query cost:  ~{result['avg_query_tokens']:,} tokens")
+    print(f"  Reduction:       {result['reduction_ratio']}x fewer tokens per query")
+    print(f"\n  Per question:")
+    for p in result["per_question"]:
+        print(f"    [{p['reduction']}x] {p['question'][:55]}")
+    print()
+## graphify/skills/agents/references/hooks.md:5-19 ## For git commit hook
+## For git commit hook
+
+Install a post-commit hook that auto-rebuilds the graph after every commit. No background process needed - triggers once per commit, works with any editor.
+
+```bash
+graphify hook install    # install
+graphify hook uninstall  # remove
+graphify hook status     # check
+```
+
+After every `git commit`, the hook detects which code files changed (via `git diff HEAD~1`), re-runs AST extraction on those files, and rebuilds `graph.json` a…
+
+If a post-commit hook already exists, graphify appends to it rather than replacing it.
+
+---
+## graphify/install.py:324-359 def _claude_pretooluse_hooks(strict: bool = False, project: bool = False) -> "list[dict]"
+  graphify/install.py:326-337
+
+    The command invokes `graphify hook-guard <search|read>` via the absolute exe
+    path (`_resolve_graphify_exe`) — or, for a project-scoped install, via the
+    bare `graphify` command, since that config gets committed (#3129). Either
+    form parses under sh, cmd.exe and PowerShell alike — this is the #522 fix,
+    and mirrors the codex hook. Matchers are
+    "Bash|Grep" and "Read|Glob" and the command always contains "graphify", so the
+    existing install/uninstall filters find and replace both old bash hooks and
+    these. "Grep" is in the search matcher because current Claude Code routes
+    content search through its dedicated Grep tool, not Bash (#1986) — a
+    Bash-only matcher never fired on the agent's primary search path.
+
+## graphify/serve.py:191-202 def _search_tokens(text: str) -> list[str]
+## graphify/benchmark.py:37-73 def _query_subgraph_tokens(G: nx.Graph, question: str, depth: int = 3) -> int
+… 2077 more candidates not shown: graphify/serve.py:392-436 _node_search_text; graphify/install.py:1814-1836 _install_claude_hook; graphify/__main__.py:40-51 ; graphify/cli.py:18-29 _SEARCH_NUDGE _READ_NUDGE
+next: repoatlas query "Graphify sorgu çıktısı token bütçesine sığmak için nerede kesiliyor?" --max-chars 12000

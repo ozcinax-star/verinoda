@@ -1,0 +1,95 @@
+# What is affected if evidence.content_hash changes?
+## repoatlas/schemas/question_plan.v1.json:359-364 "evidence"
+       "evidence": {
+        "type": "string",
+        "description": "The user's verbatim words that fix the version ('v0.3', 'eski sürüm', 'kullandığımız')."
+       }
+      }
+     },
+## repoatlas/evidence.py:71-73 def content_hash(text: str) -> str
+  called by: _h_why (repoatlas/analysis.py:929); source_evidence (repoatlas/evidence.py:175) <- _src_ev (repoatlas/analysis.py:269), _h_why (repoatlas/analysis.py:902), _create (repoatlas/benchmark/critique_eval.py:209), replay (repoatlas/benchmark/staleness.py:385) (+62); _legacy_search (repoatlas/evidence.py:191) <- check_source (repoatlas/evidence.py:235); check_source (repoatlas/evidence.py:215) <- replay (repoatlas/benchmark/staleness.py:452), _evidence_changes (repoatlas/claims.py:932), challenge (repoatlas/critique.py:399), _cited_range (repoatlas/entail.py:308) (+20); url_evidence (repoatlas/evidence.py:301) <- _research_issue (repoatlas/research.py:1741), _research_document (repoatlas/research.py:803), test_url_evidence_hashes_the_text (tests/test_evidence.py:235); add (repoatlas/feedback.py:635) <- cmd_feedback (repoatlas/cli.py:372), test_wrong_critique_is_recorded_but_claim_confirmed (tests/test_feedback.py:112), test_valid_critique_with_correction_supersedes (tests/test_feedback.py:143), test_valid_critique_without_correction_contradicts_and_leaves_statement_unknown (tests/test_feedback.py:179) (+20); resolution_evidence (repoatlas/precise.py:544) <- test_resolution_evidence_is_anchored_on_the_call_line (tests/test_precise.py:241); _site_hash (repoatlas/question_plan.py:685) <- _cand (repoatlas/question_plan.py:799) (+8)
+def content_hash(text: str) -> str:
+    norm = "\n".join(line.rstrip() for line in text.replace("\r\n", "\n").split("\n"))
+    return "sha256:" + hashlib.sha256(norm.encode("utf-8")).hexdigest()
+## tests/test_evidence.py:40-46 def test_content_hash_is_stable_across_crlf_lf_and_trailing_whitespace()
+  calls: content_hash@42
+def test_content_hash_is_stable_across_crlf_lf_and_trailing_whitespace():
+    lf = "def f():\n    return 1\n"
+    assert evmod.content_hash(lf) == evmod.content_hash(lf.replace("\n", "\r\n"))
+    assert evmod.content_hash(lf) == evmod.content_hash("def f():   \n    return 1\t\n")
+    assert evmod.content_hash(lf).startswith("sha256:")
+    assert evmod.content_hash(lf) != evmod.content_hash(lf.replace("1", "2"))
+    assert evmod.content_hash(lf) != evmod.content_hash(lf.replace("    return", "  return"))  # indentation counts
+## repoatlas/claims.py:406-407 def evidence(self, cid: str) -> list[dict]
+  called by: replay (repoatlas/benchmark/staleness.py:451)? <- main (repoatlas/benchmark/staleness.py:660), test_history_replay_recall_is_one_and_nothing_is_silently_wrong (tests/test_staleness_harness.py:88); _record_deps (repoatlas/claims.py:393) <- create (repoatlas/claims.py:364), attach (repoatlas/claims.py:385); grades (repoatlas/claims.py:411); show (repoatlas/claims.py:415) <- process (repoatlas/feedback.py:728)?, test_valid_critique_with_correction_supersedes (tests/test_feedback.py:150)?, test_reference_with_different_assumptions_qualifies (tests/test_feedback.py:202)?, test_analyze_records_claims_like_core (tests/test_mcp.py:338)? (+1); set_status (repoatlas/claims.py:481) <- invalidate_stale (repoatlas/claims.py:1063)?, create (repoatlas/claims.py:365), reassess (repoatlas/claims.py:586), supersede (repoatlas/claims.py:618) (+7); reassess (repoatlas/claims.py:582) <- resolve (repoatlas/feedback.py:1069)?, _correct (repoatlas/feedback.py:260)?, verify (repoatlas/workflow.py:319)?, test_experiment_attached_to_a_claim_supports_or_refutes_it (tests/test_experiments.py:289)? (+2); challenge (repoatlas/critique.py:374)? <- analyze (repoatlas/analysis.py:1553), evaluate (repoatlas/benchmark/critique_eval.py:249), cmd_challenge (repoatlas/cli.py:342), process (repoatlas/feedback.py:864) (+31); process (repoatlas/feedback.py:876)? <- cmd_feedback (repoatlas/cli.py:376), test_wrong_critique_is_recorded_but_claim_confirmed (tests/test_feedback.py:118), test_valid_critique_with_correction_supersedes (tests/test_feedback.py:146), test_valid_critique_without_correction_contradicts_and_leaves_statement_unknown (tests/test_feedback.py:180) (+17) (+5)
+    def evidence(self, cid: str) -> list[dict]:
+        return self.store.claim_evidence(cid)
+## repoatlas/store.py:501-502 def evidence(self, eid: str) -> dict | None
+  called by: resolve (repoatlas/feedback.py:1021)? <- cmd_feedback (repoatlas/cli.py:380), _resolve_refs (repoatlas/feedback.py:327), test_resolve_requires_evidence_and_applies_claim_updates (tests/test_feedback.py:314), test_resolve_qualified_and_unresolved (tests/test_feedback.py:345) (+3); test_relocations_are_appended_to_evidence_locations (tests/test_evidence.py:169)?; test_add_validates_source_type_and_summarize_is_small (tests/test_evidence.py:226)?
+    def evidence(self, eid: str) -> dict | None:
+        return self.one("SELECT * FROM evidence WHERE id = ?", (eid,))
+## repoatlas/evidence.py:125-178 def source_evidence( repo: Path, path: str, start: int, end: int | None = None, *, commit: str | None, source_type: str = "source_code", meta: dict | None = None, anchor: bool = True, ) -> dict | None
+  called by: _src_ev (repoatlas/analysis.py:269) <- _call_order (repoatlas/analysis.py:1050), _edge_claim (repoatlas/analysis.py:282), _context_claims (repoatlas/analysis.py:508), _path_claim (repoatlas/analysis.py:550) (+2); _h_why (repoatlas/analysis.py:902); _create (repoatlas/benchmark/critique_eval.py:209) <- evaluate (repoatlas/benchmark/critique_eval.py:246); replay (repoatlas/benchmark/staleness.py:385) <- main (repoatlas/benchmark/staleness.py:660), test_history_replay_recall_is_one_and_nothing_is_silently_wrong (tests/test_staleness_harness.py:88); cmd_claim (repoatlas/cli.py:306); challenge (repoatlas/critique.py:472) <- analyze (repoatlas/analysis.py:1553), evaluate (repoatlas/benchmark/critique_eval.py:249), cmd_challenge (repoatlas/cli.py:342), process (repoatlas/feedback.py:864) (+31); _eval_proposition (repoatlas/feedback.py:170) <- _h_behaviour (repoatlas/analysis.py:985), process (repoatlas/feedback.py:887); _exclusive_correction (repoatlas/feedback.py:204) <- _correct (repoatlas/feedback.py:237) (+58)
+  repoatlas/evidence.py:170-178
+        "locator": f"{path}:{start}" + (f"-{end}" if end != start else ""),
+        "path": path,
+        "line_start": start,
+        "line_end": end,
+        "commit_sha": commit,
+        "content_hash": content_hash(text),
+        "excerpt": _excerpt(text),
+        "meta": meta,
+    }
+## tests/test_research.py:425-453 def test_document_research_records_versioned_evidence(analysed, monkeypatch)
+  tests/test_research.py:445-453
+    assert main["source_type"] == "official_doc" and main["version"] == '"abc123"'
+    assert main["url"] == url and main["content_hash"] == res["content_hash"]
+    passage = st.evidence(res["passages"][0]["evidence_id"])
+    assert passage["locator"].startswith(url + "#text-L")
+    row = st.get("research", res["id"])
+    assert row["kind"] == "document" and row["content_hash"] == res["content_hash"]
+    # same content again -> same evidence rows (no duplicates)
+    res2 = rs.research(st, repo, url, topic="lock acquire")
+    assert res2["evidence_ids"] == res["evidence_ids"]
+tests/test_evidence.py:234-238 def test_url_evidence_hashes_the_text()
+repoatlas/evidence.py:294-304 def url_evidence(url: str, text: str, *, source_type: str, version: str | None, meta: dict | None = None) -> dict
+repoatlas/research.py:1628-1668 def _record_mechanism(store: Store, mech: dict, *, root: Path, commit: str | None, external: bool, label: str, code_typ…
+repoatlas/research.py:724-838 def _research_document(store: Store, repo: Path, spec: dict, topic: str | None, res: dict) -> dict
+tests/test_evidence.py:49-58 def test_source_evidence_hash_identical_for_crlf_and_lf_files(tmp_path)
+repoatlas/research.py:133-148 def record_evidence(store: Store, ev: dict | None) -> str | None
+tests/test_research.py:476-489 def test_plain_directory_is_pinned_by_content_hash(fx, analysed, tmp_path)
+tests/test_evidence.py:91-104 def test_check_source_detects_changed_lines(repo)
+tests/test_safety.py:164-173 def test_reversed_range_and_blank_lines_cannot_verify_through_the_claims_api(orders)
+repoatlas/research.py:1716-1751 def _research_issue(store: Store, repo: Path, spec: dict, topic: str | None, res: dict, transport) -> str
+repoatlas/critique.py:362-670 def challenge(store: Store, repo: Path, cid: str, *, graph=None, actor: str = "critique", current_files: dict[str, str]…
+repoatlas/anchors.py:847-849 def matches(s: int) -> bool
+repoatlas/analysis.py:874-942 def _h_why(ctx: _Ctx, sub: _Sub) -> None
+repoatlas/anchors.py:121-124 def text_hash(text: str) -> str
+tests/test_evidence.py:1-1 """Evidence: line-ending-stable content hashes and source re-checks (changed / moved / deleted)."""
+repoatlas/critique.py:72-74 WARN_PENALTY = 0.1
+repoatlas/question_plan.py:675-685 def _site_hash(g, site: str | None) -> str | None
+repoatlas/research.py:2407-2449 def render(res: dict) -> None
+tests/test_critique.py:514-522 def test_empty_cited_text_fails_source_recheck(plain)
+repoatlas/evidence.py:194-243 def check_source(repo: Path, ev: dict) -> SourceCheck
+repoatlas/precise.py:525-554 def resolution_evidence(repo: Path, res: dict, *, commit: str | None = None) -> dict | None
+repoatlas/evidence.py:181-191 def _legacy_search(lines: list[str], ev: dict, n: int) -> list[int]
+repoatlas/evidence.py:317-344 def summarize(ev: dict, *, location: dict | None = None, grade: str | None = None) -> dict
+tests/test_mcp.py:369-389 def test_evidence_inspect_rechecks_source(repo, tools, analysis)
+repoatlas/feedback.py:607-661 def add(store: Store, repo: Path, text: str, *, claim_id: str | None = None, reference: str | None = None, ref: str | N…
+tests/test_snapshot_stale.py:227-241 def test_verify_does_not_restore_when_a_subject_file_changed_without_recheckable_evidence(proj)
+tests/test_critique.py:492-511 def test_missing_commit_and_run_are_existence_failures(plain)
+repoatlas/evidence.py:271-291 def graph_edge_evidence(edge: dict, *, graph_path: str, commit: str | None) -> dict
+repoatlas/critique.py:107-110 def _same_refutation(existing: list[dict], ev: dict) -> bool
+repoatlas/runtime/trace.py:395-435 def edge_evidence(repo: Path, run: dict, call: dict, *, src: _Sources | None = None, caller_node: str | None = None, ca…
+repoatlas/feedback.py:690-988 def process(store: Store, repo: Path, feedback_id: str, *, topic: str | None = None, network: str | None = None) -> dict
+repoatlas/research.py:2023-2043 def _finish(store: Store, res: dict, spec: dict | None) -> dict
+tests/test_evidence.py:83-88 def test_check_source_unchanged_and_line_ending_conversion(repo)
+tests/test_references_local.py:128-133 def test_local_version_is_source_evidence(tmp_path)
+repoatlas/research.py:519-553 def _research_local_dir(store: Store, repo: Path, spec: dict, ref: str | None, res: dict) -> dict
+repoatlas/store.py:73-84 CREATE TABLE IF NOT EXISTS evidence (
+tests/test_entail.py:232-239 def test_pointers_and_blank_lines_are_never_support(repo)
+repoatlas/mcp/server.py:549-592 def go()
+repoatlas/analysis.py:945-961 def _h_impact(ctx: _Ctx, sub: _Sub) -> None
+repoatlas/references/local.py:497-504 def evidence_for(repo: Path, item: dict, *, commit: str | None) -> dict | None
+… 829 more candidates not shown: tests/test_claims.py:65-68 def run_result(outcome: str) -> dict; repoatlas/mcp/server.py:763-774 "status history (newest kept if truncated). Read-only."),; tests/test_claims.py:93-98 def test_weak_inference_needs_some_support(env); repoatlas/store.py:143-154 CREATE TABLE IF NOT EXISTS research (
+next: repoatlas query "What is affected if evidence.content_hash changes?" --max-chars 24000

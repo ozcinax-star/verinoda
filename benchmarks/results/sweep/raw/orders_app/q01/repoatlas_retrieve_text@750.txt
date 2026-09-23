@@ -1,0 +1,56 @@
+# Where is an order written to the database?
+expanded: databas->db (abbreviation)
+## orders/config.py:5-7 DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+MAX_ITEMS_PER_ORDER = int(os.environ.get("ORDERS_MAX_ITEMS", "50"))
+DISCOUNT_THRESHOLD = float(os.environ.get("ORDERS_DISCOUNT_THRESHOLD", "100.0"))
+## orders/config.py:10-15 def load_settings() -> dict
+  const orders/config.py:5: DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+  const orders/config.py:6: MAX_ITEMS_PER_ORDER = int(os.environ.get("ORDERS_MAX_ITEMS", "50"))
+def load_settings() -> dict:
+    return {
+        "database_url": DATABASE_URL,
+        "max_items": MAX_ITEMS_PER_ORDER,
+        "discount_threshold": DISCOUNT_THRESHOLD,
+    }
+## docs/adr/0001-sqlite-persistence.md:1-7 # ADR 0001: SQLite for order persistence
+# ADR 0001: SQLite for order persistence
+
+Status: accepted
+
+We persist orders in SQLite through `OrderRepository` only. No other module
+may open a database connection. Chosen for zero-ops local development; a
+server database can replace it behind the same repository interface.
+## orders/repository.py:9-13 def __init__(self, url: str = DATABASE_URL)
+    def __init__(self, url: str = DATABASE_URL):
+        self.conn = sqlite3.connect(url)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+        )
+## orders/repository.py:8-26 class OrderRepository
+class OrderRepository:
+    def __init__(self, url: str = DATABASE_URL):
+        self.conn = sqlite3.connect(url)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+        )
+
+    def save(self, customer: str, total: float) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+        )
+        self.conn.commit()
+        return cur.lastrowid
+
+    def get(self, order_id: int):
+        row = self.conn.execute(
+            "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+        ).fetchone()
+        return None if row is None else {"id": row[0], "customer": row[1], "total": row[2]}
+## orders/service.py:19-22 def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int
+def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+    validate_items(items)
+    total = compute_total(items)
+    return repo.save(customer, total)
+… 16 more candidates not shown: orders/service.py:25-26 def fetch_order(repo: OrderRepository, order_id: int); tests/test_service.py:7-10 def test_place_and_fetch_roundtrip(); tests/test_service.py:13-15 def test_empty_order_rejected(); orders/api.py:9-13 def get_repo() -> OrderRepository
+next: repoatlas query "Where is an order written to the database?" --max-chars 6000

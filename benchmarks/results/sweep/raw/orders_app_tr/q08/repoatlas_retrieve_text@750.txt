@@ -1,0 +1,58 @@
+# get_order_handler bir siparişi depodan nasıl yüklüyor?
+expanded: depodan->repository (lexicon); depodan->repo (lexicon)
+## orders/api.py:24-28 def get_order_handler(order_id: int) -> tuple[int, dict]
+  calls: fetch_order@25, get_repo@25
+def get_order_handler(order_id: int) -> tuple[int, dict]:
+    order = fetch_order(get_repo(), order_id)
+    if order is None:
+        return 404, {"error": "not found"}
+    return 200, order
+## orders/api.py:9-13 def get_repo() -> OrderRepository
+  calls: OrderRepository@12
+  called by: create_order_handler (orders/api.py:18); get_order_handler (orders/api.py:25)
+  const orders/api.py:6: _repo = None
+def get_repo() -> OrderRepository:
+    global _repo
+    if _repo is None:
+        _repo = OrderRepository()
+    return _repo
+## orders/api.py:16-21 def create_order_handler(payload: dict) -> tuple[int, dict]
+  calls: get_repo@18, place_order@18
+def create_order_handler(payload: dict) -> tuple[int, dict]:
+    try:
+        order_id = place_order(get_repo(), payload["customer"], payload["items"])
+    except ValidationError as exc:
+        return 400, {"error": str(exc)}
+    return 201, {"id": order_id}
+## orders/service.py:25-26 def fetch_order(repo: OrderRepository, order_id: int)
+def fetch_order(repo: OrderRepository, order_id: int):
+    return repo.get(order_id)
+## orders/repository.py:22-26 def get(self, order_id: int)
+    def get(self, order_id: int):
+        row = self.conn.execute(
+            "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+        ).fetchone()
+        return None if row is None else {"id": row[0], "customer": row[1], "total": row[2]}
+## orders/repository.py:8-26 class OrderRepository
+class OrderRepository:
+    def __init__(self, url: str = DATABASE_URL):
+        self.conn = sqlite3.connect(url)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+        )
+
+    def save(self, customer: str, total: float) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+        )
+        self.conn.commit()
+        return cur.lastrowid
+
+    def get(self, order_id: int):
+        row = self.conn.execute(
+            "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+        ).fetchone()
+        return None if row is None else {"id": row[0], "customer": row[1], "total": row[2]}
+## orders/service.py:19-22 def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int
+… 18 more candidates not shown: tests/test_service.py:7-10 def test_place_and_fetch_roundtrip(); README.md:1-5 # orders_app; tests/test_service.py:13-15 def test_empty_order_rejected(); orders/api.py:1-1 """HTTP-style entry points (framework-free handlers)."""
+next: repoatlas query "get_order_handler bir siparişi depodan nasıl yüklüyor?" --max-chars 6000

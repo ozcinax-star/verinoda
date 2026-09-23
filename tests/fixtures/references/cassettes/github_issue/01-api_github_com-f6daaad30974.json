@@ -1,0 +1,32 @@
+{
+ "schema": "verinoda.http_cassette/1",
+ "key": "f6daaad30974b51bc05ddd4f9b208b0177c0963d",
+ "request": {
+  "method": "GET",
+  "url": "https://api.github.com/repos/psf/requests/issues/6000",
+  "headers": {
+   "Accept": "application/vnd.github+json",
+   "User-Agent": "<redacted>"
+  }
+ },
+ "response": {
+  "status": 200,
+  "headers": {
+   "content-type": "application/json; charset=utf-8",
+   "etag": "W/\"8f4b003a3faa68a94df279d5c8a287defdd5e7ae7cd44a2d8606a053e1f44655\"",
+   "last-modified": "Sun, 14 Sep 2025 23:54:11 GMT",
+   "x-ratelimit-limit": "60",
+   "x-ratelimit-remaining": "59",
+   "x-ratelimit-used": "1",
+   "x-ratelimit-resource": "core",
+   "x-ratelimit-reset": "1790122546"
+  },
+  "final_url": "https://api.github.com/repos/psf/requests/issues/6000",
+  "body_sha256": "10b37a2833427601d4caf10f6d9f9a95f6de08d735201cc3d457025bd253e361",
+  "body_text": "{\n \"url\": \"https://api.github.com/repos/psf/requests/issues/6000\",\n \"html_url\": \"https://github.com/psf/requests/issues/6000\",\n \"number\": 6000,\n \"title\": \"Requests throws \\\"Value Error: too many values to unpack (expected 2)\\\"\",\n \"state\": \"closed\",\n \"updated_at\": \"2022-03-09T04:00:34Z\",\n \"closed_at\": \"2021-12-09T03:14:21Z\",\n \"pull_request\": null,\n \"body\": \"<!-- Summary. -->\\r\\nRequests is throwing exception.\\r\\n\\r\\n## Expected Result\\r\\n\\r\\n<!-- What you expected. -->\\r\\n\\r\\n## Actual Result\\r\\n\\r\\nThis is the stack trace of the exception\\r\\n```\\r\\nTraceback (most recent call last):\\r\\n  File \\\"test.py\\\", line 65, in <module>\\r\\n    get_data(lat, lon, start_timestamp, end_timestamp)\\r\\n  File \\\"test.py\\\", line 35, in get_data\\r\\n    result = requests.get(\\r\\n  File \\\"/usr/src/app/weather_provider/.venv/lib/python3.8/site-packages/requests/api.py\\\", line 75, in get\\r\\n    return request('get', url, params=params, **kwargs)\\r\\n  File \\\"/usr/src/app/weather_provider/.venv/lib/python3.8/site\"\n}",
+  "body_b64": null,
+  "trimmed": true
+ },
+ "recorded_at": "2026-09-22T23:15:48Z",
+ "recorder": "tools/record_reference_cassettes.py/1"
+}

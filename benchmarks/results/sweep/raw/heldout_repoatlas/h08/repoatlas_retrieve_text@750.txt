@@ -1,0 +1,31 @@
+# Which tests cover stale claim invalidation?
+## tests/test_claims.py:492-497 def test_stale_cannot_be_requested_at_creation(env)
+  calls: make@496, src@496
+def test_stale_cannot_be_requested_at_creation(env):
+    repo, st, cl = env
+    n = st.one("SELECT COUNT(*) AS n FROM claims")["n"]
+    with pytest.raises(ClaimRuleError, match="stale is set only by invalidation"):
+        make(cl, "stale", [(src(repo), "supports")])
+    assert st.one("SELECT COUNT(*) AS n FROM claims")["n"] == n  # nothing half-created
+## tests/test_analysis.py:163-193 def test_test_run_claim_goes_stale_and_is_only_restored_by_a_fresh_run(tmp_path)
+  calls: _copy_example@164, init@165, open_store@166, scan@168, analyze@169, update@175, verify@177, Claims@183
+  tests/test_analysis.py:168-176
+        workflow.scan(st, repo)
+        res = analysis.analyze(st, repo, "Which tests cover compute_total?", run_tests=True, challenge=False)
+        c = next(c for c in res["claims"] if c["text"].startswith("Tests that reach `compute_total()`"))
+        assert c["status"] == "experiment_verified"
+        p = repo / "orders" / "pricing.py"
+        original = p.read_text(encoding="utf-8")
+        p.write_text(original + "\n# harmless trailing comment\n", encoding="utf-8")
+        assert c["id"] in {s["id"] for s in workflow.update(st, repo)["stale"]}
+
+  tests/test_analysis.py:180-184
+
+        v = workflow.verify(st, repo, c["id"], run=True)
+        assert v["experiment"]["outcome"] == "pass" and v["after"]["status"] == "experiment_verified"
+        assert Claims(st, repo).get(c["id"])["snapshot_id"] == st.latest_snapshot()["id"]
+
+## tests/test_snapshot_stale.py:244-260 def test_memory_from_a_stale_claim_is_invalidated_not_deleted(proj)
+  calls: Memory@246, learn@247?, _edit@250, update@251, recall@252?, history@254?
+… 1348 more candidates not shown: tests/test_claims.py:293-302 test_stale_never_raises_confidence_and_invalidates_memory; tests/test_cli.py:383-393 test_claim_add_status_choices; repoatlas/claims.py:942-942 ; tests/test_snapshot_stale.py:3-7 
+next: repoatlas query "Which tests cover stale claim invalidation?" --max-chars 6000

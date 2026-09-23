@@ -1,0 +1,55 @@
+Graph: graphify-out/graph.json (41 nodes) | Traversal: BFS depth=2 | Start: ['sqlite3', '0001-sqlite-persistence.md', 'ADR 0001: SQLite for order persistence'] | 18 nodes found
+
+NODE sqlite3 [src= loc= community=repository.py]
+NODE 0001-sqlite-persistence.md [src=docs/adr/0001-sqlite-persistence.md loc=L1 community=OrderRepository]
+NODE ADR 0001: SQLite for order persistence [src=docs/adr/0001-sqlite-persistence.md loc=L1 community=OrderRepository]
+NODE OrderRepository [src=orders/repository.py loc=L8 community=OrderRepository]
+NODE repository.py [src=orders/repository.py loc=L1 community=repository.py]
+NODE service.py [src=orders/service.py loc=L1 community=service.py]
+NODE api.py [src=orders/api.py loc=L1 community=api.py]
+NODE place_order() [src=orders/service.py loc=L19 community=service.py]
+NODE test_service.py [src=tests/test_service.py loc=L1 community=service.py]
+NODE config.py [src=orders/config.py loc=L1 community=repository.py]
+NODE fetch_order() [src=orders/service.py loc=L25 community=api.py]
+NODE get_repo() [src=orders/api.py loc=L9 community=api.py]
+NODE test_empty_order_rejected() [src=tests/test_service.py loc=L13 community=service.py]
+NODE test_place_and_fetch_roundtrip() [src=tests/test_service.py loc=L7 community=service.py]
+NODE .get() [src=orders/repository.py loc=L22 community=OrderRepository]
+NODE .__init__() [src=orders/repository.py loc=L9 community=OrderRepository]
+NODE .save() [src=orders/repository.py loc=L15 community=OrderRepository]
+NODE Persistence layer: the only module that talks to SQLite. [src=orders/repository.py loc=L1 community=repository.py]
+EDGE ADR 0001: SQLite for order persistence --references [INFERRED context=OrderRepository]--> OrderRepository at=docs/adr/0001-sqlite-persistence.md:L5
+EDGE repository.py --imports [EXTRACTED context=import]--> sqlite3 at=orders/repository.py:L3
+EDGE api.py --imports_from [EXTRACTED context=import]--> repository.py at=orders/api.py:L3
+EDGE repository.py --imports_from [EXTRACTED context=import]--> config.py at=orders/repository.py:L5
+EDGE service.py --imports_from [EXTRACTED context=import]--> repository.py at=orders/service.py:L5
+EDGE test_service.py --imports_from [EXTRACTED context=import]--> repository.py at=tests/test_service.py:L3
+EDGE Persistence layer: the only module that talks to SQLite. --rationale_for [EXTRACTED]--> repository.py at=orders/repository.py:L1
+EDGE get_repo() --calls [EXTRACTED context=call]--> OrderRepository at=orders/api.py:L12
+EDGE test_empty_order_rejected() --calls [EXTRACTED context=call]--> OrderRepository at=tests/test_service.py:L15
+EDGE test_place_and_fetch_roundtrip() --calls [EXTRACTED context=call]--> OrderRepository at=tests/test_service.py:L8
+EDGE api.py --imports [EXTRACTED context=import]--> OrderRepository at=orders/api.py:L3
+EDGE service.py --imports [EXTRACTED context=import]--> OrderRepository at=orders/service.py:L5
+EDGE test_service.py --imports [EXTRACTED context=import]--> OrderRepository at=tests/test_service.py:L3
+EDGE OrderRepository --method [EXTRACTED]--> .save() at=orders/repository.py:L15
+EDGE OrderRepository --method [EXTRACTED]--> .get() at=orders/repository.py:L22
+EDGE OrderRepository --method [EXTRACTED]--> .__init__() at=orders/repository.py:L9
+EDGE fetch_order() --uses [INFERRED context=parameter_type]--> OrderRepository at=orders/service.py:L25
+EDGE place_order() --uses [INFERRED context=parameter_type]--> OrderRepository at=orders/service.py:L19
+EDGE 0001-sqlite-persistence.md --contains [EXTRACTED]--> ADR 0001: SQLite for order persistence at=docs/adr/0001-sqlite-persistence.md:L1
+EDGE api.py --imports [EXTRACTED context=import]--> fetch_order() at=orders/api.py:L4
+EDGE api.py --imports [EXTRACTED context=import]--> place_order() at=orders/api.py:L4
+EDGE api.py --imports_from [EXTRACTED context=import]--> service.py at=orders/api.py:L4
+EDGE api.py --contains [EXTRACTED]--> get_repo() at=orders/api.py:L9
+EDGE service.py --imports_from [EXTRACTED context=import]--> config.py at=orders/service.py:L3
+EDGE repository.py --contains [EXTRACTED]--> OrderRepository at=orders/repository.py:L8
+EDGE test_service.py --imports_from [EXTRACTED context=import]--> service.py at=tests/test_service.py:L4
+EDGE service.py --contains [EXTRACTED]--> place_order() at=orders/service.py:L19
+EDGE service.py --contains [EXTRACTED]--> fetch_order() at=orders/service.py:L25
+EDGE test_place_and_fetch_roundtrip() --calls [EXTRACTED context=call]--> fetch_order() at=tests/test_service.py:L10
+EDGE test_service.py --imports [EXTRACTED context=import]--> fetch_order() at=tests/test_service.py:L4
+EDGE test_empty_order_rejected() --calls [EXTRACTED context=call]--> place_order() at=tests/test_service.py:L15
+EDGE test_place_and_fetch_roundtrip() --calls [EXTRACTED context=call]--> place_order() at=tests/test_service.py:L9
+EDGE test_service.py --imports [EXTRACTED context=import]--> place_order() at=tests/test_service.py:L4
+EDGE test_service.py --contains [EXTRACTED]--> test_empty_order_rejected() at=tests/test_service.py:L13
+EDGE test_service.py --contains [EXTRACTED]--> test_place_and_fetch_roundtrip() at=tests/test_service.py:L7

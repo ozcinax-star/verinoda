@@ -1,0 +1,411 @@
+$ grep -rniE 'graphify|ast|çıkarım|önbelleğini|nerede|saklıyor|bir|önbellek|kaydının|anahtarı|nasıl|oluşturuluyor' .   # 7811 matching lines in 222 files
+graphify/extractors/sql.py:1: """Sql extractor. Moved verbatim from graphify/extract.py."""
+graphify/extractors/sql.py:7: from graphify.extractors.base import _file_stem, _make_id
+graphify/extractors/sql.py:69: # continues past its line is blanked only up to the newline, so a comment
+graphify/extractors/sql.py:407: # Dialect-specific syntax (e.g. Firebird COMPUTED BY) causes ERROR
+graphify/extractors/sql.py:549: # Same CTE-blindness as the AST path (#2577): a `WITH <name> AS (`
+graphify/extractors/sql.py:661: # (e.g. Firebird COMPUTED BY columns push constraints out of the tree entirely).
+graphify/cli.py:1: """graphify command dispatch — every non-install subcommand.
+graphify/cli.py:5: module. The path-redirect (`graphify <path>` -> extract) re-enters via a lazy
+graphify/cli.py:14: from graphify.paths import GRAPHIFY_OUT as _GRAPHIFY_OUT
+graphify/cli.py:22: 'MANDATORY: graphify-out/graph.json exists. You MUST run '
+graphify/cli.py:23: '`graphify query "<question>"` before grepping raw files. Only grep '
+graphify/cli.py:24: 'after graphify has oriented you, or to modify/debug specific lines.'
+graphify/cli.py:32: 'MANDATORY: graphify-out/graph.json exists. You MUST run graphify '
+graphify/cli.py:33: 'before reading source files. Use: `graphify query "<question>"` '
+graphify/cli.py:34: '(scoped subgraph), `graphify explain "<concept>"`, or '
+graphify/cli.py:35: '`graphify path "<A>" "<B>"`. Only read raw files after graphify has '
+graphify/cli.py:46: 'graphify-out/graph.json exists but may be STALE for this file (the file '
+graphify/cli.py:47: 'changed after the last build). Prefer `graphify query "<question>"` for '
+graphify/cli.py:48: 'orientation, and run `graphify update` to refresh the graph. Reading the '
+graphify/cli.py:62: 'graphify strict mode: this project has a fresh knowledge graph that covers '
+graphify/cli.py:63: 'this file. Run `graphify query "<your question>"` (or `graphify explain` / '
+graphify/cli.py:64: '`graphify path`) FIRST to orient yourself, then re-issue this Read — it '
+graphify/cli.py:72: '.py', '.js', '.cjs', '.ts', '.tsx', '.jsx', '.astro', '.vue', '.svelte', '.go',
+graphify/cli.py:77: 'graphify: knowledge graph at graphify-out/. For focused questions, run '
+graphify/cli.py:78: '`graphify query "<question>"` (scoped subgraph, usually much smaller than '
+graphify/cli.py:85: return str(Path(_GRAPHIFY_OUT) / "graph.json")
+graphify/cli.py:93: failed_ast_sources: "set[str] | list[str] | None" = None,
+graphify/cli.py:117: Mirrors the #1890 path normalization in graphify.llm.
+graphify/cli.py:126: ``failed_ast_sources`` (#2543): code files whose AST extractor errored
+graphify/cli.py:152: failed_ast_resolved = {_resolve(p) for p in (failed_ast_sources or [])}
+graphify/cli.py:157: if _resolve(f) not in failed_ast_resolved
+graphify/cli.py:179: failed_ast_sources,
+graphify/cli.py:203: failed_ast_sources=failed_ast_sources,
+graphify/cli.py:213: f"[graphify extract] semantic extraction is incomplete: unverified semantic "
+graphify/cli.py:232: (.graphifyignore/.gitignore/--exclude changed) without being listed in the
+graphify/cli.py:265: from graphify.paths import nfc
+graphify/cli.py:276: # <out>/graphify-out/graph.json — relative source_files may be anchored here.
+graphify/cli.py:337: from graphify.detect import _is_sensitive as _det_sensitive
+graphify/cli.py:397: f"[graphify] fail-closed: kept node(s) from {len(kept_alive)} "
+graphify/cli.py:417: documented recovery was deleting graphify-out/. A stamped file that the
+... (7771 more matching lines not shown)
+
+==> graphify/extractors/sql.py:1-367 <==  (truncated at char cap; file has 720 lines)
+     1	"""Sql extractor. Moved verbatim from graphify/extract.py."""
+     2	from __future__ import annotations
+     3	
+     4	import re
+     5	
+     6	from pathlib import Path
+     7	from graphify.extractors.base import _file_stem, _make_id
+     8	
+     9	# Recovers CREATE FUNCTION/PROCEDURE statements the grammar could not parse
+    10	# structurally. Used by BOTH recovery sites — the walk-time ERROR-node scan and
+    11	# the whole-file has_error fallback (#2180). They MUST share one pattern: when
+    12	# they disagreed, the same statement produced two nodes with different names
+    13	# (the ERROR scan captured `dbo.[usp_Mixed]`, the fallback stopped at `dbo`,
+    14	# and _add_node's id-dedupe never fired because the ids differed).
+    15	#
+    16	# Each name part is a bare identifier, a double-quoted (delimited) one, or a
+    17	# T-SQL bracket-delimited one, so CREATE OR REPLACE FUNCTION "public"."fn"(...)
+    18	# and CREATE PROCEDURE [dbo].[usp_Load] ... are both recovered. A bare [\w$.]+
+    19	# stops dead at the leading delimiter, which silently dropped every quoted
+    20	# PL/pgSQL routine (#2180) and every bracket-named T-SQL procedure. T-SQL's
+    21	# AS BEGIN...END body idiom always lands in recovery — the grammar has no
+    22	# create_procedure parse for it — and T-SQL spells re-creation CREATE OR ALTER
+    23	# (it has no OR REPLACE), so accept that form too, mirroring fb_proc_or_trigger.
+    24	# Inside a bracket-delimited part, a literal ] is escaped by doubling
+    25	# ([a]]b] names the identifier a]b), so consume ]] before treating a
+    26	# lone ] as the closing delimiter — stopping at the first ] truncated
+    27	# the name and minted a phantom that could collide with a real [a].
+    28	# PROC is T-SQL's official shorthand for PROCEDURE and equally common in the
+    29	# wild; the optional (?:EDURE)? still requires trailing whitespace, so a word
+    30	# that merely starts with PROC cannot match.
+    31	# \bCREATE: without the boundary, CREATE matched inside a bare word, so
+    32	# 'SELECT AUTOCREATE PROCEDURE x FROM t;' in an error-bearing file minted a
+    33	# phantom routine x() (delimited identifiers are span-skipped at the scan
+    34	# site, but a bare word has no span).
+    35	_ROUTINE_RECOVERY_RX = re.compile(
+    36	    r"\bCREATE\s+(?:OR\s+(?:REPLACE|ALTER)\s+)?(?:FUNCTION|PROC(?:EDURE)?)\s+"
+    37	    r"(?:IF\s+NOT\s+EXISTS\s+)?"
+    38	    r"((?:\"(?:[^\"\n]|\"\")+\"|\[(?:[^\]\n]|\]\])+\]|[\w$]+)"
+    39	    r"(?:\s*\.\s*(?:\"(?:[^\"\n]|\"\")+\"|\[(?:[^\]\n]|\]\])+\]|[\w$]+))*)",
+    40	    re.IGNORECASE,
+    41	)
+    42	
+    43	# _mask_sql_comments is a linear character scanner, not a regex: the four
+    44	# span kinds interact in ways a single pattern cannot express safely —
+    45	# comment-opener parity inside strings, nested block comments, and
+    46	# end-of-line abandonment of unclosed literals. Span handling:
+    47	#
+    48	# - single-quoted strings are BLANKED like comments: routine names never
+    49	#   live in single quotes, and dynamic SQL (EXEC(N'CREATE PROC [dbo].[Fake]
+    50	#   ...')) would otherwise fabricate a routine node whenever an unrelated
+    51	#   parse error arms the whole-file scan. (Dialects where other quoting
+    52	#   carries strings — MySQL double quotes, PostgreSQL dollar-quoting — are
+    53	#   NOT modelled; DDL inside those still reaches the scan.)
+    54	# - double-quoted and bracket-delimited identifiers are PRESERVED verbatim —
+    55	#   they are exactly the delimited names the recovery regex must see ("" and
+    56	#   ]] escapes consumed, mirroring _ROUTINE_RECOVERY_RX).
+    57	# - line comments blank to end-of-line; block comments blank to their
+    58	#   matching */ with NESTING tracked (SQL Server and PostgreSQL both nest
+    59	#   /* */, and a lazy first-*/ match let commented-out DDL inside a nested
+    60	#   comment fabricate nodes). MySQL and Oracle do NOT nest — there the
+    61	#   depth tracking over-blanks, losing (never fabricating) a routine after
+    62	#   an inner */; the primary T-SQL/PostgreSQL targets win that trade. An
+    63	#   UNCLOSED block comment blanks to end-of-file, matching SQL semantics.
+    64	#
+    65	# Literals are deliberately line-scoped: this mask only runs on files that
+    66	# already failed to parse, where an unclosed delimiter is likely, and a
+    67	# multi-line literal span would let one unclosed quote swallow real DDL
+    68	# below it. The cost is asymmetric by kind. A single-quoted string that
+    69	# continues past its line is blanked only up to the newline, so a comment
+    70	# opener inside it cannot fire on that line — but its CONTINUATION lines are
+    71	# scanned as code, and DDL there fabricates: multi-line dynamic SQL
+    72	# (SET @sql = N\'\n CREATE PROC ...\') is a KNOWN HOLE, alongside the
+    73	# unmodelled quoting dialects above; only same-line dynamic SQL is blanked.
+    74	# Closing it would need a real string heuristic (e.g. an end-of-line opening
+    75	# quote), judged not worth the swallow risk in a recovery-only path.
+    76	
+    77	
+    78	def _scan_sql(text: str) -> tuple[str, list[tuple[int, int]]]:
+    79	    """Blank comment and string-literal spans, preserving every offset.
+    80	
+    81	    One output character per input character: non-newline characters inside
+    82	    a blanked span become spaces and newlines are kept, so positions and
+    83	    line numbers computed against the masked text are valid against the
+    84	    original. Double-quoted and bracket-delimited identifiers are preserved
+    85	    verbatim (they carry recoverable routine names); single-quoted strings,
+    86	    line comments, and (nesting-aware) block comments are blanked. Used by
+    87	    the routine-recovery scan so CREATE PROCEDURE/FUNCTION DDL reachable
+    88	    only through a comment or a single-quoted string cannot fabricate a
+    89	    routine node when an unrelated parse error arms recovery.
+    90	
+    91	    Returns (masked_text, ident_spans) where ident_spans holds the [start,
+    92	    end) of every PRESERVED delimited identifier: preserved spans keep their
+    93	    text verbatim, so DDL keywords inside one are still visible in the
+    94	    masked text, and the recovery scan must skip a match that starts there
+    95	    (identifier data, not DDL — 'SELECT 1 AS [CREATE PROCEDURE x pending]'
+    96	    must not mint a routine).
+    97	    """
+    98	    ident_spans: list[tuple[int, int]] = []
+    99	    out: list[str] = []
+   100	    i, n = 0, len(text)
+   101	
+   102	    def _blank(upto: int) -> int:
+   103	        """Blank [i, upto), keeping newlines; return upto."""
+   104	        for c in text[i:upto]:
+   105	            out.append("\n" if c == "\n" else " ")
+   106	        return upto
+   107	
+   108	    def _blank_tail_and_carry(start: int) -> int:
+   109	        """Blank from start to end-of-line, carrying comment state forward.
+   110	
+   111	        The union-of-readings blank for an ambiguous stretch: the rest of the
+   112	        line is blanked outright; if the raw text of that stretch leaves a /*
+   113	        unclosed on its own line (the maximum comment depth any reading could
+   114	        be left holding), blanking continues, nesting-aware, to the closing
+   115	        */ or EOF. Where a carry closes MID-line the same rule applies to the
+   116	        remainder of that line — under the reading where the carry never
+   117	        opened, that whole line may be a comment or a string, so emitting the
+   118	        post-*/ text verbatim exposed it (found by differential fuzzing).
+   119	        Repeats until a line ends with no carry pending. Appends one output
+   120	        character per input character; returns the resume index.
+   121	        """
+   122	        k = start
+   123	        while True:
+   124	            eol = text.find("\n", k)
+   125	            eol = n if eol == -1 else eol
+   126	            depth = 0
+   127	            m2 = k
+   128	            while m2 < eol:
+   129	                if text.startswith("/*", m2):
+   130	                    depth += 1
+   131	                    m2 += 2
+   132	                elif text.startswith("*/", m2):
+   133	                    if depth:
+   134	                        depth -= 1
+   135	                    m2 += 2
+   136	                else:
+   137	                    m2 += 1
+   138	            for ch in text[k:eol]:
+   139	                out.append("\n" if ch == "\n" else " ")
+   140	            k = eol
+   141	            if not depth:
+   142	                return k
+   143	            j2 = k
+   144	            while j2 < n and depth:
+   145	                if text.startswith("/*", j2):
+   146	                    depth += 1
+   147	                    j2 += 2
+   148	                elif text.startswith("*/", j2):
+   149	                    depth -= 1
+   150	                    j2 += 2
+   151	                else:
+   152	                    j2 += 1
+   153	            for ch in text[k:j2]:
+   154	                out.append("\n" if ch == "\n" else " ")
+   155	            k = j2
+   156	            if k >= n:
+   157	                return k
+   158	            # the carry closed mid-line: the remainder of THIS line is the
+   159	            # same ambiguous stretch — loop and blank it too
+   160	
+   161	    while i < n:
+   162	        c = text[i]
+   163	        if c == "'":
+   164	            # Single-quoted string: blank it. '' is an escaped quote; a
+   165	            # newline abandons the literal (see the comment above).
+   166	            j = i + 1
+   167	            while j < n and text[j] != "\n":
+   168	                if text[j] == "'":
+   169	                    if j + 1 < n and text[j + 1] == "'":
+   170	                        j += 2
+   171	                        continue
+   172	                    j += 1
+   173	                    break
+   174	                j += 1
+   175	            i = _blank(j)
+   176	        elif c == '"' or c == "[":
+   177	            # Delimited identifier: preserve verbatim. Doubled closers are
+   178	            # escapes. A span is DISTRUSTED when it is unterminated (no
+   179	            # closer before the newline) or would swallow a comment opener
+   180	            # on its way to the closer ('SELECT [Col FROM t -- CREATE PROC
+   181	            # [dbo]' closes on [dbo]'s bracket) — a stray delimiter is
+   182	            # ordinary in exactly the broken files this mask runs on.
+   183	            #
+   184	            # A distrusted span is irreducibly ambiguous (identifier data vs
+   185	            # stray delimiter before real comments/strings), and any attempt
+   186	            # to pick one reading exposed text the other reading blanks —
+   187	            # re-emitting the delimiter and rescanning even re-paired later
+   188	            # single quotes and uncovered dynamic SQL. So blank the UNION of
+   189	            # every reading: the rest of the line is blanked outright, and
+   190	            # any raw /* on it with no later */ on the same line carries
+   191	            # forward as (nesting-aware) comment state, since some reading
+   192	            # may have left it open — and where that carry closes mid-line,
+   193	            # the remainder of THAT line gets the same treatment, repeated
+   194	            # until a line ends carry-free (under the no-carry reading the
+   195	            # close line may itself be all comment or string, so emitting its
+   196	            # post-*/ tail verbatim was an exposure). Over-blanking loses at
+   197	            # most routines on lines already entangled with the broken one (a
+   198	            # conservative false negative; a routine named like [a--b] is
+   199	            # inside that loss); under-blanking is what fabricates, and every
+   200	            # reading's blank set stays a subset of this one — except where a
+   201	            # */ + * versus * + /* token split makes two readings consume the
+   202	            # same /, an irreducible divergence whose only closure would be
+   203	            # blanking to EOF on every */* sequence (accepted, documented
+   204	            # limitation; the token sequence appears in no dialect's idiom).
+   205	            closer = '"' if c == '"' else "]"
+   206	            j = i + 1
+   207	            closed = False
+   208	            while j < n and text[j] != "\n":
+   209	                if text[j] == closer:
+   210	                    if j + 1 < n and text[j + 1] == closer:
+   211	                        j += 2
+   212	                        continue
+   213	                    j += 1
+   214	                    closed = True
+   215	                    break
+   216	                j += 1
+   217	            span = text[i:j]
+   218	            if closed and "--" not in span and "/*" not in span:
+   219	                ident_spans.append((i, j))
+   220	                out.append(span)
+   221	                i = j
+   222	            else:
+   223	                i = _blank_tail_and_carry(i)
+   224	        elif c == "-" and i + 1 < n and text[i + 1] == "-":
+   225	            j = i
+   226	            while j < n and text[j] != "\n":
+   227	                j += 1
+   228	            i = _blank(j)
+   229	        elif c == "/" and i + 1 < n and text[i + 1] == "*":
+   230	            depth, j = 1, i + 2
+   231	            while j < n and depth:
+   232	                if text[j] == "/" and j + 1 < n and text[j + 1] == "*":
+   233	                    depth += 1
+   234	                    j += 2
+   235	                elif text[j] == "*" and j + 1 < n and text[j + 1] == "/":
+   236	                    depth -= 1
+   237	                    j += 2
+   238	                else:
+   239	                    j += 1
+   240	            i = _blank(j)  # unclosed comment: j == n, blanks to end-of-file
+   241	        else:
+   242	            out.append(c)
+   243	            i += 1
+   244	    return "".join(out), ident_spans
+   245	
+   246	
+   247	def _mask_sql_comments(text: str) -> str:
+   248	    """Masked text only — see _scan_sql for the span-reporting form."""
+   249	    return _scan_sql(text)[0]
+   250	
+   251	
+   252	def _norm_ident(name: str) -> str:
+   253	    """Normalize a SQL identifier for name-based reference resolution.
+   254	
+   255	    Splits on `.`, strips one pair of surrounding delimiters from each part
+   256	    (double quotes for Postgres/ANSI, backticks for MySQL, brackets for
+   257	    T-SQL), lowercases, and rejoins. So `"public"."users"`, `public.users`,
+   258	    and `PUBLIC.USERS` all normalize to `public.users`. Used ONLY for
+   259	    `table_nids` keys and lookups — node ids and display labels keep the
+   260	    original text.
+   261	    """
+   262	    parts = []
+   263	    for part in name.split("."):
+   264	        p = part.strip()
+   265	        if len(p) >= 2 and ((p[0] == p[-1] and p[0] in ('"', "`"))
+   266	                            or (p[0] == "[" and p[-1] == "]")):
+   267	            p = p[1:-1]
+   268	        parts.append(p.lower())
+   269	    return ".".join(parts)
+   270	
+   271	
+   272	def extract_sql(path: Path, content: str | bytes | None = None) -> dict:
+   273	    """Extract tables, views, functions, and relationships from .sql files via tree-sitter."""
+   274	    try:
+   275	        import tree_sitter_sql as tssql
+   276	        from tree_sitter import Language, Parser
+   277	    except ImportError as e:
+   278	        import importlib.util
+   279	        # An installed-but-broken grammar (e.g. a C extension built for a
+   280	        # different Python ABI, #2602) raises ImportError here too. Reporting
+   281	        # that as "not installed" sends the user to a no-op `pip install`, so
+   282	        # distinguish a genuinely-absent module from one that failed to load
+   283	        # and surface the real exception in the latter case.
+   284	        if importlib.util.find_spec("tree_sitter_sql") is None:
+   285	            return {"nodes": [], "edges": [],
+   286	                    "error": "tree_sitter_sql not installed. Run: pip install tree-sitter-sql"}
+   287	        return {"nodes": [], "edges": [],
+   288	                "error": f"tree_sitter_sql is installed but failed to load: {e}"}
+   289	
+   290	    try:
+   291	        language = Language(tssql.language())
+   292	        parser = Parser(language)
+   293	        source = (
+   294	            content.encode("utf-8") if isinstance(content, str)
+   295	            else content if content is not None
+   296	            else path.read_bytes()
+   297	        )
+   298	        tree = parser.parse(source)
+   299	        root = tree.root_node
+   300	    except Exception as e:
+   301	        return {"nodes": [], "edges": [], "error": str(e)}
+   302	
+   303	
+   304	    stem = _file_stem(path)
+   305	    str_path = str(path)
+   306	    file_nid = _make_id(str_path)
+   307	    nodes: list[dict] = [{"id": file_nid, "label": path.name, "file_type": "code",
+   308	                           "source_file": str_path, "source_location": None}]
+   309	    edges: list[dict] = []
+   310	    seen_ids: set[str] = {file_nid}
+   311	    table_nids: dict[str, str] = {}  # name → nid for reference resolution
+   312	
+   313	    def _read(n) -> str:
+   314	        return source[n.start_byte:n.end_byte].decode("utf-8", errors="replace")
+   315	
+   316	    def _obj_name(n) -> str | None:
+   317	        for c in n.children:
+   318	            if c.type == "object_reference":
+   319	                return _read(c)
+   320	        return None
+   321	
+   322	    def _add_node(nid: str, label: str, line: int) -> None:
+   323	        if nid not in seen_ids:
+   324	            seen_ids.add(nid)
+   325	            nodes.append({"id": nid, "label": label, "file_type": "code",
+   326	                           "source_file": str_path, "source_location": f"L{line}"})
+   327	            edges.append({"source": file_nid, "target": nid, "relation": "contains",
+   328	                           "confidence": "EXTRACTED", "source_file": str_path,
+   329	                           "source_location": f"L{line}", "weight": 1.0})
+   330	
+   331	    def _add_edge(src: str, tgt: str, relation: str, line: int) -> None:
+   332	        edges.append({"source": src, "target": tgt, "relation": relation,
+   333	                       "confidence": "EXTRACTED", "source_file": str_path,
+   334	                       "source_location": f"L{line}", "weight": 1.0})
+   335	
+   336	    def _ref_stub(name: str) -> str:
+   337	        """Sourceless bare-name stub for a table referenced but not defined here.
+   338	
+   339	        SQL references are NAME-based, so a table defined in another file (e.g.
+   340	        prisma migration m2 referencing a table created in m1) can only resolve
+   341	        at the corpus level. Minting `_make_id(stem, name)` under THIS file's
+   342	        stem fabricated a node-less compound id — an absolute-path slug when the
+   343	        input path was absolute — that could never match the real definition
+   344	        (#2324). Instead emit a SOURCELESS stub, mirroring the Go extractor's
+   345	        cross-file pattern (#1402): `_rewire_unique_stub_nodes` collapses it
+   346	        onto the unique real table definition, and an unresolvable name survives
+   347	        as a portable name-only node instead of dangling. No contains edge: a
+   348	        sourced/contained stub would get the referencing file's path baked into
+   349	        its id by disambiguation, blocking the rewire.
+   350	        """
+   351	        nid = _make_id(name)
+   352	        if nid not in seen_ids:
+   353	            seen_ids.add(nid)
+   354	            nodes.append({"id": nid, "label": name, "file_type": "code",
+   355	                           "source_file": "", "source_location": "",
+   356	                           "origin_file": str_path})
+   357	        return nid
+   358	
+   359	    def walk(node) -> None:
+   360	        t = node.type
+   361	        line = node.start_point[0] + 1
+   362	
+   363	        if t == "create_table":
+   364	            name = _obj_name(node)
+   365	            if name:
+   366	                nid = _make_id(stem, name)
+   367	                _add_node(nid, name, line)

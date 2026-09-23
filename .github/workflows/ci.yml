@@ -1,0 +1,69 @@
+# Cross-platform CI (Windows / Linux / macOS). Manual trigger only while the
+# project is unfinished, so pushes do not consume Actions minutes. Enable
+# push/pull_request triggers once the suite is stable.
+name: ci
+
+on:
+  workflow_dispatch:
+
+jobs:
+  product:
+    name: product tests (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: venv + install
+        run: |
+          uv venv --python ${{ matrix.python }} .venv
+          uv pip install --python .venv -e . pytest hypothesis
+      - name: product tests
+        shell: bash
+        run: |
+          if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=.venv/Scripts/python; fi
+          git config --global user.name ci && git config --global user.email ci@example.invalid
+          $PY -m pytest tests -q -p no:cacheprovider
+
+  wheel:
+    name: clean wheel install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: build wheel
+        run: uv build --wheel --out-dir dist
+      - name: install into a fresh environment and smoke-test
+        shell: bash
+        run: |
+          uv venv --python 3.12 /tmp/clean || uv venv --python 3.12 "$RUNNER_TEMP/clean"
+          ENV=/tmp/clean; [ -d "$ENV" ] || ENV="$RUNNER_TEMP/clean"
+          if [ -x "$ENV/bin/python" ]; then BIN="$ENV/bin"; else BIN="$ENV/Scripts"; fi
+          uv pip install --python "$BIN/python" dist/*.whl
+          "$BIN/verinoda" --version
+          "$BIN/verinoda" --help
+          cp -r examples/orders_app "$RUNNER_TEMP/orders"
+          cd "$RUNNER_TEMP/orders" && git init -q && git -c user.name=ci -c user.email=ci@x add -A && git -c user.name=ci -c user.email=ci@x commit -qm init
+          "$BIN/verinoda" scan .
+          "$BIN/verinoda" analyze "How does an order get from the API handler to the database?" --json > out.json
+          "$BIN/python" -c "import json;d=json.load(open('out.json'));assert d['claims'],d"
+          "$BIN/python" -c "import importlib.util,sys;sys.exit(importlib.util.find_spec('graphify') is not None)"
+
+  upstream:
+    name: ported upstream suite (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: |
+          uv venv --python 3.12 .venv
+          uv pip install --python .venv -e ".[mcp]" pytest hypothesis tree-sitter-hcl tree-sitter-ocaml tree-sitter-commonlisp
+          .venv/bin/python -m pytest tests_upstream -q -p no:cacheprovider

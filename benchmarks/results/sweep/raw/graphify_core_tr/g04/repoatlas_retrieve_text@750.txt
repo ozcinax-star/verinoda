@@ -1,0 +1,43 @@
+# Graphify AST çıkarım önbelleğini nerede saklıyor ve bir önbellek kaydının anahtarı nasıl oluşturuluyor?
+expanded: graphify->install (lexicon); graphify->uninstall (lexicon); graphify->hook (lexicon); ast->cach (lexicon); ast->manifest (lexicon); ast->extract (lexicon)
+## graphify/detect.py:2196-2418 def save_manifest( files: dict[str, list[str]], manifest_path: str = _MANIFEST_PATH, *, kind: str = "both", root: Path | None = None, scan_corpus: set[str] | list[str] | None = None, clear_semantic: …
+  doc: Save current file mtimes + content hashes for change detection.
+  calls: load_manifest@2246, _nfc@2364, _to_relative_for_storage@2401, write_json_atomic@2418
+  called by: dispatch_command (graphify/cli.py:4304); _rebuild_code (graphify/watch.py:1965)
+  const graphify/detect.py:33: _MANIFEST_PATH = str(out_path("manifest.json"))
+  graphify/detect.py:2359-2372
+
+    for f in all_files:
+        if f not in hashed:
+            continue  # file deleted between detect() and manifest write
+        mtime, h = hashed[f]
+        key = _nfc(f)
+        prev = _normalise_entry(existing.get(key, {})) or {}
+        if kind in ("ast", "both"):
+            ast_h = h
+        else:
+            ast_h = prev.get("ast_hash", "")
+        if kind in ("semantic", "both"):
+            sem_h = h
+        else:
+  graphify/detect.py:2381-2394
+            and mtime == prev.get("mtime")
+            and (ast_h == prev.get("ast_hash", "") if kind in ("ast", "both") else True)
+            and (sem_h == prev.get("semantic_hash", "") if kind in ("semantic", "both") else True)
+            and not _in_clear_ast(f)
+            and not _in_clear(f)
+        )
+        entry: dict = {
+            "mtime": mtime,
+            "seen": prev_seen if is_unchanged else time.time(),
+            "ast_hash": ast_h,
+            "semantic_hash": sem_h,
+        }
+        manifest[key] = entry
+    if root is not None:
+## graphify/cache.py:1379-1680 def save_semantic_cache( nodes: list[dict], edges: list[dict], hyperedges: list[dict] | None = None, root: Path = Path("."), merge_existing: bool = False, allowed_source_files: Iterable[str | Path] |…
+  doc: Save semantic extraction results to cache, keyed by source_file.
+  calls: _semantic_source_matcher@1443, load_cached@1633, _group_has_partial_marker@1655, save_cached@1665
+  called by: dispatch_command (graphify/cli.py:4111); extract_corpus_parallel (graphify/llm.py:2684)
+… 2379 more candidates not shown: graphify/detect.py:2450-2588 def detect_incremental( root: Path, manifest_path: str = _MANIFEST_PATH, *, follow_symlinks; graphify/hooks.py:659-677 def _uninstall_hook(hooks_dir: Path, name: str, marker: str, marker_end: str) -> str; graphify/skills/agents/references/hooks.md:5-19 ## For git commit hook; graphify/skills/amp/references/hooks.md:5-19 For git commit…
+next: repoatlas query "Graphify AST çıkarım önbelleğini nerede saklıyor ve bir önbellek kaydının anahtarı nasıl oluşturuluyor?" --max-chars 6000

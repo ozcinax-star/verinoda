@@ -1,0 +1,52 @@
+# How does get_order_handler load an order from storage?
+## orders/api.py:24-28 def get_order_handler(order_id: int) -> tuple[int, dict]
+  calls: fetch_order@25, get_repo@25
+def get_order_handler(order_id: int) -> tuple[int, dict]:
+    order = fetch_order(get_repo(), order_id)
+    if order is None:
+        return 404, {"error": "not found"}
+    return 200, order
+## orders/config.py:10-15 def load_settings() -> dict
+  const orders/config.py:5: DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+  const orders/config.py:6: MAX_ITEMS_PER_ORDER = int(os.environ.get("ORDERS_MAX_ITEMS", "50"))
+def load_settings() -> dict:
+    return {
+        "database_url": DATABASE_URL,
+        "max_items": MAX_ITEMS_PER_ORDER,
+        "discount_threshold": DISCOUNT_THRESHOLD,
+    }
+## orders/api.py:16-21 def create_order_handler(payload: dict) -> tuple[int, dict]
+  calls: get_repo@18, place_order@18
+def create_order_handler(payload: dict) -> tuple[int, dict]:
+    try:
+        order_id = place_order(get_repo(), payload["customer"], payload["items"])
+    except ValidationError as exc:
+        return 400, {"error": str(exc)}
+    return 201, {"id": order_id}
+## orders/api.py:9-13 def get_repo() -> OrderRepository
+  calls: OrderRepository@12
+  called by: create_order_handler (orders/api.py:18); get_order_handler (orders/api.py:25)
+def get_repo() -> OrderRepository:
+    global _repo
+    if _repo is None:
+        _repo = OrderRepository()
+    return _repo
+## orders/repository.py:22-26 def get(self, order_id: int)
+  called by: fetch_order (orders/service.py:26)?
+    def get(self, order_id: int):
+        row = self.conn.execute(
+            "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+        ).fetchone()
+        return None if row is None else {"id": row[0], "customer": row[1], "total": row[2]}
+## orders/service.py:25-26 def fetch_order(repo: OrderRepository, order_id: int)
+  calls: get@26?
+  called by: get_order_handler (orders/api.py:25); test_place_and_fetch_roundtrip (tests/test_service.py:10)
+def fetch_order(repo: OrderRepository, order_id: int):
+    return repo.get(order_id)
+## orders/repository.py:8-26 class OrderRepository
+  called by: get_repo (orders/api.py:12); test_empty_order_rejected (tests/test_service.py:15); test_place_and_fetch_roundtrip (tests/test_service.py:8)
+orders/service.py:19-22 def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int
+tests/test_service.py:7-10 def test_place_and_fetch_roundtrip()
+orders/api.py:1-1 """HTTP-style entry points (framework-free handlers)."""
+… 13 more candidates not shown: tests/test_service.py:13-15 def test_empty_order_rejected(); orders/config.py:5-7 DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db"); orders/service.py:12-16 def validate_items(items: list[dict]) -> None; orders/service.py:8-9 class ValidationError(ValueError)
+next: repoatlas query "How does get_order_handler load an order from storage?" --max-chars 6000

@@ -1,0 +1,82 @@
+# Which tests cover stale claim invalidation?
+## tests/test_claims.py:492-497 def test_stale_cannot_be_requested_at_creation(env)
+  calls: make@496, src@496
+def test_stale_cannot_be_requested_at_creation(env):
+    repo, st, cl = env
+    n = st.one("SELECT COUNT(*) AS n FROM claims")["n"]
+    with pytest.raises(ClaimRuleError, match="stale is set only by invalidation"):
+        make(cl, "stale", [(src(repo), "supports")])
+    assert st.one("SELECT COUNT(*) AS n FROM claims")["n"] == n  # nothing half-created
+## tests/test_analysis.py:163-193 def test_test_run_claim_goes_stale_and_is_only_restored_by_a_fresh_run(tmp_path)
+  calls: _copy_example@164, init@165, open_store@166, scan@168, analyze@169, update@175, verify@177, Claims@183
+  tests/test_analysis.py:168-176
+        workflow.scan(st, repo)
+        res = analysis.analyze(st, repo, "Which tests cover compute_total?", run_tests=True, challenge=False)
+        c = next(c for c in res["claims"] if c["text"].startswith("Tests that reach `compute_total()`"))
+        assert c["status"] == "experiment_verified"
+        p = repo / "orders" / "pricing.py"
+        original = p.read_text(encoding="utf-8")
+        p.write_text(original + "\n# harmless trailing comment\n", encoding="utf-8")
+        assert c["id"] in {s["id"] for s in workflow.update(st, repo)["stale"]}
+
+  tests/test_analysis.py:180-184
+
+        v = workflow.verify(st, repo, c["id"], run=True)
+        assert v["experiment"]["outcome"] == "pass" and v["after"]["status"] == "experiment_verified"
+        assert Claims(st, repo).get(c["id"])["snapshot_id"] == st.latest_snapshot()["id"]
+
+## tests/test_snapshot_stale.py:244-260 def test_memory_from_a_stale_claim_is_invalidated_not_deleted(proj)
+  calls: Memory@246, learn@247?, _edit@250, update@251, recall@252?, history@254?
+def test_memory_from_a_stale_claim_is_invalidated_not_deleted(proj):
+    repo, st, cl, claims = proj
+    mem = Memory(st)
+    mem.learn("pricing.entry", "orders/pricing.py::compute_total", source_claim_id=claims["pricing"]["id"])
+    mem.learn("persistence.owner", "orders/repository.py", source_claim_id=claims["repository"]["id"])
+    rows_before = st.one("SELECT COUNT(*) AS n FROM memory")["n"]
+    _edit(repo, "orders/pricing.py", "return apply_discount(subtotal)", "return subtotal")
+    workflow.update(st, repo)
+    assert mem.recall("pricing.entry") == []
+    assert [m["value"] for m in mem.recall("persistence.owner")] == ["orders/repository.py"]
+    hist = mem.history("pricing.entry")
+    assert len(hist) == 1 and hist[0]["valid"] == 0 and hist[0]["invalidated_at"]
+    assert hist[0]["invalidation_reason"] == "source claim became stale"
+    assert st.one("SELECT COUNT(*) AS n FROM memory")["n"] == rows_before
+    # Learning from a stale claim is refused (recall must only return standing facts).
+    with pytest.raises(ValueError, match="stale"):
+        mem.learn("pricing.entry", "again", source_claim_id=claims["pricing"]["id"])
+## tests/test_claims.py:293-302 def test_stale_never_raises_confidence_and_invalidates_memory(env)
+def test_stale_never_raises_confidence_and_invalidates_memory(env):
+    repo, st, cl = env
+    c = make(cl, "unknown")
+    assert cl.set_status(c["id"], "stale", reason="changed")["confidence"] == 0.0
+    v = make(cl, "statically_verified", [(src(repo), "supports")])
+    Memory(st).learn("calc.total", "pkg/calc.py", source_claim_id=v["id"])
+    after = cl.set_status(v["id"], "stale", reason="changed")
+    assert after["confidence"] == CONFIDENCE_CAP["stale"]
+    assert Memory(st).recall("calc.total") == []
+    assert Memory(st).history("calc.total")[0]["invalidation_reason"] == "source claim became stale"
+## tests/test_cli.py:383-393 def test_claim_add_status_choices(repo)
+def test_claim_add_status_choices(repo):
+    from repoatlas import cli
+    from repoatlas.claims import ORDER
+
+    assert set(cli.CLAIM_ADD_STATUSES) == set(ORDER) | {"contradicted"} and "stale" not in cli.CLAIM_ADD_STATUSES
+    for bad in ("stale", "verified", "nonsense"):
+        r = ra("claim", "add", "x", "--status", bad, "--repo", str(repo), cwd=repo)
+        assert r.returncode == 2 and "invalid choice" in r.stderr, bad
+    c = ok_json("claim", "add", "compute_total never applies the discount", "--source", "orders/pricing.py:6-8",
+                "--refutes", "--status", "contradicted", "--repo", str(repo), "--json", cwd=repo)
+    assert c["status"] == "contradicted" and c["refuting"]
+## repoatlas/claims.py:942-942 # -- stale invalidation --------------------------------------------------------
+# -- stale invalidation --------------------------------------------------------
+## tests/test_snapshot_stale.py:3-7 Covers: modify / commit / delete a cited file -> exactly the dependent claims go
+Covers: modify / commit / delete a cited file -> exactly the dependent claims go
+stale; revert + verify restores up to the ceiling and re-binds to a snapshot of
+the current tree; memories derived from stale claims are invalidated, never
+deleted; an added (restored) file re-resolves its dependents' edges.
+"""
+tests/test_snapshot_stale.py:138-138 # -- stale invalidation ----------------------------------------------------------------------
+repoatlas/claims.py:458-530 def set_status( self, cid: str, status: str, *, reason: str, actor: str = "repoatlas", confidence: float | None = None,…
+repoatlas/snapshot.py:3-5 A snapshot is (commit, dirty flag, per-file sha256). Claims are pinned to a
+… 1341 more candidates not shown: tests/test_snapshot_stale.py:1-1 """Snapshots and stale invalidation on a scanned, git-committed copy of examples/orders; tests/test_snapshot_stale.py:140-161 def test_modifying_a_cited_file_marks_exactly_its_claims_stale(proj); repoatlas/workflow.py:126-154 def scan(store: Store, repo: Path, *, force: bool = False) -> dict; tests/test_snapshot_stale.py:181-191 d…
+next: repoatlas query "Which tests cover stale claim invalidation?" --max-chars 12000

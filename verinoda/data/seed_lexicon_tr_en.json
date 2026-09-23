@@ -1,0 +1,1290 @@
+{
+ "version": 1,
+ "description": "Turkish -> English seed glossary for question understanding (docs/DESIGN.md D6). Keys are fold_tr-folded Turkish stems (a space joins multi-word terms); values are English words. An expansion is used only when its English word occurs in the repository's own vocabulary, and it only proposes candidates - it is never evidence.",
+ "entries": {
+  "abonelik": [
+   "subscription"
+  ],
+  "ac": [
+   "open"
+  ],
+  "acente": [
+   "agent",
+   "agency"
+  ],
+  "aciklama": [
+   "description",
+   "comment",
+   "doc"
+  ],
+  "adim": [
+   "step"
+  ],
+  "adres": [
+   "address"
+  ],
+  "agac": [
+   "tree"
+  ],
+  "akis": [
+   "flow",
+   "stream"
+  ],
+  "alacak": [
+   "credit",
+   "receivable"
+  ],
+  "alan": [
+   "field"
+  ],
+  "anahtar": [
+   "key"
+  ],
+  "arabellek": [
+   "buffer"
+  ],
+  "arama": [
+   "search",
+   "query",
+   "find",
+   "lookup"
+  ],
+  "arayuz": [
+   "interface",
+   "ui",
+   "api"
+  ],
+  "arguman": [
+   "arg",
+   "argument"
+  ],
+  "asama": [
+   "stage",
+   "step",
+   "phase"
+  ],
+  "ayar": [
+   "setting",
+   "settings",
+   "config",
+   "option"
+  ],
+  "ayir": [
+   "split",
+   "separate"
+  ],
+  "ayristir": [
+   "parse"
+  ],
+  "azami": [
+   "max",
+   "maximum",
+   "limit"
+  ],
+  "bagimlilik": [
+   "dependency",
+   "dep",
+   "requirement"
+  ],
+  "bagla": [
+   "bind",
+   "connect",
+   "link"
+  ],
+  "baglan": [
+   "connect",
+   "connection"
+  ],
+  "baglanti": [
+   "connection",
+   "connect",
+   "conn"
+  ],
+  "bakiye": [
+   "balance"
+  ],
+  "banka": [
+   "bank"
+  ],
+  "basarili": [
+   "success",
+   "successful"
+  ],
+  "basarisiz": [
+   "fail",
+   "failed",
+   "failure"
+  ],
+  "baslangic": [
+   "start",
+   "init",
+   "startup"
+  ],
+  "baslat": [
+   "start",
+   "init",
+   "launch",
+   "run"
+  ],
+  "baslik": [
+   "title",
+   "header"
+  ],
+  "bekle": [
+   "wait",
+   "await"
+  ],
+  "bekleyen": [
+   "pending"
+  ],
+  "belge": [
+   "doc",
+   "docs",
+   "document"
+  ],
+  "belirtec": [
+   "token"
+  ],
+  "bellek": [
+   "memory"
+  ],
+  "benzersiz": [
+   "unique"
+  ],
+  "beyanname": [
+   "declaration",
+   "return",
+   "filing"
+  ],
+  "bilanco": [
+   "balance_sheet",
+   "balance"
+  ],
+  "bildirim": [
+   "notification",
+   "notify"
+  ],
+  "birincil anahtar": [
+   "primary_key"
+  ],
+  "birlestir": [
+   "merge",
+   "join",
+   "combine"
+  ],
+  "bolum": [
+   "section",
+   "chapter"
+  ],
+  "borc": [
+   "debt",
+   "debit",
+   "liability"
+  ],
+  "bordro": [
+   "payroll"
+  ],
+  "boru hatti": [
+   "pipeline"
+  ],
+  "bos": [
+   "empty",
+   "blank"
+  ],
+  "boyut": [
+   "size"
+  ],
+  "bul": [
+   "find",
+   "lookup",
+   "search"
+  ],
+  "bulut": [
+   "cloud"
+  ],
+  "cagir": [
+   "call",
+   "invoke"
+  ],
+  "cagiran": [
+   "caller"
+  ],
+  "cagri": [
+   "call",
+   "invocation"
+  ],
+  "calisan": [
+   "employee",
+   "staff"
+  ],
+  "calistir": [
+   "run",
+   "execute"
+  ],
+  "cari": [
+   "account",
+   "customer",
+   "ledger"
+  ],
+  "cevap": [
+   "response",
+   "reply",
+   "answer"
+  ],
+  "cevir": [
+   "convert",
+   "translate"
+  ],
+  "cikar": [
+   "remove",
+   "extract"
+  ],
+  "cikis": [
+   "logout",
+   "output",
+   "exit"
+  ],
+  "cikti": [
+   "output"
+  ],
+  "cizge": [
+   "graph"
+  ],
+  "coz": [
+   "solve",
+   "resolve",
+   "decode"
+  ],
+  "cozumle": [
+   "resolve",
+   "parse",
+   "decode"
+  ],
+  "dagitim": [
+   "deploy",
+   "deployment",
+   "distribution"
+  ],
+  "deger": [
+   "value"
+  ],
+  "degisken": [
+   "variable",
+   "var"
+  ],
+  "degistir": [
+   "change",
+   "modify",
+   "update"
+  ],
+  "deneme": [
+   "attempt",
+   "trial",
+   "try"
+  ],
+  "denetim": [
+   "audit",
+   "inspection",
+   "check"
+  ],
+  "denetle": [
+   "check",
+   "audit",
+   "inspect"
+  ],
+  "departman": [
+   "department"
+  ],
+  "depo": [
+   "repository",
+   "repo",
+   "store",
+   "storage"
+  ],
+  "depola": [
+   "store",
+   "storage",
+   "persist"
+  ],
+  "depolama": [
+   "storage",
+   "store"
+  ],
+  "derle": [
+   "compile",
+   "build"
+  ],
+  "disa aktar": [
+   "export"
+  ],
+  "dizi": [
+   "array",
+   "list",
+   "sequence"
+  ],
+  "dizin": [
+   "directory",
+   "dir",
+   "index"
+  ],
+  "dogrula": [
+   "validate",
+   "verify",
+   "check"
+  ],
+  "dogrulama": [
+   "validation",
+   "verification",
+   "validate"
+  ],
+  "dokuman": [
+   "doc",
+   "docs",
+   "document"
+  ],
+  "dondur": [
+   "return"
+  ],
+  "dongu": [
+   "loop"
+  ],
+  "donustur": [
+   "convert",
+   "transform"
+  ],
+  "dosya": [
+   "file",
+   "path"
+  ],
+  "doviz": [
+   "currency",
+   "exchange"
+  ],
+  "dugme": [
+   "button"
+  ],
+  "dugum": [
+   "node"
+  ],
+  "durdur": [
+   "stop",
+   "halt"
+  ],
+  "durum": [
+   "status",
+   "state"
+  ],
+  "duzelt": [
+   "fix",
+   "correct"
+  ],
+  "ekle": [
+   "add",
+   "append",
+   "insert"
+  ],
+  "eklenti": [
+   "plugin",
+   "extension"
+  ],
+  "ekran": [
+   "screen"
+  ],
+  "eksik": [
+   "missing"
+  ],
+  "en buyuk": [
+   "max",
+   "maximum"
+  ],
+  "en kucuk": [
+   "min",
+   "minimum"
+  ],
+  "engelle": [
+   "block"
+  ],
+  "entegrasyon": [
+   "integration"
+  ],
+  "eposta": [
+   "email",
+   "mail"
+  ],
+  "esik": [
+   "threshold",
+   "limit"
+  ],
+  "esitle": [
+   "sync"
+  ],
+  "eszamanli": [
+   "concurrent",
+   "async",
+   "parallel"
+  ],
+  "etiket": [
+   "tag",
+   "label"
+  ],
+  "fatura": [
+   "invoice",
+   "bill",
+   "billing"
+  ],
+  "filtre": [
+   "filter"
+  ],
+  "firma": [
+   "company",
+   "firm"
+  ],
+  "fis": [
+   "receipt",
+   "voucher",
+   "slip"
+  ],
+  "fiyat": [
+   "price",
+   "pricing"
+  ],
+  "fiyatlandir": [
+   "pricing",
+   "price"
+  ],
+  "fonksiyon": [
+   "function",
+   "func"
+  ],
+  "gecerli": [
+   "valid"
+  ],
+  "gecersiz": [
+   "invalid"
+  ],
+  "gecici": [
+   "temp",
+   "temporary",
+   "tmp"
+  ],
+  "gecikme": [
+   "latency",
+   "delay"
+  ],
+  "gelir": [
+   "income",
+   "revenue"
+  ],
+  "geri al": [
+   "undo",
+   "rollback",
+   "revert"
+  ],
+  "getir": [
+   "fetch",
+   "get",
+   "load",
+   "retrieve"
+  ],
+  "gider": [
+   "expense",
+   "cost"
+  ],
+  "girdi": [
+   "input"
+  ],
+  "giris": [
+   "login",
+   "input",
+   "entry"
+  ],
+  "gizli": [
+   "secret",
+   "private"
+  ],
+  "gonder": [
+   "send",
+   "post",
+   "publish",
+   "dispatch"
+  ],
+  "gorev": [
+   "task",
+   "job"
+  ],
+  "gorunum": [
+   "view"
+  ],
+  "govde": [
+   "body"
+  ],
+  "grup": [
+   "group"
+  ],
+  "guncelle": [
+   "update"
+  ],
+  "gunluk": [
+   "log",
+   "logging"
+  ],
+  "guvenlik": [
+   "security"
+  ],
+  "hasar": [
+   "claim",
+   "damage",
+   "loss"
+  ],
+  "hata": [
+   "error",
+   "exception",
+   "fail"
+  ],
+  "hata ayikla": [
+   "debug"
+  ],
+  "havuz": [
+   "pool"
+  ],
+  "hedef": [
+   "target",
+   "destination"
+  ],
+  "hesap": [
+   "account"
+  ],
+  "hesap plani": [
+   "chart_of_accounts",
+   "account"
+  ],
+  "hesapla": [
+   "compute",
+   "calculate",
+   "calc"
+  ],
+  "hesaplama": [
+   "computation",
+   "calculation",
+   "compute",
+   "calculate"
+  ],
+  "hizli": [
+   "fast"
+  ],
+  "iade": [
+   "refund",
+   "return"
+  ],
+  "ice aktar": [
+   "import"
+  ],
+  "ileti": [
+   "message",
+   "msg"
+  ],
+  "iliski": [
+   "relation",
+   "relationship"
+  ],
+  "imza": [
+   "signature",
+   "sign"
+  ],
+  "indeks": [
+   "index"
+  ],
+  "indir": [
+   "download"
+  ],
+  "indirim": [
+   "discount"
+  ],
+  "iptal": [
+   "cancel",
+   "void"
+  ],
+  "is akisi": [
+   "workflow"
+  ],
+  "is parcacigi": [
+   "thread"
+  ],
+  "isle": [
+   "process",
+   "handle"
+  ],
+  "islem": [
+   "transaction",
+   "operation",
+   "process"
+  ],
+  "islev": [
+   "function",
+   "func"
+  ],
+  "istek": [
+   "request",
+   "req"
+  ],
+  "istemci": [
+   "client"
+  ],
+  "istisna": [
+   "exception"
+  ],
+  "izle": [
+   "watch",
+   "monitor",
+   "track"
+  ],
+  "izleme": [
+   "monitor",
+   "trace",
+   "tracking"
+  ],
+  "jeton": [
+   "token"
+  ],
+  "kabul": [
+   "accept"
+  ],
+  "kalici": [
+   "persistent",
+   "persist",
+   "durable"
+  ],
+  "kampanya": [
+   "campaign",
+   "promotion"
+  ],
+  "kapat": [
+   "close",
+   "shutdown"
+  ],
+  "kapsam": [
+   "coverage",
+   "scope"
+  ],
+  "kargo": [
+   "shipping",
+   "shipment",
+   "cargo"
+  ],
+  "kasa": [
+   "cash",
+   "register",
+   "till"
+  ],
+  "kategori": [
+   "category"
+  ],
+  "kayd": [
+   "record",
+   "entry",
+   "save",
+   "store"
+  ],
+  "kayded": [
+   "save",
+   "store",
+   "persist",
+   "write"
+  ],
+  "kaydet": [
+   "save",
+   "store",
+   "persist",
+   "write"
+  ],
+  "kayit": [
+   "record",
+   "entry",
+   "save",
+   "store"
+  ],
+  "kaynak": [
+   "source",
+   "resource",
+   "src"
+  ],
+  "kdv": [
+   "vat",
+   "tax"
+  ],
+  "kenar": [
+   "edge"
+  ],
+  "kilit": [
+   "lock"
+  ],
+  "kimlik": [
+   "identity",
+   "auth",
+   "id"
+  ],
+  "kimlik dogrula": [
+   "auth",
+   "authenticate",
+   "authentication",
+   "login"
+  ],
+  "kiraci": [
+   "tenant"
+  ],
+  "klasor": [
+   "folder",
+   "dir",
+   "directory"
+  ],
+  "kod": [
+   "code"
+  ],
+  "kodla": [
+   "encode"
+  ],
+  "konteyner": [
+   "container"
+  ],
+  "kontrol": [
+   "check",
+   "control",
+   "validate"
+  ],
+  "kopyala": [
+   "copy"
+  ],
+  "kosul": [
+   "condition"
+  ],
+  "kullanici": [
+   "user"
+  ],
+  "kupon": [
+   "coupon",
+   "voucher"
+  ],
+  "kur": [
+   "rate",
+   "exchange_rate"
+  ],
+  "kural": [
+   "rule",
+   "policy"
+  ],
+  "kurulum": [
+   "install",
+   "setup"
+  ],
+  "kuyruk": [
+   "queue"
+  ],
+  "liste": [
+   "list"
+  ],
+  "listele": [
+   "list"
+  ],
+  "maas": [
+   "salary"
+  ],
+  "makbuz": [
+   "receipt"
+  ],
+  "maliyet": [
+   "cost"
+  ],
+  "mesaj": [
+   "message",
+   "msg"
+  ],
+  "metin": [
+   "text",
+   "string",
+   "str"
+  ],
+  "metot": [
+   "method"
+  ],
+  "metrik": [
+   "metric"
+  ],
+  "mizan": [
+   "trial_balance",
+   "balance"
+  ],
+  "modul": [
+   "module"
+  ],
+  "musteri": [
+   "customer",
+   "client"
+  ],
+  "nesne": [
+   "object",
+   "obj"
+  ],
+  "nitelik": [
+   "attribute"
+  ],
+  "odeme": [
+   "payment",
+   "pay"
+  ],
+  "oku": [
+   "read",
+   "load",
+   "parse"
+  ],
+  "olay": [
+   "event"
+  ],
+  "olcum": [
+   "metric",
+   "measure",
+   "measurement"
+  ],
+  "olustur": [
+   "create",
+   "build",
+   "make",
+   "new"
+  ],
+  "onay": [
+   "confirm",
+   "approve",
+   "approval"
+  ],
+  "onbellek": [
+   "cache"
+  ],
+  "ornek": [
+   "example",
+   "sample",
+   "instance"
+  ],
+  "ortam": [
+   "env",
+   "environment"
+  ],
+  "ortam degisken": [
+   "env",
+   "environ",
+   "environment",
+   "variable"
+  ],
+  "oturum": [
+   "session",
+   "login"
+  ],
+  "ozellik": [
+   "property",
+   "attribute",
+   "feature"
+  ],
+  "paket": [
+   "package",
+   "pkg"
+  ],
+  "para birimi": [
+   "currency"
+  ],
+  "paralel": [
+   "parallel"
+  ],
+  "parametre": [
+   "param",
+   "parameter",
+   "arg"
+  ],
+  "parola": [
+   "password"
+  ],
+  "performans": [
+   "performance",
+   "perf"
+  ],
+  "personel": [
+   "personnel",
+   "staff",
+   "employee"
+  ],
+  "police": [
+   "policy"
+  ],
+  "prim": [
+   "premium"
+  ],
+  "rapor": [
+   "report"
+  ],
+  "reddet": [
+   "reject",
+   "deny"
+  ],
+  "rol": [
+   "role"
+  ],
+  "sabit": [
+   "constant",
+   "const"
+  ],
+  "sablon": [
+   "template"
+  ],
+  "satir": [
+   "row",
+   "line"
+  ],
+  "sayac": [
+   "counter",
+   "count"
+  ],
+  "sayfa": [
+   "page"
+  ],
+  "sayfalama": [
+   "pagination",
+   "page",
+   "paginate"
+  ],
+  "sayi": [
+   "number",
+   "count",
+   "num"
+  ],
+  "sehir": [
+   "city"
+  ],
+  "sema": [
+   "schema"
+  ],
+  "sepet": [
+   "cart",
+   "basket"
+  ],
+  "sertifika": [
+   "certificate",
+   "cert"
+  ],
+  "sifre": [
+   "password",
+   "secret"
+  ],
+  "sifrele": [
+   "encrypt",
+   "cipher"
+  ],
+  "sifreleme": [
+   "encryption",
+   "encrypt"
+  ],
+  "sigorta": [
+   "insurance"
+  ],
+  "sigortali": [
+   "insured"
+  ],
+  "sil": [
+   "delete",
+   "remove"
+  ],
+  "sinif": [
+   "class"
+  ],
+  "sinir": [
+   "limit",
+   "bound",
+   "max"
+  ],
+  "siparis": [
+   "order"
+  ],
+  "sirala": [
+   "sort"
+  ],
+  "sirket": [
+   "company",
+   "firm",
+   "tenant"
+  ],
+  "soket": [
+   "socket"
+  ],
+  "sonuc": [
+   "result",
+   "output",
+   "outcome"
+  ],
+  "sorgu": [
+   "query"
+  ],
+  "sozlesme": [
+   "contract",
+   "agreement"
+  ],
+  "sozluk": [
+   "dict",
+   "dictionary",
+   "map"
+  ],
+  "stok": [
+   "stock",
+   "inventory"
+  ],
+  "sunucu": [
+   "server"
+  ],
+  "sure": [
+   "duration",
+   "time",
+   "timeout"
+  ],
+  "surec": [
+   "process"
+  ],
+  "surucu": [
+   "driver"
+  ],
+  "surum": [
+   "version",
+   "release"
+  ],
+  "sutun": [
+   "column"
+  ],
+  "suz": [
+   "filter"
+  ],
+  "tablo": [
+   "table"
+  ],
+  "tahsilat": [
+   "collection",
+   "receipt"
+  ],
+  "tamamla": [
+   "complete",
+   "finish",
+   "done"
+  ],
+  "tanim": [
+   "definition",
+   "def"
+  ],
+  "tanimla": [
+   "define",
+   "declare"
+  ],
+  "tarih": [
+   "date"
+  ],
+  "tasi": [
+   "move"
+  ],
+  "tazminat": [
+   "compensation",
+   "indemnity",
+   "claim"
+  ],
+  "tediye": [
+   "payment",
+   "disbursement"
+  ],
+  "teklif": [
+   "quote",
+   "offer",
+   "proposal"
+  ],
+  "tekrar": [
+   "retry",
+   "repeat"
+  ],
+  "tekrar dene": [
+   "retry"
+  ],
+  "telefon": [
+   "phone"
+  ],
+  "teminat": [
+   "coverage",
+   "guarantee"
+  ],
+  "teslim": [
+   "deliver",
+   "delivery",
+   "shipment"
+  ],
+  "toplam": [
+   "total",
+   "sum"
+  ],
+  "tur": [
+   "type",
+   "kind"
+  ],
+  "tutar": [
+   "amount",
+   "total"
+  ],
+  "uc nokta": [
+   "endpoint"
+  ],
+  "ulke": [
+   "country"
+  ],
+  "urun": [
+   "product",
+   "item"
+  ],
+  "ust veri": [
+   "metadata"
+  ],
+  "uyari": [
+   "warning",
+   "warn",
+   "alert"
+  ],
+  "uyelik": [
+   "membership"
+  ],
+  "uygula": [
+   "apply",
+   "implement"
+  ],
+  "uygulama": [
+   "application",
+   "app",
+   "implementation"
+  ],
+  "uzanti": [
+   "extension"
+  ],
+  "varsayilan": [
+   "default"
+  ],
+  "vergi": [
+   "tax",
+   "vat"
+  ],
+  "veri": [
+   "data"
+  ],
+  "veritabani": [
+   "database",
+   "db",
+   "sql",
+   "sqlite"
+  ],
+  "versiyon": [
+   "version"
+  ],
+  "yabanci anahtar": [
+   "foreign_key"
+  ],
+  "yama": [
+   "patch"
+  ],
+  "yanit": [
+   "response",
+   "reply",
+   "resp"
+  ],
+  "yapilandir": [
+   "config",
+   "configure",
+   "configuration",
+   "settings"
+  ],
+  "yapilandirma": [
+   "config",
+   "configuration",
+   "settings"
+  ],
+  "yavas": [
+   "slow"
+  ],
+  "yaz": [
+   "write",
+   "save",
+   "store"
+  ],
+  "yazar kasa": [
+   "cash_register",
+   "pos",
+   "register"
+  ],
+  "yazilim": [
+   "software"
+  ],
+  "yedek": [
+   "backup"
+  ],
+  "yeniden baslat": [
+   "restart"
+  ],
+  "yeniden dene": [
+   "retry"
+  ],
+  "yetki": [
+   "permission",
+   "auth",
+   "role",
+   "authorize",
+   "authorization"
+  ],
+  "yevmiye": [
+   "journal",
+   "entry"
+  ],
+  "yol": [
+   "path",
+   "route"
+  ],
+  "yonetici": [
+   "admin",
+   "manager"
+  ],
+  "yonlendir": [
+   "route",
+   "redirect",
+   "router"
+  ],
+  "yontem": [
+   "method"
+  ],
+  "yorum": [
+   "comment",
+   "review"
+  ],
+  "yukle": [
+   "load",
+   "upload",
+   "install"
+  ],
+  "yurut": [
+   "execute",
+   "run"
+  ],
+  "zaman": [
+   "time",
+   "timestamp"
+  ],
+  "zaman asimi": [
+   "timeout"
+  ],
+  "zamanla": [
+   "schedule"
+  ],
+  "zamanlayici": [
+   "scheduler",
+   "timer"
+  ],
+  "zarar": [
+   "loss"
+  ],
+  "zeyil": [
+   "endorsement"
+  ]
+ }
+}

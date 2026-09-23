@@ -1,0 +1,30 @@
+# Where is an experiment's process tree killed when it times out?
+## tests/test_experiments.py:190-214 def test_timeout_kills_the_process_tree_and_is_recorded(proj, tmp_path)
+  calls: _probe@193, run@200, _alive@212
+  const tests/test_experiments.py:33: PYTEST = ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+  tests/test_experiments.py:195-208
+        "def test_hangs():\n"
+        "    child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)'])\n"
+        f"    Path(r'{pidfile}').write_text(str(child.pid))\n"
+        "    time.sleep(300)\n"))
+    t0 = time.monotonic()
+    res = experiments.run(st, repo, [*PYTEST, probe], hypothesis="it finishes", timeout=10)
+    elapsed = time.monotonic() - t0
+    assert res["outcome"] == "timeout" and res["matches_expectation"] is False
+    assert res["summary"]["timed_out"] is True and res["summary"]["exit_code"] is None
+    assert elapsed < 60
+    row = st.get("experiments", res["id"])
+    assert row["status"] == "timeout" and row["timed_out"] == 1 and row["exit_code"] is None
+    ev = st.evidence(res["evidence_id"])
+    assert ev["meta"]["raw_outcome"] == "timeout" and ev["meta"]["outcome"] == "fail"
+## repoatlas/experiments.py:365-550 def run( store: Store, repo: Path, argv: list[str] | str, *, hypothesis: str, expect: str = "pass", timeout: float | None = None, claim_id: str | None = None, isolation: str = "auto", commit: str | N…
+  doc: Run one experiment and record it (and its evidence) in the store.
+  calls: load_config@380, _strip_quotes@384, policy@392, container_runtime@393, new_id@402, now@405, ExperimentRefused@418, runs_dir@420, _copy_repo@426, _scrubbed_env@427, _container_argv@457, _posix_limits@473 (+8)
+  called by: _run_tests (repoatlas/analysis.py:1674); cmd_experiment (repoatlas/cli.py:402); observe (repoatlas/runtime/trace.py:559); verify (repoatlas/workflow.py:283); test_allowlisted_pytest_passes_in_a_copy_with_process_isolation (tests/test_experiments.py:143); test_parent_secrets_are_not_visible_to_the_child (tests/test_experiments.py:177); test_timeout_kills_the_process_tree_and_is_recorded (tests/test_experiments.py:200); test_non_allowlisted_command_is_refused_without_container (tests/test_experiments.py:222) (+10)
+  const repoatlas/experiments.py:87: KILL_DRAIN_TIMEOUT = 15  # seconds to collect output after killing a timed-out tree
+  const repoatlas/experiments.py:89: MAX_LOG_BYTES = 5 * 1024 * 1024
+## repoatlas/experiments.py:318-332 def _kill_tree(proc: subprocess.Popen) -> None
+  called by: run (repoatlas/experiments.py:488)
+## repoatlas/experiments.py:288-293 def _kill_container(runtime: str, name: str) -> None
+… 804 more candidates not shown: tests/test_experiments.py:134-162 test_allowlisted_pytest_passes_in_a_copy_with_process_isolation; tests/test_experiments.py:64-82 _alive; tests/test_experiments.py:3-7 ; repoatlas/experiments.py:5-16 
+next: repoatlas query "Where is an experiment's process tree killed when it times out?" --max-chars 6000

@@ -1,0 +1,176 @@
+$ grep -rniE 'graphify|ast|çıkarım|önbelleğini|nerede|saklıyor|bir|önbellek|kaydının|anahtarı|nasıl|oluşturuluyor' .   # 7811 matching lines in 222 files
+graphify/extractors/sql.py:1: """Sql extractor. Moved verbatim from graphify/extract.py."""
+graphify/extractors/sql.py:7: from graphify.extractors.base import _file_stem, _make_id
+graphify/extractors/sql.py:69: # continues past its line is blanked only up to the newline, so a comment
+graphify/extractors/sql.py:407: # Dialect-specific syntax (e.g. Firebird COMPUTED BY) causes ERROR
+graphify/extractors/sql.py:549: # Same CTE-blindness as the AST path (#2577): a `WITH <name> AS (`
+graphify/extractors/sql.py:661: # (e.g. Firebird COMPUTED BY columns push constraints out of the tree entirely).
+graphify/cli.py:1: """graphify command dispatch — every non-install subcommand.
+graphify/cli.py:5: module. The path-redirect (`graphify <path>` -> extract) re-enters via a lazy
+graphify/cli.py:14: from graphify.paths import GRAPHIFY_OUT as _GRAPHIFY_OUT
+graphify/cli.py:22: 'MANDATORY: graphify-out/graph.json exists. You MUST run '
+graphify/cli.py:23: '`graphify query "<question>"` before grepping raw files. Only grep '
+graphify/cli.py:24: 'after graphify has oriented you, or to modify/debug specific lines.'
+graphify/cli.py:32: 'MANDATORY: graphify-out/graph.json exists. You MUST run graphify '
+graphify/cli.py:33: 'before reading source files. Use: `graphify query "<question>"` '
+graphify/cli.py:34: '(scoped subgraph), `graphify explain "<concept>"`, or '
+graphify/cli.py:35: '`graphify path "<A>" "<B>"`. Only read raw files after graphify has '
+graphify/cli.py:46: 'graphify-out/graph.json exists but may be STALE for this file (the file '
+graphify/cli.py:47: 'changed after the last build). Prefer `graphify query "<question>"` for '
+graphify/cli.py:48: 'orientation, and run `graphify update` to refresh the graph. Reading the '
+graphify/cli.py:62: 'graphify strict mode: this project has a fresh knowledge graph that covers '
+graphify/cli.py:63: 'this file. Run `graphify query "<your question>"` (or `graphify explain` / '
+graphify/cli.py:64: '`graphify path`) FIRST to orient yourself, then re-issue this Read — it '
+graphify/cli.py:72: '.py', '.js', '.cjs', '.ts', '.tsx', '.jsx', '.astro', '.vue', '.svelte', '.go',
+graphify/cli.py:77: 'graphify: knowledge graph at graphify-out/. For focused questions, run '
+graphify/cli.py:78: '`graphify query "<question>"` (scoped subgraph, usually much smaller than '
+graphify/cli.py:85: return str(Path(_GRAPHIFY_OUT) / "graph.json")
+graphify/cli.py:93: failed_ast_sources: "set[str] | list[str] | None" = None,
+graphify/cli.py:117: Mirrors the #1890 path normalization in graphify.llm.
+graphify/cli.py:126: ``failed_ast_sources`` (#2543): code files whose AST extractor errored
+graphify/cli.py:152: failed_ast_resolved = {_resolve(p) for p in (failed_ast_sources or [])}
+graphify/cli.py:157: if _resolve(f) not in failed_ast_resolved
+graphify/cli.py:179: failed_ast_sources,
+graphify/cli.py:203: failed_ast_sources=failed_ast_sources,
+graphify/cli.py:213: f"[graphify extract] semantic extraction is incomplete: unverified semantic "
+graphify/cli.py:232: (.graphifyignore/.gitignore/--exclude changed) without being listed in the
+graphify/cli.py:265: from graphify.paths import nfc
+graphify/cli.py:276: # <out>/graphify-out/graph.json — relative source_files may be anchored here.
+graphify/cli.py:337: from graphify.detect import _is_sensitive as _det_sensitive
+graphify/cli.py:397: f"[graphify] fail-closed: kept node(s) from {len(kept_alive)} "
+graphify/cli.py:417: documented recovery was deleting graphify-out/. A stamped file that the
+... (7771 more matching lines not shown)
+
+==> graphify/extractors/sql.py:1-132 <==  (truncated at char cap; file has 720 lines)
+     1	"""Sql extractor. Moved verbatim from graphify/extract.py."""
+     2	from __future__ import annotations
+     3	
+     4	import re
+     5	
+     6	from pathlib import Path
+     7	from graphify.extractors.base import _file_stem, _make_id
+     8	
+     9	# Recovers CREATE FUNCTION/PROCEDURE statements the grammar could not parse
+    10	# structurally. Used by BOTH recovery sites — the walk-time ERROR-node scan and
+    11	# the whole-file has_error fallback (#2180). They MUST share one pattern: when
+    12	# they disagreed, the same statement produced two nodes with different names
+    13	# (the ERROR scan captured `dbo.[usp_Mixed]`, the fallback stopped at `dbo`,
+    14	# and _add_node's id-dedupe never fired because the ids differed).
+    15	#
+    16	# Each name part is a bare identifier, a double-quoted (delimited) one, or a
+    17	# T-SQL bracket-delimited one, so CREATE OR REPLACE FUNCTION "public"."fn"(...)
+    18	# and CREATE PROCEDURE [dbo].[usp_Load] ... are both recovered. A bare [\w$.]+
+    19	# stops dead at the leading delimiter, which silently dropped every quoted
+    20	# PL/pgSQL routine (#2180) and every bracket-named T-SQL procedure. T-SQL's
+    21	# AS BEGIN...END body idiom always lands in recovery — the grammar has no
+    22	# create_procedure parse for it — and T-SQL spells re-creation CREATE OR ALTER
+    23	# (it has no OR REPLACE), so accept that form too, mirroring fb_proc_or_trigger.
+    24	# Inside a bracket-delimited part, a literal ] is escaped by doubling
+    25	# ([a]]b] names the identifier a]b), so consume ]] before treating a
+    26	# lone ] as the closing delimiter — stopping at the first ] truncated
+    27	# the name and minted a phantom that could collide with a real [a].
+    28	# PROC is T-SQL's official shorthand for PROCEDURE and equally common in the
+    29	# wild; the optional (?:EDURE)? still requires trailing whitespace, so a word
+    30	# that merely starts with PROC cannot match.
+    31	# \bCREATE: without the boundary, CREATE matched inside a bare word, so
+    32	# 'SELECT AUTOCREATE PROCEDURE x FROM t;' in an error-bearing file minted a
+    33	# phantom routine x() (delimited identifiers are span-skipped at the scan
+    34	# site, but a bare word has no span).
+    35	_ROUTINE_RECOVERY_RX = re.compile(
+    36	    r"\bCREATE\s+(?:OR\s+(?:REPLACE|ALTER)\s+)?(?:FUNCTION|PROC(?:EDURE)?)\s+"
+    37	    r"(?:IF\s+NOT\s+EXISTS\s+)?"
+    38	    r"((?:\"(?:[^\"\n]|\"\")+\"|\[(?:[^\]\n]|\]\])+\]|[\w$]+)"
+    39	    r"(?:\s*\.\s*(?:\"(?:[^\"\n]|\"\")+\"|\[(?:[^\]\n]|\]\])+\]|[\w$]+))*)",
+    40	    re.IGNORECASE,
+    41	)
+    42	
+    43	# _mask_sql_comments is a linear character scanner, not a regex: the four
+    44	# span kinds interact in ways a single pattern cannot express safely —
+    45	# comment-opener parity inside strings, nested block comments, and
+    46	# end-of-line abandonment of unclosed literals. Span handling:
+    47	#
+    48	# - single-quoted strings are BLANKED like comments: routine names never
+    49	#   live in single quotes, and dynamic SQL (EXEC(N'CREATE PROC [dbo].[Fake]
+    50	#   ...')) would otherwise fabricate a routine node whenever an unrelated
+    51	#   parse error arms the whole-file scan. (Dialects where other quoting
+    52	#   carries strings — MySQL double quotes, PostgreSQL dollar-quoting — are
+    53	#   NOT modelled; DDL inside those still reaches the scan.)
+    54	# - double-quoted and bracket-delimited identifiers are PRESERVED verbatim —
+    55	#   they are exactly the delimited names the recovery regex must see ("" and
+    56	#   ]] escapes consumed, mirroring _ROUTINE_RECOVERY_RX).
+    57	# - line comments blank to end-of-line; block comments blank to their
+    58	#   matching */ with NESTING tracked (SQL Server and PostgreSQL both nest
+    59	#   /* */, and a lazy first-*/ match let commented-out DDL inside a nested
+    60	#   comment fabricate nodes). MySQL and Oracle do NOT nest — there the
+    61	#   depth tracking over-blanks, losing (never fabricating) a routine after
+    62	#   an inner */; the primary T-SQL/PostgreSQL targets win that trade. An
+    63	#   UNCLOSED block comment blanks to end-of-file, matching SQL semantics.
+    64	#
+    65	# Literals are deliberately line-scoped: this mask only runs on files that
+    66	# already failed to parse, where an unclosed delimiter is likely, and a
+    67	# multi-line literal span would let one unclosed quote swallow real DDL
+    68	# below it. The cost is asymmetric by kind. A single-quoted string that
+    69	# continues past its line is blanked only up to the newline, so a comment
+    70	# opener inside it cannot fire on that line — but its CONTINUATION lines are
+    71	# scanned as code, and DDL there fabricates: multi-line dynamic SQL
+    72	# (SET @sql = N\'\n CREATE PROC ...\') is a KNOWN HOLE, alongside the
+    73	# unmodelled quoting dialects above; only same-line dynamic SQL is blanked.
+    74	# Closing it would need a real string heuristic (e.g. an end-of-line opening
+    75	# quote), judged not worth the swallow risk in a recovery-only path.
+    76	
+    77	
+    78	def _scan_sql(text: str) -> tuple[str, list[tuple[int, int]]]:
+    79	    """Blank comment and string-literal spans, preserving every offset.
+    80	
+    81	    One output character per input character: non-newline characters inside
+    82	    a blanked span become spaces and newlines are kept, so positions and
+    83	    line numbers computed against the masked text are valid against the
+    84	    original. Double-quoted and bracket-delimited identifiers are preserved
+    85	    verbatim (they carry recoverable routine names); single-quoted strings,
+    86	    line comments, and (nesting-aware) block comments are blanked. Used by
+    87	    the routine-recovery scan so CREATE PROCEDURE/FUNCTION DDL reachable
+    88	    only through a comment or a single-quoted string cannot fabricate a
+    89	    routine node when an unrelated parse error arms recovery.
+    90	
+    91	    Returns (masked_text, ident_spans) where ident_spans holds the [start,
+    92	    end) of every PRESERVED delimited identifier: preserved spans keep their
+    93	    text verbatim, so DDL keywords inside one are still visible in the
+    94	    masked text, and the recovery scan must skip a match that starts there
+    95	    (identifier data, not DDL — 'SELECT 1 AS [CREATE PROCEDURE x pending]'
+    96	    must not mint a routine).
+    97	    """
+    98	    ident_spans: list[tuple[int, int]] = []
+    99	    out: list[str] = []
+   100	    i, n = 0, len(text)
+   101	
+   102	    def _blank(upto: int) -> int:
+   103	        """Blank [i, upto), keeping newlines; return upto."""
+   104	        for c in text[i:upto]:
+   105	            out.append("\n" if c == "\n" else " ")
+   106	        return upto
+   107	
+   108	    def _blank_tail_and_carry(start: int) -> int:
+   109	        """Blank from start to end-of-line, carrying comment state forward.
+   110	
+   111	        The union-of-readings blank for an ambiguous stretch: the rest of the
+   112	        line is blanked outright; if the raw text of that stretch leaves a /*
+   113	        unclosed on its own line (the maximum comment depth any reading could
+   114	        be left holding), blanking continues, nesting-aware, to the closing
+   115	        */ or EOF. Where a carry closes MID-line the same rule applies to the
+   116	        remainder of that line — under the reading where the carry never
+   117	        opened, that whole line may be a comment or a string, so emitting the
+   118	        post-*/ text verbatim exposed it (found by differential fuzzing).
+   119	        Repeats until a line ends with no carry pending. Appends one output
+   120	        character per input character; returns the resume index.
+   121	        """
+   122	        k = start
+   123	        while True:
+   124	            eol = text.find("\n", k)
+   125	            eol = n if eol == -1 else eol
+   126	            depth = 0
+   127	            m2 = k
+   128	            while m2 < eol:
+   129	                if text.startswith("/*", m2):
+   130	                    depth += 1
+   131	                    m2 += 2
+   132	                elif text.startswith("*/", m2):

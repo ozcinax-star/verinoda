@@ -1,0 +1,71 @@
+$ grep -rniE 'repoatlas|decide|whether|experiment|command|needs|container' .   # 1877 matching lines in 103 files
+repoatlas/analysis.py:4: :mod:`repoatlas.question_plan`): the host agent's plan when one is given,
+repoatlas/analysis.py:11: 3. an invalid plan stops here (``status: invalid_plan``); a plan that needs
+repoatlas/analysis.py:13: (``status: needs_clarification``) and writes no claim
+repoatlas/analysis.py:31: A :class:`Budget` bounds wall time (index refresh and experiments included),
+repoatlas/analysis.py:51: from repoatlas import architecture_map as am
+repoatlas/analysis.py:52: from repoatlas import callsite
+repoatlas/analysis.py:53: from repoatlas import evidence as evmod
+repoatlas/analysis.py:54: from repoatlas import index, retrieval
+repoatlas/analysis.py:55: from repoatlas import question_plan as qp
+repoatlas/analysis.py:56: from repoatlas import textnorm as tn
+repoatlas/analysis.py:57: from repoatlas.claims import ORDER, VERIFIED, Claims
+repoatlas/analysis.py:58: from repoatlas.paths import load_config
+repoatlas/analysis.py:59: from repoatlas.snapshot import current_state, git
+repoatlas/analysis.py:60: from repoatlas.store import Store, new_id, now
+repoatlas/analysis.py:295: if str(d.get("_origin", "")).startswith("repoatlas"):
+repoatlas/analysis.py:638: "next_step": f"`repoatlas trace {qp._bare(g.label(src[0]))} {qp._bare(g.label(tgt[0]))} --mode any` "
+repoatlas/analysis.py:695: "next_step": "name the entry function and the storage function: `repoatlas trace A B`"})
+repoatlas/analysis.py:814: from repoatlas.runtime import trace as rt  # runtime track; optional
+repoatlas/analysis.py:826: "next_step": "run the tests with the runtime tracer (repoatlas runtime extra), or use "
+repoatlas/analysis.py:839: kw = {"timeout": min(float(ctx.cfg["experiments"]["default_timeout"]), ctx.budget.remaining_seconds()),
+repoatlas/analysis.py:864: cue_words = {"why", "neden", "nicin", "niye", "reason", "rationale", "decision", "decided", "gerekce", "karar"}
+repoatlas/analysis.py:937: "next_step": "search issue tracker/PR discussion; or `repoatlas research <reference>` "
+repoatlas/analysis.py:942: "next_step": "compare with code via `repoatlas challenge <claim>`"})
+repoatlas/analysis.py:974: "why": "a behaviour question needs a checkable proposition; the claims above only say "
+repoatlas/analysis.py:983: from repoatlas import feedback
+repoatlas/analysis.py:1070: sub.flags["not_supported"] = "reference comparison runs through `repoatlas research`/`compare`"
+repoatlas/analysis.py:1072: from repoatlas import references  # reference track; optional
+repoatlas/analysis.py:1093: "next_step": f"`repoatlas research {loc}`" + (f" at {spec}" if spec else "")
+repoatlas/analysis.py:1094: + " then `repoatlas compare`"})
+repoatlas/analysis.py:1102: "next_step": "`repoatlas map` for architecture views, or ask about a specific function"})
+repoatlas/analysis.py:1176: + (", or `repoatlas resolve` the reference" if c["kind"] == "version"
+repoatlas/analysis.py:1183: "next_step": "read that version with `repoatlas research <repository> --ref <version>` "
+repoatlas/analysis.py:1184: "(or `repoatlas resolve` the reference first)"})
+repoatlas/analysis.py:1221: "or run `repoatlas map` to browse"})
+repoatlas/analysis.py:1227: "next_step": "use the names the code uses (see `repoatlas map`), or research the "
+repoatlas/analysis.py:1408: from repoatlas import lexicon as lexmod
+repoatlas/analysis.py:1433: from repoatlas import critique, workflow
+repoatlas/analysis.py:1473: "next_step": "run `repoatlas scan --force`" + (f" ({res['hint']})" if res.get("hint") else "")})
+repoatlas/analysis.py:1514: if check_res["status"] == "invalid" or (check_res["status"] == "needs_clarification" and on_ambiguity == "ask"):
+repoatlas/analysis.py:1515: status = "invalid_plan" if check_res["status"] == "invalid" else "needs_clarification"
+... (1837 more matching lines not shown)
+
+==> repoatlas/analysis.py:1-27 <==  (truncated at char cap; file has 1699 lines)
+     1	"""Budgeted analysis loop: question -> plan -> claims with evidence -> critique -> answer.
+     2	
+     3	Every analysis runs through a question plan (docs/DESIGN.md D1-D9,
+     4	:mod:`repoatlas.question_plan`): the host agent's plan when one is given,
+     5	otherwise one drafted by rules. Order of work (cheapest reliable tool first):
+     6	
+     7	 1. refresh the index when the working tree changed (errors become unknowns)
+     8	 2. plan: draft (or parse) and check it - schema, integrity, grounding,
+     9	    versions, mention links; the plan and its check are stored
+    10	    (``question_plans``) and the analysis references it (``analyses.plan_id``)
+    11	 3. an invalid plan stops here (``status: invalid_plan``); a plan that needs
+    12	    clarification with ``on_ambiguity: ask`` returns the grounded questions
+    13	    (``status: needs_clarification``) and writes no claim
+    14	 4. per sub-question, in dependency order, with a share of the budget:
+    15	    retrieval seeded by the linked mentions (and by the symbols located for
+    16	    ``subject_from``) with lexicon / seed-dictionary expansions; items must
+    17	    pass a relevance test against the question's grounded words, otherwise the
+    18	    sub-question is an ``unknown`` with a next step - never a claim about
+    19	    unrelated code
+    20	 5. location and relation claims for the relevant items, then the handler of
+    21	    the sub-question's intent (and of its secondary intents): flow, dataflow,
+    22	    callers, config, tests (optional test run / runtime observation), why /
+    23	    history, impact, behaviour (a proposition check), reference comparison
+    24	 6. critique of each claim (confidence only goes down); a tests claim whose
+    25	    counter-probe refutes a listed test is superseded by a corrected claim
+    26	 7. each sub-question is judged against its ``done_when``: ``met``,
+    27	    ``met_with_inference``, ``unmet``, ``not_supported`` or

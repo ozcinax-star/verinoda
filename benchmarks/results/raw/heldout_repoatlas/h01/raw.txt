@@ -1,0 +1,395 @@
+$ grep -rniE 'experiment|process|tree|killed|times|out' .   # 2757 matching lines in 102 files
+tests/test_experiments.py:1: """Experiments: real isolated runs on a git-committed copy of examples/orders_app.
+tests/test_experiments.py:3: Every test runs a real child process (no mocks of experiments.run): allowlisted
+tests/test_experiments.py:4: pytest in a throw-away copy with a scrubbed environment, timeouts that kill the
+tests/test_experiments.py:5: whole process tree, refusal of non-allowlisted commands, logs on disk with only
+tests/test_experiments.py:13: os.environ.setdefault("GRAPHIFY_OUT", ".repoatlas/index")
+tests/test_experiments.py:18: import subprocess  # noqa: E402
+tests/test_experiments.py:26: from repoatlas import experiments  # noqa: E402
+tests/test_experiments.py:36: pytestmark = [pytest.mark.experiment,
+tests/test_experiments.py:41: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.autocrlf=false", *args],
+tests/test_experiments.py:42: cwd=cwd, check=True, capture_output=True)
+tests/test_experiments.py:46: shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".repoatlas", "__pycache__", "*.pyc",
+tests/test_experiments.py:54: def _tree_digest(repo: Path) -> dict[str, str]:
+tests/test_experiments.py:55: """Every file outside .repoatlas (where run logs legitimately go)."""
+tests/test_experiments.py:56: out = {}
+tests/test_experiments.py:60: out[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
+tests/test_experiments.py:61: return out
+tests/test_experiments.py:69: h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+tests/test_experiments.py:73: k32.GetExitCodeProcess(h, ctypes.byref(code))
+tests/test_experiments.py:78: except ProcessLookupError:
+tests/test_experiments.py:117: assert experiments.classify(argv, DEFAULT_CONFIG["experiments"]["process_isolation_allowlist"]) == expected
+tests/test_experiments.py:124: env = experiments._scrubbed_env(tmp_path)
+tests/test_experiments.py:129: assert env["REPOATLAS_EXPERIMENT"] == "1"
+tests/test_experiments.py:134: def test_allowlisted_pytest_passes_in_a_copy_with_process_isolation(proj):
+tests/test_experiments.py:140: "    Path('WRITTEN_BY_EXPERIMENT.txt').write_text('x')\n"
+tests/test_experiments.py:142: before = _tree_digest(repo)
+tests/test_experiments.py:143: res = experiments.run(st, repo, [*PYTEST, "-s", "tests/test_pricing.py", probe],
+tests/test_experiments.py:145: assert res["isolation"] == "process" and res["outcome"] == "pass" and res["matches_expectation"]
+tests/test_experiments.py:147: assert g["separate_process"] and g["cwd_is_copy"] and g["env_allowlisted"] and g["timeout_kills_tree"]
+tests/test_experiments.py:149: # The original tree is untouched: nothing written, nothing changed.
+tests/test_experiments.py:150: assert _tree_digest(repo) == before
+tests/test_experiments.py:151: assert not (repo / "WRITTEN_BY_EXPERIMENT.txt").exists() and not (repo / ".pytest_cache").exists()
+tests/test_experiments.py:152: log = Path(res["logs"]["stdout"]).read_text(encoding="utf-8")
+tests/test_experiments.py:155: # Recorded: experiment row + test_result evidence that can verify a claim.
+tests/test_experiments.py:156: row = st.get("experiments", res["id"])
+tests/test_experiments.py:157: assert row["status"] == "pass" and row["isolation"] == "process" and row["exit_code"] == 0
+tests/test_experiments.py:160: assert ev["source_type"] == "test_result" and ev["meta"]["outcome"] == "pass"
+tests/test_experiments.py:161: assert ev["meta"]["isolation"] == "process" and ev["commit_sha"] == "abc"
+tests/test_experiments.py:175: "    assert os.environ.get('REPOATLAS_EXPERIMENT') == '1'\n"
+tests/test_experiments.py:177: res = experiments.run(st, repo, [*PYTEST, absent], hypothesis="secrets are scrubbed")
+tests/test_experiments.py:178: assert res["outcome"] == "pass", Path(res["logs"]["stdout"]).read_text(encoding="utf-8")[-2000:]
+... (2717 more matching lines not shown)
+
+==> tests/test_experiments.py:1-351 <==  (truncated at char cap; file has 580 lines)
+     1	"""Experiments: real isolated runs on a git-committed copy of examples/orders_app.
+     2	
+     3	Every test runs a real child process (no mocks of experiments.run): allowlisted
+     4	pytest in a throw-away copy with a scrubbed environment, timeouts that kill the
+     5	whole process tree, refusal of non-allowlisted commands, logs on disk with only
+     6	a summary returned.
+     7	"""
+     8	
+     9	from __future__ import annotations
+    10	
+    11	import os
+    12	
+    13	os.environ.setdefault("GRAPHIFY_OUT", ".repoatlas/index")
+    14	
+    15	import hashlib  # noqa: E402
+    16	import json  # noqa: E402
+    17	import shutil  # noqa: E402
+    18	import subprocess  # noqa: E402
+    19	import sys  # noqa: E402
+    20	import time  # noqa: E402
+    21	from pathlib import Path  # noqa: E402
+    22	
+    23	import pytest  # noqa: E402
+    24	
+    25	from repoatlas import evidence as evmod  # noqa: E402
+    26	from repoatlas import experiments  # noqa: E402
+    27	from repoatlas.claims import Claims  # noqa: E402
+    28	from repoatlas.paths import DEFAULT_CONFIG, runs_dir  # noqa: E402
+    29	from repoatlas.store import open_store  # noqa: E402
+    30	
+    31	ROOT = Path(__file__).resolve().parents[1]
+    32	EXAMPLE = ROOT / "examples" / "orders_app"
+    33	PYTEST = ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+    34	FAKE_SECRET = "sk-ant-FAKE-0123456789-not-a-real-key"
+    35	
+    36	pytestmark = [pytest.mark.experiment,
+    37	              pytest.mark.skipif(shutil.which("git") is None, reason="git not available")]
+    38	
+    39	
+    40	def _git(cwd: Path, *args: str) -> None:
+    41	    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.autocrlf=false", *args],
+    42	                   cwd=cwd, check=True, capture_output=True)
+    43	
+    44	
+    45	def _copy_example(dst: Path) -> Path:
+    46	    shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".repoatlas", "__pycache__", "*.pyc",
+    47	                                                                ".pytest_cache", "*.db"))
+    48	    _git(dst, "init", "-q")
+    49	    _git(dst, "add", "-A")
+    50	    _git(dst, "commit", "-q", "-m", "init")
+    51	    return dst
+    52	
+    53	
+    54	def _tree_digest(repo: Path) -> dict[str, str]:
+    55	    """Every file outside .repoatlas (where run logs legitimately go)."""
+    56	    out = {}
+    57	    for p in sorted(repo.rglob("*")):
+    58	        rel = p.relative_to(repo).as_posix()
+    59	        if p.is_file() and not rel.startswith((".repoatlas/", ".git/")):
+    60	            out[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
+    61	    return out
+    62	
+    63	
+    64	def _alive(pid: int) -> bool:
+    65	    if os.name == "nt":
+    66	        import ctypes
+    67	
+    68	        k32 = ctypes.windll.kernel32
+    69	        h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    70	        if not h:
+    71	            return False
+    72	        code = ctypes.c_ulong()
+    73	        k32.GetExitCodeProcess(h, ctypes.byref(code))
+    74	        k32.CloseHandle(h)
+    75	        return code.value == 259  # STILL_ACTIVE
+    76	    try:  # pragma: no cover - POSIX
+    77	        os.kill(pid, 0)
+    78	    except ProcessLookupError:
+    79	        return False
+    80	    except PermissionError:
+    81	        return True
+    82	    return True
+    83	
+    84	
+    85	@pytest.fixture
+    86	def proj(tmp_path):
+    87	    repo = _copy_example(tmp_path / "orders_app")
+    88	    st = open_store(repo)
+    89	    yield repo, st
+    90	    st.close()
+    91	
+    92	
+    93	def _probe(repo: Path, name: str, body: str) -> str:
+    94	    (repo / "tests" / name).write_text(body, encoding="utf-8")
+    95	    return f"tests/{name}"
+    96	
+    97	
+    98	# -- policy ----------------------------------------------------------------------------------
+    99	
+   100	@pytest.mark.parametrize("argv,expected", [
+   101	    (["pytest"], "allowlisted"),
+   102	    (["pytest", "-q", "tests/test_pricing.py"], "allowlisted"),
+   103	    (["python", "-m", "pytest", "-q"], "allowlisted"),
+   104	    ([r"C:\Python312\python.exe", "-m", "pytest"], "allowlisted"),
+   105	    (["py", "-m", "pytest", "-x"], "allowlisted"),
+   106	    (["go", "test", "./..."], "allowlisted"),
+   107	    (["python", "-c", "print(1)"], "risky"),
+   108	    (["python", "-m", "pip", "install", "x"], "risky"),
+   109	    (["pytest-evil"], "risky"),
+   110	    (["pytest", "tests;", "rm", "-rf", "/"], "risky"),
+   111	    (["pytest", "$(whoami)"], "risky"),
+   112	    (["pytest", "a|b"], "risky"),
+   113	    (["bash", "-c", "pytest"], "risky"),
+   114	    ([], "risky"),
+   115	])
+   116	def test_classify(argv, expected):
+   117	    assert experiments.classify(argv, DEFAULT_CONFIG["experiments"]["process_isolation_allowlist"]) == expected
+   118	
+   119	
+   120	def test_scrubbed_env_drops_secrets_and_keeps_interpreter(monkeypatch, tmp_path):
+   121	    monkeypatch.setenv("ANTHROPIC_API_KEY", FAKE_SECRET)
+   122	    monkeypatch.setenv("GITHUB_TOKEN", "ghp_fake")
+   123	    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "fake")
+   124	    env = experiments._scrubbed_env(tmp_path)
+   125	    assert not {"ANTHROPIC_API_KEY", "GITHUB_TOKEN", "AWS_SECRET_ACCESS_KEY"} & set(env)
+   126	    assert FAKE_SECRET not in json.dumps(env)
+   127	    assert env["PATH"].split(os.pathsep)[0] == str(Path(sys.executable).parent)
+   128	    assert env["HOME"] == env["USERPROFILE"] == env["TEMP"] == str(tmp_path)
+   129	    assert env["REPOATLAS_EXPERIMENT"] == "1"
+   130	
+   131	
+   132	# -- real runs ---------------------------------------------------------------------------------
+   133	
+   134	def test_allowlisted_pytest_passes_in_a_copy_with_process_isolation(proj):
+   135	    repo, st = proj
+   136	    probe = _probe(repo, "test_probe_cwd.py", (
+   137	        "import os\nfrom pathlib import Path\n\n"
+   138	        "def test_runs_in_a_copy():\n"
+   139	        f"    assert Path.cwd().resolve() != Path(r'{repo.resolve()}')\n"
+   140	        "    Path('WRITTEN_BY_EXPERIMENT.txt').write_text('x')\n"
+   141	        "    print('CWD=' + os.getcwd())\n"))
+   142	    before = _tree_digest(repo)
+   143	    res = experiments.run(st, repo, [*PYTEST, "-s", "tests/test_pricing.py", probe],
+   144	                          hypothesis="pricing tests pass", commit="abc")
+   145	    assert res["isolation"] == "process" and res["outcome"] == "pass" and res["matches_expectation"]
+   146	    g = res["guarantees"]
+   147	    assert g["separate_process"] and g["cwd_is_copy"] and g["env_allowlisted"] and g["timeout_kills_tree"]
+   148	    assert g["network_isolated"] is False and g["fs_reads_confined"] is False  # stated honestly
+   149	    # The original tree is untouched: nothing written, nothing changed.
+   150	    assert _tree_digest(repo) == before
+   151	    assert not (repo / "WRITTEN_BY_EXPERIMENT.txt").exists() and not (repo / ".pytest_cache").exists()
+   152	    log = Path(res["logs"]["stdout"]).read_text(encoding="utf-8")
+   153	    assert "CWD=" in log and str(repo.resolve()) not in log.split("CWD=")[1].splitlines()[0]
+   154	    assert "4 passed" in log
+   155	    # Recorded: experiment row + test_result evidence that can verify a claim.
+   156	    row = st.get("experiments", res["id"])
+   157	    assert row["status"] == "pass" and row["isolation"] == "process" and row["exit_code"] == 0
+   158	    assert row["cwd"].startswith("copy of ") and row["command"][:3] == ["python", "-m", "pytest"]
+   159	    ev = st.evidence(res["evidence_id"])
+   160	    assert ev["source_type"] == "test_result" and ev["meta"]["outcome"] == "pass"
+   161	    assert ev["meta"]["isolation"] == "process" and ev["commit_sha"] == "abc"
+   162	    assert any("4 passed" in s for s in res["summary"]["summary_lines"])
+   163	
+   164	
+   165	def test_parent_secrets_are_not_visible_to_the_child(proj, monkeypatch):
+   166	    repo, st = proj
+   167	    monkeypatch.setenv("ANTHROPIC_API_KEY", FAKE_SECRET)
+   168	    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-fake")
+   169	    monkeypatch.setenv("TZ", "UTC")  # allowlisted variable: proves the env is filtered, not emptied
+   170	    absent = _probe(repo, "test_probe_env.py", (
+   171	        "import os\n\n"
+   172	        "def test_secrets_absent():\n"
+   173	        "    assert 'ANTHROPIC_API_KEY' not in os.environ\n"
+   174	        "    assert 'OPENAI_API_KEY' not in os.environ\n"
+   175	        "    assert os.environ.get('REPOATLAS_EXPERIMENT') == '1'\n"
+   176	        "    assert os.environ.get('TZ') == 'UTC'\n"))
+   177	    res = experiments.run(st, repo, [*PYTEST, absent], hypothesis="secrets are scrubbed")
+   178	    assert res["outcome"] == "pass", Path(res["logs"]["stdout"]).read_text(encoding="utf-8")[-2000:]
+   179	    # Control: a test that *requires* the key fails in the child (expected failure).
+   180	    present = _probe(repo, "test_probe_env_present.py", (
+   181	        "import os\n\ndef test_secret_present():\n    assert os.environ['ANTHROPIC_API_KEY']\n"))
+   182	    ctl = experiments.run(st, repo, [*PYTEST, present], hypothesis="the key is visible", expect="fail")
+   183	    assert ctl["outcome"] == "fail" and ctl["matches_expectation"] is True
+   184	    for r in (res, ctl):
+   185	        logs = Path(r["logs"]["stdout"]).read_text(encoding="utf-8") + Path(r["logs"]["stderr"]).read_text(
+   186	            encoding="utf-8")
+   187	        assert FAKE_SECRET not in logs and FAKE_SECRET not in json.dumps(r)
+   188	
+   189	
+   190	def test_timeout_kills_the_process_tree_and_is_recorded(proj, tmp_path):
+   191	    repo, st = proj
+   192	    pidfile = tmp_path / "grandchild.pid"
+   193	    probe = _probe(repo, "test_probe_hang.py", (
+   194	        "import subprocess, sys, time\nfrom pathlib import Path\n\n"
+   195	        "def test_hangs():\n"
+   196	        "    child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)'])\n"
+   197	        f"    Path(r'{pidfile}').write_text(str(child.pid))\n"
+   198	        "    time.sleep(300)\n"))
+   199	    t0 = time.monotonic()
+   200	    res = experiments.run(st, repo, [*PYTEST, probe], hypothesis="it finishes", timeout=10)
+   201	    elapsed = time.monotonic() - t0
+   202	    assert res["outcome"] == "timeout" and res["matches_expectation"] is False
+   203	    assert res["summary"]["timed_out"] is True and res["summary"]["exit_code"] is None
+   204	    assert elapsed < 60
+   205	    row = st.get("experiments", res["id"])
+   206	    assert row["status"] == "timeout" and row["timed_out"] == 1 and row["exit_code"] is None
+   207	    ev = st.evidence(res["evidence_id"])
+   208	    assert ev["meta"]["raw_outcome"] == "timeout" and ev["meta"]["outcome"] == "fail"
+   209	    assert pidfile.exists(), "probe never started its grandchild"
+   210	    pid = int(pidfile.read_text())
+   211	    deadline = time.monotonic() + 10
+   212	    while _alive(pid) and time.monotonic() < deadline:
+   213	        time.sleep(0.2)
+   214	    assert not _alive(pid), f"grandchild {pid} survived the timeout"
+   215	
+   216	
+   217	def test_non_allowlisted_command_is_refused_without_container(proj):
+   218	    repo, st = proj
+   219	    if experiments.container_runtime():
+   220	        pytest.skip("a container runtime is available; risky commands would run in a container")
+   221	    with pytest.raises(experiments.ExperimentRefused, match="no container runtime"):
+   222	        experiments.run(st, repo, ["python", "-c", "open('PWNED', 'w').write('x')"], hypothesis="h")
+   223	    with pytest.raises(experiments.ExperimentRefused):
+   224	        experiments.run(st, repo, "pytest -q; echo hi", hypothesis="shell metacharacters")
+   225	    with pytest.raises(experiments.ExperimentRefused):  # container requested explicitly, none available
+   226	        experiments.run(st, repo, PYTEST, hypothesis="h", isolation="container")
+   227	    rows = st.all("SELECT * FROM experiments ORDER BY created_at")
+   228	    assert [r["status"] for r in rows] == ["refused"] * 3 and {r["isolation"] for r in rows} == {"none"}
+   229	    assert not (repo / "PWNED").exists()
+   230	    assert not runs_dir(repo).exists() or not any(runs_dir(repo).iterdir())
+   231	
+   232	
+   233	def test_project_config_controls_the_allowlist(proj):
+   234	    repo, st = proj
+   235	    if experiments.container_runtime():
+   236	        pytest.skip("a container runtime is available; the command would run in a container instead")
+   237	    cfg = repo / ".repoatlas" / "config.json"
+   238	    cfg.write_text(json.dumps({"experiments": {"process_isolation_allowlist": ["go test"]}}), encoding="utf-8")
+   239	    with pytest.raises(experiments.ExperimentRefused):
+   240	        experiments.run(st, repo, PYTEST, hypothesis="pytest no longer allowlisted")
+   241	    cfg.write_text(json.dumps({"experiments": {"default_timeout": 1}}), encoding="utf-8")
+   242	    probe = _probe(repo, "test_probe_slow.py", "import time\n\ndef test_slow():\n    time.sleep(30)\n")
+   243	    res = experiments.run(st, repo, [*PYTEST, probe], hypothesis="default timeout from config")
+   244	    assert res["outcome"] == "timeout" and st.get("experiments", res["id"])["timeout_s"] == 1.0
+   245	
+   246	
+   247	def test_logs_stay_on_disk_and_only_a_summary_is_returned(proj):
+   248	    repo, st = proj
+   249	    probe = _probe(repo, "test_probe_noisy.py", (
+   250	        "def test_noisy():\n"
+   251	        "    for i in range(3000):\n"
+   252	        "        print(f'noise line {i:04d} ' + 'x' * 60)\n"
+   253	        "    assert 1 + 1 == 3, 'deliberate failure'\n"))
+   254	    res = experiments.run(st, repo, [*PYTEST, "-s", probe], hypothesis="noisy test passes")
+   255	    assert res["outcome"] == "fail" and not res["matches_expectation"]
+   256	    out = Path(res["logs"]["stdout"])
+   257	    assert out.is_file() and out.parent == runs_dir(repo) / res["id"]
+   258	    full = out.read_text(encoding="utf-8")
+   259	    assert "noise line 0000" in full and "noise line 2999" in full
+   260	    lines = full.splitlines()
+   261	    # Exactly one line per print: no "\r\r\n" doubling from text-mode rewrites on Windows.
+   262	    assert sum(1 for ln in lines if ln.startswith("noise line ")) == 3000
+   263	    assert lines[lines.index(next(ln for ln in lines if ln.startswith("noise line 0000"))) + 1].startswith(
+   264	        "noise line 0001")
+   265	    s = res["summary"]
+   266	    assert s["total_lines"] > 3000
+   267	    assert len(s["tail"]) <= 8 and len(s["relevant_lines"]) <= 15 and len(s["summary_lines"]) <= 3
+   268	    assert any("deliberate failure" in ln or "assert" in ln for ln in s["relevant_lines"])
+   269	    assert any("1 failed" in ln for ln in s["summary_lines"])
+   270	    small = json.dumps(res)
+   271	    assert len(small) < 8000 and "noise line 1500" not in small
+   272	    ev = st.evidence(res["evidence_id"])
+   273	    assert len(ev["excerpt"]) <= 400 and ev["meta"]["stdout"] == str(out)
+   274	
+   275	
+   276	def test_experiment_attached_to_a_claim_supports_or_refutes_it(proj):
+   277	    repo, st = proj
+   278	    cl = Claims(st, repo)
+   279	    c = cl.create("the pricing tests pass", project="orders_app", snapshot=None, status="unknown")
+   280	    ok = experiments.run(st, repo, [*PYTEST, "tests/test_pricing.py"], hypothesis="pricing ok", claim_id=c["id"])
+   281	    assert [e["relation"] for e in cl.evidence(c["id"])] == ["supports"]
+   282	    assert cl.set_status(c["id"], "experiment_verified", reason="ran", downgrade=False)["status"] == \
+   283	        "experiment_verified"
+   284	    bad = _probe(repo, "test_probe_fail.py", "def test_fails():\n    assert False\n")
+   285	    c2 = cl.create("the probe passes", project="orders_app", snapshot=None, status="unknown")
+   286	    res = experiments.run(st, repo, [*PYTEST, bad], hypothesis="probe ok", claim_id=c2["id"])
+   287	    assert res["outcome"] == "fail"
+   288	    assert [e["relation"] for e in cl.evidence(c2["id"])] == ["refutes"]
+   289	    assert cl.reassess(c2["id"], reason="run failed")["status"] == "contradicted"
+   290	    assert ok["evidence_id"] != res["evidence_id"]
+   291	    assert evmod.is_verifying(st.evidence(ok["evidence_id"]))
+   292	
+   293	
+   294	# -- interpreter choice ------------------------------------------------------------------------
+   295	
+   296	def test_python_for_prefers_the_projects_virtualenv(tmp_path):
+   297	    repo = tmp_path / "p"
+   298	    repo.mkdir()
+   299	    assert experiments.python_for(repo) == sys.executable
+   300	    for env, rel in (("venv", ("bin", "python")), ("venv", ("Scripts", "python.exe")),
+   301	                     (".venv", ("bin", "python")), (".venv", ("Scripts", "python.exe"))):
+   302	        exe = repo.joinpath(env, *rel)
+   303	        exe.parent.mkdir(parents=True, exist_ok=True)
+   304	        exe.write_bytes(b"")
+   305	        assert experiments.python_for(repo) == str(exe)  # each later one outranks the earlier ones
+   306	    assert Path(experiments.python_for(repo)).is_absolute()
+   307	
+   308	
+   309	@pytest.mark.parametrize("argv,expected", [
+   310	    ([sys.executable, "-m", "pytest", "-q"], "allowlisted"),
+   311	    ([r"C:\work\proj\.venv\Scripts\python.exe", "-m", "pytest", "tests/test_x.py"], "allowlisted"),
+   312	    (["/work/proj/.venv/bin/python", "-m", "pytest"], "allowlisted"),
+   313	    (["/usr/local/bin/python3.12", "-m", "pytest", "-x"], "allowlisted"),
+   314	    (['"C:\\Program Files\\Python312\\python.exe"', "-m", "pytest"], "allowlisted"),
+   315	    ([r"C:\work\proj\.venv\Scripts\python.exe", "-m", "pip", "install", "x"], "risky"),
+   316	    (["/work/proj/.venv/bin/python", "-c", "print(1)"], "risky"),
+   317	    (["/work/proj/.venv/bin/python3.12", "script.py"], "risky"),
+   318	    (["/tmp/pythonic-tool", "-m", "pytest"], "risky"),
+   319	])
+   320	def test_classify_accepts_absolute_interpreter_paths_for_pytest_only(argv, expected):
+   321	    assert experiments.classify(argv, DEFAULT_CONFIG["experiments"]["process_isolation_allowlist"]) == expected
+   322	
+   323	
+   324	def test_container_argv_uses_the_images_python():
+   325	    assert experiments._container_argv(["/w/.venv/bin/python", "-m", "pytest"]) == ["python", "-m", "pytest"]
+   326	    assert experiments._container_argv(["python", "-m", "pytest"]) == ["python", "-m", "pytest"]
+   327	    assert experiments._container_argv(["go", "test"]) == ["go", "test"]
+   328	
+   329	
+   330	# -- inconclusive runs -------------------------------------------------------------------------
+   331	
+   332	@pytest.mark.parametrize("code,outcome", [(0, "pass"), (1, "fail"), (2, "inconclusive"), (3, "inconclusive"),
+   333	                                          (4, "inconclusive"), (5, "inconclusive")])
+   334	def test_pytest_exit_codes_are_classified(code, outcome):
+   335	    assert experiments._classify_outcome(PYTEST, code, False, "", "")[0] == outcome
+   336	    # other runners: any non-zero exit is a failure
+   337	    assert experiments._classify_outcome(["go", "test"], code, False, "", "")[0] == ("pass" if code == 0 else "fail")
+   338	    assert experiments._classify_outcome(PYTEST, None, True, "", "")[0] == "timeout"
+   339	
+   340	
+   341	def test_missing_pytest_is_inconclusive():
+   342	    out, why = experiments._classify_outcome(PYTEST, 1, False, "", "C:\\py\\python.exe: No module named pytest\n")
+   343	    assert out == "inconclusive" and "not installed" in why
+   344	    # a missing *plugin* is not a missing pytest
+   345	    assert experiments._classify_outcome(PYTEST, 1, False, "", "No module named 'pytest_cov'")[0] == "fail"
+   346	
+   347	
+   348	def test_inconclusive_run_only_qualifies_the_claim(proj):
+   349	    repo, st = proj
+   350	    cl = Claims(st, repo)
+   351	    c = cl.create("the helper module is tested", project="orders_app", snapshot=None, status="weak_inference",

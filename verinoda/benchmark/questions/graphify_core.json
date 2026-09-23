@@ -1,0 +1,213 @@
+{
+  "schema": 1,
+  "name": "graphify_core",
+  "description": "Upstream Graphify at commit 20a20d30 (the Verinoda-independent checkout): the whole graphify/ package (~225 files, ~49k lines of Python in the top-level modules plus extractors, skills and docs) and two of its test modules. 9 questions: where x2, flow x2, config x2, why, impact, tests.",
+  "verified_by": "Gold facts were written by reading the upstream source at commit 20a20d30d8e7eef77675651f0199d87f913bd3e7 (graphify/serve.py, cli.py, querylog.py, cache.py, security.py, watch.py, benchmark.py, tests/test_security.py); each fact's source.at/source.contains pair is re-checked against the benchmark copy before scoring (metrics.validate_gold).",
+  "provenance": {
+    "questions_written_by": "benchmark harness author (an agent, round 1), before any approach was run on the set",
+    "gold_written_by": "same author, by reading the upstream source at 20a20d30",
+    "in_sample": true,
+    "caveat": "the round-3 retrieval design was made after seeing Verinoda's misses on this set (docs/DESIGN.md 3.1), so Verinoda results on it are in-sample; questions and gold have not changed since 05890a1"
+  },
+  "corpus": {
+    "detect": ["graphify/serve.py", "graphify/cli.py", "graphify/querylog.py"],
+    "include": ["graphify", "tests/test_security.py", "tests/test_querylog.py", "pyproject.toml"],
+    "exclude": ["*/__pycache__/*"]
+  },
+  "questions": [
+    {
+      "id": "g01", "category": "where",
+      "question": "Where is graphify query output cut to fit the token budget?",
+      "facts": [
+        {"id": "g01.func", "fact": "_subgraph_to_text renders and cuts the subgraph (graphify/serve.py:1075)",
+         "source": {"at": "graphify/serve.py:1075", "contains": "def _subgraph_to_text("},
+         "match_any": [{"loc": "graphify/serve.py:1075-1081"}, {"text": "_subgraph_to_text"}]},
+        {"id": "g01.ratio", "fact": "the token budget becomes a char budget at 3 chars/token (graphify/serve.py:1081)",
+         "source": {"at": "graphify/serve.py:1081", "contains": "char_budget = token_budget * 3"},
+         "match_any": [{"loc": "graphify/serve.py:1081"}, {"text": "token_budget * 3"}]},
+        {"id": "g01.cut", "fact": "output longer than the char budget is cut at the last newline (graphify/serve.py:1200-1202)",
+         "source": {"at": "graphify/serve.py:1200", "contains": "if len(output) > char_budget:"},
+         "match_any": [{"loc": "graphify/serve.py:1200-1202"}]},
+        {"id": "g01.caller", "fact": "_query_graph_text calls it with the seeds (graphify/serve.py:1408)",
+         "source": {"at": "graphify/serve.py:1408", "contains": "_subgraph_to_text(traversal_graph"},
+         "match_any": [{"loc": "graphify/serve.py:1408"}]}
+      ],
+      "negatives": [
+        {"id": "g01.n.reversed", "statement": "_subgraph_to_text calls _query_graph_text (direction reversed)",
+         "relation": ["_subgraph_to_text", "calls", "_query_graph_text"]}
+      ]
+    },
+    {
+      "id": "g02", "category": "flow",
+      "question": "Which functions does the graphify query command call to turn a question into graph context?",
+      "facts": [
+        {"id": "g02.entry", "fact": "the CLI query branch calls _query_graph_text (graphify/cli.py:1302)",
+         "source": {"at": "graphify/cli.py:1302", "contains": "_query_graph_text("},
+         "match_any": [{"loc": "graphify/cli.py:1302"}]},
+        {"id": "g02.terms", "fact": "_query_terms splits the question (graphify/serve.py:1359)",
+         "source": {"at": "graphify/serve.py:1359", "contains": "_query_terms(question)"},
+         "match_any": [{"loc": "graphify/serve.py:1359"}, {"text": "_query_terms"}]},
+        {"id": "g02.score", "fact": "_score_query ranks nodes (graphify/serve.py:1366)",
+         "source": {"at": "graphify/serve.py:1366", "contains": "_score_query(G, terms"},
+         "match_any": [{"loc": "graphify/serve.py:1366"}, {"text": "_score_query"}]},
+        {"id": "g02.seeds", "fact": "_pick_seeds chooses start nodes (graphify/serve.py:1380)",
+         "source": {"at": "graphify/serve.py:1380", "contains": "_pick_seeds(qs.ranked"},
+         "match_any": [{"loc": "graphify/serve.py:1380"}, {"text": "_pick_seeds"}]},
+        {"id": "g02.traverse", "fact": "_bfs/_dfs traverse from the seeds (graphify/serve.py:1385)",
+         "source": {"at": "graphify/serve.py:1385", "contains": "_bfs(traversal_graph"},
+         "match_any": [{"loc": "graphify/serve.py:1385"}, {"text": "_bfs"}]},
+        {"id": "g02.render", "fact": "_subgraph_to_text renders the result (graphify/serve.py:1408)",
+         "source": {"at": "graphify/serve.py:1408", "contains": "_subgraph_to_text("},
+         "match_any": [{"loc": "graphify/serve.py:1408"}, {"text": "_subgraph_to_text"}]}
+      ],
+      "negatives": [
+        {"id": "g02.n.logs", "statement": "_query_graph_text writes the query log (the CLI/MCP wrappers call log_query)",
+         "relation": ["_query_graph_text", "calls", "log_query"]},
+        {"id": "g02.n.terms_score", "statement": "_query_terms calls _score_query",
+         "relation": ["_query_terms", "calls", "_score_query"]}
+      ]
+    },
+    {
+      "id": "g03", "category": "config",
+      "question": "Which environment variables control graphify's query log?",
+      "facts": [
+        {"id": "g03.disable", "fact": "GRAPHIFY_QUERY_LOG_DISABLE forces logging off (graphify/querylog.py:24)",
+         "source": {"at": "graphify/querylog.py:24", "contains": "GRAPHIFY_QUERY_LOG_DISABLE"},
+         "match_any": [{"loc": "graphify/querylog.py:24"}, {"text": "GRAPHIFY_QUERY_LOG_DISABLE"}]},
+        {"id": "g03.path", "fact": "GRAPHIFY_QUERY_LOG sets the log path (graphify/querylog.py:26)",
+         "source": {"at": "graphify/querylog.py:26", "contains": "\"GRAPHIFY_QUERY_LOG\""},
+         "match_any": [{"loc": "graphify/querylog.py:26"}, {"text": "GRAPHIFY_QUERY_LOG"}]},
+        {"id": "g03.enable", "fact": "GRAPHIFY_QUERY_LOG_ENABLE turns on the default log file (graphify/querylog.py:29)",
+         "source": {"at": "graphify/querylog.py:29", "contains": "GRAPHIFY_QUERY_LOG_ENABLE"},
+         "match_any": [{"loc": "graphify/querylog.py:29"}, {"text": "GRAPHIFY_QUERY_LOG_ENABLE"}]},
+        {"id": "g03.responses", "fact": "GRAPHIFY_QUERY_LOG_RESPONSES also logs responses (graphify/querylog.py:35)",
+         "source": {"at": "graphify/querylog.py:35", "contains": "GRAPHIFY_QUERY_LOG_RESPONSES"},
+         "match_any": [{"loc": "graphify/querylog.py:35"}, {"text": "GRAPHIFY_QUERY_LOG_RESPONSES"}]}
+      ],
+      "negatives": [
+        {"id": "g03.n.default_on", "statement": "query logging is on by default (it is opt-in)",
+         "assertion_regex": "(?i)query.?log[^\\n]*(on|enabled) by default"}
+      ]
+    },
+    {
+      "id": "g04", "category": "where",
+      "question": "Where does graphify store its AST extraction cache and how is a cache entry keyed?",
+      "facts": [
+        {"id": "g04.dir", "fact": "cache_dir puts AST entries in graphify-out/cache/ast/v{version}-s{schema} (graphify/cache.py:957)",
+         "source": {"at": "graphify/cache.py:957", "contains": "_AST_CACHE_SCHEMA"},
+         "match_any": [{"loc": "graphify/cache.py:933-962"}]},
+        {"id": "g04.key", "fact": "file_hash = SHA256 of file contents + path relative to root (graphify/cache.py:429-430)",
+         "source": {"at": "graphify/cache.py:430", "contains": "SHA256 of file contents + path relative to root"},
+         "match_any": [{"loc": "graphify/cache.py:429-430"}, {"text": "SHA256 of file contents + path relative to root"}]},
+        {"id": "g04.load", "fact": "load_cached reads an entry (graphify/cache.py:965)",
+         "source": {"at": "graphify/cache.py:965", "contains": "def load_cached("},
+         "match_any": [{"loc": "graphify/cache.py:965"}, {"text": "load_cached"}]},
+        {"id": "g04.save", "fact": "save_cached writes an entry (graphify/cache.py:1071)",
+         "source": {"at": "graphify/cache.py:1071", "contains": "def save_cached("},
+         "match_any": [{"loc": "graphify/cache.py:1071"}, {"text": "save_cached"}]}
+      ],
+      "negatives": []
+    },
+    {
+      "id": "g05", "category": "config",
+      "question": "Which environment variable raises the maximum graph.json size, and what is the default limit?",
+      "facts": [
+        {"id": "g05.env", "fact": "GRAPHIFY_MAX_GRAPH_BYTES is read in _max_graph_file_bytes (graphify/security.py:49)",
+         "source": {"at": "graphify/security.py:49", "contains": "GRAPHIFY_MAX_GRAPH_BYTES"},
+         "match_any": [{"loc": "graphify/security.py:49"}, {"text": "GRAPHIFY_MAX_GRAPH_BYTES"}]},
+        {"id": "g05.default", "fact": "the default cap is 512 MiB (graphify/security.py:32)",
+         "source": {"at": "graphify/security.py:32", "contains": "512 * 1024 * 1024"},
+         "match_any": [{"loc": "graphify/security.py:32"}, {"text": "512 * 1024 * 1024"}]},
+        {"id": "g05.check", "fact": "check_graph_file_size_cap enforces it (graphify/security.py:357)",
+         "source": {"at": "graphify/security.py:357", "contains": "def check_graph_file_size_cap("},
+         "match_any": [{"loc": "graphify/security.py:357-385"}, {"text": "check_graph_file_size_cap"}]}
+      ],
+      "negatives": [
+        {"id": "g05.n.reversed", "statement": "check_graph_file_size_cap calls _enforce_graph_size_cap_or_exit (it is the other way round)",
+         "relation": ["check_graph_file_size_cap", "calls", "_enforce_graph_size_cap_or_exit"]}
+      ]
+    },
+    {
+      "id": "g06", "category": "why",
+      "question": "Why does graphify drop stopwords from query terms?",
+      "facts": [
+        {"id": "g06.reason", "fact": "so that content words drive seeding (docstring, graphify/serve.py:282-286)",
+         "source": {"at": "graphify/serve.py:284", "contains": "so content words drive seeding"},
+         "match_any": [{"loc": "graphify/serve.py:282-286"}, {"text": "content words drive seeding"}]},
+        {"id": "g06.fallback", "fact": "an all-stopword question falls back to the unfiltered terms (graphify/serve.py:300)",
+         "source": {"at": "graphify/serve.py:300", "contains": "return content or terms"},
+         "match_any": [{"loc": "graphify/serve.py:300"}, {"text": "content or terms"}]},
+        {"id": "g06.list", "fact": "the stopword list is _QUERY_STOPWORDS (graphify/serve.py:249)",
+         "source": {"at": "graphify/serve.py:249", "contains": "_QUERY_STOPWORDS = frozenset"},
+         "match_any": [{"loc": "graphify/serve.py:249"}, {"text": "_QUERY_STOPWORDS"}]}
+      ],
+      "negatives": []
+    },
+    {
+      "id": "g07", "category": "impact",
+      "question": "What is affected if _query_terms changes?",
+      "facts": [
+        {"id": "g07.query", "fact": "_query_graph_text calls it (graphify/serve.py:1359)",
+         "source": {"at": "graphify/serve.py:1359", "contains": "_query_terms(question)"},
+         "match_any": [{"loc": "graphify/serve.py:1359"}]},
+        {"id": "g07.bench", "fact": "benchmark._query_subgraph_tokens calls it (graphify/benchmark.py:39)",
+         "source": {"at": "graphify/benchmark.py:39", "contains": "_query_terms(question)"},
+         "match_any": [{"loc": "graphify/benchmark.py:37-39"}, {"text": "_query_subgraph_tokens"}]},
+        {"id": "g07.cli", "fact": "the CLI query command reaches it through _query_graph_text (graphify/cli.py:1302)",
+         "source": {"at": "graphify/cli.py:1302", "contains": "_query_graph_text("},
+         "match_any": [{"loc": "graphify/cli.py:1302"}]},
+        {"id": "g07.mcp", "fact": "the MCP query_graph tool reaches it through _query_graph_text (graphify/serve.py:2021-2030)",
+         "source": {"at": "graphify/serve.py:2030", "contains": "_query_graph_text("},
+         "match_any": [{"loc": "graphify/serve.py:2021-2030"}, {"text": "_tool_query_graph"}]}
+      ],
+      "negatives": [
+        {"id": "g07.n.reversed", "statement": "_query_terms calls _query_graph_text (direction reversed)",
+         "relation": ["_query_terms", "calls", "_query_graph_text"]}
+      ]
+    },
+    {
+      "id": "g08", "category": "flow",
+      "question": "How does graphify update rebuild the code graph without an LLM?",
+      "facts": [
+        {"id": "g08.entry", "fact": "the update command calls watch._rebuild_code (graphify/cli.py:2445)",
+         "source": {"at": "graphify/cli.py:2445", "contains": "_rebuild_code(watch_path"},
+         "match_any": [{"loc": "graphify/cli.py:2445"}]},
+        {"id": "g08.detect", "fact": "detect() collects the files (graphify/watch.py:1465)",
+         "source": {"at": "graphify/watch.py:1465", "contains": "detected = detect("},
+         "match_any": [{"loc": "graphify/watch.py:1465"}]},
+        {"id": "g08.extract", "fact": "extract() runs the AST extraction (graphify/watch.py:1780)",
+         "source": {"at": "graphify/watch.py:1780", "contains": "result = extract("},
+         "match_any": [{"loc": "graphify/watch.py:1780"}]},
+        {"id": "g08.build", "fact": "build_from_json builds the graph (graphify/watch.py:1995)",
+         "source": {"at": "graphify/watch.py:1995", "contains": "build_from_json(result"},
+         "match_any": [{"loc": "graphify/watch.py:1995"}]},
+        {"id": "g08.cluster", "fact": "cluster() computes communities (graphify/watch.py:2033)",
+         "source": {"at": "graphify/watch.py:2033", "contains": "communities = cluster(G)"},
+         "match_any": [{"loc": "graphify/watch.py:2033"}]},
+        {"id": "g08.write", "fact": "to_json writes graph.json (graphify/watch.py:2105)",
+         "source": {"at": "graphify/watch.py:2105", "contains": "to_json(G, communities"},
+         "match_any": [{"loc": "graphify/watch.py:2105"}]}
+      ],
+      "negatives": []
+    },
+    {
+      "id": "g09", "category": "tests",
+      "question": "Which tests cover the graph file size cap and its environment override?",
+      "facts": [
+        {"id": "g09.default", "fact": "test_graph_size_cap_default_is_512_mib (tests/test_security.py:233)",
+         "source": {"at": "tests/test_security.py:233", "contains": "def test_graph_size_cap_default_is_512_mib"},
+         "match_any": [{"loc": "tests/test_security.py:233-234"}, {"text": "test_graph_size_cap_default_is_512_mib"}]},
+        {"id": "g09.env", "fact": "test_max_graph_bytes_default_when_unset and the other GRAPHIFY_MAX_GRAPH_BYTES parsing tests (tests/test_security.py:241-285)",
+         "source": {"at": "tests/test_security.py:241", "contains": "def test_max_graph_bytes_default_when_unset"},
+         "match_any": [{"loc": "tests/test_security.py:241-285"}, {"text": "test_max_graph_bytes_default_when_unset"}]},
+        {"id": "g09.over", "fact": "test_graph_size_cap_over_limit_raises (tests/test_security.py:294)",
+         "source": {"at": "tests/test_security.py:294", "contains": "def test_graph_size_cap_over_limit_raises"},
+         "match_any": [{"loc": "tests/test_security.py:294-299"}, {"text": "test_graph_size_cap_over_limit_raises"}]}
+      ],
+      "negatives": [
+        {"id": "g09.n.wrong_callee", "statement": "test_graph_size_cap_over_limit_raises calls _enforce_graph_size_cap_or_exit (it calls check_graph_file_size_cap)",
+         "relation": ["test_graph_size_cap_over_limit_raises", "calls", "_enforce_graph_size_cap_or_exit"]}
+      ]
+    }
+  ]
+}

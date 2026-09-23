@@ -1,0 +1,153 @@
+# Why can a claim not be deleted from the store?
+## tests/test_store.py:66-74 def test_schema_created_with_version_and_triggers(st)
+  calls: _tables@67, _version@68, _triggers@69
+  const tests/test_store.py:17: TABLES = {"meta", "snapshots", "snapshot_files", "claims", "evidence", "claim_evidence", "claim_history",
+def test_schema_created_with_version_and_triggers(st):
+    assert TABLES <= _tables(st.conn)
+    assert _version(st.conn) == SCHEMA_VERSION >= 2
+    trig = _triggers(st.conn)
+    for name in ("no_delete_history", "no_update_history", "no_delete_claims", "no_delete_evidence",
+                 "no_delete_feedback", "no_delete_memory", "no_delete_claim_evidence", "no_update_claim_evidence",
+                 "no_delete_snapshots", "no_delete_experiments", "no_delete_analyses", "no_delete_research"):
+        assert name in trig, name
+    assert st.conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+## tests/test_store.py:139-153 def test_claim_history_and_links_are_append_only(st)
+  calls: _seed@140
+def test_claim_history_and_links_are_append_only(st):
+    ids = _seed(st)
+    with pytest.raises(sqlite3.DatabaseError, match="append-only"):
+        st.conn.execute("DELETE FROM claim_history WHERE claim_id = ?", (ids["claim"],))
+    with pytest.raises(sqlite3.DatabaseError, match="append-only"):
+        st.conn.execute("UPDATE claim_history SET reason = 'rewritten' WHERE claim_id = ?", (ids["claim"],))
+    with pytest.raises(sqlite3.DatabaseError, match="never deleted"):
+        st.conn.execute("DELETE FROM claim_evidence WHERE claim_id = ?", (ids["claim"],))
+    with pytest.raises(sqlite3.DatabaseError, match="immutable"):
+        st.conn.execute("UPDATE claim_evidence SET relation = 'refutes' WHERE claim_id = ?", (ids["claim"],))
+    with pytest.raises(sqlite3.DatabaseError, match="never deleted"):
+        st.conn.execute("DELETE FROM snapshot_files")
+    st.conn.rollback()
+    assert [h["reason"] for h in st.history(ids["claim"])] == ["created", "r"]
+    assert [e["relation"] for e in st.claim_evidence(ids["claim"])] == ["supports"]
+## tests/test_store.py:89-105 def test_migrates_a_v1_database_keeping_data(tmp_path)
+  calls: now@94, _triggers@98, Store@101, _version@102, claim@103?, close@105?
+def test_migrates_a_v1_database_keeping_data(tmp_path):
+    p = tmp_path / "old.db"
+    conn = sqlite3.connect(p)
+    conn.executescript(storemod._MIGRATIONS[1])
+    conn.execute("INSERT INTO meta(key, value) VALUES ('schema_version', '1')")
+    ts = now()
+    conn.execute("INSERT INTO claims (id, text, project, status, confidence, created_at, updated_at)"
+                 " VALUES ('clm_old', 'legacy', 'p', 'weak_inference', 0.4, ?, ?)", (ts, ts))
+    conn.commit()
+    assert "no_delete_claim_evidence" not in _triggers(conn)
+    conn.close()
+
+    st = Store(p)
+    assert _version(st.conn) == SCHEMA_VERSION
+    assert st.claim("clm_old")["text"] == "legacy"
+    assert "no_delete_claim_evidence" in _triggers(st.conn)
+    st.close()
+## tests/test_snapshot_stale.py:181-191 def test_deleting_a_cited_file_marks_its_claims_stale(proj)
+def test_deleting_a_cited_file_marks_its_claims_stale(proj):
+    repo, st, cl, claims = proj
+    (repo / "orders" / "repository.py").unlink()
+    res = workflow.update(st, repo)
+    assert res["changed"]["removed"] == ["orders/repository.py"]
+    assert {s["id"] for s in res["stale"]} == {claims["repository"]["id"]}
+    assert res["stale"][0]["changed"] == [{"file": "orders/repository.py", "change": "removed"}]
+    assert _status(cl, claims)["repository"] == "stale"
+    v = workflow.verify(st, repo, claims["repository"]["id"])
+    assert v["after"]["status"] == "stale"
+    assert v["source_checks"][0]["reason"] == "file no longer exists: orders/repository.py"
+## tests/test_snapshot_stale.py:244-260 def test_memory_from_a_stale_claim_is_invalidated_not_deleted(proj)
+def test_memory_from_a_stale_claim_is_invalidated_not_deleted(proj):
+    repo, st, cl, claims = proj
+    mem = Memory(st)
+    mem.learn("pricing.entry", "orders/pricing.py::compute_total", source_claim_id=claims["pricing"]["id"])
+    mem.learn("persistence.owner", "orders/repository.py", source_claim_id=claims["repository"]["id"])
+    rows_before = st.one("SELECT COUNT(*) AS n FROM memory")["n"]
+    _edit(repo, "orders/pricing.py", "return apply_discount(subtotal)", "return subtotal")
+    workflow.update(st, repo)
+    assert mem.recall("pricing.entry") == []
+    assert [m["value"] for m in mem.recall("persistence.owner")] == ["orders/repository.py"]
+    hist = mem.history("pricing.entry")
+    assert len(hist) == 1 and hist[0]["valid"] == 0 and hist[0]["invalidated_at"]
+    assert hist[0]["invalidation_reason"] == "source claim became stale"
+    assert st.one("SELECT COUNT(*) AS n FROM memory")["n"] == rows_before
+    # Learning from a stale claim is refused (recall must only return standing facts).
+    with pytest.raises(ValueError, match="stale"):
+        mem.learn("pricing.entry", "again", source_claim_id=claims["pricing"]["id"])
+## tests/test_critique.py:347-357 def test_deleted_claim_file_is_stale_in_critique(proj)
+def test_deleted_claim_file_is_stale_in_critique(proj):
+    repo, st, cl, g = proj
+    snap = st.latest_snapshot()
+    ln = _line(repo, "orders/config.py", "ORDERS_DISCOUNT_THRESHOLD")
+    c = cl.create("threshold from env", project=snap["project"], snapshot=snap, status="statically_verified",
+                  evidence=[(evmod.source_evidence(repo, "orders/config.py", ln, commit=None), "supports")])
+    (repo / "orders" / "config.py").unlink()
+    res = critique.challenge(st, repo, c["id"], graph=g)
+    stale = next(f for f in res["findings"] if f["check"] == "staleness")
+    assert stale["result"] == "fail" and "orders/config.py (removed)" in stale["detail"]
+    assert res["after"]["status"] == "stale"
+## repoatlas/store.py:187-198 -- History is append-only and claims are never deleted.
+-- History is append-only and claims are never deleted.
+CREATE TRIGGER IF NOT EXISTS no_delete_history BEFORE DELETE ON claim_history
+BEGIN SELECT RAISE(ABORT, 'claim_history is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS no_update_history BEFORE UPDATE ON claim_history
+BEGIN SELECT RAISE(ABORT, 'claim_history is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS no_delete_claims BEFORE DELETE ON claims
+BEGIN SELECT RAISE(ABORT, 'claims are never deleted; change their status'); END;
+CREATE TRIGGER IF NOT EXISTS no_delete_evidence BEFORE DELETE ON evidence
+BEGIN SELECT RAISE(ABORT, 'evidence is never deleted'); END;
+CREATE TRIGGER IF NOT EXISTS no_delete_feedback BEFORE DELETE ON feedback
+BEGIN SELECT RAISE(ABORT, 'feedback is never deleted'); END;
+CREATE TRIGGER IF NOT EXISTS no_delete_memory BEFORE DELETE ON memory
+repoatlas/store.py:202-213 # v2: close the remaining holes in "nothing is deleted". Without these a
+repoatlas/store.py:405-647 class Store
+tests/test_memory.py:66-72 def test_memory_rows_are_never_deleted(env)
+tests/test_store.py:131-136 def test_deletes_are_rejected_by_triggers(st, table, key)
+repoatlas/store.py:260-271 -- D24 claim dependencies at symbol/facet level
+tests/test_store.py:229-255 def test_trust_engine_helpers(st)
+repoatlas/store.py:272-275 BEGIN SELECT RAISE(ABORT, 'claim dependencies are never deleted'); END;
+tests/test_store.py:1-1 """Store: schema creation/migration, schema_version, and the no-delete / append-only triggers."""
+repoatlas/store.py:214-221 BEGIN SELECT RAISE(ABORT, 'snapshot files are never deleted'); END;
+tests/test_memory.py:1-1 """Memory: versioned learnings tied to claims; invalidated (never deleted) when the claim falls."""
+repoatlas/store.py:5-13 * Nothing is deleted. Claims change status; memories are invalidated;
+repoatlas/feedback.py:26-27 9 claim updates go through :class:`repoatlas.claims.Claims` (history is
+repoatlas/store.py:603-604 def claim(self, cid: str) -> dict | None
+repoatlas/store.py:321-325 CREATE INDEX IF NOT EXISTS idx_rtc_caller ON runtime_calls(run_id, caller_path, caller_line);
+tests/test_snapshot_stale.py:3-7 Covers: modify / commit / delete a cited file -> exactly the dependent claims go
+tests/test_snapshot_stale.py:279-294 def test_restoring_a_deleted_file_re_resolves_dependents(proj)
+tests/test_claims.py:139-147 def test_unanchored_moved_or_deleted_source_blocks_verification(env)
+repoatlas/store.py:593-601 def insert_claim(self, claim: dict) -> None
+repoatlas/workflow.py:248-337 def verify(store: Store, repo: Path, cid: str, *, run: bool = False) -> dict
+tests/test_store.py:77-86 def test_reopening_is_idempotent(tmp_path)
+repoatlas/critique.py:362-670 def challenge(store: Store, repo: Path, cid: str, *, graph=None, actor: str = "critique", current_files: dict[str, str]…
+tests/test_question_plan.py:619-638 def test_store_plan_is_immutable_and_revisable(orders)
+repoatlas/analysis.py:1323-1333 def _claim_rows(store: Store, ids: list[str]) -> list[dict]
+repoatlas/memory.py:50-70 def recall(self, key: str | None = None) -> list[dict]
+repoatlas/store.py:199-200 BEGIN SELECT RAISE(ABORT, 'memory is invalidated, never deleted'); END;
+repoatlas/store.py:606-609 def claims(self, status: str | None = None, limit: int = 200) -> list[dict]
+repoatlas/workflow.py:35-52 def _index_refused(store: Store, repo: Path, stats: dict, *, force: bool, files: dict[str, str] | None = None ) -> dict
+repoatlas/store.py:611-615 def update_claim(self, cid: str, fields: dict) -> None
+repoatlas/claims.py:948-957 def claim_files(store: Store, claim: dict) -> set[str]
+repoatlas/claims.py:322-324 def __init__(self, store: Store, repo: Path | None = None)
+repoatlas/research.py:2347-2387 def _compare_claims(store: Store, local: Path, snap: dict, topic: str, cmp: dict, full: dict) -> list[str]
+repoatlas/store.py:508-519 def link(self, claim_id: str, evidence_id: str, relation: str, note: str | None = None, grp: str | None = None) -> None
+repoatlas/store.py:559-561 def claim_deps(self, claim_id: str) -> list[dict]
+repoatlas/store.py:521-526 def claim_evidence(self, claim_id: str) -> list[dict]
+repoatlas/store.py:541-549 def add_claim_deps(self, claim_id: str, deps: list[dict]) -> None
+tests/test_workflow_index.py:93-111 def test_nodes_the_indexer_keeps_for_a_deleted_file_are_pruned(proj, monkeypatch)
+repoatlas/memory.py:21-48 def learn(self, key: str, value: str, *, source_claim_id: str | None = None, snapshot_id: str | None = None) -> dict
+repoatlas/store.py:551-557 def rebase_claim_deps(self, claim_id: str, deps: list[dict]) -> None
+repoatlas/claims.py:964-983 def changed_claim_files(store: Store, claim: dict, old_files: dict[str, str], new_files: dict[str, str]) -> list[dict]
+repoatlas/analysis.py:1601-1610 def _store_analysis(store: Store, aid: str, question: str, snap: dict, budget: Budget, result: dict, claim_ids: list[st…
+repoatlas/store.py:585-590 def claims_for_evidence(self, evidence_id: str) -> list[dict]
+repoatlas/store.py:292-295 CREATE TRIGGER IF NOT EXISTS no_delete_evidence_locations BEFORE DELETE ON evidence_locations
+tests/test_store.py:33-56 def _seed(st: Store) -> dict
+repoatlas/store.py:339-350 -- D10 reference resolutions (append-only record of how user references were pinned)
+repoatlas/store.py:634-635 def history(self, cid: str) -> list[dict]
+tests/test_snapshot_stale.py:337-369 def test_refused_index_rebuild_records_no_snapshot_and_says_what_to_do(proj, monkeypatch)
+tests/test_workflow_index.py:114-128 def test_scan_forces_a_rebuild_when_the_graph_describes_deleted_files(proj, monkeypatch)
+… 783 more candidates not shown: repoatlas/memory.py:75-83 def invalidate_for_claim(self, claim_id: str, reason: str) -> int; repoatlas/store.py:617-632 def record_transition( self, cid: str, *, from_status: str | None, to_status: str, from_conf:; repoatlas/feedback.py:1095-1115 def show(store: Store, feedback_id: str) -> dict; repoatlas/workflow.py:126-154 def scan(store: Store, repo: Path, *, f…
+next: repoatlas query "Why can a claim not be deleted from the store?" --max-chars 24000

@@ -1,0 +1,36 @@
+# Hangi ortam değişkeni en büyük graph.json boyutunu artırıyor ve varsayılan sınır nedir?
+expanded: artırıyor->artifact (turkish stem 'art'); artırıyor->articl (turkish stem 'art'); artırıyor->artefact (turkish stem 'art'); sınır->singl (turkish stem 'sin'); sınır->sinc (turkish stem 'sin'); sınır->singleton (turkish stem 'sin')
+## graphify/llm.py:3157-3169 def backend_detection_env_vars() -> tuple[str, ...]
+  doc: Every environment variable ``detect_backend()`` consults, in probe order.
+  calls: _backend_env_keys@3165
+  const graphify/llm.py:101: BACKENDS: dict[str, dict] = {
+  const graphify/llm.py:3150: _BACKEND_DETECTION_EXTRA_ENV = (
+def backend_detection_env_vars() -> tuple[str, ...]:
+    """Every environment variable ``detect_backend()`` consults, in probe order.
+
+    Covers the API-key variables of every registered backend (built-in and
+    custom) plus the endpoint/region/host variables checked directly.
+    """
+    seen: dict[str, None] = {}
+    for name in BACKENDS:
+        for env_key in _backend_env_keys(name):
+            seen.setdefault(env_key, None)
+    for env_key in _BACKEND_DETECTION_EXTRA_ENV:
+        seen.setdefault(env_key, None)
+    return tuple(seen)
+## graphify/security.py:35-66 def _max_graph_file_bytes() -> int
+  doc: Return the graph.json size cap in bytes.
+  called by: check_graph_file_size_cap (graphify/security.py:373); test_max_graph_bytes_default_when_unset (tests/test_security.py:243); test_max_graph_bytes_default_when_blank (tests/test_security.py:248); test_max_graph_bytes_plain_integer (tests/test_security.py:253); test_max_graph_bytes_mb_suffix_is_binary (tests/test_security.py:258); test_max_graph_bytes_gb_suffix_is_binary (tests/test_security.py:263); test_max_graph_bytes_suffix_is_case_insensitive (tests/test_security.py:268); test_max_graph_bytes_tolerates_space_before_suffix (tests/test_security.py:273) (+2)
+  const graphify/security.py:32: _MAX_GRAPH_FILE_BYTES = 512 * 1024 * 1024   # 512 MiB
+  graphify/security.py:37-45
+
+    Honors the ``GRAPHIFY_MAX_GRAPH_BYTES`` environment variable so users with
+    large codebases can raise the limit without editing source. The value may
+    be plain bytes (``671088640``) or carry an ``MB`` / ``GB`` suffix
+    (``640MB``, ``2GB`` — case-insensitive, binary multipliers: ``MB`` is
+    1024*1024 and ``GB`` is 1024*1024*1024, i.e. MiB / GiB).
+    Falls back to ``_MAX_GRAPH_FILE_BYTES`` (512 MiB) when the env var is unset,
+    blank, or unparseable.
+
+… 2060 more candidates not shown: graphify/security.py:357-383 def check_graph_file_size_cap(path: Path) -> None; graphify/exporters/html.py:17-30 def _viz_node_limit() -> int; tests/test_security.py:294-299 test_graph_size_cap_over_limit_raises; graphify/llm.py:308-318 _resolve_max_tokens
+next: repoatlas query "Hangi ortam değişkeni en büyük graph.json boyutunu artırıyor ve varsayılan sınır nedir?" --max-chars 6000
