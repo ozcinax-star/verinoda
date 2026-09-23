@@ -815,7 +815,7 @@ bilgi (50 üzerinden):
 | Ham grep+okuma | 33 | 33 | 33 |
 | Graphify | 13 | 13 | 13 |
 | Verinoda analyze | 18 | 25 | **39** |
-| Verinoda retrieve (JSON) | 25 | 32 | **41** |
+| Verinoda retrieve (JSON) | 25 | 32 | **43** |
 | Verinoda retrieve (düz metin) | 34 | 46 | **48** |
 
 Önceki beş kümede (gerileme kontrolü) Verinoda'nın 25 hücresinden 24'ü ve

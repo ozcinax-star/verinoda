@@ -282,7 +282,7 @@ def test_restoring_a_deleted_file_re_resolves_dependents(proj):
     original = (repo / "orders" / "repository.py").read_bytes()
     (repo / "orders" / "repository.py").unlink()
     res = workflow.update(st, repo)
-    assert res["index_mode"] == "incremental" and res["snapshot"]["graph_edges"] < full
+    assert res["index_mode"] == "full" and res["snapshot"]["graph_edges"] < full
     (repo / "orders" / "repository.py").write_bytes(original)
     res = workflow.update(st, repo)
     # Unchanged files (api.py, service.py, tests) import the restored module; an

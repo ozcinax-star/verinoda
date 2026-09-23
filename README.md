@@ -16,10 +16,10 @@
 | Graphify port (`verinoda/project_index`, `tests_upstream/`) | done. Upstream suite at port time: 5436 passed / 50 failed, and every failure also fails on unmodified upstream on the same Windows machine; not re-run since (`docs/UPSTREAM.md`) |
 | Core: claims, evidence, critique, experiments, research/compare, feedback, memory, installers, MCP server (23 tools) | implemented |
 | Round 3: search engine, question plans with Turkish support, reference resolver, trust engine (anchors, entailment, facet-level staleness), runtime observation, precise call resolution | implemented and wired into the CLI, MCP and `analyze`; gaps per decision in `docs/DESIGN.md` ("Implementation status") |
-| Product test suite | 1,172 passed, 1 skipped, 2 deselected (slow packaging and installer checks), Windows 11 / Python 3.12, 2026-09-24 |
+| Product test suite | 1,176 passed, 1 skipped, 2 deselected (slow packaging and installer checks), Windows 11 / Python 3.12, 2026-09-24 |
 | Agent integration | Claude Code (`/verinoda`) and Codex (`$verinoda`) verified in real headless sessions with the earlier skill text (`docs/AGENT-VERIFICATION.md`); the round-3 skill text (understand-first and references protocols) has no such record yet |
 | Benchmarks (measured, `docs/BENCHMARKS.md`, chars/4 token estimates, gold facts found in the delivered context; no model in the loop) | Graphify's own code (226 files, 37 facts, in-sample): Verinoda text retrieval 36/37 at 1,424 tokens/question, ~0.14 s; Graphify 7/37. Set on Verinoda's own earlier code (33 facts): 25/33 vs Graphify 8/33 and raw reading 9/33; it was held out until the 2026-09-23 ranking change, which was chosen with it in view (22/33 before). Turkish paraphrases of the example app: 32/32. Regressions: `analyze` on the example app 32 -> 31/32, the one-off scan of the large corpus got slower (6.7 s -> 14.7 s cold), and the 2026-09-23 change adds about 0.03 s per retrieval on the large sets |
-| Game mods and data files (2026-09-24) | data packs, JSON/yml configs and other data files indexed; resource-id links between code and data; reference trees; Java calls the extractor drops; translation pairs from locale files. New example set `glow_mod` (a small fictional Fabric mod, 50 facts): Verinoda text retrieval 48/50, JSON 41, analyze 39, against raw reading 33 and Graphify 13; at `32a5bd4` it was 34 / 25 / 18. Held out only for its first measurement (46 / 32 / 25). The five earlier sets: unchanged except one fact lost by one JSON cell (`docs/BENCHMARKS.md`) |
+| Game mods and data files (2026-09-24) | data packs, JSON/yml configs and other data files indexed; resource-id links between code and data; reference trees; Java calls the extractor drops; translation pairs from locale files. New example set `glow_mod` (a small fictional Fabric mod, 50 facts): Verinoda text retrieval 48/50, JSON 43, analyze 39, against raw reading 33 and Graphify 13; at `32a5bd4` it was 34 / 25 / 18. Held out only for its first measurement (46 / 32 / 25). The five earlier sets: unchanged except one fact lost by one JSON cell (`docs/BENCHMARKS.md`) |
 | Cross-platform | tested on Windows 11 only; the CI workflow (Linux/macOS/Windows) exists but is manual and has not been run |
 
 **Known limitations** (see also `docs/DESIGN.md` for per-decision gaps):
@@ -34,13 +34,13 @@ Open findings of the second acceptance audit (2026-09-23 05:00), not yet fixed:
 
 Found by running Verinoda on its own repository (2026-09-23), not yet fixed:
 
-- On a repository of about 2,000 files an incremental `update` after a two-file edit took about 33 s, almost all of it in the graph rebuild, and 47-85 s when a file was added (a new file forces a full graph rebuild). `analyze` refreshes first and can spend its default 60 s budget on that; run `verinoda update .` before asking.
+- `update` rebuilds the code graph over the whole corpus (unchanged files come from the AST cache): about 33 s on a repository of about 2,100 files. The upstream incremental pass was faster (about 20 s) but lost the cross-file edges of every file it re-extracted, so after an edit a function's imports and calls into other files were missing until the next full scan (fixed 2026-09-24). `analyze` refreshes first and can spend its default 60 s budget on that; run `verinoda update .` before asking.
 - A frozen copy of the code inside the repository (here `benchmarks/corpora/heldout_repoatlas_7371990/`) still answers self-queries unless it is marked: `verinoda setup . --reference benchmarks/corpora=heldout,snapshot`. (Fixed on 2026-09-24: command names now map to their handlers, `scan` komutu -> `cmd_scan`.)
 
 Game mods and data files (2026-09-24):
 
 - The kind of resource an id names is taken from a fixed table of command words and JSON keys; an id in plain Java is "kind not stated" (an inference) unless one file carries it. Bare names count only as an argument of an id constructor or of a helper whose name says what it loads.
-- The extra call pass is Java only. Turkish stems that folding merges (`öl` die / `ol` be) are not in the seed dictionary, so "öldüğünde" is not understood.
+- The extra call pass is Java only. Turkish stems that folding merges (`öl` die / `ol` be) are matched as written only in retrieval; the question plan still reads folded words.
 
 - Windows only so far. The POSIX resource limits and the container isolation
   path (docker/podman) are coded but have never been run.

@@ -73,9 +73,9 @@ Facts found (pinpointed), tokens per question:
 |---|---|---|---|
 | raw grep+read | 33 (29), 2,695 | 33 (29), 2,695 | 33 (29), 2,695 |
 | Graphify (vendored renderer) | 13 (13), 1,200 | 13 (13), 1,200 | 13 (13), 1,200 |
-| Verinoda analyze | 18 (17), 672 | 25 (24), 774 | **39 (37)**, 991 |
-| Verinoda retrieve (JSON) | 25 (25), 1,327 | 32 (32), 1,396 | **41 (41)**, 1,430 |
-| Verinoda retrieve (text) | 34 (32), 1,381 | 46 (44), 1,431 | **48 (45)**, 1,482 |
+| Verinoda analyze | 18 (17), 672 | 25 (24), 774 | **39 (37)**, 1,006 |
+| Verinoda retrieve (JSON) | 25 (25), 1,327 | 32 (32), 1,396 | **43 (43)**, 1,430 |
+| Verinoda retrieve (text) | 34 (32), 1,381 | 46 (44), 1,431 | **48 (45)**, 1,484 |
 
 No approach stated any of the 12 negative facts. Raw grep+read is strong here
 because the example is small (37 files) and its identifiers are in the
@@ -94,6 +94,26 @@ out of the JSON budget. The text format of the same question is unchanged.
 Before the generic-data factor, `heldout_repoatlas` text lost a fact to the
 1,290-line seed dictionary JSON of that corpus, which outranked the code; that
 is what the factor is for.
+
+**Later the same night** (in the "now" column above): the `update`
+correctness fix below, a Turkish stem rule (an inflected word also searches
+its longest indexed stem: "bıçağının" -> `bicagi`), `öl` (die) matched as
+written so it no longer collides with `ol` (be), and a PageRank prior for data
+units through their links. Measured on all seven sets against the run before
+them: `glow_mod` JSON 41 -> 43, the private set JSON +1, every other cell
+unchanged. A 0.8 factor for test files was tried in the same round and
+dropped: +3 facts on `heldout_repoatlas`, but -2 on `glow_mod` and -1 on
+`orders_app_tr`, whose behaviour questions cite tests.
+
+**`update` lost cross-file edges (fixed).** The upstream incremental rebuild
+extracts only the changed files and resolves imports and calls within that
+batch, so after editing `orders/service.py` its 4 edges into `pricing.py` and
+`repository.py` were missing (and dangling references appeared) until the next
+full scan. `update` now re-extracts the whole corpus from the AST cache: about
+33 s instead of 20 s on Verinoda's own ~2,100 files; skipping the upstream
+report's "suggested questions", which Verinoda never reads, took a full
+rebuild there from 42 s to 33 s. `tests/test_workflow_index.py` checks the
+edges after an edit.
 
 **A private mod.** The work was driven by the owner's own Fabric mod (Java,
 a data pack, a yml config and the original Paper plugin kept as a reference

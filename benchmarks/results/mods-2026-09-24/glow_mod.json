@@ -63,18 +63,18 @@
   "prices_usd_per_mtok": null,
   "price_source": null
  },
- "workdir": "<TMP>/verinoda-bench-wbqp87f0",
+ "workdir": "<TMP>/verinoda-bench-uuh2ri6t",
  "workdir_kept": false,
  "corpus": {
   "source": "<REPO>/examples/glow_mod",
-  "source_commit": "32a5bd4a626742e8859532ffb9b12d915a14d8ed",
+  "source_commit": "ea93f92324537816c1c2676ff73c5181cb2ed051",
   "source_dirty": true,
   "snapshot": "working tree (tracked + untracked, not ignored)",
   "include": null,
   "exclude": null,
   "file_count": 37,
   "bytes": 33709,
-  "workdir_commit": "565cd88abc41acd9bef0304cabf7c1ff3105587c"
+  "workdir_commit": "abeacd6d4d30bcf0d3a15d9b21e19dfe8bd4374f"
  },
  "gold_validation": {
   "ok": true,
@@ -90,7 +90,7 @@
   "verinoda_retrieve_text"
  ],
  "environment": {
-  "date_utc": "2026-09-23T21:01:02+00:00",
+  "date_utc": "2026-09-23T21:50:36+00:00",
   "os": "Windows-11-10.0.26200-SP0",
   "machine": "AMD64",
   "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
@@ -101,31 +101,15 @@
   "vendored_graphify_commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7",
   "graphify_cli": null,
   "git": "git version 2.53.0.windows.1",
-  "verinoda_source_commit": "32a5bd4a626742e8859532ffb9b12d915a14d8ed",
+  "verinoda_source_commit": "ea93f92324537816c1c2676ff73c5181cb2ed051",
   "verinoda_package_changes_vs_commit": [
-   "M verinoda/agents/installer.py",
-   "M verinoda/analysis.py",
-   "M verinoda/architecture_map.py",
-   "M verinoda/benchmark/runner.py",
-   "M verinoda/cli.py",
-   "M verinoda/critique.py",
    "M verinoda/data/seed_lexicon_tr_en.json",
-   "M verinoda/doctor.py",
-   "M verinoda/entail.py",
    "M verinoda/index.py",
    "M verinoda/lexicon.py",
-   "M verinoda/mcp/server.py",
-   "M verinoda/paths.py",
-   "M verinoda/question_plan.py",
-   "M verinoda/retrieval.py",
    "M verinoda/search_index.py",
-   "M verinoda/setup.py",
-   "M verinoda/snapshot.py",
-   "M verinoda/workflow.py",
-   "?? verinoda/benchmark/questions/glow_mod.json",
-   "?? verinoda/resources.py"
+   "M verinoda/workflow.py"
   ],
-  "verinoda_package_diff_sha256": "b977f8657ec31a193a03e0f5d69d3f178613a732f86dce5af2b27d34f2ced396"
+  "verinoda_package_diff_sha256": "ff8c13f1af90de895031f6f9035763719de34870966c12cd8a4e4cce80ab77ac"
  },
  "verinoda_config": {
   "index": {
@@ -148,8 +132,8 @@
    "note": "no index; every query greps and reads the working tree"
   },
   "verinoda": {
-   "cold_seconds": 1.015,
-   "warm_seconds": 0.479,
+   "cold_seconds": 1.078,
+   "warm_seconds": 0.48,
    "nodes": 194,
    "edges": 351,
    "warm_nodes": 194,
@@ -177,7 +161,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0386,
+       "seconds": 0.0384,
        "chars": 14354,
        "sha256": "41246ff434721809123616a6e6c5e770d9cea155251da1a61762be5c143c7c6e"
       }
@@ -291,7 +275,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0118,
+       "seconds": 0.0123,
        "chars": 6511,
        "sha256": "a42e1627fe555d51d7c6698635880e7d2982a5289f4b299c1d1ee94789bb14c0"
       }
@@ -359,9 +343,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.3257,
+       "seconds": 0.3463,
        "chars": 6089,
-       "sha256": "885067dc28f606f9b4609d1849d18113552be9bf31c8e15b3454337d736b07a8",
+       "sha256": "ea9d4f086f140c407477968d23fee50edac3f4ba50d6ea84917f3aaa4fafa5a5",
        "claims": 11,
        "claims_reused": 0,
        "claims_new": 11,
@@ -372,7 +356,7 @@
      "score": {
       "chars": 6089,
       "tokens": 1523,
-      "sha256": "885067dc28f606f9b4609d1849d18113552be9bf31c8e15b3454337d736b07a8",
+      "sha256": "ea9d4f086f140c407477968d23fee50edac3f4ba50d6ea84917f3aaa4fafa5a5",
       "facts": {
        "total": 6,
        "found_n": 6,
@@ -427,10 +411,10 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.297,
+       "elapsed_s": 0.344,
        "tool_calls": 19,
-       "context_chars": 7385,
-       "context_tokens_est": 1846,
+       "context_chars": 7383,
+       "context_tokens_est": 1845,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -460,15 +444,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0223,
-       "chars": 5741,
-       "sha256": "8ee1bd0d7d568734ad72c098657561a52aabf1a4f2ec2b3f1e0cdf58e520fd65"
+       "seconds": 0.0226,
+       "chars": 5749,
+       "sha256": "0875162c93f8dbf0b94cef42acec5b72ba0cf1b581c8f96f2bd2c50878ceec4e"
       }
      ],
      "score": {
-      "chars": 5741,
-      "tokens": 1436,
-      "sha256": "8ee1bd0d7d568734ad72c098657561a52aabf1a4f2ec2b3f1e0cdf58e520fd65",
+      "chars": 5749,
+      "tokens": 1438,
+      "sha256": "0875162c93f8dbf0b94cef42acec5b72ba0cf1b581c8f96f2bd2c50878ceec4e",
       "facts": {
        "total": 6,
        "found_n": 6,
@@ -492,20 +476,22 @@
        }
       },
       "locators": {
-       "distinct": 24,
+       "distinct": 22,
        "files": 10,
-       "point_or_short": 24
+       "point_or_short": 22
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
       "retrieve": {
        "items": 7,
-       "edges": 0,
-       "edge_confidence": {},
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5976,
+        "used_chars": 5991,
         "truncated": true,
         "expansions": [
          "wisp->summon_wisp (lexicon)",
@@ -513,9 +499,6 @@
          "wisp->wisp_heart (lexicon)",
          "wisp->heart (lexicon)",
          "cagriliyor->call (lexicon)"
-        ],
-        "more": [
-         "src/gametest/java/com/example/glowmod/test/WispTests.java:22-28 WispTests.deadWispLeavesItsHeart"
         ]
        }
       },
@@ -525,7 +508,7 @@
        "matched": []
       },
       "relations": {
-       "asserted": 0,
+       "asserted": 1,
        "checked": 0,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
@@ -543,15 +526,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0338,
+       "seconds": 0.0324,
        "chars": 5927,
-       "sha256": "2a886db5a0f2feb2ab4e78e9a47ae962152f953e23fa5d7a25bd8994ee4549c7"
+       "sha256": "9c2149e73d8f1887ec8eeaa081cb1db27ccb29bd02d8686326bdd4a27aec6c46"
       }
      ],
      "score": {
       "chars": 5927,
       "tokens": 1482,
-      "sha256": "2a886db5a0f2feb2ab4e78e9a47ae962152f953e23fa5d7a25bd8994ee4549c7",
+      "sha256": "9c2149e73d8f1887ec8eeaa081cb1db27ccb29bd02d8686326bdd4a27aec6c46",
       "facts": {
        "total": 6,
        "found_n": 6,
@@ -653,7 +636,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0359,
+       "seconds": 0.0341,
        "chars": 16433,
        "sha256": "cc5351aa43afb2897235177eb8aeaff2b75993a5db0c960a929575ac8370ecfe"
       }
@@ -761,13 +744,13 @@
        "kind": "cold",
        "seconds": 0.0092,
        "chars": 3340,
-       "sha256": "c0c933cda25552a3321c097d89988749b2409e2bed1ff7e1d150d29b896729ec"
+       "sha256": "627af7a77540bc4213007cfa2b7d4d88c944afc225aeafd211dd923833b79be5"
       }
      ],
      "score": {
       "chars": 3340,
       "tokens": 835,
-      "sha256": "c0c933cda25552a3321c097d89988749b2409e2bed1ff7e1d150d29b896729ec",
+      "sha256": "627af7a77540bc4213007cfa2b7d4d88c944afc225aeafd211dd923833b79be5",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -824,9 +807,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1379,
+       "seconds": 0.1444,
        "chars": 2236,
-       "sha256": "9effade1364a7ea9341a208d3138d8e31508fc23ace1fe41b78914fd6f9e0ddc",
+       "sha256": "0975b30ec25a76c4df237afcb33a6cab073091eb65cd64fd726ba48f85857e02",
        "claims": 5,
        "claims_reused": 0,
        "claims_new": 5,
@@ -837,7 +820,7 @@
      "score": {
       "chars": 2236,
       "tokens": 559,
-      "sha256": "9effade1364a7ea9341a208d3138d8e31508fc23ace1fe41b78914fd6f9e0ddc",
+      "sha256": "0975b30ec25a76c4df237afcb33a6cab073091eb65cd64fd726ba48f85857e02",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -884,7 +867,7 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.141,
+       "elapsed_s": 0.14,
        "tool_calls": 13,
        "context_chars": 3591,
        "context_tokens_est": 897,
@@ -917,7 +900,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.021,
+       "seconds": 0.0183,
        "chars": 5720,
        "sha256": "0808fb93d8f66131ce39f0d900c1dac4f281a382ac6ba669891fae76605efad9"
       }
@@ -984,15 +967,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0323,
-       "chars": 5936,
-       "sha256": "55a0683e586326d9fdb830058a33ee1a0ac96399efabe29fdcbf6ddc2c9bdb9e"
+       "seconds": 0.0288,
+       "chars": 5963,
+       "sha256": "f4a67af5d53df4d61c59b866574d76d7b5238c641a2ab410db2b62ccaf64126b"
       }
      ],
      "score": {
-      "chars": 5936,
-      "tokens": 1484,
-      "sha256": "55a0683e586326d9fdb830058a33ee1a0ac96399efabe29fdcbf6ddc2c9bdb9e",
+      "chars": 5963,
+      "tokens": 1491,
+      "sha256": "f4a67af5d53df4d61c59b866574d76d7b5238c641a2ab410db2b62ccaf64126b",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -1009,7 +992,7 @@
       },
       "locators": {
        "distinct": 32,
-       "files": 14,
+       "files": 15,
        "point_or_short": 30
       },
       "agent_tool_calls": 1,
@@ -1077,7 +1060,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0347,
+       "seconds": 0.0357,
        "chars": 13085,
        "sha256": "71339f5ef24043d32e69c1a8e9bc2c8f7254d69c4e0103ad73ff7bd3a756ec85"
       }
@@ -1191,15 +1174,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0102,
+       "seconds": 0.0103,
        "chars": 5177,
-       "sha256": "84ee29706eeb0cacda6876e213e78e3f1fc7be7220cb03ecdf59c5e3543d8662"
+       "sha256": "c9a40700e46dd676a95cd521d8fea8e3ffa7bb4e6b5930ec680010b6306e3a38"
       }
      ],
      "score": {
       "chars": 5177,
       "tokens": 1295,
-      "sha256": "84ee29706eeb0cacda6876e213e78e3f1fc7be7220cb03ecdf59c5e3543d8662",
+      "sha256": "c9a40700e46dd676a95cd521d8fea8e3ffa7bb4e6b5930ec680010b6306e3a38",
       "facts": {
        "total": 4,
        "found_n": 0,
@@ -1255,20 +1238,20 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.219,
-       "chars": 5529,
-       "sha256": "c090a4d0c4fb34c1d871aa5dac77d3a2ff1e181eed8577b635fc4246fce1962c",
-       "claims": 13,
+       "seconds": 0.2383,
+       "chars": 5953,
+       "sha256": "caab6605eb6df1faee12a0245d282270e689c7079b3d9219fcf9d88fb9481605",
+       "claims": 14,
        "claims_reused": 1,
-       "claims_new": 12,
+       "claims_new": 13,
        "internal_tool_calls": 23,
        "budget_exhausted": null
       }
      ],
      "score": {
-      "chars": 5529,
-      "tokens": 1383,
-      "sha256": "c090a4d0c4fb34c1d871aa5dac77d3a2ff1e181eed8577b635fc4246fce1962c",
+      "chars": 5953,
+      "tokens": 1489,
+      "sha256": "caab6605eb6df1faee12a0245d282270e689c7079b3d9219fcf9d88fb9481605",
       "facts": {
        "total": 4,
        "found_n": 0,
@@ -1283,30 +1266,30 @@
        "via": {}
       },
       "locators": {
-       "distinct": 13,
-       "files": 6,
-       "point_or_short": 13
+       "distinct": 14,
+       "files": 7,
+       "point_or_short": 14
       },
       "agent_tool_calls": 1,
       "claims": {
-       "total": 13,
+       "total": 14,
        "by_status": {
-        "statically_verified": 10,
+        "statically_verified": 11,
         "strong_inference": 3
        },
-       "verified": 10,
+       "verified": 11,
        "inference": 3,
-       "verified_share": 0.769,
-       "inference_share": 0.231,
+       "verified_share": 0.786,
+       "inference_share": 0.214,
        "weak_or_unknown": 0,
        "weak_or_unknown_unlabelled": 0,
        "contradicted_shown": 0,
        "stale_shown": 0,
        "evidence_by_type": {
-        "source_code": 13,
+        "source_code": 14,
         "graph_edge": 3
        },
-       "evidence_verifying": 13,
+       "evidence_verifying": 14,
        "evidence_non_verifying": 3,
        "contradicted_relations": 0,
        "contradicted_but_cited_line_names_target": 0,
@@ -1314,10 +1297,10 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.219,
+       "elapsed_s": 0.234,
        "tool_calls": 23,
-       "context_chars": 7231,
-       "context_tokens_est": 1807,
+       "context_chars": 7708,
+       "context_tokens_est": 1927,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -1329,7 +1312,7 @@
        "labelled_not_findings": 0
       },
       "relations": {
-       "asserted": 6,
+       "asserted": 7,
        "checked": 3,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
@@ -1347,35 +1330,36 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0193,
-       "chars": 5710,
-       "sha256": "3583dcb6a0169ab4d762f88cf2f387ad4b63546565e3fa68336d88db087a320a"
+       "seconds": 0.0196,
+       "chars": 5732,
+       "sha256": "6cad36c4f6704ae302523b74502b19ef3168ffb3e576d1c1adc0d2955ae36f05"
       }
      ],
      "score": {
-      "chars": 5710,
-      "tokens": 1428,
-      "sha256": "3583dcb6a0169ab4d762f88cf2f387ad4b63546565e3fa68336d88db087a320a",
+      "chars": 5732,
+      "tokens": 1433,
+      "sha256": "6cad36c4f6704ae302523b74502b19ef3168ffb3e576d1c1adc0d2955ae36f05",
       "facts": {
        "total": 4,
-       "found_n": 1,
-       "pinpointed_n": 1,
+       "found_n": 2,
+       "pinpointed_n": 2,
        "found": [
+        "q03.ondeath",
         "q03.heart"
        ],
        "missed": [
-        "q03.ondeath",
         "q03.namespace",
         "q03.loot"
        ],
        "via": {
-        "q03.heart": "loc src/main/resources/data/glowmod/function/wisp_death.mcfunction:1-5"
+        "q03.ondeath": "loc src/main/java/com/example/glowmod/entity/Wisp.java:38-44",
+        "q03.heart": "loc src/main/resources/data/glowmod/function/wisp_death.mcfunction:4"
        }
       },
       "locators": {
-       "distinct": 18,
-       "files": 6,
-       "point_or_short": 18
+       "distinct": 19,
+       "files": 9,
+       "point_or_short": 19
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
@@ -1386,7 +1370,7 @@
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5960,
+        "used_chars": 5971,
         "truncated": true,
         "expansions": [
          "düşüyor->dust (turkish stem 'dus')",
@@ -1396,10 +1380,15 @@
          "wisp->heart (lexicon)",
          "esyalar->item (lexicon)",
          "dusuyor->drop (lexicon)",
-         "dusuyor->fall (lexicon)"
+         "dusuyor->fall (lexicon)",
+         "oldugunde->death (lexicon)",
+         "oldugunde->dead (lexicon)",
+         "oldugunde->kill (lexicon)"
         ],
         "more": [
-         "src/main/resources/data/glowmod/function/wisp_death.mcfunction:1-5 glowmod:wisp_death",
+         "src/main/resources/assets/glowmod/lang/tr_tr.json:1-11 glowmod:tr_tr",
+         "src/main/java/com/example/glowmod/entity/Wisp.java:38-44 Wisp.onDeath",
+         "reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:29-35 WispListener.onDeath",
          "src/main/java/com/example/glowmod/item/ModItems.java:25-31 ModItems.initialize"
         ]
        }
@@ -1428,15 +1417,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0296,
-       "chars": 5909,
-       "sha256": "ef83da819d59c617faff2d6e02b4a1879a205c272dcff4b875473295e9bd5a48"
+       "seconds": 0.0276,
+       "chars": 5937,
+       "sha256": "3929ebec54bee47ead6d761114e70890987d1178db891b957e736083d5b11398"
       }
      ],
      "score": {
-      "chars": 5909,
-      "tokens": 1478,
-      "sha256": "ef83da819d59c617faff2d6e02b4a1879a205c272dcff4b875473295e9bd5a48",
+      "chars": 5937,
+      "tokens": 1485,
+      "sha256": "3929ebec54bee47ead6d761114e70890987d1178db891b957e736083d5b11398",
       "facts": {
        "total": 4,
        "found_n": 2,
@@ -1455,9 +1444,9 @@
        }
       },
       "locators": {
-       "distinct": 15,
-       "files": 12,
-       "point_or_short": 15
+       "distinct": 16,
+       "files": 11,
+       "point_or_short": 16
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
@@ -1505,7 +1494,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0359,
+       "seconds": 0.0363,
        "chars": 15368,
        "sha256": "2e57b424da577dd0ae9370faf257b8afecab74e5686193ba59b2f71000765093"
       }
@@ -1621,7 +1610,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.012,
+       "seconds": 0.0122,
        "chars": 6510,
        "sha256": "e6a22b23457b66b073aee2aca41a37e27e0fbe8abc90319ca0a16f3a8c6ba362"
       }
@@ -1688,9 +1677,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1848,
+       "seconds": 0.1816,
        "chars": 3945,
-       "sha256": "72bae5b31e66a15e1af4189831e592858aac7c89503a69c32e4e13b9e14fbed8",
+       "sha256": "538da96d50f0a920256f08c83b80d38c13e1c8f1acccd2ac90899769a36f5f02",
        "claims": 9,
        "claims_reused": 0,
        "claims_new": 9,
@@ -1701,7 +1690,7 @@
      "score": {
       "chars": 3945,
       "tokens": 987,
-      "sha256": "72bae5b31e66a15e1af4189831e592858aac7c89503a69c32e4e13b9e14fbed8",
+      "sha256": "538da96d50f0a920256f08c83b80d38c13e1c8f1acccd2ac90899769a36f5f02",
       "facts": {
        "total": 4,
        "found_n": 2,
@@ -1752,7 +1741,7 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.187,
+       "elapsed_s": 0.172,
        "tool_calls": 13,
        "context_chars": 4785,
        "context_tokens_est": 1196,
@@ -1785,36 +1774,37 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0195,
-       "chars": 5675,
-       "sha256": "d5222e5f10cf3e79fdc6e7bccddfd972d928c8d934fcab2d2a86bc8936b997f6"
+       "seconds": 0.0183,
+       "chars": 5750,
+       "sha256": "5c0c30f4b5a00004d4cbf206c4f6f2ff295ac125e66991e28aaa5bd99948a7c5"
       }
      ],
      "score": {
-      "chars": 5675,
-      "tokens": 1419,
-      "sha256": "d5222e5f10cf3e79fdc6e7bccddfd972d928c8d934fcab2d2a86bc8936b997f6",
+      "chars": 5750,
+      "tokens": 1438,
+      "sha256": "5c0c30f4b5a00004d4cbf206c4f6f2ff295ac125e66991e28aaa5bd99948a7c5",
       "facts": {
        "total": 4,
-       "found_n": 2,
-       "pinpointed_n": 2,
+       "found_n": 3,
+       "pinpointed_n": 3,
        "found": [
         "q04.baslat",
+        "q04.execute",
         "q04.command"
        ],
        "missed": [
-        "q04.helper",
-        "q04.execute"
+        "q04.helper"
        ],
        "via": {
         "q04.baslat": "loc src/main/java/com/example/glowmod/ritual/Ritual.java:22",
+        "q04.execute": "loc src/main/java/com/example/glowmod/util/Datapack.java:25-35",
         "q04.command": "loc src/main/java/com/example/glowmod/command/GlowCommands.java:40"
        }
       },
       "locators": {
-       "distinct": 14,
+       "distinct": 15,
        "files": 7,
-       "point_or_short": 14
+       "point_or_short": 15
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
@@ -1825,10 +1815,13 @@
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5910,
+        "used_chars": 5989,
         "truncated": true,
         "expansions": [
          "glowmod->glow (corpus prefix)"
+        ],
+        "more": [
+         "src/main/java/com/example/glowmod/util/Datapack.java:25-35 Datapack.execute"
         ]
        }
       },
@@ -1856,15 +1849,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0286,
-       "chars": 5986,
-       "sha256": "edfe0c2fe797e45efb8522ab1edd9d7435995ba3653c1056b422d0d08038a92a"
+       "seconds": 0.0274,
+       "chars": 5984,
+       "sha256": "be1a23ec07be6bb5be32d2951ef3e24ff114b2f585ad3dcbc38850af89577fe4"
       }
      ],
      "score": {
-      "chars": 5986,
-      "tokens": 1497,
-      "sha256": "edfe0c2fe797e45efb8522ab1edd9d7435995ba3653c1056b422d0d08038a92a",
+      "chars": 5984,
+      "tokens": 1496,
+      "sha256": "be1a23ec07be6bb5be32d2951ef3e24ff114b2f585ad3dcbc38850af89577fe4",
       "facts": {
        "total": 4,
        "found_n": 4,
@@ -2045,7 +2038,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0113,
+       "seconds": 0.011,
        "chars": 6413,
        "sha256": "4621680d798fc252624d240e47dd26773563d09b2dc21839df3cae68e38ff3a5"
       }
@@ -2106,9 +2099,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1356,
+       "seconds": 0.1379,
        "chars": 4658,
-       "sha256": "555648b6a9f3e8b4148395a847194203a4f54bafbf5cad16172c48b2b52ff6c0",
+       "sha256": "747a6e9ee22e5391375d98b15e8b15adf8b232d56927df94f030a020a7bd0776",
        "claims": 9,
        "claims_reused": 5,
        "claims_new": 4,
@@ -2119,7 +2112,7 @@
      "score": {
       "chars": 4658,
       "tokens": 1165,
-      "sha256": "555648b6a9f3e8b4148395a847194203a4f54bafbf5cad16172c48b2b52ff6c0",
+      "sha256": "747a6e9ee22e5391375d98b15e8b15adf8b232d56927df94f030a020a7bd0776",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -2200,15 +2193,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0204,
-       "chars": 5763,
-       "sha256": "abab734d055071c5ac5cc51704c7bc62255355f6bd9f986131f62e98e7986a6f"
+       "seconds": 0.0203,
+       "chars": 5715,
+       "sha256": "4becbfd438b653b0c65a63bc8e84d84defd83ee106e05a6accfbc92293e61f36"
       }
      ],
      "score": {
-      "chars": 5763,
-      "tokens": 1441,
-      "sha256": "abab734d055071c5ac5cc51704c7bc62255355f6bd9f986131f62e98e7986a6f",
+      "chars": 5715,
+      "tokens": 1429,
+      "sha256": "4becbfd438b653b0c65a63bc8e84d84defd83ee106e05a6accfbc92293e61f36",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -2239,7 +2232,7 @@
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5994,
+        "used_chars": 5946,
         "truncated": true,
         "expansions": [
          "glowmod->glow (corpus prefix)",
@@ -2275,15 +2268,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0305,
+       "seconds": 0.0286,
        "chars": 5842,
-       "sha256": "b920f266b2bddc746db2f37bebdd5b0dabfabb74d4a007930de1d083f4e7b985"
+       "sha256": "a5a31c3014179e6a48190a3f79621390fe2e99ced3ecf70fffc4398db39d101e"
       }
      ],
      "score": {
       "chars": 5842,
       "tokens": 1461,
-      "sha256": "b920f266b2bddc746db2f37bebdd5b0dabfabb74d4a007930de1d083f4e7b985",
+      "sha256": "a5a31c3014179e6a48190a3f79621390fe2e99ced3ecf70fffc4398db39d101e",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -2351,7 +2344,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0342,
+       "seconds": 0.0343,
        "chars": 13076,
        "sha256": "2c58f6be8ee4f4ef421da6e8c8e52cbe62f45e3fef0d4eaf366e730ed5578dee"
       }
@@ -2466,7 +2459,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0211,
+       "seconds": 0.0193,
        "chars": 6468,
        "sha256": "c64d4e345273ba7fb2337cbb0092655c847cfe0527fbaf06a7ad1919f3781112"
       }
@@ -2532,9 +2525,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1644,
+       "seconds": 0.1614,
        "chars": 5457,
-       "sha256": "504145464ee09363981ed35abc05c8c91ad12205ee4aee1279b243dde81fd3cb",
+       "sha256": "9692380da0f603651537586dfe852c74a61a7ff8f928d82ee1b4bc9cac5b7047",
        "claims": 12,
        "claims_reused": 7,
        "claims_new": 5,
@@ -2545,7 +2538,7 @@
      "score": {
       "chars": 5457,
       "tokens": 1365,
-      "sha256": "504145464ee09363981ed35abc05c8c91ad12205ee4aee1279b243dde81fd3cb",
+      "sha256": "9692380da0f603651537586dfe852c74a61a7ff8f928d82ee1b4bc9cac5b7047",
       "facts": {
        "total": 5,
        "found_n": 4,
@@ -2598,10 +2591,10 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.156,
+       "elapsed_s": 0.172,
        "tool_calls": 29,
-       "context_chars": 7886,
-       "context_tokens_est": 1971,
+       "context_chars": 7883,
+       "context_tokens_est": 1970,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -2631,7 +2624,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0181,
+       "seconds": 0.0172,
        "chars": 5744,
        "sha256": "b19a2f860956b87d17b7b6bf7536c8f91bf30ac152cc116e45b9bf474b31a212"
       }
@@ -2707,7 +2700,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0286,
+       "seconds": 0.0271,
        "chars": 5996,
        "sha256": "8d7e11e6cd850ecaba337247bc781f0ab751c35d9038cb79c074452525b828cd"
       }
@@ -2922,7 +2915,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0099,
+       "seconds": 0.0102,
        "chars": 6471,
        "sha256": "79ac2ba14bd32d64279ceac8cf2014bceec2522bb39bdc3d8ef73403a40c89e8"
       }
@@ -2986,9 +2979,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1371,
+       "seconds": 0.1365,
        "chars": 2494,
-       "sha256": "6dc7c8b19cb040fd5833cae7b9e7413d2c3c5d138f66279144f843557cb0453e",
+       "sha256": "9e559da03e0af6cea08044e100f17fac2ea7225bfdb7d8495ce7886cf432cb6f",
        "claims": 5,
        "claims_reused": 2,
        "claims_new": 3,
@@ -2999,7 +2992,7 @@
      "score": {
       "chars": 2494,
       "tokens": 624,
-      "sha256": "6dc7c8b19cb040fd5833cae7b9e7413d2c3c5d138f66279144f843557cb0453e",
+      "sha256": "9e559da03e0af6cea08044e100f17fac2ea7225bfdb7d8495ce7886cf432cb6f",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -3048,9 +3041,9 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.141,
+       "elapsed_s": 0.14,
        "tool_calls": 12,
-       "context_chars": 4133,
+       "context_chars": 4134,
        "context_tokens_est": 1033,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
@@ -3081,7 +3074,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0203,
+       "seconds": 0.0199,
        "chars": 5706,
        "sha256": "310ed0ac6f27edc17d9ee8fac9618dd8cdaece87756c374a2e235594789ece4e"
       }
@@ -3155,15 +3148,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0316,
+       "seconds": 0.03,
        "chars": 5893,
-       "sha256": "e986389bb2efe3e12a1d47584e26e41db10cdcdee3404fcca04497bf8976ce6e"
+       "sha256": "138fae9917e73ecfeba8bb2b428c36c551a524539412051f05049d4dacc5b2e0"
       }
      ],
      "score": {
       "chars": 5893,
       "tokens": 1474,
-      "sha256": "e986389bb2efe3e12a1d47584e26e41db10cdcdee3404fcca04497bf8976ce6e",
+      "sha256": "138fae9917e73ecfeba8bb2b428c36c551a524539412051f05049d4dacc5b2e0",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -3239,7 +3232,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0345,
+       "seconds": 0.0343,
        "chars": 9192,
        "sha256": "5ca0ea2d57aad875f6ca8863a48bd1e02a9c3b4a5c90aa43c6ae1ec0d700536c"
       }
@@ -3349,7 +3342,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0104,
+       "seconds": 0.0101,
        "chars": 6430,
        "sha256": "f9eb2f2791bdbf891af5d4da904711cda1b6b79b453de2c37953b650e01aaf09"
       }
@@ -3410,9 +3403,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1845,
+       "seconds": 0.1842,
        "chars": 5764,
-       "sha256": "4676438010fa74df1cfb19cc112c08bf5750004151c87eb9ad690a50689d6590",
+       "sha256": "61a31fc0cc60030e94bc9ad732f1da31f9ed39e59d78023ed5521bed73f4556e",
        "claims": 13,
        "claims_reused": 6,
        "claims_new": 7,
@@ -3423,7 +3416,7 @@
      "score": {
       "chars": 5764,
       "tokens": 1441,
-      "sha256": "4676438010fa74df1cfb19cc112c08bf5750004151c87eb9ad690a50689d6590",
+      "sha256": "61a31fc0cc60030e94bc9ad732f1da31f9ed39e59d78023ed5521bed73f4556e",
       "facts": {
        "total": 3,
        "found_n": 2,
@@ -3473,10 +3466,10 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.187,
+       "elapsed_s": 0.188,
        "tool_calls": 24,
-       "context_chars": 7731,
-       "context_tokens_est": 1932,
+       "context_chars": 7732,
+       "context_tokens_est": 1933,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -3506,15 +3499,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0186,
-       "chars": 5697,
-       "sha256": "9e7741909855ffa8945e84bcc854a771b9946f9b64a760039e04714dea530b3d"
+       "seconds": 0.0203,
+       "chars": 5716,
+       "sha256": "399a7139635007b006ce05c247f12ea9dcae2d84bd006b32d0f60f79df2c9f8a"
       }
      ],
      "score": {
-      "chars": 5697,
-      "tokens": 1425,
-      "sha256": "9e7741909855ffa8945e84bcc854a771b9946f9b64a760039e04714dea530b3d",
+      "chars": 5716,
+      "tokens": 1429,
+      "sha256": "399a7139635007b006ce05c247f12ea9dcae2d84bd006b32d0f60f79df2c9f8a",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -3532,9 +3525,9 @@
        }
       },
       "locators": {
-       "distinct": 21,
-       "files": 7,
-       "point_or_short": 21
+       "distinct": 19,
+       "files": 6,
+       "point_or_short": 19
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
@@ -3545,7 +3538,7 @@
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5947,
+        "used_chars": 5988,
         "truncated": true
        }
       },
@@ -3573,15 +3566,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0278,
-       "chars": 5929,
-       "sha256": "84e7fd8ab1ca65f855f92ede695aa3b47dbf84dede1813eb7578f2d2ff253507"
+       "seconds": 0.0275,
+       "chars": 5923,
+       "sha256": "5858fa9932ca308a71d9232d07aefbc5634be3f415256f0df5ac751f89adf74d"
       }
      ],
      "score": {
-      "chars": 5929,
-      "tokens": 1483,
-      "sha256": "84e7fd8ab1ca65f855f92ede695aa3b47dbf84dede1813eb7578f2d2ff253507",
+      "chars": 5923,
+      "tokens": 1481,
+      "sha256": "5858fa9932ca308a71d9232d07aefbc5634be3f415256f0df5ac751f89adf74d",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -3600,8 +3593,8 @@
       },
       "locators": {
        "distinct": 26,
-       "files": 17,
-       "point_or_short": 25
+       "files": 18,
+       "point_or_short": 26
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
@@ -3649,7 +3642,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0359,
+       "seconds": 0.036,
        "chars": 10563,
        "sha256": "31c146943b66e6fe4e9a808d93c34edd71d1c4c37880b2a61d690f3fff0ef508"
       }
@@ -3767,7 +3760,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0106,
+       "seconds": 0.01,
        "chars": 6430,
        "sha256": "9a2326f4c9d6af66e385ca150d444b04ebe8dbc060d4519f5877ae02746b9209"
       }
@@ -3829,9 +3822,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1254,
+       "seconds": 0.1244,
        "chars": 3316,
-       "sha256": "97dd00d65e52552752f86b5184dff9fd915e652b957401c0112d0e6cfb697619",
+       "sha256": "259bb73c6b889a8dab0a1ed3f4f3a16b0d48195c6f332ccc28030fbf41b47367",
        "claims": 7,
        "claims_reused": 6,
        "claims_new": 1,
@@ -3842,7 +3835,7 @@
      "score": {
       "chars": 3316,
       "tokens": 829,
-      "sha256": "97dd00d65e52552752f86b5184dff9fd915e652b957401c0112d0e6cfb697619",
+      "sha256": "259bb73c6b889a8dab0a1ed3f4f3a16b0d48195c6f332ccc28030fbf41b47367",
       "facts": {
        "total": 4,
        "found_n": 3,
@@ -3894,8 +3887,8 @@
       "analysis_usage": {
        "elapsed_s": 0.125,
        "tool_calls": 11,
-       "context_chars": 4396,
-       "context_tokens_est": 1099,
+       "context_chars": 4393,
+       "context_tokens_est": 1098,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -3925,15 +3918,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0214,
-       "chars": 5730,
-       "sha256": "94666df66b14b6c9a11cb3c0c2a9932cd6c68df1047d6f4674623e53d87348ef"
+       "seconds": 0.0217,
+       "chars": 5714,
+       "sha256": "e021d49aab9bcc51c8ab3c70da4eb8ecec342ec9b4ddd9d12d0d1e06a98c8d77"
       }
      ],
      "score": {
-      "chars": 5730,
-      "tokens": 1433,
-      "sha256": "94666df66b14b6c9a11cb3c0c2a9932cd6c68df1047d6f4674623e53d87348ef",
+      "chars": 5714,
+      "tokens": 1429,
+      "sha256": "e021d49aab9bcc51c8ab3c70da4eb8ecec342ec9b4ddd9d12d0d1e06a98c8d77",
       "facts": {
        "total": 4,
        "found_n": 4,
@@ -3953,9 +3946,9 @@
        }
       },
       "locators": {
-       "distinct": 19,
-       "files": 7,
-       "point_or_short": 19
+       "distinct": 18,
+       "files": 8,
+       "point_or_short": 18
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
@@ -3966,12 +3959,12 @@
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5987,
+        "used_chars": 5971,
         "truncated": true,
         "expansions": [
          "asasının->asasi (turkish stem 'asasi')",
+         "modeli->model (turkish stem 'model')",
          "modeli->modentities (turkish stem 'mode')",
-         "modeli->model (turkish stem 'mode')",
          "modeli->mod (corpus prefix)",
          "esya->item (lexicon)",
          "dosyalarda->fil (lexicon)",
@@ -3980,8 +3973,8 @@
         "more": [
          "src/main/java/com/example/glowmod/item/ModItems.java:25-31 ModItems.initialize",
          "src/main/resources/assets/glowmod/lang/en_us.json:1-11 glowmod:en_us",
-         "README.md:1-26 Glow Mod (example)",
-         "src/main/java/com/example/glowmod/event/LanternEvents.java:11-35 LanternEvents"
+         "src/main/resources/assets/glowmod/models/item/ember_shard.json:1-6 glowmod:item/ember_shard",
+         "README.md:1-26 Glow Mod (example)"
         ]
        }
       },
@@ -4009,15 +4002,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0314,
-       "chars": 5881,
-       "sha256": "d954944a580bd40b6248ae319a2bc266805f572f41cae296c00b0c571237dea8"
+       "seconds": 0.0305,
+       "chars": 5935,
+       "sha256": "b83dc957e9a788a5b918a3a837f874175f0ea625515a626f96a8ee9edb48f047"
       }
      ],
      "score": {
-      "chars": 5881,
-      "tokens": 1471,
-      "sha256": "d954944a580bd40b6248ae319a2bc266805f572f41cae296c00b0c571237dea8",
+      "chars": 5935,
+      "tokens": 1484,
+      "sha256": "b83dc957e9a788a5b918a3a837f874175f0ea625515a626f96a8ee9edb48f047",
       "facts": {
        "total": 4,
        "found_n": 4,
@@ -4037,9 +4030,9 @@
        }
       },
       "locators": {
-       "distinct": 16,
-       "files": 11,
-       "point_or_short": 16
+       "distinct": 17,
+       "files": 10,
+       "point_or_short": 17
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
@@ -4087,7 +4080,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0362,
+       "seconds": 0.0348,
        "chars": 10485,
        "sha256": "8f31fd410d9c1a195ff39ed6b6a93be6fffd1a4d8d471bab5984f35203426a7b"
       }
@@ -4203,7 +4196,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.012,
+       "seconds": 0.0116,
        "chars": 6540,
        "sha256": "8b82ce70ae22007f6bc4938d7a33909121af7fc658a7425b546bfd8c9e60fd7e"
       }
@@ -4271,9 +4264,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1501,
+       "seconds": 0.1408,
        "chars": 2292,
-       "sha256": "6179b292282808ed81999404c1565502dfa26984320b8e83f338403fe02c6980",
+       "sha256": "4e404cdeb9e92d4c4ceac2fc3b2d135f584b0ba1612485f782c43c90aea5d078",
        "claims": 4,
        "claims_reused": 1,
        "claims_new": 3,
@@ -4284,7 +4277,7 @@
      "score": {
       "chars": 2292,
       "tokens": 573,
-      "sha256": "6179b292282808ed81999404c1565502dfa26984320b8e83f338403fe02c6980",
+      "sha256": "4e404cdeb9e92d4c4ceac2fc3b2d135f584b0ba1612485f782c43c90aea5d078",
       "facts": {
        "total": 5,
        "found_n": 3,
@@ -4336,10 +4329,10 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.156,
+       "elapsed_s": 0.141,
        "tool_calls": 11,
-       "context_chars": 3656,
-       "context_tokens_est": 914,
+       "context_chars": 3655,
+       "context_tokens_est": 913,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -4369,7 +4362,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0192,
+       "seconds": 0.0198,
        "chars": 5701,
        "sha256": "b0d5edb8edd81da1e9d3a48d9fb6d678e2db9105a94f89f3a7ec169e1cb8957b"
       }
@@ -4440,7 +4433,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0295,
+       "seconds": 0.0281,
        "chars": 5941,
        "sha256": "7de7a75d7376ed0cb8afbef6832c7b6b8b4bd2a8ea60b34985f8895da61ef664"
       }
@@ -4549,7 +4542,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0352,
+       "seconds": 0.0344,
        "chars": 100,
        "sha256": "4fcff59b054ee6cd265f5e2cb0a317cd8d67483d7487fff21dccf164ef89fa88"
       }
@@ -4615,7 +4608,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0076,
+       "seconds": 0.0079,
        "chars": 24,
        "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c"
       }
@@ -4676,9 +4669,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1401,
+       "seconds": 0.1353,
        "chars": 2757,
-       "sha256": "d9b8d87e5c3d38fee0caa98f2c4242927ba4f77ec65985bd945d482c95b26a0a",
+       "sha256": "568f7e027db42fe31b3c856dd6c5ba801d713f67b22365e45e85fc456e872dd8",
        "claims": 6,
        "claims_reused": 2,
        "claims_new": 4,
@@ -4689,7 +4682,7 @@
      "score": {
       "chars": 2757,
       "tokens": 690,
-      "sha256": "d9b8d87e5c3d38fee0caa98f2c4242927ba4f77ec65985bd945d482c95b26a0a",
+      "sha256": "568f7e027db42fe31b3c856dd6c5ba801d713f67b22365e45e85fc456e872dd8",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -4738,7 +4731,7 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.125,
+       "elapsed_s": 0.14,
        "tool_calls": 13,
        "context_chars": 4272,
        "context_tokens_est": 1068,
@@ -4771,7 +4764,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0194,
+       "seconds": 0.0206,
        "chars": 5690,
        "sha256": "7bddfbf130bf8af009d231df54562e20b65cf8dce7319d2b808fe6693577a7eb"
       }
@@ -4845,15 +4838,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0314,
+       "seconds": 0.0296,
        "chars": 5958,
-       "sha256": "7c5d6755e51689ccd087ec47c6a16bf560d49c5229320204f97e0a39ee74e484"
+       "sha256": "b808b220391d2edc298fcb668ae24f2805674c78bc66d45cc247671b72c5e136"
       }
      ],
      "score": {
       "chars": 5958,
       "tokens": 1490,
-      "sha256": "7c5d6755e51689ccd087ec47c6a16bf560d49c5229320204f97e0a39ee74e484",
+      "sha256": "b808b220391d2edc298fcb668ae24f2805674c78bc66d45cc247671b72c5e136",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -4871,9 +4864,9 @@
        }
       },
       "locators": {
-       "distinct": 28,
-       "files": 15,
-       "point_or_short": 26
+       "distinct": 27,
+       "files": 14,
+       "point_or_short": 25
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
@@ -4929,7 +4922,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0348,
+       "seconds": 0.0334,
        "chars": 11444,
        "sha256": "8667ae1f6bf50e1181b3916bc8acb8bc7f18e3b085164053fd04d631cd0a17bc"
       }
@@ -5037,7 +5030,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.011,
+       "seconds": 0.0107,
        "chars": 6419,
        "sha256": "2e261e6e8a2f2c7079ffb13a13e42cf2fea48932ec3110f49d9c273158ce50bd"
       }
@@ -5101,20 +5094,20 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.122,
-       "chars": 3420,
-       "sha256": "fbda1084b0e344ecba53866c2c19aba848c32840e4233b8825552101befb88bc",
-       "claims": 8,
+       "seconds": 0.1209,
+       "chars": 3699,
+       "sha256": "06acf976f6a731dabb7e9e7df6c0ba4f786bb06234b438c9bd8d1fd7e0da27b3",
+       "claims": 9,
        "claims_reused": 6,
-       "claims_new": 2,
-       "internal_tool_calls": 15,
+       "claims_new": 3,
+       "internal_tool_calls": 16,
        "budget_exhausted": null
       }
      ],
      "score": {
-      "chars": 3420,
-      "tokens": 855,
-      "sha256": "fbda1084b0e344ecba53866c2c19aba848c32840e4233b8825552101befb88bc",
+      "chars": 3699,
+      "tokens": 925,
+      "sha256": "06acf976f6a731dabb7e9e7df6c0ba4f786bb06234b438c9bd8d1fd7e0da27b3",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -5132,31 +5125,31 @@
        }
       },
       "locators": {
-       "distinct": 8,
-       "files": 3,
-       "point_or_short": 8
+       "distinct": 9,
+       "files": 4,
+       "point_or_short": 9
       },
       "agent_tool_calls": 1,
       "claims": {
-       "total": 8,
+       "total": 9,
        "by_status": {
         "statically_verified": 5,
-        "weak_inference": 1,
+        "weak_inference": 2,
         "strong_inference": 2
        },
        "verified": 5,
-       "inference": 3,
-       "verified_share": 0.625,
-       "inference_share": 0.375,
-       "weak_or_unknown": 1,
+       "inference": 4,
+       "verified_share": 0.556,
+       "inference_share": 0.444,
+       "weak_or_unknown": 2,
        "weak_or_unknown_unlabelled": 0,
        "contradicted_shown": 0,
        "stale_shown": 0,
        "evidence_by_type": {
-        "source_code": 8,
+        "source_code": 9,
         "graph_edge": 2
        },
-       "evidence_verifying": 8,
+       "evidence_verifying": 9,
        "evidence_non_verifying": 2,
        "contradicted_relations": 0,
        "contradicted_but_cited_line_names_target": 0,
@@ -5165,9 +5158,9 @@
       "unknowns": 0,
       "analysis_usage": {
        "elapsed_s": 0.109,
-       "tool_calls": 15,
-       "context_chars": 4754,
-       "context_tokens_est": 1188,
+       "tool_calls": 16,
+       "context_chars": 5153,
+       "context_tokens_est": 1288,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -5197,15 +5190,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0182,
-       "chars": 5695,
-       "sha256": "ddc511b0690133adf2d412405d3be3d05ed47dbf79c574242ea5b704aecbfa99"
+       "seconds": 0.018,
+       "chars": 5706,
+       "sha256": "6a54177a5dd469bc9e424e27a0d7b4dd7ef5d0e4902918a4746f8ba416b79e96"
       }
      ],
      "score": {
-      "chars": 5695,
-      "tokens": 1424,
-      "sha256": "ddc511b0690133adf2d412405d3be3d05ed47dbf79c574242ea5b704aecbfa99",
+      "chars": 5706,
+      "tokens": 1427,
+      "sha256": "6a54177a5dd469bc9e424e27a0d7b4dd7ef5d0e4902918a4746f8ba416b79e96",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -5223,20 +5216,22 @@
        }
       },
       "locators": {
-       "distinct": 20,
-       "files": 6,
-       "point_or_short": 20
+       "distinct": 19,
+       "files": 5,
+       "point_or_short": 19
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
       "retrieve": {
-       "items": 9,
-       "edges": 0,
-       "edge_confidence": {},
+       "items": 8,
+       "edges": 3,
+       "edge_confidence": {
+        "EXTRACTED": 3
+       },
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5955,
+        "used_chars": 5980,
         "truncated": true
        }
       },
@@ -5246,7 +5241,7 @@
        "matched": []
       },
       "relations": {
-       "asserted": 0,
+       "asserted": 3,
        "checked": 0,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
@@ -5264,15 +5259,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0285,
-       "chars": 5910,
-       "sha256": "e2a326b5e9f0625fdcaccfb738065fe0245684bb99e1ac0cedf7851fa55e69f8"
+       "seconds": 0.0273,
+       "chars": 5899,
+       "sha256": "f6d30ff54827902d8b6b7988c1dab28e199b607a9040323f0a923612e66bd1fb"
       }
      ],
      "score": {
-      "chars": 5910,
-      "tokens": 1478,
-      "sha256": "e2a326b5e9f0625fdcaccfb738065fe0245684bb99e1ac0cedf7851fa55e69f8",
+      "chars": 5899,
+      "tokens": 1475,
+      "sha256": "f6d30ff54827902d8b6b7988c1dab28e199b607a9040323f0a923612e66bd1fb",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -5291,13 +5286,13 @@
       },
       "locators": {
        "distinct": 29,
-       "files": 17,
+       "files": 15,
        "point_or_short": 29
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
       "retrieve_text": {
-       "items": 9,
+       "items": 8,
        "outline_edges": 2,
        "edge_confidence": {
         "INFERRED": 1,
@@ -5349,7 +5344,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0368,
+       "seconds": 0.0352,
        "chars": 878,
        "sha256": "22fc228f2e5a8f0170ef300cacca2f5fbd33243c389dd6e1035da5a570744ab7"
       }
@@ -5427,7 +5422,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0076,
+       "seconds": 0.0084,
        "chars": 24,
        "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c"
       }
@@ -5488,9 +5483,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1255,
-       "chars": 3065,
-       "sha256": "5f41ff70a0ce5d47d7fd63733f4c4295496b825462da91d6b6246f4333a7c2ef",
+       "seconds": 0.1348,
+       "chars": 3090,
+       "sha256": "ccc422220183e4ce91dec887d2af3caa78b7a33f232625c99bf7ef5a13456fdb",
        "claims": 7,
        "claims_reused": 6,
        "claims_new": 1,
@@ -5499,9 +5494,9 @@
       }
      ],
      "score": {
-      "chars": 3065,
-      "tokens": 767,
-      "sha256": "5f41ff70a0ce5d47d7fd63733f4c4295496b825462da91d6b6246f4333a7c2ef",
+      "chars": 3090,
+      "tokens": 773,
+      "sha256": "ccc422220183e4ce91dec887d2af3caa78b7a33f232625c99bf7ef5a13456fdb",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -5520,7 +5515,7 @@
       },
       "locators": {
        "distinct": 7,
-       "files": 4,
+       "files": 6,
        "point_or_short": 7
       },
       "agent_tool_calls": 1,
@@ -5549,10 +5544,10 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.125,
+       "elapsed_s": 0.141,
        "tool_calls": 12,
-       "context_chars": 4346,
-       "context_tokens_est": 1086,
+       "context_chars": 4371,
+       "context_tokens_est": 1092,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -5582,15 +5577,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0209,
-       "chars": 5762,
-       "sha256": "761c1203e814b2fca2ab4abfe20a5ec9cb45a9e4372fb367e604e7a66b6af166"
+       "seconds": 0.0208,
+       "chars": 5727,
+       "sha256": "100fd39b41d0be0759ccfa9ceba380abb1be19567bb179053edf73986241b253"
       }
      ],
      "score": {
-      "chars": 5762,
-      "tokens": 1441,
-      "sha256": "761c1203e814b2fca2ab4abfe20a5ec9cb45a9e4372fb367e604e7a66b6af166",
+      "chars": 5727,
+      "tokens": 1432,
+      "sha256": "100fd39b41d0be0759ccfa9ceba380abb1be19567bb179053edf73986241b253",
       "facts": {
        "total": 3,
        "found_n": 2,
@@ -5608,9 +5603,9 @@
        }
       },
       "locators": {
-       "distinct": 18,
+       "distinct": 17,
        "files": 7,
-       "point_or_short": 18
+       "point_or_short": 17
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
@@ -5621,7 +5616,7 @@
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5993,
+        "used_chars": 5962,
         "truncated": true,
         "expansions": [
          "asasıyla->asasi (turkish stem 'asasi')",
@@ -5665,15 +5660,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.094,
+       "seconds": 0.0299,
        "chars": 5945,
-       "sha256": "2322ecd331b2ddde0d2da36f685af8364284dc8a724713d68a541b6b9da7bd2f"
+       "sha256": "075977313b8d7a8369cb3104d49c1b70353b984926c4a220aef402bec928eb82"
       }
      ],
      "score": {
       "chars": 5945,
       "tokens": 1487,
-      "sha256": "2322ecd331b2ddde0d2da36f685af8364284dc8a724713d68a541b6b9da7bd2f",
+      "sha256": "075977313b8d7a8369cb3104d49c1b70353b984926c4a220aef402bec928eb82",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -5741,7 +5736,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0347,
+       "seconds": 0.0355,
        "chars": 10281,
        "sha256": "84c0451950457dfef5e5f69b088b96a9caf390ec1a020f28c9469aef4e45260c"
       }
@@ -5850,7 +5845,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0106,
+       "seconds": 0.0108,
        "chars": 428,
        "sha256": "9fdedd69ec6d913d54fd734ca9c51fa814c83977d8b433e1051b8e18414f1454"
       }
@@ -5910,9 +5905,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2192,
-       "chars": 4425,
-       "sha256": "79fc168cb787e72986763d27dadaa67a05278ef02fbd7bedc4d9fd153eefc479",
+       "seconds": 0.2001,
+       "chars": 4567,
+       "sha256": "b84389cb771722c724c84a4695acd20bb52715bbe01540c396f2806d67263eb1",
        "claims": 11,
        "claims_reused": 1,
        "claims_new": 10,
@@ -5921,9 +5916,9 @@
       }
      ],
      "score": {
-      "chars": 4425,
-      "tokens": 1107,
-      "sha256": "79fc168cb787e72986763d27dadaa67a05278ef02fbd7bedc4d9fd153eefc479",
+      "chars": 4567,
+      "tokens": 1142,
+      "sha256": "b84389cb771722c724c84a4695acd20bb52715bbe01540c396f2806d67263eb1",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -5969,10 +5964,10 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.219,
+       "elapsed_s": 0.204,
        "tool_calls": 23,
-       "context_chars": 6106,
-       "context_tokens_est": 1526,
+       "context_chars": 6245,
+       "context_tokens_est": 1561,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -6002,7 +5997,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0243,
+       "seconds": 0.0194,
        "chars": 5715,
        "sha256": "b5e3823a1d674bb73bef1834ecf00c4d8d9d0a3cc9a054438421b63de463e1db"
       }
@@ -6070,7 +6065,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0318,
+       "seconds": 0.0274,
        "chars": 5933,
        "sha256": "6816245b4810a74ac1de7db3d01a002eb529e29a926ef58ebeb62076922cc24f"
       }
@@ -6179,7 +6174,7 @@
    "locators_distinct_mean": 35.7,
    "agent_tool_calls_mean": 5.36,
    "seconds_cold_median": 0.035,
-   "seconds_cold_total": 0.495,
+   "seconds_cold_total": 0.49,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 33,
@@ -6207,8 +6202,8 @@
    "pinpointed_per_1k_tokens": 0.77,
    "locators_distinct_mean": 30.7,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.011,
-   "seconds_cold_total": 0.155,
+   "seconds_cold_median": 0.01,
+   "seconds_cold_total": 0.154,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 13,
@@ -6227,38 +6222,38 @@
    "facts_total": 50,
    "facts_pinpointed": 37,
    "questions_all_facts": 8,
-   "tokens_mean": 990.6,
-   "tokens_median": 921.0,
+   "tokens_mean": 1006.1,
+   "tokens_median": 956.0,
    "tokens_max": 1523,
-   "tokens_total": 13868,
-   "chars_total": 55447,
-   "facts_per_1k_tokens": 2.81,
-   "pinpointed_per_1k_tokens": 2.67,
-   "locators_distinct_mean": 8.3,
+   "tokens_total": 14085,
+   "chars_total": 56317,
+   "facts_per_1k_tokens": 2.77,
+   "pinpointed_per_1k_tokens": 2.63,
+   "locators_distinct_mean": 8.4,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.145,
-   "seconds_cold_total": 2.371,
+   "seconds_cold_median": 0.143,
+   "seconds_cold_total": 2.387,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 39,
    "assertions_scored": true,
    "negatives_matched": 0,
    "negatives_checked": 12,
-   "relations_asserted": 58,
+   "relations_asserted": 59,
    "relations_checked": 33,
    "relations_cited_line_missing_target": 0,
    "relations_named_via_import_alias": 0,
    "claims": {
-    "total": 120,
+    "total": 122,
     "by_status": {
-     "statically_verified": 99,
+     "statically_verified": 100,
      "strong_inference": 12,
-     "weak_inference": 8,
+     "weak_inference": 9,
      "primary_source_verified": 1
     },
-    "verified_share": 0.833,
-    "inference_share": 0.167,
-    "weak_or_unknown": 8,
+    "verified_share": 0.828,
+    "inference_share": 0.172,
+    "weak_or_unknown": 9,
     "weak_or_unknown_unlabelled": 0,
     "negatives_presented_as_findings": 0,
     "contradicted_relations": 0,
@@ -6268,7 +6263,7 @@
    },
    "cache": {
     "method": "claims whose id already existed in atlas.db before the run (same text + snapshot)",
-    "cold_claims": 120,
+    "cold_claims": 122,
     "cold_reused": 43,
     "warm_claims": 0,
     "warm_reused": 0
@@ -6277,28 +6272,28 @@
   "verinoda_retrieve": {
    "questions": 14,
    "errors": 0,
-   "facts_found": 41,
+   "facts_found": 43,
    "facts_total": 50,
-   "facts_pinpointed": 41,
+   "facts_pinpointed": 43,
    "questions_all_facts": 8,
-   "tokens_mean": 1429.9,
-   "tokens_median": 1428.5,
-   "tokens_max": 1441,
-   "tokens_total": 20018,
-   "chars_total": 80049,
-   "facts_per_1k_tokens": 2.05,
-   "pinpointed_per_1k_tokens": 2.05,
-   "locators_distinct_mean": 18.9,
+   "tokens_mean": 1430.4,
+   "tokens_median": 1429.0,
+   "tokens_max": 1438,
+   "tokens_total": 20026,
+   "chars_total": 80085,
+   "facts_per_1k_tokens": 2.15,
+   "pinpointed_per_1k_tokens": 2.15,
+   "locators_distinct_mean": 18.5,
    "agent_tool_calls_mean": 1,
    "seconds_cold_median": 0.02,
-   "seconds_cold_total": 0.283,
+   "seconds_cold_total": 0.277,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
-   "facts_found_via_locator": 41,
+   "facts_found_via_locator": 43,
    "assertions_scored": true,
    "negatives_matched": 0,
    "negatives_checked": 12,
-   "relations_asserted": 6,
+   "relations_asserted": 10,
    "relations_checked": 2,
    "relations_cited_line_missing_target": 0,
    "relations_named_via_import_alias": 0
@@ -6310,17 +6305,17 @@
    "facts_total": 50,
    "facts_pinpointed": 45,
    "questions_all_facts": 13,
-   "tokens_mean": 1482.4,
-   "tokens_median": 1483.5,
+   "tokens_mean": 1483.9,
+   "tokens_median": 1484.5,
    "tokens_max": 1499,
-   "tokens_total": 20754,
-   "chars_total": 82986,
+   "tokens_total": 20775,
+   "chars_total": 83076,
    "facts_per_1k_tokens": 2.31,
    "pinpointed_per_1k_tokens": 2.17,
-   "locators_distinct_mean": 25.2,
+   "locators_distinct_mean": 25.3,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.031,
-   "seconds_cold_total": 0.489,
+   "seconds_cold_median": 0.028,
+   "seconds_cold_total": 0.402,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 48,

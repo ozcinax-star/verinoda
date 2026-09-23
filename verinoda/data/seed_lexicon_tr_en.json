@@ -1,6 +1,6 @@
 {
  "version": 1,
- "description": "Turkish -> English seed glossary for question understanding (docs/DESIGN.md D6). Keys are fold_tr-folded Turkish stems (a space joins multi-word terms); values are English words. An expansion is used only when its English word occurs in the repository's own vocabulary, and it only proposes candidates - it is never evidence.",
+ "description": "Turkish -> English seed glossary for question understanding (docs/DESIGN.md D6). Keys are fold_tr-folded Turkish stems (a space joins multi-word terms); values are English words. An expansion is used only when its English word occurs in the repository's own vocabulary, and it only proposes candidates - it is never evidence. Keys in \"exact\" keep their Turkish letters: they are stems that folding merges with another word (öl die / ol be) and match only the word as written.",
  "entries": {
   "abone": [
    "subscribe",
@@ -1597,6 +1597,23 @@
   ],
   "zirh": [
    "armor"
+  ]
+ },
+ "exact": {
+  "öl": [
+   "die",
+   "death",
+   "dead",
+   "kill",
+   "olum",
+   "olu"
+  ],
+  "ölü": [
+   "dead",
+   "corpse"
+  ],
+  "öldür": [
+   "kill"
   ]
  }
 }

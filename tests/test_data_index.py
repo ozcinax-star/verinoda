@@ -362,3 +362,19 @@ public final class Commands {
     assert any("`Commands.ritual()` calls `Ritual.begin()`" in t for t in texts), texts      # how it is reached
     chain = [c for c in res["claims"] if "calls `Ritual.begin()`" in c["text"]]
     assert chain[0]["status"] == "statically_verified"  # the import binds Ritual: a verified call
+
+
+def test_the_stem_of_an_inflected_turkish_word_is_searched_even_when_the_form_is_known(tmp_path):
+    root = tmp_path / "stem"
+    _write(root, "app/geometri.py", "class GeometriModeli:\n    pass\n")
+    _write(root, "app/model.py", "def model_yukle(yol):\n    return yol\n")
+    g = _scan(root)
+    q = search_index.analyze_query("Eşyanın modeli nerede yükleniyor?", _db(g))
+    exp = {(e["from"], e["to"]): e["weight"] for e in q.expansions}
+    assert exp.get(("modeli", "model")) == search_index.EXPANSION_WEIGHT  # searched although "modeli" is a known word
+
+
+def test_a_data_file_takes_graph_prior_through_the_code_that_names_it(mod):
+    rk = search_index.rank(mod, "what does onDeath do when a wisp dies")
+    death = next((h for h in rk.hits if h.file == RES + "data/glow/function/wisp_death.mcfunction"), None)
+    assert death is not None and any("graph prior through the link" in r for r in death.reasons)

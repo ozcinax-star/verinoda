@@ -43,7 +43,8 @@ uses it as an idf table for relevance.
 four hundred Turkish stems of generic software, business and game/mod
 development terms to English words (``veritaban`` -> database, ``siparis`` ->
 order, ``esya`` -> item). Stems that folding merges with another word (``öl``
-die / ``ol`` be) are left out. A short key only
+die / ``ol`` be) live in a separate ``exact`` section and match only the word as
+written (:func:`seed_exact_lookup`: "öldüğünde" but not "oluyor"). A short key only
 matches when the rest of the word is Turkish inflection
 (:func:`verinoda.textnorm.is_suffix_chain`), and the longest matching key
 wins (``indirim`` -> discount, not ``indir`` -> download).
@@ -532,6 +533,34 @@ def seed_entries() -> dict[str, tuple[str, ...]]:
     return {k: tuple(v) for k, v in json.loads(raw)["entries"].items()}
 
 
+@lru_cache(maxsize=1)
+def seed_exact_entries() -> dict[str, tuple[str, ...]]:
+    """Seed entries keyed by the Turkish spelling (``öl``): stems folding would merge with another word."""
+    raw = resources.files("verinoda").joinpath("data/seed_lexicon_tr_en.json").read_text(encoding="utf-8")
+    return {k: tuple(v) for k, v in (json.loads(raw).get("exact") or {}).items()}
+
+
+def tr_lower(word: str) -> str:
+    """Lowercase with Turkish dotted/dotless i, keeping the other Turkish letters."""
+    return tn.nfc(word).replace("İ", "i").replace("I", "ı").lower()
+
+
+def seed_exact_lookup(originals: list[str]) -> list[tuple[int, str, tuple[str, ...]]]:
+    """``(index, key, english)`` for words as written that are an exact key plus Turkish inflection."""
+    entries = seed_exact_entries()
+    out = []
+    for i, w in enumerate(originals):
+        low = tr_lower(w)
+        best = None
+        for key, targets in entries.items():
+            if low.startswith(key) and (low == key or tn.is_suffix_chain(tn.fold_tr(low[len(key):]))):
+                if best is None or len(key) > len(best[0]):
+                    best = (key, targets)
+        if best:
+            out.append((i, best[0], best[1]))
+    return out
+
+
 # Final-consonant softening before a vowel-initial suffix, folded: reddet -> reddediyor,
 # kaydet -> kaydedilir, gerek -> gereği (ğ folds to g), kitap -> kitabı. ç -> c is
 # invisible after folding.
@@ -654,6 +683,12 @@ class Lexicon:
             res.append({"start": start, "n": n, "key": key, "targets": kept,
                         "dropped": [t for t in targets if t not in kept]})
         return res
+
+    def seed_exact(self, originals: list[str]) -> list[dict]:
+        """Grounded exact-spelling seed hits for the words as written: ``{index, key, targets}``."""
+        return [{"index": i, "key": key, "targets": kept}
+                for i, key, targets in seed_exact_lookup(originals)
+                if (kept := [x for x in targets if self.grounded(x)])]
 
     def text_hits(self, word: str) -> list[str]:
         """``file:line`` sites of units whose comments/strings/body use the word."""

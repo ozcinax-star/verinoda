@@ -83,6 +83,8 @@ REL_WEIGHTS = {"calls": (1.0, 0.6), "uses": (0.5, 0.3), "inherits": (0.5, 0.3), 
                "references": (0.4, 0.2), "imports_from": (0.15, 0.1)}
 EXPANSION_WEIGHT = 0.5            # abbreviation / prefix / Turkish-stem expansions
 PROVIDED_EXPANSION_WEIGHT = 0.7   # expansions supplied by the caller (question plan, lexicon)
+TR_STEM_WEIGHT = 0.8              # the vocabulary-confirmed stem of an inflected Turkish word (the user's word)
+LINK_PPR_FACTOR = 0.5             # graph prior a data unit takes from the code units linked to it
 PROX_BOOST = 0.3                  # code passage factor when two adjacent question words are adjacent in it
 PROX_GAP = 1                      # "adjacent": at most this many tokens apart, in either order
 PROX_CANDIDATES = 300             # passages checked for proximity, best term coverage first
@@ -1047,7 +1049,8 @@ def _vocab_prefixed(conn: sqlite3.Connection, prefix: str, limit: int = 4) -> li
     return [(t, d) for t, d in rows]
 
 
-def _lexicon_expansions(repo: Path | None, words: list[str]) -> dict[str, list[str]]:
+def _lexicon_expansions(repo: Path | None, words: list[str],
+                        originals: list[str] | None = None) -> dict[str, list[str]]:
     """Repo-learned associations and grounded seed glosses (docs/DESIGN.md D6) for folded words.
 
     Uses :mod:`verinoda.lexicon` when it is installed and a lexicon was built;
@@ -1077,6 +1080,10 @@ def _lexicon_expansions(repo: Path | None, words: list[str]) -> dict[str, list[s
                 src = " ".join(words[item["start"]: item["start"] + item.get("n", 1)])
                 if item.get("targets"):
                     out.setdefault(src, []).extend(str(t) for t in item["targets"])
+        exact = getattr(lx, "seed_exact", None)
+        if callable(exact) and originals:
+            for item in exact(originals) or []:
+                out.setdefault(words[item["index"]], []).extend(str(x) for x in item["targets"])
     except Exception:  # noqa: BLE001 - a malformed lexicon never breaks retrieval
         return {}
     return {k: list(dict.fromkeys(v)) for k, v in out.items() if v}
@@ -1147,15 +1154,24 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
             weights[t] = weight
             exps.append({"from": src, "to": t, "via": via, "weight": weight})
 
-    # Turkish words the index does not know: vocabulary-confirmed stem, then its corpus terms.
+    # Inflected Turkish words: the vocabulary-confirmed stem itself is the user's word
+    # ("modeli" -> model, "bıçağının" -> bicagi) even when the inflected form also occurs
+    # somewhere (GeometriModeli); for words the index does not know, also the stem's corpus terms.
     tr_question = textnorm.has_turkish(question)
     for w in words:
         f = textnorm.fold_tr(w)
-        if (tr_question or not w.isascii()) and f not in have and len(f) >= 4 and f.isalpha():
+        if (tr_question or not w.isascii()) and len(f) >= 4 and f.isalpha():
+            # the longest indexed term that leaves only Turkish inflection ("modeli" -> model)
+            cands = [f[:k] for k in range(len(f) - 1, 2, -1) if textnorm.is_suffix_chain(f[k:])]
+            known = _vocab_has(conn, cands)
+            exact = next((c for c in cands if c in known), None)
+            if exact:  # an inflected form the index also knows as a word keeps the lower weight
+                add(w, exact, f"turkish stem '{exact}'", EXPANSION_WEIGHT if f in have else TR_STEM_WEIGHT)
             st = textnorm.tr_stem(f, lambda p: bool(_vocab_prefixed(conn, p, 1)))
             if st != f and len(st) >= 3:
-                for term, _df in _vocab_prefixed(conn, st, 3):
-                    add(w, term, f"turkish stem '{st}'", EXPANSION_WEIGHT)
+                if f not in have:
+                    for term, _df in _vocab_prefixed(conn, st, 3):
+                        add(w, term, f"turkish stem '{st}'", EXPANSION_WEIGHT)
     # Abbreviations: fixed map (both directions) and corpus prefixes of long words.
     base_terms = list(weights)
     cand: dict[str, tuple[str, str]] = {}
@@ -1187,7 +1203,7 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
             add(prefixes[c], c, "corpus prefix", EXPANSION_WEIGHT)
     provided = dict(expansions or {})
     if not provided and tr_question:
-        provided = _lexicon_expansions(repo, [textnorm.fold_tr(w) for w in words])
+        provided = _lexicon_expansions(repo, [textnorm.fold_tr(w) for w in words], words)
         via_default = "lexicon"
     else:
         via_default = "question plan"
@@ -1475,6 +1491,8 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
                 return 1.0
             return DATA_FACTOR
 
+        # (a 0.8 factor for test files was tried on 2026-09-24: +3 facts on heldout_repoatlas,
+        # -2 on glow_mod and -1 on orders_app_tr, whose behaviour questions cite tests; not kept)
         for uid in best:
             best[uid] *= ref_factor(uid) * data_factor(uid)
         top = max(best.values(), default=0.0) or 1.0
@@ -1528,6 +1546,11 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
                     bonus = PPR_LAMBDA * m / (m + PPR_KAPPA) * ref_factor(uid)
                     ppr_mass[uid] = bonus
                     score[uid] = score.get(uid, 0.0) + bonus
+        if ppr_mass:
+            for uid, (bonus, why) in _linked_prior(conn, h, lex, ppr_mass, include_tests).items():
+                score[uid] = score.get(uid, 0.0) + bonus * ref_factor(uid)
+                ppr_mass[uid] = bonus
+                reasons[uid].append(why)
         _fold_copies(h, score, canon, include_tests)
         for uid in score:
             if ref_factor(uid) < 1.0:
@@ -1745,6 +1768,32 @@ def _link_bonus(conn: sqlite3.Connection, h: Handle, lex: dict[int, float],
                 break
             give(u, bonus * (1.0 if sure else UNSURE_LINK_FACTOR),
                  f"names {rid} ({sf}:{line}), defined in {f}" + ("" if sure else " (inferred link)"))
+    return out
+
+
+def _linked_prior(conn: sqlite3.Connection, h: Handle, lex: dict[int, float], ppr_mass: dict[int, float],
+                  include_tests: bool, top: int = 60) -> dict[int, tuple[float, str]]:
+    """Data units have no graph node, so the PageRank prior never reaches them. A data unit
+    among the top lexical candidates takes :data:`LINK_PPR_FACTOR` of the largest prior of a
+    code unit that names it or that it names (``wisp_death.mcfunction`` <- the function that
+    runs it)."""
+    out: dict[int, tuple[float, str]] = {}
+    data = [u for u in sorted(lex, key=lambda u: (-lex[u], u))[:top] if h.units[u][2] == "data"]
+    for uid in data:
+        f, _nid, _kind, _name, a, b = h.units[uid][:6]
+        lk = links_of(conn, f, a, b)
+        cands: list[tuple[float, int]] = []
+        for sf, line, _rid, _form, _sure in lk["in"]:
+            u = unit_at(h, sf, line)
+            if u is not None and u in ppr_mass and (include_tests or not is_test_file(sf)):
+                cands.append((ppr_mass[u], u))
+        for _line, target, _rid, _form, _sure in lk["out"]:
+            for _s, _a, _b, u in _by_file(h).get(target, []):
+                if u in ppr_mass:
+                    cands.append((ppr_mass[u], u))
+        if cands:
+            m, u = max(cands)
+            out[uid] = (LINK_PPR_FACTOR * m, f"graph prior through the link with {h.units[u][3]} ({h.units[u][0]})")
     return out
 
 

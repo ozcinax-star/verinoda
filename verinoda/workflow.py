@@ -168,12 +168,13 @@ def scan(store: Store, repo: Path, *, force: bool = False) -> dict:
 
 
 def update(store: Store, repo: Path) -> dict:
-    """Incremental: re-extract only files changed since the last snapshot.
+    """Refresh after edits: rebuild the graph, re-index only the files changed since the last snapshot.
 
-    When files were *added* the whole index is rebuilt instead: unchanged files
-    that import or call the new (or restored) file were extracted while it did
-    not exist, and an incremental pass would leave their cross-file edges
-    unresolved. When files were *removed* and the indexer refuses the shrunken
+    The code graph is rebuilt over the whole corpus whenever a file changed (the
+    AST cache keeps unchanged files cheap): the upstream incremental pass loses the
+    cross-file edges of the files it re-extracts. The derived search index,
+    lexicon and symbol facts are still updated per changed file.
+    When files were *removed* and the indexer refuses the shrunken
     graph, the rebuild is repeated in full with force; in every case any node
     still pointing at a missing file is pruned. ``index_mode`` in the result
     says which rebuild ran.
@@ -196,20 +197,23 @@ def update(store: Store, repo: Path) -> dict:
     t0 = time.monotonic()
     stats = None
     index_mode = "none"
-    if diff["added"]:
-        stats = index.build(repo, force=True)
+    forced = False
+    if changed:
+        # Graphify's incremental pass extracts only the changed files, and its cross-file
+        # passes see only that batch: a changed file's imports and calls into unchanged files
+        # are lost (orders_app: editing service.py dropped its 4 edges into pricing.py and
+        # repository.py). The whole corpus is re-extracted instead; unchanged files come
+        # from the AST cache.
+        stats = index.build(repo)
         index_mode = "full"
-    elif changed:
-        stats = index.build(repo, changed=[repo / p for p in changed])
-        index_mode = "incremental"
         if not stats.get("ok", True) and diff["removed"]:
             # The indexer refuses a graph that shrinks; removed files explain the
-            # shrink, so rebuild in full with force rather than keep their nodes.
+            # shrink, so rebuild with force rather than keep their nodes.
             stats = index.build(repo, force=True)
-            index_mode = "full"
+            forced = True
     t_index = time.monotonic() - t0
     if stats is not None and not stats.get("ok", True):
-        return {**_index_refused(store, repo, stats, force=index_mode == "full", files=state["files"]),
+        return {**_index_refused(store, repo, stats, force=forced, files=state["files"]),
                 "changed": diff, "changed_count": len(changed), "mode": "index_refused",
                 "index_mode": index_mode, "index_seconds": round(t_index, 3)}
     if not changed and prev["commit_sha"] == state["commit"]:

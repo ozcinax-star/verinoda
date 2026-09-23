@@ -69,7 +69,9 @@ def test_update_reindexes_only_what_changed(proj):
     svc.write_bytes(svc.read_bytes() + b"\n\ndef audit_trail_marker():\n    return 'audit'\n")
     res = workflow.update(st, repo)
     si = res["derived"]["search_index"]
-    assert res["index_mode"] == "incremental" and si["mode"] == "incremental" and si["files_indexed"] >= 1
+    # the graph is rebuilt over the corpus (cross-file edges stay right); the search index only
+    # re-reads the changed file
+    assert res["index_mode"] == "full" and si["mode"] == "incremental" and si["files_indexed"] >= 1
     g = index.load(repo)
     assert retrieval.retrieve(g, "audit trail marker")["items"][0]["symbol"] == "audit_trail_marker()"
     again = workflow.update(st, repo)
@@ -278,3 +280,22 @@ def test_nodes_for_files_that_never_existed_are_dropped_and_reported_apart(proj,
     cli._r_derived(res)
     out = capsys.readouterr().out
     assert "no longer exist" not in out and "1 file(s) named by other files are not in the repository" in out
+
+
+def test_an_update_keeps_the_cross_file_edges_of_the_files_it_re_extracts(proj):
+    """The upstream incremental pass extracts only the changed files and resolves cross-file
+    imports and calls within that batch, so editing service.py dropped its edges into
+    pricing.py and repository.py until the next full scan."""
+    repo, st = proj
+    workflow.scan(st, repo)
+
+    def edges():
+        g = index.load(repo, augment=False)
+        return {(g.file(u), g.label(u), d.get("relation"), g.file(v), g.label(v)) for u, v, d in g.G.edges(data=True)}
+
+    before = edges()
+    assert any(e[0] == "orders/service.py" and e[3] == "orders/pricing.py" for e in before)
+    svc = repo / "orders" / "service.py"
+    svc.write_bytes(svc.read_bytes() + b"\n# a comment only\n")
+    workflow.update(st, repo)
+    assert edges() == before

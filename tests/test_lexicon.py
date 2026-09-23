@@ -322,3 +322,11 @@ def test_parallel_locale_files_give_translation_pairs(tmp_path):
     assert "bir" not in parts and not any("a" == p for ps in parts.values() for p in ps)  # stopwords and 'a'
     assert tp["fener"][0]["via"] == "translation"
     assert tp["fener"][0]["sites"] == ["src/main/resources/assets/glow/lang/tr_tr.json:2"]
+
+
+def test_exact_spelling_seed_keys_keep_stems_that_folding_would_merge():
+    got = {i: key for i, key, _t in lexicon.seed_exact_lookup(
+        ["Melek", "öldüğünde", "oluyor", "Ölen", "öldürünce", "ölüsü", "olan"])}
+    assert got == {1: "öl", 3: "öl", 4: "öldür", 5: "ölü"}  # "oluyor" / "olan" are "be", not "die"
+    (_i, key, targets), = lexicon.seed_exact_lookup(["ölünce"])  # the longest key wins: ölü
+    assert key == "ölü" and "dead" in targets
