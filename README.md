@@ -16,9 +16,9 @@
 | Graphify port (`verinoda/project_index`, `tests_upstream/`) | done. Upstream suite at port time: 5436 passed / 50 failed, and every failure also fails on unmodified upstream on the same Windows machine; not re-run since (`docs/UPSTREAM.md`) |
 | Core: claims, evidence, critique, experiments, research/compare, feedback, memory, installers, MCP server (23 tools) | implemented |
 | Round 3: search engine, question plans with Turkish support, reference resolver, trust engine (anchors, entailment, facet-level staleness), runtime observation, precise call resolution | implemented and wired into the CLI, MCP and `analyze`; gaps per decision in `docs/DESIGN.md` ("Implementation status") |
-| Product test suite | 1,123 passed, 1 skipped, 1 deselected (slow packaging checks), Windows 11 / Python 3.12, 2026-09-23 |
+| Product test suite | 1,134 passed, 1 skipped, 2 deselected (slow packaging and installer checks), Windows 11 / Python 3.12, 2026-09-23 |
 | Agent integration | Claude Code (`/verinoda`) and Codex (`$verinoda`) verified in real headless sessions with the earlier skill text (`docs/AGENT-VERIFICATION.md`); the round-3 skill text (understand-first and references protocols) has no such record yet |
-| Benchmarks (measured, `docs/BENCHMARKS.md`, chars/4 token estimates, gold facts found in the delivered context; no model in the loop) | Graphify's own code (226 files, 37 facts, in-sample): Verinoda text retrieval 35/37 at 1,422 tokens/question, ~0.1 s; Graphify 7/37. Held-out set on Verinoda's own code (33 facts): 22/33 vs Graphify 8/33 and raw reading 9/33. Turkish paraphrases of the example app: 32/32. Regressions: `analyze` on the example app 32 -> 31/32, and the one-off scan of the large corpus got slower (6.7 s -> 14.7 s cold) |
+| Benchmarks (measured, `docs/BENCHMARKS.md`, chars/4 token estimates, gold facts found in the delivered context; no model in the loop) | Graphify's own code (226 files, 37 facts, in-sample): Verinoda text retrieval 36/37 at 1,424 tokens/question, ~0.14 s; Graphify 7/37. Set on Verinoda's own earlier code (33 facts): 25/33 vs Graphify 8/33 and raw reading 9/33; it was held out until the 2026-09-23 ranking change, which was chosen with it in view (22/33 before). Turkish paraphrases of the example app: 32/32. Regressions: `analyze` on the example app 32 -> 31/32, the one-off scan of the large corpus got slower (6.7 s -> 14.7 s cold), and the 2026-09-23 change adds about 0.03 s per retrieval on the large sets |
 | Cross-platform | tested on Windows 11 only; the CI workflow (Linux/macOS/Windows) exists but is manual and has not been run |
 
 **Known limitations** (see also `docs/DESIGN.md` for per-decision gaps):
@@ -30,6 +30,12 @@ Open findings of the second acceptance audit (2026-09-23 05:00), not yet fixed:
 - Questions that are only partly about the code can come back `met` with verified but irrelevant claims.
 - The reference resolver can merge or drop references in some multi-reference sentences.
 - Fixed after that audit: user `claim add --kind` with unrelated text no longer verifies; `.verinoda/` and `.git/` files are no longer accepted as evidence; `packaging` is now a declared dependency.
+
+Found by running Verinoda on its own repository (2026-09-23), not yet fixed:
+
+- Command names in a question ("the `scan` command", "`scan` komutu") are not mapped to their handler functions (`cmd_scan`) unless the names match, so "do `init` and `scan` refuse the home directory?" does not reach the guard in `paths.py`.
+- On a repository of about 2,000 files an incremental `update` after a two-file edit took about 33 s, almost all of it in the graph rebuild. `analyze` refreshes first and can spend its default 60 s budget on that; run `verinoda update .` before asking.
+- In this repository the frozen benchmark snapshot (`benchmarks/corpora/heldout_repoatlas_7371990/`) duplicates many hits of self-queries.
 
 - Windows only so far. The POSIX resource limits and the container isolation
   path (docker/podman) are coded but have never been run.

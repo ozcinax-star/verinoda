@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,87 @@ Sections: [Summary](#summary) · [Results per set](#results-per-set) ·
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-23: dogfooding fixes
+
+Running Verinoda on its own repository exposed two problems, fixed in commit
+`8eb47ff`:
+
+1. **Turkish question understanding.** The seed dictionary missed common
+   software words (`komut`, `kök`, `izin`, `tara`, `kaldır`, `ev dizini`,
+   `zaman aşımı`, ...), did not match softened stems (`reddet` ->
+   `reddediyor`, `istek` -> `isteği`) or u-harmony suffixes (`grubu`), and a
+   two-word key such as `ev dizin` never matched because the word `ev` was
+   dropped as too short before the lookup.
+2. **Ranking.** The question "home directory" ranked `find_repo_root`, whose
+   docstring says "The home directory ...", 73rd: functions that repeat a
+   `home` parameter scored higher. A passage of code (not prose) or a unit
+   name in which two adjacent words of the question are also adjacent now
+   counts 1.3 times (`search_index.PROX_BOOST`).
+
+**How the ranking variant was chosen.** Four variants (factor 1.5 or 1.3;
+at most two tokens apart or strictly adjacent; with or without prose
+passages) were run once on all five sets. The kept variant found the most
+facts over all five sets (392 against 376 before and 378, 385 and 386 for the
+others) and lost no fact in any set/approach cell. The held-out set took part
+in that choice, so **for this change `heldout_repoatlas` is in-sample**.
+Documentation passages were excluded: the 1.5 / two-token variant lost 6
+facts on `graphify_core_tr` (retrieve text 25 -> 19, 5 of them on the question
+about `graphify update`) when prose passages got the factor and 1 when they
+did not (25 -> 24). Documentation often puts command names side by side.
+
+**Measured.** Result files: `benchmarks/results/dogfood-2026-09-23/` (same
+machine and harness as round 3, `repeat = 2`, the real upstream CLI). The
+five main runs and the budget sweep ran on the clean commit `8eb47ff`
+(17:35-17:47 UTC), then the five main runs on the previous commit `923bb8c`
+(17:47-17:52 UTC, `previous-commit/`), one after another with nothing else
+running. Facts found (pinpointed), `923bb8c` -> `8eb47ff`:
+
+| set | Verinoda analyze | retrieve (JSON) | retrieve (text) |
+|---|---|---|---|
+| `orders_app` | 31 (31) -> 31 (31) | 31 (31) -> 31 (31) | 32 (32) -> 32 (32) |
+| `graphify_core` | 26 (16) -> **30** (15) | 27 (18) -> 27 (18) | 35 (21) -> **36** (22) |
+| `heldout_repoatlas` | 11 (7) -> **13** (7) | 17 (12) -> **20** (15) | 22 (16) -> **25** (18) |
+| `orders_app_tr` | 30 (30) -> 30 (30) | 28 (28) -> 28 (28) | 32 (32) -> 32 (32) |
+| `graphify_core_tr` | 13 (12) -> **16** (13) | 16 (12) -> 16 (12) | 25 (15) -> 25 (15) |
+
+Raw grep+read and both Graphify renderers found the same facts with the same
+context sizes in both runs. The `923bb8c` numbers equal the round-3 numbers
+below (that commit did not change retrieval).
+
+Costs, from the same two runs:
+
+* **Context size** (tokens per question, chars/4): analyze 1,154 -> 1,181
+  on `orders_app`, 587 -> 652 on `heldout_repoatlas`, 863 -> 971 on
+  `graphify_core_tr`, and 1,021 -> 985 on `graphify_core`. Retrieve sizes
+  moved by at most 9.
+* **Latency** (cold median per question): retrieve text 0.110 -> 0.140 s on
+  `graphify_core`, 0.109 -> 0.135 s on `heldout_repoatlas`, 0.161 -> 0.198 s
+  on `graphify_core_tr`, unchanged on `orders_app` (0.010 s). The approaches
+  whose code did not change moved by at most 7% between the two runs. The
+  adjacency check re-reads up to 300 candidate passages from disk per
+  question. Analyze cold medians rose (`graphify_core` 1.316 -> 2.061 s) while
+  its warm medians fell (1.038 -> 0.821 s); two repeats cannot separate that
+  from noise.
+* **Pinpointing:** analyze on `graphify_core` pinpointed 15 facts instead of
+  16 while finding 30 instead of 26.
+* **Timing drift:** unchanged code (the upstream CLI) measured 10-16% slower
+  in this session than in round 3. Compare times only within this section.
+
+Budget sweep, retrieve text, facts at 750 / 1,500 / 3,000 tokens (round 3 ->
+now): `graphify_core` 32 -> 33 / 35 -> 36 / 37 -> 37; `heldout_repoatlas`
+18 -> 22 / 22 -> 25 / 32 -> 32; `graphify_core_tr` 19 -> 19 / 25 -> 25 /
+26 -> 26 (`dogfood-2026-09-23/sweep/`).
+
+**Still open.** The question that exposed these problems ("init ve scan
+komutları ev dizininde çalıştırılınca reddediyor mu?") is still not
+answered. The plan now reads it correctly (`komutları=command`,
+`ev dizininde=home`, `reddediyor=reject`), but retrieval does not reach
+`paths._is_home_or_above` or `find_repo_root`, and the command names `init`
+and `scan` are not mapped to their handlers `cmd_init` and `cmd_scan`.
+
+The sections below describe the round-3 measurement unless they say
+otherwise.
 
 ## Summary
 

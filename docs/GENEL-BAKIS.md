@@ -718,6 +718,38 @@ Yorum (yalnızca bu tablodan):
 | Referans URL şekilleri (93) | sürüm adı geçen 21 URL'yi eski ayrıştırıcı sessizce varsayılan dalın son haline sabitliyor ya da tarihsiz bir sayfa çekiyordu; şimdi 0. Reddedilen 21 girdi → 0. `#L` satır aralıkları 0/7 → 7/7 korunuyor | tablo ekip tarafından hazırlandı, bağımsız değil |
 | Referans soru korpusu (56 TR/EN soru) | örneklem içi 44 soruda %100; ayrılmış 12 sorunun ilk körlemesine çalıştırmasında 11/12 | ıskalanan durum sonradan düzeltildi, o küme artık kör değil; hedef ≥ 60 soruydu |
 
+
+### 7.5 Verinoda'yı kendi üzerinde kullanma turu (2026-09-23, `docs/BENCHMARKS.md`)
+
+Verinoda kendi deposunda kullanılırken iki sorun çıktı ve `8eb47ff`
+commit'inde düzeltildi: Türkçe sözlükte sık yazılım kelimeleri yoktu
+(`komut`, `kök`, `izin`, `tara`, `kaldır`, `ev dizini` ...), yumuşayan
+kökler (`reddet` → `reddediyor`) eşleşmiyordu; sıralamada da "home
+directory" sorusu, belgesinde tam bu ifade geçen `find_repo_root`'u 73.
+sıraya koyuyordu. Artık sorudaki iki komşu kelime bir kod parçasında da yan
+yanaysa o parça 1,3 kat sayılıyor (belge bölümleri hariç).
+
+Aynı makine ve düzenek, `repeat = 2`, gerçek Graphify CLI; önceki commit
+aynı koşullarda hemen ardından ölçüldü. Bulunan bilgi, önce → sonra:
+
+| Küme | analyze | retrieve (JSON) | retrieve (düz metin) |
+|---|---|---|---|
+| Örnek uygulama | 31 → 31 | 31 → 31 | 32 → 32 |
+| Graphify'ın kodu | 26 → **30** | 27 → 27 | 35 → **36** |
+| Verinoda'nın eski kodu (33 bilgi) | 11 → **13** | 17 → **20** | 22 → **25** |
+| Örnek uygulama, Türkçe | 30 → 30 | 28 → 28 | 32 → 32 |
+| Graphify'ın kodu, Türkçe | 13 → **16** | 16 → 16 | 25 → 25 |
+
+Çekinceler: sıralama ayarı dört varyant arasından beş kümenin toplamına
+bakılarak seçildi; "ayrılmış" küme de bu seçimde kullanıldığı için bu
+değişiklik açısından artık örneklem içidir. Bedeli: büyük kümelerde soru
+başına ~0,03 sn daha uzun arama (ör. 0,110 → 0,140 sn); analyze bağlamı
+bazı kümelerde 27–108 token büyüdü. Graphify ve düz arama sonuçları iki
+çalıştırmada da aynı. Bu turu başlatan soru ("init ve scan komutları ev
+dizininde çalıştırılınca reddediyor mu?") hâlâ yanıtlanamıyor: soru artık
+doğru anlaşılıyor, ama komut adları (`init`, `scan`) işleyici
+fonksiyonlarına (`cmd_init`, `cmd_scan`) bağlanmıyor.
+
 ---
 
 ## 8. Ek maliyetler ve zayıf kalınan yerler
