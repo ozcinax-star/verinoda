@@ -848,13 +848,16 @@
    "save",
    "store",
    "persist",
-   "write"
+   "write",
+   "register"
   ],
   "kayit": [
    "record",
    "entry",
    "save",
-   "store"
+   "store",
+   "registry",
+   "registration"
   ],
   "kaynak": [
    "source",
@@ -1597,6 +1600,10 @@
   ],
   "zirh": [
    "armor"
+  ],
+  "kaydol": [
+   "register",
+   "sign_up"
   ]
  },
  "exact": {

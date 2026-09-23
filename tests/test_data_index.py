@@ -386,3 +386,12 @@ def test_plan_glosses_get_the_exact_spelling_seed_entries(mod):
                                    repo=mod.root)
     got = {(e["from"], e["to"]) for e in q.expansions}
     assert ("oldugunde", "death") in got and not any(e["from"] == "oluyor" for e in q.expansions)
+
+
+def test_a_derivational_ending_is_not_stripped_to_reach_a_stem(tmp_path):
+    root = tmp_path / "deriv"
+    _write(root, "app/oyun.py", "def oyun_baslat():\n    return 1\n\n\ndef kanat_ac(kanatlar):\n    return kanatlar\n")
+    g = _scan(root)
+    exp = {(e["from"], e["to"]) for e in search_index.analyze_query("Oyuncu kanatları nasıl açıyor?", _db(g)).expansions}
+    assert ("oyuncu", "oyun") not in exp and ("Oyuncu", "oyun") not in exp   # oyuncu (player) is not oyun (game)
+    assert any(src.lower().startswith("kanat") and to == "kanatlar" for src, to in exp)  # inflection is stripped

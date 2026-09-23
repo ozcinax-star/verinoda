@@ -84,6 +84,9 @@ REL_WEIGHTS = {"calls": (1.0, 0.6), "uses": (0.5, 0.3), "inherits": (0.5, 0.3), 
 EXPANSION_WEIGHT = 0.5            # abbreviation / prefix / Turkish-stem expansions
 PROVIDED_EXPANSION_WEIGHT = 0.7   # expansions supplied by the caller (question plan, lexicon)
 TR_STEM_WEIGHT = 0.8              # the vocabulary-confirmed stem of an inflected Turkish word (the user's word)
+# Turkish derivational endings (folded) change the meaning of a stem: -ci/-cu (agent), -lik (-ness),
+# -siz (without), -li (with), -ce (-ly)
+TR_DERIVATIONAL = ("ci", "cu", "lik", "luk", "siz", "suz", "li", "lu", "ce", "ca")
 LINK_PPR_FACTOR = 0.5             # graph prior a data unit takes from the code units linked to it
 PROX_BOOST = 0.3                  # code passage factor when two adjacent question words are adjacent in it
 PROX_GAP = 1                      # "adjacent": at most this many tokens apart, in either order
@@ -1215,13 +1218,14 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
         f = textnorm.fold_tr(w)
         if (tr_question or not w.isascii()) and len(f) >= 4 and f.isalpha():
             # the longest indexed term that leaves only Turkish inflection ("modeli" -> model)
-            cands = [f[:k] for k in range(len(f) - 1, 2, -1) if textnorm.is_suffix_chain(f[k:])]
+            cands = [f[:k] for k in range(len(f) - 1, 2, -1) if textnorm.is_suffix_chain(f[k:])
+                     and not f[k:].startswith(TR_DERIVATIONAL)]  # oyuncu (player) is not oyun (game)
             known = _vocab_has(conn, cands)
             exact = next((c for c in cands if c in known), None)
             if exact:  # an inflected form the index also knows as a word keeps the lower weight
                 add(w, exact, f"turkish stem '{exact}'", EXPANSION_WEIGHT if f in have else TR_STEM_WEIGHT)
             st = textnorm.tr_stem(f, lambda p: bool(_vocab_prefixed(conn, p, 1)))
-            if st != f and len(st) >= 3:
+            if st != f and len(st) >= 3 and not f[len(st):].startswith(TR_DERIVATIONAL):
                 if f not in have:
                     for term, _df in _vocab_prefixed(conn, st, 3):
                         add(w, term, f"turkish stem '{st}'", EXPANSION_WEIGHT)
@@ -1239,7 +1243,7 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
                 cand.setdefault(short, (t, "abbreviation"))
         if len(t) >= 6:
             for k in range(max(3, math.ceil(0.4 * len(t))), len(t)):
-                if t[:k] not in NOT_ABBREVIATIONS and not t[k:].startswith(_DERIVATIONAL):
+                if t[:k] not in NOT_ABBREVIATIONS and not t[k:].startswith(_DERIVATIONAL + TR_DERIVATIONAL):
                     prefixes.setdefault(t[:k], t)
     known = _vocab_has(conn, [c for c in cand if c not in weights])
     for c, (src, via) in cand.items():
