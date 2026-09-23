@@ -1,0 +1,6 @@
+{
+  "parent": "emberforge:block/ember_forge",
+  "textures": {
+    "front": "emberforge:block/ember_forge_front_lit"
+  }
+}

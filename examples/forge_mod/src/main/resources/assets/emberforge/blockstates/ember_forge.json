@@ -1,0 +1,12 @@
+{
+  "variants": {
+    "facing=north,lit=false": { "model": "emberforge:block/ember_forge" },
+    "facing=east,lit=false": { "model": "emberforge:block/ember_forge", "y": 90 },
+    "facing=south,lit=false": { "model": "emberforge:block/ember_forge", "y": 180 },
+    "facing=west,lit=false": { "model": "emberforge:block/ember_forge", "y": 270 },
+    "facing=north,lit=true": { "model": "emberforge:block/ember_forge_lit" },
+    "facing=east,lit=true": { "model": "emberforge:block/ember_forge_lit", "y": 90 },
+    "facing=south,lit=true": { "model": "emberforge:block/ember_forge_lit", "y": 180 },
+    "facing=west,lit=true": { "model": "emberforge:block/ember_forge_lit", "y": 270 }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "parent": "minecraft:story/mine_stone",
+  "display": {
+    "icon": {
+      "id": "emberforge:cinder_ore"
+    },
+    "title": {
+      "translate": "advancement.emberforge.first_cinder.title"
+    },
+    "description": {
+      "translate": "advancement.emberforge.first_cinder.description"
+    },
+    "frame": "task"
+  },
+  "criteria": {
+    "has_cinder_ore": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          {
+            "items": "#emberforge:cinder_ores"
+          }
+        ]
+      }
+    }
+  },
+  "rewards": {
+    "function": "emberforge:rewards/first_cinder"
+  }
+}

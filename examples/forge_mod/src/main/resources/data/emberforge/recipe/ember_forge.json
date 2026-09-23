@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "CCC",
+    "CFC",
+    "BBB"
+  ],
+  "key": {
+    "C": {
+      "item": "emberforge:cinder_ingot"
+    },
+    "F": {
+      "item": "minecraft:blast_furnace"
+    },
+    "B": {
+      "item": "minecraft:bricks"
+    }
+  },
+  "result": {
+    "id": "emberforge:ember_forge",
+    "count": 1
+  }
+}

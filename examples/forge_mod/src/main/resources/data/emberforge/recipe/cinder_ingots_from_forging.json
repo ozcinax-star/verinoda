@@ -1,0 +1,12 @@
+{
+  "type": "emberforge:forging",
+  "ingredient": {
+    "tag": "emberforge:cinder_ores"
+  },
+  "result": {
+    "id": "emberforge:cinder_ingot",
+    "count": 2
+  },
+  "forge_time": 160,
+  "min_heat": 40
+}

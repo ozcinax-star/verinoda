@@ -1,0 +1,17 @@
+{
+  "block.emberforge.ember_forge": "Ember Forge",
+  "block.emberforge.cinder_ore": "Cinder Ore",
+  "item.emberforge.cinder_ingot": "Cinder Ingot",
+  "item.emberforge.forge_hammer": "Forge Hammer",
+  "itemGroup.emberforge": "Emberforge",
+  "container.emberforge.ember_forge": "Ember Forge",
+  "gui.emberforge.stoke": "Stoke",
+  "message.emberforge.stoked": "The forge glows hotter (heat %s)",
+  "message.emberforge.first_cinder": "Warm stone! Here is some coal to light a forge.",
+  "message.emberforge.reset.heat_source": "There is still a heat source under you.",
+  "message.emberforge.reset.done": "Nearby Ember Forges were reset.",
+  "command.emberforge.heat": "Forge heat: %s",
+  "command.emberforge.heat.not_a_forge": "That block is not an Ember Forge.",
+  "advancement.emberforge.first_cinder.title": "Smouldering Stone",
+  "advancement.emberforge.first_cinder.description": "Find some Cinder Ore"
+}

@@ -1,0 +1,8 @@
+{
+  "replace": false,
+  "values": [
+    "#minecraft:is_badlands",
+    "minecraft:stony_peaks",
+    "minecraft:windswept_gravelly_hills"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "": { "model": "emberforge:block/cinder_ore" }
+  }
+}

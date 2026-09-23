@@ -820,6 +820,13 @@ bilgi (50 üzerinden):
 | Verinoda retrieve (JSON) | 25 | 32 | **43** |
 | Verinoda retrieve (düz metin) | 34 | 46 | **48** |
 
+İkinci ayrılmış küme `forge_mod` (kurgusal bir NeoForge modu: Java ve Kotlin, özel tarif tipi,
+etiketler, worldgen, iki dilde dil dosyaları; 14 soru, 68 bilgi) bütün bu değişikliklerden sonra
+Verinoda'yı hiç çalıştırmamış bir ajan tarafından yazıldı ve üzerinde hiçbir ayar yapılmadan bir kez
+ölçüldü: düz metin 43 → **63**, JSON 28 → **45**, analyze 26 → **38** (`32a5bd4` → şimdi); ham okuma
+36 (4.471 token ile), Graphify 12. En zayıf yerler: yalnızca veri dosyalarıyla yanıtlanan Türkçe
+worldgen sorusu ve özel tarif tipi sorusu. Kotlin için ek çağrı geçişi yok.
+
 Önceki beş kümede (gerileme kontrolü) Verinoda'nın 25 hücresinden 24'ü ve
 Graphify ile ham okumanın bütün hücreleri aynı sayıda bilgi buldu; bir hücre
 bir bilgi kaybetti (`graphify_core_tr` JSON 16 → 15: aynı içerikli belge

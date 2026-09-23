@@ -83,6 +83,28 @@ questions; it still missed 17 facts at almost twice the context. Result files:
 `benchmarks/results/mods-2026-09-24/` (`glow_mod_at_32a5bd4.json`,
 `glow_mod_first_measurement.json`, `glow_mod.json`).
 
+**A second held-out set, `forge_mod`** (`examples/forge_mod`: a fictional
+NeoForge mod in Java and Kotlin with recipes of a custom type, tags, worldgen
+and a biome modifier, a config spec, a network payload, lang files in both
+languages and JUnit tests; 14 questions, 7 of them Turkish, 68 facts, 19
+negatives). Another agent wrote it without running Verinoda on it, after all
+of the changes above, and it was measured once, with nothing tuned on it
+(`forge_mod.json`, `forge_mod_at_32a5bd4.json`; `repeat = 1`):
+
+| approach | `32a5bd4` | now |
+|---|---|---|
+| raw grep+read | 36 (30), 4,471 | 36 (30), 4,471 |
+| Graphify (vendored renderer) | 12 (12), 1,344 | 12 (12), 1,344 |
+| Verinoda analyze | 26 (19), 672 | **38 (30)**, 816 |
+| Verinoda retrieve (JSON) | 28 (28), 1,334 | **45 (44)**, 1,429 |
+| Verinoda retrieve (text) | 43 (36), 1,375 | **63 (57)**, 1,466 |
+
+No approach stated any of the 19 negatives. The text format answered 10 of
+the 14 questions completely (raw 3, Graphify 0). The weakest spots: a data-only
+worldgen question in Turkish (q05, text 3/4, JSON and analyze 0/4) and the
+recipe-type question q03 (text 4/6, analyze 1/6). Kotlin gets no extra call
+pass: Kotlin -> Java calls come only from the extractor.
+
 **The five earlier sets** (regression check, same harness, `repeat = 1`, no
 upstream CLI, against `dogfood-2026-09-23/`): 24 of the 25 Verinoda cells and
 every raw and Graphify cell found exactly the same number of facts. One cell
@@ -1144,6 +1166,7 @@ since `05890a1`; `tests/test_benchmark.py` pins the sha256 of both arrays.
 | `heldout_repoatlas` | the product (then named RepoAtlas) at commit `7371990` of the pre-rename history, shipped as a snapshot: `repoatlas/` without `project_index/` and `benchmark/questions/`, plus `tests/` without `fixtures/` (106 files) | 8: where ×2, config, flow, impact, behaviour, why, tests | 33 | 0 | the retrieval research agent, after its prototype was built and before it ran on this corpus; gold reviewed and re-anchored to `7371990` by the measurement step | no (held out from the design; seen by the search track, which reports no tuning on it) |
 | `orders_app_tr` | as `orders_app` | the 10 `orders_app` questions in Turkish | 32 (same) | 15 (same) | the question-understanding rule author, while tuning the Turkish rules | yes |
 | `graphify_core_tr` | as `graphify_core` | the 9 `graphify_core` questions in Turkish | 37 (same) | 7 (same) | the question-understanding rule author, while tuning the Turkish rules | yes |
+| `forge_mod` | `examples/forge_mod` (55 files: a fictional NeoForge mod in Java and Kotlin with a data pack, worldgen, tags, lang files in two languages and JUnit tests) | 14, 7 of them Turkish: callers, cross-layer, config, resources, flow, behaviour, where | 68 | 19 | an agent that never ran Verinoda on it, after all the 2026-09-24 changes | no: measured once, nothing tuned on it |
 | `glow_mod` | `examples/glow_mod` (37 files: a fictional Fabric mod - Java, a data pack, assets, a yml config, a reference tree `reference/` configured through `corpus.verinoda_config`, and a copied data pack) | 14, 7 of them Turkish: callers, cross-layer (code <-> data pack), config, resources, flow, behaviour, where | 50 | 12 (in 10 questions) | an agent that never ran Verinoda on it, after the Minecraft support was written | held out for its first measurement only: the Java call pass, the translation pairs, the game words of the seed dictionary and the link chain were added after looking at the misses of q01, q03, q04 and q13 |
 
 The held-out review, fact by fact, is stored in the set:

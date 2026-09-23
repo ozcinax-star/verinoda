@@ -1,0 +1,26 @@
+# Default common config, as NeoForge writes it to config/emberforge-common.toml on first start.
+# Kept in the repository as documentation of the keys; edit the copy in your instance's config folder.
+
+#Ember Forge heat settings
+[forge]
+	#Heat added by one fuel item (blaze rods count double)
+	# Default: 40
+	# Range: 1 ~ 400
+	heat_per_fuel = 40
+	#Upper limit of a forge's heat
+	# Default: 200
+	# Range: 50 ~ 1000
+	max_heat = 200
+	#Heat added by the Stoke button or a Forge Hammer hit
+	# Default: 15
+	# Range: 0 ~ 100
+	stoke_heat = 15
+	#Ticks between two losses of 1 heat
+	# Default: 20
+	# Range: 1 ~ 1200
+	decay_interval_ticks = 20
+
+#Debug helpers
+[debug]
+	#Allow operators to use /emberforge reset
+	allow_reset_command = true

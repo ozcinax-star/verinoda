@@ -1,0 +1,17 @@
+{
+  "block.emberforge.ember_forge": "Kor Ocağı",
+  "block.emberforge.cinder_ore": "Cüruf Cevheri",
+  "item.emberforge.cinder_ingot": "Cüruf Külçesi",
+  "item.emberforge.forge_hammer": "Demirci Çekici",
+  "itemGroup.emberforge": "Emberforge",
+  "container.emberforge.ember_forge": "Kor Ocağı",
+  "gui.emberforge.stoke": "Körükle",
+  "message.emberforge.stoked": "Ocak daha da kızarıyor (ısı %s)",
+  "message.emberforge.first_cinder": "Sıcak taş! Bir ocak yakman için biraz kömür.",
+  "message.emberforge.reset.heat_source": "Altında hâlâ bir ısı kaynağı var.",
+  "message.emberforge.reset.done": "Yakındaki Kor Ocakları sıfırlandı.",
+  "command.emberforge.heat": "Ocak ısısı: %s",
+  "command.emberforge.heat.not_a_forge": "Bu blok bir Kor Ocağı değil.",
+  "advancement.emberforge.first_cinder.title": "İçten İçe Yanan Taş",
+  "advancement.emberforge.first_cinder.description": "Biraz Cüruf Cevheri bul"
+}

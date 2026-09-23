@@ -1,0 +1,12 @@
+{
+  "type": "emberforge:forging",
+  "ingredient": {
+    "item": "emberforge:cinder_ingot"
+  },
+  "result": {
+    "id": "emberforge:forge_hammer",
+    "count": 1
+  },
+  "forge_time": 400,
+  "min_heat": 120
+}

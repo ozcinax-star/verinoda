@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:smelting",
+  "category": "misc",
+  "ingredient": {
+    "item": "emberforge:cinder_ore"
+  },
+  "result": {
+    "id": "emberforge:cinder_ingot"
+  },
+  "experience": 0.7,
+  "cookingtime": 200
+}
