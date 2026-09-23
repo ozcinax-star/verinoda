@@ -474,15 +474,14 @@ def _value_words(text: str) -> list[str]:
     return re.findall(r"[^\W\d_]+", text)
 
 
-def translation_pairs(repo: Path, files: list[str]) -> dict[str, list[dict]]:
-    """Turkish word key -> ``[{part, score, support, sites, via}]`` from parallel en/tr locale files."""
+def _locale_entries(repo: Path, files: list[str]):
+    """``(site, key, tr_value, en_value)`` for the keys an en and a tr locale file both translate."""
     groups: dict[str, dict[str, str]] = defaultdict(dict)
     for rel in files:
         m = _LOCALE_FILE.search(rel)
         if m:
             lang = "tr" if m.group(1).lower().startswith("tr") else "en"
             groups[rel[:m.start(1)]][lang] = rel
-    found: dict[tuple[str, str], dict] = {}
     for pair in groups.values():
         if "en" not in pair or "tr" not in pair:
             continue
@@ -499,29 +498,60 @@ def translation_pairs(repo: Path, files: list[str]) -> dict[str, list[dict]]:
                 continue
             leaf = key.rsplit(".", 1)[-1]
             line = next((i for i, ln in enumerate(tr_lines, 1) if f'"{leaf}"' in ln or f'"{key}"' in ln), 1)
-            site = f"{pair['tr']}:{line}"
-            tw, ew = _value_words(tr_val), _value_words(en_val)
-            if not tw or len(tw) > MAX_TRANSLATION_WORDS:
+            yield f"{pair['tr']}:{line}", key, tr_val, en_val
+
+
+def _is_leaf_identifier(leaf: str) -> bool:
+    return bool(re.fullmatch(r"[a-z][a-z0-9_]{2,}", leaf)) and "_" in leaf
+
+
+def translation_pairs(repo: Path, files: list[str]) -> dict[str, list[dict]]:
+    """Turkish word key -> ``[{part, score, support, sites, via}]`` from parallel en/tr locale files."""
+    found: dict[tuple[str, str], dict] = {}
+    for site, key, tr_val, en_val in _locale_entries(repo, files):
+        leaf = key.rsplit(".", 1)[-1]
+        tw, ew = _value_words(tr_val), _value_words(en_val)
+        if not tw or len(tw) > MAX_TRANSLATION_WORDS:
+            continue
+        links: list[tuple[str, str]] = []
+        if len(tw) == len(ew):
+            links += [(a, b) for a, b in zip(tw, ew) if tn.fold_tr(a) != tn.fold_tr(b)]
+        if _is_leaf_identifier(leaf):
+            links += [(a, leaf) for a in tw]
+        for tr_word, target in links:
+            if len(tr_word) < 3 or len(target) < 3 or tn.fold_tr(tr_word) in tn.TR_STOPWORDS:
                 continue
-            links: list[tuple[str, str]] = []
-            if len(tw) == len(ew):
-                links += [(a, b) for a, b in zip(tw, ew) if tn.fold_tr(a) != tn.fold_tr(b)]
-            if re.fullmatch(r"[a-z][a-z0-9_]{2,}", leaf) and "_" in leaf:
-                links += [(a, leaf) for a in tw]
-            for tr_word, target in links:
-                if len(tr_word) < 3 or len(target) < 3 or tn.fold_tr(tr_word) in tn.TR_STOPWORDS:
-                    continue
-                part = tn.fold_tr(target) if "_" in target else tn.en_stem(tn.fold_tr(target))
-                for k in word_keys(tr_word):
-                    e = found.setdefault((k, part), {"part": part, "score": TRANSLATION_SCORE, "support": 0,
-                                                     "sites": [], "via": "translation"})
-                    e["support"] += 1
-                    if len(e["sites"]) < MAX_SITES and site not in e["sites"]:
-                        e["sites"].append(site)
+            part = tn.fold_tr(target) if "_" in target else tn.en_stem(tn.fold_tr(target))
+            for k in word_keys(tr_word):
+                e = found.setdefault((k, part), {"part": part, "score": TRANSLATION_SCORE, "support": 0,
+                                                 "sites": [], "via": "translation"})
+                e["support"] += 1
+                if len(e["sites"]) < MAX_SITES and site not in e["sites"]:
+                    e["sites"].append(site)
     out: dict[str, list[dict]] = defaultdict(list)
     for (k, _part), e in found.items():
         out[k].append(e)
     return {k: sorted(v, key=lambda x: (-x["support"], x["part"]))[:TOP_PAIRS] for k, v in sorted(out.items())}
+
+
+def translation_phrases(repo: Path, files: list[str]) -> dict[str, dict]:
+    """Folded Turkish label of two or more words -> ``{targets, sites}``: the identifiers its keys end in.
+
+    "Kor Ocağı" under ``block.emberforge.ember_forge`` -> ``ember_forge``: a question that names a
+    thing by its Turkish label names that identifier, not every word the label's words occur in.
+    """
+    out: dict[str, dict] = {}
+    for site, key, tr_val, _en_val in _locale_entries(repo, files):
+        leaf = key.rsplit(".", 1)[-1]
+        tw = _value_words(tr_val)
+        if not _is_leaf_identifier(leaf) or not 2 <= len(tw) <= MAX_TRANSLATION_WORDS:
+            continue
+        e = out.setdefault(" ".join(tn.fold_tr(w).lower() for w in tw), {"targets": [], "sites": []})
+        if leaf not in e["targets"] and len(e["targets"]) < TOP_PAIRS:
+            e["targets"].append(leaf)
+        if site not in e["sites"] and len(e["sites"]) < MAX_SITES:
+            e["sites"].append(site)
+    return dict(sorted(out.items()))
 
 
 # -- seed dictionary --------------------------------------------------------------------------
@@ -551,13 +581,11 @@ def seed_exact_lookup(originals: list[str]) -> list[tuple[int, str, tuple[str, .
     out = []
     for i, w in enumerate(originals):
         low = tr_lower(w)
-        best = None
-        for key, targets in entries.items():
-            if low.startswith(key) and (low == key or tn.is_suffix_chain(tn.fold_tr(low[len(key):]))):
-                if best is None or len(key) > len(best[0]):
-                    best = (key, targets)
-        if best:
-            out.append((i, best[0], best[1]))
+        # the longest key the word starts with decides: "ölçülüyor" is ölç (measure) even where
+        # its ending is not read as inflection, never öl (die)
+        key = max((k for k in entries if low.startswith(k)), key=len, default=None)
+        if key and (low == key or tn.is_suffix_chain(tn.fold_tr(low[len(key):]))):
+            out.append((i, key, entries[key]))
     return out
 
 
@@ -624,6 +652,7 @@ class Lexicon:
     tree_hash: str | None = None
     built_at: str | None = None
     source: str = "file"
+    phrases: dict[str, dict] = field(default_factory=dict)
     _sorted: list[str] = field(default_factory=list, repr=False)
 
     def __post_init__(self) -> None:
@@ -682,6 +711,29 @@ class Lexicon:
             kept = [t for t in targets if self.grounded(t)]
             res.append({"start": start, "n": n, "key": key, "targets": kept,
                         "dropped": [t for t in targets if t not in kept]})
+        return res
+
+    def phrase_hits(self, words: list[str]) -> list[dict]:
+        """Locale labels spelled by adjacent folded words: ``{start, n, key, targets, sites}``.
+
+        Each label word may carry Turkish inflection (``kor ocağının``); per start the longest label wins.
+        """
+        res: list[dict] = []
+        i = 0
+        while i < len(words) and self.phrases:
+            best = None
+            for key, e in self.phrases.items():
+                kw = key.split()
+                if len(kw) > len(words) - i or (best and len(kw) <= best[0]):
+                    continue
+                if all(seed_key_matches(k, words[i + j]) for j, k in enumerate(kw)):
+                    best = (len(kw), key, e)
+            if best is None:
+                i += 1
+                continue
+            res.append({"start": i, "n": best[0], "key": best[1], "targets": list(best[2].get("targets") or []),
+                        "sites": list(best[2].get("sites") or [])})
+            i += best[0]
         return res
 
     def seed_exact(self, originals: list[str]) -> list[dict]:
@@ -744,16 +796,36 @@ def _read_raw(path: Path) -> dict | None:
 
 
 def _from_raw(raw: dict) -> Lexicon:
-    return Lexicon(pairs=raw.get("pairs") or {}, vocab=raw.get("vocab") or {},
+    return Lexicon(pairs=raw.get("pairs") or {}, vocab=raw.get("vocab") or {}, phrases=raw.get("phrases") or {},
                    n_files=int(raw.get("n_files") or 0), text_sites=raw.get("text_sites") or {},
                    units=int(raw.get("units") or 0), tree_hash=raw.get("tree_hash"),
                    built_at=raw.get("built_at"), source="file")
 
 
+_LOADED: dict[str, tuple[tuple[int, int], Lexicon | None]] = {}
+
+
 def load(repo: Path) -> Lexicon | None:
-    """The lexicon built for ``repo``, or None when there is none (or it is from another version)."""
-    raw = _read_raw(lexicon_path(repo))
-    return _from_raw(raw) if raw else None
+    """The lexicon built for ``repo``, or None when there is none (or it is from another version).
+
+    Parsed once per file version (modification time and size): one question reads it several
+    times, and a large repository's lexicon takes a noticeable fraction of a second to parse.
+    """
+    path = lexicon_path(repo)
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    key, stamp = str(path), (st.st_mtime_ns, st.st_size)
+    hit = _LOADED.get(key)
+    if hit is not None and hit[0] == stamp:
+        return hit[1]
+    raw = _read_raw(path)
+    lx = _from_raw(raw) if raw else None
+    if len(_LOADED) >= 4:
+        _LOADED.clear()
+    _LOADED[key] = (stamp, lx)
+    return lx
 
 
 def _candidate_files(repo: Path, graph) -> list[str]:
@@ -820,9 +892,11 @@ def build(repo: Path, graph=None, changed=None, *, file_hashes: dict[str, str] |
     try:
         from verinoda.snapshot import list_files
 
-        translations = translation_pairs(repo, list_files(repo))
+        listed = list_files(repo)
+        translations = translation_pairs(repo, listed)
+        phrases = translation_phrases(repo, listed)
     except Exception:  # noqa: BLE001 - a malformed locale file never breaks the lexicon
-        translations = {}
+        translations, phrases = {}, {}
     for k, prs in translations.items():  # the repository's own translations come first
         have = {x["part"] for x in prs}
         pairs[k] = (prs + [x for x in pairs.get(k, []) if x["part"] not in have])[:TOP_PAIRS]
@@ -840,7 +914,7 @@ def build(repo: Path, graph=None, changed=None, *, file_hashes: dict[str, str] |
         "params": {"g2_min": G2_MIN, "min_support": MIN_SUPPORT, "top_pairs": TOP_PAIRS,
                    "common_part_share": COMMON_PART_SHARE, "common_part_min_units": COMMON_PART_MIN_UNITS},
         "units": n_units, "n_files": len(files), "stop_parts": stop, "pairs": pairs,
-        "seed_hits": dict(sorted(seed_hits.items())), "vocab": dict(sorted(vocab.items())),
+        "seed_hits": dict(sorted(seed_hits.items())), "phrases": phrases, "vocab": dict(sorted(vocab.items())),
         "text_sites": text_sites, "files": dict(sorted(files.items())),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -850,7 +924,7 @@ def build(repo: Path, graph=None, changed=None, *, file_hashes: dict[str, str] |
     tmp.replace(path)
     return {"path": str(path), "files": len(files), "reparsed": reparsed, "units": n_units,
             "words": len(pairs), "pairs": sum(len(v) for v in pairs.values()),
-            "translation_pairs": sum(len(v) for v in translations.values()),
+            "translation_pairs": sum(len(v) for v in translations.values()), "phrases": len(phrases),
             "seed_grounded": len(seed_hits), "bytes": path.stat().st_size,
             "seconds": round(time.monotonic() - t0, 3)}
 

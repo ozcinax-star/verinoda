@@ -167,12 +167,35 @@ def scan(store: Store, repo: Path, *, force: bool = False) -> dict:
     return out
 
 
+def _graph_affected(repo: Path, diff: dict) -> bool:
+    """Can the changed files change the code graph? A file the graph has nodes from, or a new file
+    the extractor reads (code, package manifests). An edited README, data file or document is
+    only re-indexed for search: rebuilding the graph for it costs as much as for a code edit."""
+    from verinoda.project_index.detect import FileType, classify_file
+
+    try:
+        g = index.load(repo)
+        in_graph = {d.get("source_file") for _, d in g.G.nodes(data=True) if d.get("source_file")}
+    except Exception:  # noqa: BLE001 - no readable graph: rebuild
+        return True
+    if any(f in in_graph for f in diff["modified"] + diff["removed"]):
+        return True
+    for f in diff["added"]:
+        try:
+            if classify_file(repo / f) == FileType.CODE:
+                return True
+        except OSError:
+            return True
+    return False
+
+
 def update(store: Store, repo: Path) -> dict:
     """Refresh after edits: rebuild the graph, re-index only the files changed since the last snapshot.
 
-    The code graph is rebuilt over the whole corpus whenever a file changed (the
-    AST cache keeps unchanged files cheap): the upstream incremental pass loses the
-    cross-file edges of the files it re-extracts. The derived search index,
+    The code graph is rebuilt over the whole corpus whenever a file of the graph (or a
+    new code file) changed (the AST cache keeps unchanged files cheap): the upstream
+    incremental pass loses the cross-file edges of the files it re-extracts. Edits
+    to other files (docs, data) leave the graph as it is. The derived search index,
     lexicon and symbol facts are still updated per changed file.
     When files were *removed* and the indexer refuses the shrunken
     graph, the rebuild is repeated in full with force; in every case any node
@@ -206,7 +229,7 @@ def update(store: Store, repo: Path) -> dict:
     stats = None
     index_mode = "none"
     forced = False
-    if changed:
+    if changed and _graph_affected(repo, diff):
         # Graphify's incremental pass extracts only the changed files, and its cross-file
         # passes see only that batch: a changed file's imports and calls into unchanged files
         # are lost (orders_app: editing service.py dropped its 4 edges into pricing.py and

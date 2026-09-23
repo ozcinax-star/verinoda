@@ -167,3 +167,37 @@ def test_folders_that_copy_other_code_are_suggested_as_reference_trees(tmp_path)
     assert sugg == [{"path": "legacy/plugin/src/", "shared": 6, "files": 7, "copy_of": "app/"}]
     assert setup_mod.reference_suggestions(tmp_path, files, ["legacy/"]) == []   # already configured
     assert setup_mod.reference_suggestions(tmp_path, [f"app/{n}" for n in names]) == []
+
+
+def _tree(root, files: dict) -> list[str]:
+    for rel, text in files.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+    return sorted(files)
+
+
+def test_a_copy_of_root_code_is_suggested_but_sibling_apps_and_api_impl_pairs_are_not(tmp_path):
+    body = "".join(f"    def m{i}(self):\n        return {i}\n" for i in range(6))
+    copy = {f"src/app/mod{i}.py": f"class Mod{i}:\n{body}" for i in range(8)}
+    copy |= {f"legacy/src/app/mod{i}.py": f"class Mod{i}:\n{body}    # old\n" for i in range(6)}
+    sugg = setup_mod.reference_suggestions(tmp_path / "a", _tree(tmp_path / "a", copy))
+    assert [s["path"] for s in sugg] == ["legacy/src/app/"] and sugg[0]["copy_of"] == "./"
+    django = {f"{app}/{m}.py": f"# {app} {m}\nfrom django.db import models\nclass {app.title()}{m.title()}: pass\n"
+              for app in ("blog", "shop") for m in ("models", "views", "admin", "apps", "urls", "forms", "signals")}
+    assert setup_mod.reference_suggestions(tmp_path / "d", _tree(tmp_path / "d", django)) == []
+    api_impl = {f"{mod}/src/main/java/com/x/Svc{i}.java":
+                (f"package com.x;\npublic interface Svc{i} {{\n  int run{i}(int a);\n}}\n" if mod == "api" else
+                 f"package com.x;\nimport java.util.List;\npublic class Svc{i} implements Api{i} {{\n"
+                 f"  public int run{i}(int a) {{\n    return a * {i};\n  }}\n}}\n")
+                for mod in ("api", "impl") for i in range(7)}
+    api_impl |= {"impl/src/main/java/com/x/Extra.java": "class Extra {}\n"}
+    assert setup_mod.reference_suggestions(tmp_path / "j", _tree(tmp_path / "j", api_impl)) == []
+
+
+def test_a_bad_reference_refuses_before_anything_is_written(tmp_path):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    with pytest.raises(setup_mod.SetupRefused):
+        setup_mod.setup_project(proj, agents=[], reference=["no_such_dir"])
+    assert not (proj / ".verinoda").exists()

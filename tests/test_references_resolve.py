@@ -348,10 +348,82 @@ def test_a_bare_pr_or_issue_number_belongs_to_the_repository_its_sentence_names(
     assert any(r["class"] == "issue" and r["identity"].get("owner") == "psf" for r in tr["references"])
 
 
-def test_a_name_right_before_a_version_is_a_package_and_an_unresolved_name_is_asked_about(world):
-    res = run(world, "compare fancylib 2.31 with the old one", network="off")
-    pkg = [r for r in res["references"] if r["class"] == "package"]
-    assert pkg and pkg[0]["identity"]["package"]["name"] == "fancylib"
-    assert any("network off" in w for w in pkg[0]["warnings"]) and res["status"] != "complete"
-    # an ordinary word after an article is not a package: "a bare 2.5"
-    assert not [r for r in run(world, "a bare 2.5 here", network="off")["references"] if r["class"] == "package"]
+def _registry(d: Path, name: str, pypi: list[str] | None, npm: list[str] | None) -> CassetteTransport:
+    """Cassettes for PyPI / npm / crates.io answering ``name`` with these versions (None: 404)."""
+    import json as _json
+
+    from verinoda.references.transport import Response, to_entry
+
+    d.mkdir(parents=True, exist_ok=True)
+
+    def entry(url: str, status: int, body: bytes, accept: str | None = None) -> None:
+        e = to_entry(Response(status, {"content-type": "application/json"}, body, url, url, retrieved_at=NOW),
+                     accept=accept)
+        (d / f"{e['key'][:12]}.json").write_bytes(_json.dumps(e).encode("utf-8"))
+
+    pypi_url, npm_url = f"https://pypi.org/pypi/{name}/json", f"https://registry.npmjs.org/{name}"
+    if pypi is None:
+        entry(pypi_url, 404, b"{}")
+    else:
+        entry(pypi_url, 200, _json.dumps({"info": {"name": name, "version": pypi[-1]},
+                                          "releases": {v: [] for v in pypi}}).encode("utf-8"))
+    npm_accept = "application/vnd.npm.install-v1+json"
+    if npm is None:
+        entry(npm_url, 404, b"{}", npm_accept)
+    else:
+        entry(npm_url, 200, _json.dumps({"name": name, "versions": {v: {} for v in npm}}).encode("utf-8"), npm_accept)
+    entry(f"https://index.crates.io/{name[:2]}/{name[2:4]}/{name}", 404, b"")
+    return CassetteTransport(d)
+
+
+def test_prose_before_a_number_is_not_a_package_and_blocks_nothing(world):
+    for text in ("the build took 2.5 seconds", "Why does startup take 1.5 seconds?", "It fails on macOS 14.2",
+                 "Tested on Chrome 120.0 and Firefox 121.0", "the ratio drops below 0.75 after warmup",
+                 "a bare 2.5 here", "compare fancylib 2.31 with the old one",
+                 "Bu fonksiyon log'a ne yazıyor?", "redis'e bağlantı nerede açılıyor?"):
+        res = run(world, text, network="off")
+        assert not [r for r in res["references"] if r["class"] == "package"], text
+        assert res["status"] == "complete" and not res["questions_for_user"], (text, res["status"])
+
+
+def test_a_name_before_a_version_is_looked_up_only_with_network_on(world, tmp_path):
+    # the default mode sends no name to a public registry: the name stays unbound
+    res = run(world, "compare fancylib 2.31 with the old one", network="cache",
+              transport=_registry(tmp_path / "c0", "fancylib", ["2.31.0"], None))
+    assert not [r for r in res["references"] if r["class"] == "package"]
+    assert any("network on" in u["why"] for u in res["unbound_mentions"] if u.get("text") == "fancylib")
+    # network on: the project's own registry (PyPI here) has the version
+    res = run(world, "compare fancylib 2.31 with the old one", network="on",
+              transport=_registry(tmp_path / "c1", "fancylib", ["2.30.0", "2.31.0"], None))
+    pkg, = [r for r in res["references"] if r["class"] == "package"]
+    assert pkg["identity"]["package"]["purl"] == "pkg:pypi/fancylib"
+    assert pkg["coreference"]["via"] == ["name_before_version", "registry_pypi"]
+    # the project's own registry has the name but not the version, npm has it: asked, not guessed
+    res = run(world, "how does fancylib v2.31 parse headers?", network="on",
+              transport=_registry(tmp_path / "c2", "fancylib", ["0.1.0"], ["2.31.0"]))
+    assert not [r for r in res["references"] if r["class"] == "package"]
+    assert any("which one is meant" in u["why"] for u in res["unbound_mentions"] if u.get("text") == "fancylib")
+    assert res["status"] != "complete" and res["questions_for_user"]  # v2.31: the user wrote a version
+
+
+def test_a_bare_number_keeps_the_local_origin_over_a_repository_of_another_sentence(world, tmp_path):
+    import subprocess
+
+    proj = helpers.analysed_project(tmp_path / "withorigin")
+    if not (proj / ".git").exists():
+        subprocess.run(["git", "init", "-q"], cwd=proj, check=True)
+    subprocess.run(["git", "remote", "add", "origin", "https://github.com/me/app"], cwd=proj, check=True)
+    res = run(world, "Our PR #7 fixes the crash. The same bug was reported in psf/requests.", project=proj,
+              network="off")
+    pr, = [r for r in res["references"] if r["class"] == "pull_request"]
+    assert pr["identity"]["canonical_url"] == "https://github.com/me/app"
+
+
+def test_a_sentence_with_two_repositories_binds_each_number_to_the_one_written_after_it(world):
+    res = run(world, "Compare PR #5 in psf/requests with PR #7 in urllib3/urllib3", network="off")
+    urls = sorted(r["identity"]["canonical_url"] for r in res["references"] if r["class"] == "pull_request")
+    assert urls == ["https://github.com/psf/requests", "https://github.com/urllib3/urllib3"]
+    # the same repository written twice is one repository
+    res = run(world, "Is issue #6000 fixed between psf/requests@v2.30.0 and psf/requests@v2.31.0?", network="off")
+    issue, = [r for r in res["references"] if r["class"] == "issue"]
+    assert issue["identity"]["canonical_url"] == "https://github.com/psf/requests"

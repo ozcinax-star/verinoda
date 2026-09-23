@@ -178,11 +178,17 @@ def _fmt_bytes(n: int | None) -> str:
 
 
 def _stale_indexed_files(repo: Path, rows: list[tuple]) -> list[str]:
-    """Indexed files whose content differs from what the index saw (stat first, sha256 on a stat change)."""
+    """Indexed files whose content differs from what the index saw (stat first, sha256 on a stat change),
+    and files the index recorded as behind the graph (``search_index.MISALIGNED_PREFIX``)."""
     import hashlib
+
+    from verinoda.search_index import MISALIGNED_PREFIX
 
     out = []
     for f, sha, size, mtime_ns in rows:
+        if (sha or "").startswith(MISALIGNED_PREFIX):
+            out.append(f)  # indexed while its file was being edited: `verinoda update` re-extracts it
+            continue
         p = repo / f
         try:
             st = p.stat()

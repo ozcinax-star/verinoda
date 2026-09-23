@@ -317,3 +317,24 @@ def test_a_file_edited_while_the_index_was_built_is_caught_and_rebuilt(proj):
     res = workflow.update(st, repo)
     assert "orders/service.py" in res["changed"]["modified"]
     assert search_index.misaligned_files(db) == []
+
+
+def test_an_update_that_touches_no_file_of_the_graph_keeps_the_graph(proj):
+    repo, st = proj
+    data = repo / "deploy" / "settings.yml"
+    data.parent.mkdir()
+    data.write_text("orders:\n  max_items: 50\n", encoding="utf-8")
+    workflow.scan(st, repo)
+    assert "deploy/settings.yml" not in _graph_files(repo)  # a data file: indexed for search only
+    gp = graph_path(repo)
+    before = gp.read_bytes()
+    data.write_text("orders:\n  max_items: 50\n  archive_after_days: 30\n", encoding="utf-8")
+    res = workflow.update(st, repo)
+    assert res["mode"] == "incremental" and res["index_mode"] == "none"
+    assert "deploy/settings.yml" in res["changed"]["modified"] and gp.read_bytes() == before
+    # the search index still sees the edit
+    items = retrieval.retrieve(index.load(repo), "archive_after_days")["items"]
+    assert any(i["file"] == "deploy/settings.yml" for i in items)
+    # a new code file does rebuild it
+    (repo / "orders" / "audit.py").write_text("def audit_order(order):\n    return order\n", encoding="utf-8")
+    assert workflow.update(st, repo)["index_mode"] == "full" and "orders/audit.py" in _graph_files(repo)

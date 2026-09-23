@@ -175,7 +175,8 @@ _p("repo_slug", r"(?:\b(?:repo|repository|repos|depo|deposu|github|gitlab|fork)\
    conf="pattern", flags=re.I)
 _SLUG = r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}"
 # "psf/requests reposundaki #12", "psf/requests deposunda", "psf/requests'teki issue"
-_p("repo_slug", r"(?<![\w./@-])(" + _SLUG + r")(?=(?:['’][a-zçğıöşü]{1,8})?\s+(?:repo|depo)\w*"
+_p("repo_slug", r"(?<![\w./@-])(" + _SLUG + r")(?=(?:['’][a-zçğıöşü]{1,8})?\s+"
+                r"(?:repo(?:su|sunda|sundaki|sundan|suna|lar\w*)?|repository|depo(?:su|sunda|sundaki|sundan|suna)?)\b"
                 r"|['’](?:te|ta|de|da|teki|taki|deki|daki)\b)", 1, name="regex:tr_slug", conf="pattern", flags=re.I)
 # "PR #123 in psf/requests": only when the text talks about git objects (see extract)
 _p("repo_slug", r"\b(?:in|on|from|of|at|for|to)\s+(" + _SLUG + r")(?![\w/@#!])", 1, name="regex:prep_slug",
@@ -221,17 +222,38 @@ _GIT_CUE = re.compile(r"\b(?:PR|pull request|pull req|issues?|commits?|fork|bran
 # the first segment of a path, not a GitHub owner ("in src/requests")
 _DIR_OWNERS = frozenset("""src lib libs app apps test tests docs doc examples example bin scripts packages pkg internal
     cmd data assets config configs build dist public static include vendor node_modules tools utils util spec
-    resources res main core common modules""".split())
+    resources res main core common modules api apis services service components component handlers handler models
+    model controllers controller views view routes route pages page hooks hook server client clients frontend
+    backend web ui db database migrations templates styles plugins plugin shared features feature store stores
+    types interfaces middleware schemas schema providers jobs workers tasks cli pkgs crates""".split())
 _FILE_EXTS = frozenset("py pyi java kt kts ts tsx jsx md rst json yml yaml toml txt rs go c h cc cpp hpp cs rb php "
-                       "swift lua sh ps1 cfg ini xml html css scss lock".split())
+                       "swift lua sh ps1 cfg ini xml html css scss lock vue svelte astro mjs cjs sql proto".split())
+# "read/write", "HTTP/2", "A/B", "client/server": pairs of words, not owner/repo
+_WORD_PAIRS = frozenset("""read/write and/or input/output client/server a/b tcp/ip i/o on/off yes/no true/false get/set
+    request/response send/receive open/close start/stop push/pull import/export encode/decode before/after min/max
+    src/dst x/y width/height key/value he/she his/her r/w rx/tx up/down in/out left/right front/back""".split())
 
 
-def _slug_in_git_context(text: str, tok: str) -> bool:
-    """``owner/repo`` after a preposition is a repository only when the text is about git objects
-    (a PR, issue, commit, branch, tag ...) and it does not read as a file path."""
+def _plausible_slug(tok: str) -> bool:
+    """Could ``tok`` be a GitHub ``owner/repo`` rather than a fraction, date, protocol or word pair?"""
     owner, _, repo = tok.partition("/")
+    if not re.search(r"[A-Za-z]", owner) or len(repo) < 2 or not re.search(r"[A-Za-z]", repo):
+        return False  # 1/3, 2023/24, 3/14, HTTP/2, http/1.1
+    return tok.lower() not in _WORD_PAIRS and owner.lower() not in _DIR_OWNERS
+
+
+def _slug_in_git_context(text: str, tok: str, start: int = 0) -> bool:
+    """``owner/repo`` after a preposition is a repository only when its sentence is about git objects
+    (a PR, issue, commit, branch, tag ...) and it does not read as a file path."""
+    _owner, _, repo = tok.partition("/")
     ext = repo.rsplit(".", 1)[-1].lower() if "." in repo else ""
-    return bool(_GIT_CUE.search(text)) and owner.lower() not in _DIR_OWNERS and ext not in _FILE_EXTS
+    a = max(text.rfind(c, 0, start) for c in ".!?\n") + 1
+    ends = [i for i in (text.find(c, start + len(tok)) for c in "!?\n") if i >= 0]
+    dot = re.search(r"\.(?:\s|$)", text[start + len(tok):])
+    if dot:
+        ends.append(start + len(tok) + dot.start())
+    sentence = text[a:min(ends) if ends else len(text)]
+    return bool(_GIT_CUE.search(sentence)) and ext not in _FILE_EXTS
 
 
 def _accept(kind: str, name: str, tok: str) -> bool:
@@ -319,7 +341,9 @@ def extract(text: str) -> list[dict]:
                 continue
             if not _accept(kind, name, tok):
                 continue
-            if name == "regex:prep_slug" and not _slug_in_git_context(text, tok):
+            if name in ("regex:prep_slug", "regex:tr_slug") and not _plausible_slug(tok):
+                continue
+            if name == "regex:prep_slug" and not _slug_in_git_context(text, tok, s):
                 continue
             k = kind
             norm = _normalize(kind, tok)

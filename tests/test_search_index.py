@@ -390,3 +390,26 @@ def test_no_file_cap_every_indexed_file_is_searchable(tmp_path):
     g = _scan(root)
     rk = search_index.rank(g, "unique needle")
     assert rk.hits[0].file == "pkg/zz_last.py"
+
+
+def test_locale_labels_expand_at_full_weight_instead_of_their_words(mini, monkeypatch):
+    runner_tok = search_index.tokens("runner")[0]
+
+    class FakeLexicon:
+        def phrase_hits(self, words):
+            return [{"start": i, "n": 2, "key": "kor ocagi", "targets": ["runner"], "sites": []}
+                    for i in range(len(words) - 1) if words[i] == "kor" and words[i + 1].startswith("ocag")]
+
+        def associations(self, word):
+            return [{"part": "retries", "score": 0.9}] if word in ("kor", "ocagi") else []
+
+        def seed(self, words):
+            return []
+
+    fake = types.ModuleType("verinoda.lexicon")
+    fake.load = lambda repo: FakeLexicon()
+    monkeypatch.setitem(sys.modules, "verinoda.lexicon", fake)
+    monkeypatch.setattr(verinoda, "lexicon", fake, raising=False)
+    q = _query(mini, "Kor Ocağı nerede çalışıyor?", repo=mini.root)
+    assert {"from": "kor ocagi", "to": runner_tok, "via": "locale label", "weight": 1.0} in q.expansions
+    assert not [e for e in q.expansions if e["from"] in ("kor", "ocagi")]  # the label replaces its words

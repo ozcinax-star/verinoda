@@ -723,6 +723,10 @@ def _candidate_strings(mention: dict, lexicon) -> list[tuple[str, str, float]]:
     for hit in lexicon.seed(folded_words):
         for t in hit["targets"]:
             out.append((t, f"seed_dictionary:{hit['key']}", TIER_SCORES["seed_dictionary"]))
+    phrase_hits = getattr(lexicon, "phrase_hits", None)
+    for hit in phrase_hits(folded_words) if callable(phrase_hits) else []:
+        for t in hit["targets"]:  # a Turkish label from the locale files names its key's identifier
+            out.append((t, f"lexicon:label '{hit['key']}'", TIER_SCORES["fuzzy"]))
     for w in folded_words:
         if lexicon.has(w):
             continue  # the repository already uses the word itself

@@ -857,19 +857,40 @@ def receiver_call_edges(g: Graph, facts_for=None) -> list[tuple[str, str, dict]]
 _JAVA_STRING = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
 _JAVA_CALL = re.compile(r"(?<![\w.$])([A-Za-z_$][\w$]*)\s*\.\s*([a-z_$][\w$]*)\s*\(")
 _JAVA_DECL = re.compile(r"(?<![\w.$])([A-Z][\w$]*)(?:<[^<>;()]*(?:<[^<>;()]*>[^<>;()]*)*>)?(?:\[\])?\s+([a-z_$][\w$]*)\s*(?=[=;,):])")
-_JAVA_IMPORT = re.compile(r"\s*import\s+(static\s+)?([\w.]+)\.([\w$]+|\*)\s*(?:;|\s+as\s+\w+)?\s*$")
-_JAVA_PACKAGE_DECL = re.compile(r"\s*package\s+([\w.]+)\s*;?\s*$")
+# matched on comment-free lines (_java_code_lines): `import a.B; // NOPMD`, Kotlin `import a.B as C`
+_JAVA_IMPORT = re.compile(r"\s*import\s+(static\s+)?([\w.]+)\.([\w$]+|\*)\s*(?:;|\s+as\s+\w+|$)")
+_JAVA_PACKAGE_DECL = re.compile(r"\s*package\s+([\w.]+)\s*(?:;|$)")
 # Kotlin: `val x: Type`, `var x: Type = ...`, a parameter `x: Type`, `val x = Type(...)`
 _KOTLIN_DECL = re.compile(r"(?:\b(?:val|var)\s+|[(,]\s*)([a-z_]\w*)\s*:\s*([A-Z]\w*)"
                           r"|\b(?:val|var)\s+([a-z_]\w*)\s*=\s*([A-Z]\w*)\s*\(")
+# Kotlin properties (class body or primary constructor): the fields of the class
+_KOTLIN_PROP = re.compile(r"\b(?:val|var)\s+([a-z_]\w*)\s*(?::\s*([A-Z]\w*)|=\s*([A-Z]\w*)\s*\()")
 JVM_SUFFIXES = (".java", ".kt")
 
 
-def _java_code_lines(text: str) -> list[str]:
-    """The file's lines with string literals and comments blanked (same line numbers)."""
-    out, in_block = [], False
+def _java_code_lines(text: str, *, kotlin: bool = False) -> list[str]:
+    """The file's lines with string literals and comments blanked (same line numbers).
+
+    ``kotlin``: Kotlin raw strings (three double quotes), which may span lines, are blanked too.
+    """
+    out, in_block, in_raw = [], False, False
     for ln in text.splitlines():
-        s = _JAVA_STRING.sub('""', ln)
+        s = ln
+        if kotlin:
+            if in_raw:
+                end = s.find('"""')
+                if end < 0:
+                    out.append("")
+                    continue
+                s, in_raw = '""' + s[end + 3:], False
+            while '"""' in s:
+                a = s.find('"""')
+                b = s.find('"""', a + 3)
+                if b < 0:
+                    s, in_raw = s[:a] + '""', True
+                    break
+                s = s[:a] + '""' + s[b + 3:]
+        s = _JAVA_STRING.sub('""', s)
         if in_block:
             end = s.find("*/")
             if end < 0:
@@ -936,10 +957,10 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
         text = read(f)
         if text is None:
             continue
-        raw = text.splitlines()
-        code = _java_code_lines(text)
-        imports = [m.groups() for ln in raw if (m := _JAVA_IMPORT.match(ln))]
-        pkg = next((m.group(1) for ln in raw if (m := _JAVA_PACKAGE_DECL.match(ln))), None)
+        kotlin = f.endswith(".kt")
+        code = _java_code_lines(text, kotlin=kotlin)
+        imports = [m.groups() for ln in code if (m := _JAVA_IMPORT.match(ln))]
+        pkg = next((m.group(1) for ln in code if (m := _JAVA_PACKAGE_DECL.match(ln))), None)
         here = str(PurePosixPath(f).parent)
 
         def resolve(cls: str) -> str | None:
@@ -962,15 +983,16 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
                     hit = [cid for cid, cf in cands if any(pkg_of(cf, p) for p in wild)]
             return hit[0] if len(hit) == 1 else None
 
-        kotlin = f.endswith(".kt")
-
         def decls(line: str) -> list[tuple[str, str]]:
             if kotlin:
                 return [(m.group(1) or m.group(3), m.group(2) or m.group(4)) for m in _KOTLIN_DECL.finditer(line)]
             return [(m.group(2), m.group(1)) for m in _JAVA_DECL.finditer(line)]
 
-        fields = {} if kotlin else {m.group(2): m.group(1) for ln in code for m in _JAVA_DECL.finditer(ln)
-                  if re.match(r"\s*(?:(?:private|protected|public|static|final|volatile|transient)\s+)+", ln)}
+        if kotlin:  # `class S(private val repo: Repo)`, `private val backup: Repo = Repo()`
+            fields = {m.group(1): m.group(2) or m.group(3) for ln in code for m in _KOTLIN_PROP.finditer(ln)}
+        else:
+            fields = {m.group(2): m.group(1) for ln in code for m in _JAVA_DECL.finditer(ln)
+                      if re.match(r"\s*(?:(?:private|protected|public|static|final|volatile|transient)\s+)+", ln)}
         for n in by_file[f]:
             sp = g.span(n)
             if not sp:

@@ -117,3 +117,27 @@ def test_extraction_invariants(text):
         assert m["kind"] in KINDS and m["extractor"] and m["confidence"] in ("exact", "pattern", "heuristic")
     assert [m["id"] for m in ms] == [f"m{i}" for i in range(1, len(ms) + 1)]
     assert [(m["kind"], m["span"]) for m in extract(text)] == [(m["kind"], m["span"]) for m in ms]  # deterministic
+
+
+@pytest.mark.parametrize("text", [
+    "Which commit switched the client to HTTP/2?",
+    "PR #88 moves the proxy from http/1.1",
+    "PR #12 fixes a bug in read/write handling",
+    "The PR reduced the latency to 1/3",
+    "We merged PR #40 in 2023/24",
+    "merged on 3/14 in PR #9",
+    "issue #7 is caused by code in services/billing",
+    "Which commit changed the retry logic in api/handlers?",
+    "The A/B report shows issue #5 regressed",
+    "our client/server reports are slow since PR #3",
+    "PR #2 changed components/Button.vue",
+])
+def test_fractions_protocols_word_pairs_and_folders_are_not_repositories(text):
+    assert not [m for m in extract(text) if m["kind"] == "repo_slug"], text
+
+
+def test_a_slug_after_a_preposition_needs_git_words_in_its_own_sentence():
+    assert [m["text"] for m in extract("see PR #123 and issue #456 in psf/requests") if m["kind"] == "repo_slug"] \
+        == ["psf/requests"]
+    assert not [m for m in extract("PR #5 is merged. The helper lives in psf/requests") if m["kind"] == "repo_slug"]
+    assert [m["text"] for m in extract("psf/requests reposundaki #12") if m["kind"] == "repo_slug"] == ["psf/requests"]

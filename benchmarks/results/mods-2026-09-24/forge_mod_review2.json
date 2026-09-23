@@ -1,0 +1,6371 @@
+{
+ "benchmark": "verinoda raw-vs-graphify-vs-verinoda",
+ "schema": 2,
+ "set": {
+  "name": "forge_mod",
+  "file": "<REPO>/verinoda/benchmark/questions/forge_mod.json",
+  "description": "A small fictional NeoForge 1.21.1 mod (examples/forge_mod), shaped differently from glow_mod: Java and Kotlin code (DeferredRegister registries, a forge block with a ticking block entity, a menu and its Kotlin screen, a custom emberforge:forging recipe type and serializer, a client-to-server payload, a ModConfigSpec common config, @SubscribeEvent handlers, Kotlin commands), a data pack (forging/smelting/crafting recipes, item/block/biome tags, loot tables, a configured + placed ore feature, a NeoForge biome modifier, an advancement, two functions), assets (blockstates, block/item models, en_us / tr_tr translations), a documented default config/emberforge-common.toml and JUnit tests; no reference tree. 14 questions, 7 Turkish and 7 English: callers x3, cross_layer x4, config x2, resources x2, flow, behaviour, where.",
+  "questions": 14,
+  "gold_verified_by": "Gold facts were written by reading every file of examples/forge_mod line by line; every source.at line was re-read by hand after the example was finished, and each fact's source.at/source.contains pair is re-checked against the benchmark copy before any approach is scored (metrics.validate_gold).",
+  "provenance": {
+   "questions_written_by": "an agent asked by the Verinoda maintainer to write examples/forge_mod and this set in one session; it never ran Verinoda on the example and saw no Verinoda output for it or for these questions",
+   "gold_written_by": "same agent, by reading every file of examples/forge_mod; checked with metrics.validate_gold only",
+   "example_written_by": "same agent, same session, before the questions; written fresh after examples/glow_mod had been used for tuning, with a different loader (NeoForge), language mix (Java + Kotlin) and data shape (worldgen, biome modifier, custom recipe type)",
+   "in_sample": false,
+   "caveat": "held out for Verinoda's retrieval on these questions (no Verinoda run and no Verinoda output while writing the example or the set), but not independent of the design: the Minecraft support (resource ids, data-pack linking, Java calls, Turkish questions) was developed against other mods by the same project (a private mod and examples/glow_mod), and the author knew which kinds of features Verinoda supports when choosing what the example and the questions exercise"
+  }
+ },
+ "params": {
+  "repeat": 1,
+  "raw": {
+   "top_files": 5,
+   "char_cap": 24000,
+   "grep_lines": 40,
+   "min_term_len": 3,
+   "terms": "verinoda.retrieval.terms_for (Graphify _query_terms)"
+  },
+  "graphify_vendored": {
+   "renderer": "verinoda.index.graphify_query_text",
+   "mode": "bfs",
+   "depth": 3,
+   "token_budget": 2000
+  },
+  "graphify_cli": {
+   "command": "graphify query <question>",
+   "mode": "bfs",
+   "depth": 2,
+   "token_budget": 2000
+  },
+  "verinoda_analyze": {
+   "budget": "config defaults (60 s, 40 tool calls, 6000 tokens)",
+   "challenge": true,
+   "run_tests": false
+  },
+  "verinoda_retrieve": {
+   "max_items": 10,
+   "max_chars": 6000
+  },
+  "verinoda_retrieve_text": {
+   "max_items": 10,
+   "max_chars": 6000,
+   "render_chars": 6000,
+   "call": "retrieval.render_text(retrieve(g, q, Budget(10, 6000)), 6000)"
+  },
+  "sweep": null,
+  "pinpoint_max_lines": 30,
+  "sweep_only": false
+ },
+ "token_count_method": "chars/4 estimate",
+ "llm": {
+  "enabled": false,
+  "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)",
+  "model": null,
+  "prices_usd_per_mtok": null,
+  "price_source": null
+ },
+ "workdir": "<TMP>/verinoda-bench-v56fxbry",
+ "workdir_kept": false,
+ "corpus": {
+  "source": "<REPO>/examples/forge_mod",
+  "source_commit": "82a344318895e06b33e73b48ecba11165981dbb9",
+  "source_dirty": true,
+  "snapshot": "working tree (tracked + untracked, not ignored)",
+  "include": null,
+  "exclude": null,
+  "file_count": 55,
+  "bytes": 53429,
+  "workdir_commit": "35cd98a9f235955eb683103ef0f696611652c7c1"
+ },
+ "gold_validation": {
+  "ok": true,
+  "facts_checked": 68,
+  "failures": []
+ },
+ "graphify_cli_status": "not run: --graphify-cmd not given",
+ "approaches": [
+  "raw",
+  "graphify_vendored",
+  "verinoda_analyze",
+  "verinoda_retrieve",
+  "verinoda_retrieve_text"
+ ],
+ "environment": {
+  "date_utc": "2026-09-23T23:55:04+00:00",
+  "os": "Windows-11-10.0.26200-SP0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+  "cpu_count": 6,
+  "python": "3.12.0",
+  "python_impl": "CPython",
+  "verinoda_version": "0.1.0.dev0",
+  "vendored_graphify_commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7",
+  "graphify_cli": null,
+  "git": "git version 2.53.0.windows.1",
+  "verinoda_source_commit": "82a344318895e06b33e73b48ecba11165981dbb9",
+  "verinoda_package_changes_vs_commit": [
+   "M verinoda/data/seed_lexicon_tr_en.json",
+   "M verinoda/doctor.py",
+   "M verinoda/index.py",
+   "M verinoda/lexicon.py",
+   "M verinoda/question_plan.py",
+   "M verinoda/references/mentions.py",
+   "M verinoda/references/resolver.py",
+   "M verinoda/search_index.py",
+   "M verinoda/setup.py",
+   "M verinoda/workflow.py"
+  ],
+  "verinoda_package_diff_sha256": "820ba9e78f8fcd37819675815cb5c01b92df59afd3b4d97759b37531d19e6f3a"
+ },
+ "index": {
+  "raw": {
+   "note": "no index; every query greps and reads the working tree"
+  },
+  "verinoda": {
+   "cold_seconds": 1.397,
+   "warm_seconds": 1.192,
+   "nodes": 244,
+   "edges": 553,
+   "warm_nodes": 244,
+   "warm_edges": 553,
+   "cache_files": 25,
+   "what": "workflow.scan = Graphify-derived AST index (in-process) + snapshot (file hashes) + stale-claim check; warm = same tree again with the AST cache present",
+   "used_by": [
+    "graphify_vendored",
+    "verinoda_analyze",
+    "verinoda_retrieve",
+    "verinoda_retrieve_text"
+   ]
+  }
+ },
+ "questions": [
+  {
+   "id": "q01",
+   "category": "callers",
+   "question": "EmberForgeBlockEntity.stoke kimler tarafından çağrılıyor?",
+   "facts": 2,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.4129,
+       "chars": 23947,
+       "sha256": "586db7e53cd2ab4563498c8acb74ef3e26a5092dccc9c3af12296318eb33e134"
+      }
+     ],
+     "score": {
+      "chars": 23947,
+      "tokens": 5987,
+      "sha256": "586db7e53cd2ab4563498c8acb74ef3e26a5092dccc9c3af12296318eb33e134",
+      "facts": {
+       "total": 2,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q01.network",
+        "q01.hammer"
+       ],
+       "missed": [],
+       "via": {
+        "q01.network": "loc src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28",
+        "q01.hammer": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:82"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 7,
+       "point_or_short": 42
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "emberforgeblockentity",
+        "stoke",
+        "kimler",
+        "tarafından",
+        "çağrılıyor"
+       ],
+       "matching_files": 14,
+       "matching_lines": 55,
+       "files_read": [
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java",
+         "lines": [
+          1,
+          115
+         ],
+         "of": 115
+        },
+        {
+         "file": "src/test/java/net/ashvale/emberforge/ForgeTickTest.java",
+         "lines": [
+          1,
+          25
+         ],
+         "of": 25
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+         "lines": [
+          1,
+          179
+         ],
+         "of": 179
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java",
+         "lines": [
+          1,
+          42
+         ],
+         "of": 42
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java",
+         "lines": [
+          1,
+          18
+         ],
+         "of": 93
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q01/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0189,
+       "chars": 6439,
+       "sha256": "9cb9790ea82d2b616103149dcdc220f94893f9a18936e6a4b4b5af0cf0d61126"
+      }
+     ],
+     "score": {
+      "chars": 6439,
+      "tokens": 1610,
+      "sha256": "9cb9790ea82d2b616103149dcdc220f94893f9a18936e6a4b4b5af0cf0d61126",
+      "facts": {
+       "total": 2,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q01.network",
+        "q01.hammer"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 38,
+       "files": 15,
+       "point_or_short": 38
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 50,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 207,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q01/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.5343,
+       "chars": 3056,
+       "sha256": "c5d52f5aaf4fb971811d15eea9407c97670866b320ba58cf005d80dbb12d6139",
+       "claims": 5,
+       "claims_reused": 0,
+       "claims_new": 5,
+       "internal_tool_calls": 12,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 3056,
+      "tokens": 764,
+      "sha256": "c5d52f5aaf4fb971811d15eea9407c97670866b320ba58cf005d80dbb12d6139",
+      "facts": {
+       "total": 2,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q01.network",
+        "q01.hammer"
+       ],
+       "missed": [],
+       "via": {
+        "q01.network": "loc src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:39",
+        "q01.hammer": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:83"
+       }
+      },
+      "locators": {
+       "distinct": 5,
+       "files": 3,
+       "point_or_short": 4
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 5,
+       "by_status": {
+        "statically_verified": 2,
+        "strong_inference": 3
+       },
+       "verified": 2,
+       "inference": 3,
+       "verified_share": 0.4,
+       "inference_share": 0.6,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 5,
+        "graph_edge": 2
+       },
+       "evidence_verifying": 5,
+       "evidence_non_verifying": 2,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.484,
+       "tool_calls": 12,
+       "context_chars": 4200,
+       "context_tokens_est": 1050,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 2,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q01/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0322,
+       "chars": 5700,
+       "sha256": "9cd0da73e80f913b06a229f877bfede3c015bf638916ed08aa233411ea4525e7"
+      }
+     ],
+     "score": {
+      "chars": 5700,
+      "tokens": 1425,
+      "sha256": "9cd0da73e80f913b06a229f877bfede3c015bf638916ed08aa233411ea4525e7",
+      "facts": {
+       "total": 2,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q01.network",
+        "q01.hammer"
+       ],
+       "missed": [],
+       "via": {
+        "q01.network": "loc src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:39",
+        "q01.hammer": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:83"
+       }
+      },
+      "locators": {
+       "distinct": 16,
+       "files": 4,
+       "point_or_short": 16
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 7,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5925,
+        "truncated": true,
+        "expansions": [
+         "emberforgeblockentity->emberforge (corpus prefix)",
+         "stoke->inventory (lexicon)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q01/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0445,
+       "chars": 5943,
+       "sha256": "40887fb383639dc6c327a78e51879c04cccfb4ce497e90e8e3e4747700b31b03"
+      }
+     ],
+     "score": {
+      "chars": 5943,
+      "tokens": 1486,
+      "sha256": "40887fb383639dc6c327a78e51879c04cccfb4ce497e90e8e3e4747700b31b03",
+      "facts": {
+       "total": 2,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q01.network",
+        "q01.hammer"
+       ],
+       "missed": [],
+       "via": {
+        "q01.network": "loc src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28-41",
+        "q01.hammer": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:76-87"
+       }
+      },
+      "locators": {
+       "distinct": 18,
+       "files": 8,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 7,
+       "outline_edges": 2,
+       "edge_confidence": {
+        "INFERRED": 2
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 2,
+       "checked": 2,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q01/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q02",
+   "category": "callers",
+   "question": "Who calls HeatMath.addHeat?",
+   "facts": 5,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0548,
+       "chars": 12649,
+       "sha256": "20f2e8cef9af21a88b13d890d464aa11fb17f746d3a53b853d070770ccf52ff7"
+      }
+     ],
+     "score": {
+      "chars": 12649,
+      "tokens": 3163,
+      "sha256": "20f2e8cef9af21a88b13d890d464aa11fb17f746d3a53b853d070770ccf52ff7",
+      "facts": {
+       "total": 5,
+       "found_n": 5,
+       "pinpointed_n": 5,
+       "found": [
+        "q02.fuel",
+        "q02.source",
+        "q02.stoke",
+        "q02.overload",
+        "q02.test"
+       ],
+       "missed": [],
+       "via": {
+        "q02.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:79",
+        "q02.source": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:87",
+        "q02.stoke": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:141",
+        "q02.overload": "loc src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22",
+        "q02.test": "loc src/test/java/net/ashvale/emberforge/HeatMathTest.java:23"
+       }
+      },
+      "locators": {
+       "distinct": 20,
+       "files": 3,
+       "point_or_short": 18
+      },
+      "agent_tool_calls": 4,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "calls",
+        "heatmath",
+        "addheat"
+       ],
+       "matching_files": 3,
+       "matching_lines": 17,
+       "files_read": [
+        {
+         "file": "src/test/java/net/ashvale/emberforge/HeatMathTest.java",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+         "lines": [
+          1,
+          179
+         ],
+         "of": 179
+        },
+        {
+         "file": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt",
+         "lines": [
+          1,
+          36
+         ],
+         "of": 36
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q02/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0132,
+       "chars": 3753,
+       "sha256": "a432647863172d4d7345792a9b5ed22604a2dacc7051928ff1fd550632a34230"
+      }
+     ],
+     "score": {
+      "chars": 3753,
+      "tokens": 939,
+      "sha256": "a432647863172d4d7345792a9b5ed22604a2dacc7051928ff1fd550632a34230",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q02.fuel",
+        "q02.stoke",
+        "q02.overload",
+        "q02.test"
+       ],
+       "missed": [
+        "q02.source"
+       ],
+       "via": {
+        "q02.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82",
+        "q02.stoke": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:140",
+        "q02.overload": "loc src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:21",
+        "q02.test": "loc src/test/java/net/ashvale/emberforge/HeatMathTest.java:21"
+       }
+      },
+      "locators": {
+       "distinct": 26,
+       "files": 4,
+       "point_or_short": 26
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 14,
+       "edges_shown": 12,
+       "edge_confidence": {
+        "EXTRACTED": 10,
+        "INFERRED": 2
+       },
+       "truncated": false,
+       "nodes_found": 14,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 12,
+       "checked": 12,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q02/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.3136,
+       "chars": 4238,
+       "sha256": "77c939b7949163a0e882b71a042791335ed69d28755685115942f50f5c78d6f4",
+       "claims": 8,
+       "claims_reused": 0,
+       "claims_new": 8,
+       "internal_tool_calls": 20,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 4238,
+      "tokens": 1060,
+      "sha256": "77c939b7949163a0e882b71a042791335ed69d28755685115942f50f5c78d6f4",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q02.fuel",
+        "q02.stoke",
+        "q02.overload",
+        "q02.test"
+       ],
+       "missed": [
+        "q02.source"
+       ],
+       "via": {
+        "q02.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82",
+        "q02.stoke": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:141",
+        "q02.overload": "loc src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22",
+        "q02.test": "loc src/test/java/net/ashvale/emberforge/HeatMathTest.java:23"
+       }
+      },
+      "locators": {
+       "distinct": 8,
+       "files": 3,
+       "point_or_short": 8
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 8,
+       "by_status": {
+        "statically_verified": 7,
+        "weak_inference": 1
+       },
+       "verified": 7,
+       "inference": 1,
+       "verified_share": 0.875,
+       "inference_share": 0.125,
+       "weak_or_unknown": 1,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 8,
+        "graph_edge": 6
+       },
+       "evidence_verifying": 8,
+       "evidence_non_verifying": 6,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.313,
+       "tool_calls": 20,
+       "context_chars": 5986,
+       "context_tokens_est": 1496,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 6,
+       "checked": 5,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q02/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0318,
+       "chars": 5730,
+       "sha256": "648dfe3d2aa3f3566a43b69d309f5d1b38d94dcf04b1e08a1d66ace06bb8d30f"
+      }
+     ],
+     "score": {
+      "chars": 5730,
+      "tokens": 1433,
+      "sha256": "648dfe3d2aa3f3566a43b69d309f5d1b38d94dcf04b1e08a1d66ace06bb8d30f",
+      "facts": {
+       "total": 5,
+       "found_n": 5,
+       "pinpointed_n": 5,
+       "found": [
+        "q02.fuel",
+        "q02.source",
+        "q02.stoke",
+        "q02.overload",
+        "q02.test"
+       ],
+       "missed": [],
+       "via": {
+        "q02.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82",
+        "q02.source": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:86",
+        "q02.stoke": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:141",
+        "q02.overload": "loc src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22",
+        "q02.test": "loc src/test/java/net/ashvale/emberforge/HeatMathTest.java:23"
+       }
+      },
+      "locators": {
+       "distinct": 23,
+       "files": 5,
+       "point_or_short": 23
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 7,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5968,
+        "truncated": true,
+        "more": [
+         "src/test/java/net/ashvale/emberforge/HeatMathTest.java:9-13 HeatMathTest.noProgressBelowTheRecipesMinimumHeat"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q02/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0477,
+       "chars": 5948,
+       "sha256": "a5fe296d531ac45d1781c44b4ad11a4b9231f6992a4eab6a0b01c2db49d58284"
+      }
+     ],
+     "score": {
+      "chars": 5948,
+      "tokens": 1487,
+      "sha256": "a5fe296d531ac45d1781c44b4ad11a4b9231f6992a4eab6a0b01c2db49d58284",
+      "facts": {
+       "total": 5,
+       "found_n": 5,
+       "pinpointed_n": 5,
+       "found": [
+        "q02.fuel",
+        "q02.source",
+        "q02.stoke",
+        "q02.overload",
+        "q02.test"
+       ],
+       "missed": [],
+       "via": {
+        "q02.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82",
+        "q02.source": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:85-90",
+        "q02.stoke": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:141",
+        "q02.overload": "loc src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22",
+        "q02.test": "loc src/test/java/net/ashvale/emberforge/HeatMathTest.java:23"
+       }
+      },
+      "locators": {
+       "distinct": 39,
+       "files": 13,
+       "point_or_short": 33
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 7,
+       "outline_edges": 9,
+       "edge_confidence": {
+        "EXTRACTED": 5,
+        "INFERRED": 4
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 9,
+       "checked": 9,
+       "cited_line_missing_target": 2,
+       "named_via_import_alias": 0,
+       "examples": [
+        {
+         "assertion": "useItemOn -calls-> public @src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:83",
+         "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:83",
+         "line": "forge.stoke(player);"
+        },
+        {
+         "assertion": "handleStoke -calls-> public @src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:39",
+         "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:39",
+         "line": "forge.stoke(player);"
+        }
+       ]
+      },
+      "context_file": "raw/forge_mod/q02/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q03",
+   "category": "cross_layer",
+   "question": "emberforge:forging tarif tipi kodda nerede tanımlanıyor ve bu tarifleri hangi kod okuyup kullanıyor?",
+   "facts": 6,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0441,
+       "chars": 21739,
+       "sha256": "eb856ca9190aee52861a7c033d18203fee16faa53e8a50411958446708a4cb37"
+      }
+     ],
+     "score": {
+      "chars": 21739,
+      "tokens": 5435,
+      "sha256": "eb856ca9190aee52861a7c033d18203fee16faa53e8a50411958446708a4cb37",
+      "facts": {
+       "total": 6,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q03.type",
+        "q03.serializer",
+        "q03.codec",
+        "q03.lookup"
+       ],
+       "missed": [
+        "q03.ingots",
+        "q03.hammer"
+       ],
+       "via": {
+        "q03.type": "loc src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:1-25",
+        "q03.serializer": "loc src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:1-25",
+        "q03.codec": "loc src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:63",
+        "q03.lookup": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:92"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 5,
+       "point_or_short": 42
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "emberforge",
+        "forging",
+        "tarif",
+        "tipi",
+        "kodda",
+        "nerede",
+        "tanımlanıyor",
+        "tarifleri",
+        "hangi",
+        "kod",
+        "okuyup",
+        "kullanıyor"
+       ],
+       "matching_files": 51,
+       "matching_lines": 270,
+       "files_read": [
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+         "lines": [
+          1,
+          179
+         ],
+         "of": 179
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java",
+         "lines": [
+          1,
+          87
+         ],
+         "of": 87
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/registry/ModRecipes.java",
+         "lines": [
+          1,
+          25
+         ],
+         "of": 25
+        },
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          22
+         ],
+         "of": 22
+        },
+        {
+         "file": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt",
+         "lines": [
+          1,
+          36
+         ],
+         "of": 36
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q03/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0279,
+       "chars": 6399,
+       "sha256": "b9192e606c885a6584fa1581ef14b70563f89499ceb74a88d14f86d5e6aa68ca"
+      }
+     ],
+     "score": {
+      "chars": 6399,
+      "tokens": 1600,
+      "sha256": "b9192e606c885a6584fa1581ef14b70563f89499ceb74a88d14f86d5e6aa68ca",
+      "facts": {
+       "total": 6,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q03.type",
+        "q03.serializer",
+        "q03.codec",
+        "q03.lookup",
+        "q03.ingots",
+        "q03.hammer"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 36,
+       "files": 15,
+       "point_or_short": 36
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 55,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 223,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q03/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2309,
+       "chars": 2634,
+       "sha256": "8f5e84aef760f4f293edaa930adcf2945cc3461fc976d4b20940852bf202c08b",
+       "claims": 6,
+       "claims_reused": 0,
+       "claims_new": 6,
+       "internal_tool_calls": 16,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 2634,
+      "tokens": 659,
+      "sha256": "8f5e84aef760f4f293edaa930adcf2945cc3461fc976d4b20940852bf202c08b",
+      "facts": {
+       "total": 6,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q03.lookup"
+       ],
+       "missed": [
+        "q03.type",
+        "q03.serializer",
+        "q03.codec",
+        "q03.ingots",
+        "q03.hammer"
+       ],
+       "via": {
+        "q03.lookup": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:99"
+       }
+      },
+      "locators": {
+       "distinct": 6,
+       "files": 6,
+       "point_or_short": 4
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 6,
+       "by_status": {
+        "statically_verified": 4,
+        "primary_source_verified": 1,
+        "strong_inference": 1
+       },
+       "verified": 5,
+       "inference": 1,
+       "verified_share": 0.833,
+       "inference_share": 0.167,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 5,
+        "design_doc": 1,
+        "graph_edge": 1
+       },
+       "evidence_verifying": 6,
+       "evidence_non_verifying": 1,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.219,
+       "tool_calls": 16,
+       "context_chars": 4226,
+       "context_tokens_est": 1056,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q03/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0505,
+       "chars": 5696,
+       "sha256": "04ae2e4eaac13548310fd30ac3a60337013f02c5f7933424ef8f66c6ff15aa28"
+      }
+     ],
+     "score": {
+      "chars": 5696,
+      "tokens": 1424,
+      "sha256": "04ae2e4eaac13548310fd30ac3a60337013f02c5f7933424ef8f66c6ff15aa28",
+      "facts": {
+       "total": 6,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q03.type",
+        "q03.serializer",
+        "q03.lookup"
+       ],
+       "missed": [
+        "q03.codec",
+        "q03.ingots",
+        "q03.hammer"
+       ],
+       "via": {
+        "q03.type": "loc src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:18",
+        "q03.serializer": "loc src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:20",
+        "q03.lookup": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:91"
+       }
+      },
+      "locators": {
+       "distinct": 15,
+       "files": 6,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 7,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5919,
+        "truncated": true,
+        "expansions": [
+         "emberforg->ember (corpus prefix)",
+         "tarif->recip (lexicon)",
+         "kodda->cod (lexicon)",
+         "tanimlaniyor->defin (lexicon)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q03/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0547,
+       "chars": 5267,
+       "sha256": "7c913e21ef577e5c1fc6882cf04a5d973e2bed3ede2f1b02da062db1a94d7b44"
+      }
+     ],
+     "score": {
+      "chars": 5267,
+      "tokens": 1317,
+      "sha256": "7c913e21ef577e5c1fc6882cf04a5d973e2bed3ede2f1b02da062db1a94d7b44",
+      "facts": {
+       "total": 6,
+       "found_n": 4,
+       "pinpointed_n": 2,
+       "found": [
+        "q03.type",
+        "q03.serializer",
+        "q03.codec",
+        "q03.lookup"
+       ],
+       "missed": [
+        "q03.ingots",
+        "q03.hammer"
+       ],
+       "via": {
+        "q03.type": "loc src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:12-25",
+        "q03.serializer": "loc src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:12-25",
+        "q03.codec": "loc src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:24-87",
+        "q03.lookup": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120"
+       }
+      },
+      "locators": {
+       "distinct": 15,
+       "files": 7,
+       "point_or_short": 11
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 7,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q03/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q04",
+   "category": "cross_layer",
+   "question": "Where is the #emberforge:forge_fuels tag defined, what does it contain, and which code checks it?",
+   "facts": 5,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0406,
+       "chars": 23945,
+       "sha256": "00faa5624c34d5443c9c292d7d2a047e8ed4416f64b2d3ba9fc4f6e047ba309e"
+      }
+     ],
+     "score": {
+      "chars": 23945,
+      "tokens": 5987,
+      "sha256": "00faa5624c34d5443c9c292d7d2a047e8ed4416f64b2d3ba9fc4f6e047ba309e",
+      "facts": {
+       "total": 5,
+       "found_n": 2,
+       "pinpointed_n": 1,
+       "found": [
+        "q04.slot",
+        "q04.tick"
+       ],
+       "missed": [
+        "q04.file",
+        "q04.key",
+        "q04.heat"
+       ],
+       "via": {
+        "q04.slot": "loc src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:43",
+        "q04.tick": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:1-179"
+       }
+      },
+      "locators": {
+       "distinct": 44,
+       "files": 4,
+       "point_or_short": 41
+      },
+      "agent_tool_calls": 5,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "emberforge",
+        "forge_fuels",
+        "tag",
+        "defined",
+        "contain",
+        "code",
+        "checks"
+       ],
+       "matching_files": 51,
+       "matching_lines": 316,
+       "files_read": [
+        {
+         "file": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java",
+         "lines": [
+          1,
+          93
+         ],
+         "of": 93
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+         "lines": [
+          1,
+          179
+         ],
+         "of": 179
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java",
+         "lines": [
+          1,
+          115
+         ],
+         "of": 115
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/registry/ModTags.java",
+         "lines": [
+          1,
+          4
+         ],
+         "of": 26
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q04/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0165,
+       "chars": 6473,
+       "sha256": "1da4d0d8af392f311fc5c7d6280922b1acd597106c8fc7218eadf249548e600f"
+      }
+     ],
+     "score": {
+      "chars": 6473,
+      "tokens": 1619,
+      "sha256": "1da4d0d8af392f311fc5c7d6280922b1acd597106c8fc7218eadf249548e600f",
+      "facts": {
+       "total": 5,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q04.file",
+        "q04.key",
+        "q04.heat",
+        "q04.slot",
+        "q04.tick"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 35,
+       "files": 19,
+       "point_or_short": 35
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 58,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 224,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q04/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2237,
+       "chars": 2532,
+       "sha256": "408d50d3bca6dd2d7723f1e5f2c89d6318fcf2e95d60790633830b246fff74d7",
+       "claims": 7,
+       "claims_reused": 4,
+       "claims_new": 3,
+       "internal_tool_calls": 20,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 2532,
+      "tokens": 633,
+      "sha256": "408d50d3bca6dd2d7723f1e5f2c89d6318fcf2e95d60790633830b246fff74d7",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 3,
+       "found": [
+        "q04.file",
+        "q04.key",
+        "q04.heat",
+        "q04.slot"
+       ],
+       "missed": [
+        "q04.tick"
+       ],
+       "via": {
+        "q04.file": "loc src/main/resources/data/emberforge/tags/item/forge_fuels.json:1",
+        "q04.key": "loc src/main/java/net/ashvale/emberforge/registry/ModTags.java:10-26",
+        "q04.heat": "loc src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:14-19",
+        "q04.slot": "loc src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:21-93"
+       }
+      },
+      "locators": {
+       "distinct": 7,
+       "files": 7,
+       "point_or_short": 5
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 7,
+       "by_status": {
+        "statically_verified": 6,
+        "weak_inference": 1
+       },
+       "verified": 6,
+       "inference": 1,
+       "verified_share": 0.857,
+       "inference_share": 0.143,
+       "weak_or_unknown": 1,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 7
+       },
+       "evidence_verifying": 7,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.218,
+       "tool_calls": 20,
+       "context_chars": 4577,
+       "context_tokens_est": 1144,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q04/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0265,
+       "chars": 5761,
+       "sha256": "61b31f2bde5db3513d6099ca5b5ed802a16f1f9d9d22cefb6a6c4054fe40beb8"
+      }
+     ],
+     "score": {
+      "chars": 5761,
+      "tokens": 1441,
+      "sha256": "61b31f2bde5db3513d6099ca5b5ed802a16f1f9d9d22cefb6a6c4054fe40beb8",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 3,
+       "found": [
+        "q04.file",
+        "q04.key",
+        "q04.heat",
+        "q04.tick"
+       ],
+       "missed": [
+        "q04.slot"
+       ],
+       "via": {
+        "q04.file": "loc src/main/resources/data/emberforge/tags/item/forge_fuels.json:1",
+        "q04.key": "loc src/main/java/net/ashvale/emberforge/registry/ModTags.java:11",
+        "q04.heat": "loc src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:15",
+        "q04.tick": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120"
+       }
+      },
+      "locators": {
+       "distinct": 17,
+       "files": 5,
+       "point_or_short": 16
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 8,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5990,
+        "truncated": true,
+        "expansions": [
+         "emberforg->ember (corpus prefix)"
+        ],
+        "more": [
+         "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120 EmberForgeBlockEntity.serverTick"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q04/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0412,
+       "chars": 5860,
+       "sha256": "6bb7543da54c0a106f2be59f785327fb692000260c385770971b3942d39f36db"
+      }
+     ],
+     "score": {
+      "chars": 5860,
+      "tokens": 1465,
+      "sha256": "6bb7543da54c0a106f2be59f785327fb692000260c385770971b3942d39f36db",
+      "facts": {
+       "total": 5,
+       "found_n": 5,
+       "pinpointed_n": 4,
+       "found": [
+        "q04.file",
+        "q04.key",
+        "q04.heat",
+        "q04.slot",
+        "q04.tick"
+       ],
+       "missed": [],
+       "via": {
+        "q04.file": "loc src/main/resources/data/emberforge/tags/item/forge_fuels.json:1-8",
+        "q04.key": "loc src/main/java/net/ashvale/emberforge/registry/ModTags.java:10-26",
+        "q04.heat": "loc src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:14-19",
+        "q04.slot": "loc src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:21-93",
+        "q04.tick": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:77-85"
+       }
+      },
+      "locators": {
+       "distinct": 22,
+       "files": 11,
+       "point_or_short": 18
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 8,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q04/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q05",
+   "category": "cross_layer",
+   "question": "Cüruf cevheri dünyada hangi biyomlarda ve nasıl oluşuyor?",
+   "facts": 4,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0452,
+       "chars": 1535,
+       "sha256": "cc2a710430194d62d8b1a112a1ee9c36d31cf80ae9570cdb33af051100d88a9d"
+      }
+     ],
+     "score": {
+      "chars": 1535,
+      "tokens": 384,
+      "sha256": "cc2a710430194d62d8b1a112a1ee9c36d31cf80ae9570cdb33af051100d88a9d",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q05.modifier",
+        "q05.biomes",
+        "q05.placed",
+        "q05.configured"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 4,
+       "files": 1,
+       "point_or_short": 4
+      },
+      "agent_tool_calls": 2,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "cüruf",
+        "cevheri",
+        "dünyada",
+        "hangi",
+        "biyomlarda",
+        "nasıl",
+        "oluşuyor"
+       ],
+       "matching_files": 1,
+       "matching_lines": 3,
+       "files_read": [
+        {
+         "file": "src/main/resources/assets/emberforge/lang/tr_tr.json",
+         "lines": [
+          1,
+          17
+         ],
+         "of": 17
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q05/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0113,
+       "chars": 24,
+       "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c"
+      }
+     ],
+     "score": {
+      "chars": 24,
+      "tokens": 6,
+      "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q05.modifier",
+        "q05.biomes",
+        "q05.placed",
+        "q05.configured"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 0,
+       "files": 0,
+       "point_or_short": 0
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 0,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": false,
+       "nodes_found": 0,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q05/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1708,
+       "chars": 2330,
+       "sha256": "38f74271b0ee112664998b4acc1f71855338b21031e132f9aa42552c5c05ab3e",
+       "claims": 5,
+       "claims_reused": 0,
+       "claims_new": 5,
+       "internal_tool_calls": 8,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 2330,
+      "tokens": 583,
+      "sha256": "38f74271b0ee112664998b4acc1f71855338b21031e132f9aa42552c5c05ab3e",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q05.modifier",
+        "q05.biomes",
+        "q05.placed",
+        "q05.configured"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 3,
+       "files": 2,
+       "point_or_short": 3
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 5,
+       "by_status": {
+        "statically_verified": 5
+       },
+       "verified": 5,
+       "inference": 0,
+       "verified_share": 1.0,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 5
+       },
+       "evidence_verifying": 5,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.172,
+       "tool_calls": 8,
+       "context_chars": 3147,
+       "context_tokens_est": 786,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q05/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0207,
+       "chars": 5648,
+       "sha256": "4d50372f2311286e184fcf4ace4960ecce60b1d5fef8124ace99a27c28ed2929"
+      }
+     ],
+     "score": {
+      "chars": 5648,
+      "tokens": 1412,
+      "sha256": "4d50372f2311286e184fcf4ace4960ecce60b1d5fef8124ace99a27c28ed2929",
+      "facts": {
+       "total": 4,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q05.placed"
+       ],
+       "missed": [
+        "q05.modifier",
+        "q05.biomes",
+        "q05.configured"
+       ],
+       "via": {
+        "q05.placed": "loc src/main/resources/data/emberforge/worldgen/placed_feature/ore_cinder.json:1"
+       }
+      },
+      "locators": {
+       "distinct": 16,
+       "files": 5,
+       "point_or_short": 16
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 5,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5912,
+        "truncated": true,
+        "expansions": [
+         "curuf cevheri->cinder_ore (locale label)",
+         "curuf cevheri->cind (locale label)",
+         "curuf cevheri->ore (locale label)",
+         "dunyada->world (lexicon)",
+         "dunyada->worldgen (lexicon)",
+         "biyomlarda->biom (lexicon)",
+         "olusuyor->generat (lexicon)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q05/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0327,
+       "chars": 5949,
+       "sha256": "237015ecbe6e56c2c7e6c6aecb49837accec7af23692a25ecb27390ec715a560"
+      }
+     ],
+     "score": {
+      "chars": 5949,
+      "tokens": 1488,
+      "sha256": "237015ecbe6e56c2c7e6c6aecb49837accec7af23692a25ecb27390ec715a560",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q05.modifier",
+        "q05.biomes",
+        "q05.placed",
+        "q05.configured"
+       ],
+       "missed": [],
+       "via": {
+        "q05.modifier": "loc src/main/resources/data/emberforge/neoforge/biome_modifier/add_cinder_ore.json:4",
+        "q05.biomes": "loc src/main/resources/data/emberforge/tags/worldgen/biome/has_cinder_ore.json:1-8",
+        "q05.placed": "loc src/main/resources/data/emberforge/worldgen/placed_feature/ore_cinder.json:2",
+        "q05.configured": "loc src/main/resources/data/emberforge/worldgen/configured_feature/ore_cinder.json:1-18"
+       }
+      },
+      "locators": {
+       "distinct": 26,
+       "files": 17,
+       "point_or_short": 26
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 5,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q05/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q06",
+   "category": "config",
+   "question": "Where is max_heat declared, what is its default, and which code reads it?",
+   "facts": 5,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0398,
+       "chars": 23941,
+       "sha256": "2f7e712b4358ae1be5535fe432ad87acf56242d239a0ccfcfb1f417d3a4ae20e"
+      }
+     ],
+     "score": {
+      "chars": 23941,
+      "tokens": 5986,
+      "sha256": "2f7e712b4358ae1be5535fe432ad87acf56242d239a0ccfcfb1f417d3a4ae20e",
+      "facts": {
+       "total": 5,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q06.toml",
+        "q06.fuel",
+        "q06.sync"
+       ],
+       "missed": [
+        "q06.declare",
+        "q06.heatmath"
+       ],
+       "via": {
+        "q06.toml": "loc config/emberforge-common.toml:11",
+        "q06.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:80",
+        "q06.sync": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:53"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 6,
+       "point_or_short": 42
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "max_heat",
+        "declared",
+        "default",
+        "code",
+        "reads"
+       ],
+       "matching_files": 11,
+       "matching_lines": 49,
+       "files_read": [
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java",
+         "lines": [
+          1,
+          115
+         ],
+         "of": 115
+        },
+        {
+         "file": "config/emberforge-common.toml",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          22
+         ],
+         "of": 22
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+         "lines": [
+          1,
+          179
+         ],
+         "of": 179
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java",
+         "lines": [
+          1,
+          65
+         ],
+         "of": 87
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q06/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0147,
+       "chars": 6501,
+       "sha256": "4666fd78c836f3cca6972c49c4681eb5a3e3c4908973077e3124217b3a6037aa"
+      }
+     ],
+     "score": {
+      "chars": 6501,
+      "tokens": 1626,
+      "sha256": "4666fd78c836f3cca6972c49c4681eb5a3e3c4908973077e3124217b3a6037aa",
+      "facts": {
+       "total": 5,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q06.heatmath"
+       ],
+       "missed": [
+        "q06.declare",
+        "q06.toml",
+        "q06.fuel",
+        "q06.sync"
+       ],
+       "via": {
+        "q06.heatmath": "loc src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:21"
+       }
+      },
+      "locators": {
+       "distinct": 31,
+       "files": 14,
+       "point_or_short": 31
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 56,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 171,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q06/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1853,
+       "chars": 4518,
+       "sha256": "2020efa5ef4dc745b2db0b8a92c6707015fe06fcfe8b158524952865eb01eb20",
+       "claims": 11,
+       "claims_reused": 8,
+       "claims_new": 3,
+       "internal_tool_calls": 30,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 4518,
+      "tokens": 1130,
+      "sha256": "2020efa5ef4dc745b2db0b8a92c6707015fe06fcfe8b158524952865eb01eb20",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 3,
+       "found": [
+        "q06.declare",
+        "q06.toml",
+        "q06.heatmath",
+        "q06.fuel"
+       ],
+       "missed": [
+        "q06.sync"
+       ],
+       "via": {
+        "q06.declare": "loc src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9-41",
+        "q06.toml": "loc config/emberforge-common.toml:13",
+        "q06.heatmath": "loc src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22",
+        "q06.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82"
+       }
+      },
+      "locators": {
+       "distinct": 11,
+       "files": 8,
+       "point_or_short": 10
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 11,
+       "by_status": {
+        "statically_verified": 10,
+        "weak_inference": 1
+       },
+       "verified": 10,
+       "inference": 1,
+       "verified_share": 0.909,
+       "inference_share": 0.091,
+       "weak_or_unknown": 1,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 11,
+        "graph_edge": 4
+       },
+       "evidence_verifying": 11,
+       "evidence_non_verifying": 4,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.187,
+       "tool_calls": 30,
+       "context_chars": 7259,
+       "context_tokens_est": 1814,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 4,
+       "checked": 3,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q06/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0234,
+       "chars": 5702,
+       "sha256": "0bfded521011929231cc1e21f23098912e7998157faf8f7d1a7dd968890674bd"
+      }
+     ],
+     "score": {
+      "chars": 5702,
+      "tokens": 1426,
+      "sha256": "0bfded521011929231cc1e21f23098912e7998157faf8f7d1a7dd968890674bd",
+      "facts": {
+       "total": 5,
+       "found_n": 5,
+       "pinpointed_n": 5,
+       "found": [
+        "q06.declare",
+        "q06.toml",
+        "q06.heatmath",
+        "q06.fuel",
+        "q06.sync"
+       ],
+       "missed": [],
+       "via": {
+        "q06.declare": "loc src/main/java/net/ashvale/emberforge/config/EmberConfig.java:19-25",
+        "q06.toml": "loc config/emberforge-common.toml:11",
+        "q06.heatmath": "loc src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22",
+        "q06.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82",
+        "q06.sync": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:52"
+       }
+      },
+      "locators": {
+       "distinct": 20,
+       "files": 7,
+       "point_or_short": 20
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 8,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5936,
+        "truncated": true
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q06/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0336,
+       "chars": 5987,
+       "sha256": "3395ddef3f17b44eb18268b55192a258592df0a5c617cafb3daa2e295fa326fa"
+      }
+     ],
+     "score": {
+      "chars": 5987,
+      "tokens": 1497,
+      "sha256": "3395ddef3f17b44eb18268b55192a258592df0a5c617cafb3daa2e295fa326fa",
+      "facts": {
+       "total": 5,
+       "found_n": 5,
+       "pinpointed_n": 5,
+       "found": [
+        "q06.declare",
+        "q06.toml",
+        "q06.heatmath",
+        "q06.fuel",
+        "q06.sync"
+       ],
+       "missed": [],
+       "via": {
+        "q06.declare": "loc src/main/java/net/ashvale/emberforge/config/EmberConfig.java:19-30",
+        "q06.toml": "loc config/emberforge-common.toml:5-23",
+        "q06.heatmath": "loc src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22",
+        "q06.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82",
+        "q06.sync": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:47-59"
+       }
+      },
+      "locators": {
+       "distinct": 27,
+       "files": 12,
+       "point_or_short": 24
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 8,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q06/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q07",
+   "category": "config",
+   "question": "/emberforge reset komutunu kapatan ayar nerede tanımlanıyor ve nerede kontrol ediliyor?",
+   "facts": 4,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.043,
+       "chars": 11739,
+       "sha256": "a873e5c3807db82d3bc8e36948f5e9e2c7c85a5c73c8583143d75cb879db476d"
+      }
+     ],
+     "score": {
+      "chars": 11739,
+      "tokens": 2935,
+      "sha256": "a873e5c3807db82d3bc8e36948f5e9e2c7c85a5c73c8583143d75cb879db476d",
+      "facts": {
+       "total": 4,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q07.check"
+       ],
+       "missed": [
+        "q07.declare",
+        "q07.toml",
+        "q07.registered"
+       ],
+       "via": {
+        "q07.check": "loc src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:20"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 5,
+       "point_or_short": 44
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "emberforge",
+        "reset",
+        "komutunu",
+        "kapatan",
+        "ayar",
+        "nerede",
+        "tanımlanıyor",
+        "kontrol",
+        "ediliyor"
+       ],
+       "matching_files": 51,
+       "matching_lines": 253,
+       "files_read": [
+        {
+         "file": "src/main/resources/assets/emberforge/lang/en_us.json",
+         "lines": [
+          1,
+          17
+         ],
+         "of": 17
+        },
+        {
+         "file": "src/main/resources/assets/emberforge/lang/tr_tr.json",
+         "lines": [
+          1,
+          17
+         ],
+         "of": 17
+        },
+        {
+         "file": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt",
+         "lines": [
+          1,
+          43
+         ],
+         "of": 43
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          22
+         ],
+         "of": 22
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q07/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0187,
+       "chars": 6412,
+       "sha256": "8740a4b030508576bd241497a30fcff384b5134a6120ac972faa034da1a9299a"
+      }
+     ],
+     "score": {
+      "chars": 6412,
+      "tokens": 1603,
+      "sha256": "8740a4b030508576bd241497a30fcff384b5134a6120ac972faa034da1a9299a",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q07.declare",
+        "q07.toml",
+        "q07.check",
+        "q07.registered"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 36,
+       "files": 20,
+       "point_or_short": 36
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 54,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 216,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q07/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2455,
+       "chars": 3373,
+       "sha256": "2b297b375e275e6d71f09348e1571e8f0ca6e1e8ddee67afae7bbac87a9560f9",
+       "claims": 6,
+       "claims_reused": 1,
+       "claims_new": 5,
+       "internal_tool_calls": 14,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 3373,
+      "tokens": 844,
+      "sha256": "2b297b375e275e6d71f09348e1571e8f0ca6e1e8ddee67afae7bbac87a9560f9",
+      "facts": {
+       "total": 4,
+       "found_n": 3,
+       "pinpointed_n": 2,
+       "found": [
+        "q07.declare",
+        "q07.toml",
+        "q07.check"
+       ],
+       "missed": [
+        "q07.registered"
+       ],
+       "via": {
+        "q07.declare": "loc src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9-41",
+        "q07.toml": "loc config/emberforge-common.toml:25",
+        "q07.check": "loc src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:22"
+       }
+      },
+      "locators": {
+       "distinct": 6,
+       "files": 4,
+       "point_or_short": 5
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 6,
+       "by_status": {
+        "statically_verified": 4,
+        "weak_inference": 2
+       },
+       "verified": 4,
+       "inference": 2,
+       "verified_share": 0.667,
+       "inference_share": 0.333,
+       "weak_or_unknown": 2,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 6,
+        "graph_edge": 2
+       },
+       "evidence_verifying": 6,
+       "evidence_non_verifying": 2,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 2,
+      "analysis_usage": {
+       "elapsed_s": 0.25,
+       "tool_calls": 14,
+       "context_chars": 5207,
+       "context_tokens_est": 1301,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 2,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q07/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0241,
+       "chars": 5744,
+       "sha256": "8c7dbb32401c79857ff1fd49285002545384df6d2032cf134807fdba926ebc6b"
+      }
+     ],
+     "score": {
+      "chars": 5744,
+      "tokens": 1436,
+      "sha256": "8c7dbb32401c79857ff1fd49285002545384df6d2032cf134807fdba926ebc6b",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q07.declare",
+        "q07.toml",
+        "q07.check",
+        "q07.registered"
+       ],
+       "missed": [],
+       "via": {
+        "q07.declare": "loc src/main/java/net/ashvale/emberforge/config/EmberConfig.java:32",
+        "q07.toml": "loc config/emberforge-common.toml:24",
+        "q07.check": "loc src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:22",
+        "q07.registered": "loc src/main/java/net/ashvale/emberforge/event/ModEvents.java:22"
+       }
+      },
+      "locators": {
+       "distinct": 18,
+       "files": 6,
+       "point_or_short": 18
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 7,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5980,
+        "truncated": true,
+        "expansions": [
+         "komutunu->komur (turkish stem 'komu')",
+         "emberforg->ember (corpus prefix)",
+         "komutunu->command (lexicon)",
+         "kapatan->clos (lexicon)",
+         "ayar->sett (lexicon)",
+         "ayar->config (lexicon)",
+         "ayar->option (lexicon)",
+         "tanimlaniyor->defin (lexicon)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q07/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0392,
+       "chars": 5803,
+       "sha256": "0e20a67caa3fd6967fa390ba91b52f646dd4956a3120b15e4a6283e294010bd0"
+      }
+     ],
+     "score": {
+      "chars": 5803,
+      "tokens": 1451,
+      "sha256": "0e20a67caa3fd6967fa390ba91b52f646dd4956a3120b15e4a6283e294010bd0",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q07.declare",
+        "q07.toml",
+        "q07.check",
+        "q07.registered"
+       ],
+       "missed": [],
+       "via": {
+        "q07.declare": "loc src/main/java/net/ashvale/emberforge/config/EmberConfig.java:30-35",
+        "q07.toml": "loc config/emberforge-common.toml:24-26",
+        "q07.check": "loc src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:22",
+        "q07.registered": "loc src/main/java/net/ashvale/emberforge/event/ModEvents.java:22"
+       }
+      },
+      "locators": {
+       "distinct": 16,
+       "files": 6,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 7,
+       "outline_edges": 1,
+       "edge_confidence": {
+        "INFERRED": 1
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 1,
+       "named_via_import_alias": 0,
+       "examples": [
+        {
+         "assertion": "register -calls-> public @src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:22",
+         "at": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:22",
+         "line": ".executes { ctx -> if (ForgeFunctions.resetForges(ctx.source)) 1 else 0 }"
+        }
+       ]
+      },
+      "context_file": "raw/forge_mod/q07/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q08",
+   "category": "resources",
+   "question": "Which blockstate, block models and textures does the Ember Forge use when it is lit and when it is not?",
+   "facts": 6,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0507,
+       "chars": 23956,
+       "sha256": "91f5866e104d460c659576f5986673466f42d932d842596daa7f1b507067594c"
+      }
+     ],
+     "score": {
+      "chars": 23956,
+      "tokens": 5989,
+      "sha256": "91f5866e104d460c659576f5986673466f42d932d842596daa7f1b507067594c",
+      "facts": {
+       "total": 6,
+       "found_n": 1,
+       "pinpointed_n": 0,
+       "found": [
+        "q08.lit_state"
+       ],
+       "missed": [
+        "q08.unlit",
+        "q08.lit",
+        "q08.model",
+        "q08.lit_model",
+        "q08.item"
+       ],
+       "via": {
+        "q08.lit_state": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:1-179"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 5,
+       "point_or_short": 42
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "blockstate",
+        "block",
+        "models",
+        "textures",
+        "ember",
+        "forge",
+        "use",
+        "lit"
+       ],
+       "matching_files": 53,
+       "matching_lines": 475,
+       "files_read": [
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          22
+         ],
+         "of": 22
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java",
+         "lines": [
+          1,
+          115
+         ],
+         "of": 115
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+         "lines": [
+          1,
+          179
+         ],
+         "of": 179
+        },
+        {
+         "file": "src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt",
+         "lines": [
+          1,
+          44
+         ],
+         "of": 44
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/event/ModEvents.java",
+         "lines": [
+          1,
+          30
+         ],
+         "of": 36
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q08/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0204,
+       "chars": 6510,
+       "sha256": "cbe91edbde2b08ef5c6ceec93e0e8979ebcf38a56d0e4f481853f88dcf77afa1"
+      }
+     ],
+     "score": {
+      "chars": 6510,
+      "tokens": 1628,
+      "sha256": "cbe91edbde2b08ef5c6ceec93e0e8979ebcf38a56d0e4f481853f88dcf77afa1",
+      "facts": {
+       "total": 6,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q08.unlit",
+        "q08.lit",
+        "q08.model",
+        "q08.lit_model",
+        "q08.item",
+        "q08.lit_state"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 33,
+       "files": 19,
+       "point_or_short": 33
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 57,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 237,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q08/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2505,
+       "chars": 4391,
+       "sha256": "a4cb66f220b2c2c3c55f391dba923d19688bac891d7b5b2da5ecb9e94f024db9",
+       "claims": 10,
+       "claims_reused": 1,
+       "claims_new": 9,
+       "internal_tool_calls": 17,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 4391,
+      "tokens": 1098,
+      "sha256": "a4cb66f220b2c2c3c55f391dba923d19688bac891d7b5b2da5ecb9e94f024db9",
+      "facts": {
+       "total": 6,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q08.unlit",
+        "q08.lit_model"
+       ],
+       "missed": [
+        "q08.lit",
+        "q08.model",
+        "q08.item",
+        "q08.lit_state"
+       ],
+       "via": {
+        "q08.unlit": "loc src/main/resources/assets/emberforge/blockstates/ember_forge.json:3",
+        "q08.lit_model": "loc src/main/resources/assets/emberforge/models/block/ember_forge_lit.json:2"
+       }
+      },
+      "locators": {
+       "distinct": 9,
+       "files": 8,
+       "point_or_short": 9
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 10,
+       "by_status": {
+        "statically_verified": 8,
+        "strong_inference": 2
+       },
+       "verified": 8,
+       "inference": 2,
+       "verified_share": 0.8,
+       "inference_share": 0.2,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 10
+       },
+       "evidence_verifying": 10,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.234,
+       "tool_calls": 17,
+       "context_chars": 5670,
+       "context_tokens_est": 1417,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 4,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q08/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.029,
+       "chars": 5730,
+       "sha256": "496517fad0f99e7c4a725eb8d31b9ecb81f7fb6ff7888e9d5d00663949584dee"
+      }
+     ],
+     "score": {
+      "chars": 5730,
+      "tokens": 1433,
+      "sha256": "496517fad0f99e7c4a725eb8d31b9ecb81f7fb6ff7888e9d5d00663949584dee",
+      "facts": {
+       "total": 6,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q08.unlit",
+        "q08.lit",
+        "q08.model",
+        "q08.lit_model"
+       ],
+       "missed": [
+        "q08.item",
+        "q08.lit_state"
+       ],
+       "via": {
+        "q08.unlit": "loc src/main/resources/assets/emberforge/blockstates/ember_forge.json:3",
+        "q08.lit": "loc src/main/resources/assets/emberforge/blockstates/ember_forge.json:7",
+        "q08.model": "loc src/main/resources/assets/emberforge/models/block/ember_forge.json:1",
+        "q08.lit_model": "loc src/main/resources/assets/emberforge/models/block/ember_forge_lit.json:1"
+       }
+      },
+      "locators": {
+       "distinct": 12,
+       "files": 4,
+       "point_or_short": 12
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 4,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5993,
+        "truncated": true,
+        "more": [
+         "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:89-97 EmberForgeBlock.useWithoutItem"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q08/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0427,
+       "chars": 5947,
+       "sha256": "afae57cdb5a30e526d8b7230c0a487d518b71be5fc0b3a6df721ffccc980cc1b"
+      }
+     ],
+     "score": {
+      "chars": 5947,
+      "tokens": 1487,
+      "sha256": "afae57cdb5a30e526d8b7230c0a487d518b71be5fc0b3a6df721ffccc980cc1b",
+      "facts": {
+       "total": 6,
+       "found_n": 6,
+       "pinpointed_n": 6,
+       "found": [
+        "q08.unlit",
+        "q08.lit",
+        "q08.model",
+        "q08.lit_model",
+        "q08.item",
+        "q08.lit_state"
+       ],
+       "missed": [],
+       "via": {
+        "q08.unlit": "loc src/main/resources/assets/emberforge/blockstates/ember_forge.json:1-12",
+        "q08.lit": "loc src/main/resources/assets/emberforge/blockstates/ember_forge.json:7",
+        "q08.model": "loc src/main/resources/assets/emberforge/models/block/ember_forge.json:1-8",
+        "q08.lit_model": "loc src/main/resources/assets/emberforge/models/block/ember_forge_lit.json:1-6",
+        "q08.item": "loc src/main/resources/assets/emberforge/models/item/ember_forge.json:1-3",
+        "q08.lit_state": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:112-120"
+       }
+      },
+      "locators": {
+       "distinct": 19,
+       "files": 8,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 4,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q08/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q09",
+   "category": "resources",
+   "question": "Kor Ocağı'nın Türkçe ve İngilizce adı hangi anahtarla, hangi dosyalarda tanımlı ve blok kodda nerede kaydediliyor?",
+   "facts": 5,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0554,
+       "chars": 4000,
+       "sha256": "e57b6d711ad510ddb9be59434412293efc7f61ebf260c8ee9728467d463050af"
+      }
+     ],
+     "score": {
+      "chars": 4000,
+      "tokens": 1000,
+      "sha256": "e57b6d711ad510ddb9be59434412293efc7f61ebf260c8ee9728467d463050af",
+      "facts": {
+       "total": 5,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q09.tr",
+        "q09.container"
+       ],
+       "missed": [
+        "q09.en",
+        "q09.block",
+        "q09.item"
+       ],
+       "via": {
+        "q09.tr": "loc src/main/resources/assets/emberforge/lang/tr_tr.json:2",
+        "q09.container": "loc src/main/resources/assets/emberforge/lang/tr_tr.json:7"
+       }
+      },
+      "locators": {
+       "distinct": 7,
+       "files": 2,
+       "point_or_short": 6
+      },
+      "agent_tool_calls": 3,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "kor",
+        "ocağı",
+        "nın",
+        "türkçe",
+        "ngilizce",
+        "adı",
+        "hangi",
+        "anahtarla",
+        "dosyalarda",
+        "tanımlı",
+        "blok",
+        "kodda",
+        "nerede",
+        "kaydediliyor"
+       ],
+       "matching_files": 2,
+       "matching_lines": 5,
+       "files_read": [
+        {
+         "file": "src/main/resources/assets/emberforge/lang/tr_tr.json",
+         "lines": [
+          1,
+          17
+         ],
+         "of": 17
+        },
+        {
+         "file": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt",
+         "lines": [
+          1,
+          43
+         ],
+         "of": 43
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q09/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0133,
+       "chars": 24,
+       "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c"
+      }
+     ],
+     "score": {
+      "chars": 24,
+      "tokens": 6,
+      "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c",
+      "facts": {
+       "total": 5,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q09.tr",
+        "q09.en",
+        "q09.block",
+        "q09.item",
+        "q09.container"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 0,
+       "files": 0,
+       "point_or_short": 0
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 0,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": false,
+       "nodes_found": 0,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q09/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2824,
+       "chars": 7304,
+       "sha256": "162a8efab4a8f94ba6bc0f4bc7d731cb8d728e0b5ad2928f30fc1ddfb0fa5d74",
+       "claims": 16,
+       "claims_reused": 5,
+       "claims_new": 11,
+       "internal_tool_calls": 26,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 7304,
+      "tokens": 1826,
+      "sha256": "162a8efab4a8f94ba6bc0f4bc7d731cb8d728e0b5ad2928f30fc1ddfb0fa5d74",
+      "facts": {
+       "total": 5,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q09.tr",
+        "q09.block",
+        "q09.container"
+       ],
+       "missed": [
+        "q09.en",
+        "q09.item"
+       ],
+       "via": {
+        "q09.tr": "loc src/main/resources/assets/emberforge/lang/tr_tr.json:2",
+        "q09.block": "loc src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:23",
+        "q09.container": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:172"
+       }
+      },
+      "locators": {
+       "distinct": 16,
+       "files": 9,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 16,
+       "by_status": {
+        "statically_verified": 12,
+        "strong_inference": 3,
+        "weak_inference": 1
+       },
+       "verified": 12,
+       "inference": 4,
+       "verified_share": 0.75,
+       "inference_share": 0.25,
+       "weak_or_unknown": 1,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 16,
+        "graph_edge": 2
+       },
+       "evidence_verifying": 16,
+       "evidence_non_verifying": 2,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.281,
+       "tool_calls": 26,
+       "context_chars": 9767,
+       "context_tokens_est": 2441,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 7,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q09/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0273,
+       "chars": 5694,
+       "sha256": "ae2d57d32a5b8aa80d9eded675fcd22a925cc2575c240e6e6f7732f907c20cf2"
+      }
+     ],
+     "score": {
+      "chars": 5694,
+      "tokens": 1424,
+      "sha256": "ae2d57d32a5b8aa80d9eded675fcd22a925cc2575c240e6e6f7732f907c20cf2",
+      "facts": {
+       "total": 5,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q09.tr",
+        "q09.container"
+       ],
+       "missed": [
+        "q09.en",
+        "q09.block",
+        "q09.item"
+       ],
+       "via": {
+        "q09.tr": "loc src/main/resources/assets/emberforge/lang/tr_tr.json:2",
+        "q09.container": "loc src/main/resources/assets/emberforge/lang/tr_tr.json:7"
+       }
+      },
+      "locators": {
+       "distinct": 13,
+       "files": 6,
+       "point_or_short": 13
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 4,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5952,
+        "truncated": true,
+        "expansions": [
+         "kor ocagi->ember_forge (locale label)",
+         "kor ocagi->ember (locale label)",
+         "kor ocagi->forg (locale label)",
+         "blok->not_a_forge (lexicon)",
+         "blok->not (lexicon)",
+         "blok->block (lexicon)",
+         "anahtarla->key (lexicon)",
+         "dosyalarda->path (lexicon)",
+         "tanimli->definition (lexicon)",
+         "kodda->cod (lexicon)",
+         "kaydediliyor->sav (lexicon)",
+         "kaydediliyor->writ (lexicon)",
+         "kaydediliyor->regist (lexicon)"
+        ],
+        "more": [
+         "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:49-52 EmberForgeBlock.createBlockStateDefinition",
+         "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:39-42 EmberForgeBlock.EmberForgeBlock",
+         "src/main/java/net/ashvale/emberforge/registry/ModTags.java:20-22 ModTags.blockTag"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q09/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0406,
+       "chars": 5979,
+       "sha256": "a0cd93ebcaacf88145f67214fbd77e6278eb95df3f1b8f54cd258c8f7791878a"
+      }
+     ],
+     "score": {
+      "chars": 5979,
+      "tokens": 1495,
+      "sha256": "a0cd93ebcaacf88145f67214fbd77e6278eb95df3f1b8f54cd258c8f7791878a",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q09.tr",
+        "q09.en",
+        "q09.block",
+        "q09.container"
+       ],
+       "missed": [
+        "q09.item"
+       ],
+       "via": {
+        "q09.tr": "loc src/main/resources/assets/emberforge/lang/tr_tr.json:1-17",
+        "q09.en": "loc src/main/resources/assets/emberforge/lang/en_us.json:1-17",
+        "q09.block": "loc src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:23",
+        "q09.container": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:172"
+       }
+      },
+      "locators": {
+       "distinct": 26,
+       "files": 16,
+       "point_or_short": 24
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 4,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q09/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q10",
+   "category": "flow",
+   "question": "How does pressing the Stoke button in the forge screen end up adding heat on the server?",
+   "facts": 6,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.042,
+       "chars": 23957,
+       "sha256": "2c0fda5ce18ab9b7acaaf33692d09c26473b0bd94afaa61a9b7883b102cca4a0"
+      }
+     ],
+     "score": {
+      "chars": 23957,
+      "tokens": 5990,
+      "sha256": "2c0fda5ce18ab9b7acaaf33692d09c26473b0bd94afaa61a9b7883b102cca4a0",
+      "facts": {
+       "total": 6,
+       "found_n": 4,
+       "pinpointed_n": 3,
+       "found": [
+        "q10.button",
+        "q10.send",
+        "q10.payload",
+        "q10.stoke"
+       ],
+       "missed": [
+        "q10.register",
+        "q10.handler"
+       ],
+       "via": {
+        "q10.button": "loc src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:18",
+        "q10.send": "loc src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:25",
+        "q10.payload": "loc src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:1-19",
+        "q10.stoke": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:1-179"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 5,
+       "point_or_short": 42
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "pressing",
+        "stoke",
+        "button",
+        "forge",
+        "screen",
+        "end",
+        "adding",
+        "heat",
+        "server"
+       ],
+       "matching_files": 52,
+       "matching_lines": 464,
+       "files_read": [
+        {
+         "file": "src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt",
+         "lines": [
+          1,
+          44
+         ],
+         "of": 44
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+         "lines": [
+          1,
+          179
+         ],
+         "of": 179
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java",
+         "lines": [
+          1,
+          19
+         ],
+         "of": 19
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java",
+         "lines": [
+          1,
+          115
+         ],
+         "of": 115
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 93
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q10/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0181,
+       "chars": 6561,
+       "sha256": "1c2346f306483a647c3c6bd5ca8579ecf84930b2eac1bc220c81e61f9165c7f0"
+      }
+     ],
+     "score": {
+      "chars": 6561,
+      "tokens": 1641,
+      "sha256": "1c2346f306483a647c3c6bd5ca8579ecf84930b2eac1bc220c81e61f9165c7f0",
+      "facts": {
+       "total": 6,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q10.send",
+        "q10.payload",
+        "q10.handler",
+        "q10.stoke"
+       ],
+       "missed": [
+        "q10.button",
+        "q10.register"
+       ],
+       "via": {
+        "q10.send": "loc src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:25",
+        "q10.payload": "loc src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:10",
+        "q10.handler": "loc src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28",
+        "q10.stoke": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:140"
+       }
+      },
+      "locators": {
+       "distinct": 35,
+       "files": 17,
+       "point_or_short": 35
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 57,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 236,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q10/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2073,
+       "chars": 3461,
+       "sha256": "b499f826c5393ac732dcbf67c491b2aa38ac1823d0e277efe2c4c65d0f0e69a7",
+       "claims": 6,
+       "claims_reused": 1,
+       "claims_new": 5,
+       "internal_tool_calls": 14,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 3461,
+      "tokens": 866,
+      "sha256": "b499f826c5393ac732dcbf67c491b2aa38ac1823d0e277efe2c4c65d0f0e69a7",
+      "facts": {
+       "total": 6,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q10.button",
+        "q10.send",
+        "q10.payload"
+       ],
+       "missed": [
+        "q10.register",
+        "q10.handler",
+        "q10.stoke"
+       ],
+       "via": {
+        "q10.button": "loc src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:19",
+        "q10.send": "loc src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:26",
+        "q10.payload": "loc src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:9"
+       }
+      },
+      "locators": {
+       "distinct": 6,
+       "files": 2,
+       "point_or_short": 6
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 6,
+       "by_status": {
+        "statically_verified": 3,
+        "weak_inference": 3
+       },
+       "verified": 3,
+       "inference": 3,
+       "verified_share": 0.5,
+       "inference_share": 0.5,
+       "weak_or_unknown": 3,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 6,
+        "graph_edge": 3
+       },
+       "evidence_verifying": 6,
+       "evidence_non_verifying": 3,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.203,
+       "tool_calls": 14,
+       "context_chars": 5400,
+       "context_tokens_est": 1350,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q10/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0228,
+       "chars": 5676,
+       "sha256": "413350c88afb556bb00272fa9c2b1c9095a84aeb93b108404a2a52770078c8f6"
+      }
+     ],
+     "score": {
+      "chars": 5676,
+      "tokens": 1419,
+      "sha256": "413350c88afb556bb00272fa9c2b1c9095a84aeb93b108404a2a52770078c8f6",
+      "facts": {
+       "total": 6,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q10.button",
+        "q10.send",
+        "q10.payload"
+       ],
+       "missed": [
+        "q10.register",
+        "q10.handler",
+        "q10.stoke"
+       ],
+       "via": {
+        "q10.button": "loc src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:19",
+        "q10.send": "loc src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:25",
+        "q10.payload": "loc src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:9"
+       }
+      },
+      "locators": {
+       "distinct": 16,
+       "files": 5,
+       "point_or_short": 16
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 8,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5928,
+        "truncated": true,
+        "expansions": [
+         "button->but (corpus prefix)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q10/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0362,
+       "chars": 5978,
+       "sha256": "9be20bc363243de3e37cf701ce91ff7a65562a44ab0c76060ce93ed934f29921"
+      }
+     ],
+     "score": {
+      "chars": 5978,
+      "tokens": 1495,
+      "sha256": "9be20bc363243de3e37cf701ce91ff7a65562a44ab0c76060ce93ed934f29921",
+      "facts": {
+       "total": 6,
+       "found_n": 6,
+       "pinpointed_n": 6,
+       "found": [
+        "q10.button",
+        "q10.send",
+        "q10.payload",
+        "q10.register",
+        "q10.handler",
+        "q10.stoke"
+       ],
+       "missed": [],
+       "via": {
+        "q10.button": "loc src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:19",
+        "q10.send": "loc src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:25-27",
+        "q10.payload": "loc src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:9",
+        "q10.register": "loc src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:21-25",
+        "q10.handler": "loc src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28-41",
+        "q10.stoke": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:140-144"
+       }
+      },
+      "locators": {
+       "distinct": 32,
+       "files": 14,
+       "point_or_short": 27
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 8,
+       "outline_edges": 11,
+       "edge_confidence": {
+        "EXTRACTED": 9,
+        "INFERRED": 2
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 11,
+       "checked": 11,
+       "cited_line_missing_target": 2,
+       "named_via_import_alias": 0,
+       "examples": [
+        {
+         "assertion": "init -calls-> private @src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:19",
+         "at": "src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:19",
+         "line": "Button.builder(Component.translatable(\"gui.emberforge.stoke\")) { requestStoke() }"
+        },
+        {
+         "assertion": "init -calls-> override @src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:17",
+         "at": "src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:17",
+         "line": "super.init()"
+        }
+       ]
+      },
+      "context_file": "raw/forge_mod/q10/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q11",
+   "category": "behaviour",
+   "question": "Kor Ocağı'nın blok varlığı her tick'te ne yapıyor?",
+   "facts": 6,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0412,
+       "chars": 22928,
+       "sha256": "daee13068bce1ffcdd74da130633c570d511aa5d33cb9c6df5cd316a837e6c5d"
+      }
+     ],
+     "score": {
+      "chars": 22928,
+      "tokens": 5732,
+      "sha256": "daee13068bce1ffcdd74da130633c570d511aa5d33cb9c6df5cd316a837e6c5d",
+      "facts": {
+       "total": 6,
+       "found_n": 6,
+       "pinpointed_n": 3,
+       "found": [
+        "q11.ticker",
+        "q11.fuel",
+        "q11.source",
+        "q11.forge",
+        "q11.cool",
+        "q11.lit"
+       ],
+       "missed": [],
+       "via": {
+        "q11.ticker": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:70",
+        "q11.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:1-179",
+        "q11.source": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:1-179",
+        "q11.forge": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:97",
+        "q11.cool": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:122",
+        "q11.lit": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:1-179"
+       }
+      },
+      "locators": {
+       "distinct": 42,
+       "files": 14,
+       "point_or_short": 39
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "kor",
+        "ocağı",
+        "nın",
+        "blok",
+        "varlığı",
+        "her",
+        "tick",
+        "yapıyor"
+       ],
+       "matching_files": 14,
+       "matching_lines": 37,
+       "files_read": [
+        {
+         "file": "src/main/resources/assets/emberforge/lang/tr_tr.json",
+         "lines": [
+          1,
+          17
+         ],
+         "of": 17
+        },
+        {
+         "file": "src/test/java/net/ashvale/emberforge/HeatMathTest.java",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java",
+         "lines": [
+          1,
+          115
+         ],
+         "of": 115
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+         "lines": [
+          1,
+          179
+         ],
+         "of": 179
+        },
+        {
+         "file": "src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt",
+         "lines": [
+          1,
+          44
+         ],
+         "of": 44
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q11/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0183,
+       "chars": 6567,
+       "sha256": "105b20a56875f12dd65e77c51fb1e948a4295a38fbe11eded7e3cd5d23aacd7b"
+      }
+     ],
+     "score": {
+      "chars": 6567,
+      "tokens": 1642,
+      "sha256": "105b20a56875f12dd65e77c51fb1e948a4295a38fbe11eded7e3cd5d23aacd7b",
+      "facts": {
+       "total": 6,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q11.cool"
+       ],
+       "missed": [
+        "q11.ticker",
+        "q11.fuel",
+        "q11.source",
+        "q11.forge",
+        "q11.lit"
+       ],
+       "via": {
+        "q11.cool": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:123"
+       }
+      },
+      "locators": {
+       "distinct": 37,
+       "files": 15,
+       "point_or_short": 37
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 51,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 176,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q11/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1636,
+       "chars": 2918,
+       "sha256": "b53bba82ed4efb417fc41e62d6b368572722b0e2d6d3ba307b76edf0c95c42fb",
+       "claims": 7,
+       "claims_reused": 5,
+       "claims_new": 2,
+       "internal_tool_calls": 11,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 2918,
+      "tokens": 730,
+      "sha256": "b53bba82ed4efb417fc41e62d6b368572722b0e2d6d3ba307b76edf0c95c42fb",
+      "facts": {
+       "total": 6,
+       "found_n": 6,
+       "pinpointed_n": 1,
+       "found": [
+        "q11.ticker",
+        "q11.fuel",
+        "q11.source",
+        "q11.forge",
+        "q11.cool",
+        "q11.lit"
+       ],
+       "missed": [],
+       "via": {
+        "q11.ticker": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:69-73",
+        "q11.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
+        "q11.source": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
+        "q11.forge": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
+        "q11.cool": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
+        "q11.lit": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120"
+       }
+      },
+      "locators": {
+       "distinct": 7,
+       "files": 4,
+       "point_or_short": 6
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 7,
+       "by_status": {
+        "statically_verified": 6,
+        "strong_inference": 1
+       },
+       "verified": 6,
+       "inference": 1,
+       "verified_share": 0.857,
+       "inference_share": 0.143,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 7
+       },
+       "evidence_verifying": 7,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.156,
+       "tool_calls": 11,
+       "context_chars": 3967,
+       "context_tokens_est": 991,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q11/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0271,
+       "chars": 5661,
+       "sha256": "e6ef261fefe61c909ff05bfffcbbfa4a51150fd7d4236b8e04be56bb40dac8db"
+      }
+     ],
+     "score": {
+      "chars": 5661,
+      "tokens": 1416,
+      "sha256": "e6ef261fefe61c909ff05bfffcbbfa4a51150fd7d4236b8e04be56bb40dac8db",
+      "facts": {
+       "total": 6,
+       "found_n": 6,
+       "pinpointed_n": 1,
+       "found": [
+        "q11.ticker",
+        "q11.fuel",
+        "q11.source",
+        "q11.forge",
+        "q11.cool",
+        "q11.lit"
+       ],
+       "missed": [],
+       "via": {
+        "q11.ticker": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:70",
+        "q11.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179",
+        "q11.source": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179",
+        "q11.forge": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179",
+        "q11.cool": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179",
+        "q11.lit": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179"
+       }
+      },
+      "locators": {
+       "distinct": 15,
+       "files": 7,
+       "point_or_short": 14
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 5,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5908,
+        "truncated": true,
+        "expansions": [
+         "kor ocagi->ember_forge (locale label)",
+         "kor ocagi->ember (locale label)",
+         "kor ocagi->forg (locale label)",
+         "blok->not_a_forge (lexicon)",
+         "blok->not (lexicon)",
+         "blok->block (lexicon)",
+         "varligi->entity (lexicon)"
+        ],
+        "more": [
+         "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179 EmberForgeBlockEntity",
+         "src/test/java/net/ashvale/emberforge/ForgeTickTest.java:10-14 ForgeTickTest.forgeCoolsOnlyOnDecayTicks",
+         "src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:18-40 ModBlocks"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q11/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0366,
+       "chars": 5932,
+       "sha256": "deba63df090dd1da370182b2911b2e50195d762819fbf8c6e63d4177993c7f65"
+      }
+     ],
+     "score": {
+      "chars": 5932,
+      "tokens": 1483,
+      "sha256": "deba63df090dd1da370182b2911b2e50195d762819fbf8c6e63d4177993c7f65",
+      "facts": {
+       "total": 6,
+       "found_n": 6,
+       "pinpointed_n": 3,
+       "found": [
+        "q11.ticker",
+        "q11.fuel",
+        "q11.source",
+        "q11.forge",
+        "q11.cool",
+        "q11.lit"
+       ],
+       "missed": [],
+       "via": {
+        "q11.ticker": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:69-73",
+        "q11.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
+        "q11.source": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
+        "q11.forge": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
+        "q11.cool": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:121-123",
+        "q11.lit": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:112-120"
+       }
+      },
+      "locators": {
+       "distinct": 22,
+       "files": 11,
+       "point_or_short": 19
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 5,
+       "outline_edges": 6,
+       "edge_confidence": {
+        "EXTRACTED": 4,
+        "INFERRED": 2
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 6,
+       "checked": 6,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q11/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q12",
+   "category": "cross_layer",
+   "question": "What does /emberforge reset do, from the command down to the data pack?",
+   "facts": 6,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0453,
+       "chars": 15956,
+       "sha256": "5785a827b65d7628c38637e4f7c5804081dd449e8dc13c2563d0435578b8f279"
+      }
+     ],
+     "score": {
+      "chars": 15956,
+      "tokens": 3989,
+      "sha256": "5785a827b65d7628c38637e4f7c5804081dd449e8dc13c2563d0435578b8f279",
+      "facts": {
+       "total": 6,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q12.command",
+        "q12.run",
+        "q12.id"
+       ],
+       "missed": [
+        "q12.fill",
+        "q12.nbt",
+        "q12.messages"
+       ],
+       "via": {
+        "q12.command": "loc src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:20",
+        "q12.run": "loc src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:16",
+        "q12.id": "loc src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:10"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 5,
+       "point_or_short": 42
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "emberforge",
+        "reset",
+        "command",
+        "down",
+        "data",
+        "pack"
+       ],
+       "matching_files": 51,
+       "matching_lines": 288,
+       "files_read": [
+        {
+         "file": "src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt",
+         "lines": [
+          1,
+          43
+         ],
+         "of": 43
+        },
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          22
+         ],
+         "of": 22
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java",
+         "lines": [
+          1,
+          41
+         ],
+         "of": 41
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java",
+         "lines": [
+          1,
+          93
+         ],
+         "of": 93
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q12/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0165,
+       "chars": 6539,
+       "sha256": "1d5a5c47af55e611bdd39aa39af7d7cd8db3783147e7b1fa3aab61eae9a98bcb"
+      }
+     ],
+     "score": {
+      "chars": 6539,
+      "tokens": 1635,
+      "sha256": "1d5a5c47af55e611bdd39aa39af7d7cd8db3783147e7b1fa3aab61eae9a98bcb",
+      "facts": {
+       "total": 6,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q12.run"
+       ],
+       "missed": [
+        "q12.command",
+        "q12.id",
+        "q12.fill",
+        "q12.nbt",
+        "q12.messages"
+       ],
+       "via": {
+        "q12.run": "loc src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:16"
+       }
+      },
+      "locators": {
+       "distinct": 39,
+       "files": 19,
+       "point_or_short": 39
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 53,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 229,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q12/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1645,
+       "chars": 3958,
+       "sha256": "5f6cec244e14e986b844cd57ffd1b6407ed97744aaba617a5b9f3ebcd20658ba",
+       "claims": 8,
+       "claims_reused": 4,
+       "claims_new": 4,
+       "internal_tool_calls": 20,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 3958,
+      "tokens": 990,
+      "sha256": "5f6cec244e14e986b844cd57ffd1b6407ed97744aaba617a5b9f3ebcd20658ba",
+      "facts": {
+       "total": 6,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q12.command",
+        "q12.run",
+        "q12.id",
+        "q12.fill"
+       ],
+       "missed": [
+        "q12.nbt",
+        "q12.messages"
+       ],
+       "via": {
+        "q12.command": "loc src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:22",
+        "q12.run": "loc src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:16-25",
+        "q12.id": "loc src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:10",
+        "q12.fill": "loc src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction:1"
+       }
+      },
+      "locators": {
+       "distinct": 8,
+       "files": 4,
+       "point_or_short": 8
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 8,
+       "by_status": {
+        "statically_verified": 5,
+        "weak_inference": 3
+       },
+       "verified": 5,
+       "inference": 3,
+       "verified_share": 0.625,
+       "inference_share": 0.375,
+       "weak_or_unknown": 3,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 8,
+        "graph_edge": 2
+       },
+       "evidence_verifying": 8,
+       "evidence_non_verifying": 2,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.172,
+       "tool_calls": 20,
+       "context_chars": 6246,
+       "context_tokens_est": 1561,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q12/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0228,
+       "chars": 5758,
+       "sha256": "736f3d238030e7a62156eba410c2b49457330bace1a53b7d0a4f2604dfaebbdc"
+      }
+     ],
+     "score": {
+      "chars": 5758,
+      "tokens": 1440,
+      "sha256": "736f3d238030e7a62156eba410c2b49457330bace1a53b7d0a4f2604dfaebbdc",
+      "facts": {
+       "total": 6,
+       "found_n": 5,
+       "pinpointed_n": 5,
+       "found": [
+        "q12.command",
+        "q12.run",
+        "q12.id",
+        "q12.fill",
+        "q12.messages"
+       ],
+       "missed": [
+        "q12.nbt"
+       ],
+       "via": {
+        "q12.command": "loc src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:22",
+        "q12.run": "loc src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:16",
+        "q12.id": "loc src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:10",
+        "q12.fill": "loc src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction:1",
+        "q12.messages": "loc src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction:1-4"
+       }
+      },
+      "locators": {
+       "distinct": 18,
+       "files": 6,
+       "point_or_short": 18
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 7,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5985,
+        "truncated": true,
+        "expansions": [
+         "emberforg->ember (corpus prefix)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q12/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0301,
+       "chars": 5896,
+       "sha256": "fdbf39fcce8e1d93b3a1c211bfd594d8f20d28727a84113697bef86bd9c8dd5c"
+      }
+     ],
+     "score": {
+      "chars": 5896,
+      "tokens": 1474,
+      "sha256": "fdbf39fcce8e1d93b3a1c211bfd594d8f20d28727a84113697bef86bd9c8dd5c",
+      "facts": {
+       "total": 6,
+       "found_n": 5,
+       "pinpointed_n": 5,
+       "found": [
+        "q12.command",
+        "q12.run",
+        "q12.id",
+        "q12.fill",
+        "q12.messages"
+       ],
+       "missed": [
+        "q12.nbt"
+       ],
+       "via": {
+        "q12.command": "loc src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:15-32",
+        "q12.run": "loc src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:9-26",
+        "q12.id": "loc src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:10",
+        "q12.fill": "loc src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction:1-4",
+        "q12.messages": "loc src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction:1-4"
+       }
+      },
+      "locators": {
+       "distinct": 20,
+       "files": 10,
+       "point_or_short": 19
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 7,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q12/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q13",
+   "category": "callers",
+   "question": "emberforge:rewards/first_cinder fonksiyonu nereden çalıştırılıyor?",
+   "facts": 3,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.04,
+       "chars": 16080,
+       "sha256": "2711f0c712db8c2c29238b074be571d10138259c2bd3c83df73025987ee44721"
+      }
+     ],
+     "score": {
+      "chars": 16080,
+      "tokens": 4020,
+      "sha256": "2711f0c712db8c2c29238b074be571d10138259c2bd3c83df73025987ee44721",
+      "facts": {
+       "total": 3,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q13.advancement",
+        "q13.trigger"
+       ],
+       "missed": [
+        "q13.tag"
+       ],
+       "via": {
+        "q13.advancement": "loc src/main/resources/data/emberforge/advancement/first_cinder.json:27",
+        "q13.trigger": "loc src/main/resources/data/emberforge/advancement/first_cinder.json:21"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 5,
+       "point_or_short": 44
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "emberforge",
+        "rewards",
+        "first_cinder",
+        "fonksiyonu",
+        "nereden",
+        "çalıştırılıyor"
+       ],
+       "matching_files": 51,
+       "matching_lines": 244,
+       "files_read": [
+        {
+         "file": "src/main/resources/data/emberforge/advancement/first_cinder.json",
+         "lines": [
+          1,
+          30
+         ],
+         "of": 30
+        },
+        {
+         "file": "src/main/resources/assets/emberforge/lang/en_us.json",
+         "lines": [
+          1,
+          17
+         ],
+         "of": 17
+        },
+        {
+         "file": "src/main/resources/assets/emberforge/lang/tr_tr.json",
+         "lines": [
+          1,
+          17
+         ],
+         "of": 17
+        },
+        {
+         "file": "src/main/resources/data/emberforge/function/rewards/first_cinder.mcfunction",
+         "lines": [
+          1,
+          3
+         ],
+         "of": 3
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+         "lines": [
+          1,
+          179
+         ],
+         "of": 179
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q13/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0202,
+       "chars": 6451,
+       "sha256": "eda382d81d3a7c971b4233cfbd6ae1dfce8bc1fae62a00348479d26a407d62ed"
+      }
+     ],
+     "score": {
+      "chars": 6451,
+      "tokens": 1613,
+      "sha256": "eda382d81d3a7c971b4233cfbd6ae1dfce8bc1fae62a00348479d26a407d62ed",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q13.advancement",
+        "q13.trigger",
+        "q13.tag"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 36,
+       "files": 20,
+       "point_or_short": 36
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 55,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 216,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q13/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1685,
+       "chars": 4259,
+       "sha256": "fcd970eab6a7731397a4c1f71b7a95dd2780b912abb0646c523aa2bbf211f3e4",
+       "claims": 9,
+       "claims_reused": 3,
+       "claims_new": 6,
+       "internal_tool_calls": 15,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 4259,
+      "tokens": 1065,
+      "sha256": "fcd970eab6a7731397a4c1f71b7a95dd2780b912abb0646c523aa2bbf211f3e4",
+      "facts": {
+       "total": 3,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q13.advancement",
+        "q13.trigger"
+       ],
+       "missed": [
+        "q13.tag"
+       ],
+       "via": {
+        "q13.advancement": "loc src/main/resources/data/emberforge/advancement/first_cinder.json:28",
+        "q13.trigger": "loc src/main/resources/data/emberforge/advancement/first_cinder.json:21"
+       }
+      },
+      "locators": {
+       "distinct": 8,
+       "files": 4,
+       "point_or_short": 8
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 9,
+       "by_status": {
+        "statically_verified": 7,
+        "strong_inference": 1,
+        "weak_inference": 1
+       },
+       "verified": 7,
+       "inference": 2,
+       "verified_share": 0.778,
+       "inference_share": 0.222,
+       "weak_or_unknown": 1,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 9,
+        "graph_edge": 1
+       },
+       "evidence_verifying": 9,
+       "evidence_non_verifying": 1,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.171,
+       "tool_calls": 15,
+       "context_chars": 5690,
+       "context_tokens_est": 1422,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 4,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q13/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0261,
+       "chars": 5731,
+       "sha256": "95816e1e5e4462b30301f11a3d2c403d30780eb36bf65dc008e255ab4798579a"
+      }
+     ],
+     "score": {
+      "chars": 5731,
+      "tokens": 1433,
+      "sha256": "95816e1e5e4462b30301f11a3d2c403d30780eb36bf65dc008e255ab4798579a",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q13.advancement",
+        "q13.trigger",
+        "q13.tag"
+       ],
+       "missed": [],
+       "via": {
+        "q13.advancement": "loc src/main/resources/data/emberforge/advancement/first_cinder.json:28",
+        "q13.trigger": "loc src/main/resources/data/emberforge/advancement/first_cinder.json:21",
+        "q13.tag": "loc src/main/resources/data/emberforge/tags/item/cinder_ores.json:1"
+       }
+      },
+      "locators": {
+       "distinct": 18,
+       "files": 5,
+       "point_or_short": 18
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 6,
+       "edges": 2,
+       "edge_confidence": {
+        "EXTRACTED": 2
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5996,
+        "truncated": true,
+        "expansions": [
+         "emberforg->ember (corpus prefix)",
+         "fonksiyonu->function (lexicon)",
+         "calistiriliyor->run (lexicon)",
+         "calistiriliyor->execut (lexicon)"
+        ],
+        "more": [
+         "src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:16-25 ForgeFunctions.resetForges"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 2,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q13/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0332,
+       "chars": 5729,
+       "sha256": "99732e682e1230704cc5bb270c3e1e23c8d3f90fdef9633c2d57c32c934399a3"
+      }
+     ],
+     "score": {
+      "chars": 5729,
+      "tokens": 1433,
+      "sha256": "99732e682e1230704cc5bb270c3e1e23c8d3f90fdef9633c2d57c32c934399a3",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q13.advancement",
+        "q13.trigger",
+        "q13.tag"
+       ],
+       "missed": [],
+       "via": {
+        "q13.advancement": "loc src/main/resources/data/emberforge/advancement/first_cinder.json:28",
+        "q13.trigger": "loc src/main/resources/data/emberforge/advancement/first_cinder.json:21",
+        "q13.tag": "loc src/main/resources/data/emberforge/tags/item/cinder_ores.json:1-6"
+       }
+      },
+      "locators": {
+       "distinct": 16,
+       "files": 10,
+       "point_or_short": 16
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 6,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q13/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q14",
+   "category": "where",
+   "question": "Where are the mod's block entity type, menu type and recipe serializer registered, and where are those registers attached to the mod event bus?",
+   "facts": 5,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0463,
+       "chars": 23997,
+       "sha256": "58ac24f9793157e10b88e40d1eee015be3e5b3a6ea8e5db84583a01e15796f4e"
+      }
+     ],
+     "score": {
+      "chars": 23997,
+      "tokens": 6000,
+      "sha256": "58ac24f9793157e10b88e40d1eee015be3e5b3a6ea8e5db84583a01e15796f4e",
+      "facts": {
+       "total": 5,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q14.bus"
+       ],
+       "missed": [
+        "q14.be",
+        "q14.menu",
+        "q14.serializer",
+        "q14.screen"
+       ],
+       "via": {
+        "q14.bus": "loc src/main/java/net/ashvale/emberforge/EmberForge.java:21"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 5,
+       "point_or_short": 41
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "mod",
+        "block",
+        "entity",
+        "type",
+        "menu",
+        "recipe",
+        "serializer",
+        "registered",
+        "registers",
+        "attached",
+        "event",
+        "bus"
+       ],
+       "matching_files": 45,
+       "matching_lines": 381,
+       "files_read": [
+        {
+         "file": "src/main/java/net/ashvale/emberforge/EmberForge.java",
+         "lines": [
+          1,
+          37
+         ],
+         "of": 37
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java",
+         "lines": [
+          1,
+          42
+         ],
+         "of": 42
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+         "lines": [
+          1,
+          179
+         ],
+         "of": 179
+        },
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          22
+         ],
+         "of": 22
+        },
+        {
+         "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java",
+         "lines": [
+          1,
+          113
+         ],
+         "of": 115
+        }
+       ],
+       "truncated": true
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q14/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0189,
+       "chars": 6573,
+       "sha256": "1a974b698d6b94adb526a602a3ac841363ac817eb74af18a46b94d93211678e2"
+      }
+     ],
+     "score": {
+      "chars": 6573,
+      "tokens": 1644,
+      "sha256": "1a974b698d6b94adb526a602a3ac841363ac817eb74af18a46b94d93211678e2",
+      "facts": {
+       "total": 5,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q14.screen"
+       ],
+       "missed": [
+        "q14.be",
+        "q14.menu",
+        "q14.serializer",
+        "q14.bus"
+       ],
+       "via": {
+        "q14.screen": "loc src/main/java/net/ashvale/emberforge/client/ClientSetup.java:15"
+       }
+      },
+      "locators": {
+       "distinct": 32,
+       "files": 17,
+       "point_or_short": 32
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 55,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 238,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q14/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2229,
+       "chars": 1102,
+       "sha256": "eaa3cc64ce8afe7eb9c5bbbdb7469de19d42f06f5b12c4bd1fb1c5f204b5dad2",
+       "claims": 3,
+       "claims_reused": 0,
+       "claims_new": 3,
+       "internal_tool_calls": 12,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 1102,
+      "tokens": 276,
+      "sha256": "eaa3cc64ce8afe7eb9c5bbbdb7469de19d42f06f5b12c4bd1fb1c5f204b5dad2",
+      "facts": {
+       "total": 5,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q14.serializer",
+        "q14.bus"
+       ],
+       "missed": [
+        "q14.be",
+        "q14.menu",
+        "q14.screen"
+       ],
+       "via": {
+        "q14.serializer": "loc src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:12-25",
+        "q14.bus": "loc src/main/java/net/ashvale/emberforge/EmberForge.java:21-32"
+       }
+      },
+      "locators": {
+       "distinct": 3,
+       "files": 3,
+       "point_or_short": 3
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 3,
+       "by_status": {
+        "statically_verified": 3
+       },
+       "verified": 3,
+       "inference": 0,
+       "verified_share": 1.0,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 3
+       },
+       "evidence_verifying": 3,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.219,
+       "tool_calls": 12,
+       "context_chars": 2551,
+       "context_tokens_est": 637,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q14/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0255,
+       "chars": 5692,
+       "sha256": "dad3086767250c6184dc52210ff0d112996747c17afb1cb8d834746912419f4a"
+      }
+     ],
+     "score": {
+      "chars": 5692,
+      "tokens": 1423,
+      "sha256": "dad3086767250c6184dc52210ff0d112996747c17afb1cb8d834746912419f4a",
+      "facts": {
+       "total": 5,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q14.serializer",
+        "q14.bus",
+        "q14.screen"
+       ],
+       "missed": [
+        "q14.be",
+        "q14.menu"
+       ],
+       "via": {
+        "q14.serializer": "loc src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:12-25",
+        "q14.bus": "loc src/main/java/net/ashvale/emberforge/EmberForge.java:21",
+        "q14.screen": "loc src/main/java/net/ashvale/emberforge/client/ClientSetup.java:15"
+       }
+      },
+      "locators": {
+       "distinct": 15,
+       "files": 7,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 7,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5912,
+        "truncated": true,
+        "more": [
+         "src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:52-55 ForgingRecipe.getSerializer"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q14/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0343,
+       "chars": 5868,
+       "sha256": "dfba1846c26aeb528044ef16e52060c905f0557bc47a081eea5d5f7e10b25362"
+      }
+     ],
+     "score": {
+      "chars": 5868,
+      "tokens": 1467,
+      "sha256": "dfba1846c26aeb528044ef16e52060c905f0557bc47a081eea5d5f7e10b25362",
+      "facts": {
+       "total": 5,
+       "found_n": 5,
+       "pinpointed_n": 5,
+       "found": [
+        "q14.be",
+        "q14.menu",
+        "q14.serializer",
+        "q14.bus",
+        "q14.screen"
+       ],
+       "missed": [],
+       "via": {
+        "q14.be": "loc src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:18-40",
+        "q14.menu": "loc src/main/java/net/ashvale/emberforge/registry/ModMenus.java:12-20",
+        "q14.serializer": "loc src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:12-25",
+        "q14.bus": "loc src/main/java/net/ashvale/emberforge/EmberForge.java:21-32",
+        "q14.screen": "loc src/main/java/net/ashvale/emberforge/client/ClientSetup.java:10-19"
+       }
+      },
+      "locators": {
+       "distinct": 11,
+       "files": 10,
+       "point_or_short": 9
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 7,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/forge_mod/q14/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  }
+ ],
+ "summary": {
+  "raw": {
+   "questions": 14,
+   "errors": 0,
+   "facts_found": 36,
+   "facts_total": 68,
+   "facts_pinpointed": 30,
+   "questions_all_facts": 3,
+   "tokens_mean": 4471.2,
+   "tokens_median": 5583.5,
+   "tokens_max": 6000,
+   "tokens_total": 62597,
+   "chars_total": 250369,
+   "facts_per_1k_tokens": 0.58,
+   "pinpointed_per_1k_tokens": 0.48,
+   "locators_distinct_mean": 37.3,
+   "agent_tool_calls_mean": 5.29,
+   "seconds_cold_median": 0.045,
+   "seconds_cold_total": 1.001,
+   "seconds_warm_median": null,
+   "seconds_warm_total": null,
+   "facts_found_via_locator": 36,
+   "assertions_scored": false,
+   "negatives_matched": 0,
+   "negatives_checked": 19,
+   "relations_asserted": 0,
+   "relations_checked": 0,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "graphify_vendored": {
+   "questions": 14,
+   "errors": 0,
+   "facts_found": 12,
+   "facts_total": 68,
+   "facts_pinpointed": 12,
+   "questions_all_facts": 0,
+   "tokens_mean": 1343.7,
+   "tokens_median": 1616.0,
+   "tokens_max": 1644,
+   "tokens_total": 18812,
+   "chars_total": 75226,
+   "facts_per_1k_tokens": 0.64,
+   "pinpointed_per_1k_tokens": 0.64,
+   "locators_distinct_mean": 29.6,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.018,
+   "seconds_cold_total": 0.247,
+   "seconds_warm_median": null,
+   "seconds_warm_total": null,
+   "facts_found_via_locator": 12,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 19,
+   "relations_asserted": 12,
+   "relations_checked": 12,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "verinoda_analyze": {
+   "questions": 14,
+   "errors": 0,
+   "facts_found": 40,
+   "facts_total": 68,
+   "facts_pinpointed": 32,
+   "questions_all_facts": 2,
+   "tokens_mean": 894.6,
+   "tokens_median": 855.0,
+   "tokens_max": 1826,
+   "tokens_total": 12524,
+   "chars_total": 50074,
+   "facts_per_1k_tokens": 3.19,
+   "pinpointed_per_1k_tokens": 2.56,
+   "locators_distinct_mean": 7.4,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.223,
+   "seconds_cold_total": 3.364,
+   "seconds_warm_median": null,
+   "seconds_warm_total": null,
+   "facts_found_via_locator": 40,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 19,
+   "relations_asserted": 43,
+   "relations_checked": 12,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0,
+   "claims": {
+    "total": 107,
+    "by_status": {
+     "statically_verified": 82,
+     "strong_inference": 11,
+     "weak_inference": 13,
+     "primary_source_verified": 1
+    },
+    "verified_share": 0.776,
+    "inference_share": 0.224,
+    "weak_or_unknown": 13,
+    "weak_or_unknown_unlabelled": 0,
+    "negatives_presented_as_findings": 0,
+    "contradicted_relations": 0,
+    "contradicted_but_cited_line_names_target": 0,
+    "contradicted_named_via_import_alias": 0,
+    "unknowns": 10
+   },
+   "cache": {
+    "method": "claims whose id already existed in atlas.db before the run (same text + snapshot)",
+    "cold_claims": 107,
+    "cold_reused": 32,
+    "warm_claims": 0,
+    "warm_reused": 0
+   }
+  },
+  "verinoda_retrieve": {
+   "questions": 14,
+   "errors": 0,
+   "facts_found": 50,
+   "facts_total": 68,
+   "facts_pinpointed": 44,
+   "questions_all_facts": 6,
+   "tokens_mean": 1427.5,
+   "tokens_median": 1425.5,
+   "tokens_max": 1441,
+   "tokens_total": 19985,
+   "chars_total": 79923,
+   "facts_per_1k_tokens": 2.5,
+   "pinpointed_per_1k_tokens": 2.2,
+   "locators_distinct_mean": 16.6,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.026,
+   "seconds_cold_total": 0.39,
+   "seconds_warm_median": null,
+   "seconds_warm_total": null,
+   "facts_found_via_locator": 50,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 19,
+   "relations_asserted": 8,
+   "relations_checked": 4,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "verinoda_retrieve_text": {
+   "questions": 14,
+   "errors": 0,
+   "facts_found": 64,
+   "facts_total": 68,
+   "facts_pinpointed": 58,
+   "questions_all_facts": 11,
+   "tokens_mean": 1466.1,
+   "tokens_median": 1484.5,
+   "tokens_max": 1497,
+   "tokens_total": 20525,
+   "chars_total": 82086,
+   "facts_per_1k_tokens": 3.12,
+   "pinpointed_per_1k_tokens": 2.83,
+   "locators_distinct_mean": 22.1,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.038,
+   "seconds_cold_total": 0.547,
+   "seconds_warm_median": null,
+   "seconds_warm_total": null,
+   "facts_found_via_locator": 64,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 19,
+   "relations_asserted": 29,
+   "relations_checked": 29,
+   "relations_cited_line_missing_target": 5,
+   "relations_named_via_import_alias": 0
+  }
+ },
+ "sweep": null,
+ "not_measured": [
+  "model-in-the-loop answer accuracy, model tokens and model cost - not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)",
+  "real upstream Graphify CLI baseline - not run: --graphify-cmd not given",
+  "runtime correctness of answers (only presence of gold facts in the delivered context is scored)",
+  "OS file-cache effects are not separated from process warm-up in cold vs warm timings",
+  "memory use"
+ ],
+ "status": "ok",
+ "paths_sanitized": {
+  "placeholders": [
+   "<TMP>",
+   "<REPO>"
+  ],
+  "rule": "absolute home / temp / checkout paths replaced when written; see verinoda/benchmark/sanitize.py"
+ }
+}

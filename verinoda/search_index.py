@@ -87,7 +87,11 @@ TR_STEM_WEIGHT = 0.8              # the vocabulary-confirmed stem of an inflecte
 # Turkish derivational endings (folded) change the meaning of a stem: -ci/-cu (agent), -lik (-ness),
 # -siz (without), -li (with), -ce (-ly)
 TR_DERIVATIONAL = ("ci", "cu", "lik", "luk", "siz", "suz", "li", "lu", "ce", "ca")
+TR_MIN_STEM = 4                   # a shorter "stem" is mostly an English stem (çalışıyor -> cal, veri -> ver)
+TR_MIN_STEM_KNOWN = 5             # for words the index knows as they are (login -> log, event -> even)
 LINK_PPR_FACTOR = 0.5             # graph prior a data unit takes from the code units linked to it
+LINK_FAN_POWER = 0.0              # ... divided by (data units that code unit links to) ** this; 1.0 (a hub
+                                  # shares its prior) was tried 2026-09-24: forge_mod JSON -4 facts, not kept
 PROX_BOOST = 0.3                  # code passage factor when two adjacent question words are adjacent in it
 PROX_GAP = 1                      # "adjacent": at most this many tokens apart, in either order
 PROX_CANDIDATES = 300             # passages checked for proximity, best term coverage first
@@ -457,9 +461,28 @@ ALIGN_SUFFIXES = (".py", ".java", ".kt", ".kts", ".scala", ".groovy", ".js", ".j
 _ALIGN_NAME = re.compile(r"[A-Za-z_$][\w$]*")
 
 
+def _declaration_line(lines: list[str], a: int) -> int:
+    """0-based index of the first line at or after line ``a`` that is not an annotation or decorator
+    (with its parenthesised arguments), a comment or blank: where the declaration itself begins."""
+    i, depth, last = max(0, a - 1), 0, min(len(lines), a - 1 + 400)
+    while i < last:
+        s = lines[i].strip()
+        if depth > 0:
+            depth = max(0, depth + s.count("(") + s.count("{") - s.count(")") - s.count("}"))
+            i += 1
+            continue
+        if s.startswith("@"):
+            depth = max(0, s.count("(") + s.count("{") - s.count(")") - s.count("}"))
+        elif s and not s.startswith(("//", "/*", "*", "#")):
+            break
+        i += 1
+    return i
+
+
 def _misaligned(units: list["_Unit"], lines: list[str], f: str) -> bool:
     """Most symbols of ``f`` do not start where the graph says: their names are not in the first
-    :data:`ALIGN_WINDOW` lines of their spans (decorators and annotations fit in that window)."""
+    :data:`ALIGN_WINDOW` lines of their declarations (Java/Kotlin spans start at the annotations,
+    which may run longer than that: they are skipped first)."""
     if not f.lower().endswith(ALIGN_SUFFIXES):
         return False
     checked = bad = 0
@@ -467,7 +490,8 @@ def _misaligned(units: list["_Unit"], lines: list[str], f: str) -> bool:
         if u.kind != "symbol" or not _ALIGN_NAME.fullmatch(u.name or ""):
             continue
         checked += 1
-        if u.name not in "\n".join(lines[max(0, u.a - 1): u.a - 1 + ALIGN_WINDOW]):
+        start = _declaration_line(lines, u.a)
+        if u.name not in "\n".join(lines[max(0, u.a - 1): start + ALIGN_WINDOW]):
             bad += 1
     return checked > 0 and bad * 2 > checked
 
@@ -1091,8 +1115,43 @@ def _vocab_prefixed(conn: sqlite3.Connection, prefix: str, limit: int = 4) -> li
     return [(t, d) for t, d in rows]
 
 
+def _load_lexicon(repo: Path | None):
+    if repo is None:
+        return None
+    try:
+        from verinoda import lexicon  # other track: may be absent
+        return lexicon.load(repo)
+    except Exception:  # noqa: BLE001 - no lexicon, or an unreadable one
+        return None
+
+
+def _label_expansions(repo: Path | None, words: list[str]) -> tuple[dict[str, list[str]], set[int]]:
+    """Turkish labels from the repository's locale files spelled by adjacent folded words.
+
+    "kor ocağı" under ``block.x.ember_forge`` -> ``{"kor ocagi": ["ember_forge"]}``, and the
+    positions of the words it covers. The label names that identifier as surely as if the
+    question spelled it; the words' separate associations would only add the other labels
+    they occur in.
+    """
+    lx = _load_lexicon(repo) if words else None
+    hits = getattr(lx, "phrase_hits", None)
+    if not callable(hits):
+        return {}, set()
+    out: dict[str, list[str]] = {}
+    covered: set[int] = set()
+    try:
+        for item in hits(words) or []:
+            if item.get("targets"):
+                src = " ".join(words[item["start"]: item["start"] + item["n"]])
+                out.setdefault(src, []).extend(str(x) for x in item["targets"])
+                covered.update(range(item["start"], item["start"] + item["n"]))
+    except Exception:  # noqa: BLE001 - a malformed lexicon never breaks retrieval
+        return {}, set()
+    return out, covered
+
+
 def _lexicon_expansions(repo: Path | None, words: list[str],
-                        originals: list[str] | None = None) -> dict[str, list[str]]:
+                        originals: list[str] | None = None, skip: set[int] | None = None) -> dict[str, list[str]]:
     """Repo-learned associations and grounded seed glosses (docs/DESIGN.md D6) for folded words.
 
     Uses :mod:`verinoda.lexicon` when it is installed and a lexicon was built;
@@ -1112,7 +1171,9 @@ def _lexicon_expansions(repo: Path | None, words: list[str],
     try:
         assoc = getattr(lx, "associations", None)
         if callable(assoc):
-            for w in words:
+            for k, w in enumerate(words):
+                if k in (skip or ()):
+                    continue  # part of a locale label (_label_expansions)
                 parts = [str(a.get("part")) for a in (assoc(w) or [])[:3] if isinstance(a, dict) and a.get("part")]
                 if parts:
                     out.setdefault(w, []).extend(parts)
@@ -1217,8 +1278,10 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
     for w in words:
         f = textnorm.fold_tr(w)
         if (tr_question or not w.isascii()) and len(f) >= 4 and f.isalpha():
-            # the longest indexed term that leaves only Turkish inflection ("modeli" -> model)
-            cands = [f[:k] for k in range(len(f) - 1, 2, -1) if textnorm.is_suffix_chain(f[k:])
+            # the longest indexed term that leaves only Turkish inflection ("modeli" -> model); an
+            # English word typed into a Turkish question (login, event) needs a longer stem
+            shortest = TR_MIN_STEM_KNOWN if f in have and w.isascii() else TR_MIN_STEM
+            cands = [f[:k] for k in range(len(f) - 1, shortest - 1, -1) if textnorm.is_suffix_chain(f[k:])
                      and not f[k:].startswith(TR_DERIVATIONAL)]  # oyuncu (player) is not oyun (game)
             known = _vocab_has(conn, cands)
             exact = next((c for c in cands if c in known), None)
@@ -1242,8 +1305,11 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
             if t in {word_stem(x) for x in longs}:
                 cand.setdefault(short, (t, "abbreviation"))
         if len(t) >= 6:
+            # Turkish derivational endings only in Turkish questions (oyuncu is not oyun); in English
+            # "applic" -> app and "deduplicat" -> dedup are abbreviations
+            endings = _DERIVATIONAL + TR_DERIVATIONAL if tr_question else _DERIVATIONAL
             for k in range(max(3, math.ceil(0.4 * len(t))), len(t)):
-                if t[:k] not in NOT_ABBREVIATIONS and not t[k:].startswith(_DERIVATIONAL + TR_DERIVATIONAL):
+                if t[:k] not in NOT_ABBREVIATIONS and not t[k:].startswith(endings):
                     prefixes.setdefault(t[:k], t)
     known = _vocab_has(conn, [c for c in cand if c not in weights])
     for c, (src, via) in cand.items():
@@ -1259,8 +1325,12 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
         if c in known or _vocab_has(conn, [c]):
             add(prefixes[c], c, "corpus prefix", EXPANSION_WEIGHT)
     provided = dict(expansions or {})
+    labels, covered = _label_expansions(repo, [textnorm.fold_tr(w) for w in words]) if tr_question else ({}, set())
+    for src, targets in labels.items():
+        for tgt in targets:
+            add(src, tgt, "locale label", 1.0, indexed=False)
     if not provided and tr_question:
-        provided = _lexicon_expansions(repo, [textnorm.fold_tr(w) for w in words], words)
+        provided = _lexicon_expansions(repo, [textnorm.fold_tr(w) for w in words], words, skip=covered)
         via_default = "lexicon"
     else:
         via_default = "question plan"
@@ -1842,20 +1912,27 @@ def _linked_prior(conn: sqlite3.Connection, h: Handle, lex: dict[int, float], pp
     runs it)."""
     out: dict[int, tuple[float, str]] = {}
     data = [u for u in sorted(lex, key=lambda u: (-lex[u], u))[:top] if h.units[u][2] == "data"]
+    found: dict[int, list[tuple[float, int]]] = {}
+    fan: dict[int, int] = defaultdict(int)   # code unit -> how many of these data units it links to
     for uid in data:
         f, _nid, _kind, _name, a, b = h.units[uid][:6]
         lk = links_of(conn, f, a, b)
-        cands: list[tuple[float, int]] = []
-        for sf, line, _rid, _form, _sure in lk["in"]:
+        cands: dict[int, float] = {}
+        for sf, line, _rid, _form, sure in lk["in"]:
             u = unit_at(h, sf, line)
             if u is not None and u in ppr_mass and (include_tests or not is_test_file(sf)):
-                cands.append((ppr_mass[u], u))
-        for _line, target, _rid, _form, _sure in lk["out"]:
+                cands[u] = max(cands.get(u, 0.0), ppr_mass[u] * (1.0 if sure else UNSURE_LINK_FACTOR))
+        for _line, target, _rid, _form, sure in lk["out"]:
             for _s, _a, _b, u in _by_file(h).get(target, []):
                 if u in ppr_mass:
-                    cands.append((ppr_mass[u], u))
+                    cands[u] = max(cands.get(u, 0.0), ppr_mass[u] * (1.0 if sure else UNSURE_LINK_FACTOR))
+        found[uid] = [(m, u) for u, m in cands.items()]
+        for u in cands:
+            fan[u] += 1
+    for uid, cands in found.items():
         if cands:
-            m, u = max(cands)
+            # a registry class that names every item passes its prior to all of them: shared, not copied
+            m, u = max((m / fan[u] ** LINK_FAN_POWER, u) for m, u in cands)
             out[uid] = (LINK_PPR_FACTOR * m, f"graph prior through the link with {h.units[u][3]} ({h.units[u][0]})")
     return out
 

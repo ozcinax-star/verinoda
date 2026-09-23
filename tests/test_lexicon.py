@@ -330,3 +330,47 @@ def test_exact_spelling_seed_keys_keep_stems_that_folding_would_merge():
     assert got == {1: "öl", 3: "öl", 4: "öldür", 5: "ölü"}  # "oluyor" / "olan" are "be", not "die"
     (_i, key, targets), = lexicon.seed_exact_lookup(["ölünce"])  # the longest key wins: ölü
     assert key == "ölü" and "dead" in targets
+
+
+def test_olc_measure_is_not_ol_die():
+    for w in ("ölçü", "ölçüsü", "ölçülüyor", "ölçüt", "ölçüm"):
+        (_i, key, targets), = lexicon.seed_exact_lookup([w])
+        assert key == "ölç" and "measure" in targets, w
+    assert lexicon.seed_exact_lookup(["ölçek"]) == []  # the longest key decides: never öl (die)
+    (_i, key, _t), = lexicon.seed_exact_lookup(["öldüğünde"])
+    assert key == "öl"
+
+
+def test_locale_labels_name_their_key_identifier(tmp_path):
+    lang = tmp_path / "src/main/resources/assets/forge/lang"
+    lang.mkdir(parents=True)
+    (lang / "en_us.json").write_text('{"block.forge.ember_forge": "Ember Forge", "gui.forge.title": "Forge Menu", '
+                                     '"item.forge.shard": "Shard"}', encoding="utf-8")
+    (lang / "tr_tr.json").write_text('{\n  "block.forge.ember_forge": "Kor Ocağı",\n  "gui.forge.title": '
+                                     '"Ocak Menüsü",\n  "item.forge.shard": "Kırık"\n}', encoding="utf-8")
+    files = ["src/main/resources/assets/forge/lang/en_us.json", "src/main/resources/assets/forge/lang/tr_tr.json"]
+    ph = lexicon.translation_phrases(tmp_path, files)
+    # "title" is not an identifier; a one-word label is a word, not a label
+    assert ph == {"kor ocagi": {"targets": ["ember_forge"],
+                                "sites": ["src/main/resources/assets/forge/lang/tr_tr.json:2"]}}
+    lx = lexicon.Lexicon(phrases=ph)
+    hit, = lx.phrase_hits(["bu", "kor", "ocaginin", "adi"])  # inflected last word
+    assert (hit["start"], hit["n"], hit["targets"]) == (1, 2, ["ember_forge"])
+    assert lx.phrase_hits(["kor", "ates"]) == []
+
+
+def test_a_loaded_lexicon_is_reused_until_its_file_changes(tmp_path):
+    import os
+
+    path = lexicon.lexicon_path(tmp_path)
+    path.parent.mkdir(parents=True)
+    raw = {"version": lexicon.LEXICON_VERSION, "pairs": {}, "vocab": {"a": 1}}
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    one = lexicon.load(tmp_path)
+    assert one is not None and lexicon.load(tmp_path) is one
+    raw["vocab"] = {"a": 1, "bb": 2}
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    st = path.stat()
+    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000))
+    two = lexicon.load(tmp_path)
+    assert two is not one and two.vocab == {"a": 1, "bb": 2}

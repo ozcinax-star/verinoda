@@ -107,6 +107,47 @@ pass then: Kotlin -> Java calls came only from the extractor. The pass now
 covers Kotlin callers too (added after this measurement, so `forge_mod` is
 in-sample for it: analyze 38 -> 39, the other cells and sets unchanged).
 
+**Second review round (later the same night).** Four more review agents went
+through every change after `ea93f92` and reproduced each finding. Fixed, with
+tests: short "stems" of Turkish words (`çalışıyor` -> `cal`, `veri` -> `ver`:
+a stem is now at least 4 letters, 5 for an English word typed into a Turkish
+question such as `login`); the Turkish derivation guard had also blocked
+English abbreviations (`application` -> `app`, `deduplicate` -> `dedup`); `öl`
+(die) also matched `ölçü` (measure); an inferred link now passes only half of
+a code unit's graph prior to a data unit; the alignment check flagged
+unchanged Java/Kotlin files with long annotation blocks for good; a Java
+import with a trailing comment was ignored; Kotlin raw strings were read as
+code and Kotlin properties were not followed; `update` rebuilt the graph for
+edits to documents and data files; `doctor` did not know the mismatch marker.
+In the reference resolver, ordinary prose before a number ("took 2.5
+seconds", "macOS 14.2") became a package reference and made the result
+`unresolved`, and every "word N.N" was sent to three public registries: a
+name before a version is now looked up only with `--network on`, common words
+and units are never package names, and only a clearly written project name
+("the X package", a name before `v0.3`) is asked about. Fractions, protocols,
+word pairs and folders (`1/3`, `HTTP/2`, `read/write`, `services/billing`) are
+no longer repositories, a bare PR number keeps the local origin over a
+repository named in another sentence, and a sentence with two repositories
+binds each number to the one written after it. The reference-tree suggestion
+of `setup` matched bare file names (every pair of Django apps, monorepo
+packages) and took 259 s on 48,000 files: it now compares relative paths and
+file contents, in 0.3 s.
+
+Added in the same round: Turkish labels from the repository's own locale files
+("Kor Ocağı" under `block.x.ember_forge`) expand to the identifier of their
+key at full weight, instead of every label their words occur in; the seed
+dictionary has world-generation words (`biyom`, `dünya`, `cevher`, `oluş`,
+`üret`, ...); a loaded lexicon is reused until its file changes (0.16 s per
+load on a large project, up to three loads per Turkish question before). After
+looking at the failures of `forge_mod` q05, q09 and q11, that set is
+in-sample for these changes: text 63 -> **64**, JSON 45 -> **50**, analyze
+38 -> **40** (`forge_mod_review2.json`); `glow_mod` is unchanged
+(`glow_mod_review2.json`), and on the five earlier sets only
+`graphify_core_tr` changed (text 25 -> 26). Tried and not kept: counting all
+expansions of one question word as one term (`graphify_core_tr` -1 text, -1
+analyze) and splitting a registry class's prior among the items it names
+(`forge_mod` JSON -4).
+
 **The five earlier sets** (regression check, same harness, `repeat = 1`, no
 upstream CLI, against `dogfood-2026-09-23/`): 24 of the 25 Verinoda cells and
 every raw and Graphify cell found exactly the same number of facts. One cell
@@ -148,7 +189,7 @@ tree). Its question set and results are not published.
 round 3 14.7 s; the data pass reads the non-graph files once more, about 0.3 s
 on Verinoda's own repository). Retrieval medians stayed within noise of the
 previous round (`graphify_core` text 0.141 s, `heldout_repoatlas` 0.135 s).
-Analyze contexts grew on `glow_mod` (774 -> 991 tokens) with the link-chain
+Analyze contexts grew on `glow_mod` (774 -> 1,025 tokens) with the link-chain
 claims. The search index schema is now 4; an older `search.db` is rebuilt on
 first use.
 
@@ -156,8 +197,10 @@ first use.
 of command words and JSON keys; an id in plain Java is "kind not stated"
 unless one file has it. Bare names count only as an argument of an id
 constructor or of a helper whose name says what it loads. Folding merges
-Turkish stems such as `öl` (die) and `ol` (be), so "öldüğünde" is not
-understood. Only Java gets the extra call pass.
+Turkish stems such as `öl` (die) and `ol` (be): `öl` is now matched as written
+(an `exact` section of the seed dictionary), but the question plan itself
+still reads folded words. The extra call pass covers Java and Kotlin callers,
+not Scala or Groovy.
 
 ## Update 2026-09-23: dogfooding fixes
 
@@ -1168,7 +1211,7 @@ since `05890a1`; `tests/test_benchmark.py` pins the sha256 of both arrays.
 | `heldout_repoatlas` | the product (then named RepoAtlas) at commit `7371990` of the pre-rename history, shipped as a snapshot: `repoatlas/` without `project_index/` and `benchmark/questions/`, plus `tests/` without `fixtures/` (106 files) | 8: where ×2, config, flow, impact, behaviour, why, tests | 33 | 0 | the retrieval research agent, after its prototype was built and before it ran on this corpus; gold reviewed and re-anchored to `7371990` by the measurement step | no (held out from the design; seen by the search track, which reports no tuning on it) |
 | `orders_app_tr` | as `orders_app` | the 10 `orders_app` questions in Turkish | 32 (same) | 15 (same) | the question-understanding rule author, while tuning the Turkish rules | yes |
 | `graphify_core_tr` | as `graphify_core` | the 9 `graphify_core` questions in Turkish | 37 (same) | 7 (same) | the question-understanding rule author, while tuning the Turkish rules | yes |
-| `forge_mod` | `examples/forge_mod` (55 files: a fictional NeoForge mod in Java and Kotlin with a data pack, worldgen, tags, lang files in two languages and JUnit tests) | 14, 7 of them Turkish: callers, cross-layer, config, resources, flow, behaviour, where | 68 | 19 | an agent that never ran Verinoda on it, after all the 2026-09-24 changes | no: measured once, nothing tuned on it |
+| `forge_mod` | `examples/forge_mod` (55 files: a fictional NeoForge mod in Java and Kotlin with a data pack, worldgen, tags, lang files in two languages and JUnit tests) | 14, 7 of them Turkish: callers, cross-layer, config, resources, flow, behaviour, where | 68 | 19 | an agent that never ran Verinoda on it, after all the 2026-09-24 changes | held out for its first measurement; in-sample since: the Kotlin call pass, and q05, q09, q11 for the second review round |
 | `glow_mod` | `examples/glow_mod` (37 files: a fictional Fabric mod - Java, a data pack, assets, a yml config, a reference tree `reference/` configured through `corpus.verinoda_config`, and a copied data pack) | 14, 7 of them Turkish: callers, cross-layer (code <-> data pack), config, resources, flow, behaviour, where | 50 | 12 (in 10 questions) | an agent that never ran Verinoda on it, after the Minecraft support was written | held out for its first measurement only: the Java call pass, the translation pairs, the game words of the seed dictionary and the link chain were added after looking at the misses of q01, q03, q04 and q13 |
 
 The held-out review, fact by fact, is stored in the set:

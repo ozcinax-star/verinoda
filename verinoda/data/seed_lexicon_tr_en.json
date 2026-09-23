@@ -196,8 +196,16 @@
    "join",
    "combine"
   ],
+  "biyom": [
+   "biome"
+  ],
   "blok": [
    "block"
+  ],
+  "bolge": [
+   "region",
+   "zone",
+   "area"
   ],
   "bolum": [
    "section",
@@ -276,6 +284,9 @@
    "response",
    "reply",
    "answer"
+  ],
+  "cevher": [
+   "ore"
   ],
   "cevir": [
    "convert",
@@ -370,6 +381,9 @@
    "storage",
    "store"
   ],
+  "derinlik": [
+   "depth"
+  ],
   "derle": [
    "compile",
    "build"
@@ -435,6 +449,10 @@
   ],
   "dugum": [
    "node"
+  ],
+  "dunya": [
+   "world",
+   "worldgen"
   ],
   "durdur": [
    "stop",
@@ -645,6 +663,9 @@
   "guvenlik": [
    "security"
   ],
+  "harita": [
+   "map"
+  ],
   "hasar": [
    "claim",
    "damage",
@@ -832,6 +853,10 @@
   "katman": [
    "layer"
   ],
+  "kaya": [
+   "rock",
+   "stone"
+  ],
   "kayd": [
    "record",
    "entry",
@@ -842,7 +867,8 @@
    "save",
    "store",
    "persist",
-   "write"
+   "write",
+   "register"
   ],
   "kaydet": [
    "save",
@@ -850,6 +876,10 @@
    "persist",
    "write",
    "register"
+  ],
+  "kaydol": [
+   "register",
+   "sign_up"
   ],
   "kayit": [
    "record",
@@ -970,6 +1000,11 @@
   "maas": [
    "salary"
   ],
+  "maden": [
+   "ore",
+   "mine",
+   "mining"
+  ],
   "makbuz": [
    "receipt"
   ],
@@ -1002,6 +1037,10 @@
    "customer",
    "client"
   ],
+  "nadir": [
+   "rare",
+   "rarity"
+  ],
   "nesne": [
    "object",
    "obj"
@@ -1018,6 +1057,10 @@
    "load",
    "parse"
   ],
+  "olasilik": [
+   "probability",
+   "chance"
+  ],
   "olay": [
    "event"
   ],
@@ -1033,6 +1076,11 @@
    "death",
    "die",
    "dead"
+  ],
+  "olus": [
+   "generate",
+   "spawn",
+   "occur"
   ],
   "olustur": [
    "create",
@@ -1105,6 +1153,11 @@
    "parameter",
    "arg"
   ],
+  "parca": [
+   "part",
+   "piece",
+   "chunk"
+  ],
   "parcacik": [
    "particle"
   ],
@@ -1128,6 +1181,9 @@
   ],
   "rapor": [
    "report"
+  ],
+  "rastgele": [
+   "random"
   ],
   "reddet": [
    "reject",
@@ -1388,6 +1444,9 @@
   "tikla": [
    "click"
   ],
+  "tohum": [
+   "seed"
+  ],
   "topla": [
    "sum",
    "collect"
@@ -1413,6 +1472,11 @@
   ],
   "ulke": [
    "country"
+  ],
+  "uret": [
+   "generate",
+   "produce",
+   "generator"
   ],
   "urun": [
    "product",
@@ -1521,6 +1585,10 @@
   "yeniden dene": [
    "retry"
   ],
+  "yerlestir": [
+   "place",
+   "placement"
+  ],
   "yetenek": [
    "ability",
    "skill"
@@ -1568,6 +1636,9 @@
    "upload",
    "install"
   ],
+  "yukseklik": [
+   "height"
+  ],
   "yurut": [
    "execute",
    "run"
@@ -1595,15 +1666,14 @@
   "zeyil": [
    "endorsement"
   ],
+  "zindan": [
+   "dungeon"
+  ],
   "zipla": [
    "jump"
   ],
   "zirh": [
    "armor"
-  ],
-  "kaydol": [
-   "register",
-   "sign_up"
   ]
  },
  "exact": {
@@ -1615,12 +1685,22 @@
    "olum",
    "olu"
   ],
+  "öldür": [
+   "kill"
+  ],
+  "ölç": [
+   "measure",
+   "metric",
+   "scale",
+   "size"
+  ],
   "ölü": [
    "dead",
    "corpse"
   ],
-  "öldür": [
-   "kill"
+  "şans": [
+   "chance",
+   "luck"
   ]
  }
 }

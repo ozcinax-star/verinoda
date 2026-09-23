@@ -423,3 +423,66 @@ object Commands {
     calls = {(full.label(u), full.label(v)) for u, v, d in full.G.edges(data=True) if d.get("relation") == "calls"
              and (full.file(u) or "").endswith(".kt")}
     assert (".register()", ".run()") in calls
+
+
+def test_kotlin_raw_strings_properties_and_commented_imports(tmp_path):
+    root = tmp_path / "kt2"
+    _mod(root)
+    _write(root, "src/main/java/com/other/Wisp.java", "package com.other;\n\npublic class Wisp {\n"
+           "    public static Wisp spawn(Object w) { return new Wisp(); }\n    public void onDeath(Object w) { }\n}\n")
+    _write(root, "src/main/java/com/other/Caller.java", """package com.other;
+
+import com.glow.entity.Wisp; // NOPMD: the glow variant, not this package's
+
+public class Caller {
+    public void go(Object w) {
+        Wisp.spawn(w);
+    }
+}
+""")
+    _write(root, "src/main/kotlin/com/glow/Service.kt", '''package com.glow
+
+import com.glow.entity.Wisp
+
+class Service(private val wisp: Wisp) {
+    private val backup: Wisp = Wisp.spawn(null)
+
+    fun help(): String = """
+        Killing it calls Wisp.spawn(world) again
+    """
+
+    fun kill(world: Any) {
+        wisp.onDeath(world)
+        backup.onDeath(world)
+    }
+}
+''')
+    _scan(root)
+    g = index.load(root, augment=False)
+    edges = {(g.file(u).rsplit("/", 1)[-1], g.label(u), g.label(v), g.file(v)) for u, v, _d in index.java_call_edges(g)}
+    # the import with a trailing comment shadows the same-package class
+    assert ("Caller.java", ".go()", ".spawn()", "src/main/java/com/glow/entity/Wisp.java") in edges
+    assert not any(e[3] == "src/main/java/com/other/Wisp.java" for e in edges if e[0] == "Caller.java")
+    kt = {(e[1], e[2]) for e in edges if e[0] == "Service.kt"}
+    assert (".kill()", ".onDeath()") in kt                   # through constructor and class properties
+    assert (".help()", ".spawn()") not in kt                  # text inside a raw string is not a call
+
+
+def test_english_words_keep_their_abbreviations_and_turkish_stems_are_long_enough(tmp_path):
+    root = tmp_path / "abbr"
+    _write(root, "app/factory.py", "def create_app():\n    return 1\n\ndef create_user():\n    return 2\n\n"
+                                   "def dedup_rows(rows):\n    return rows\n\ndef sort_rows(rows):\n    return rows\n")
+    _write(root, "app/calendar_utils.py", "def cal_days():\n    return 1\n\ndef cal_weeks():\n    return 2\n")
+    _write(root, "app/auth.py", "def login(user):\n    return user\n\ndef log_event(e):\n    return e\n")
+    _write(root, "app/payments.py", "def process_payment(p):\n    return p\n\ndef refund_payment(p):\n    return p\n")
+    g = _scan(root)
+
+    def exps(q):
+        return {(e["from"], e["to"], e["via"]) for e in search_index.analyze_query(q, _db(g)).expansions}
+
+    assert ("application", "app", "corpus prefix") in {(f.lower(), t, v) for f, t, v in exps(
+        "Where is the application created?")} or any(t == "app" for _f, t, _v in exps("Where is the application created?"))
+    assert any(t == "dedup" for _f, t, _v in exps("Which function deduplicates rows?"))
+    assert not any(t == "cal" for _f, t, _v in exps("Ödeme nasıl çalışıyor?"))        # çalışıyor is not cal
+    assert not any(t == "log" for _f, t, _v in exps("login nasıl çalışıyor?"))        # login is not log + in
+    assert search_index.rank(g, "Ödeme nasıl çalışıyor?").hits[0].name in ("process_payment", "refund_payment")

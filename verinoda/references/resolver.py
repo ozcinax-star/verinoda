@@ -192,51 +192,101 @@ _DETERMINERS = frozenset("a an the this that these those its our their my your s
                          "bir bu şu su o her hiç hic".split())
 
 
-def _registry_package(ctx: _Ctx, r: dict, name: str, mentions: list[dict]) -> bool:
-    """``requests 2.31``: a name written right before a version is a package. The ecosystems of the
-    local project are tried first, then PyPI, npm and crates.io; the first registry that has the
-    name and the version is taken (a registry of the project's own ecosystem also counts without
-    the version) and the others that also have the name are listed. Offline, the reference stays
-    with an unknown ecosystem and says so.
-    """
+# words that stand before a number in ordinary prose ("took 2.5 seconds", "macOS 14.2", "below 0.75")
+_NOT_PACKAGE_NAMES = frozenset("""took take takes taking waits wait waited waiting lasts last lasted drops drop dropped
+    falls fall fell rises rise rose fails fail failed runs run ran uses use used needs need needed gets get got
+    below above after before about around over under than approx approximately roughly nearly almost only just
+    by to from at on in of for with within and or is was are were be been being version versions release releases
+    build builds update upgrade upgraded patch fix fixed new old latest same next last first second final current
+    previous stable beta alpha bare seconds second secs sec minutes minute mins ms hours hour days day times time
+    percent pct x mb gb kb tb px pt em rem macos ios ipados android windows win linux ubuntu debian fedora centos
+    rhel alpine chrome chromium firefox safari edge opera iphone ipad pixel galaxy java jdk jre sdk api level
+    step steps page pages line lines chapter section figure table item items""".split())
+
+
+def _name_strength(ctx: _Ctx, r: dict, mentions: list[dict]) -> str:
+    """How surely the user wrote a project name: ``strong`` ("the X package", "kütüphane X", a name
+    right before a cued version such as ``v0.3`` or ``sürüm 2``), ``weak`` (a word before a bare number,
+    an apostrophe-suffixed word) or ``none`` (an ordinary word: "took 2.5 seconds")."""
+    m = r["_anchor"]
+    ex = m.get("extractor") or ""
+    if ex in ("regex:cue_name", "regex:name_cue"):
+        return "strong"
+    name = (m.get("text") or "").lower()
+    if name in _NOT_PACKAGE_NAMES or name in _DETERMINERS or tn.fold_tr(name) in tn.TR_STOPWORDS:
+        return "none"
+    if ex == "regex:name_before_version":
+        ver = _version_after(ctx, r, mentions)
+        return "strong" if ver is not None and ver["kind"] == "version" else "weak"
+    return "weak"
+
+
+def _version_after(ctx: _Ctx, r: dict, mentions: list[dict]) -> dict | None:
     span = r["_anchor"].get("span")
     if not span:
-        return False
+        return None
     after = [m for m in mentions if m["kind"] in ("version", "version_candidate") and m["span"][0] >= span[1]]
     ver = min(after, key=lambda m: m["span"][0]) if after else None
-    if ver is None or not _GAP.fullmatch(ctx.text[span[1]:ver["span"][0]]):
-        return False
-    before = re.findall(r"[\w']+", ctx.text[:span[0]])
-    if before and before[-1].lower() in _DETERMINERS:
-        return False  # "a bare 2.5", "the new 3.0": an ordinary word, not a package name
+    return ver if ver is not None and _GAP.fullmatch(ctx.text[span[1]:ver["span"][0]]) else None
+
+
+MAX_REGISTRY_NAMES = 2   # names before a version looked up in public registries per message (network on)
+
+
+def _registry_package(ctx: _Ctx, r: dict, name: str, mentions: list[dict]) -> str | None:
+    """``requests 2.31``: a name written right before a version may be a package. Public registries
+    are asked only with ``network="on"`` (the name of an internal package is not sent to PyPI,
+    npm and crates.io by default), for at most :data:`MAX_REGISTRY_NAMES` names per message. A
+    registry that has the name and the version binds it; several such registries, or a foreign one
+    while the project's own ecosystem has the name without that version, are ambiguous: the name
+    stays unbound and the reason says which registries have it. Returns None when the name was
+    bound, else why it stays unbound.
+    """
+    ver = _version_after(ctx, r, mentions)
+    if ver is None:
+        return "no version right after the name"
+    if _name_strength(ctx, r, mentions) == "none":
+        return "an ordinary word before a number, not a package name"
+    if ctx.network != "on":
+        return "a name before a version; public registries are asked only with network on"
+    ctx.registry_names = getattr(ctx, "registry_names", 0) + 1
+    if ctx.registry_names > MAX_REGISTRY_NAMES:
+        return f"more than {MAX_REGISTRY_NAMES} names before versions in one message; not looked up"
     version = ver["text"].lstrip("vV")
-    pkg = r["identity"]["package"]
-    if ctx.network == "off":
-        r["warnings"].append(f"'{name} {version}' reads as a package and version; the ecosystem was not looked up "
-                             "(network off)")
-        r["coreference"] = {"merged": [], "via": ["name_before_version"]}
-        return True
     local_ecos = [e for e in dict.fromkeys(it["ecosystem"] for items in (ctx.local.get("packages") or {}).values()
                                            for it in items) if e in REGISTRY_ECOSYSTEMS]
     found: list[tuple[str, bool]] = []
     for eco in dict.fromkeys(local_ecos + list(REGISTRY_ECOSYSTEMS)):
         info = ctx.registry(reg.package_versions, eco, name)
         if info.get("ok"):
-            found.append((eco, any(vermod.equal(v, version) or str(v).startswith(version + ".")
-                                   for v in info.get("versions", []))))
-    # a registry that has the name but not the version counts only for the project's own ecosystems:
-    # "Graphify v0.3" is not the unrelated crate that happens to be called Graphify
-    found = [(e, v) for e, v in found if v or e in local_ecos]
-    if not found:
-        return False
-    eco = next((e for e, has_version in found if has_version), found[0][0])
-    pkg.update(ecosystem=eco, purl=f"pkg:{eco}/{name}", ecosystem_guessed=True)
+            has = any(vermod.equal(v, version) or str(v).startswith(version + ".") for v in info.get("versions", []))
+            found.append((eco, has))
+            if has and eco in local_ecos:
+                break  # the project's own ecosystem has it: no need to ask the others
+    exact = [e for e, has in found if has]
+    own = [e for e, _has in found if e in local_ecos]
+    if len(exact) > 1 and not any(e in local_ecos for e in exact):
+        return f"'{name} {version}' exists in several registries ({', '.join(exact)}); which one is meant?"
+    if exact and exact[0] not in local_ecos and own:
+        return (f"the project's own {own[0]} has '{name}' but not version {version}; {exact[0]} has it: "
+                "which one is meant?")
+    eco = next((e for e in exact if e in local_ecos), exact[0] if exact else (own[0] if own else None))
+    if eco is None:
+        return f"no registry has '{name}' with version {version}"
+    r["class"] = "package"
+    r["identity"]["package"].update(ecosystem=eco, purl=f"pkg:{eco}/{name}", ecosystem_guessed=True)
     r["coreference"] = {"merged": [], "via": ["name_before_version", f"registry_{eco}"]}
-    others = [e for e, _v in found if e != eco]
-    if others:
-        r["warnings"].append(f"'{name}' also exists in {', '.join(others)}; {eco} was taken because "
-                             + ("it has version " + version if dict(found)[eco] else "it comes first"))
-    return True
+    if eco not in exact:
+        r["warnings"].append(f"'{name}' is in the project's own {eco} registry, but without version {version}")
+    return None
+
+
+_PREP_GAP = re.compile(r"\s+(?:in|on|from|of|at|for)\s+|\s*(?:['’]\w{1,6})?\s+", re.I)
+
+
+def _has_origin(ctx: _Ctx) -> bool:
+    rc, out, _ = run_git(["remote", "get-url", "origin"], cwd=ctx.repo)
+    return rc == 0 and bool(out.strip())
 
 
 def _clause_refs(refs: list[dict], segs, pos: int) -> list[dict]:
@@ -315,12 +365,14 @@ def _build_references(ctx: _Ctx, mentions: list[dict], explicit: list[dict]) -> 
             r["coreference"] = {"merged": [], "via": ["local_dependency"], "evidence": it["locator"]}
             out.append(r)
             continue
-        if _registry_package(ctx, r, name, mentions):
+        why = _registry_package(ctx, r, name, mentions)
+        if why is None:
             out.append(r)
             continue
-        unbound.append({"mention": r["_anchor"]["id"], "text": name,
+        strength = _name_strength(ctx, r, mentions)
+        unbound.append({"mention": r["_anchor"]["id"], "text": name, "ask": strength == "strong",
                         "why": "a name that is neither a local dependency nor next to a repository, package or docs "
-                               "reference; nothing to resolve it against"})
+                               f"reference ({why})"})
     refs = out
     # 3. package spec + repository with the same name in one clause: one project
     for r in list(refs):
@@ -348,11 +400,28 @@ def _build_references(ctx: _Ctx, mentions: list[dict], explicit: list[dict]) -> 
     # 5. "PR #123 and issue #456 in psf/requests": a bare number belongs to the repository its sentence
     #    names (else to the only repository in the message; else, later, to the local origin remote)
     repos = [x for x in refs if x["class"] in GIT_CLASSES and x["identity"].get("canonical_url")]
+    distinct_repos = list({x["identity"]["canonical_url"]: x for x in repos}.values())
     for r in refs:
         if r["class"] not in ("issue", "pull_request", "merge_request") or r["identity"].get("canonical_url"):
             continue
-        near = [x for x in (_clause_refs(repos, segs, r["_anchor"]["span"][0]) if r["_anchor"].get("span") else [])]
-        host, via = (near[0], "repository_in_sentence") if len(near) == 1 else             ((repos[0], "only_repository_in_message") if len(repos) == 1 and not near else (None, None))
+        span = r["_anchor"].get("span")
+        near = list({x["identity"]["canonical_url"]: x for x in
+                     (_clause_refs(repos, segs, span[0]) if span else [])}.values())
+        host = via = None
+        if len(near) == 1:
+            host, via = near[0], "repository_in_sentence"
+        elif len(near) > 1 and span:
+            # "PR #5 in psf/requests and PR #7 in urllib3/urllib3": the repository written right after it
+            follow = [x for x in near if x["_anchor"]["span"][0] >= span[1]
+                      and _PREP_GAP.fullmatch(ctx.text[span[1]:x["_anchor"]["span"][0]])]
+            if len(follow) == 1:
+                host, via = follow[0], "repository_after_number"
+            else:
+                r["warnings"].append(f"its sentence names {len(near)} repositories "
+                                     f"({', '.join(x['_anchor']['text'] for x in near)}); none was chosen")
+        elif not near and len(distinct_repos) == 1 and not _has_origin(ctx):
+            # another sentence names the only repository, and the project has no origin remote to prefer
+            host, via = distinct_repos[0], "only_repository_in_message"
         if host is not None:
             for k in ("host", "owner", "repo", "canonical_url", "clone_url", "local_path"):
                 r["identity"][k] = host["identity"].get(k)
@@ -1546,7 +1615,7 @@ def resolve(store, repo, text: str, *, explicit=(), network: str = "cache", topi
         for mid in missing:
             result["unbound_mentions"].append({"mention": mid, "why": "internal: mention lost during resolution"})
     # a name the user wrote as a reference ("Graphify v0.3", "the X package") that nothing resolved
-    names_left = [u for u in unbound if str(u.get("why", "")).startswith("a name that is neither")]
+    names_left = [u for u in unbound if u.get("ask")]
     for u in names_left:
         q = _question(ctx, u["mention"], "unknown_name", u["text"], [])
         if not any(x.get("question") == q["question"] for x in questions):
