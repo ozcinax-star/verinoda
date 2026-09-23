@@ -447,6 +447,41 @@ def _data_files(repo: Path, graph_files: list[str]) -> tuple[list[str], dict[str
     return data, skipped, files
 
 
+MISALIGNED_PREFIX = "graph-mismatch:"
+ALIGN_WINDOW = 8                  # lines after a symbol's start in which its name must appear
+ALIGN_SUFFIXES = (".py", ".java", ".kt", ".kts", ".scala", ".groovy", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx",
+                  ".go", ".rs", ".cs", ".rb", ".php", ".swift", ".c", ".cc", ".cpp", ".h", ".hpp", ".lua", ".dart")
+_ALIGN_NAME = re.compile(r"[A-Za-z_$][\w$]*")
+
+
+def _misaligned(units: list["_Unit"], lines: list[str], f: str) -> bool:
+    """Most symbols of ``f`` do not start where the graph says: their names are not in the first
+    :data:`ALIGN_WINDOW` lines of their spans (decorators and annotations fit in that window)."""
+    if not f.lower().endswith(ALIGN_SUFFIXES):
+        return False
+    checked = bad = 0
+    for u in units:
+        if u.kind != "symbol" or not _ALIGN_NAME.fullmatch(u.name or ""):
+            continue
+        checked += 1
+        if u.name not in "\n".join(lines[max(0, u.a - 1): u.a - 1 + ALIGN_WINDOW]):
+            bad += 1
+    return checked > 0 and bad * 2 > checked
+
+
+def misaligned_files(db: Path) -> list[str]:
+    """Files whose graph spans did not fit their text when they were indexed."""
+    try:
+        conn = sqlite3.connect(str(db), timeout=30)
+        try:
+            return [r[0] for r in conn.execute("SELECT file FROM files WHERE sha256 LIKE ? ORDER BY file",
+                                               (MISALIGNED_PREFIX + "%",))]
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return []
+
+
 def _data_units(f: str, lines: list[str]) -> list["_Unit"]:
     """Units of a data file: config sections (top-level keys / ``[section]``), else the whole file."""
     from verinoda import resources
@@ -675,7 +710,7 @@ class _Writer:
     def add_file(self, g, f: str, data: bytes, st: os.stat_result, gsig: str) -> int:
         sha = hashlib.sha256(data).hexdigest()
         lines = data.decode("utf-8", errors="replace").splitlines()
-        if lines and lines[0].startswith("﻿"):  # a BOM is not part of the first line's text
+        if lines and lines[0].startswith("\ufeff"):  # a BOM is not part of the first line's text
             lines[0] = lines[0][1:]
         skipped = None
         if len(data) > MAX_FILE_BYTES:
@@ -691,6 +726,10 @@ class _Writer:
             units = _prose_units(g, f, lines)
         else:
             units = _code_units(g, f, lines)
+            if _misaligned(units, lines, f):
+                # the graph describes another version of this file (it changed while the index
+                # was being built): stored so that stale_files and the next update see it
+                sha = MISALIGNED_PREFIX + sha
         if skipped is None:
             self.add_refs(f, lines)
         path_tf = _path_tf(f)
@@ -1863,6 +1902,9 @@ def stale_files(h: Handle, root: Path, files: list[str]) -> list[str]:
             out.append(f)
             continue
         if row is None:
+            continue
+        if str(row[0]).startswith(MISALIGNED_PREFIX):  # the graph describes another version of it
+            out.append(f)
             continue
         if row[1] == st.st_size and row[2] == st.st_mtime_ns:
             continue

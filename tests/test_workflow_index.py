@@ -299,3 +299,21 @@ def test_an_update_keeps_the_cross_file_edges_of_the_files_it_re_extracts(proj):
     svc.write_bytes(svc.read_bytes() + b"\n# a comment only\n")
     workflow.update(st, repo)
     assert edges() == before
+
+
+def test_a_file_edited_while_the_index_was_built_is_caught_and_rebuilt(proj):
+    """The graph read the old text and the search index the new one: spans no longer fit.
+    The file is stored as changed since indexing, and the next update rebuilds it."""
+    repo, st = proj
+    workflow.scan(st, repo)
+    svc = repo / "orders" / "service.py"
+    index.build(repo)                                   # the graph sees the old text ...
+    svc.write_bytes(b"\n\n\n\n\n\n\n\n\n\n\n\n" + svc.read_bytes())  # ... then the file shifts
+    g = index.load(repo)
+    search_index.update(repo, g)
+    db = search_index.db_path_for(g)
+    assert search_index.misaligned_files(db) == ["orders/service.py"]
+    assert "orders/service.py" in search_index.stale_files(search_index.open_for(g), repo, ["orders/service.py"])
+    res = workflow.update(st, repo)
+    assert "orders/service.py" in res["changed"]["modified"]
+    assert search_index.misaligned_files(db) == []

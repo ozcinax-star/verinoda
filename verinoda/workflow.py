@@ -194,6 +194,14 @@ def update(store: Store, repo: Path) -> dict:
     state = current_state(repo, store=store)
     diff = changed_files(store.snapshot_files(prev["id"]), state["files"])
     changed = diff["added"] + diff["modified"] + diff["removed"]
+    from verinoda import search_index
+    from verinoda.paths import search_db_path
+
+    # a file that changed while the last index was built: the graph describes its older text
+    behind = [f for f in search_index.misaligned_files(search_db_path(repo)) if f in state["files"] and f not in changed]
+    if behind:
+        diff["modified"] = sorted(diff["modified"] + behind)
+        changed += behind
     t0 = time.monotonic()
     stats = None
     index_mode = "none"
