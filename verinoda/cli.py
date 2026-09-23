@@ -325,6 +325,19 @@ def cmd_init(args) -> int:
     return 0
 
 
+def cmd_setup(args) -> int:
+    from verinoda import setup as setup_mod
+
+    try:
+        rep = setup_mod.setup_project(args.path or ".", agents=args.agents, scope=args.scope,
+                                      with_mcp=not args.no_mcp, allow_home=args.allow_home)
+    except setup_mod.SetupRefused as exc:
+        _emit(args, {"ok": False, "error": str(exc)}, lambda r: print(f"error: {r['error']}", file=sys.stderr))
+        return 2
+    _emit(args, rep, setup_mod.render)
+    return 0 if rep["ok"] else 1
+
+
 def _scan_precise(st, repo: Path, before: dict[str, str], now_files: dict[str, str]) -> dict:
     """``scan --precise``: resolve every call site of the .py files that changed since the previous snapshot."""
     import time
@@ -1320,6 +1333,14 @@ def build_parser() -> argparse.ArgumentParser:
         return sp
 
     add("doctor", cmd_doctor, "check installation, index, agent skills and MCP configuration")
+    sp = add("setup", cmd_setup, "one step for a project: init + scan/update + skills for the agents found "
+                                 "on PATH (safe to re-run)", repo=False)
+    sp.add_argument("path", nargs="?", default=".")
+    sp.add_argument("--agents", default="auto",
+                    help="auto (claude/codex found on PATH), all, none, or a comma list such as claude,codex")
+    sp.add_argument("--scope", choices=["project", "user"], default="project")
+    sp.add_argument("--no-mcp", action="store_true", help="skills only, no MCP registration")
+    sp.add_argument("--allow-home", action="store_true", help="allow setting up the home directory itself")
     sp = add("init", cmd_init, "create .verinoda/ (database + config) in a project", repo=False)
     sp.add_argument("path", nargs="?", default=".")
     sp = add("scan", cmd_scan, "index a repository (AST, no LLM) and record a snapshot", repo=False)

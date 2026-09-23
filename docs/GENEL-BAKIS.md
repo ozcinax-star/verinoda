@@ -1,6 +1,6 @@
 # Verinoda — Ne yapar, Graphify'a neler ekler, teorik model ve ölçülen sonuçlar
 
-> **Durum: TAMAMLANMADI — güvence verilmez.** Bu belge Verinoda'ı
+> **Durum: TAMAMLANMADI — güvence verilmez.** Bu belge Verinoda'yı
 > 2026-09-23 itibarıyla kodda olduğu haliyle anlatır; her bileşenin gerçek
 > durumu yanında yazılıdır. **Bölüm 6 teorik bir modeldir:** oradaki oranlar
 > ölçüm değil, açıkça yazılmış varsayımlarla yapılmış hesaplardır.
@@ -83,10 +83,10 @@ Graphify'ın yapmadıkları: bir sorunun **cevabını** kanıtla doğrulamak, ce
 saklamak, kod değişince cevabın eskidiğini anlamak, cevabı çürütmeye çalışmak,
 test çalıştırarak doğrulamak, kullanıcı itirazını bir hipotez olarak
 sınamak, soruyu yapılandırılmış bir plana çevirmek, referansları tam sürüme
-sabitlemek. Verinoda'ın eklediği katman budur.
+sabitlemek. Verinoda'nın eklediği katman budur.
 
 Kod hacmi (bu belgenin yazıldığı an, satır sayısı): Graphify'dan gelen motor
-yaklaşık 70.900 satır Python; Verinoda'ın kendi katmanı yaklaşık 34.000
+yaklaşık 70.900 satır Python; Verinoda'nın kendi katmanı yaklaşık 34.000
 satır; ürün testleri yaklaşık 15.300 satır.
 
 ---
@@ -144,7 +144,7 @@ $ verinoda claim show clm_df443be8cd85
 İkinci iddia neden "doğrulandı" değil? `place_order()` içindeki `repo.save()`
 çağrısında `repo` bir parametredir: çalışma anında hangi sınıfın (bir alt
 sınıf ya da test dublörü) geleceğini kod tek başına söylemez. Bu adım
-Graphify grafiğinde yoktu. Verinoda'ın Python alıcı-tipi geçişi onu
+Graphify grafiğinde yoktu. Verinoda'nın Python alıcı-tipi geçişi onu
 parametrenin tip açıklamasından (`repo: OrderRepository`) çözdü ve `INFERRED`
 işaretledi. `orders/service.py:22` satırı "kısmi" derecelendi. jedi de bu
 çağrı için `dynamic` dedi (`verinoda resolve-call orders/service.py:22
@@ -376,7 +376,7 @@ dosyası sha256'sıyla, snapshot ve commit'e bağlı olarak saklanır.
   `apply_discount`'a tam olarak 4 test ulaştı. `test_empty_order_rejected`
   ulaşmadı; oysa önceki statik analiz onun da ulaştığını söylüyordu.
 - **Sınırlar:** Yalnızca Python/pytest. Testler projenin kendi `.venv`'iyle
-  (yoksa Verinoda'ın yorumlayıcısıyla) çalışır ve orada pytest kurulu
+  (yoksa Verinoda'nın yorumlayıcısıyla) çalışır ve orada pytest kurulu
   olmalıdır. Kurulu değilse sonuç "belirsiz" olur (bu belge yazılırken
   denendi). Alt süreçler izlenmez. Ek yük hedeflenenden yüksek (Bölüm 7.4).
   `setprofile` yedeği yalnızca Python 3.12'de zorlanarak denendi. Container
@@ -416,11 +416,11 @@ Her görünüm hangi yöntemle üretildiğini ve **neyi göremediğini** yazar:
 | Etki | bir değişiklikten etkilenebilecek semboller, dosyalar, testler | "etkilenebilir" demektir, "bozuldu" değil |
 
 `trace` iki sembol arasındaki yönlü yolları verir. `flow` modu `calls`
-kenarlarını (Graphify'ın ve Verinoda'ın `INFERRED` çağrıları dahil) ve
+kenarlarını (Graphify'ın ve Verinoda'nın `INFERRED` çağrıları dahil) ve
 sınıf oluşturma → `__init__` adımını izler; diğer içerme ilişkilerini akış
 saymaz.
 
-Verinoda'ın Python alıcı-tipi geçişi basit durumları kapsar: düz sınıf adıyla
+Verinoda'nın Python alıcı-tipi geçişi basit durumları kapsar: düz sınıf adıyla
 işaretlenmiş parametreler ve `x = Sınıf()` atamaları. `Optional[X]`,
 `modül.Sınıf` ve `self` alanları çözülmez; aynı adlı sınıflar karışabilir.
 Diğer dillerde yalnızca Graphify motorunun kendi çözücüleri çalışır.
@@ -536,7 +536,7 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
 | Sürümlü hafıza | — | iddiaya bağlanırsa eskiyince geçersiz | Çalışıyor (yalnızca elle) |
 | Ajan kurulumu | 20'den fazla platform | Claude Code + Codex, manifest, güvenli kaldırma | Çalışıyor |
 | MCP araçları | grafik araçları | 23 araç: plan, referans, iddia, kanıt, gözlem, doğrulama, eleştiri | Çalışıyor |
-| Karşılaştırmalı benchmark | kendi yayınladığı doğruluk, maliyet ve token rakamları (Verinoda'a aktarılmaz) | ham arama vs Graphify vs Verinoda; eskime ve karşıt kontrol ölçüm düzenekleri | Çalışıyor (model döngüde değil) |
+| Karşılaştırmalı benchmark | kendi yayınladığı doğruluk, maliyet ve token rakamları (Verinoda'ya aktarılmaz) | ham arama vs Graphify vs Verinoda; eskime ve karşıt kontrol ölçüm düzenekleri | Çalışıyor (model döngüde değil) |
 | LLM ile belge/görsel çıkarımı | var | analizde kullanılmıyor; `verinoda index -- extract` geçişiyle, desteklenmeden erişilebilir | daraltıldı |
 | Claude Code ve Codex dışındaki ~20 ajan platformu | var | engellendi: `verinoda index -- install` vb. gerçek bir Graphify kurulumunu bozmasın diye reddedilir | daraltıldı |
 
@@ -546,7 +546,7 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
 
 > **Bu bölüm teoriktir.** Aşağıdaki oranlar ölçüm değildir; açıkça yazılmış
 > varsayımlarla yapılmış **senaryo hesaplarıdır**. Graphify'ın kendi
-> yayınladığı tasarruf rakamları Verinoda'a aktarılmaz. Ölçülen sonuçlar
+> yayınladığı tasarruf rakamları Verinoda'ya aktarılmaz. Ölçülen sonuçlar
 > Bölüm 7'de ve `docs/BENCHMARKS.md`'dedir. İki bölümün sayıları doğrudan
 > karşılaştırılamaz (Bölüm 9).
 
@@ -616,7 +616,7 @@ Senaryoların yorumu:
   kalitesini karşılaştırmaz.** Bütçe kesilirse bazı bilgiler eksik kalabilir;
   Verinoda bunu `unknown` ve "kesildi" diye bildirir.
 - Graphify'a göre beklenti: Graphify sorgusunun bütçesi de yaklaşık 1.500
-  token (chars/4) olduğu için, Verinoda'ın Graphify'a göre asıl farkı token
+  token (chars/4) olduğu için, Verinoda'nın Graphify'a göre asıl farkı token
   değil **isabet ve güvenilirliktir**. Ölçülen isabet farkı Bölüm 7'dedir.
 - Orta ve büyük projelerde ham okumaya göre tasarruf beklenir; bu ölçülmedi.
   Küçük projede beklenmez.
@@ -722,7 +722,7 @@ Yorum (yalnızca bu tablodan):
 
 ## 8. Ek maliyetler ve zayıf kalınan yerler
 
-**Verinoda'ın daha yavaş ya da daha kötü olduğu yerler (ölçülmüş)**
+**Verinoda'nın daha yavaş ya da daha kötü olduğu yerler (ölçülmüş)**
 
 - Soru başına süre: yayımlanmış benchmark'ta (tur-2 kodu), Graphify'ın kendi
   kodu üzerinde Graphify ve ham okumadan 2–7 kat yavaş (1,4–1,9 sn'ye karşı
@@ -765,7 +765,7 @@ Yorum (yalnızca bu tablodan):
 
 **Daraltılan kapsam**
 
-- Graphify'ın LLM'li belge/görsel çıkarımı Verinoda'ın kendi komutlarında
+- Graphify'ın LLM'li belge/görsel çıkarımı Verinoda'nın kendi komutlarında
   yoktur; `verinoda index -- extract` geçişiyle desteklenmeden erişilebilir.
 - Diğer ajan platformlarının kurulumu, git kancaları ve `~/.graphify`'a
   yazan komutlar (`clone`, `provider`, `global`) geçişte **engellenir**, çünkü
@@ -821,10 +821,60 @@ akıllı bir ham arama ajanı.
 
 ## 10. Kurulum ve kullanım özeti
 
+**En kolay yol: tek satırlık kurulum + `verinoda setup`.** Git ya da önceden
+kurulu Python gerekmez; betik gerekirse `uv`'yi resmi kurulum betiğiyle kurar,
+uv de uygun bir Python indirir.
+
+```bash
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/ozcinax-star/verinoda/main/install.ps1 | iex"
+
+# macOS / Linux (Windows'ta Git Bash da olur)
+curl -LsSf https://raw.githubusercontent.com/ozcinax-star/verinoda/main/install.sh | sh
+```
+
+Betik sırasıyla şunları yapar: `uv`'yi bulur ya da kurar; Verinoda'yı GitHub
+arşivinden (zip) ayrı bir uv aracı olarak, `precise` ekiyle ve kopyalama
+moduyla (`--link-mode copy`) kurar; `uv tool update-shell` ile PATH'i yeni
+terminaller için ayarlar; sonunda sürümü ve sonraki adımı yazar. Aynı satırı
+tekrar çalıştırmak son koda günceller. Seçenekler ortam değişkeniyle verilir
+(`irm | iex` argüman alamaz): `VERINODA_REF` (dal/etiket/commit, varsayılan
+`main`), `VERINODA_EXTRAS` (varsayılan `precise`, istemezseniz `none`),
+`VERINODA_NO_MODIFY_PATH=1` (PATH'e dokunmaz), `VERINODA_NO_UV_INSTALL=1`
+(uv yoksa kurmak yerine durur). Borulu bir betiği çalıştırmadan önce okumak
+iyi bir alışkanlıktır; iki betik de kısadır ve başlarında ne yaptıklarını yazar.
+
+Sonra her proje için bir kez, proje klasörünün içinde:
+
+```bash
+verinoda setup
+```
+
+`setup` şunları yapar ve tekrar çalıştırmak güvenlidir: `.verinoda/`
+klasörünü açar; ilk seferde kodu tarar (`scan`), sonraki seferlerde yalnızca
+değişenleri günceller (`update`); PATH'te bulduğu ajanlara (Claude Code,
+Codex) proje kapsamında skill + MCP ayarını kurar (kendisine ait olmayan
+dosyaların üzerine yazmaz); en sonda ne yapıldığını ve elle yapılması
+gerekenleri listeler. Ev dizininin kendisinde çalışmayı reddeder.
+Seçenekler: `--agents claude,codex|all|none` (varsayılan: bulunanlar),
+`--scope user` (ajan ayarlarını proje yerine kullanıcı düzeyine kurar),
+`--no-mcp`, `--json`.
+
+Kurulumdan sonra:
+
+- Claude Code: klasörü açın, `verinoda` MCP sunucusunu bir kez onaylayın
+  (`/mcp`), sonra `/verinoda <soru>`.
+- Codex: projeye güvenin (`.codex/config.toml` okunsun), sonra
+  `$verinoda <soru>` (Codex'te `/verinoda` komutu yoktur).
+- Terminal: `verinoda query "<soru>"` ya da `verinoda analyze "<soru>"`.
+
+**Diğer yollar ve tek tek komutlar:**
+
 ```bash
 # Bir checkout'tan ya da wheel'den (PyPI'da yok)
 uv tool install --link-mode copy .                                  # Windows'ta Codex için --link-mode copy şart
 uv tool install --link-mode copy --with "jedi>=0.19.2,<0.21" .      # kesin çözümleme (precise) ile
+uv tool install --link-mode copy "verinoda[precise] @ git+https://github.com/ozcinax-star/verinoda"   # git ile
 pip install ".[precise]"                                            # ya da mevcut bir venv'e
 
 verinoda doctor
@@ -841,14 +891,15 @@ verinoda install --agent codex  --scope project    # Codex: $verinoda …
 Neden `--link-mode copy`: uv varsayılan olarak paket dosyalarını kendi
 önbelleğinden sabit bağlantıyla (hardlink) kurar. Codex'in Windows
 sandbox'ı bu dosyaları okuyamadı; CLI çalışmadı, MCP araçları çalıştı.
-Kopyalama moduyla sorun ortadan kalkar; `verinoda doctor` bu durumu uyarır.
-Bu belge yazılırken precise ekli `uv tool install --link-mode copy --with …`
-kurulumu ve `.[precise]` kurulumu (uv pip ile) geçici dizinlerde denendi.
-İkisinde de precise çözücü kullanılabilir göründü; uv tool kurulumunda
-`verinoda --version` çalıştı. Kurulan paket dosyalarının bağlantı sayısı
-1'di (kopya).
+Kopyalama moduyla sorun ortadan kalkar; kurulum betikleri bu modu kullanır,
+`verinoda doctor` ve `verinoda setup` hardlink'li kurulumu uyarır.
+Kurulum betikleri geçici uv dizinlerinde denendi: `install.ps1` gerçek
+Windows PowerShell 5.1'de, `install.sh` Git Bash'te; ikisi de herkese açık
+GitHub arşivinden kurup `verinoda --version` çalıştırdı. macOS ve Linux'ta
+henüz denenmedi.
 
-Depo şu an özeldir. Graphify'ın (`graphifyy`) ayrıca kurulması gerekmez.
+Depo herkese açıktır (https://github.com/ozcinax-star/verinoda); paket PyPI'da
+yayımlanmadı. Graphify'ın (`graphifyy`) ayrıca kurulması gerekmez.
 
 ---
 
@@ -867,7 +918,7 @@ Depo şu an özeldir. Graphify'ın (`graphifyy`) ayrıca kurulması gerekmez.
 | Anchor | Alıntılanan satırların bağlandığı sembol/ifade/bölüm; kod taşınınca satırları yeniden bulur |
 | `stale` | Dayandığı öğe değiştiği için güncelliği kaybolmuş iddia |
 | Kesin / sezgisel çürütme | Kesin: kapsamı belli, eksiksiz bir denetim (iddiayı çürütür). Sezgisel: yalnızca bir basamak düşürür |
-| `EXTRACTED` / `INFERRED` | Graphify'ın grafik kenarı güven etiketleri; Verinoda'ta doğrulama sayılmaz |
+| `EXTRACTED` / `INFERRED` | Graphify'ın grafik kenarı güven etiketleri; Verinoda'da doğrulama sayılmaz |
 | Tavan (ceiling) | Bir iddianın yeniden doğrulamayla ulaşabileceği en yüksek durum |
 | Karşıt kontrol | İddiayı çürütmeye çalışan otomatik denetim |
 | Örneklem içi / ayrılmış küme | Örneklem içi: tasarım o sorular görülerek yapıldı. Ayrılmış: hiçbir ayar için kullanılmadı |

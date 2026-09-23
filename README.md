@@ -84,6 +84,41 @@ are pinned to the exact version the user meant before anything is compared.
 
 ## Install
 
+One line, nothing else required (no git, no Python needed beforehand):
+
+**Windows (PowerShell)**
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/ozcinax-star/verinoda/main/install.ps1 | iex"
+```
+
+**macOS / Linux (or Git Bash on Windows)**
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/ozcinax-star/verinoda/main/install.sh | sh
+```
+
+The script installs [uv](https://docs.astral.sh/uv/) if it is missing (uv downloads a
+suitable Python if there is none), installs Verinoda as an isolated tool with the
+optional precise resolver, copies files instead of hardlinking them (so sandboxed
+agents such as Codex can import it) and puts `verinoda` on your PATH. Run the same
+line again to upgrade. You can read the scripts first: [install.ps1](install.ps1),
+[install.sh](install.sh). Options are environment variables: `VERINODA_REF` (branch,
+tag or commit; default `main`), `VERINODA_EXTRAS` (`none` to skip the precise extra),
+`VERINODA_NO_MODIFY_PATH=1`.
+
+Then, once per project:
+
+```bash
+cd my-project
+verinoda setup        # index the code + connect Claude Code / Codex if they are installed
+```
+
+`verinoda setup` is safe to re-run (it updates the index and leaves unchanged skills
+alone). `--agents claude,codex|all|none`, `--scope user` for all projects, `--no-mcp`.
+
+### Other ways to install
+
 Python 3.10+ (3.12+ recommended: the runtime tracer uses `sys.monitoring`).
 Graphify (`graphifyy`) is **not** required; the extractor is part of this
 package.
@@ -116,7 +151,7 @@ is hardlinked or editable.
 
 ```bash
 cd my-project
-verinoda scan .                          # AST index, search index, lexicon, snapshot (no LLM, no network)
+verinoda setup                           # once: index + agent skills (or `verinoda scan .` for the index only)
 verinoda map . --view dataflow           # entry points -> persistence, with limits stated
 verinoda query "where is the discount threshold configured?"     # plain-text context
 verinoda trace create_order_handler OrderRepository.save
@@ -141,6 +176,7 @@ give the copy a `.venv` with pytest installed.
 | Command | What it does |
 |---|---|
 | `doctor` | Python, package layout, upstream base, graph/snapshot freshness, schema, claim counts, search index, lexicon, precise/SCIP availability, `sys.monitoring`, reference network mode, agent skills, MCP config, optional deps; secrets shown only as set/unset |
+| `setup [path] [--agents auto\|all\|none\|claude,codex] [--scope project\|user] [--no-mcp]` | One step per project, safe to re-run: `init`, `scan` on the first run and `update` afterwards, then skills + MCP for the agents found on PATH (default `auto`); prints what is left to do by hand. Refuses the home directory unless `--allow-home` |
 | `init [path]` | Create `.verinoda/` (database, config) |
 | `scan <repo> [--force] [--precise] [--scip FILE]` / `update <repo>` | Full / incremental index + snapshot, then the derived search index, lexicon and symbol facts; `update` marks claims whose dependencies changed `stale`. `--precise` resolves the call sites of changed `.py` files; `--scip` adopts a SCIP index you produced |
 | `map <repo> [--view …]` | hierarchy, dependencies, dataflow, config, tests, history, impact (`--target`, default: git changes) |
