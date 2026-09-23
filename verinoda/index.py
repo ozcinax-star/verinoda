@@ -857,8 +857,12 @@ def receiver_call_edges(g: Graph, facts_for=None) -> list[tuple[str, str, dict]]
 _JAVA_STRING = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
 _JAVA_CALL = re.compile(r"(?<![\w.$])([A-Za-z_$][\w$]*)\s*\.\s*([a-z_$][\w$]*)\s*\(")
 _JAVA_DECL = re.compile(r"(?<![\w.$])([A-Z][\w$]*)(?:<[^<>;()]*(?:<[^<>;()]*>[^<>;()]*)*>)?(?:\[\])?\s+([a-z_$][\w$]*)\s*(?=[=;,):])")
-_JAVA_IMPORT = re.compile(r"\s*import\s+(static\s+)?([\w.]+)\.([\w$]+|\*)\s*;")
-_JAVA_PACKAGE_DECL = re.compile(r"\s*package\s+([\w.]+)\s*;")
+_JAVA_IMPORT = re.compile(r"\s*import\s+(static\s+)?([\w.]+)\.([\w$]+|\*)\s*(?:;|\s+as\s+\w+)?\s*$")
+_JAVA_PACKAGE_DECL = re.compile(r"\s*package\s+([\w.]+)\s*;?\s*$")
+# Kotlin: `val x: Type`, `var x: Type = ...`, a parameter `x: Type`, `val x = Type(...)`
+_KOTLIN_DECL = re.compile(r"(?:\b(?:val|var)\s+|[(,]\s*)([a-z_]\w*)\s*:\s*([A-Z]\w*)"
+                          r"|\b(?:val|var)\s+([a-z_]\w*)\s*=\s*([A-Z]\w*)\s*\(")
+JVM_SUFFIXES = (".java", ".kt")
 
 
 def _java_code_lines(text: str) -> list[str]:
@@ -897,14 +901,14 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
     methods: dict[tuple[str, str], str] = {}
     for n, d in g.G.nodes(data=True):
         f = d.get("source_file") or ""
-        if f.endswith(".java") and d.get("_callable_class"):
+        if f.endswith(JVM_SUFFIXES) and d.get("_callable_class"):
             classes.setdefault(d.get("label", ""), []).append((n, f))
     if not classes:
         return []
     by_file: dict[str, list[str]] = {}
     for n, d in g.G.nodes(data=True):
         f = d.get("source_file") or ""
-        if f.endswith(".java") and d.get("_callable") and not d.get("_callable_class"):
+        if f.endswith(JVM_SUFFIXES) and d.get("_callable") and not d.get("_callable_class"):
             by_file.setdefault(f, []).append(n)
     # a method belongs to the innermost class whose span holds it (the extractor's `method` edge
     # can be lost when the method also calls its own class's constructor)
@@ -958,7 +962,14 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
                     hit = [cid for cid, cf in cands if any(pkg_of(cf, p) for p in wild)]
             return hit[0] if len(hit) == 1 else None
 
-        fields = {m.group(2): m.group(1) for ln in code for m in _JAVA_DECL.finditer(ln)
+        kotlin = f.endswith(".kt")
+
+        def decls(line: str) -> list[tuple[str, str]]:
+            if kotlin:
+                return [(m.group(1) or m.group(3), m.group(2) or m.group(4)) for m in _KOTLIN_DECL.finditer(line)]
+            return [(m.group(2), m.group(1)) for m in _JAVA_DECL.finditer(line)]
+
+        fields = {} if kotlin else {m.group(2): m.group(1) for ln in code for m in _JAVA_DECL.finditer(ln)
                   if re.match(r"\s*(?:(?:private|protected|public|static|final|volatile|transient)\s+)+", ln)}
         for n in by_file[f]:
             sp = g.span(n)
@@ -967,8 +978,8 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
             a, b = sp[0], min(sp[1], len(code))
             local = dict(fields)
             for i in range(a, b + 1):
-                for m in _JAVA_DECL.finditer(code[i - 1]):
-                    local[m.group(2)] = m.group(1)
+                for var, typ in decls(code[i - 1]):
+                    local[var] = typ
             for i in range(a, b + 1):
                 for m in _JAVA_CALL.finditer(code[i - 1]):
                     recv, meth = m.group(1), m.group(2)

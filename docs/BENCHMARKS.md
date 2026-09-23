@@ -102,8 +102,10 @@ of the changes above, and it was measured once, with nothing tuned on it
 No approach stated any of the 19 negatives. The text format answered 10 of
 the 14 questions completely (raw 3, Graphify 0). The weakest spots: a data-only
 worldgen question in Turkish (q05, text 3/4, JSON and analyze 0/4) and the
-recipe-type question q03 (text 4/6, analyze 1/6). Kotlin gets no extra call
-pass: Kotlin -> Java calls come only from the extractor.
+recipe-type question q03 (text 4/6, analyze 1/6). Kotlin had no extra call
+pass then: Kotlin -> Java calls came only from the extractor. The pass now
+covers Kotlin callers too (added after this measurement, so `forge_mod` is
+in-sample for it: analyze 38 -> 39, the other cells and sets unchanged).
 
 **The five earlier sets** (regression check, same harness, `repeat = 1`, no
 upstream CLI, against `dogfood-2026-09-23/`): 24 of the 25 Verinoda cells and

@@ -395,3 +395,31 @@ def test_a_derivational_ending_is_not_stripped_to_reach_a_stem(tmp_path):
     exp = {(e["from"], e["to"]) for e in search_index.analyze_query("Oyuncu kanatları nasıl açıyor?", _db(g)).expansions}
     assert ("oyuncu", "oyun") not in exp and ("Oyuncu", "oyun") not in exp   # oyuncu (player) is not oyun (game)
     assert any(src.lower().startswith("kanat") and to == "kanatlar" for src, to in exp)  # inflection is stripped
+
+
+def test_kotlin_calls_into_java_classes_are_resolved_by_imports(tmp_path):
+    root = tmp_path / "kt"
+    _mod(root)
+    _write(root, "src/main/kotlin/com/glow/command/Commands.kt", """package com.glow.command
+
+import com.glow.entity.Wisp
+import com.glow.util.Datapack
+
+object Commands {
+    fun register(world: Any) {
+        val w: Wisp = Wisp.spawn(world)
+        run { Datapack.run(world, "ritual") }
+        w.onDeath(world)
+    }
+}
+""")
+    _scan(root)
+    g = index.load(root, augment=False)
+    edges = {(g.label(u), g.label(v), d["source_location"]) for u, v, d in index.java_call_edges(g)
+             if g.file(u).endswith(".kt")}
+    assert (".register()", ".spawn()", "L8") in edges       # a class-qualified call bound by the import
+    assert (".register()", ".onDeath()", "L10") in edges   # a typed Kotlin local
+    full = index.load(root)  # with the extractor's own edges: the unique Datapack.run was already there
+    calls = {(full.label(u), full.label(v)) for u, v, d in full.G.edges(data=True) if d.get("relation") == "calls"
+             and (full.file(u) or "").endswith(".kt")}
+    assert (".register()", ".run()") in calls

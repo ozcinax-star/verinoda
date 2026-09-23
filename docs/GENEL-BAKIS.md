@@ -825,7 +825,8 @@ etiketler, worldgen, iki dilde dil dosyaları; 14 soru, 68 bilgi) bütün bu de�
 Verinoda'yı hiç çalıştırmamış bir ajan tarafından yazıldı ve üzerinde hiçbir ayar yapılmadan bir kez
 ölçüldü: düz metin 43 → **63**, JSON 28 → **45**, analyze 26 → **38** (`32a5bd4` → şimdi); ham okuma
 36 (4.471 token ile), Graphify 12. En zayıf yerler: yalnızca veri dosyalarıyla yanıtlanan Türkçe
-worldgen sorusu ve özel tarif tipi sorusu. Kotlin için ek çağrı geçişi yok.
+worldgen sorusu ve özel tarif tipi sorusu. O ölçümde Kotlin için ek çağrı geçişi yoktu; sonradan
+eklendi (bu küme onun için artık örneklem içi: analyze 38 → 39).
 
 Önceki beş kümede (gerileme kontrolü) Verinoda'nın 25 hücresinden 24'ü ve
 Graphify ile ham okumanın bütün hücreleri aynı sayıda bilgi buldu; bir hücre
