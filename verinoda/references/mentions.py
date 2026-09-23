@@ -173,6 +173,13 @@ _p("name_candidate", r"\b([A-Za-z][\w.-]{1,40})\s+(?:package|library|crate|modul
 _p("repo_slug", r"(?:\b(?:repo|repository|repos|depo|deposu|github|gitlab|fork)\s+)"
                 r"([A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100})\b", 1, name="regex:cued_slug",
    conf="pattern", flags=re.I)
+_SLUG = r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}"
+# "psf/requests reposundaki #12", "psf/requests deposunda", "psf/requests'teki issue"
+_p("repo_slug", r"(?<![\w./@-])(" + _SLUG + r")(?=(?:['’][a-zçğıöşü]{1,8})?\s+(?:repo|depo)\w*"
+                r"|['’](?:te|ta|de|da|teki|taki|deki|daki)\b)", 1, name="regex:tr_slug", conf="pattern", flags=re.I)
+# "PR #123 in psf/requests": only when the text talks about git objects (see extract)
+_p("repo_slug", r"\b(?:in|on|from|of|at|for|to)\s+(" + _SLUG + r")(?![\w/@#!])", 1, name="regex:prep_slug",
+   conf="heuristic", flags=re.I)
 # -- versions last ----------------------------------------------------------------------------------------------
 _p("version", r"(?<![\w.])v?\d+\.\d+(?:\.\d+){0,2}(?:[-.]?(?:a|b|rc|dev|post|alpha|beta)\.?\d*)?(?:\.x)?(?![\w.])"
               r"|(?<![\w.])v\d+(?![\w.])", name="regex:version", conf="pattern", flags=re.I)
@@ -207,6 +214,24 @@ def _cue_version(text: str, s: int, e: int, tok: str) -> bool:
     if _CUE_BEFORE.search(before + " ") or _CUE_BEFORE.search(before):
         return True
     return bool(_CUE_AFTER.search(text[e:e + 30]))
+
+
+_GIT_CUE = re.compile(r"\b(?:PR|pull request|pull req|issues?|commits?|fork|branch|tags?|releases?|merge|"
+                      r"çekme isteği|cekme istegi|sorun|dal|etiket)\b|#\d", re.I)
+# the first segment of a path, not a GitHub owner ("in src/requests")
+_DIR_OWNERS = frozenset("""src lib libs app apps test tests docs doc examples example bin scripts packages pkg internal
+    cmd data assets config configs build dist public static include vendor node_modules tools utils util spec
+    resources res main core common modules""".split())
+_FILE_EXTS = frozenset("py pyi java kt kts ts tsx jsx md rst json yml yaml toml txt rs go c h cc cpp hpp cs rb php "
+                       "swift lua sh ps1 cfg ini xml html css scss lock".split())
+
+
+def _slug_in_git_context(text: str, tok: str) -> bool:
+    """``owner/repo`` after a preposition is a repository only when the text is about git objects
+    (a PR, issue, commit, branch, tag ...) and it does not read as a file path."""
+    owner, _, repo = tok.partition("/")
+    ext = repo.rsplit(".", 1)[-1].lower() if "." in repo else ""
+    return bool(_GIT_CUE.search(text)) and owner.lower() not in _DIR_OWNERS and ext not in _FILE_EXTS
 
 
 def _accept(kind: str, name: str, tok: str) -> bool:
@@ -293,6 +318,8 @@ def extract(text: str) -> list[dict]:
             if not tok or any(a < e and s < b for a, b in taken):
                 continue
             if not _accept(kind, name, tok):
+                continue
+            if name == "regex:prep_slug" and not _slug_in_git_context(text, tok):
                 continue
             k = kind
             norm = _normalize(kind, tok)

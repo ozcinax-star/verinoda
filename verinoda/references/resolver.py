@@ -187,6 +187,58 @@ def _merge(into: dict, other: dict, via: str) -> None:
         into["requested"]["path"] = other["requested"]["path"]
 
 
+REGISTRY_ECOSYSTEMS = ("pypi", "npm", "cargo")   # tried for "<name> <version>" when nothing local names it
+_DETERMINERS = frozenset("a an the this that these those its our their my your some any every each no one another "
+                         "bir bu şu su o her hiç hic".split())
+
+
+def _registry_package(ctx: _Ctx, r: dict, name: str, mentions: list[dict]) -> bool:
+    """``requests 2.31``: a name written right before a version is a package. The ecosystems of the
+    local project are tried first, then PyPI, npm and crates.io; the first registry that has the
+    name and the version is taken (a registry of the project's own ecosystem also counts without
+    the version) and the others that also have the name are listed. Offline, the reference stays
+    with an unknown ecosystem and says so.
+    """
+    span = r["_anchor"].get("span")
+    if not span:
+        return False
+    after = [m for m in mentions if m["kind"] in ("version", "version_candidate") and m["span"][0] >= span[1]]
+    ver = min(after, key=lambda m: m["span"][0]) if after else None
+    if ver is None or not _GAP.fullmatch(ctx.text[span[1]:ver["span"][0]]):
+        return False
+    before = re.findall(r"[\w']+", ctx.text[:span[0]])
+    if before and before[-1].lower() in _DETERMINERS:
+        return False  # "a bare 2.5", "the new 3.0": an ordinary word, not a package name
+    version = ver["text"].lstrip("vV")
+    pkg = r["identity"]["package"]
+    if ctx.network == "off":
+        r["warnings"].append(f"'{name} {version}' reads as a package and version; the ecosystem was not looked up "
+                             "(network off)")
+        r["coreference"] = {"merged": [], "via": ["name_before_version"]}
+        return True
+    local_ecos = [e for e in dict.fromkeys(it["ecosystem"] for items in (ctx.local.get("packages") or {}).values()
+                                           for it in items) if e in REGISTRY_ECOSYSTEMS]
+    found: list[tuple[str, bool]] = []
+    for eco in dict.fromkeys(local_ecos + list(REGISTRY_ECOSYSTEMS)):
+        info = ctx.registry(reg.package_versions, eco, name)
+        if info.get("ok"):
+            found.append((eco, any(vermod.equal(v, version) or str(v).startswith(version + ".")
+                                   for v in info.get("versions", []))))
+    # a registry that has the name but not the version counts only for the project's own ecosystems:
+    # "Graphify v0.3" is not the unrelated crate that happens to be called Graphify
+    found = [(e, v) for e, v in found if v or e in local_ecos]
+    if not found:
+        return False
+    eco = next((e for e, has_version in found if has_version), found[0][0])
+    pkg.update(ecosystem=eco, purl=f"pkg:{eco}/{name}", ecosystem_guessed=True)
+    r["coreference"] = {"merged": [], "via": ["name_before_version", f"registry_{eco}"]}
+    others = [e for e, _v in found if e != eco]
+    if others:
+        r["warnings"].append(f"'{name}' also exists in {', '.join(others)}; {eco} was taken because "
+                             + ("it has version " + version if dict(found)[eco] else "it comes first"))
+    return True
+
+
 def _clause_refs(refs: list[dict], segs, pos: int) -> list[dict]:
     ci = clause_of(segs, pos)
     return [r for r in refs if r["_anchor"].get("span") and clause_of(segs, r["_anchor"]["span"][0]) == ci]
@@ -263,6 +315,9 @@ def _build_references(ctx: _Ctx, mentions: list[dict], explicit: list[dict]) -> 
             r["coreference"] = {"merged": [], "via": ["local_dependency"], "evidence": it["locator"]}
             out.append(r)
             continue
+        if _registry_package(ctx, r, name, mentions):
+            out.append(r)
+            continue
         unbound.append({"mention": r["_anchor"]["id"], "text": name,
                         "why": "a name that is neither a local dependency nor next to a repository, package or docs "
                                "reference; nothing to resolve it against"})
@@ -290,6 +345,18 @@ def _build_references(ctx: _Ctx, mentions: list[dict], explicit: list[dict]) -> 
         if host:
             _merge(host[0], r, "path_of_repository_reference")
             refs.remove(r)
+    # 5. "PR #123 and issue #456 in psf/requests": a bare number belongs to the repository its sentence
+    #    names (else to the only repository in the message; else, later, to the local origin remote)
+    repos = [x for x in refs if x["class"] in GIT_CLASSES and x["identity"].get("canonical_url")]
+    for r in refs:
+        if r["class"] not in ("issue", "pull_request", "merge_request") or r["identity"].get("canonical_url"):
+            continue
+        near = [x for x in (_clause_refs(repos, segs, r["_anchor"]["span"][0]) if r["_anchor"].get("span") else [])]
+        host, via = (near[0], "repository_in_sentence") if len(near) == 1 else             ((repos[0], "only_repository_in_message") if len(repos) == 1 and not near else (None, None))
+        if host is not None:
+            for k in ("host", "owner", "repo", "canonical_url", "clone_url", "local_path"):
+                r["identity"][k] = host["identity"].get(k)
+            r["coreference"] = {"merged": [], "via": [via], "repository": host["_anchor"]["text"]}
     for i, r in enumerate(refs, 1):
         r["id"] = f"r{i}"
     return refs, unbound
@@ -1362,6 +1429,8 @@ _Q = {
     "relative_version": ("'{x}' hangi sürüm, etiket ya da tarih?", "Which version, tag or date is '{x}'?"),
     "app_source": ("{x} için hangi kaynak deposu ve sürüm kullanılsın?",
                    "Which source repository and version of {x} should be used?"),
+    "unknown_name": ("'{x}' hangi proje? owner/repo, bağlantı ya da paket (paket==sürüm) olarak yazar mısınız?",
+                     "Which project is '{x}'? Please give it as owner/repo, a URL or a package (pkg==version)."),
 }
 
 
@@ -1476,9 +1545,17 @@ def resolve(store, repo, text: str, *, explicit=(), network: str = "cache", topi
     if not ok:  # a bug, never a silent drop: say which mentions went missing
         for mid in missing:
             result["unbound_mentions"].append({"mention": mid, "why": "internal: mention lost during resolution"})
+    # a name the user wrote as a reference ("Graphify v0.3", "the X package") that nothing resolved
+    names_left = [u for u in unbound if str(u.get("why", "")).startswith("a name that is neither")]
+    for u in names_left:
+        q = _question(ctx, u["mention"], "unknown_name", u["text"], [])
+        if not any(x.get("question") == q["question"] for x in questions):
+            questions.append(q)
     bad = summary["unresolved"] + summary["refused"] + summary["ambiguous"]
-    result["status"] = ("complete" if not bad and not questions and not unres and not summary["errors"] else
-                        "unresolved" if references and bad == len(references) else "partial")
+    result["status"] = ("complete" if not bad and not names_left and not questions and not unres
+                        and not summary["errors"] else
+                        "unresolved" if (references and bad == len(references)) or (names_left and not references)
+                        else "partial")
     if store is not None and record:
         from verinoda.store import new_id
 

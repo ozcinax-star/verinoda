@@ -335,3 +335,23 @@ def test_package_research_maps_the_version_to_its_tag_and_compares_the_sdist(wor
         assert content["matched"] == content["total"] > 0
     bad = rs.research_full(st, project, "requests>=2", transport=CassetteTransport(d))
     assert bad["status"] == "error" and "no exact version" in bad["error"]
+
+
+def test_a_bare_pr_or_issue_number_belongs_to_the_repository_its_sentence_names(world):
+    res = run(world, "see PR #123 and issue #456 in psf/requests", network="off")
+    xrefs = [r for r in res["references"] if r["class"] in ("issue", "pull_request")]
+    assert len(xrefs) == 2
+    for r in xrefs:
+        assert r["identity"]["canonical_url"] == "https://github.com/psf/requests"
+        assert r["coreference"]["via"] == ["repository_in_sentence"]
+    tr = run(world, "psf/requests reposundaki #12 sorunu", network="off")
+    assert any(r["class"] == "issue" and r["identity"].get("owner") == "psf" for r in tr["references"])
+
+
+def test_a_name_right_before_a_version_is_a_package_and_an_unresolved_name_is_asked_about(world):
+    res = run(world, "compare fancylib 2.31 with the old one", network="off")
+    pkg = [r for r in res["references"] if r["class"] == "package"]
+    assert pkg and pkg[0]["identity"]["package"]["name"] == "fancylib"
+    assert any("network off" in w for w in pkg[0]["warnings"]) and res["status"] != "complete"
+    # an ordinary word after an article is not a package: "a bare 2.5"
+    assert not [r for r in run(world, "a bare 2.5 here", network="off")["references"] if r["class"] == "package"]
