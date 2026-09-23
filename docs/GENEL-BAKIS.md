@@ -821,28 +821,38 @@ akıllı bir ham arama ajanı.
 
 ## 10. Kurulum ve kullanım özeti
 
-**En kolay yol: tek satırlık kurulum + `verinoda setup`.** Git ya da önceden
-kurulu Python gerekmez; betik gerekirse `uv`'yi resmi kurulum betiğiyle kurar,
-uv de uygun bir Python indirir.
+**En kolay yol: `uv` ile tek komut + `verinoda setup`.** Git ya da önceden
+kurulu Python gerekmez; uv, Verinoda'yı ayrı bir araç olarak kurar ve gerekirse
+uygun bir Python indirir.
+
+```powershell
+# Windows (PowerShell ya da cmd)
+winget install --id astral-sh.uv -e   # yalnızca `uv --version` çalışmıyorsa; sonra yeni bir terminal açın
+uv tool install --force --reinstall-package verinoda --link-mode copy "verinoda[precise] @ https://github.com/ozcinax-star/verinoda/archive/main.zip"
+uv tool update-shell                  # bir kez: verinoda'yı yeni terminaller için PATH'e ekler
+```
 
 ```bash
-# Windows (PowerShell)
-powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/ozcinax-star/verinoda/main/install.ps1 | iex"
-
 # macOS / Linux (Windows'ta Git Bash da olur)
 curl -LsSf https://raw.githubusercontent.com/ozcinax-star/verinoda/main/install.sh | sh
 ```
 
-Betik sırasıyla şunları yapar: `uv`'yi bulur ya da kurar; Verinoda'yı GitHub
-arşivinden (zip) ayrı bir uv aracı olarak, `precise` ekiyle ve kopyalama
-moduyla (`--link-mode copy`) kurar; `uv tool update-shell` ile PATH'i yeni
-terminaller için ayarlar; sonunda sürümü ve sonraki adımı yazar. Aynı satırı
-tekrar çalıştırmak son koda günceller. Seçenekler ortam değişkeniyle verilir
-(`irm | iex` argüman alamaz): `VERINODA_REF` (dal/etiket/commit, varsayılan
-`main`), `VERINODA_EXTRAS` (varsayılan `precise`, istemezseniz `none`),
-`VERINODA_NO_MODIFY_PATH=1` (PATH'e dokunmaz), `VERINODA_NO_UV_INSTALL=1`
-(uv yoksa kurmak yerine durur). Borulu bir betiği çalıştırmadan önce okumak
-iyi bir alışkanlıktır; iki betik de kısadır ve başlarında ne yaptıklarını yazar.
+İkisi de GitHub arşivinden (zip), `precise` ekiyle ve kopyalama moduyla
+(`--link-mode copy`) kurar. Güncellemek için aynı `uv tool install …` satırını
+ya da betiği tekrar çalıştırın. `install.sh` uv yoksa resmi betiğiyle kurar,
+yukarıdaki komutu çalıştırır ve `uv tool update-shell` ile PATH'i ayarlar;
+seçenekler ortam değişkeniyle verilir: `VERINODA_REF` (dal/etiket/commit,
+varsayılan `main`), `VERINODA_EXTRAS` (varsayılan `precise`, istemezseniz
+`none`), `VERINODA_NO_MODIFY_PATH=1` (PATH'e dokunmaz),
+`VERINODA_NO_UV_INSTALL=1` (uv yoksa kurmak yerine durur). Borulu bir betiği
+çalıştırmadan önce okumak iyi bir alışkanlıktır.
+
+Windows'ta neden `irm … | iex` tek satırı yok: Microsoft Defender,
+`powershell -ExecutionPolicy ByPass -c "irm <betik adresi> | iex"` komutunu bu
+projenin betiği için `Trojan:Win32/Commando.A!ml` olarak engelledi. Bu, "indir
+ve çalıştır" komut satırı kalıbına verilen bir makine öğrenmesi kararıdır;
+betik dosyasının kendisi işaretlenmedi. Yukarıdaki düz `uv` komutları bu
+kalıbı kullanmaz ve aynı makinede uyarı üretmedi.
 
 Sonra her proje için bir kez, proje klasörünün içinde:
 
@@ -893,10 +903,12 @@ Neden `--link-mode copy`: uv varsayılan olarak paket dosyalarını kendi
 sandbox'ı bu dosyaları okuyamadı; CLI çalışmadı, MCP araçları çalıştı.
 Kopyalama moduyla sorun ortadan kalkar; kurulum betikleri bu modu kullanır,
 `verinoda doctor` ve `verinoda setup` hardlink'li kurulumu uyarır.
-Kurulum betikleri geçici uv dizinlerinde denendi: `install.ps1` gerçek
-Windows PowerShell 5.1'de, `install.sh` Git Bash'te; ikisi de herkese açık
-GitHub arşivinden kurup `verinoda --version` çalıştırdı. macOS ve Linux'ta
-henüz denenmedi.
+Kurulum yolları geçici uv dizinlerinde denendi: Windows'taki `uv tool install …`
+satırı (iki kez: kurulum ve güncelleme) ve Git Bash'te `install.sh`; ikisi de
+herkese açık GitHub arşivinden kurup `verinoda --version` çalıştırdı. macOS ve
+Linux'ta henüz denenmedi. `winget install --id astral-sh.uv` satırı yalnızca
+paketin winget'te bulunduğu kontrol edilerek eklendi; bu makinede uv zaten
+kurulu olduğu için çalıştırılmadı.
 
 Depo herkese açıktır (https://github.com/ozcinax-star/verinoda); paket PyPI'da
 yayımlanmadı. Graphify'ın (`graphifyy`) ayrıca kurulması gerekmez.

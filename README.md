@@ -84,12 +84,15 @@ are pinned to the exact version the user meant before anything is compared.
 
 ## Install
 
-One line, nothing else required (no git, no Python needed beforehand):
+No git and no Python needed beforehand; [uv](https://docs.astral.sh/uv/) installs
+Verinoda as an isolated tool and downloads a suitable Python if there is none.
 
-**Windows (PowerShell)**
+**Windows (PowerShell or cmd)**
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/ozcinax-star/verinoda/main/install.ps1 | iex"
+winget install --id astral-sh.uv -e   # only if `uv --version` does not work yet; then open a new terminal
+uv tool install --force --reinstall-package verinoda --link-mode copy "verinoda[precise] @ https://github.com/ozcinax-star/verinoda/archive/main.zip"
+uv tool update-shell                  # once: puts verinoda on PATH for new terminals
 ```
 
 **macOS / Linux (or Git Bash on Windows)**
@@ -98,14 +101,19 @@ powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/ozc
 curl -LsSf https://raw.githubusercontent.com/ozcinax-star/verinoda/main/install.sh | sh
 ```
 
-The script installs [uv](https://docs.astral.sh/uv/) if it is missing (uv downloads a
-suitable Python if there is none), installs Verinoda as an isolated tool with the
-optional precise resolver, copies files instead of hardlinking them (so sandboxed
-agents such as Codex can import it) and puts `verinoda` on your PATH. Run the same
-line again to upgrade. You can read the scripts first: [install.ps1](install.ps1),
-[install.sh](install.sh). Options are environment variables: `VERINODA_REF` (branch,
-tag or commit; default `main`), `VERINODA_EXTRAS` (`none` to skip the precise extra),
-`VERINODA_NO_MODIFY_PATH=1`.
+Both install from the GitHub archive with the optional precise resolver and copy files
+instead of hardlinking them (so sandboxed agents such as Codex can import the package).
+Run the same `uv tool install ...` line, or the script, again to upgrade. The script
+([install.sh](install.sh), read it first) installs uv if it is missing, runs that
+command and `uv tool update-shell`; options are environment variables: `VERINODA_REF`
+(branch, tag or commit; default `main`), `VERINODA_EXTRAS` (`none` to skip the precise
+extra), `VERINODA_NO_MODIFY_PATH=1`.
+
+Why there is no `irm ... | iex` one-liner for Windows: Microsoft Defender blocked
+`powershell -ExecutionPolicy ByPass -c "irm <script url> | iex"` for this project's
+script as `Trojan:Win32/Commando.A!ml`, a machine-learning verdict on that
+download-and-run command line (the script file itself was not flagged). The plain `uv`
+commands above avoid the pattern.
 
 Then, once per project:
 

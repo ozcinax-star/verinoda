@@ -115,8 +115,8 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
     if lay.get("hardlinked") or lay.get("editable"):
         report["warnings"].append(
             "this Verinoda install is hardlinked or editable; a sandboxed agent (Codex on Windows) may not be "
-            "able to import it and will fall back to MCP. Reinstall with the install script or "
-            "`uv tool install --link-mode copy ...`")
+            "able to import it and will fall back to MCP. Reinstall with the command in the README "
+            "(`uv tool install --force --reinstall-package verinoda --link-mode copy ...`)")
     report["next_steps"].append("Terminal: `verinoda query \"<question>\"` or `verinoda analyze \"<question>\"`; "
                                 "after big edits `verinoda update .`; if anything looks wrong `verinoda doctor`")
     report["ok"] = all(a["ok"] for a in report["agents"]) and not res.get("error")

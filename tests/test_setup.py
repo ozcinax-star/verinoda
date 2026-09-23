@@ -90,20 +90,28 @@ def test_setup_cli_json(project):
 
 # -- installer scripts -------------------------------------------------------------------------------
 
-def test_installer_scripts_parse_and_use_the_safe_options():
-    for name in ("install.sh", "install.ps1"):
-        text = (ROOT / name).read_text(encoding="utf-8")
-        assert "--link-mode copy" in text and "--reinstall-package verinoda" in text
-        assert "/archive/" in text and "git+" not in text  # no git needed
-        for opt in ("VERINODA_REF", "VERINODA_EXTRAS", "VERINODA_SPEC", "VERINODA_NO_MODIFY_PATH"):
-            assert opt in text
-        assert b"\r" not in (ROOT / name).read_bytes()
+def test_install_script_parses_and_uses_the_safe_options():
+    text = (ROOT / "install.sh").read_text(encoding="utf-8")
+    assert "--link-mode copy" in text and "--reinstall-package verinoda" in text
+    assert "/archive/" in text and "git+" not in text  # no git needed
+    for opt in ("VERINODA_REF", "VERINODA_EXTRAS", "VERINODA_SPEC", "VERINODA_NO_MODIFY_PATH"):
+        assert opt in text
+    assert b"\r" not in (ROOT / "install.sh").read_bytes()
     if shutil.which("sh"):
         assert subprocess.run(["sh", "-n", str(ROOT / "install.sh")], capture_output=True).returncode == 0
-    if os.name == "nt" and shutil.which("powershell"):
-        cmd = ("$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile("
-               f"'{ROOT / 'install.ps1'}', [ref]$null, [ref]$e); if ($e) {{ exit 1 }}")
-        assert subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True).returncode == 0
+
+
+def test_docs_do_not_recommend_a_powershell_download_cradle():
+    """Microsoft Defender blocked `powershell ... -c "irm <url> | iex"` for our script
+    (Trojan:Win32/Commando.A!ml, 2026-09-23); the Windows instructions use plain uv commands."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    overview = (ROOT / "docs" / "GENEL-BAKIS.md").read_text(encoding="utf-8")
+    assert not (ROOT / "install.ps1").exists()
+    for text in (readme, overview):
+        code = "\n".join(text.split("```")[1::2])  # fenced blocks only: prose may name the pattern
+        assert "| iex" not in code and "iex (" not in code and "DownloadString" not in code
+        assert ('uv tool install --force --reinstall-package verinoda --link-mode copy '
+                '"verinoda[precise] @ https://github.com/ozcinax-star/verinoda/archive/main.zip"') in code
 
 
 @pytest.mark.slow
