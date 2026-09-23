@@ -305,6 +305,10 @@ def _r_derived(r: dict) -> None:
         print(f"  warning: derived data not refreshed: {r['derived']['error']}")
     if r.get("pruned_missing_files"):
         print(f"  pruned from the graph (files no longer exist): {', '.join(r['pruned_missing_files'][:5])}")
+    dd = r.get("dropped_dangling_references") or {}
+    if dd.get("count"):
+        print(f"  note: {dd['count']} file(s) named by other files are not in the repository; the graph keeps no "
+              f"nodes for them ({', '.join(dd['files'][:3])}{', ...' if dd['count'] > 3 else ''})")
 
 
 # -- commands -------------------------------------------------------------------
@@ -330,7 +334,8 @@ def cmd_setup(args) -> int:
 
     try:
         rep = setup_mod.setup_project(args.path or ".", agents=args.agents, scope=args.scope,
-                                      with_mcp=not args.no_mcp, allow_home=args.allow_home)
+                                      with_mcp=not args.no_mcp, allow_home=args.allow_home,
+                                      reference=args.reference)
     except setup_mod.SetupRefused as exc:
         _emit(args, {"ok": False, "error": str(exc)}, lambda r: print(f"error: {r['error']}", file=sys.stderr))
         return 2
@@ -481,7 +486,7 @@ def cmd_map(args) -> int:
     from verinoda import architecture_map as am
     from verinoda import index
 
-    repo = Path(args.path).resolve()
+    repo = Path(getattr(args, "repo", None) or args.path).resolve()
     _need_graph(repo)
     g = index.load(repo)
     if args.view == "impact":
@@ -1161,9 +1166,9 @@ def cmd_uninstall(args) -> int:
 
 
 def cmd_mcp(args) -> int:
-    from verinoda.mcp.server import serve
+    from verinoda.mcp.server import default_repo, serve
 
-    serve(_repo(args))
+    serve(_repo(args) if args.repo else default_repo(Path.cwd()))
     return 0
 
 
@@ -1341,6 +1346,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--scope", choices=["project", "user"], default="project")
     sp.add_argument("--no-mcp", action="store_true", help="skills only, no MCP registration")
     sp.add_argument("--allow-home", action="store_true", help="allow setting up the home directory itself")
+    sp.add_argument("--reference", action="append", metavar="PATH[=ALIAS,...]",
+                    help="a folder of reference code (an original being ported, a vendored copy) that should rank "
+                         "below the project's own code unless a question names it or an alias; repeatable")
     sp = add("init", cmd_init, "create .verinoda/ (database + config) in a project", repo=False)
     sp.add_argument("path", nargs="?", default=".")
     sp = add("scan", cmd_scan, "index a repository (AST, no LLM) and record a snapshot", repo=False)
@@ -1354,7 +1362,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("update", cmd_update, "re-index changed files, record a snapshot, mark affected claims stale", repo=False)
     sp.add_argument("path")
     sp = add("map", cmd_map, "top-down architecture views", repo=False)
-    sp.add_argument("path")
+    sp.add_argument("path", nargs="?", default=".")
+    sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--view", choices=["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact"])
     sp.add_argument("--target", action="append", help="impact view: file or symbol (repeatable); default: git changes")
     sp.add_argument("--base", help="impact view: diff base (default HEAD + untracked)")

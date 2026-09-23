@@ -300,3 +300,25 @@ def test_non_python_code_uses_graph_symbols(tmp_path):
     units = raw["files"]["src/cart.js"]["units"]
     assert units and units[0][0] == "src/cart.js:2" and "cart" in units[0][2]
     assert any(w.startswith("sepet") for w in units[0][1])
+
+
+def test_parallel_locale_files_give_translation_pairs(tmp_path):
+    lang = tmp_path / "src/main/resources/assets/glow/lang"
+    lang.mkdir(parents=True)
+    (lang / "en_us.json").write_text('{"item.glow.lantern_staff": "Lantern Staff", "item.glow.ember_shard": '
+                                     '"Ember Shard", "msg.glow.spawned": "A wisp appeared.", "same": "Wisp"}',
+                                     encoding="utf-8")
+    (lang / "tr_tr.json").write_text('{\n  "item.glow.lantern_staff": "Fener Asası",\n  "item.glow.ember_shard": '
+                                     '"Kor Kırığı",\n  "msg.glow.spawned": "Bir wisp belirdi.",\n  "same": "Wisp"\n}',
+                                     encoding="utf-8")
+    (tmp_path / "locales").mkdir()
+    (tmp_path / "locales" / "en.json").write_text('{"cart": {"checkout_button": "Checkout"}}', encoding="utf-8")
+    files = ["src/main/resources/assets/glow/lang/en_us.json", "src/main/resources/assets/glow/lang/tr_tr.json",
+             "locales/en.json"]  # no tr file next to this one: nothing learned from it
+    tp = lexicon.translation_pairs(tmp_path, files)
+    parts = {k: {x["part"] for x in v} for k, v in tp.items()}
+    assert {"lantern", "lantern_staff"} <= parts["fener"] and {"staff", "lantern_staff"} <= parts["asasi"]
+    assert "ember" in parts["kor"] and "appear" in parts["belirdi"]
+    assert "bir" not in parts and not any("a" == p for ps in parts.values() for p in ps)  # stopwords and 'a'
+    assert tp["fener"][0]["via"] == "translation"
+    assert tp["fener"][0]["sites"] == ["src/main/resources/assets/glow/lang/tr_tr.json:2"]

@@ -218,6 +218,11 @@ def _search_index(repo: Path, gp: Path, checks: list[dict]) -> dict:
         try:
             meta = {k: json.loads(v) for k, v in conn.execute("SELECT key, value FROM meta")}
             rows = conn.execute("SELECT file, sha256, size, mtime_ns FROM files").fetchall()
+            try:  # schema v3+: repository files left out of the index, by reason
+                skipped = conn.execute("SELECT reason, COUNT(*) FROM unindexed GROUP BY reason "
+                                       "ORDER BY COUNT(*) DESC, reason").fetchall()
+            except sqlite3.Error:
+                skipped = None
         finally:
             conn.close()
     except (sqlite3.Error, ValueError) as exc:
@@ -250,6 +255,23 @@ def _search_index(repo: Path, gp: Path, checks: list[dict]) -> dict:
                         f"{', ...' if len(stale) > 3 else ''}); run `verinoda update`")
     checks.append(_check("search_index", not problems, detail + ("; " + "; ".join(problems) if problems else ""),
                          "warn"))
+    if skipped is not None:
+        n_skipped = sum(n for _r, n in skipped)
+        info["coverage"] = {"data_files": meta.get("data_files"), "not_indexed": n_skipped,
+                            "not_indexed_by_reason": {r: n for r, n in skipped}}
+        cats: dict[str, list[tuple[str, int]]] = {}
+        for r, n in skipped:  # "type not indexed (.gitkeep)" -> category "type not indexed", detail ".gitkeep"
+            cat, _, sub = r.partition(" (")
+            cats.setdefault(cat, []).append((sub.rstrip(")"), n))
+        why = "; ".join(f"{sum(n for _s, n in subs)} {cat}"
+                        + (f" ({', '.join(f'{s} {n}' for s, n in subs[:3] if s)}{', ...' if len(subs) > 3 else ''})"
+                           if any(s for s, _n in subs) else "")
+                        for cat, subs in sorted(cats.items(), key=lambda kv: -sum(n for _s, n in kv[1])))
+        checks.append(_check("index_coverage", True,
+                             f"{len(rows)} files indexed ({meta.get('data_files') or 0} of them as data: configs, "
+                             f"data packs, other text); {n_skipped} not indexed" + (f" ({why})" if why else "")
+                             + ("; queries mention a not-indexed file whose path matches the question"
+                                if n_skipped else ""), "info"))
     return info
 
 

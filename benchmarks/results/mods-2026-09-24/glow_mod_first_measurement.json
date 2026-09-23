@@ -1,0 +1,6225 @@
+{
+ "benchmark": "verinoda raw-vs-graphify-vs-verinoda",
+ "schema": 2,
+ "set": {
+  "name": "glow_mod",
+  "file": "<REPO>/verinoda/benchmark/questions/glow_mod.json",
+  "description": "A small fictional Fabric mod (examples/glow_mod): Java code, a data pack (functions, recipe, loot table), assets (item models, en_us / tr_tr translations), a YAML config copied out of the jar, a client payload, a game test, a byte-identical copy of one function under datapack/, and a reference tree (reference/original-plugin, the Paper plugin it was ported from) declared as index.reference. 14 questions, 7 Turkish and 7 English: callers x3, cross_layer x2, config x2, resources x2, flow, behaviour x2, where x2 (one of them explicitly about the original plugin).",
+  "questions": 14,
+  "gold_verified_by": "Gold facts were written by reading every file of examples/glow_mod line by line; every source.at line was re-read by hand after the example was finished, and each fact's source.at/source.contains pair is re-checked against the benchmark copy before any approach is scored (metrics.validate_gold).",
+  "provenance": {
+   "questions_written_by": "an agent asked by the Verinoda maintainer to write examples/glow_mod and this set in one session; it did not run Verinoda on the example and saw no Verinoda output for these questions",
+   "gold_written_by": "same agent, by reading every file of examples/glow_mod; checked with metrics.validate_gold only",
+   "example_written_by": "same agent, same session, before the questions",
+   "in_sample": false,
+   "caveat": "held out for Verinoda's retrieval on these questions (no Verinoda run and no Verinoda output while writing them), but not independent of the design: the Minecraft support (resource ids, data-pack linking, reference trees, class-qualified Java calls, Turkish passive caller questions) was developed against a similar private mod by the same project, and this example was written afterwards by an agent that knew which of those features it should exercise"
+  }
+ },
+ "params": {
+  "repeat": 1,
+  "raw": {
+   "top_files": 5,
+   "char_cap": 24000,
+   "grep_lines": 40,
+   "min_term_len": 3,
+   "terms": "verinoda.retrieval.terms_for (Graphify _query_terms)"
+  },
+  "graphify_vendored": {
+   "renderer": "verinoda.index.graphify_query_text",
+   "mode": "bfs",
+   "depth": 3,
+   "token_budget": 2000
+  },
+  "graphify_cli": {
+   "command": "graphify query <question>",
+   "mode": "bfs",
+   "depth": 2,
+   "token_budget": 2000
+  },
+  "verinoda_analyze": {
+   "budget": "config defaults (60 s, 40 tool calls, 6000 tokens)",
+   "challenge": true,
+   "run_tests": false
+  },
+  "verinoda_retrieve": {
+   "max_items": 10,
+   "max_chars": 6000
+  },
+  "verinoda_retrieve_text": {
+   "max_items": 10,
+   "max_chars": 6000,
+   "render_chars": 6000,
+   "call": "retrieval.render_text(retrieve(g, q, Budget(10, 6000)), 6000)"
+  },
+  "sweep": null,
+  "pinpoint_max_lines": 30,
+  "sweep_only": false
+ },
+ "token_count_method": "chars/4 estimate",
+ "llm": {
+  "enabled": false,
+  "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)",
+  "model": null,
+  "prices_usd_per_mtok": null,
+  "price_source": null
+ },
+ "workdir": "<TMP>/verinoda-bench-pyywecx8",
+ "workdir_kept": false,
+ "corpus": {
+  "source": "<REPO>/examples/glow_mod",
+  "source_commit": "32a5bd4a626742e8859532ffb9b12d915a14d8ed",
+  "source_dirty": true,
+  "snapshot": "working tree (tracked + untracked, not ignored)",
+  "include": null,
+  "exclude": null,
+  "file_count": 37,
+  "bytes": 33709,
+  "workdir_commit": "1ace0459b24fd5cfc4306b72383eda6ac73f555d"
+ },
+ "gold_validation": {
+  "ok": true,
+  "facts_checked": 50,
+  "failures": []
+ },
+ "graphify_cli_status": "not run: --graphify-cmd not given",
+ "approaches": [
+  "raw",
+  "graphify_vendored",
+  "verinoda_analyze",
+  "verinoda_retrieve",
+  "verinoda_retrieve_text"
+ ],
+ "environment": {
+  "date_utc": "2026-09-23T20:05:05+00:00",
+  "os": "Windows-11-10.0.26200-SP0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+  "cpu_count": 6,
+  "python": "3.12.0",
+  "python_impl": "CPython",
+  "verinoda_version": "0.1.0.dev0",
+  "vendored_graphify_commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7",
+  "graphify_cli": null,
+  "git": "git version 2.53.0.windows.1",
+  "verinoda_source_commit": "32a5bd4a626742e8859532ffb9b12d915a14d8ed",
+  "verinoda_package_changes_vs_commit": [
+   "M verinoda/agents/installer.py",
+   "M verinoda/analysis.py",
+   "M verinoda/architecture_map.py",
+   "M verinoda/benchmark/runner.py",
+   "M verinoda/cli.py",
+   "M verinoda/doctor.py",
+   "M verinoda/entail.py",
+   "M verinoda/mcp/server.py",
+   "M verinoda/paths.py",
+   "M verinoda/question_plan.py",
+   "M verinoda/retrieval.py",
+   "M verinoda/search_index.py",
+   "M verinoda/setup.py",
+   "M verinoda/snapshot.py",
+   "M verinoda/workflow.py",
+   "?? verinoda/benchmark/questions/glow_mod.json",
+   "?? verinoda/resources.py"
+  ],
+  "verinoda_package_diff_sha256": "998f14421f3ef6df932273236147a246b14bcc3bd14ca9316a162774a6584549"
+ },
+ "verinoda_config": {
+  "index": {
+   "reference": [
+    {
+     "path": "reference/",
+     "aliases": [
+      "original",
+      "plugin",
+      "paper",
+      "orijinal",
+      "eklenti"
+     ]
+    }
+   ]
+  }
+ },
+ "index": {
+  "raw": {
+   "note": "no index; every query greps and reads the working tree"
+  },
+  "verinoda": {
+   "cold_seconds": 0.975,
+   "warm_seconds": 0.422,
+   "nodes": 194,
+   "edges": 351,
+   "warm_nodes": 194,
+   "warm_edges": 351,
+   "cache_files": 22,
+   "what": "workflow.scan = Graphify-derived AST index (in-process) + snapshot (file hashes) + stale-claim check; warm = same tree again with the AST cache present",
+   "used_by": [
+    "graphify_vendored",
+    "verinoda_analyze",
+    "verinoda_retrieve",
+    "verinoda_retrieve_text"
+   ]
+  }
+ },
+ "questions": [
+  {
+   "id": "q01",
+   "category": "callers",
+   "question": "Wisp.spawn kimler tarafından çağrılıyor?",
+   "facts": 6,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0264,
+       "chars": 14354,
+       "sha256": "41246ff434721809123616a6e6c5e770d9cea155251da1a61762be5c143c7c6e"
+      }
+     ],
+     "score": {
+      "chars": 14354,
+      "tokens": 3589,
+      "sha256": "41246ff434721809123616a6e6c5e770d9cea155251da1a61762be5c143c7c6e",
+      "facts": {
+       "total": 6,
+       "found_n": 3,
+       "pinpointed_n": 2,
+       "found": [
+        "q01.command",
+        "q01.chunk",
+        "q01.gametest"
+       ],
+       "missed": [
+        "q01.lantern",
+        "q01.ritual",
+        "q01.network"
+       ],
+       "via": {
+        "q01.command": "loc src/main/java/com/example/glowmod/command/GlowCommands.java:27",
+        "q01.chunk": "loc src/main/java/com/example/glowmod/world/WispSpawner.java:1-34",
+        "q01.gametest": "loc src/gametest/java/com/example/glowmod/test/WispTests.java:15"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 5,
+       "point_or_short": 41
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "wisp",
+        "spawn",
+        "kimler",
+        "tarafından",
+        "çağrılıyor"
+       ],
+       "matching_files": 27,
+       "matching_lines": 116,
+       "files_read": [
+        {
+         "file": "src/main/java/com/example/glowmod/entity/Wisp.java",
+         "lines": [
+          1,
+          45
+         ],
+         "of": 45
+        },
+        {
+         "file": "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java",
+         "lines": [
+          1,
+          35
+         ],
+         "of": 35
+        },
+        {
+         "file": "src/gametest/java/com/example/glowmod/test/WispTests.java",
+         "lines": [
+          1,
+          29
+         ],
+         "of": 29
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/command/GlowCommands.java",
+         "lines": [
+          1,
+          49
+         ],
+         "of": 49
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/world/WispSpawner.java",
+         "lines": [
+          1,
+          34
+         ],
+         "of": 34
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q01/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0116,
+       "chars": 6511,
+       "sha256": "a42e1627fe555d51d7c6698635880e7d2982a5289f4b299c1d1ee94789bb14c0"
+      }
+     ],
+     "score": {
+      "chars": 6511,
+      "tokens": 1628,
+      "sha256": "a42e1627fe555d51d7c6698635880e7d2982a5289f4b299c1d1ee94789bb14c0",
+      "facts": {
+       "total": 6,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q01.ritual",
+        "q01.chunk"
+       ],
+       "missed": [
+        "q01.command",
+        "q01.lantern",
+        "q01.network",
+        "q01.gametest"
+       ],
+       "via": {
+        "q01.ritual": "loc src/main/java/com/example/glowmod/ritual/Ritual.java:21",
+        "q01.chunk": "loc src/main/java/com/example/glowmod/world/WispSpawner.java:22"
+       }
+      },
+      "locators": {
+       "distinct": 47,
+       "files": 15,
+       "point_or_short": 47
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 57,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 152,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q01/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.232,
+       "chars": 1950,
+       "sha256": "4c09e44ee78c72b09472196841683ebd5912056f99f1cf758493efdb9209853c",
+       "claims": 3,
+       "claims_reused": 0,
+       "claims_new": 3,
+       "internal_tool_calls": 10,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 1950,
+      "tokens": 488,
+      "sha256": "4c09e44ee78c72b09472196841683ebd5912056f99f1cf758493efdb9209853c",
+      "facts": {
+       "total": 6,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q01.command",
+        "q01.lantern",
+        "q01.ritual",
+        "q01.chunk",
+        "q01.network",
+        "q01.gametest"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 3,
+       "files": 2,
+       "point_or_short": 3
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 3,
+       "by_status": {
+        "statically_verified": 2,
+        "strong_inference": 1
+       },
+       "verified": 2,
+       "inference": 1,
+       "verified_share": 0.667,
+       "inference_share": 0.333,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 3
+       },
+       "evidence_verifying": 3,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 3,
+      "analysis_usage": {
+       "elapsed_s": 0.219,
+       "tool_calls": 10,
+       "context_chars": 3083,
+       "context_tokens_est": 770,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q01/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0357,
+       "chars": 5647,
+       "sha256": "36664e3ed388eff05f607820e4c1b006f68562b8b44beb79d979c7b394d263d8"
+      }
+     ],
+     "score": {
+      "chars": 5647,
+      "tokens": 1412,
+      "sha256": "36664e3ed388eff05f607820e4c1b006f68562b8b44beb79d979c7b394d263d8",
+      "facts": {
+       "total": 6,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q01.command"
+       ],
+       "missed": [
+        "q01.lantern",
+        "q01.ritual",
+        "q01.chunk",
+        "q01.network",
+        "q01.gametest"
+       ],
+       "via": {
+        "q01.command": "loc src/main/java/com/example/glowmod/command/GlowCommands.java:27"
+       }
+      },
+      "locators": {
+       "distinct": 19,
+       "files": 4,
+       "point_or_short": 19
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 10,
+       "edges": 2,
+       "edge_confidence": {
+        "EXTRACTED": 2
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5942,
+        "truncated": true,
+        "expansions": [
+         "cagriliyor->call (lexicon)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 2,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q01/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0472,
+       "chars": 5841,
+       "sha256": "83bb4d381f2f3d4300762ec638c0838fb6590b3ceadb32b8aedd035a04ec221f"
+      }
+     ],
+     "score": {
+      "chars": 5841,
+      "tokens": 1461,
+      "sha256": "83bb4d381f2f3d4300762ec638c0838fb6590b3ceadb32b8aedd035a04ec221f",
+      "facts": {
+       "total": 6,
+       "found_n": 6,
+       "pinpointed_n": 6,
+       "found": [
+        "q01.command",
+        "q01.lantern",
+        "q01.ritual",
+        "q01.chunk",
+        "q01.network",
+        "q01.gametest"
+       ],
+       "missed": [],
+       "via": {
+        "q01.command": "loc src/main/java/com/example/glowmod/command/GlowCommands.java:27-36",
+        "q01.lantern": "loc src/main/java/com/example/glowmod/event/LanternEvents.java:18-34",
+        "q01.ritual": "loc src/main/java/com/example/glowmod/ritual/Ritual.java:21-31",
+        "q01.chunk": "loc src/main/java/com/example/glowmod/world/WispSpawner.java:14-34",
+        "q01.network": "loc src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30",
+        "q01.gametest": "loc src/gametest/java/com/example/glowmod/test/WispTests.java:14-20"
+       }
+      },
+      "locators": {
+       "distinct": 24,
+       "files": 16,
+       "point_or_short": 23
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 10,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q01/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q02",
+   "category": "callers",
+   "question": "Who calls GlowConfig.load?",
+   "facts": 2,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0215,
+       "chars": 16433,
+       "sha256": "cc5351aa43afb2897235177eb8aeaff2b75993a5db0c960a929575ac8370ecfe"
+      }
+     ],
+     "score": {
+      "chars": 16433,
+      "tokens": 4109,
+      "sha256": "cc5351aa43afb2897235177eb8aeaff2b75993a5db0c960a929575ac8370ecfe",
+      "facts": {
+       "total": 2,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q02.init",
+        "q02.reload"
+       ],
+       "missed": [],
+       "via": {
+        "q02.init": "loc src/main/java/com/example/glowmod/GlowMod.java:21",
+        "q02.reload": "loc src/main/java/com/example/glowmod/command/GlowCommands.java:44"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 8,
+       "point_or_short": 40
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "calls",
+        "glowconfig",
+        "load"
+       ],
+       "matching_files": 18,
+       "matching_lines": 58,
+       "files_read": [
+        {
+         "file": "src/main/java/com/example/glowmod/config/GlowConfig.java",
+         "lines": [
+          1,
+          64
+         ],
+         "of": 64
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/network/ServerNetworking.java",
+         "lines": [
+          1,
+          31
+         ],
+         "of": 31
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/command/GlowCommands.java",
+         "lines": [
+          1,
+          49
+         ],
+         "of": 49
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/world/WispSpawner.java",
+         "lines": [
+          1,
+          34
+         ],
+         "of": 34
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/ritual/Ritual.java",
+         "lines": [
+          1,
+          43
+         ],
+         "of": 43
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q02/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0107,
+       "chars": 3340,
+       "sha256": "7f58a9be345d8364bd22ec7d59c3456ad4931c4abb23053c8b98afa5f7f52ce9"
+      }
+     ],
+     "score": {
+      "chars": 3340,
+      "tokens": 835,
+      "sha256": "7f58a9be345d8364bd22ec7d59c3456ad4931c4abb23053c8b98afa5f7f52ce9",
+      "facts": {
+       "total": 2,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q02.init",
+        "q02.reload"
+       ],
+       "missed": [],
+       "via": {
+        "q02.init": "loc src/main/java/com/example/glowmod/GlowMod.java:21",
+        "q02.reload": "loc src/main/java/com/example/glowmod/command/GlowCommands.java:44"
+       }
+      },
+      "locators": {
+       "distinct": 27,
+       "files": 9,
+       "point_or_short": 27
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 14,
+       "edges_shown": 13,
+       "edge_confidence": {
+        "EXTRACTED": 13
+       },
+       "truncated": false,
+       "nodes_found": 14,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 13,
+       "checked": 13,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q02/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1625,
+       "chars": 2431,
+       "sha256": "0646979efd91d7a68b8236122dbcafbd593692235b2966a8c8ad642690ed890d",
+       "claims": 5,
+       "claims_reused": 0,
+       "claims_new": 5,
+       "internal_tool_calls": 14,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 2431,
+      "tokens": 608,
+      "sha256": "0646979efd91d7a68b8236122dbcafbd593692235b2966a8c8ad642690ed890d",
+      "facts": {
+       "total": 2,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q02.init",
+        "q02.reload"
+       ],
+       "missed": [],
+       "via": {
+        "q02.init": "loc src/main/java/com/example/glowmod/GlowMod.java:21",
+        "q02.reload": "loc src/main/java/com/example/glowmod/command/GlowCommands.java:45"
+       }
+      },
+      "locators": {
+       "distinct": 5,
+       "files": 3,
+       "point_or_short": 4
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 5,
+       "by_status": {
+        "statically_verified": 4,
+        "weak_inference": 1
+       },
+       "verified": 4,
+       "inference": 1,
+       "verified_share": 0.8,
+       "inference_share": 0.2,
+       "weak_or_unknown": 1,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 5,
+        "graph_edge": 3
+       },
+       "evidence_verifying": 5,
+       "evidence_non_verifying": 3,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.156,
+       "tool_calls": 14,
+       "context_chars": 3863,
+       "context_tokens_est": 965,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 2,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q02/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.036,
+       "chars": 5720,
+       "sha256": "a6bcf7b9409b18414a9a0577cc6f62e818fe3fef56739b3c0ccd387ec49e7b7c"
+      }
+     ],
+     "score": {
+      "chars": 5720,
+      "tokens": 1430,
+      "sha256": "a6bcf7b9409b18414a9a0577cc6f62e818fe3fef56739b3c0ccd387ec49e7b7c",
+      "facts": {
+       "total": 2,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q02.init",
+        "q02.reload"
+       ],
+       "missed": [],
+       "via": {
+        "q02.init": "loc src/main/java/com/example/glowmod/GlowMod.java:21",
+        "q02.reload": "loc src/main/java/com/example/glowmod/command/GlowCommands.java:45"
+       }
+      },
+      "locators": {
+       "distinct": 20,
+       "files": 7,
+       "point_or_short": 20
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 7,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5951,
+        "truncated": true
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q02/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0443,
+       "chars": 5925,
+       "sha256": "645134d669ea404d1774ea2b55450f0a7913862729bfea5e842834d0e6394573"
+      }
+     ],
+     "score": {
+      "chars": 5925,
+      "tokens": 1482,
+      "sha256": "645134d669ea404d1774ea2b55450f0a7913862729bfea5e842834d0e6394573",
+      "facts": {
+       "total": 2,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q02.init",
+        "q02.reload"
+       ],
+       "missed": [],
+       "via": {
+        "q02.init": "loc src/main/java/com/example/glowmod/GlowMod.java:26",
+        "q02.reload": "loc src/main/java/com/example/glowmod/command/GlowCommands.java:44-48"
+       }
+      },
+      "locators": {
+       "distinct": 33,
+       "files": 15,
+       "point_or_short": 31
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 7,
+       "outline_edges": 8,
+       "edge_confidence": {
+        "EXTRACTED": 8
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 8,
+       "checked": 8,
+       "cited_line_missing_target": 3,
+       "named_via_import_alias": 0,
+       "examples": [
+        {
+         "assertion": "parse -calls-> public @src/main/java/com/example/glowmod/config/GlowConfig.java:48",
+         "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:48",
+         "line": "return new GlowConfig("
+        },
+        {
+         "assertion": "alaniAc -calls-> public @src/main/java/com/example/glowmod/ritual/Ritual.java:38",
+         "at": "src/main/java/com/example/glowmod/ritual/Ritual.java:38",
+         "line": "RepairScheduler.kaydet(world, pos.toImmutable(), state);"
+        },
+        {
+         "assertion": "onInitialize -calls-> public @src/main/java/com/example/glowmod/GlowMod.java:26",
+         "at": "src/main/java/com/example/glowmod/GlowMod.java:26",
+         "line": "WispSpawner.register();"
+        }
+       ]
+      },
+      "context_file": "raw/glow_new/q02/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q03",
+   "category": "cross_layer",
+   "question": "Bir wisp öldüğünde hangi eşyalar düşüyor ve bunlar nerede tanımlanıyor?",
+   "facts": 4,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0261,
+       "chars": 13085,
+       "sha256": "71339f5ef24043d32e69c1a8e9bc2c8f7254d69c4e0103ad73ff7bd3a756ec85"
+      }
+     ],
+     "score": {
+      "chars": 13085,
+      "tokens": 3272,
+      "sha256": "71339f5ef24043d32e69c1a8e9bc2c8f7254d69c4e0103ad73ff7bd3a756ec85",
+      "facts": {
+       "total": 4,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q03.ondeath"
+       ],
+       "missed": [
+        "q03.namespace",
+        "q03.heart",
+        "q03.loot"
+       ],
+       "via": {
+        "q03.ondeath": "loc src/main/java/com/example/glowmod/entity/Wisp.java:42"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 5,
+       "point_or_short": 42
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "bir",
+        "wisp",
+        "öldüğünde",
+        "hangi",
+        "eşyalar",
+        "düşüyor",
+        "bunlar",
+        "nerede",
+        "tanımlanıyor"
+       ],
+       "matching_files": 27,
+       "matching_lines": 112,
+       "files_read": [
+        {
+         "file": "src/main/resources/assets/glowmod/lang/tr_tr.json",
+         "lines": [
+          1,
+          11
+         ],
+         "of": 11
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/entity/Wisp.java",
+         "lines": [
+          1,
+          45
+         ],
+         "of": 45
+        },
+        {
+         "file": "src/gametest/java/com/example/glowmod/test/WispTests.java",
+         "lines": [
+          1,
+          29
+         ],
+         "of": 29
+        },
+        {
+         "file": "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java",
+         "lines": [
+          1,
+          35
+         ],
+         "of": 35
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/command/GlowCommands.java",
+         "lines": [
+          1,
+          49
+         ],
+         "of": 49
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q03/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0105,
+       "chars": 5177,
+       "sha256": "5c9ef1f0b52955a837e55520286564f04350b63a89ada141b1bf2ad0c94cf3a7"
+      }
+     ],
+     "score": {
+      "chars": 5177,
+      "tokens": 1295,
+      "sha256": "5c9ef1f0b52955a837e55520286564f04350b63a89ada141b1bf2ad0c94cf3a7",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q03.ondeath",
+        "q03.namespace",
+        "q03.heart",
+        "q03.loot"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 18,
+       "files": 2,
+       "point_or_short": 18
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 18,
+       "edges_shown": 22,
+       "edge_confidence": {
+        "EXTRACTED": 22
+       },
+       "truncated": false,
+       "nodes_found": 18,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 22,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q03/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1817,
+       "chars": 2701,
+       "sha256": "e7b23bede354cbc1421021f3c61f713aac7ade03a65a96eac0f3e8ff324d392a",
+       "claims": 6,
+       "claims_reused": 1,
+       "claims_new": 5,
+       "internal_tool_calls": 16,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 2701,
+      "tokens": 676,
+      "sha256": "e7b23bede354cbc1421021f3c61f713aac7ade03a65a96eac0f3e8ff324d392a",
+      "facts": {
+       "total": 4,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q03.ondeath",
+        "q03.heart"
+       ],
+       "missed": [
+        "q03.namespace",
+        "q03.loot"
+       ],
+       "via": {
+        "q03.ondeath": "loc src/main/java/com/example/glowmod/entity/Wisp.java:42",
+        "q03.heart": "loc datapack/data/glowmod/function/wisp_death.mcfunction:4"
+       }
+      },
+      "locators": {
+       "distinct": 5,
+       "files": 3,
+       "point_or_short": 4
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 6,
+       "by_status": {
+        "statically_verified": 5,
+        "strong_inference": 1
+       },
+       "verified": 5,
+       "inference": 1,
+       "verified_share": 0.833,
+       "inference_share": 0.167,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 6,
+        "graph_edge": 1
+       },
+       "evidence_verifying": 6,
+       "evidence_non_verifying": 1,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.172,
+       "tool_calls": 16,
+       "context_chars": 4203,
+       "context_tokens_est": 1050,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 2,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q03/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0329,
+       "chars": 5695,
+       "sha256": "a4e545998d971c57976942bc23202b47e60464172c5157e767f5d768f4cce51c"
+      }
+     ],
+     "score": {
+      "chars": 5695,
+      "tokens": 1424,
+      "sha256": "a4e545998d971c57976942bc23202b47e60464172c5157e767f5d768f4cce51c",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q03.ondeath",
+        "q03.namespace",
+        "q03.heart",
+        "q03.loot"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 19,
+       "files": 5,
+       "point_or_short": 19
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 9,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5964,
+        "truncated": true,
+        "expansions": [
+         "düşüyor->dust (turkish stem 'dus')"
+        ],
+        "more": [
+         "src/main/java/com/example/glowmod/world/WispSpawner.java:14-34 WispSpawner"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q03/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0442,
+       "chars": 5958,
+       "sha256": "881166a211a52af756847ff63176fe400cf653f41e02b0960166575a10830091"
+      }
+     ],
+     "score": {
+      "chars": 5958,
+      "tokens": 1490,
+      "sha256": "881166a211a52af756847ff63176fe400cf653f41e02b0960166575a10830091",
+      "facts": {
+       "total": 4,
+       "found_n": 3,
+       "pinpointed_n": 2,
+       "found": [
+        "q03.ondeath",
+        "q03.heart",
+        "q03.loot"
+       ],
+       "missed": [
+        "q03.namespace"
+       ],
+       "via": {
+        "q03.ondeath": "loc src/main/java/com/example/glowmod/entity/Wisp.java:14-45",
+        "q03.heart": "loc datapack/data/glowmod/function/wisp_death.mcfunction:1-5",
+        "q03.loot": "loc src/main/resources/data/glowmod/loot_table/entities/wisp.json:1-20"
+       }
+      },
+      "locators": {
+       "distinct": 30,
+       "files": 14,
+       "point_or_short": 29
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 9,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q03/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q04",
+   "category": "cross_layer",
+   "question": "Which Java code runs the glowmod:ritual/start data pack function?",
+   "facts": 4,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.023,
+       "chars": 15368,
+       "sha256": "2e57b424da577dd0ae9370faf257b8afecab74e5686193ba59b2f71000765093"
+      }
+     ],
+     "score": {
+      "chars": 15368,
+      "tokens": 3842,
+      "sha256": "2e57b424da577dd0ae9370faf257b8afecab74e5686193ba59b2f71000765093",
+      "facts": {
+       "total": 4,
+       "found_n": 3,
+       "pinpointed_n": 1,
+       "found": [
+        "q04.baslat",
+        "q04.helper",
+        "q04.execute"
+       ],
+       "missed": [
+        "q04.command"
+       ],
+       "via": {
+        "q04.baslat": "loc src/main/java/com/example/glowmod/ritual/Ritual.java:1-43",
+        "q04.helper": "loc src/main/java/com/example/glowmod/util/Datapack.java:1-36",
+        "q04.execute": "loc src/main/java/com/example/glowmod/util/Datapack.java:32"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 5,
+       "point_or_short": 41
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "java",
+        "code",
+        "runs",
+        "glowmod",
+        "ritual",
+        "start",
+        "data",
+        "pack",
+        "function"
+       ],
+       "matching_files": 36,
+       "matching_lines": 192,
+       "files_read": [
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/util/Datapack.java",
+         "lines": [
+          1,
+          36
+         ],
+         "of": 36
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/config/GlowConfig.java",
+         "lines": [
+          1,
+          64
+         ],
+         "of": 64
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/ritual/Ritual.java",
+         "lines": [
+          1,
+          43
+         ],
+         "of": 43
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/repair/RepairScheduler.java",
+         "lines": [
+          1,
+          48
+         ],
+         "of": 48
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q04/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0123,
+       "chars": 6510,
+       "sha256": "e6a22b23457b66b073aee2aca41a37e27e0fbe8abc90319ca0a16f3a8c6ba362"
+      }
+     ],
+     "score": {
+      "chars": 6510,
+      "tokens": 1628,
+      "sha256": "e6a22b23457b66b073aee2aca41a37e27e0fbe8abc90319ca0a16f3a8c6ba362",
+      "facts": {
+       "total": 4,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q04.helper",
+        "q04.execute",
+        "q04.command"
+       ],
+       "missed": [
+        "q04.baslat"
+       ],
+       "via": {
+        "q04.helper": "loc src/main/java/com/example/glowmod/util/Datapack.java:21",
+        "q04.execute": "loc src/main/java/com/example/glowmod/util/Datapack.java:25",
+        "q04.command": "loc src/main/java/com/example/glowmod/command/GlowCommands.java:38"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 16,
+       "point_or_short": 45
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 58,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 152,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q04/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1524,
+       "chars": 3395,
+       "sha256": "a517a196ddc74006db5972d1f00bf6c13348910e7a332e1ba438c831e3ff4720",
+       "claims": 8,
+       "claims_reused": 0,
+       "claims_new": 8,
+       "internal_tool_calls": 12,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 3395,
+      "tokens": 849,
+      "sha256": "a517a196ddc74006db5972d1f00bf6c13348910e7a332e1ba438c831e3ff4720",
+      "facts": {
+       "total": 4,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q04.baslat"
+       ],
+       "missed": [
+        "q04.helper",
+        "q04.execute",
+        "q04.command"
+       ],
+       "via": {
+        "q04.baslat": "loc src/main/java/com/example/glowmod/ritual/Ritual.java:22"
+       }
+      },
+      "locators": {
+       "distinct": 7,
+       "files": 5,
+       "point_or_short": 7
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 8,
+       "by_status": {
+        "primary_source_verified": 1,
+        "statically_verified": 7
+       },
+       "verified": 8,
+       "inference": 0,
+       "verified_share": 1.0,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "design_doc": 1,
+        "source_code": 7
+       },
+       "evidence_verifying": 8,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.157,
+       "tool_calls": 12,
+       "context_chars": 4222,
+       "context_tokens_est": 1055,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q04/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0287,
+       "chars": 5741,
+       "sha256": "c888e72e13e5cce8d45ab9c1da456f60c393eaf1c6a61b6865514798f872bed3"
+      }
+     ],
+     "score": {
+      "chars": 5741,
+      "tokens": 1436,
+      "sha256": "c888e72e13e5cce8d45ab9c1da456f60c393eaf1c6a61b6865514798f872bed3",
+      "facts": {
+       "total": 4,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q04.baslat",
+        "q04.command"
+       ],
+       "missed": [
+        "q04.helper",
+        "q04.execute"
+       ],
+       "via": {
+        "q04.baslat": "loc src/main/java/com/example/glowmod/ritual/Ritual.java:22",
+        "q04.command": "loc src/main/java/com/example/glowmod/command/GlowCommands.java:40"
+       }
+      },
+      "locators": {
+       "distinct": 15,
+       "files": 7,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 6,
+       "edges": 1,
+       "edge_confidence": {
+        "INFERRED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5980,
+        "truncated": true,
+        "expansions": [
+         "glowmod->glow (corpus prefix)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q04/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0396,
+       "chars": 5975,
+       "sha256": "ea35fdb4bb493104d8df1655f5167ae3f6d8d123fcd523e34307ee336bcb8363"
+      }
+     ],
+     "score": {
+      "chars": 5975,
+      "tokens": 1494,
+      "sha256": "ea35fdb4bb493104d8df1655f5167ae3f6d8d123fcd523e34307ee336bcb8363",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q04.baslat",
+        "q04.helper",
+        "q04.execute",
+        "q04.command"
+       ],
+       "missed": [],
+       "via": {
+        "q04.baslat": "loc src/main/java/com/example/glowmod/ritual/Ritual.java:22",
+        "q04.helper": "loc src/main/java/com/example/glowmod/util/Datapack.java:11-36",
+        "q04.execute": "loc src/main/java/com/example/glowmod/util/Datapack.java:25-35",
+        "q04.command": "loc src/main/java/com/example/glowmod/command/GlowCommands.java:40"
+       }
+      },
+      "locators": {
+       "distinct": 21,
+       "files": 10,
+       "point_or_short": 21
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 6,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q04/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q05",
+   "category": "callers",
+   "question": "glowmod:ritual/tick fonksiyonu nereden çağrılıyor?",
+   "facts": 3,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.023,
+       "chars": 12739,
+       "sha256": "ba2814d210e369f1101ba6bbc577e027033e1e53ee9b2bebbd7f416ff872f1f3"
+      }
+     ],
+     "score": {
+      "chars": 12739,
+      "tokens": 3185,
+      "sha256": "ba2814d210e369f1101ba6bbc577e027033e1e53ee9b2bebbd7f416ff872f1f3",
+      "facts": {
+       "total": 3,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q05.start",
+        "q05.self"
+       ],
+       "missed": [
+        "q05.java"
+       ],
+       "via": {
+        "q05.start": "loc src/main/resources/data/glowmod/function/ritual/start.mcfunction:7",
+        "q05.self": "loc src/main/resources/data/glowmod/function/ritual/tick.mcfunction:5"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 6,
+       "point_or_short": 43
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "glowmod",
+        "ritual",
+        "tick",
+        "fonksiyonu",
+        "nereden",
+        "çağrılıyor"
+       ],
+       "matching_files": 33,
+       "matching_lines": 157,
+       "files_read": [
+        {
+         "file": "src/main/java/com/example/glowmod/repair/RepairScheduler.java",
+         "lines": [
+          1,
+          48
+         ],
+         "of": 48
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/config/GlowConfig.java",
+         "lines": [
+          1,
+          64
+         ],
+         "of": 64
+        },
+        {
+         "file": "src/main/resources/glowmod.yml",
+         "lines": [
+          1,
+          18
+         ],
+         "of": 18
+        },
+        {
+         "file": "src/main/resources/data/glowmod/function/ritual/start.mcfunction",
+         "lines": [
+          1,
+          7
+         ],
+         "of": 7
+        },
+        {
+         "file": "src/main/resources/data/glowmod/function/ritual/tick.mcfunction",
+         "lines": [
+          1,
+          5
+         ],
+         "of": 5
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q05/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0116,
+       "chars": 6413,
+       "sha256": "4621680d798fc252624d240e47dd26773563d09b2dc21839df3cae68e38ff3a5"
+      }
+     ],
+     "score": {
+      "chars": 6413,
+      "tokens": 1604,
+      "sha256": "4621680d798fc252624d240e47dd26773563d09b2dc21839df3cae68e38ff3a5",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q05.start",
+        "q05.self",
+        "q05.java"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 43,
+       "files": 15,
+       "point_or_short": 43
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 59,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 139,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q05/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1466,
+       "chars": 4236,
+       "sha256": "e48b2a170a25e7084fd31341adabee6da8e334eb8592458f3e70510c887c278c",
+       "claims": 8,
+       "claims_reused": 3,
+       "claims_new": 5,
+       "internal_tool_calls": 17,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 4236,
+      "tokens": 1059,
+      "sha256": "e48b2a170a25e7084fd31341adabee6da8e334eb8592458f3e70510c887c278c",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q05.start",
+        "q05.self",
+        "q05.java"
+       ],
+       "missed": [],
+       "via": {
+        "q05.start": "loc src/main/resources/data/glowmod/function/ritual/start.mcfunction:7",
+        "q05.self": "loc src/main/resources/data/glowmod/function/ritual/tick.mcfunction:5",
+        "q05.java": "loc src/main/java/com/example/glowmod/ritual/Ritual.java:22"
+       }
+      },
+      "locators": {
+       "distinct": 7,
+       "files": 4,
+       "point_or_short": 7
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 8,
+       "by_status": {
+        "statically_verified": 8
+       },
+       "verified": 8,
+       "inference": 0,
+       "verified_share": 1.0,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 8,
+        "graph_edge": 2
+       },
+       "evidence_verifying": 8,
+       "evidence_non_verifying": 2,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 2,
+      "analysis_usage": {
+       "elapsed_s": 0.141,
+       "tool_calls": 17,
+       "context_chars": 5625,
+       "context_tokens_est": 1406,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 4,
+       "checked": 2,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q05/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0305,
+       "chars": 5703,
+       "sha256": "67b0be20b7eb199e31d0cd3f98ba2bd82f856707cf1bbe901236e6ef249da427"
+      }
+     ],
+     "score": {
+      "chars": 5703,
+      "tokens": 1426,
+      "sha256": "67b0be20b7eb199e31d0cd3f98ba2bd82f856707cf1bbe901236e6ef249da427",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q05.start",
+        "q05.self",
+        "q05.java"
+       ],
+       "missed": [],
+       "via": {
+        "q05.start": "loc src/main/resources/data/glowmod/function/ritual/start.mcfunction:7",
+        "q05.self": "loc src/main/resources/data/glowmod/function/ritual/tick.mcfunction:1-5",
+        "q05.java": "loc src/main/java/com/example/glowmod/ritual/Ritual.java:22"
+       }
+      },
+      "locators": {
+       "distinct": 12,
+       "files": 4,
+       "point_or_short": 12
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 5,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5925,
+        "truncated": true,
+        "expansions": [
+         "glowmod->glow (corpus prefix)",
+         "fonksiyonu->function (lexicon)",
+         "cagriliyor->call (lexicon)"
+        ],
+        "more": [
+         "src/main/java/com/example/glowmod/ritual/Ritual.java:15-43 Ritual"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q05/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0401,
+       "chars": 5999,
+       "sha256": "48e305351921c65d19dedb7ea365020fe37c18cdcb4453bcf6990163e5557f25"
+      }
+     ],
+     "score": {
+      "chars": 5999,
+      "tokens": 1500,
+      "sha256": "48e305351921c65d19dedb7ea365020fe37c18cdcb4453bcf6990163e5557f25",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q05.start",
+        "q05.self",
+        "q05.java"
+       ],
+       "missed": [],
+       "via": {
+        "q05.start": "loc src/main/resources/data/glowmod/function/ritual/start.mcfunction:7",
+        "q05.self": "loc src/main/resources/data/glowmod/function/ritual/tick.mcfunction:1-5",
+        "q05.java": "loc src/main/java/com/example/glowmod/ritual/Ritual.java:22"
+       }
+      },
+      "locators": {
+       "distinct": 23,
+       "files": 10,
+       "point_or_short": 22
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 5,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q05/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q06",
+   "category": "config",
+   "question": "Where is glowmod.yml loaded and where do its default values come from?",
+   "facts": 5,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0225,
+       "chars": 13076,
+       "sha256": "2c58f6be8ee4f4ef421da6e8c8e52cbe62f45e3fef0d4eaf366e730ed5578dee"
+      }
+     ],
+     "score": {
+      "chars": 13076,
+      "tokens": 3269,
+      "sha256": "2c58f6be8ee4f4ef421da6e8c8e52cbe62f45e3fef0d4eaf366e730ed5578dee",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q06.load",
+        "q06.copy",
+        "q06.default_file",
+        "q06.fallback"
+       ],
+       "missed": [
+        "q06.caller"
+       ],
+       "via": {
+        "q06.load": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:31",
+        "q06.copy": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:31",
+        "q06.default_file": "loc src/main/resources/glowmod.yml:1",
+        "q06.fallback": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:18"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 6,
+       "point_or_short": 43
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "glowmod",
+        "yml",
+        "loaded",
+        "default",
+        "values",
+        "come"
+       ],
+       "matching_files": 32,
+       "matching_lines": 134,
+       "files_read": [
+        {
+         "file": "src/main/java/com/example/glowmod/config/GlowConfig.java",
+         "lines": [
+          1,
+          64
+         ],
+         "of": 64
+        },
+        {
+         "file": "src/main/resources/assets/glowmod/lang/en_us.json",
+         "lines": [
+          1,
+          11
+         ],
+         "of": 11
+        },
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "src/main/resources/glowmod.yml",
+         "lines": [
+          1,
+          18
+         ],
+         "of": 18
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/ritual/Ritual.java",
+         "lines": [
+          1,
+          43
+         ],
+         "of": 43
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q06/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0114,
+       "chars": 6468,
+       "sha256": "c64d4e345273ba7fb2337cbb0092655c847cfe0527fbaf06a7ad1919f3781112"
+      }
+     ],
+     "score": {
+      "chars": 6468,
+      "tokens": 1617,
+      "sha256": "c64d4e345273ba7fb2337cbb0092655c847cfe0527fbaf06a7ad1919f3781112",
+      "facts": {
+       "total": 5,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q06.load"
+       ],
+       "missed": [
+        "q06.copy",
+        "q06.default_file",
+        "q06.fallback",
+        "q06.caller"
+       ],
+       "via": {
+        "q06.load": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:26"
+       }
+      },
+      "locators": {
+       "distinct": 35,
+       "files": 14,
+       "point_or_short": 35
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 67,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 136,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q06/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2233,
+       "chars": 5663,
+       "sha256": "d838eb8acbf0a7cbaa272c92936fa54cfd83f8d1a286ef7ebd7428e5701b705f",
+       "claims": 13,
+       "claims_reused": 4,
+       "claims_new": 9,
+       "internal_tool_calls": 30,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 5663,
+      "tokens": 1416,
+      "sha256": "d838eb8acbf0a7cbaa272c92936fa54cfd83f8d1a286ef7ebd7428e5701b705f",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q06.load",
+        "q06.copy",
+        "q06.default_file",
+        "q06.caller"
+       ],
+       "missed": [
+        "q06.fallback"
+       ],
+       "via": {
+        "q06.load": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:36",
+        "q06.copy": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:26-42",
+        "q06.default_file": "loc src/main/resources/glowmod.yml:1",
+        "q06.caller": "loc src/main/java/com/example/glowmod/GlowMod.java:21"
+       }
+      },
+      "locators": {
+       "distinct": 13,
+       "files": 5,
+       "point_or_short": 13
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 13,
+       "by_status": {
+        "statically_verified": 12,
+        "weak_inference": 1
+       },
+       "verified": 12,
+       "inference": 1,
+       "verified_share": 0.923,
+       "inference_share": 0.077,
+       "weak_or_unknown": 1,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 13,
+        "graph_edge": 7
+       },
+       "evidence_verifying": 13,
+       "evidence_non_verifying": 7,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.235,
+       "tool_calls": 30,
+       "context_chars": 8172,
+       "context_tokens_est": 2043,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 7,
+       "checked": 6,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q06/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0319,
+       "chars": 5744,
+       "sha256": "f244ed3a74e19647deb4cb4930d12925c1c7b1789ca0f06bf649f503342646b2"
+      }
+     ],
+     "score": {
+      "chars": 5744,
+      "tokens": 1436,
+      "sha256": "f244ed3a74e19647deb4cb4930d12925c1c7b1789ca0f06bf649f503342646b2",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q06.load",
+        "q06.default_file",
+        "q06.fallback",
+        "q06.caller"
+       ],
+       "missed": [
+        "q06.copy"
+       ],
+       "via": {
+        "q06.load": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:35",
+        "q06.default_file": "loc src/main/resources/glowmod.yml:1",
+        "q06.fallback": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:15-20",
+        "q06.caller": "loc src/main/java/com/example/glowmod/GlowMod.java:21"
+       }
+      },
+      "locators": {
+       "distinct": 20,
+       "files": 5,
+       "point_or_short": 20
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 8,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5991,
+        "truncated": true,
+        "expansions": [
+         "glowmod->glow (corpus prefix)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q06/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0456,
+       "chars": 5955,
+       "sha256": "1c57236defab3a484925b4a180be87e54b47e825897c4a4b9e09aeadd2ecf278"
+      }
+     ],
+     "score": {
+      "chars": 5955,
+      "tokens": 1489,
+      "sha256": "1c57236defab3a484925b4a180be87e54b47e825897c4a4b9e09aeadd2ecf278",
+      "facts": {
+       "total": 5,
+       "found_n": 5,
+       "pinpointed_n": 5,
+       "found": [
+        "q06.load",
+        "q06.copy",
+        "q06.default_file",
+        "q06.fallback",
+        "q06.caller"
+       ],
+       "missed": [],
+       "via": {
+        "q06.load": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:36",
+        "q06.copy": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:26-42",
+        "q06.default_file": "loc src/main/resources/glowmod.yml:1-2",
+        "q06.fallback": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:15-20",
+        "q06.caller": "loc src/main/java/com/example/glowmod/GlowMod.java:21"
+       }
+      },
+      "locators": {
+       "distinct": 30,
+       "files": 12,
+       "point_or_short": 29
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 8,
+       "outline_edges": 8,
+       "edge_confidence": {
+        "EXTRACTED": 8
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 8,
+       "checked": 8,
+       "cited_line_missing_target": 4,
+       "named_via_import_alias": 0,
+       "examples": [
+        {
+         "assertion": "onInitialize -calls-> public @src/main/java/com/example/glowmod/GlowMod.java:21",
+         "at": "src/main/java/com/example/glowmod/GlowMod.java:21",
+         "line": "GlowConfig.load();"
+        },
+        {
+         "assertion": "reload -calls-> public @src/main/java/com/example/glowmod/command/GlowCommands.java:45",
+         "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:45",
+         "line": "GlowConfig.load();"
+        },
+        {
+         "assertion": "load -calls-> private @src/main/java/com/example/glowmod/config/GlowConfig.java:36",
+         "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:36",
+         "line": "current = parse(root == null ? Map.of() : root);"
+        },
+        {
+         "assertion": "parse -calls-> public @src/main/java/com/example/glowmod/config/GlowConfig.java:48",
+         "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:48",
+         "line": "return new GlowConfig("
+        }
+       ]
+      },
+      "context_file": "raw/glow_new/q06/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q07",
+   "category": "config",
+   "question": "Her tick'te kaç bloğun onarılacağı nerede ayarlanıyor?",
+   "facts": 3,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0223,
+       "chars": 12882,
+       "sha256": "0bac001f2d46cec8a63a2a6116a40d09a2b55eb8ee3dcef005ea39909f63d303"
+      }
+     ],
+     "score": {
+      "chars": 12882,
+      "tokens": 3221,
+      "sha256": "0bac001f2d46cec8a63a2a6116a40d09a2b55eb8ee3dcef005ea39909f63d303",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q07.yml",
+        "q07.parse",
+        "q07.use"
+       ],
+       "missed": [],
+       "via": {
+        "q07.yml": "loc src/main/resources/glowmod.yml:11",
+        "q07.parse": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:51",
+        "q07.use": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:33"
+       }
+      },
+      "locators": {
+       "distinct": 39,
+       "files": 15,
+       "point_or_short": 36
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "her",
+        "tick",
+        "kaç",
+        "bloğun",
+        "onarılacağı",
+        "nerede",
+        "ayarlanıyor"
+       ],
+       "matching_files": 15,
+       "matching_lines": 34,
+       "files_read": [
+        {
+         "file": "src/main/resources/data/glowmod/function/ritual/start.mcfunction",
+         "lines": [
+          1,
+          7
+         ],
+         "of": 7
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/repair/RepairScheduler.java",
+         "lines": [
+          1,
+          48
+         ],
+         "of": 48
+        },
+        {
+         "file": "src/main/resources/glowmod.yml",
+         "lines": [
+          1,
+          18
+         ],
+         "of": 18
+        },
+        {
+         "file": "src/client/java/com/example/glowmod/client/GlowModClient.java",
+         "lines": [
+          1,
+          32
+         ],
+         "of": 32
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/config/GlowConfig.java",
+         "lines": [
+          1,
+          64
+         ],
+         "of": 64
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q07/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0111,
+       "chars": 6471,
+       "sha256": "79ac2ba14bd32d64279ceac8cf2014bceec2522bb39bdc3d8ef73403a40c89e8"
+      }
+     ],
+     "score": {
+      "chars": 6471,
+      "tokens": 1618,
+      "sha256": "79ac2ba14bd32d64279ceac8cf2014bceec2522bb39bdc3d8ef73403a40c89e8",
+      "facts": {
+       "total": 3,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q07.use"
+       ],
+       "missed": [
+        "q07.yml",
+        "q07.parse"
+       ],
+       "via": {
+        "q07.use": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:33"
+       }
+      },
+      "locators": {
+       "distinct": 44,
+       "files": 16,
+       "point_or_short": 44
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 57,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 92,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q07/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1478,
+       "chars": 3387,
+       "sha256": "207bbce5fd1baa095a5eecba4f9b5b667e41c742eabe18a8274e304f6cc88575",
+       "claims": 7,
+       "claims_reused": 2,
+       "claims_new": 5,
+       "internal_tool_calls": 15,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 3387,
+      "tokens": 847,
+      "sha256": "207bbce5fd1baa095a5eecba4f9b5b667e41c742eabe18a8274e304f6cc88575",
+      "facts": {
+       "total": 3,
+       "found_n": 2,
+       "pinpointed_n": 1,
+       "found": [
+        "q07.parse",
+        "q07.use"
+       ],
+       "missed": [
+        "q07.yml"
+       ],
+       "via": {
+        "q07.parse": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:15-64",
+        "q07.use": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:34"
+       }
+      },
+      "locators": {
+       "distinct": 7,
+       "files": 3,
+       "point_or_short": 6
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 7,
+       "by_status": {
+        "statically_verified": 6,
+        "weak_inference": 1
+       },
+       "verified": 6,
+       "inference": 1,
+       "verified_share": 0.857,
+       "inference_share": 0.143,
+       "weak_or_unknown": 1,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 7,
+        "graph_edge": 3
+       },
+       "evidence_verifying": 7,
+       "evidence_non_verifying": 3,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 2,
+      "analysis_usage": {
+       "elapsed_s": 0.141,
+       "tool_calls": 15,
+       "context_chars": 4874,
+       "context_tokens_est": 1218,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 2,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q07/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0323,
+       "chars": 5743,
+       "sha256": "12938a92048f858fe87f0c905843dcd4f306306ddaabeb969c49c8ad1910a690"
+      }
+     ],
+     "score": {
+      "chars": 5743,
+      "tokens": 1436,
+      "sha256": "12938a92048f858fe87f0c905843dcd4f306306ddaabeb969c49c8ad1910a690",
+      "facts": {
+       "total": 3,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q07.parse",
+        "q07.use"
+       ],
+       "missed": [
+        "q07.yml"
+       ],
+       "via": {
+        "q07.parse": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:44-54",
+        "q07.use": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:33"
+       }
+      },
+      "locators": {
+       "distinct": 18,
+       "files": 5,
+       "point_or_short": 18
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 8,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5978,
+        "truncated": true,
+        "expansions": [
+         "ayarlanıyor->ayarlari (turkish stem 'ayarl')",
+         "ayarlaniyor->sett (lexicon)",
+         "ayarlaniyor->config (lexicon)",
+         "ayarlaniyor->option (lexicon)"
+        ],
+        "more": [
+         "src/main/resources/data/glowmod/function/ritual/tick.mcfunction:1-5 glowmod:ritual/tick"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q07/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0469,
+       "chars": 5957,
+       "sha256": "e6dc1d739a4260a7895f19cf4ad67f00a145ec7a8de56ac47b5c980c2a79082c"
+      }
+     ],
+     "score": {
+      "chars": 5957,
+      "tokens": 1490,
+      "sha256": "e6dc1d739a4260a7895f19cf4ad67f00a145ec7a8de56ac47b5c980c2a79082c",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 2,
+       "found": [
+        "q07.yml",
+        "q07.parse",
+        "q07.use"
+       ],
+       "missed": [],
+       "via": {
+        "q07.yml": "loc src/main/resources/glowmod.yml:10-14",
+        "q07.parse": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:15-64",
+        "q07.use": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:33-39"
+       }
+      },
+      "locators": {
+       "distinct": 34,
+       "files": 19,
+       "point_or_short": 33
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 8,
+       "outline_edges": 3,
+       "edge_confidence": {
+        "EXTRACTED": 3
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 3,
+       "cited_line_missing_target": 1,
+       "named_via_import_alias": 0,
+       "examples": [
+        {
+         "assertion": "parse -calls-> public @src/main/java/com/example/glowmod/config/GlowConfig.java:48",
+         "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:48",
+         "line": "return new GlowConfig("
+        }
+       ]
+      },
+      "context_file": "raw/glow_new/q07/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q08",
+   "category": "resources",
+   "question": "Where is the crafting recipe for the lantern staff and what goes into it?",
+   "facts": 3,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0216,
+       "chars": 9192,
+       "sha256": "5ca0ea2d57aad875f6ca8863a48bd1e02a9c3b4a5c90aa43c6ae1ec0d700536c"
+      }
+     ],
+     "score": {
+      "chars": 9192,
+      "tokens": 2298,
+      "sha256": "5ca0ea2d57aad875f6ca8863a48bd1e02a9c3b4a5c90aa43c6ae1ec0d700536c",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q08.file",
+        "q08.keys",
+        "q08.pattern"
+       ],
+       "missed": [],
+       "via": {
+        "q08.file": "loc src/main/resources/data/glowmod/recipe/lantern_staff.json:2",
+        "q08.keys": "loc src/main/resources/data/glowmod/recipe/lantern_staff.json:11",
+        "q08.pattern": "loc src/main/resources/data/glowmod/recipe/lantern_staff.json:1-18"
+       }
+      },
+      "locators": {
+       "distinct": 33,
+       "files": 15,
+       "point_or_short": 31
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "crafting",
+        "recipe",
+        "lantern",
+        "staff",
+        "goes"
+       ],
+       "matching_files": 15,
+       "matching_lines": 28,
+       "files_read": [
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "src/main/resources/data/glowmod/recipe/lantern_staff.json",
+         "lines": [
+          1,
+          18
+         ],
+         "of": 18
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/event/LanternEvents.java",
+         "lines": [
+          1,
+          35
+         ],
+         "of": 35
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/item/ModItems.java",
+         "lines": [
+          1,
+          32
+         ],
+         "of": 32
+        },
+        {
+         "file": "reference/original-plugin/plugin.yml",
+         "lines": [
+          1,
+          9
+         ],
+         "of": 9
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q08/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0108,
+       "chars": 6430,
+       "sha256": "f9eb2f2791bdbf891af5d4da904711cda1b6b79b453de2c37953b650e01aaf09"
+      }
+     ],
+     "score": {
+      "chars": 6430,
+      "tokens": 1608,
+      "sha256": "f9eb2f2791bdbf891af5d4da904711cda1b6b79b453de2c37953b650e01aaf09",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q08.file",
+        "q08.keys",
+        "q08.pattern"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 43,
+       "files": 15,
+       "point_or_short": 43
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 63,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 133,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q08/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.2461,
+       "chars": 5629,
+       "sha256": "7c44301a201e7a82296b576d3df51f8d86cde79cbdd7f9a64507cc9e0cf18b89",
+       "claims": 13,
+       "claims_reused": 0,
+       "claims_new": 13,
+       "internal_tool_calls": 23,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 5629,
+      "tokens": 1408,
+      "sha256": "7c44301a201e7a82296b576d3df51f8d86cde79cbdd7f9a64507cc9e0cf18b89",
+      "facts": {
+       "total": 3,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q08.file",
+        "q08.keys"
+       ],
+       "missed": [
+        "q08.pattern"
+       ],
+       "via": {
+        "q08.file": "loc src/main/resources/data/glowmod/recipe/lantern_staff.json:11",
+        "q08.keys": "loc src/main/resources/data/glowmod/recipe/lantern_staff.json:11"
+       }
+      },
+      "locators": {
+       "distinct": 12,
+       "files": 7,
+       "point_or_short": 12
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 13,
+       "by_status": {
+        "statically_verified": 10,
+        "strong_inference": 3
+       },
+       "verified": 10,
+       "inference": 3,
+       "verified_share": 0.769,
+       "inference_share": 0.231,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 13,
+        "graph_edge": 2
+       },
+       "evidence_verifying": 13,
+       "evidence_non_verifying": 2,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.25,
+       "tool_calls": 23,
+       "context_chars": 7313,
+       "context_tokens_est": 1828,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 7,
+       "checked": 2,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q08/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0306,
+       "chars": 5643,
+       "sha256": "90432dbca337ad44c097375d6856bf97b89fe889cbf3993885cdd1fcd0b49eb1"
+      }
+     ],
+     "score": {
+      "chars": 5643,
+      "tokens": 1411,
+      "sha256": "90432dbca337ad44c097375d6856bf97b89fe889cbf3993885cdd1fcd0b49eb1",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q08.file",
+        "q08.keys",
+        "q08.pattern"
+       ],
+       "missed": [],
+       "via": {
+        "q08.file": "loc src/main/resources/data/glowmod/recipe/lantern_staff.json:1",
+        "q08.keys": "loc src/main/resources/data/glowmod/recipe/lantern_staff.json:1-12",
+        "q08.pattern": "loc src/main/resources/data/glowmod/recipe/lantern_staff.json:1-12"
+       }
+      },
+      "locators": {
+       "distinct": 19,
+       "files": 7,
+       "point_or_short": 19
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 7,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5930,
+        "truncated": true,
+        "more": [
+         "src/main/resources/assets/glowmod/lang/tr_tr.json:1-11 glowmod:tr_tr"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q08/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0386,
+       "chars": 5951,
+       "sha256": "defeb15738a7745dccb740ae7d83ea1348a9e7c03d4968bd4353bbecdb8bdb3f"
+      }
+     ],
+     "score": {
+      "chars": 5951,
+      "tokens": 1488,
+      "sha256": "defeb15738a7745dccb740ae7d83ea1348a9e7c03d4968bd4353bbecdb8bdb3f",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q08.file",
+        "q08.keys",
+        "q08.pattern"
+       ],
+       "missed": [],
+       "via": {
+        "q08.file": "loc src/main/resources/data/glowmod/recipe/lantern_staff.json:1-18",
+        "q08.keys": "loc src/main/resources/data/glowmod/recipe/lantern_staff.json:1-18",
+        "q08.pattern": "loc src/main/resources/data/glowmod/recipe/lantern_staff.json:1-18"
+       }
+      },
+      "locators": {
+       "distinct": 22,
+       "files": 15,
+       "point_or_short": 22
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 7,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q08/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q09",
+   "category": "resources",
+   "question": "Fener asasının (lantern_staff) eşya modeli ve oyunda görünen adı hangi dosyalarda tanımlı?",
+   "facts": 4,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0247,
+       "chars": 10563,
+       "sha256": "31c146943b66e6fe4e9a808d93c34edd71d1c4c37880b2a61d690f3fff0ef508"
+      }
+     ],
+     "score": {
+      "chars": 10563,
+      "tokens": 2641,
+      "sha256": "31c146943b66e6fe4e9a808d93c34edd71d1c4c37880b2a61d690f3fff0ef508",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q09.model",
+        "q09.en",
+        "q09.tr",
+        "q09.item"
+       ],
+       "missed": [],
+       "via": {
+        "q09.model": "loc src/main/resources/assets/glowmod/models/item/lantern_staff.json:4",
+        "q09.en": "loc src/main/resources/assets/glowmod/lang/en_us.json:2",
+        "q09.tr": "loc src/main/resources/assets/glowmod/lang/tr_tr.json:2",
+        "q09.item": "loc src/main/java/com/example/glowmod/item/ModItems.java:13"
+       }
+      },
+      "locators": {
+       "distinct": 20,
+       "files": 9,
+       "point_or_short": 16
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "fener",
+        "asasının",
+        "lantern_staff",
+        "eşya",
+        "modeli",
+        "oyunda",
+        "görünen",
+        "adı",
+        "hangi",
+        "dosyalarda",
+        "tanımlı"
+       ],
+       "matching_files": 9,
+       "matching_lines": 15,
+       "files_read": [
+        {
+         "file": "src/main/resources/assets/glowmod/lang/tr_tr.json",
+         "lines": [
+          1,
+          11
+         ],
+         "of": 11
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/ritual/Ritual.java",
+         "lines": [
+          1,
+          43
+         ],
+         "of": 43
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/event/LanternEvents.java",
+         "lines": [
+          1,
+          35
+         ],
+         "of": 35
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/item/ModItems.java",
+         "lines": [
+          1,
+          32
+         ],
+         "of": 32
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/command/GlowCommands.java",
+         "lines": [
+          1,
+          49
+         ],
+         "of": 49
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q09/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0106,
+       "chars": 6430,
+       "sha256": "9a2326f4c9d6af66e385ca150d444b04ebe8dbc060d4519f5877ae02746b9209"
+      }
+     ],
+     "score": {
+      "chars": 6430,
+      "tokens": 1608,
+      "sha256": "9a2326f4c9d6af66e385ca150d444b04ebe8dbc060d4519f5877ae02746b9209",
+      "facts": {
+       "total": 4,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q09.model",
+        "q09.en",
+        "q09.tr",
+        "q09.item"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 43,
+       "files": 15,
+       "point_or_short": 43
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 63,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 133,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q09/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1144,
+       "chars": 3084,
+       "sha256": "fc62dca80d7a86f1b43ce5324d8e06da63b2d3ff197f2aad8a8f3a99f9b919b4",
+       "claims": 6,
+       "claims_reused": 5,
+       "claims_new": 1,
+       "internal_tool_calls": 10,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 3084,
+      "tokens": 771,
+      "sha256": "fc62dca80d7a86f1b43ce5324d8e06da63b2d3ff197f2aad8a8f3a99f9b919b4",
+      "facts": {
+       "total": 4,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q09.model",
+        "q09.en",
+        "q09.item"
+       ],
+       "missed": [
+        "q09.tr"
+       ],
+       "via": {
+        "q09.model": "loc src/main/resources/assets/glowmod/models/item/lantern_staff.json:4",
+        "q09.en": "loc src/main/resources/assets/glowmod/lang/en_us.json:2",
+        "q09.item": "loc src/main/java/com/example/glowmod/item/ModItems.java:13"
+       }
+      },
+      "locators": {
+       "distinct": 6,
+       "files": 5,
+       "point_or_short": 6
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 6,
+       "by_status": {
+        "statically_verified": 5,
+        "strong_inference": 1
+       },
+       "verified": 5,
+       "inference": 1,
+       "verified_share": 0.833,
+       "inference_share": 0.167,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 6
+       },
+       "evidence_verifying": 6,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 2,
+      "analysis_usage": {
+       "elapsed_s": 0.11,
+       "tool_calls": 10,
+       "context_chars": 4090,
+       "context_tokens_est": 1022,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 2,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q09/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0323,
+       "chars": 5679,
+       "sha256": "aa7e73cab5e7962a387324d7cb176d055089a9af82878c85eae59f65af81db7b"
+      }
+     ],
+     "score": {
+      "chars": 5679,
+      "tokens": 1420,
+      "sha256": "aa7e73cab5e7962a387324d7cb176d055089a9af82878c85eae59f65af81db7b",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q09.model",
+        "q09.en",
+        "q09.tr",
+        "q09.item"
+       ],
+       "missed": [],
+       "via": {
+        "q09.model": "loc src/main/resources/assets/glowmod/models/item/lantern_staff.json:1",
+        "q09.en": "loc src/main/resources/assets/glowmod/lang/en_us.json:1-11",
+        "q09.tr": "loc src/main/resources/assets/glowmod/lang/tr_tr.json:2",
+        "q09.item": "loc src/main/java/com/example/glowmod/item/ModItems.java:13"
+       }
+      },
+      "locators": {
+       "distinct": 19,
+       "files": 7,
+       "point_or_short": 19
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 5,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5944,
+        "truncated": true,
+        "expansions": [
+         "asasının->asasi (turkish stem 'asasi')",
+         "modeli->modentities (turkish stem 'mode')",
+         "modeli->model (turkish stem 'mode')",
+         "modeli->mod (corpus prefix)",
+         "dosyalarda->fil (lexicon)",
+         "dosyalarda->path (lexicon)"
+        ],
+        "more": [
+         "src/main/java/com/example/glowmod/event/LanternEvents.java:11-35 LanternEvents",
+         "src/main/resources/assets/glowmod/lang/en_us.json:1-11 glowmod:en_us",
+         "README.md:1-26 Glow Mod (example)",
+         "src/main/java/com/example/glowmod/item/ModItems.java:25-31 ModItems.initialize"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q09/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0403,
+       "chars": 5659,
+       "sha256": "ade2297c1454e94dc2f3ce1adee9c039f06511e0662fddf822367c6af5878aec"
+      }
+     ],
+     "score": {
+      "chars": 5659,
+      "tokens": 1415,
+      "sha256": "ade2297c1454e94dc2f3ce1adee9c039f06511e0662fddf822367c6af5878aec",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q09.model",
+        "q09.en",
+        "q09.tr",
+        "q09.item"
+       ],
+       "missed": [],
+       "via": {
+        "q09.model": "loc src/main/resources/assets/glowmod/models/item/lantern_staff.json:1-6",
+        "q09.en": "loc src/main/resources/assets/glowmod/lang/en_us.json:2",
+        "q09.tr": "loc src/main/resources/assets/glowmod/lang/tr_tr.json:2",
+        "q09.item": "loc src/main/java/com/example/glowmod/item/ModItems.java:13"
+       }
+      },
+      "locators": {
+       "distinct": 15,
+       "files": 10,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 5,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q09/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q10",
+   "category": "flow",
+   "question": "How does pressing the summon key on the client end up spawning a wisp on the server?",
+   "facts": 5,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0238,
+       "chars": 10485,
+       "sha256": "8f31fd410d9c1a195ff39ed6b6a93be6fffd1a4d8d471bab5984f35203426a7b"
+      }
+     ],
+     "score": {
+      "chars": 10485,
+      "tokens": 2622,
+      "sha256": "8f31fd410d9c1a195ff39ed6b6a93be6fffd1a4d8d471bab5984f35203426a7b",
+      "facts": {
+       "total": 5,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q10.key",
+        "q10.send",
+        "q10.payload"
+       ],
+       "missed": [
+        "q10.register",
+        "q10.handler"
+       ],
+       "via": {
+        "q10.key": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:19",
+        "q10.send": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:25",
+        "q10.payload": "loc src/main/java/com/example/glowmod/network/SummonWispPayload.java:11"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 5,
+       "point_or_short": 43
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "pressing",
+        "summon",
+        "key",
+        "client",
+        "end",
+        "spawning",
+        "wisp",
+        "server"
+       ],
+       "matching_files": 32,
+       "matching_lines": 211,
+       "files_read": [
+        {
+         "file": "src/client/java/com/example/glowmod/client/GlowModClient.java",
+         "lines": [
+          1,
+          32
+         ],
+         "of": 32
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/network/SummonWispPayload.java",
+         "lines": [
+          1,
+          21
+         ],
+         "of": 21
+        },
+        {
+         "file": "src/main/resources/glowmod.yml",
+         "lines": [
+          1,
+          18
+         ],
+         "of": 18
+        },
+        {
+         "file": "build.gradle",
+         "lines": [
+          1,
+          69
+         ],
+         "of": 69
+        },
+        {
+         "file": "src/main/resources/assets/glowmod/lang/tr_tr.json",
+         "lines": [
+          1,
+          11
+         ],
+         "of": 11
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q10/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0122,
+       "chars": 6540,
+       "sha256": "8b82ce70ae22007f6bc4938d7a33909121af7fc658a7425b546bfd8c9e60fd7e"
+      }
+     ],
+     "score": {
+      "chars": 6540,
+      "tokens": 1635,
+      "sha256": "8b82ce70ae22007f6bc4938d7a33909121af7fc658a7425b546bfd8c9e60fd7e",
+      "facts": {
+       "total": 5,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q10.send",
+        "q10.payload",
+        "q10.handler"
+       ],
+       "missed": [
+        "q10.key",
+        "q10.register"
+       ],
+       "via": {
+        "q10.send": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:25",
+        "q10.payload": "loc src/main/java/com/example/glowmod/network/SummonWispPayload.java:11",
+        "q10.handler": "loc src/main/java/com/example/glowmod/network/ServerNetworking.java:20"
+       }
+      },
+      "locators": {
+       "distinct": 44,
+       "files": 17,
+       "point_or_short": 44
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 57,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 173,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q10/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1455,
+       "chars": 1674,
+       "sha256": "c252835571ccec7d62c655d07d749086ad699909cd731fadbbf75f68ccb2a934",
+       "claims": 3,
+       "claims_reused": 0,
+       "claims_new": 3,
+       "internal_tool_calls": 9,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 1674,
+      "tokens": 419,
+      "sha256": "c252835571ccec7d62c655d07d749086ad699909cd731fadbbf75f68ccb2a934",
+      "facts": {
+       "total": 5,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q10.key",
+        "q10.send"
+       ],
+       "missed": [
+        "q10.payload",
+        "q10.register",
+        "q10.handler"
+       ],
+       "via": {
+        "q10.key": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:18-23",
+        "q10.send": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:28"
+       }
+      },
+      "locators": {
+       "distinct": 3,
+       "files": 1,
+       "point_or_short": 3
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 3,
+       "by_status": {
+        "statically_verified": 2,
+        "weak_inference": 1
+       },
+       "verified": 2,
+       "inference": 1,
+       "verified_share": 0.667,
+       "inference_share": 0.333,
+       "weak_or_unknown": 1,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 3,
+        "graph_edge": 1
+       },
+       "evidence_verifying": 3,
+       "evidence_non_verifying": 1,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.141,
+       "tool_calls": 9,
+       "context_chars": 2930,
+       "context_tokens_est": 732,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q10/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0331,
+       "chars": 5763,
+       "sha256": "d892ea3114bc8df7b65cadec85866e710f854e370adf5df7f550b6627ab94193"
+      }
+     ],
+     "score": {
+      "chars": 5763,
+      "tokens": 1441,
+      "sha256": "d892ea3114bc8df7b65cadec85866e710f854e370adf5df7f550b6627ab94193",
+      "facts": {
+       "total": 5,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "found": [
+        "q10.key",
+        "q10.send",
+        "q10.payload",
+        "q10.handler"
+       ],
+       "missed": [
+        "q10.register"
+       ],
+       "via": {
+        "q10.key": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:19",
+        "q10.send": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:25",
+        "q10.payload": "loc src/main/java/com/example/glowmod/network/SummonWispPayload.java:11",
+        "q10.handler": "loc src/main/java/com/example/glowmod/network/ServerNetworking.java:20"
+       }
+      },
+      "locators": {
+       "distinct": 18,
+       "files": 6,
+       "point_or_short": 18
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 8,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5994,
+        "truncated": true
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q10/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0453,
+       "chars": 5999,
+       "sha256": "40a68483f4d1c651cc876d6f92a069b22f0e064946350278f01aea2428c756f2"
+      }
+     ],
+     "score": {
+      "chars": 5999,
+      "tokens": 1500,
+      "sha256": "40a68483f4d1c651cc876d6f92a069b22f0e064946350278f01aea2428c756f2",
+      "facts": {
+       "total": 5,
+       "found_n": 5,
+       "pinpointed_n": 5,
+       "found": [
+        "q10.key",
+        "q10.send",
+        "q10.payload",
+        "q10.register",
+        "q10.handler"
+       ],
+       "missed": [],
+       "via": {
+        "q10.key": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:18-23",
+        "q10.send": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:28",
+        "q10.payload": "loc src/main/java/com/example/glowmod/network/SummonWispPayload.java:11-21",
+        "q10.register": "loc src/main/java/com/example/glowmod/network/ServerNetworking.java:15-18",
+        "q10.handler": "loc src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30"
+       }
+      },
+      "locators": {
+       "distinct": 27,
+       "files": 14,
+       "point_or_short": 26
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 8,
+       "outline_edges": 4,
+       "edge_confidence": {
+        "EXTRACTED": 4
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 4,
+       "checked": 4,
+       "cited_line_missing_target": 2,
+       "named_via_import_alias": 0,
+       "examples": [
+        {
+         "assertion": "onEndTick -calls-> public @src/client/java/com/example/glowmod/client/GlowModClient.java:28",
+         "at": "src/client/java/com/example/glowmod/client/GlowModClient.java:28",
+         "line": "ClientPlayNetworking.send(new SummonWispPayload(hit.getBlockPos()));"
+        },
+        {
+         "assertion": "onInitialize -calls-> public @src/main/java/com/example/glowmod/GlowMod.java:26",
+         "at": "src/main/java/com/example/glowmod/GlowMod.java:26",
+         "line": "WispSpawner.register();"
+        }
+       ]
+      },
+      "context_file": "raw/glow_new/q10/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q11",
+   "category": "behaviour",
+   "question": "Sunucu kapanırken henüz onarılmamış bloklara ne oluyor?",
+   "facts": 3,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0245,
+       "chars": 100,
+       "sha256": "4fcff59b054ee6cd265f5e2cb0a317cd8d67483d7487fff21dccf164ef89fa88"
+      }
+     ],
+     "score": {
+      "chars": 100,
+      "tokens": 25,
+      "sha256": "4fcff59b054ee6cd265f5e2cb0a317cd8d67483d7487fff21dccf164ef89fa88",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q11.hook",
+        "q11.restore",
+        "q11.clear"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 0,
+       "files": 0,
+       "point_or_short": 0
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "sunucu",
+        "kapanırken",
+        "henüz",
+        "onarılmamış",
+        "bloklara",
+        "oluyor"
+       ],
+       "matching_files": 0,
+       "matching_lines": 0,
+       "files_read": [],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q11/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0079,
+       "chars": 24,
+       "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c"
+      }
+     ],
+     "score": {
+      "chars": 24,
+      "tokens": 6,
+      "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q11.hook",
+        "q11.restore",
+        "q11.clear"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 0,
+       "files": 0,
+       "point_or_short": 0
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 0,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": false,
+       "nodes_found": 0,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q11/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1194,
+       "chars": 1706,
+       "sha256": "f16f3eea32a71f6b4093f9be803529cfda9dc61053aea4e7fbb0c7eabbf40e15",
+       "claims": 3,
+       "claims_reused": 0,
+       "claims_new": 3,
+       "internal_tool_calls": 8,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 1706,
+      "tokens": 427,
+      "sha256": "f16f3eea32a71f6b4093f9be803529cfda9dc61053aea4e7fbb0c7eabbf40e15",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q11.hook",
+        "q11.restore",
+        "q11.clear"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 3,
+       "files": 1,
+       "point_or_short": 3
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 3,
+       "by_status": {
+        "statically_verified": 3
+       },
+       "verified": 3,
+       "inference": 0,
+       "verified_share": 1.0,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 3
+       },
+       "evidence_verifying": 3,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 2,
+      "analysis_usage": {
+       "elapsed_s": 0.109,
+       "tool_calls": 8,
+       "context_chars": 2731,
+       "context_tokens_est": 682,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q11/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0367,
+       "chars": 5741,
+       "sha256": "84f092f8666b45475e89eaa0a126ebed13d5264f1e1b1cd86d4e249567d0c520"
+      }
+     ],
+     "score": {
+      "chars": 5741,
+      "tokens": 1436,
+      "sha256": "84f092f8666b45475e89eaa0a126ebed13d5264f1e1b1cd86d4e249567d0c520",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q11.hook",
+        "q11.restore",
+        "q11.clear"
+       ],
+       "missed": [],
+       "via": {
+        "q11.hook": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:24",
+        "q11.restore": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:42",
+        "q11.clear": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:42-47"
+       }
+      },
+      "locators": {
+       "distinct": 19,
+       "files": 4,
+       "point_or_short": 19
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 9,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5993,
+        "truncated": true,
+        "expansions": [
+         "sunucu->serv (lexicon)"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q11/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0456,
+       "chars": 5962,
+       "sha256": "3af6e72487a8939351c364aa111c8efffb992a8945da26267e3f9f41603f53a0"
+      }
+     ],
+     "score": {
+      "chars": 5962,
+      "tokens": 1491,
+      "sha256": "3af6e72487a8939351c364aa111c8efffb992a8945da26267e3f9f41603f53a0",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q11.hook",
+        "q11.restore",
+        "q11.clear"
+       ],
+       "missed": [],
+       "via": {
+        "q11.hook": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:23-26",
+        "q11.restore": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:40-42",
+        "q11.clear": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:42-47"
+       }
+      },
+      "locators": {
+       "distinct": 32,
+       "files": 16,
+       "point_or_short": 31
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 9,
+       "outline_edges": 3,
+       "edge_confidence": {
+        "EXTRACTED": 3
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 3,
+       "cited_line_missing_target": 3,
+       "named_via_import_alias": 0,
+       "examples": [
+        {
+         "assertion": "onInitialize -calls-> public @src/main/java/com/example/glowmod/GlowMod.java:28",
+         "at": "src/main/java/com/example/glowmod/GlowMod.java:28",
+         "line": "RepairScheduler.register();"
+        },
+        {
+         "assertion": "run -calls-> private @src/main/java/com/example/glowmod/util/Datapack.java:17",
+         "at": "src/main/java/com/example/glowmod/util/Datapack.java:17",
+         "line": "execute(world, pos, Identifier.of(GlowMod.MOD_ID, name));"
+        },
+        {
+         "assertion": "runQualified -calls-> private @src/main/java/com/example/glowmod/util/Datapack.java:22",
+         "at": "src/main/java/com/example/glowmod/util/Datapack.java:22",
+         "line": "execute(world, pos, Identifier.of(id));"
+        }
+       ]
+      },
+      "context_file": "raw/glow_new/q11/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q12",
+   "category": "where",
+   "question": "Where are the mod's items registered?",
+   "facts": 3,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0223,
+       "chars": 11444,
+       "sha256": "8667ae1f6bf50e1181b3916bc8acb8bc7f18e3b085164053fd04d631cd0a17bc"
+      }
+     ],
+     "score": {
+      "chars": 11444,
+      "tokens": 2861,
+      "sha256": "8667ae1f6bf50e1181b3916bc8acb8bc7f18e3b085164053fd04d631cd0a17bc",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 2,
+       "found": [
+        "q12.helper",
+        "q12.fields",
+        "q12.init"
+       ],
+       "missed": [],
+       "via": {
+        "q12.helper": "loc src/main/java/com/example/glowmod/item/ModItems.java:21",
+        "q12.fields": "loc src/main/java/com/example/glowmod/item/ModItems.java:1-32",
+        "q12.init": "loc src/main/java/com/example/glowmod/GlowMod.java:22"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 5,
+       "point_or_short": 42
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "mod",
+        "items",
+        "registered"
+       ],
+       "matching_files": 33,
+       "matching_lines": 157,
+       "files_read": [
+        {
+         "file": "src/main/java/com/example/glowmod/GlowMod.java",
+         "lines": [
+          1,
+          31
+         ],
+         "of": 31
+        },
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/item/ModItems.java",
+         "lines": [
+          1,
+          32
+         ],
+         "of": 32
+        },
+        {
+         "file": "src/gametest/java/com/example/glowmod/test/WispTests.java",
+         "lines": [
+          1,
+          29
+         ],
+         "of": 29
+        },
+        {
+         "file": "src/main/java/com/example/glowmod/network/ServerNetworking.java",
+         "lines": [
+          1,
+          31
+         ],
+         "of": 31
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q12/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0115,
+       "chars": 6419,
+       "sha256": "2e261e6e8a2f2c7079ffb13a13e42cf2fea48932ec3110f49d9c273158ce50bd"
+      }
+     ],
+     "score": {
+      "chars": 6419,
+      "tokens": 1605,
+      "sha256": "2e261e6e8a2f2c7079ffb13a13e42cf2fea48932ec3110f49d9c273158ce50bd",
+      "facts": {
+       "total": 3,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q12.helper"
+       ],
+       "missed": [
+        "q12.fields",
+        "q12.init"
+       ],
+       "via": {
+        "q12.helper": "loc src/main/java/com/example/glowmod/item/ModItems.java:20"
+       }
+      },
+      "locators": {
+       "distinct": 39,
+       "files": 14,
+       "point_or_short": 39
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 66,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": true,
+       "nodes_found": 134,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q12/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1297,
+       "chars": 3664,
+       "sha256": "d2d00567b6575c750722315447547591097ef3b81f07f3c1fd384992580251ae",
+       "claims": 9,
+       "claims_reused": 5,
+       "claims_new": 4,
+       "internal_tool_calls": 16,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 3664,
+      "tokens": 916,
+      "sha256": "d2d00567b6575c750722315447547591097ef3b81f07f3c1fd384992580251ae",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q12.helper",
+        "q12.fields",
+        "q12.init"
+       ],
+       "missed": [],
+       "via": {
+        "q12.helper": "loc src/main/java/com/example/glowmod/item/ModItems.java:20-22",
+        "q12.fields": "loc src/main/java/com/example/glowmod/item/ModItems.java:13",
+        "q12.init": "loc src/main/java/com/example/glowmod/GlowMod.java:22"
+       }
+      },
+      "locators": {
+       "distinct": 9,
+       "files": 4,
+       "point_or_short": 9
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 9,
+       "by_status": {
+        "statically_verified": 5,
+        "weak_inference": 2,
+        "strong_inference": 2
+       },
+       "verified": 5,
+       "inference": 4,
+       "verified_share": 0.556,
+       "inference_share": 0.444,
+       "weak_or_unknown": 2,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 9,
+        "graph_edge": 2
+       },
+       "evidence_verifying": 9,
+       "evidence_non_verifying": 2,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.125,
+       "tool_calls": 16,
+       "context_chars": 5100,
+       "context_tokens_est": 1275,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 4,
+       "checked": 2,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q12/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.042,
+       "chars": 5724,
+       "sha256": "250e7c87d1f1bd5eda9f8502e6ff9b7bfb146ea25c6b0f97f601919eeb772007"
+      }
+     ],
+     "score": {
+      "chars": 5724,
+      "tokens": 1431,
+      "sha256": "250e7c87d1f1bd5eda9f8502e6ff9b7bfb146ea25c6b0f97f601919eeb772007",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q12.helper",
+        "q12.fields",
+        "q12.init"
+       ],
+       "missed": [],
+       "via": {
+        "q12.helper": "loc src/main/java/com/example/glowmod/item/ModItems.java:20",
+        "q12.fields": "loc src/main/java/com/example/glowmod/item/ModItems.java:14",
+        "q12.init": "loc src/main/java/com/example/glowmod/GlowMod.java:22"
+       }
+      },
+      "locators": {
+       "distinct": 22,
+       "files": 6,
+       "point_or_short": 22
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 9,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5982,
+        "truncated": true
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q12/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0495,
+       "chars": 5888,
+       "sha256": "85f50d4b7d447151de9c2ded90000327076b4726fa64c90ece575d85b3930e02"
+      }
+     ],
+     "score": {
+      "chars": 5888,
+      "tokens": 1472,
+      "sha256": "85f50d4b7d447151de9c2ded90000327076b4726fa64c90ece575d85b3930e02",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "found": [
+        "q12.helper",
+        "q12.fields",
+        "q12.init"
+       ],
+       "missed": [],
+       "via": {
+        "q12.helper": "loc src/main/java/com/example/glowmod/item/ModItems.java:12-32",
+        "q12.fields": "loc src/main/java/com/example/glowmod/item/ModItems.java:14",
+        "q12.init": "loc src/main/java/com/example/glowmod/GlowMod.java:19-30"
+       }
+      },
+      "locators": {
+       "distinct": 31,
+       "files": 18,
+       "point_or_short": 31
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 9,
+       "outline_edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 1,
+       "cited_line_missing_target": 1,
+       "named_via_import_alias": 0,
+       "examples": [
+        {
+         "assertion": "onInitialize -calls-> public @src/main/java/com/example/glowmod/GlowMod.java:25",
+         "at": "src/main/java/com/example/glowmod/GlowMod.java:25",
+         "line": "LanternEvents.etkinlestir();"
+        }
+       ]
+      },
+      "context_file": "raw/glow_new/q12/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q13",
+   "category": "behaviour",
+   "question": "Oyuncu fener asasıyla bir ruh fenerine sağ tıklayınca ne oluyor?",
+   "facts": 3,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.025,
+       "chars": 878,
+       "sha256": "22fc228f2e5a8f0170ef300cacca2f5fbd33243c389dd6e1035da5a570744ab7"
+      }
+     ],
+     "score": {
+      "chars": 878,
+      "tokens": 220,
+      "sha256": "22fc228f2e5a8f0170ef300cacca2f5fbd33243c389dd6e1035da5a570744ab7",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q13.check",
+        "q13.spawn",
+        "q13.cooldown"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 3,
+       "files": 1,
+       "point_or_short": 3
+      },
+      "agent_tool_calls": 2,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "oyuncu",
+        "fener",
+        "asasıyla",
+        "bir",
+        "ruh",
+        "fenerine",
+        "sağ",
+        "tıklayınca",
+        "oluyor"
+       ],
+       "matching_files": 1,
+       "matching_lines": 2,
+       "files_read": [
+        {
+         "file": "src/main/resources/assets/glowmod/lang/tr_tr.json",
+         "lines": [
+          1,
+          11
+         ],
+         "of": 11
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q13/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0081,
+       "chars": 24,
+       "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c"
+      }
+     ],
+     "score": {
+      "chars": 24,
+      "tokens": 6,
+      "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q13.check",
+        "q13.spawn",
+        "q13.cooldown"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 0,
+       "files": 0,
+       "point_or_short": 0
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 0,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": false,
+       "nodes_found": 0,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q13/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.095,
+       "chars": 1087,
+       "sha256": "d6228ec0161647559d39be820a5afafbf06efbdf62241d4d13af0cb919adb75f",
+       "claims": 0,
+       "claims_reused": 0,
+       "claims_new": 0,
+       "internal_tool_calls": 2,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 1087,
+      "tokens": 272,
+      "sha256": "d6228ec0161647559d39be820a5afafbf06efbdf62241d4d13af0cb919adb75f",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q13.check",
+        "q13.spawn",
+        "q13.cooldown"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 0,
+       "files": 0,
+       "point_or_short": 0
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 0,
+       "by_status": {},
+       "verified": 0,
+       "inference": 0,
+       "verified_share": null,
+       "inference_share": null,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {},
+       "evidence_verifying": 0,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 3,
+      "analysis_usage": {
+       "elapsed_s": 0.094,
+       "tool_calls": 2,
+       "context_chars": 1684,
+       "context_tokens_est": 421,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q13/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0286,
+       "chars": 3870,
+       "sha256": "8245a009aa42b83fa35c67c4dc1efd99d07effc717b9344cc297e7672d2db26d"
+      }
+     ],
+     "score": {
+      "chars": 3870,
+      "tokens": 968,
+      "sha256": "8245a009aa42b83fa35c67c4dc1efd99d07effc717b9344cc297e7672d2db26d",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q13.check",
+        "q13.spawn",
+        "q13.cooldown"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 13,
+       "files": 5,
+       "point_or_short": 13
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 5,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 4097,
+        "truncated": false,
+        "expansions": [
+         "asasıyla->asasi (turkish stem 'asasi')"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q13/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0433,
+       "chars": 3161,
+       "sha256": "ee1cad16ee001477b777ef242b7aa8983e41fec9cddb5224dc00d4f9dabbe001"
+      }
+     ],
+     "score": {
+      "chars": 3161,
+      "tokens": 791,
+      "sha256": "ee1cad16ee001477b777ef242b7aa8983e41fec9cddb5224dc00d4f9dabbe001",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q13.check",
+        "q13.spawn",
+        "q13.cooldown"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 14,
+       "files": 8,
+       "point_or_short": 14
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 5,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": false,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q13/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q14",
+   "category": "where",
+   "question": "In the original Paper plugin, how was a wisp spawned and what called it?",
+   "facts": 2,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0252,
+       "chars": 10281,
+       "sha256": "84c0451950457dfef5e5f69b088b96a9caf390ec1a020f28c9469aef4e45260c"
+      }
+     ],
+     "score": {
+      "chars": 10281,
+      "tokens": 2571,
+      "sha256": "84c0451950457dfef5e5f69b088b96a9caf390ec1a020f28c9469aef4e45260c",
+      "facts": {
+       "total": 2,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q14.spawn",
+        "q14.listener"
+       ],
+       "missed": [],
+       "via": {
+        "q14.spawn": "loc reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:19",
+        "q14.listener": "loc reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:25"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 7,
+       "point_or_short": 43
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "original",
+        "paper",
+        "plugin",
+        "wisp",
+        "spawned",
+        "called"
+       ],
+       "matching_files": 29,
+       "matching_lines": 129,
+       "files_read": [
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java",
+         "lines": [
+          1,
+          35
+         ],
+         "of": 35
+        },
+        {
+         "file": "reference/original-plugin/config.yml",
+         "lines": [
+          1,
+          9
+         ],
+         "of": 9
+        },
+        {
+         "file": "reference/original-plugin/plugin.yml",
+         "lines": [
+          1,
+          9
+         ],
+         "of": 9
+        },
+        {
+         "file": "reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java",
+         "lines": [
+          1,
+          36
+         ],
+         "of": 36
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q14/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0103,
+       "chars": 428,
+       "sha256": "9fdedd69ec6d913d54fd734ca9c51fa814c83977d8b433e1051b8e18414f1454"
+      }
+     ],
+     "score": {
+      "chars": 428,
+      "tokens": 107,
+      "sha256": "9fdedd69ec6d913d54fd734ca9c51fa814c83977d8b433e1051b8e18414f1454",
+      "facts": {
+       "total": 2,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "found": [],
+       "missed": [
+        "q14.spawn",
+        "q14.listener"
+       ],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 2,
+       "files": 1,
+       "point_or_short": 2
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 2,
+       "edges_shown": 0,
+       "edge_confidence": {},
+       "truncated": false,
+       "nodes_found": 2,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q14/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.193,
+       "chars": 2719,
+       "sha256": "3d8ee2def7bd0cbacf9fa829c520008be53c4aad30ba46cfe375710284e2a601",
+       "claims": 8,
+       "claims_reused": 1,
+       "claims_new": 7,
+       "internal_tool_calls": 17,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 2719,
+      "tokens": 680,
+      "sha256": "3d8ee2def7bd0cbacf9fa829c520008be53c4aad30ba46cfe375710284e2a601",
+      "facts": {
+       "total": 2,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q14.spawn"
+       ],
+       "missed": [
+        "q14.listener"
+       ],
+       "via": {
+        "q14.spawn": "loc reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:19-24"
+       }
+      },
+      "locators": {
+       "distinct": 8,
+       "files": 7,
+       "point_or_short": 8
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 8,
+       "by_status": {
+        "statically_verified": 8
+       },
+       "verified": 8,
+       "inference": 0,
+       "verified_share": 1.0,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 8
+       },
+       "evidence_verifying": 8,
+       "evidence_non_verifying": 0,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.188,
+       "tool_calls": 17,
+       "context_chars": 4130,
+       "context_tokens_est": 1032,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q14/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0361,
+       "chars": 5727,
+       "sha256": "a80cdfe92e2fd7baf84ae355f1420358a97c0694192c1868f7a64215b3dcbfc4"
+      }
+     ],
+     "score": {
+      "chars": 5727,
+      "tokens": 1432,
+      "sha256": "a80cdfe92e2fd7baf84ae355f1420358a97c0694192c1868f7a64215b3dcbfc4",
+      "facts": {
+       "total": 2,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "found": [
+        "q14.spawn"
+       ],
+       "missed": [
+        "q14.listener"
+       ],
+       "via": {
+        "q14.spawn": "loc reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:19"
+       }
+      },
+      "locators": {
+       "distinct": 19,
+       "files": 5,
+       "point_or_short": 19
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 10,
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 6000,
+        "truncated": true
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 1,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q14/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0437,
+       "chars": 5901,
+       "sha256": "00ccfbe533873db4ff67e5d5f70278c6bcce850a4e07ebeb68970f702b4880d6"
+      }
+     ],
+     "score": {
+      "chars": 5901,
+      "tokens": 1476,
+      "sha256": "00ccfbe533873db4ff67e5d5f70278c6bcce850a4e07ebeb68970f702b4880d6",
+      "facts": {
+       "total": 2,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "found": [
+        "q14.spawn",
+        "q14.listener"
+       ],
+       "missed": [],
+       "via": {
+        "q14.spawn": "loc reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:19-24",
+        "q14.listener": "loc reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:18-27"
+       }
+      },
+      "locators": {
+       "distinct": 29,
+       "files": 16,
+       "point_or_short": 28
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 10,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": true,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/glow_new/q14/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  }
+ ],
+ "summary": {
+  "raw": {
+   "questions": 14,
+   "errors": 0,
+   "facts_found": 33,
+   "facts_total": 50,
+   "facts_pinpointed": 29,
+   "questions_all_facts": 6,
+   "tokens_mean": 2694.6,
+   "tokens_median": 3023.0,
+   "tokens_max": 4109,
+   "tokens_total": 37725,
+   "chars_total": 150880,
+   "facts_per_1k_tokens": 0.87,
+   "pinpointed_per_1k_tokens": 0.77,
+   "locators_distinct_mean": 35.7,
+   "agent_tool_calls_mean": 5.36,
+   "seconds_cold_median": 0.023,
+   "seconds_cold_total": 0.332,
+   "seconds_warm_median": null,
+   "seconds_warm_total": null,
+   "facts_found_via_locator": 33,
+   "assertions_scored": false,
+   "negatives_matched": 0,
+   "negatives_checked": 12,
+   "relations_asserted": 0,
+   "relations_checked": 0,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "graphify_vendored": {
+   "questions": 14,
+   "errors": 0,
+   "facts_found": 13,
+   "facts_total": 50,
+   "facts_pinpointed": 13,
+   "questions_all_facts": 1,
+   "tokens_mean": 1200,
+   "tokens_median": 1606.5,
+   "tokens_max": 1635,
+   "tokens_total": 16800,
+   "chars_total": 67185,
+   "facts_per_1k_tokens": 0.77,
+   "pinpointed_per_1k_tokens": 0.77,
+   "locators_distinct_mean": 30.7,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.011,
+   "seconds_cold_total": 0.151,
+   "seconds_warm_median": null,
+   "seconds_warm_total": null,
+   "facts_found_via_locator": 13,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 12,
+   "relations_asserted": 35,
+   "relations_checked": 13,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "verinoda_analyze": {
+   "questions": 14,
+   "errors": 0,
+   "facts_found": 25,
+   "facts_total": 50,
+   "facts_pinpointed": 24,
+   "questions_all_facts": 3,
+   "tokens_mean": 774,
+   "tokens_median": 725.5,
+   "tokens_max": 1416,
+   "tokens_total": 10836,
+   "chars_total": 43326,
+   "facts_per_1k_tokens": 2.31,
+   "pinpointed_per_1k_tokens": 2.21,
+   "locators_distinct_mean": 6.3,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.15,
+   "seconds_cold_total": 2.289,
+   "seconds_warm_median": null,
+   "seconds_warm_total": null,
+   "facts_found_via_locator": 25,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 12,
+   "relations_asserted": 37,
+   "relations_checked": 17,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0,
+   "claims": {
+    "total": 92,
+    "by_status": {
+     "statically_verified": 77,
+     "strong_inference": 8,
+     "weak_inference": 6,
+     "primary_source_verified": 1
+    },
+    "verified_share": 0.848,
+    "inference_share": 0.152,
+    "weak_or_unknown": 6,
+    "weak_or_unknown_unlabelled": 0,
+    "negatives_presented_as_findings": 0,
+    "contradicted_relations": 0,
+    "contradicted_but_cited_line_names_target": 0,
+    "contradicted_named_via_import_alias": 0,
+    "unknowns": 18
+   },
+   "cache": {
+    "method": "claims whose id already existed in atlas.db before the run (same text + snapshot)",
+    "cold_claims": 92,
+    "cold_reused": 21,
+    "warm_claims": 0,
+    "warm_reused": 0
+   }
+  },
+  "verinoda_retrieve": {
+   "questions": 14,
+   "errors": 0,
+   "facts_found": 32,
+   "facts_total": 50,
+   "facts_pinpointed": 32,
+   "questions_all_facts": 6,
+   "tokens_mean": 1395.6,
+   "tokens_median": 1430.5,
+   "tokens_max": 1441,
+   "tokens_total": 19539,
+   "chars_total": 78140,
+   "facts_per_1k_tokens": 1.64,
+   "pinpointed_per_1k_tokens": 1.64,
+   "locators_distinct_mean": 18,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.033,
+   "seconds_cold_total": 0.467,
+   "seconds_warm_median": null,
+   "seconds_warm_total": null,
+   "facts_found_via_locator": 32,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 12,
+   "relations_asserted": 8,
+   "relations_checked": 1,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "verinoda_retrieve_text": {
+   "questions": 14,
+   "errors": 0,
+   "facts_found": 46,
+   "facts_total": 50,
+   "facts_pinpointed": 44,
+   "questions_all_facts": 12,
+   "tokens_mean": 1431.4,
+   "tokens_median": 1488.5,
+   "tokens_max": 1500,
+   "tokens_total": 20039,
+   "chars_total": 80131,
+   "facts_per_1k_tokens": 2.3,
+   "pinpointed_per_1k_tokens": 2.2,
+   "locators_distinct_mean": 26.1,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.044,
+   "seconds_cold_total": 0.614,
+   "seconds_warm_median": null,
+   "seconds_warm_total": null,
+   "facts_found_via_locator": 46,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 12,
+   "relations_asserted": 27,
+   "relations_checked": 27,
+   "relations_cited_line_missing_target": 14,
+   "relations_named_via_import_alias": 0
+  }
+ },
+ "sweep": null,
+ "not_measured": [
+  "model-in-the-loop answer accuracy, model tokens and model cost - not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)",
+  "real upstream Graphify CLI baseline - not run: --graphify-cmd not given",
+  "runtime correctness of answers (only presence of gold facts in the delivered context is scored)",
+  "OS file-cache effects are not separated from process warm-up in cold vs warm timings",
+  "memory use"
+ ],
+ "status": "ok",
+ "paths_sanitized": {
+  "placeholders": [
+   "<TMP>",
+   "<REPO>"
+  ],
+  "rule": "absolute home / temp / checkout paths replaced when written; see verinoda/benchmark/sanitize.py"
+ }
+}

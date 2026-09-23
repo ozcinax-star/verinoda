@@ -1692,6 +1692,36 @@ def _move_protocol_off_std_fds() -> None:
     sys.stdout = io.TextIOWrapper(io.open(out_fd, "wb"), encoding="utf-8", write_through=True)
 
 
+def default_repo(start: Path) -> Path:
+    """The project a ``verinoda mcp serve`` without ``--repo`` serves when started in ``start``.
+
+    A user-scope server is started in the folder the agent session was opened in. That is
+    normally the project (or a folder inside it: the nearest ``.git`` / initialised
+    ``.verinoda`` above wins, as for the CLI). When the session was opened one level
+    *above* the project - a workspace folder holding it - and exactly one direct
+    sub-folder is an initialised Verinoda project, that one is served; with several, the
+    start folder is kept and the log names them (pass ``--repo``).
+    """
+    from verinoda.paths import find_repo_root
+
+    root = find_repo_root(Path(start))
+    if (root / ".git").exists() or (atlas_dir(root) / "atlas.db").is_file():
+        return root
+    try:
+        subs = sorted(d for d in root.iterdir()
+                      if d.is_dir() and not d.name.startswith(".") and (atlas_dir(d) / "atlas.db").is_file())
+    except OSError:
+        subs = []
+    if len(subs) == 1:
+        print(f"verinoda mcp: {root} is not a Verinoda project; serving its only initialised sub-folder "
+              f"{subs[0].name} (pass --repo to choose)", file=sys.stderr, flush=True)
+        return subs[0]
+    if subs:
+        print(f"verinoda mcp: {root} is not a Verinoda project and holds several: "
+              f"{', '.join(d.name for d in subs)}; pass --repo to choose one", file=sys.stderr, flush=True)
+    return root
+
+
 def serve(repo: Path) -> None:
     """Serve the Verinoda tools for ``repo`` over stdio (``verinoda mcp serve``)."""
     repo = Path(repo).resolve()

@@ -1,0 +1,11 @@
+{
+  "item.glowmod.lantern_staff": "Fener Asası",
+  "item.glowmod.ember_shard": "Kor Kırığı",
+  "item.glowmod.wisp_heart": "Wisp Kalbi",
+  "entity.glowmod.wisp": "Wisp",
+  "key.glowmod.summon_wisp": "Wisp Çağır",
+  "category.glowmod": "Glow Mod",
+  "command.glowmod.wisp.spawned": "Bir wisp belirdi.",
+  "command.glowmod.wisp.failed": "Wisp gelmedi.",
+  "command.glowmod.reload.done": "Glow Mod ayarları yeniden yüklendi."
+}

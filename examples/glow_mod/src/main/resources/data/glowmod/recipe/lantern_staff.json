@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [
+    " EL",
+    " SE",
+    "S  "
+  ],
+  "key": {
+    "E": { "item": "glowmod:ember_shard" },
+    "L": { "item": "minecraft:soul_lantern" },
+    "S": { "item": "minecraft:stick" }
+  },
+  "result": {
+    "id": "glowmod:lantern_staff",
+    "count": 1
+  }
+}

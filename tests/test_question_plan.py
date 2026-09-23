@@ -272,6 +272,10 @@ GOLD = [
     ("Graphify sorgu terimlerinden neden stopword'leri atıyor?", ["why"]),
     ("_query_terms değişirse ne etkilenir?", ["impact"]),
     ("Kaydetme fonksiyonunu kim çağırıyor?", ["callers"]),
+    # passive caller questions (added with the Java/Minecraft support; written by the rule author: in-sample)
+    ("OrderRepository.save kimler tarafından çağrılıyor?", ["callers"]),
+    ("OrderRepository.save nerelerden çağrılıyor?", ["callers"]),
+    ("Bu metot hangi sınıflar tarafından kullanılıyor?", ["callers"]),
     ("Graphify v0.3'teki _query_terms ile bizimki farklı mı, farklıysa hangi testler bunu yakalar?",
      ["compare_reference", "tests"]),
     ("Sipariş API'den veritabanına nasıl ulaşıyor ve bunu hangi testler kapsıyor?", ["flow", "tests"]),

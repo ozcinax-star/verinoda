@@ -67,7 +67,7 @@ from pathlib import Path
 from verinoda import textnorm
 from verinoda.architecture_map import is_test_file
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
 TOKENIZER_VERSION = 2
 DB_NAME = "search.db"
 
@@ -88,12 +88,57 @@ PROX_GAP = 1                      # "adjacent": at most this many tokens apart, 
 PROX_CANDIDATES = 300             # passages checked for proximity, best term coverage first
 MAX_FILE_BYTES = 4_000_000        # larger files are not indexed (reported in stats)
 PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc")
+# Text files the graph has no nodes for (data packs, configs, shaders, resources) are indexed
+# as "data" units, so a question can reach them and the code that names them.
+DATA_SUFFIXES = (".mcfunction", ".mcmeta", ".json", ".jsonc", ".json5", ".snbt", ".yml", ".yaml", ".toml",
+                 ".ini", ".cfg", ".conf", ".properties", ".xml", ".sql", ".graphql", ".proto", ".fsh", ".vsh",
+                 ".glsl", ".hlsl", ".csv", ".tsv", ".lang", ".gradle", ".kts", ".cmake", ".mk", ".bat", ".cmd",
+                 ".ps1", ".sh", ".html", ".css", ".scss", *PROSE_SUFFIXES,
+                 # source files the graph extractor skipped (it ignores directories such as build/)
+                 ".java", ".kt", ".scala", ".groovy", ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".go",
+                 ".rs", ".rb", ".php", ".cs", ".c", ".h", ".cc", ".cpp", ".hpp", ".swift", ".lua", ".dart")
+DATA_NAMES = frozenset({"Dockerfile", "Makefile", "Procfile", "Jenkinsfile", ".env.example"})
+BINARY_SUFFIXES = frozenset(""".png .jpg .jpeg .gif .webp .avif .ico .bmp .tga .psd .svgz .ogg .wav .mp3 .flac .mp4 .webm
+    .nbt .dat .mca .mcr .schem .schematic .litematic .zip .gz .tgz .xz .7z .rar .jar .class .war .bin .exe .dll .so
+    .dylib .pdb .pyc .whl .glb .fbx .blend .ttf .otf .woff .woff2 .pdf .db .sqlite""".split())
+LOCK_NAMES = frozenset({"package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock",
+                        "Cargo.lock", "composer.lock", "Gemfile.lock", "uv.lock", "Pipfile.lock"})
+MAX_DATA_BYTES = 512_000          # larger data files are listed as not indexed
+MAX_DATA_LINE = 4_000             # a data file with longer lines is minified / generated
+# Tabular / tree data outside a resource pack (benchmark results, fixtures, exports) is mostly
+# generated; above this size it is listed as not indexed instead of matching every question.
+BULK_DATA_SUFFIXES = (".json", ".jsonc", ".json5", ".csv", ".tsv", ".xml", ".snbt", ".sql")
+MAX_BULK_DATA_BYTES = 64_000
+# Captured tool output kept in the repository (benchmark runs, logs, test snapshots): not written
+# by hand, and it repeats the words of the code it describes.
+GENERATED_DIRS = frozenset({"results", "raw", "output", "outputs", "logs", "log", "cassettes", "snapshots",
+                            "__snapshots__", "reports", "coverage", "htmlcov", "golden", "goldens"})
+GENERATED_SUFFIXES = (".txt", ".json", ".csv", ".tsv", ".xml", ".html", ".out", ".snap")
+MAX_DATA_SECTIONS = 60            # a config file with more top-level sections stays one unit
+LINK_SEEDS = 8                    # top lexical units whose resource links are followed
+LINK_LAMBDA = 0.35                # score a linked unit gains, times its source's lexical score
+LINK_FANOUT = 12                  # references followed per unit and direction
+REFERENCE_FACTOR = 0.6            # score factor for units under config index.reference roots
+REFERENCE_REASON = "in a reference tree (config index.reference)"
+UNSURE_LINK_FACTOR = 0.5          # a link whose namespace or resource kind the line does not state
+# Data files that are neither configuration nor a pack/mod resource (dictionaries, fixtures,
+# exports) repeat many words of any question; they count less unless the question names the file.
+DATA_FACTOR = 0.6
+CONFIG_SUFFIXES = (".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".properties", ".env.example",
+                   ".gradle", ".kts", ".mcmeta")
 MAX_SIG_CHARS = 220
 MAX_DOC_CHARS = 240
 
 IMPORT_RE = re.compile(r"^\s*(from\s+\S+\s+)?import\s|^\s*(#include|using\s+[\w.]+;|require\s*\()")
 ASSIGN_RE = re.compile(r"^(?:export\s+)?(?:const\s+|let\s+|var\s+)?([A-Za-z_$][\w$]*)\s*(?::[^=]*)?=(?![=>])")
 IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*(?:\(\))?")
+# "init and scan commands", "`scan` komutu": the words before a command noun are command names
+_CMD_WORD = r"`?[A-Za-z][\w-]*`?"
+_COMMAND_PHRASE = re.compile(
+    rf"({_CMD_WORD}(?:\s*(?:,|\band\b|\bor\b|\bve\b|\bveya\b|\bile\b)\s*{_CMD_WORD})*)\s+"
+    r"(?:sub-?|alt\s+)?(?:commands?\b|komut\w*)", re.I)
+_NOT_COMMANDS = frozenset("""the this that these those which what each every any all some a an its their
+    same other new cli shell terminal git bu su o hangi her tum butun ayni diger bir""".split())
 FILE_EXTS = {"py", "js", "ts", "tsx", "jsx", "go", "rs", "java", "rb", "md", "rst", "json", "toml", "yaml",
              "yml", "txt", "cfg", "ini", "html", "css", "sql", "sh", "db", "xml", "csv", "lock"}
 # (suffix, shortest stem kept); first match wins
@@ -121,6 +166,7 @@ ABBREVIATIONS = {
     "db": ("database",), "msg": ("message",), "ctx": ("context",), "err": ("error",), "idx": ("index",),
     "tmp": ("temporary",), "repo": ("repository",), "param": ("parameter",), "params": ("parameters",),
     "dir": ("directory",), "dirs": ("directories",), "arg": ("argument",), "args": ("arguments",),
+    "cmd": ("command",), "cmds": ("commands",),
 }
 # short forms only expanded from short to long (the long word is a generic question word)
 ABBREVIATIONS_ONE_WAY = {"fn": ("function",), "func": ("function",)}
@@ -248,6 +294,11 @@ CREATE TABLE IF NOT EXISTS names (term TEXT NOT NULL, uid INTEGER NOT NULL, tf I
 CREATE TABLE IF NOT EXISTS paths (term TEXT NOT NULL, file TEXT NOT NULL, tf INTEGER NOT NULL,
                                   PRIMARY KEY (term, file)) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS df (term TEXT PRIMARY KEY, df INTEGER NOT NULL) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS refs (file TEXT NOT NULL, line INTEGER NOT NULL, target TEXT NOT NULL, rid TEXT NOT NULL,
+                                 form TEXT NOT NULL, sure INTEGER NOT NULL DEFAULT 1);
+CREATE INDEX IF NOT EXISTS refs_file ON refs(file, line);
+CREATE INDEX IF NOT EXISTS refs_target ON refs(target);
+CREATE TABLE IF NOT EXISTS unindexed (file TEXT PRIMARY KEY, reason TEXT NOT NULL) WITHOUT ROWID;
 """
 
 
@@ -296,11 +347,153 @@ def _graph_files(g) -> list[str]:
     return out
 
 
+def _read_lines(p: Path) -> list[str] | None:
+    try:
+        return p.read_bytes().decode("utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+
+
+def _ignore_rules(repo: Path):
+    """``rel -> bool``: excluded by the .graphifyignore chain, as the graph extractor reads it.
+
+    Inside git, ``.gitignore`` is already applied by ``git ls-files``; outside git it is read
+    here too. Nested ignore files are loaded along each path's own folders.
+    """
+    from verinoda.project_index import detect
+
+    use_gitignore = not (repo / ".git").exists()
+    try:
+        patterns = detect._load_graphifyignore(repo, gitignore=use_gitignore)
+    except OSError:
+        patterns = []
+    loaded = {repo}
+    cache: dict = {}
+
+    def ignored(rel: str) -> bool:
+        anc = repo
+        for part in rel.split("/")[:-1]:
+            anc = anc / part
+            if anc not in loaded:
+                loaded.add(anc)
+                try:
+                    patterns.extend(detect._load_dir_own_ignore(anc, gitignore=use_gitignore))
+                except OSError:
+                    pass
+        return bool(patterns) and detect._is_ignored(repo / rel, repo, patterns, _cache=cache)
+
+    return ignored
+
+
+def _data_files(repo: Path, graph_files: list[str]) -> tuple[list[str], dict[str, str], list[str]]:
+    """``(data files, {not indexed file: reason}, every repository file)``.
+
+    Data files are text files the graph has no node for, by suffix (:data:`DATA_SUFFIXES`);
+    the others are listed with the reason they are not indexed.
+    """
+    from verinoda import resources
+    from verinoda.project_index import detect
+    from verinoda.snapshot import list_files
+
+    in_graph = set(graph_files)
+    files = list_files(repo)
+    ignored = _ignore_rules(repo)
+    data: list[str] = []
+    skipped: dict[str, str] = {}
+    for f in files:
+        if f in in_graph:
+            continue
+        name = f.rsplit("/", 1)[-1]
+        suffix = ("." + name.rsplit(".", 1)[-1].lower()) if "." in name else ""
+        if suffix in BINARY_SUFFIXES:
+            skipped[f] = "binary"
+            continue
+        if name in LOCK_NAMES or name.endswith((".min.js", ".min.css")):
+            skipped[f] = "lock or minified file"
+            continue
+        if suffix not in DATA_SUFFIXES and name not in DATA_NAMES:
+            skipped[f] = f"type not indexed ({suffix or 'no suffix'})"
+            continue
+        # the graph's own exclusions hold here too: secrets are never read into the index,
+        # nor .graphifyignore'd paths or dependency/output folders (a tracked build/ or
+        # dist/ is kept: list_files lets only tracked ones through)
+        if detect._is_sensitive(Path(f)):
+            skipped[f] = "may hold secrets, skipped as the graph skips it"
+            continue
+        noise = [d for d in f.split("/")[:-1] if d in detect._SKIP_DIRS or d.endswith(".egg-info")]
+        if any(d not in ("build", "dist") for d in noise):
+            skipped[f] = f"in a dependency or output folder ({next(d for d in noise if d not in ('build', 'dist'))}/)"
+            continue
+        if ignored(f):
+            skipped[f] = "excluded by .graphifyignore"
+            continue
+        gen = next((d for d in f.split("/")[:-1] if d.lower() in GENERATED_DIRS), None)
+        if gen and suffix in GENERATED_SUFFIXES:
+            skipped[f] = f"generated output ({gen}/)"
+            continue
+        try:
+            size = (repo / f).stat().st_size
+        except OSError:
+            continue
+        if size > MAX_DATA_BYTES:
+            skipped[f] = f"larger than {MAX_DATA_BYTES // 1000} KB"
+            continue
+        if size > MAX_BULK_DATA_BYTES and suffix in BULK_DATA_SUFFIXES and not resources.RES_PATH.search(f):
+            skipped[f] = f"large data file over {MAX_BULK_DATA_BYTES // 1000} KB, likely generated"
+            continue
+        data.append(f)
+    return data, skipped, files
+
+
+def _data_units(f: str, lines: list[str]) -> list["_Unit"]:
+    """Units of a data file: config sections (top-level keys / ``[section]``), else the whole file."""
+    from verinoda import resources
+
+    keys = resources.resource_keys(f)
+    ident = f"{keys[0][0]}:{keys[0][1]}" if keys else Path(f).name
+    doc_lines = []
+    for ln in lines:  # leading comment block = what the file is for (.mcfunction, yml, sh)
+        s = ln.strip()
+        if not s.startswith(("#", "//")):
+            break
+        doc_lines.append(s.lstrip("#/ ").strip())
+    doc = _first_paragraph("\n".join(doc_lines))
+    starts: list[int] = []
+    low = f.lower()
+    if low.endswith((".yml", ".yaml")):
+        starts = [i for i, ln in enumerate(lines, 1) if re.match(r"^[A-Za-z0-9_.\-\"']+\s*:", ln)]
+    elif low.endswith((".toml", ".ini", ".cfg", ".conf")):
+        # [section], [[array.table]], with an optional trailing comment
+        starts = [i for i, ln in enumerate(lines, 1) if re.match(r"^\[\[?[^\]]+\]\]?\s*([#;].*)?$", ln)]
+    units: list[_Unit] = []
+    if 2 <= len(starts) <= MAX_DATA_SECTIONS:
+        bounds = ([(1, starts[0] - 1)] if starts[0] > 1 else [])
+        bounds += [(s, (starts[k + 1] - 1) if k + 1 < len(starts) else len(lines)) for k, s in enumerate(starts)]
+        for a, b in bounds:
+            own = [i for i in range(a, b + 1) if lines[i - 1].strip()]
+            if not own:
+                continue
+            head = lines[a - 1].strip()
+            sec = re.match(r"\[\[?\s*([^\]]+?)\s*\]", head)  # [section] / [[array.table]] # comment
+            key = ((sec.group(1) if sec else re.split(r"\s*[:=]", head, maxsplit=1)[0]).strip("\"' ")
+                   if a in starts else ident)
+            units.append(_Unit(f, None, "data", key[:120] or ident, ident if a in starts else "", a, own[-1], own,
+                               sig=head[:MAX_SIG_CHARS], doc=doc if a == 1 else ""))
+        return units
+    own = [i for i in range(1, len(lines) + 1) if lines[i - 1].strip()]
+    if own:
+        first = next((lines[i - 1].strip() for i in own if not lines[i - 1].strip().startswith(("#", "//"))),
+                     lines[own[0] - 1].strip())
+        units.append(_Unit(f, None, "data", ident[:120], "", own[0], own[-1], own, sig=first[:MAX_SIG_CHARS],
+                           doc=doc))
+    return units
+
+
 @dataclass
 class _Unit:
     file: str
     nid: str | None
-    kind: str          # symbol | module | prose
+    kind: str          # symbol | module | prose | data
     name: str
     qual: str
     a: int
@@ -434,8 +627,10 @@ def _path_tf(f: str) -> dict[str, int]:
 class _Writer:
     """Inserts one file's units, passages and postings; keeps df and the totals exact."""
 
-    def __init__(self, conn: sqlite3.Connection):
+    def __init__(self, conn: sqlite3.Connection, keymap=None, data_files: set[str] | None = None):
         self.conn = conn
+        self.keymap = keymap
+        self.data_files = data_files or set()
         m = _meta(conn)
         self.totals = {k: int(m.get(k, 0)) for k in ("n_units", "n_passages", "sum_plen", "sum_name_len")}
         self.next_uid = (conn.execute("SELECT COALESCE(MAX(uid), 0) FROM units").fetchone()[0] or 0) + 1
@@ -473,18 +668,29 @@ class _Writer:
             self.conn.execute("DELETE FROM units WHERE uid BETWEEN ? AND ?", (uid_lo, uid_hi))
         self.conn.executemany("DELETE FROM paths WHERE term = ? AND file = ?", [(t, f) for t in _path_tf(f)])
         self.conn.execute("DELETE FROM files WHERE file = ?", (f,))
+        self.conn.execute("DELETE FROM refs WHERE file = ?", (f,))
 
     def add_file(self, g, f: str, data: bytes, st: os.stat_result, gsig: str) -> int:
         sha = hashlib.sha256(data).hexdigest()
         lines = data.decode("utf-8", errors="replace").splitlines()
+        if lines and lines[0].startswith("﻿"):  # a BOM is not part of the first line's text
+            lines[0] = lines[0][1:]
         skipped = None
         if len(data) > MAX_FILE_BYTES:
             units: list[_Unit] = []
             skipped = f"larger than {MAX_FILE_BYTES} bytes"
+        elif f in self.data_files and not f.lower().endswith(PROSE_SUFFIXES) and \
+                any(len(ln) > MAX_DATA_LINE for ln in lines):
+            units = []
+            skipped = f"minified or generated (a line over {MAX_DATA_LINE} characters)"
+        elif f in self.data_files and not f.lower().endswith(PROSE_SUFFIXES):
+            units = _data_units(f, lines)
         elif f.lower().endswith(PROSE_SUFFIXES):
             units = _prose_units(g, f, lines)
         else:
             units = _code_units(g, f, lines)
+        if skipped is None:
+            self.add_refs(f, lines)
         path_tf = _path_tf(f)
         line_tokens: dict[int, list[str]] = {}
 
@@ -540,6 +746,26 @@ class _Writer:
                    (self.next_uid - 1) if units else None, pid_lo if p_rows else None,
                    (self.next_pid - 1) if p_rows else None, skipped))
         return len(units)
+
+    def add_refs(self, f: str, lines: list[str]) -> int:
+        """Store the resource ids ``f`` names that resolve to repository files (see :mod:`verinoda.resources`)."""
+        from verinoda import resources
+
+        if self.keymap is None or not self.keymap.by_key:
+            return 0
+        data_file = f.lower().endswith(resources.DATA_REF_SUFFIXES)
+        rows = []
+        for i, text in enumerate(lines, 1):
+            if ":" not in text and '"' not in text and "'" not in text:
+                continue
+            for r in resources.refs_in_line(text, i, data_file=data_file):
+                targets = self.keymap.resolve(r)
+                sure = int(self.keymap.sure(r, targets))
+                for target, _kind in targets:
+                    if target != f:
+                        rows.append((f, i, target, r.rid, r.form, sure))
+        self.conn.executemany("INSERT INTO refs VALUES (?,?,?,?,?,?)", rows)
+        return len(rows)
 
     def finish(self, **meta) -> None:
         if self.df_delta:
@@ -608,8 +834,14 @@ def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: P
                 hint.add(pp.resolve().relative_to(repo).as_posix() if pp.is_absolute() else pp.as_posix())
             except ValueError:
                 continue
-        files = _graph_files(g)
-        w = _Writer(conn)
+        from verinoda import resources
+
+        gfiles = _graph_files(g)
+        data_files, not_indexed, repo_files = _data_files(repo, gfiles)
+        keymap = resources.KeyMap.build(repo_files)
+        key_sig = keymap.signature()
+        files = gfiles + data_files
+        w = _Writer(conn, keymap, set(data_files))
         indexed = removed = unchanged = 0
         for f in files:
             p = repo / f
@@ -640,11 +872,23 @@ def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: P
             if f not in live or not (repo / f).exists():
                 w.remove_file(f)
                 removed += 1
+        m = _meta(conn)
+        if not fresh and m.get("resource_sig") != key_sig:
+            # the defined ids changed: references in unchanged files may now resolve differently
+            conn.execute("DELETE FROM refs")
+            for (f,) in conn.execute("SELECT file FROM files WHERE skipped IS NULL").fetchall():
+                lines = _read_lines(repo / f)
+                if lines is not None:
+                    w.add_refs(f, lines)
+        conn.execute("DELETE FROM unindexed")
+        conn.executemany("INSERT INTO unindexed VALUES (?, ?)", sorted(not_indexed.items()))
+        # files read but left without units (too large, minified) are not indexed either
+        conn.execute("INSERT OR REPLACE INTO unindexed SELECT file, skipped FROM files WHERE skipped IS NOT NULL")
         from verinoda.index import graph_identity
 
-        m = _meta(conn)
         generation = int(m.get("generation", 0)) + (1 if (indexed or removed or fresh) else 0)
-        w.finish(schema_version=SCHEMA_VERSION, tokenizer_version=TOKENIZER_VERSION,
+        w.finish(schema_version=SCHEMA_VERSION, tokenizer_version=TOKENIZER_VERSION, resource_sig=key_sig,
+                 data_files=len(data_files), not_indexed=len(not_indexed),
                  graph=graph_identity(g.path), generation=generation,
                  built_at=m.get("built_at") if not fresh and m.get("built_at") else time.time())
         conn.commit()
@@ -654,6 +898,7 @@ def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: P
     _HANDLES.pop(str(db), None)
     return {"mode": "full" if fresh else ("incremental" if indexed or removed else "noop"),
             "files_indexed": indexed, "files_removed": removed, "files_unchanged": unchanged,
+            "data_files": len(data_files), "not_indexed": len(not_indexed),
             "units": n_units, "generation": generation, "db": str(db),
             "seconds": round(time.perf_counter() - t0, 3)}
 
@@ -675,6 +920,9 @@ class Handle:
     nid_uid: dict[str, int]
     memory: sqlite3.Connection | None = None   # in-memory fallback (read-only index directory)
     notes: list[str] = field(default_factory=list)
+    by_file: dict[str, list[tuple[int, int, int, int]]] | None = None   # file -> (span, a, b, uid), innermost first
+    copies: dict[str, list[str]] | None = None    # file -> other files with byte-identical content
+    unindexed: list[tuple[str, str, frozenset]] | None = None   # (file, reason, name tokens), loaded once
 
     def connect(self) -> sqlite3.Connection:
         return self.memory if self.memory is not None else sqlite3.connect(self.db, timeout=30)
@@ -745,17 +993,24 @@ def open_for(g, *, sync: bool = True) -> Handle:
         except (OSError, sqlite3.Error) as exc:
             notes.append(f"search index not writable ({type(exc).__name__}); built in memory")
             break
+    from verinoda import resources
+
     mem = sqlite3.connect(":memory:", check_same_thread=False)
     mem.executescript(_SCHEMA)
-    w = _Writer(mem)
-    for f in _graph_files(g):
+    gfiles = _graph_files(g)
+    data_files, not_indexed, repo_files = _data_files(Path(g.root), gfiles)
+    w = _Writer(mem, resources.KeyMap.build(repo_files), set(data_files))
+    for f in gfiles + data_files:
         p = g.root / f
         try:
             w.add_file(g, f, p.read_bytes(), p.stat(), _gsig(g, f))
         except OSError:
             continue
+    mem.executemany("INSERT INTO unindexed VALUES (?, ?)", sorted(not_indexed.items()))
+    mem.execute("INSERT OR REPLACE INTO unindexed SELECT file, skipped FROM files WHERE skipped IS NOT NULL")
     w.finish(schema_version=SCHEMA_VERSION, tokenizer_version=TOKENIZER_VERSION,
-             graph=graph_identity(g.path), generation=1, built_at=time.time())
+             graph=graph_identity(g.path), generation=1, built_at=time.time(),
+             data_files=len(data_files), not_indexed=len(not_indexed))
     mem.commit()
     h = _load_handle(":memory:", mem, memory=mem)
     h.meta["_graph"] = str(g.path)
@@ -825,6 +1080,35 @@ def _lexicon_expansions(repo: Path | None, words: list[str]) -> dict[str, list[s
     except Exception:  # noqa: BLE001 - a malformed lexicon never breaks retrieval
         return {}
     return {k: list(dict.fromkeys(v)) for k, v in out.items() if v}
+
+
+def command_words(question: str) -> list[str]:
+    """Command names a question uses as such: ``the scan command``, ``init and scan commands``,
+    ``scan komutu``, ``init ve scan komutları``, ```verinoda scan` ``."""
+    out: list[str] = []
+    for m in _COMMAND_PHRASE.finditer(question):
+        for w in re.split(r"\s*(?:,|\band\b|\bor\b|\bve\b|\bveya\b|\bile\b)\s*", m.group(1)):
+            w = w.strip("`'\" ").lower()
+            if re.fullmatch(r"[a-z][a-z0-9_-]{1,30}", w) and w not in _NOT_COMMANDS:
+                out.append(w)
+    for m in re.finditer(r"`([\w.-]+)\s+([a-z][\w-]{1,30})(?:\s[^`]*)?`", question):
+        out.append(m.group(2).lower())  # `prog sub ...`: the sub-command
+    return list(dict.fromkeys(out))
+
+
+def command_handlers(conn: sqlite3.Connection, words: list[str]) -> dict[str, str]:
+    """Symbol names of the handlers of the commands ``words`` that exist in the index: ``cmd_scan``,
+    ``scan_command``, ``handle_scan``, ``ScanCommand``, ``cmdScan`` ... -> the command word."""
+    cand: dict[str, str] = {}
+    for w in words:
+        s = w.replace("-", "_")
+        camel = "".join(p[:1].upper() + p[1:] for p in s.split("_") if p)
+        for name in (f"cmd_{s}", f"{s}_command", f"command_{s}", f"handle_{s}", f"do_{s}", f"{s}_cmd",
+                     f"cmd{camel}", f"{camel}Command", f"handle{camel}", f"{camel}Cmd"):
+            cand.setdefault(word_tokens(name)[0], w)
+    rows = _fetch(conn, "SELECT DISTINCT n.term, u.name FROM names n JOIN units u ON u.uid = n.uid "
+                        "WHERE n.term IN ({ph}) AND u.kind = 'symbol'", sorted(cand))
+    return {name: cand[term] for term, name in rows if word_tokens(name)[0] == term}
 
 
 def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[str, list[str]] | None = None,
@@ -910,6 +1194,11 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
     for src, targets in provided.items():
         for tgt in targets or ():
             add(str(src), str(tgt), via_default, PROVIDED_EXPANSION_WEIGHT, indexed=False)
+    # "the scan command" / "scan komutu": its handler (cmd_scan) counts as named by the question
+    for handler, word in command_handlers(conn, command_words(question)).items():
+        if handler not in named:
+            named.append(handler)
+            exps.append({"from": f"{word} (command)", "to": handler, "via": "command handler", "weight": 1.0})
     return QueryTerms(weights, words, named, exps, dropped)
 
 
@@ -1168,9 +1457,28 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
             scored.sort(key=lambda x: (-x[0], x[1]))
             per_unit[uid] = scored
             best[uid] = scored[0][0] if scored else 0.0
+        reasons: dict[int, list[str]] = defaultdict(list)
+        ref_roots = _reference_roots(getattr(g, "root", None), q, question)
+
+        def ref_factor(uid: int) -> float:
+            return REFERENCE_FACTOR if ref_roots and h.units[uid][0].startswith(ref_roots) else 1.0
+
+        own_words = {t for t, w in q.weights.items() if w >= 1.0}
+
+        def data_factor(uid: int) -> float:
+            f, kind = h.units[uid][0], h.units[uid][2]
+            if kind != "data" or f.lower().endswith(CONFIG_SUFFIXES):
+                return 1.0
+            from verinoda import resources
+
+            if resources.resource_keys(f) or own_words & set(tokens(f.rsplit("/", 1)[-1].split(".", 1)[0])):
+                return 1.0
+            return DATA_FACTOR
+
+        for uid in best:
+            best[uid] *= ref_factor(uid) * data_factor(uid)
         top = max(best.values(), default=0.0) or 1.0
         lex = {uid: s / top for uid, s in best.items() if s > 0}
-        reasons: dict[int, list[str]] = defaultdict(list)
         if q.named:
             want = {nm.strip("_").lower(): nm for nm in q.named}
             rows = _fetch(conn, "SELECT uid, name FROM units WHERE uid IN (SELECT uid FROM names WHERE term IN ({ph}))",
@@ -1179,7 +1487,7 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
                 nm = want.get(name.strip("_").lower())
                 if nm and uid in h.units and h.units[uid][2] == "symbol" and \
                         (include_tests or not is_test_file(h.units[uid][0])):
-                    lex[uid] = max(lex.get(uid, 0.0), 1.0)
+                    lex[uid] = max(lex.get(uid, 0.0), ref_factor(uid))
                     reasons[uid].append(f"question names '{nm}'")
                     if uid not in per_unit and h.units[uid][7] is not None:
                         per_unit[uid] = [(0.0, h.units[uid][7])]
@@ -1187,11 +1495,19 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
             uid = h.nid_uid.get(nid)
             if uid is None or (not include_tests and is_test_file(h.units[uid][0])):
                 continue
-            lex[uid] = max(lex.get(uid, 0.0), 1.0)
+            lex[uid] = max(lex.get(uid, 0.0), ref_factor(uid))
             reasons[uid].append(f"plan: {why}" if why else "plan seed")
             if uid not in per_unit and h.units[uid][7] is not None:
                 per_unit[uid] = [(0.0, h.units[uid][7])]
+        # byte-identical data files (a data pack shipped twice) rank once, as their canonical copy
+        canon = _canonical(h, conn, ref_roots)
+        _fold_copies(h, lex, canon, include_tests)
         score = dict(lex)
+        for uid, (bonus, why) in _link_bonus(conn, h, lex, include_tests, canon).items():
+            score[uid] = score.get(uid, 0.0) + bonus * ref_factor(uid)
+            reasons[uid].append(why)
+            if uid not in per_unit and h.units[uid][7] is not None:
+                per_unit[uid] = [(0.0, h.units[uid][7])]
         ppr_mass: dict[int, float] = {}
         pushes = 0
         if ppr and lex:
@@ -1209,9 +1525,13 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
                     uid = h.nid_uid.get(nid)
                     if uid is None or (not include_tests and is_test_file(h.units[uid][0])):
                         continue
-                    bonus = PPR_LAMBDA * m / (m + PPR_KAPPA)
+                    bonus = PPR_LAMBDA * m / (m + PPR_KAPPA) * ref_factor(uid)
                     ppr_mass[uid] = bonus
                     score[uid] = score.get(uid, 0.0) + bonus
+        _fold_copies(h, score, canon, include_tests)
+        for uid in score:
+            if ref_factor(uid) < 1.0:
+                reasons[uid].append(REFERENCE_REASON)
         order = sorted(score, key=lambda u: (-round(score[u], 9), h.units[u][0], h.units[u][4], h.units[u][2],
                                              h.units[u][3], u))
         chosen = order[:limit]
@@ -1235,6 +1555,225 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
         return Ranking(hits, q, len(score), pushes, time.perf_counter() - t0, list(h.notes))
     finally:
         h.release(conn)
+
+
+def _copies(h: Handle, conn: sqlite3.Connection) -> dict[str, list[str]]:
+    """file -> the other indexed files with the same sha256 (sorted; the first path is the one ranked)."""
+    if h.copies is None:
+        by_sha: dict[str, list[str]] = defaultdict(list)
+        for f, sha in conn.execute("SELECT file, sha256 FROM files WHERE uid_lo IS NOT NULL"):
+            by_sha[sha].append(f)
+        h.copies = {f: sorted(x for x in fs if x != f) for fs in by_sha.values() if len(fs) > 1 for f in fs}
+    return h.copies
+
+
+def _canonical(h: Handle, conn: sqlite3.Connection, ref_roots: tuple[str, ...] = ()) -> dict[str, str]:
+    """file -> the copy that stands for its group of byte-identical files.
+
+    Preference: a file with code units (the graph describes it) over a data copy, product
+    code over tests, the project's own files over reference trees, a copy in a source set
+    (``src/``) over a loose one, then path order.
+    """
+    out: dict[str, str] = {}
+    by_file = _by_file(h)
+
+    def key(f: str):
+        code = any(h.units[u][2] in ("symbol", "module") for *_x, u in by_file.get(f, []))
+        return (not code, is_test_file(f), bool(ref_roots) and f.startswith(ref_roots),
+                "/src/" not in "/" + f, f)
+
+    for f, others in _copies(h, conn).items():
+        if f not in out:
+            k = min([f, *others], key=key)
+            for x in (f, *others):
+                out[x] = k
+    return out
+
+
+def _fold_copies(h: Handle, scores: dict[int, float], canon: dict[str, str], include_tests: bool) -> None:
+    """Drop data units of non-canonical copies from ``scores``, carrying their score to the
+    matching unit of the canonical copy (same content, same spans). Code units are never dropped:
+    two identical code files are two places in the graph."""
+    by_file = _by_file(h)
+    for uid in [u for u in scores if canon.get(h.units[u][0], h.units[u][0]) != h.units[u][0]]:
+        f, _nid, kind, _name, a, b = h.units[uid][:6]
+        k = canon[f]
+        if kind not in ("data", "prose") or (not include_tests and is_test_file(k)):
+            continue
+        s = scores.pop(uid)
+        ku = next((u for _s, ka, kb, u in by_file.get(k, []) if (ka, kb) == (a, b)), None)
+        if ku is not None and s > scores.get(ku, 0.0):
+            scores[ku] = s
+
+
+def copies_of(h: Handle, file: str) -> list[str]:
+    """Other indexed files with exactly the same content as ``file``."""
+    conn = h.connect()
+    try:
+        return list(_copies(h, conn).get(file, []))
+    finally:
+        h.release(conn)
+
+
+def _by_file(h: Handle) -> dict[str, list[tuple[int, int, int, int]]]:
+    if h.by_file is None:
+        m: dict[str, list[tuple[int, int, int, int]]] = defaultdict(list)
+        for uid, row in h.units.items():
+            m[row[0]].append((row[5] - row[4], row[4], row[5], uid))
+        h.by_file = {f: sorted(v) for f, v in m.items()}
+    return h.by_file
+
+
+def unit_at(h: Handle, file: str, line: int) -> int | None:
+    """The innermost unit of ``file`` whose span contains ``line``."""
+    return next((uid for _s, a, b, uid in _by_file(h).get(file, []) if a <= line <= b), None)
+
+
+def first_unit(h: Handle, file: str) -> int | None:
+    units = _by_file(h).get(file, [])
+    return min(units, key=lambda x: (x[1], x[0]))[3] if units else None
+
+
+def links_of(conn: sqlite3.Connection, file: str, a: int, b: int, *, also: list[str] | tuple = ()) -> dict:
+    """Resource links of the lines ``a..b`` of ``file``: ids they name (``out``: line, target, rid,
+    form, sure) and lines naming the file or one of its identical copies ``also`` (``in``: file,
+    line, rid, form, sure). Callers filter first and cap after."""
+    out = conn.execute("SELECT line, target, rid, form, sure FROM refs WHERE file = ? AND line BETWEEN ? AND ? "
+                       "ORDER BY line, target", (file, a, b)).fetchall()
+    targets = [file, *also]
+    inn = conn.execute(f"SELECT file, line, rid, form, sure FROM refs WHERE target IN ({','.join('?' * len(targets))}) "
+                       "ORDER BY file, line", targets).fetchall()
+    return {"out": out, "in": inn}
+
+
+def describe_links(h: Handle, file: str, a: int, b: int, *, limit: int = 3) -> dict:
+    """What lines ``a..b`` of ``file`` name, and which lines name ``file`` (for rendering).
+
+    ``names``: ``[{"rid", "line", "form", "targets": [files]}]`` (one entry per id);
+    ``named_by``: ``[{"file", "line", "rid", "form", "unit"}]``; ``copies``: identical files;
+    ``more_names`` / ``more_named_by``: how many were left out.
+    """
+    conn = h.connect()
+    try:
+        copies = _copies(h, conn).get(file, [])
+        lk = links_of(conn, file, a, b, also=copies)
+        canon = _canonical(h, conn)
+    finally:
+        h.release(conn)
+    names: dict[str, dict] = {}
+    for line, target, rid, form, sure in lk["out"]:
+        target = canon.get(target, target)  # a copy of a target stands for the canonical file
+        e = names.setdefault(rid, {"rid": rid, "line": line, "form": form, "sure": bool(sure), "targets": []})
+        if target not in e["targets"]:
+            e["targets"].append(target)
+    by: list[dict] = []
+    seen: set[tuple[str, int]] = set()
+    for sf, line, rid, form, sure in lk["in"]:
+        if (sf, line) in seen or canon.get(sf, sf) != sf:
+            continue  # a non-canonical copy repeats the canonical copy's line
+        seen.add((sf, line))
+        u = unit_at(h, sf, line)
+        by.append({"file": sf, "line": line, "rid": rid, "form": form, "sure": bool(sure),
+                   "unit": h.units[u][3] if u is not None else "",
+                   "code": u is not None and h.units[u][2] in ("symbol", "module")})
+    # code before data files, links that state what they name before inferred ones, then path order
+    by.sort(key=lambda x: (not x["code"], not x["sure"], is_test_file(x["file"]), x["file"], x["line"]))
+    return {"names": list(names.values())[:limit], "more_names": max(0, len(names) - limit),
+            "named_by": by[:limit], "more_named_by": max(0, len(by) - limit),
+            "copies": list(copies)}
+
+
+def unindexed_matching(h: Handle, q: "QueryTerms", *, limit: int = 3) -> tuple[list[tuple[str, str]], int]:
+    """Repository files that were not indexed and whose path carries one of the question's own words."""
+    own = {t for t, w in q.weights.items() if w >= 1.0 and len(t) >= 3}
+    if not own:
+        return [], 0
+    if h.unindexed is None:  # tokenized once per handle: asset-heavy repos list 100k+ files here
+        conn = h.connect()
+        try:
+            rows = conn.execute("SELECT file, reason FROM unindexed ORDER BY file").fetchall()
+        except sqlite3.Error:
+            rows = []
+        finally:
+            h.release(conn)
+        h.unindexed = [(f, r, frozenset(tokens(f.rsplit("/", 1)[-1].split(".", 1)[0]))) for f, r in rows]
+    # the file's own name must carry a question word (a folder word matches whole trees)
+    hits = [(f, r) for f, r, toks in h.unindexed if own & toks]
+    return hits[:limit], len(hits)
+
+
+def _link_bonus(conn: sqlite3.Connection, h: Handle, lex: dict[int, float],
+                include_tests: bool, canon: dict[str, str] | None = None) -> dict[int, tuple[float, str]]:
+    """Units linked by a resource id to one of the top lexical units, with the score they gain."""
+    out: dict[int, tuple[float, str]] = {}
+
+    def give(uid: int | None, bonus: float, why: str) -> None:
+        if uid is None or uid not in h.units or (not include_tests and is_test_file(h.units[uid][0])):
+            return
+        if uid not in out or out[uid][0] < bonus:
+            out[uid] = (bonus, why)
+
+    canon = canon if canon is not None else _canonical(h, conn)
+    copies = _copies(h, conn)
+    for src in sorted(lex, key=lambda u: (-lex[u], u))[:LINK_SEEDS]:
+        f, _nid, _kind, name, a, b = h.units[src][:6]
+        bonus = LINK_LAMBDA * lex[src]
+        lk = links_of(conn, f, a, b, also=copies.get(f, []))
+        # ids this unit names -> their files (a copy stands for its canonical file); stated links first
+        done: set[str] = set()
+        for line, target, rid, _form, sure in sorted(lk["out"], key=lambda r: (not r[4], r[0], r[1])):
+            target = canon.get(target, target)
+            if target in done or (not include_tests and is_test_file(target)):
+                continue
+            done.add(target)
+            if len(done) > LINK_FANOUT:
+                break
+            tu = [u for _s, _a, _b, u in _by_file(h).get(target, []) if u in lex]
+            give(max(tu, key=lambda u: lex[u]) if tu else first_unit(h, target),
+                 bonus * (1.0 if sure else UNSURE_LINK_FACTOR),
+                 f"named by {name} ({f}:{line}) as {rid}" + ("" if sure else " (inferred link)"))
+        # lines naming this file: filtered first, product code and stated links first, one per unit
+        rows = [r for r in lk["in"] if canon.get(r[0], r[0]) == r[0] and (include_tests or not is_test_file(r[0]))]
+        rows.sort(key=lambda r: (not r[4], is_test_file(r[0]), r[0], r[1]))
+        got: set[int] = set()
+        for sf, line, rid, _form, sure in rows:
+            u = unit_at(h, sf, line)
+            if u is None or u in got:
+                continue
+            got.add(u)
+            if len(got) > LINK_FANOUT:
+                break
+            give(u, bonus * (1.0 if sure else UNSURE_LINK_FACTOR),
+                 f"names {rid} ({sf}:{line}), defined in {f}" + ("" if sure else " (inferred link)"))
+    return out
+
+
+def _reference_roots(root, q: "QueryTerms", q_text: str = "") -> tuple[str, ...]:
+    """Path prefixes of config ``index.reference`` that the question does not name (they count less)."""
+    if root is None:
+        return ()
+    try:
+        from verinoda.paths import load_config
+
+        entries = (load_config(Path(root)).get("index") or {}).get("reference") or []
+    except Exception:  # noqa: BLE001 - an unreadable config only means no reference trees
+        return ()
+    words = {textnorm.fold_tr(w) for w in q.words}
+    text = textnorm.fold_tr(q_text)
+    roots = []
+    for e in entries:
+        path = e.get("path") if isinstance(e, dict) else e
+        if not isinstance(path, str) or not path.strip("/"):
+            continue
+        aliases = [textnorm.fold_tr(s) for s in (e.get("aliases") or [])] if isinstance(e, dict) else []
+        segments = [textnorm.fold_tr(seg) for seg in path.strip("/").split("/") if len(seg) >= 3]
+        # an alias counts as a word or a word's stem ("orijinalde" names "orijinal"); a folder name
+        # only as the whole word (so "super" does not name "mymod-original")
+        named = any(a in words or (len(a) >= 5 and any(w.startswith(a) for w in words)) for a in aliases) \
+            or any(s in words or re.search(r"(?<![\w-])" + re.escape(s) + r"(?![\w-])", text) for s in segments)
+        if not named:
+            roots.append(path.strip("/") + "/")
+    return tuple(roots)
 
 
 def stale_files(h: Handle, root: Path, files: list[str]) -> list[str]:

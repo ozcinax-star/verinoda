@@ -251,3 +251,30 @@ def test_noop_update_still_rechecks_citations_of_ignored_files(proj):
     res = workflow.update(st, repo)
     assert res["mode"] == "noop" and [s["id"] for s in res["stale"]] == [c["id"]], res
     assert Claims(st, repo).get(c["id"])["status"] == "stale"
+
+
+def test_nodes_for_files_that_never_existed_are_dropped_and_reported_apart(proj, monkeypatch, capsys):
+    """A project file naming another project (sample.csproj -> ../Domain/Domain.csproj) made the
+    indexer add nodes for a file that is not in the repository; they were reported as deleted."""
+    from verinoda import cli
+
+    repo, st = proj
+    workflow.scan(st, repo)
+    real_build = index.build
+
+    def adds_a_phantom(r, **kw):
+        res = real_build(r, **kw)
+        data = json.loads(graph_path(r).read_text(encoding="utf-8"))
+        data["nodes"].append({"id": "phantom", "label": "Domain.csproj", "source_file": "Domain/Domain.csproj"})
+        graph_path(r).write_text(json.dumps(data), encoding="utf-8")
+        return res
+
+    monkeypatch.setattr(index, "build", adds_a_phantom)
+    (repo / "orders" / "config.py").write_text("X = 1\n", encoding="utf-8")
+    res = workflow.update(st, repo)
+    assert "pruned_missing_files" not in res
+    assert res["dropped_dangling_references"] == {"count": 1, "files": ["Domain/Domain.csproj"]}
+    assert "Domain/Domain.csproj" not in _graph_files(repo)
+    cli._r_derived(res)
+    out = capsys.readouterr().out
+    assert "no longer exist" not in out and "1 file(s) named by other files are not in the repository" in out

@@ -205,7 +205,13 @@ def call_outline(g: Graph, nid: str, *, impact: bool = False) -> tuple[list[str]
         ln = _edge_line(d)
         calls.append(f"{lab}@{ln}{_mark(d)}" if ln else f"{lab}{_mark(d)}")
     callers = []
-    for u, d in sorted(g.in_edges(nid, {"calls"}), key=lambda x: (_at(x[1]) or "", x[0])):
+    seen_callers: set[str] = set()
+    # product code before tests (a mod's gametest callers sort before src/main), one line per caller
+    for u, d in sorted(g.in_edges(nid, {"calls"}),
+                       key=lambda x: (search_index.is_test_file(g.file(x[0]) or ""), _at(x[1]) or "", x[0])):
+        if u in seen_callers:
+            continue
+        seen_callers.add(u)
         entry = f"{_short(g, u)} ({_at(d) or g.file(u)}){_mark(d)}"
         if impact:
             sub = [f"{_short(g, w)} ({_at(d2) or g.file(w)}){_mark(d2)}"
@@ -249,6 +255,7 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
     rk = search_index.rank(g, question, include_tests=include_tests, seeds=seeds, expansions=expansions,
                            limit=RANK_LIMIT)
     q = rk.query
+    ranked_files = {x.file for x in rk.hits[:40]}
     # the question's content words (folded), as the index saw them before tokenizing
     terms = list(dict.fromkeys(fold_tr(w) for w in q.words))
     # The envelope is always returned, so it is always charged (a list of terms
@@ -270,6 +277,7 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
     prose, prose_skipped = 0, 0
     higher: dict[str, float] = {}
     rest_from = len(rk.hits)
+    handle = search_index.open_for(g)  # the index rank() just used: links and copies read from it
     for k, h in enumerate(rk.hits):
         if len(items) >= budget.max_items:
             budget.truncated = True
@@ -308,15 +316,36 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
         item = {"id": h.key, "symbol": symbol, "file": h.file, "lines": [a, b], "span": [span[0], span[1]],
                 "score": round(h.score, 3), "why": _why(g, h, hits[0] if hits else None, higher, expanded),
                 "excerpt": excerpt}
+        if h.kind == "data":
+            item["kind"] = "data"
         if in_graph and len(items) < (JSON_EXCERPT_ITEMS if flow or impact else OUTLINE_ITEMS):
             calls, callers, _nc, _nb = call_outline(g, h.nid, impact=impact)
             if calls:
                 item["calls"] = calls
             if callers:
                 item["called_by"] = callers
+        if len(items) < OUTLINE_ITEMS:
+            try:
+                lk = search_index.describe_links(handle, h.file, h.a, h.b)
+            except Exception:  # noqa: BLE001 - links are an optional extra
+                lk = None
+            if lk:
+                names = [{"rid": e["rid"], "line": e["line"], "form": e["form"], "sure": e["sure"],
+                          "targets": [x for x in e["targets"] if x in ranked_files][:1]} for e in lk["names"]]
+                names = [e for e in names if e["targets"]][:2]
+                by = [{k: e[k] for k in ("file", "line", "rid", "form", "sure", "unit")} for e in lk["named_by"][:2]]
+                if names or by:
+                    item["links"] = {k: v for k, v in (("names", names), ("named_by", by)) if v}
+        try:
+            copies = search_index.copies_of(handle, h.file)
+        except Exception:  # noqa: BLE001
+            copies = []
+        if copies:  # byte-identical files are ranked once; their locations are listed here
+            item["same_text_at"] = [f"{c}:{a}-{b}" for c in copies[:3]]
         if not budget.take(_cost(item)):  # serialised size: escaped newlines/quotes count
             item.pop("calls", None)
             item.pop("called_by", None)
+            item.pop("links", None)
             item["excerpt"] = ""
             if not budget.take(_cost(item)):
                 rest_from = k
@@ -355,7 +384,6 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
             break
         more_cost = 0
         more.append(entry)
-    handle = search_index.open_for(g)
     stale = search_index.stale_files(handle, g.root, [i["file"] for i in items])
     out_budget = {"max_items": budget.max_items, "max_chars": budget.max_chars,
                   "used_chars": budget.used_chars, "truncated": budget.truncated}
@@ -378,6 +406,45 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
 
 def _clip(s: str, n: int) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def _link_how(e: dict) -> str:
+    """How a link was read: stated, or inferred (bare name: namespace assumed; kind not stated)."""
+    if e["form"] == "bare":
+        return "bare name, inferred"
+    if not e.get("sure", True):
+        return f"{e['form']}, kind not stated: inferred"
+    return e["form"]
+
+
+def _link_lines(handle, h, ranked: set[str]) -> list[str]:
+    """``names`` / ``named by`` / ``same content`` lines for a hit (resource ids between code and data).
+
+    ``names`` lists only ids whose file is itself among the ranked candidates (the link is why
+    both are here); ``named by`` lists the lines naming this file, code first.
+    """
+    try:
+        lk = search_index.describe_links(handle, h.file, h.a, h.b, limit=12)
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    bits = []
+    for e in lk["names"]:
+        tg = [x for x in e["targets"] if x in ranked]
+        if not tg:
+            continue
+        bits.append(f"`{e['rid']}` (line {e['line']}, {_link_how(e)}) -> {tg[0]}")
+    if bits:
+        out.append("  names: " + "; ".join(bits[:2]) + (f" (+{len(bits) - 2})" if len(bits) > 2 else ""))
+    if lk["named_by"]:
+        shown = lk["named_by"][:3]
+        more = len(lk["named_by"]) - len(shown) + lk["more_named_by"]
+        out.append("  named by: " + "; ".join(f"{e['unit'] or '?'} ({e['file']}:{e['line']}) as `{e['rid']}`"
+                                              + ("" if e.get("sure", True) else f" ({_link_how(e)})")
+                                              for e in shown) + (f" (+{more} more)" if more else ""))
+    if lk["copies"]:
+        out.append("  same content: " + ", ".join(lk["copies"][:2]) + (" ..." if len(lk["copies"]) > 2 else ""))
+    return [_clip(x, 500) for x in out]
 
 
 def render_text(result: dict, budget_chars: int = 6000) -> str:
@@ -411,6 +478,11 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
         return _render_items(result, out, add, budget_chars)
     g = rd.g
     flow, impact = rd.flow, rd.impact
+    try:
+        handle = search_index.open_for(g, sync=False)
+    except Exception:  # noqa: BLE001 - links and coverage notes are optional extras
+        handle = None
+    ranked = {x.file for x in rd.ranking.hits[:40]}
     shown: dict[str, list[tuple[int, int]]] = defaultdict(list)
     rank = prose = 0
     rest: list[str] = []
@@ -436,9 +508,11 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
                 break
             continue
         full = rank <= TEXT_FULL_ITEMS
-        parts = [f"## {h.file}:{a}-{b} {sig}"]
+        ref_tag = " [reference]" if any("reference tree" in r for r in h.reasons) else ""
+        parts = [f"## {h.file}:{a}-{b} {sig}{ref_tag}"]
         if h.doc and full:
             parts.append("  doc: " + _clip(h.doc, 160))
+        parts += _link_lines(handle, h, ranked) if handle is not None else []
         if h.nid and h.nid in g.G and (full or flow or impact):
             calls, callers, nc, nb = call_outline(g, h.nid, impact=impact)
             if calls and (full or flow):
@@ -472,6 +546,12 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
             body = "\n".join(_clip(lines[j - 1], TEXT_LINE_CHARS) for j in range(x, min(y, len(lines)) + 1))
             add((f"  {h.file}:{x}-{y}\n" if (x, y) != (a, b) else "") + body)
         shown[h.file].append((a, b))
+    if handle is not None:
+        missing, n_missing = search_index.unindexed_matching(handle, rd.ranking.query)
+        if missing:
+            add(_clip(f"not indexed, and the path matches your words ({n_missing}): "
+                      + "; ".join(f"{f} ({why})" for f, why in missing)
+                      + ("; ..." if n_missing > len(missing) else ""), 400))
     more = len(rest) + max(0, rd.ranking.candidates - len(rd.ranking.hits))
     if outlined:
         add("(calls / called by: static call graph, '?' = inferred edge; may be incomplete)")

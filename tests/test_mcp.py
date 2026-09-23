@@ -1326,3 +1326,24 @@ def test_stdio_server_starts_in_unscanned_dir(tmp_path):
         p = _payload(res)
         assert p["error"] == "not_initialised" and "verinoda scan" in p["hint"]
     assert not (plain / ".verinoda").exists()
+
+
+def test_default_repo_serves_the_only_initialised_subfolder_of_a_workspace(tmp_path, capsys, monkeypatch):
+    ws = tmp_path / "workspace"
+    for name in ("tool", "other", ".hidden"):
+        (ws / name).mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "elsewhere"))
+    assert mcp_server.default_repo(ws) == ws  # nothing initialised: the start folder, no guess
+    (ws / "tool" / ".verinoda").mkdir()
+    (ws / "tool" / ".verinoda" / "atlas.db").write_bytes(b"")
+    (ws / ".hidden" / ".verinoda").mkdir()
+    (ws / ".hidden" / ".verinoda" / "atlas.db").write_bytes(b"")
+    assert mcp_server.default_repo(ws) == ws / "tool"
+    assert "only initialised sub-folder tool" in capsys.readouterr().err
+    # inside a project the nearest project wins, as for the CLI
+    (ws / "tool" / "pkg").mkdir()
+    assert mcp_server.default_repo(ws / "tool" / "pkg") == ws / "tool"
+    (ws / "other" / ".verinoda").mkdir()
+    (ws / "other" / ".verinoda" / "atlas.db").write_bytes(b"")
+    assert mcp_server.default_repo(ws) == ws  # two candidates: no guess, the log names them
+    assert "other, tool" in capsys.readouterr().err

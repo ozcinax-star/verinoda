@@ -21,7 +21,11 @@ from verinoda.snapshot import git
 # -- shared helpers -------------------------------------------------------------
 
 TEST_FILE_RE = re.compile(
-    r"(^|/)(tests?|__tests__|spec)/|(^|/)test_[^/]+\.py$|_test\.(py|go)$|\.(test|spec)\.[jt]sx?$|Tests?\.(java|cs|kt)$"
+    r"(^|/)(tests?|__tests__|spec)/|(^|/)test_[^/]+\.py$|_test\.(py|go)$|\.(test|spec)\.[jt]sx?$"
+    # Gradle/Maven test source sets (src/test, src/gametest, src/integrationTest, src/testFixtures);
+    # not src/latest/, src/contest/, src/_pytest/
+    r"|(^|/)src/(test[A-Z0-9_][A-Za-z0-9_]*|tests?|gametest|[a-z]+Tests?)/"
+    r"|(Tests?|[a-z0-9]IT|Testleri|Testi)\.(java|cs|kt)$"
 )
 DOC_DECISION_RE = re.compile(r"(^|/)(adr|adrs|decisions?|rfcs?)/|ARCHITECTURE\.md$|DESIGN\.md$", re.I)
 

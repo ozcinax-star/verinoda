@@ -254,7 +254,11 @@ TR_WEAK: dict[str, list[str]] = {"flow": [r"\bnasil\b"]}
 # (pattern, shadowable): a shadowable cue is also a common domain noun; it needs a
 # second cue of the same intent when the word is part of this repository's vocabulary.
 TR_CUES: dict[str, list[tuple[str, bool]]] = {
-    "callers": [(r"\bkim(ler)? (cagir|kullan)\w*", False), (r"\bnereden cagri\w*|\bnereden cagril\w*", False),
+    "callers": [(r"\bkim(ler)? (cagir|kullan)\w*", False), (r"\bnere(ler)?den (cagri|cagril|kullanil)\w*", False),
+                # passive: "kimler tarafından çağrılıyor", "hangi sınıflar tarafından kullanılıyor"
+                # the verb only: not the participle "tarafindan kullanilan port" or the noun "cagri"
+                (r"\btarafindan (cagril|kullanil)(?!an\b|dig|mis\b)\w*", False),
+                (r"\bkim(ler)?\b[^.?!]{0,30}\b(cagril|kullanil)\w*", False),
                 (r"\bcagiran\w*", False), (r"\bkullanan\w*", False), (r"\bkullanildig\w*", False),
                 (r"\bcagrildig\w*", False),
                 (r"\bhangi (fonksiyon|metot|metod|modul|sinif)\w* (cagir|kullan)\w*", False)],
@@ -345,6 +349,10 @@ def clause_cues(text: str, lexicon=None) -> list[dict]:
                 found[intent] = {"intent": intent, "cue": hits[0][0].group(0), "lang": "tr"}
         if "flow" not in found and _case_pair(folded):
             found["flow"] = {"intent": "flow", "cue": "ablative+dative", "lang": "tr"}
+    # "who calls X" / "X kimler tarafından çağrılıyor": the call verb is the callers cue, not a flow one
+    if "callers" in found and "flow" in found and \
+            re.fullmatch(r"calls?|called|cagir\w*|cagri\w*", found["flow"]["cue"]):
+        del found["flow"]
     if not found:
         weak = [(_EN_WEAK_RX, low, "en")]
         if _uses_turkish_cues(text):

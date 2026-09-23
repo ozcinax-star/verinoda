@@ -88,6 +88,37 @@ def test_setup_cli_json(project):
     assert out["ok"] and out["index"]["nodes"] > 0 and out["next_steps"]
 
 
+
+def test_reference_trees_are_recorded_merged_and_validated(tmp_path):
+    from verinoda import workflow
+    from verinoda.paths import DEFAULT_CONFIG, load_config
+
+    repo = tmp_path / "mod"
+    (repo / "original" / "src").mkdir(parents=True)
+    (repo / "src").mkdir()
+    workflow.init(repo)
+    assert setup_mod.add_reference(repo, "original=Plugin,paper") ==         {"path": "original/", "aliases": ["paper", "plugin"], "added": True}
+    # the same folder again (absolute this time) merges aliases instead of adding a second entry
+    again = setup_mod.add_reference(repo, f"{repo / 'original'}=orijinal")
+    assert again == {"path": "original/", "aliases": ["orijinal", "paper", "plugin"], "added": False}
+    cfg = load_config(repo)
+    assert cfg["index"]["reference"] == [{"path": "original/", "aliases": ["orijinal", "paper", "plugin"]}]
+    assert cfg["budget"] == DEFAULT_CONFIG["budget"]  # the rest of the config is untouched
+    raw = (repo / ".verinoda" / "config.json").read_bytes()
+    assert b"\r\n" not in raw and raw.endswith(b"\n")
+    for bad in ["", "=alias", "missing", ".", str(tmp_path), "src/../.."]:
+        with pytest.raises(setup_mod.SetupRefused):
+            setup_mod.add_reference(repo, bad)
+    assert load_config(repo)["index"]["reference"] == cfg["index"]["reference"]
+
+
+def test_setup_records_reference_trees(project):
+    (project / "vendored").mkdir()
+    (project / "vendored" / "old.py").write_text("def create_order():\n    return 1\n", encoding="utf-8")
+    rep = setup_mod.setup_project(project, agents="none", reference=["vendored=legacy"])
+    assert rep["ok"] and rep["reference"] == [{"path": "vendored/", "aliases": ["legacy"], "added": True}]
+    assert "reference" in rep["steps"]
+
 # -- installer scripts -------------------------------------------------------------------------------
 
 def test_install_script_parses_and_uses_the_safe_options():

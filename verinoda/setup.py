@@ -13,6 +13,11 @@ and every step is idempotent, so running it again is how you refresh a project:
 4. a short checklist of what to do next, including install-layout warnings
    that ``doctor`` would report (for example a hardlinked install that a
    sandboxed agent cannot import).
+
+``reference=[...]`` also records *reference trees* in the project config
+(``index.reference``): code kept for comparison, such as the original
+implementation a port is based on, or a vendored copy. Their code ranks lower
+unless the question names the tree (see :func:`add_reference`).
 """
 
 from __future__ import annotations
@@ -30,6 +35,56 @@ USAGE = {
 
 class SetupRefused(RuntimeError):
     pass
+
+
+def add_reference(repo: Path, spec: str) -> dict:
+    """Record ``spec`` - ``PATH`` or ``PATH=alias,alias`` - as a reference tree in ``.verinoda/config.json``.
+
+    ``PATH`` is a directory inside the project (relative to it, or absolute). Aliases are
+    the words a question uses for the tree ("original", "plugin"); the path's own folder
+    names count too. Re-adding a path merges its aliases. Only ``index.reference`` of the
+    config file is changed; the ranking reads it at query time, so nothing is re-indexed.
+    """
+    import json
+
+    from verinoda import textnorm
+    from verinoda.paths import atlas_dir
+
+    repo = Path(repo).resolve()
+    raw, _, alias_part = spec.rpartition("=") if "=" in spec else (spec, "", "")
+    raw = raw.strip().strip('"')
+    if not raw:
+        raise SetupRefused(f"--reference {spec!r}: no path given (use PATH or PATH=alias,alias)")
+    target = Path(raw)
+    target = (target if target.is_absolute() else repo / target).resolve()
+    try:
+        rel = target.relative_to(repo).as_posix()
+    except ValueError:
+        raise SetupRefused(f"--reference {raw}: not inside the project {repo}") from None
+    if not target.is_dir() or rel in ("", "."):
+        raise SetupRefused(f"--reference {raw}: not a sub-directory of the project")
+    aliases = [textnorm.fold_tr(a.strip()) for a in alias_part.split(",") if a.strip()]
+    cfg_p = atlas_dir(repo) / "config.json"
+    try:
+        cfg = json.loads(cfg_p.read_text(encoding="utf-8")) if cfg_p.exists() else {}
+    except (OSError, ValueError) as exc:
+        raise SetupRefused(f"{cfg_p} is not readable JSON ({type(exc).__name__}); fix or delete it first") from None
+    index_cfg = cfg.setdefault("index", {})
+    entries = index_cfg.setdefault("reference", [])
+    path = rel.rstrip("/") + "/"
+    entry = next((e for e in entries
+                  if (e.get("path") if isinstance(e, dict) else e).strip("/") == path.strip("/")), None)
+    added = entry is None
+    if added:
+        entries.append({"path": path, "aliases": sorted(set(aliases))})
+    else:
+        if not isinstance(entry, dict):  # a plain string entry: keep its position, add aliases
+            k = entries.index(entry)
+            entries[k] = entry = {"path": path, "aliases": []}
+        entry["aliases"] = sorted(set(entry.get("aliases") or []) | set(aliases))
+    cfg_p.parent.mkdir(parents=True, exist_ok=True)
+    cfg_p.write_bytes((json.dumps(cfg, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+    return {"path": path, "aliases": (entry or entries[-1]).get("aliases", aliases), "added": added}
 
 
 def detect_agents() -> list[str]:
@@ -57,7 +112,8 @@ def _choose(agents: str | list[str]) -> list[str]:
 
 
 def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", scope: str = "project",
-                  with_mcp: bool = True, allow_home: bool = False, home: Path | None = None) -> dict:
+                  with_mcp: bool = True, allow_home: bool = False, home: Path | None = None,
+                  reference: list[str] | None = None) -> dict:
     """Initialise, index and connect agents for one project. Returns a structured report."""
     from verinoda import workflow
     from verinoda.agents import installer
@@ -78,6 +134,9 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
     report: dict = {"repo": str(repo), "steps": [], "agents": [], "warnings": [], "next_steps": []}
     workflow.init(repo)
     report["steps"].append("init")
+    if reference:
+        report["reference"] = [add_reference(repo, spec) for spec in reference]
+        report["steps"].append("reference")
     st = open_store(repo, create=True)
     try:
         first = not graph_path(repo).exists() or st.latest_snapshot() is None
@@ -128,6 +187,9 @@ def render(rep: dict) -> None:
     print(f"Verinoda is set up in {rep['repo']}")
     print(f"  index: {idx.get('mode')} - {idx.get('files')} files, {idx.get('nodes')} nodes, "
           f"{idx.get('edges')} edges" + (f", {idx['stale_claims']} claim(s) marked stale" if idx.get('stale_claims') else ""))
+    for r in rep.get("reference") or []:
+        aka = f" (also called: {', '.join(r['aliases'])})" if r.get("aliases") else ""
+        print(f"  reference tree: {r['path']}{aka} - ranks lower unless a question names it")
     for a in rep["agents"]:
         state = "ok" if a["ok"] else "FAILED"
         print(f"  {a['agent']} ({a['scope']}): {state} - {a.get('result') or ''}".rstrip(" -"))

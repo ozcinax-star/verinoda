@@ -33,6 +33,9 @@ _SKIP_DIRS = {
     ".git", ".verinoda", "graphify-out", ".venv", "venv", "node_modules", "__pycache__",
     ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", "dist", "build", ".idea", ".vscode",
 }
+# Inside git, ignored output is already excluded; a *tracked* directory called build or dist
+# is source (a Java package `.../build/`), so only these are skipped there.
+_GIT_SKIP_DIRS = _SKIP_DIRS - {"build", "dist"}
 # A cached hash is trusted only for files last modified this long before it was recorded
 # (covers coarse mtime granularity: FAT 2 s, network shares, clock ticks).
 RACY_MARGIN_NS = 2_000_000_000
@@ -105,10 +108,14 @@ def sha256_file(p: Path) -> str:
 def list_files(repo: Path) -> list[str]:
     """Repo-relative POSIX paths of tracked + untracked-not-ignored files."""
     repo = Path(repo).resolve()
-    out = git(repo, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
-    if out is not None:
-        rels = [r for r in out.split("\0") if r]
-        return sorted(r for r in rels if not set(Path(r).parts) & _SKIP_DIRS and (repo / r).is_file())
+    tracked = git(repo, "ls-files", "-z", "--cached")
+    if tracked is not None:
+        # a tracked build/ or dist/ is source (a Java package named `build`); an untracked,
+        # not-ignored one is build output (setuptools' build/lib copy) and stays out
+        others = git(repo, "ls-files", "-z", "--others", "--exclude-standard") or ""
+        rels = {r for r in tracked.split("\0") if r and not set(Path(r).parts) & _GIT_SKIP_DIRS}
+        rels |= {r for r in others.split("\0") if r and not set(Path(r).parts) & _SKIP_DIRS}
+        return sorted(r for r in rels if (repo / r).is_file())
     rels = []
     for dirpath, dirnames, filenames in os.walk(repo):
         dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and not d.endswith(".egg-info")]

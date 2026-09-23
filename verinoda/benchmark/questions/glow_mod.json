@@ -1,0 +1,198 @@
+{
+  "schema": 1,
+  "name": "glow_mod",
+  "description": "A small fictional Fabric mod (examples/glow_mod): Java code, a data pack (functions, recipe, loot table), assets (item models, en_us / tr_tr translations), a YAML config copied out of the jar, a client payload, a game test, a byte-identical copy of one function under datapack/, and a reference tree (reference/original-plugin, the Paper plugin it was ported from) declared as index.reference. 14 questions, 7 Turkish and 7 English: callers x3, cross_layer x2, config x2, resources x2, flow, behaviour x2, where x2 (one of them explicitly about the original plugin).",
+  "verified_by": "Gold facts were written by reading every file of examples/glow_mod line by line; every source.at line was re-read by hand after the example was finished, and each fact's source.at/source.contains pair is re-checked against the benchmark copy before any approach is scored (metrics.validate_gold).",
+  "provenance": {
+    "questions_written_by": "an agent asked by the Verinoda maintainer to write examples/glow_mod and this set in one session; it did not run Verinoda on the example and saw no Verinoda output for these questions",
+    "gold_written_by": "same agent, by reading every file of examples/glow_mod; checked with metrics.validate_gold only",
+    "example_written_by": "same agent, same session, before the questions",
+    "in_sample": false,
+    "caveat": "held out for Verinoda's retrieval on these questions (no Verinoda run and no Verinoda output while writing them), but not independent of the design: the Minecraft support (resource ids, data-pack linking, reference trees, class-qualified Java calls, Turkish passive caller questions) was developed against a similar private mod by the same project, and this example was written afterwards by an agent that knew which of those features it should exercise"
+  },
+  "corpus": {
+    "detect": ["src/main/java/com/example/glowmod/entity/Wisp.java", "src/main/resources/fabric.mod.json", "reference/original-plugin/plugin.yml"],
+    "include": null,
+    "exclude": null,
+    "verinoda_config": {"index": {"reference": [{"path": "reference/", "aliases": ["original", "plugin", "paper", "orijinal", "eklenti"]}]}}
+  },
+  "questions": [
+    {
+      "id": "q01", "category": "callers", "lang": "tr",
+      "question": "Wisp.spawn kimler tarafından çağrılıyor?",
+      "question_en": "Who calls Wisp.spawn?",
+      "facts": [
+        {"id": "q01.command", "fact": "GlowCommands.wisp (/glow wisp) calls Wisp.spawn at the command source's position (src/main/java/com/example/glowmod/command/GlowCommands.java:29)", "source": {"at": "src/main/java/com/example/glowmod/command/GlowCommands.java:29", "contains": "Wisp.spawn(source.getWorld()"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/command/GlowCommands.java:27-36"}, {"text": "Wisp.spawn(source.getWorld()"}]},
+        {"id": "q01.lantern", "fact": "the UseBlockCallback registered by LanternEvents.etkinlestir calls Wisp.spawn above a soul lantern (src/main/java/com/example/glowmod/event/LanternEvents.java:30)", "source": {"at": "src/main/java/com/example/glowmod/event/LanternEvents.java:30", "contains": "Wisp.spawn((ServerWorld) world, pos.up())"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/event/LanternEvents.java:18-34"}, {"text": "Wisp.spawn((ServerWorld) world, pos.up())"}]},
+        {"id": "q01.ritual", "fact": "Ritual.baslat calls Wisp.spawn once per ritual wisp around the altar (src/main/java/com/example/glowmod/ritual/Ritual.java:29)", "source": {"at": "src/main/java/com/example/glowmod/ritual/Ritual.java:29", "contains": "Wisp.spawn(world, at)"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/ritual/Ritual.java:21-31"}, {"text": "Wisp.spawn(world, at)"}]},
+        {"id": "q01.chunk", "fact": "WispSpawner.onChunkLoad (ServerChunkEvents.CHUNK_LOAD hook) calls Wisp.spawn on a swamp surface (src/main/java/com/example/glowmod/world/WispSpawner.java:31)", "source": {"at": "src/main/java/com/example/glowmod/world/WispSpawner.java:31", "contains": "Wisp.spawn(world, top.up())"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/world/WispSpawner.java:22-33"}, {"text": "Wisp.spawn(world, top.up())"}]},
+        {"id": "q01.network", "fact": "ServerNetworking.onSummonWisp (server handler of SummonWispPayload) calls Wisp.spawn (src/main/java/com/example/glowmod/network/ServerNetworking.java:29)", "source": {"at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:29", "contains": "Wisp.spawn(player.getServerWorld()"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30"}, {"text": "Wisp.spawn(player.getServerWorld()"}]},
+        {"id": "q01.gametest", "fact": "the game test WispTests.wispAppearsWhereAsked calls Wisp.spawn (src/gametest/java/com/example/glowmod/test/WispTests.java:16)", "source": {"at": "src/gametest/java/com/example/glowmod/test/WispTests.java:16", "contains": "Wisp.spawn(context.getWorld()"}, "match_any": [{"loc": "src/gametest/java/com/example/glowmod/test/WispTests.java:15-20"}, {"text": "wispAppearsWhereAsked"}]}
+      ],
+      "negatives": [
+        {"id": "q01.n.ondeath", "statement": "Wisp.onDeath calls Wisp.spawn (a dying wisp runs the wisp_death function; it spawns no new wisp)", "relation": ["onDeath", "calls", "spawn"]},
+        {"id": "q01.n.client", "statement": "client code calls Wisp.spawn directly (the client only sends SummonWispPayload)", "relation": ["onEndTick|onInitializeClient|GlowModClient", "calls", "spawn"]}
+      ]
+    },
+    {
+      "id": "q02", "category": "callers", "lang": "en",
+      "question": "Who calls GlowConfig.load?",
+      "facts": [
+        {"id": "q02.init", "fact": "GlowMod.onInitialize calls GlowConfig.load first, at mod start (src/main/java/com/example/glowmod/GlowMod.java:21)", "source": {"at": "src/main/java/com/example/glowmod/GlowMod.java:21", "contains": "GlowConfig.load();"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/GlowMod.java:20-30"}]},
+        {"id": "q02.reload", "fact": "GlowCommands.reload (/glow reload) calls GlowConfig.load again (src/main/java/com/example/glowmod/command/GlowCommands.java:45)", "source": {"at": "src/main/java/com/example/glowmod/command/GlowCommands.java:45", "contains": "GlowConfig.load();"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/command/GlowCommands.java:44-48"}]}
+      ],
+      "negatives": [
+        {"id": "q02.n.readers", "statement": "the code that reads settings (RepairScheduler, Ritual, WispSpawner, ServerNetworking) calls GlowConfig.load (it only calls GlowConfig.get)", "relation": ["tick|kaydet|baslat|onChunkLoad|onSummonWisp", "calls", "load"]}
+      ]
+    },
+    {
+      "id": "q03", "category": "cross_layer", "lang": "tr",
+      "question": "Bir wisp öldüğünde hangi eşyalar düşüyor ve bunlar nerede tanımlanıyor?",
+      "question_en": "When a wisp dies, which items drop and where is that defined?",
+      "facts": [
+        {"id": "q03.ondeath", "fact": "Wisp.onDeath runs the data-pack function by its bare name: Datapack.run(serverWorld, getPos(), \"wisp_death\") (src/main/java/com/example/glowmod/entity/Wisp.java:42)", "source": {"at": "src/main/java/com/example/glowmod/entity/Wisp.java:42", "contains": "Datapack.run(serverWorld, getPos(), \"wisp_death\")"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/entity/Wisp.java:38-44"}, {"text": "Datapack.run(serverWorld, getPos(), \"wisp_death\")"}]},
+        {"id": "q03.namespace", "fact": "Datapack.run prepends the mod namespace, so \"wisp_death\" is glowmod:wisp_death = data/glowmod/function/wisp_death.mcfunction (src/main/java/com/example/glowmod/util/Datapack.java:16-18)", "source": {"at": "src/main/java/com/example/glowmod/util/Datapack.java:17", "contains": "Identifier.of(GlowMod.MOD_ID, name)"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/util/Datapack.java:16-18"}, {"text": "execute(world, pos, Identifier.of(GlowMod.MOD_ID, name))"}]},
+        {"id": "q03.heart", "fact": "wisp_death.mcfunction summons a glowmod:wisp_heart item named \"Wisp Heart\" at the death spot (src/main/resources/data/glowmod/function/wisp_death.mcfunction:4; identical copy datapack/data/glowmod/function/wisp_death.mcfunction:4)", "source": {"at": "src/main/resources/data/glowmod/function/wisp_death.mcfunction:4", "contains": "id:\"glowmod:wisp_heart\""}, "match_any": [{"loc": "src/main/resources/data/glowmod/function/wisp_death.mcfunction:1-5"}, {"loc": "datapack/data/glowmod/function/wisp_death.mcfunction:1-5"}]},
+        {"id": "q03.loot", "fact": "the wisp's entity loot table drops 0-2 glowmod:ember_shard (src/main/resources/data/glowmod/loot_table/entities/wisp.json:9-13)", "source": {"at": "src/main/resources/data/glowmod/loot_table/entities/wisp.json:9", "contains": "\"glowmod:ember_shard\""}, "match_any": [{"loc": "src/main/resources/data/glowmod/loot_table/entities/wisp.json:1-20"}]}
+      ],
+      "negatives": [
+        {"id": "q03.n.qualified", "statement": "Wisp.onDeath calls Datapack.runQualified (it passes the bare name to Datapack.run)", "relation": ["onDeath", "calls", "runQualified"]}
+      ]
+    },
+    {
+      "id": "q04", "category": "cross_layer", "lang": "en",
+      "question": "Which Java code runs the glowmod:ritual/start data pack function?",
+      "facts": [
+        {"id": "q04.baslat", "fact": "Ritual.baslat runs it by its full id: Datapack.runQualified(..., \"glowmod:ritual/start\") (src/main/java/com/example/glowmod/ritual/Ritual.java:22)", "source": {"at": "src/main/java/com/example/glowmod/ritual/Ritual.java:22", "contains": "\"glowmod:ritual/start\""}, "match_any": [{"loc": "src/main/java/com/example/glowmod/ritual/Ritual.java:22"}, {"text": "runQualified(world, Vec3d.ofBottomCenter(altar)"}]},
+        {"id": "q04.helper", "fact": "Datapack.runQualified parses the full id with Identifier.of(id) (src/main/java/com/example/glowmod/util/Datapack.java:21-23)", "source": {"at": "src/main/java/com/example/glowmod/util/Datapack.java:22", "contains": "execute(world, pos, Identifier.of(id))"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/util/Datapack.java:21-23"}, {"text": "execute(world, pos, Identifier.of(id))"}]},
+        {"id": "q04.execute", "fact": "Datapack.execute looks the function up and runs it through the server's command function manager at the altar position (src/main/java/com/example/glowmod/util/Datapack.java:25-35)", "source": {"at": "src/main/java/com/example/glowmod/util/Datapack.java:33", "contains": "getCommandFunctionManager().execute(function, source)"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/util/Datapack.java:25-35"}, {"text": "getCommandFunctionManager().execute(function, source)"}]},
+        {"id": "q04.command", "fact": "the /glow ritual command reaches it: GlowCommands.ritual calls Ritual.baslat (src/main/java/com/example/glowmod/command/GlowCommands.java:40)", "source": {"at": "src/main/java/com/example/glowmod/command/GlowCommands.java:40", "contains": "Ritual.baslat("}, "match_any": [{"loc": "src/main/java/com/example/glowmod/command/GlowCommands.java:38-42"}, {"text": "Ritual.baslat(source.getWorld()"}]}
+      ],
+      "negatives": [
+        {"id": "q04.n.run", "statement": "Ritual.baslat calls Datapack.run (it calls Datapack.runQualified with the full id)", "relation": ["baslat", "calls", "run"]}
+      ]
+    },
+    {
+      "id": "q05", "category": "callers", "lang": "tr",
+      "question": "glowmod:ritual/tick fonksiyonu nereden çağrılıyor?",
+      "question_en": "Where is the glowmod:ritual/tick function called from?",
+      "facts": [
+        {"id": "q05.start", "fact": "ritual/start.mcfunction calls it once with `function glowmod:ritual/tick` (src/main/resources/data/glowmod/function/ritual/start.mcfunction:7)", "source": {"at": "src/main/resources/data/glowmod/function/ritual/start.mcfunction:7", "contains": "function glowmod:ritual/tick"}, "match_any": [{"loc": "src/main/resources/data/glowmod/function/ritual/start.mcfunction:7"}]},
+        {"id": "q05.self", "fact": "ritual/tick.mcfunction reschedules itself every tick while an altar marker exists (src/main/resources/data/glowmod/function/ritual/tick.mcfunction:5)", "source": {"at": "src/main/resources/data/glowmod/function/ritual/tick.mcfunction:5", "contains": "schedule function glowmod:ritual/tick 1t"}, "match_any": [{"loc": "src/main/resources/data/glowmod/function/ritual/tick.mcfunction:5"}, {"text": "schedule function glowmod:ritual/tick 1t"}]},
+        {"id": "q05.java", "fact": "indirectly from Java: Ritual.baslat runs glowmod:ritual/start (src/main/java/com/example/glowmod/ritual/Ritual.java:22)", "source": {"at": "src/main/java/com/example/glowmod/ritual/Ritual.java:22", "contains": "\"glowmod:ritual/start\""}, "match_any": [{"loc": "src/main/java/com/example/glowmod/ritual/Ritual.java:22"}]}
+      ],
+      "negatives": [
+        {"id": "q05.n.java_direct", "statement": "Ritual.baslat runs glowmod:ritual/tick directly (it runs ritual/start, which calls ritual/tick)", "relation": ["baslat", "calls", "tick|ritual/tick|glowmod:ritual/tick"]}
+      ]
+    },
+    {
+      "id": "q06", "category": "config", "lang": "en",
+      "question": "Where is glowmod.yml loaded and where do its default values come from?",
+      "facts": [
+        {"id": "q06.load", "fact": "GlowConfig.load reads glowmod.yml from the Fabric config directory (src/main/java/com/example/glowmod/config/GlowConfig.java:26-42)", "source": {"at": "src/main/java/com/example/glowmod/config/GlowConfig.java:27", "contains": "getConfigDir().resolve(FILE_NAME)"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/config/GlowConfig.java:26-42"}, {"text": "getConfigDir().resolve(FILE_NAME)"}]},
+        {"id": "q06.copy", "fact": "when the file does not exist yet, the default is copied out of the mod jar (src/main/java/com/example/glowmod/config/GlowConfig.java:29-33)", "source": {"at": "src/main/java/com/example/glowmod/config/GlowConfig.java:30", "contains": "getResourceAsStream(\"/\" + FILE_NAME)"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/config/GlowConfig.java:29-33"}, {"text": "getResourceAsStream(\"/\" + FILE_NAME)"}]},
+        {"id": "q06.default_file", "fact": "the bundled default file is src/main/resources/glowmod.yml (src/main/resources/glowmod.yml:1-18)", "source": {"at": "src/main/resources/glowmod.yml:1", "contains": "Copied to config/glowmod.yml on first start"}, "match_any": [{"loc": "src/main/resources/glowmod.yml:1-18"}]},
+        {"id": "q06.fallback", "fact": "missing keys and an unreadable file fall back to DEFAULTS = new GlowConfig(4, 0.02, 8, 40, 8) (src/main/java/com/example/glowmod/config/GlowConfig.java:18)", "source": {"at": "src/main/java/com/example/glowmod/config/GlowConfig.java:18", "contains": "new GlowConfig(4, 0.02, 8, 40, 8)"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/config/GlowConfig.java:18"}, {"text": "new GlowConfig(4, 0.02, 8, 40, 8)"}]},
+        {"id": "q06.caller", "fact": "it is loaded at mod start by GlowMod.onInitialize (src/main/java/com/example/glowmod/GlowMod.java:21)", "source": {"at": "src/main/java/com/example/glowmod/GlowMod.java:21", "contains": "GlowConfig.load();"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/GlowMod.java:21"}]}
+      ],
+      "negatives": [
+        {"id": "q06.n.plugin_config", "statement": "GlowConfig reads config.yml (that file belongs to the original plugin under reference/)", "assertion_regex": "(?i)GlowConfig[^\\n]*(?<![\\w/.-])config\\.yml"}
+      ]
+    },
+    {
+      "id": "q07", "category": "config", "lang": "tr",
+      "question": "Her tick'te kaç bloğun onarılacağı nerede ayarlanıyor?",
+      "question_en": "Where is it set how many blocks are repaired per tick?",
+      "facts": [
+        {"id": "q07.yml", "fact": "repair.blocks_per_tick: 8 in the default config (src/main/resources/glowmod.yml:11-12)", "source": {"at": "src/main/resources/glowmod.yml:12", "contains": "blocks_per_tick: 8"}, "match_any": [{"loc": "src/main/resources/glowmod.yml:11-12"}, {"text": "blocks_per_tick: 8"}]},
+        {"id": "q07.parse", "fact": "GlowConfig.parse reads repair.blocks_per_tick, default 8 (src/main/java/com/example/glowmod/config/GlowConfig.java:51)", "source": {"at": "src/main/java/com/example/glowmod/config/GlowConfig.java:51", "contains": "\"blocks_per_tick\""}, "match_any": [{"loc": "src/main/java/com/example/glowmod/config/GlowConfig.java:51"}, {"text": "number(repair, \"blocks_per_tick\""}]},
+        {"id": "q07.use", "fact": "RepairScheduler.tick uses it as the per-tick repair budget (src/main/java/com/example/glowmod/repair/RepairScheduler.java:33-39)", "source": {"at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:34", "contains": "GlowConfig.get().blocksPerTick()"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:33-39"}, {"text": "GlowConfig.get().blocksPerTick()"}]}
+      ],
+      "negatives": [
+        {"id": "q07.n.plugin_key", "statement": "the mod reads the hyphenated key blocks-per-tick (that is the original plugin's config.yml)", "assertion_regex": "(?i)(GlowConfig|RepairScheduler|glowmod\\.yml)[^\\n]*blocks-per-tick"}
+      ]
+    },
+    {
+      "id": "q08", "category": "resources", "lang": "en",
+      "question": "Where is the crafting recipe for the lantern staff and what goes into it?",
+      "facts": [
+        {"id": "q08.file", "fact": "a shaped crafting recipe in src/main/resources/data/glowmod/recipe/lantern_staff.json whose result is glowmod:lantern_staff (src/main/resources/data/glowmod/recipe/lantern_staff.json:14-17)", "source": {"at": "src/main/resources/data/glowmod/recipe/lantern_staff.json:15", "contains": "\"id\": \"glowmod:lantern_staff\""}, "match_any": [{"loc": "src/main/resources/data/glowmod/recipe/lantern_staff.json:1-18"}]},
+        {"id": "q08.keys", "fact": "ingredients: E = glowmod:ember_shard, L = minecraft:soul_lantern, S = minecraft:stick (src/main/resources/data/glowmod/recipe/lantern_staff.json:9-13)", "source": {"at": "src/main/resources/data/glowmod/recipe/lantern_staff.json:10", "contains": "glowmod:ember_shard"}, "match_any": [{"loc": "src/main/resources/data/glowmod/recipe/lantern_staff.json:9-13"}, {"all": ["glowmod:ember_shard", "minecraft:soul_lantern", "minecraft:stick"]}]},
+        {"id": "q08.pattern", "fact": "pattern \" EL\" / \" SE\" / \"S  \": two ember shards, one soul lantern, two sticks (src/main/resources/data/glowmod/recipe/lantern_staff.json:4-8)", "source": {"at": "src/main/resources/data/glowmod/recipe/lantern_staff.json:5", "contains": "\" EL\""}, "match_any": [{"loc": "src/main/resources/data/glowmod/recipe/lantern_staff.json:4-8"}]}
+      ],
+      "negatives": []
+    },
+    {
+      "id": "q09", "category": "resources", "lang": "tr",
+      "question": "Fener asasının (lantern_staff) eşya modeli ve oyunda görünen adı hangi dosyalarda tanımlı?",
+      "question_en": "In which files are the lantern staff's item model and in-game name defined?",
+      "facts": [
+        {"id": "q09.model", "fact": "item model src/main/resources/assets/glowmod/models/item/lantern_staff.json (parent minecraft:item/handheld, texture glowmod:item/lantern_staff)", "source": {"at": "src/main/resources/assets/glowmod/models/item/lantern_staff.json:2", "contains": "minecraft:item/handheld"}, "match_any": [{"loc": "src/main/resources/assets/glowmod/models/item/lantern_staff.json:1-6"}]},
+        {"id": "q09.en", "fact": "English name: \"item.glowmod.lantern_staff\": \"Lantern Staff\" (src/main/resources/assets/glowmod/lang/en_us.json:2)", "source": {"at": "src/main/resources/assets/glowmod/lang/en_us.json:2", "contains": "\"item.glowmod.lantern_staff\": \"Lantern Staff\""}, "match_any": [{"loc": "src/main/resources/assets/glowmod/lang/en_us.json:2"}, {"text": "Lantern Staff"}]},
+        {"id": "q09.tr", "fact": "Turkish name: \"item.glowmod.lantern_staff\": \"Fener Asası\" (src/main/resources/assets/glowmod/lang/tr_tr.json:2)", "source": {"at": "src/main/resources/assets/glowmod/lang/tr_tr.json:2", "contains": "\"item.glowmod.lantern_staff\": \"Fener Asası\""}, "match_any": [{"loc": "src/main/resources/assets/glowmod/lang/tr_tr.json:2"}, {"text": "Fener Asası"}]},
+        {"id": "q09.item", "fact": "the item itself is registered as glowmod:lantern_staff in ModItems (src/main/java/com/example/glowmod/item/ModItems.java:13)", "source": {"at": "src/main/java/com/example/glowmod/item/ModItems.java:13", "contains": "register(\"lantern_staff\""}, "match_any": [{"loc": "src/main/java/com/example/glowmod/item/ModItems.java:13"}, {"text": "register(\"lantern_staff\""}]}
+      ],
+      "negatives": []
+    },
+    {
+      "id": "q10", "category": "flow", "lang": "en",
+      "question": "How does pressing the summon key on the client end up spawning a wisp on the server?",
+      "facts": [
+        {"id": "q10.key", "fact": "GlowModClient registers the key binding key.glowmod.summon_wisp (G) (src/client/java/com/example/glowmod/client/GlowModClient.java:19-23)", "source": {"at": "src/client/java/com/example/glowmod/client/GlowModClient.java:21", "contains": "\"key.glowmod.summon_wisp\""}, "match_any": [{"loc": "src/client/java/com/example/glowmod/client/GlowModClient.java:19-23"}]},
+        {"id": "q10.send", "fact": "on a key press while looking at a block, onEndTick sends SummonWispPayload(hit.getBlockPos()) (src/client/java/com/example/glowmod/client/GlowModClient.java:28)", "source": {"at": "src/client/java/com/example/glowmod/client/GlowModClient.java:28", "contains": "ClientPlayNetworking.send(new SummonWispPayload("}, "match_any": [{"loc": "src/client/java/com/example/glowmod/client/GlowModClient.java:25-31"}, {"text": "ClientPlayNetworking.send(new SummonWispPayload(hit.getBlockPos()))"}]},
+        {"id": "q10.payload", "fact": "SummonWispPayload is a record with id glowmod:summon_wisp carrying a BlockPos (src/main/java/com/example/glowmod/network/SummonWispPayload.java:11-15)", "source": {"at": "src/main/java/com/example/glowmod/network/SummonWispPayload.java:13", "contains": "\"summon_wisp\""}, "match_any": [{"loc": "src/main/java/com/example/glowmod/network/SummonWispPayload.java:11-15"}]},
+        {"id": "q10.register", "fact": "ServerNetworking.register registers the C2S payload type and onSummonWisp as its receiver (src/main/java/com/example/glowmod/network/ServerNetworking.java:15-18)", "source": {"at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:17", "contains": "registerGlobalReceiver(SummonWispPayload.ID, ServerNetworking::onSummonWisp)"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/network/ServerNetworking.java:15-18"}, {"text": "ServerNetworking::onSummonWisp"}]},
+        {"id": "q10.handler", "fact": "onSummonWisp requires the lantern staff in the main hand and a distance within max_summon_distance, then calls Wisp.spawn above the block (src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30)", "source": {"at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:29", "contains": "Wisp.spawn(player.getServerWorld(), payload.pos().up())"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30"}, {"text": "Wisp.spawn(player.getServerWorld()"}]}
+      ],
+      "negatives": [
+        {"id": "q10.n.client_spawn", "statement": "the client calls Wisp.spawn itself", "relation": ["onEndTick|onInitializeClient", "calls", "spawn"]},
+        {"id": "q10.n.reversed", "statement": "the server handler sends the payload (direction reversed)", "relation": ["onSummonWisp", "calls", "send"]}
+      ]
+    },
+    {
+      "id": "q11", "category": "behaviour", "lang": "tr",
+      "question": "Sunucu kapanırken henüz onarılmamış bloklara ne oluyor?",
+      "question_en": "What happens to blocks that are not repaired yet when the server shuts down?",
+      "facts": [
+        {"id": "q11.hook", "fact": "RepairScheduler.register hooks temizle to ServerLifecycleEvents.SERVER_STOPPING (src/main/java/com/example/glowmod/repair/RepairScheduler.java:25)", "source": {"at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:25", "contains": "SERVER_STOPPING.register(RepairScheduler::temizle)"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:23-26"}, {"text": "SERVER_STOPPING.register(RepairScheduler::temizle)"}]},
+        {"id": "q11.restore", "fact": "temizle puts every pending block back at once, without the per-tick budget or the delay (src/main/java/com/example/glowmod/repair/RepairScheduler.java:42-45)", "source": {"at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:44", "contains": "p.world().setBlockState(p.pos(), p.state())"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:42-45"}]},
+        {"id": "q11.clear", "fact": "then the queue is emptied (src/main/java/com/example/glowmod/repair/RepairScheduler.java:46)", "source": {"at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:46", "contains": "QUEUE.clear()"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:46"}, {"text": "QUEUE.clear()"}]}
+      ],
+      "negatives": [
+        {"id": "q11.n.tick", "statement": "the per-tick repair handler calls temizle", "relation": ["tick", "calls", "temizle"]}
+      ]
+    },
+    {
+      "id": "q12", "category": "where", "lang": "en",
+      "question": "Where are the mod's items registered?",
+      "facts": [
+        {"id": "q12.helper", "fact": "ModItems.register puts each item into Registries.ITEM under glowmod:<name> (src/main/java/com/example/glowmod/item/ModItems.java:20-22)", "source": {"at": "src/main/java/com/example/glowmod/item/ModItems.java:21", "contains": "Registry.register(Registries.ITEM, Identifier.of(GlowMod.MOD_ID, name), item)"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/item/ModItems.java:20-22"}, {"text": "Registries.ITEM"}]},
+        {"id": "q12.fields", "fact": "the items are the fields LANTERN_STAFF, EMBER_SHARD and WISP_HEART (src/main/java/com/example/glowmod/item/ModItems.java:13-15)", "source": {"at": "src/main/java/com/example/glowmod/item/ModItems.java:13", "contains": "LANTERN_STAFF = register(\"lantern_staff\""}, "match_any": [{"loc": "src/main/java/com/example/glowmod/item/ModItems.java:13-15"}, {"all": ["LANTERN_STAFF", "EMBER_SHARD", "WISP_HEART"]}]},
+        {"id": "q12.init", "fact": "GlowMod.onInitialize calls ModItems.initialize, which loads the class and adds the items to creative tabs (src/main/java/com/example/glowmod/GlowMod.java:22)", "source": {"at": "src/main/java/com/example/glowmod/GlowMod.java:22", "contains": "ModItems.initialize();"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/GlowMod.java:22"}, {"text": "ModItems.initialize()"}]}
+      ],
+      "negatives": []
+    },
+    {
+      "id": "q13", "category": "behaviour", "lang": "tr",
+      "question": "Oyuncu fener asasıyla bir ruh fenerine sağ tıklayınca ne oluyor?",
+      "question_en": "What happens when a player right-clicks a soul lantern with the lantern staff?",
+      "facts": [
+        {"id": "q13.check", "fact": "the UseBlockCallback from LanternEvents.etkinlestir reacts only server-side, to the lantern staff in hand on a soul lantern (src/main/java/com/example/glowmod/event/LanternEvents.java:19-26)", "source": {"at": "src/main/java/com/example/glowmod/event/LanternEvents.java:24", "contains": "Blocks.SOUL_LANTERN"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/event/LanternEvents.java:19-26"}]},
+        {"id": "q13.spawn", "fact": "a wisp is spawned in the block above the lantern (src/main/java/com/example/glowmod/event/LanternEvents.java:30)", "source": {"at": "src/main/java/com/example/glowmod/event/LanternEvents.java:30", "contains": "Wisp.spawn((ServerWorld) world, pos.up())"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/event/LanternEvents.java:30"}, {"text": "Wisp.spawn((ServerWorld) world, pos.up())"}]},
+        {"id": "q13.cooldown", "fact": "the staff then gets a 100-tick cooldown; during it the click fails (src/main/java/com/example/glowmod/event/LanternEvents.java:12, 27-31)", "source": {"at": "src/main/java/com/example/glowmod/event/LanternEvents.java:31", "contains": "set(ModItems.LANTERN_STAFF, STAFF_COOLDOWN_TICKS)"}, "match_any": [{"loc": "src/main/java/com/example/glowmod/event/LanternEvents.java:27-31"}, {"loc": "src/main/java/com/example/glowmod/event/LanternEvents.java:12"}, {"text": "STAFF_COOLDOWN_TICKS"}]}
+      ],
+      "negatives": [
+        {"id": "q13.n.ritual", "statement": "using the staff on a lantern starts the ritual", "relation": ["etkinlestir", "calls", "baslat"]}
+      ]
+    },
+    {
+      "id": "q14", "category": "where", "lang": "en",
+      "question": "In the original Paper plugin, how was a wisp spawned and what called it?",
+      "facts": [
+        {"id": "q14.spawn", "fact": "the plugin's Wisp.spawn spawns an Allay named \"Wisp\" and tags it with a persistent wisp key (reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:19-24)", "source": {"at": "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:20", "contains": "EntityType.ALLAY"}, "match_any": [{"loc": "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:19-24"}]},
+        {"id": "q14.listener", "fact": "WispListener.onInteract calls it when a soul lantern is right-clicked with a blaze rod (reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:19-27)", "source": {"at": "reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:25", "contains": "Wisp.spawn(plugin, block.getLocation()"}, "match_any": [{"loc": "reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:19-27"}, {"text": "Wisp.spawn(plugin"}]}
+      ],
+      "negatives": []
+    }
+  ]
+}

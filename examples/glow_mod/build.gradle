@@ -1,0 +1,69 @@
+plugins {
+    id 'fabric-loom' version '1.7-SNAPSHOT'
+    id 'maven-publish'
+}
+
+version = '0.3.0'
+group = 'com.example.glowmod'
+
+base {
+    archivesName = 'glowmod'
+}
+
+sourceSets {
+    gametest {
+        compileClasspath += main.compileClasspath + main.output
+        runtimeClasspath += main.runtimeClasspath + main.output
+    }
+}
+
+loom {
+    splitEnvironmentSourceSets()
+
+    mods {
+        glowmod {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+
+    runs {
+        gametest {
+            server()
+            name 'Game Test'
+            vmArg '-Dfabric-api.gametest'
+            source sourceSets.gametest
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    minecraft 'com.mojang:minecraft:1.21.1'
+    mappings 'net.fabricmc:yarn:1.21.1+build.3:v2'
+    modImplementation 'net.fabricmc:fabric-loader:0.16.5'
+    modImplementation 'net.fabricmc.fabric-api:fabric-api:0.105.0+1.21.1'
+
+    // config/glowmod.yml is parsed with SnakeYAML, shipped inside the mod jar
+    implementation 'org.yaml:snakeyaml:2.2'
+    include 'org.yaml:snakeyaml:2.2'
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 21
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}

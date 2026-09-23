@@ -40,11 +40,24 @@ expansion only when its English target occurs in the repository, and analysis
 uses it as an idf table for relevance.
 
 **Seed dictionary.** ``verinoda/data/seed_lexicon_tr_en.json`` maps about
-three hundred Turkish stems of generic software and business terms to English
-words (``veritaban`` -> database, ``siparis`` -> order). A short key only
+four hundred Turkish stems of generic software, business and game/mod
+development terms to English words (``veritaban`` -> database, ``siparis`` ->
+order, ``esya`` -> item). Stems that folding merges with another word (``öl``
+die / ``ol`` be) are left out. A short key only
 matches when the rest of the word is Turkish inflection
 (:func:`verinoda.textnorm.is_suffix_chain`), and the longest matching key
 wins (``indirim`` -> discount, not ``indir`` -> download).
+
+**Translations.** A repository that ships the same strings in two languages
+(a Minecraft ``lang/en_us.json`` next to ``lang/tr_tr.json``, i18n
+``locales/en.json`` next to ``locales/tr.json``) states its own dictionary:
+for every key present in both files, each Turkish word of the value is paired
+with the English word at the same position when the two values have the same
+number of words ("Fener Asası" / "Lantern Staff": fener -> lantern, asası ->
+staff), and the whole Turkish value with the key's last identifier
+(``lantern_staff``). These pairs are kept with ``"via": "translation"`` and the
+line of the Turkish file as their site; like every lexicon pair they only widen
+the search.
 
 The file is ``.verinoda/index/lexicon.json``. :func:`build` is incremental:
 files whose sha256 did not change keep their extracted units.
@@ -435,6 +448,81 @@ def _associate(units: list[list]) -> tuple[dict, dict, list[str], int]:
     return dict(sorted(pairs.items())), dict(sorted(text_sites.items())), sorted(stop), n
 
 
+# -- translations: parallel locale files ---------------------------------------------------------
+
+_LOCALE_FILE = re.compile(r"(?:^|/)(?:lang|langs|locale|locales|i18n|l10n|translations?)/"
+                          r"(en|en_us|en-us|en_gb|tr|tr_tr|tr-tr)\.json$", re.I)
+TRANSLATION_SCORE = 0.9
+MAX_TRANSLATION_WORDS = 6
+
+
+def _flat_strings(obj, prefix: str = "") -> dict[str, str]:
+    out: dict[str, str] = {}
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            key = f"{prefix}.{k}" if prefix else str(k)
+            if isinstance(v, str):
+                out[key] = v
+            elif isinstance(v, dict):
+                out.update(_flat_strings(v, key))
+    return out
+
+
+def _value_words(text: str) -> list[str]:
+    text = re.sub(r"%\w|\{[^}]*\}|§.|<[^>]+>", " ", text)
+    return re.findall(r"[^\W\d_]+", text)
+
+
+def translation_pairs(repo: Path, files: list[str]) -> dict[str, list[dict]]:
+    """Turkish word key -> ``[{part, score, support, sites, via}]`` from parallel en/tr locale files."""
+    groups: dict[str, dict[str, str]] = defaultdict(dict)
+    for rel in files:
+        m = _LOCALE_FILE.search(rel)
+        if m:
+            lang = "tr" if m.group(1).lower().startswith("tr") else "en"
+            groups[rel[:m.start(1)]][lang] = rel
+    found: dict[tuple[str, str], dict] = {}
+    for pair in groups.values():
+        if "en" not in pair or "tr" not in pair:
+            continue
+        try:
+            en_raw = (repo / pair["en"]).read_text(encoding="utf-8", errors="replace")
+            tr_raw = (repo / pair["tr"]).read_text(encoding="utf-8", errors="replace")
+            en, tr = _flat_strings(json.loads(en_raw)), _flat_strings(json.loads(tr_raw))
+        except (OSError, ValueError):
+            continue
+        tr_lines = tr_raw.splitlines()
+        for key, tr_val in tr.items():
+            en_val = en.get(key)
+            if not isinstance(en_val, str) or tn.fold_tr(en_val) == tn.fold_tr(tr_val):
+                continue
+            leaf = key.rsplit(".", 1)[-1]
+            line = next((i for i, ln in enumerate(tr_lines, 1) if f'"{leaf}"' in ln or f'"{key}"' in ln), 1)
+            site = f"{pair['tr']}:{line}"
+            tw, ew = _value_words(tr_val), _value_words(en_val)
+            if not tw or len(tw) > MAX_TRANSLATION_WORDS:
+                continue
+            links: list[tuple[str, str]] = []
+            if len(tw) == len(ew):
+                links += [(a, b) for a, b in zip(tw, ew) if tn.fold_tr(a) != tn.fold_tr(b)]
+            if re.fullmatch(r"[a-z][a-z0-9_]{2,}", leaf) and "_" in leaf:
+                links += [(a, leaf) for a in tw]
+            for tr_word, target in links:
+                if len(tr_word) < 3 or len(target) < 3 or tn.fold_tr(tr_word) in tn.TR_STOPWORDS:
+                    continue
+                part = tn.fold_tr(target) if "_" in target else tn.en_stem(tn.fold_tr(target))
+                for k in word_keys(tr_word):
+                    e = found.setdefault((k, part), {"part": part, "score": TRANSLATION_SCORE, "support": 0,
+                                                     "sites": [], "via": "translation"})
+                    e["support"] += 1
+                    if len(e["sites"]) < MAX_SITES and site not in e["sites"]:
+                        e["sites"].append(site)
+    out: dict[str, list[dict]] = defaultdict(list)
+    for (k, _part), e in found.items():
+        out[k].append(e)
+    return {k: sorted(v, key=lambda x: (-x["support"], x["part"]))[:TOP_PAIRS] for k, v in sorted(out.items())}
+
+
 # -- seed dictionary --------------------------------------------------------------------------
 
 @lru_cache(maxsize=1)
@@ -694,6 +782,15 @@ def build(repo: Path, graph=None, changed=None, *, file_hashes: dict[str, str] |
         reparsed += 1
     units = [u for f in files.values() for u in f.get("units", ())]
     pairs, text_sites, stop, n_units = _associate(units)
+    try:
+        from verinoda.snapshot import list_files
+
+        translations = translation_pairs(repo, list_files(repo))
+    except Exception:  # noqa: BLE001 - a malformed locale file never breaks the lexicon
+        translations = {}
+    for k, prs in translations.items():  # the repository's own translations come first
+        have = {x["part"] for x in prs}
+        pairs[k] = (prs + [x for x in pairs.get(k, []) if x["part"] not in have])[:TOP_PAIRS]
     vocab: Counter = Counter()
     for f in files.values():
         vocab.update(f.get("vocab", ()))
@@ -718,6 +815,7 @@ def build(repo: Path, graph=None, changed=None, *, file_hashes: dict[str, str] |
     tmp.replace(path)
     return {"path": str(path), "files": len(files), "reparsed": reparsed, "units": n_units,
             "words": len(pairs), "pairs": sum(len(v) for v in pairs.values()),
+            "translation_pairs": sum(len(v) for v in translations.values()),
             "seed_grounded": len(seed_hits), "bytes": path.stat().st_size,
             "seconds": round(time.monotonic() - t0, 3)}
 

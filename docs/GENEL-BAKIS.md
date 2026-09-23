@@ -185,6 +185,47 @@ Bölüm 4.5'teki öğe düzeyinde eskimenin ve kanıt bağlamanın gerçek bir
   İndekslendikten sonra değişen dosyalar sorgu anında yeniden indekslenmez;
   çıktıda `stale_files` olarak bildirilir.
 
+### 4.1a Veri dosyaları, oyun modları ve veri paketleri (`search_index`, `resources`) — Çalışıyor (yeni, 2026-09-23)
+
+Bir Minecraft modunda mekaniklerin bir kısmı Java'da değil veri paketindedir:
+Java kodu `mymod:wisp_death` fonksiyonunu çalıştırır, `config/mymod.yml`'yi
+okur, modeli `assets/mymod/models/item/x.json` olan eşyayı kaydeder. Kod ile
+veri birbirini yalnızca bu dizgilerle anar. Graphify (ve eski Verinoda) bu
+dosyaları hiç okumuyordu.
+
+- **Veri dosyaları aranabilir.** Grafın düğüm çıkarmadığı metin dosyaları
+  (`.mcfunction`, JSON, YAML/TOML/INI yapılandırmaları, SQL, gölgelendirici,
+  Gradle betikleri…) "veri" birimi olarak indekslenir; yapılandırmalar üst
+  düzey bölümlere ayrılır. Dışarıda bırakılan dosyalar gerekçesiyle
+  listelenir: ikili dosya, sır içerebilir (grafın kendi kuralı), `.graphifyignore`,
+  bağımlılık/derleme çıktısı klasörü, üretilmiş çıktı (`results/`, `logs/`…),
+  büyük üretilmiş JSON, küçültülmüş dosya. `doctor` bunları sayar; sorunun
+  kelimeleri dışarıda kalan bir dosyanın adında geçiyorsa sorgu çıktısı bunu söyler.
+- **Kaynak kimlikleri kodu ve veriyi bağlar** — yalnızca gerçekten paket ya
+  da mod olan depolarda (`pack.mcmeta` ya da Fabric/Quilt/Forge/NeoForge
+  manifesti): `ns:yol`, `#ns:etiket`, worldgen kimlikleri, `function ns:x`,
+  `"item.ns.x"` çeviri anahtarları, `Identifier.of("ns", "x")`, tam varlık
+  yolları ve bir kimlik kurucusuna ya da adı ne yüklediğini söyleyen bir
+  yardımcıya (`fonksiyon(p, poz, "wisp_death")`) verilen çıplak adlar. Kayıt
+  türünü bağlam seçer (`advancement revoke … only ns:x` bir başarımı,
+  `"parent"` bir modeli adlandırır). Ad alanı varsayılan ya da türü satırda
+  yazmayan bağlantı "çıkarım" diye işaretlenir; ondan kurulan iddia
+  `strong_inference` olur.
+- **Aynı içerikli kopyalar** (iki kez gönderilen veri paketi) bir kez sıralanır;
+  diğerleri `same content:` satırında listelenir.
+- **Java çağrıları:** Graphify'ın düşürdüğü çağrılar (depoda iki `Wisp` sınıfı
+  varsa `Wisp.spawn(...)` tümden kayboluyordu; tipli değişkenler hiç
+  izlenmiyordu) dosyanın import'ları ya da paketi sınıfı bağlıyorsa eklenir ve
+  her çağrı yeri gibi derecelendirilir. İddia metni `Ritual.baslat()` calls
+  `Wisp.spawn()` biçimindedir.
+- **Referans ağaçları:** `verinoda setup --reference orijinal-eklenti/=orijinal,eklenti`
+  özgün uygulamayı aranabilir tutar, ama soru "orijinal", "eklenti" ya da klasör
+  adını anmadıkça 0,6 katsayıyla sıralar.
+- **Depodan Türkçe adlar:** paralel dil dosyaları (`lang/en_us.json` +
+  `lang/tr_tr.json`) sözlüğe "Fener Asası" = `lantern_staff` bilgisini öğretir.
+- **Komut adları:** "`scan` komutu", "init ve scan komutları" gibi ifadeler
+  `cmd_scan`, `scan_command`, `ScanCommand` gibi işleyicilere bağlanır.
+
 ### 4.2 Soru planları ve Türkçe desteği (`question_plan`, `textnorm`, `lexicon`) — Çalışıyor (plan revizyonu kısmi)
 
 - **Soru planı** (`verinoda.question_plan/1`): kullanıcının mesajı olduğu
@@ -749,6 +790,40 @@ bazı kümelerde 27–108 token büyüdü. Graphify ve düz arama sonuçları ik
 dizininde çalıştırılınca reddediyor mu?") hâlâ yanıtlanamıyor: soru artık
 doğru anlaşılıyor, ama komut adları (`init`, `scan`) işleyici
 fonksiyonlarına (`cmd_init`, `cmd_scan`) bağlanmıyor.
+
+### 7.6 Oyun modları ve veri dosyaları turu (2026-09-24, `docs/BENCHMARKS.md`)
+
+Bu turun amacı, davranışının bir kısmı veri paketinde (`.mcfunction`), JSON
+kaynaklarında ve yml ayar dosyasında duran bir Minecraft modu hakkındaki
+soruları yanıtlayabilmekti (bölüm 4.1a). Değişiklik ölçülmeden önce dört
+bağımsız inceleme ajanı kodu okudu ve yaklaşık yirmi hatayı yeniden üreterek
+buldu; hepsi düzeltildi. En ciddileri: veri geçişi grafın sır saydığı dosyaları
+(`credentials.json`) indeksleyip sorgu çıktısına basıyordu; sıradan bir
+depodaki her `data/<a>/<b>/` klasörü kaynak bağlantısı üretiyordu; yanlış
+türdeki dosyaya bağlantı `statically_verified` iddia oluyordu; başka paketteki
+aynı adlı sınıfa yapılan Java çağrısı doğrulanmış çağrı sayılıyordu.
+
+Yeni küme `glow_mod`: küçük, kurgusal bir Fabric modu (`examples/glow_mod`,
+14 soru, 7'si Türkçe, 50 bilgi). Soruları Verinoda'yı hiç çalıştırmamış bir
+ajan yazdı. Yalnızca ilk ölçüm için ayrılmıştır; sonraki eklemeler (Java çağrı
+geçişi, dil dosyalarından çeviri çiftleri, sözlüğe oyun kelimeleri, analyze
+zinciri) q01, q03, q04 ve q13'ün kaçırdıklarına bakılarak yapıldı. Bulunan
+bilgi (50 üzerinden):
+
+| Yaklaşım | `32a5bd4` | İlk ölçüm (ayrılmış) | Şimdi |
+|---|---|---|---|
+| Ham grep+okuma | 33 | 33 | 33 |
+| Graphify | 13 | 13 | 13 |
+| Verinoda analyze | 18 | 25 | **39** |
+| Verinoda retrieve (JSON) | 25 | 32 | **41** |
+| Verinoda retrieve (düz metin) | 34 | 46 | **48** |
+
+Önceki beş kümede (gerileme kontrolü) Verinoda'nın 25 hücresinden 24'ü ve
+Graphify ile ham okumanın bütün hücreleri aynı sayıda bilgi buldu; bir hücre
+bir bilgi kaybetti (`graphify_core_tr` JSON 16 → 15: aynı içerikli belge
+kopyaları artık tek öğe; kalan öğelerin iki çağrı kenarı "more" listesini JSON
+bütçesinin dışına itti). Tarama süresi ölçülebilir biçimde artmadı. Bu turu
+başlatan, sahibinin kendi modu üzerindeki özel küme yayımlanmıyor.
 
 ---
 

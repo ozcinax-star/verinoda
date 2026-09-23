@@ -1,0 +1,9 @@
+# GlowPlugin settings
+wisp:
+  # wisps called by one ritual
+  ritual-count: 3
+  # chance that a swamp chunk gets a wisp when it loads at night
+  natural-chance: 0.05
+repair:
+  # blocks restored per tick after a ritual
+  blocks-per-tick: 4

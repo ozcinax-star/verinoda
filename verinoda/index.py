@@ -45,7 +45,8 @@ CODE_RELATIONS = {"calls", "imports", "imports_from", "uses", "inherits", "metho
                   "extends", "references", "contains"}
 FLOW_RELATIONS = {"calls"}
 RECEIVER_ORIGIN = "verinoda.receiver"
-RECEIVER_SIDECAR_VERSION = 1
+JAVA_CALL_ORIGIN = "verinoda.java_calls"
+RECEIVER_SIDECAR_VERSION = 2
 HEURISTIC_SPAN_CAP = 80        # the next-symbol fallback never spans more lines than this
 PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc")
 MARKDOWN_SUFFIXES = (".md", ".markdown", ".mdx")
@@ -828,6 +829,145 @@ def receiver_call_edges(g: Graph, facts_for=None) -> list[tuple[str, str, dict]]
     return out
 
 
+# -- Java calls the extractor left out ---------------------------------------------------------------
+
+_JAVA_STRING = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
+_JAVA_CALL = re.compile(r"(?<![\w.$])([A-Za-z_$][\w$]*)\s*\.\s*([a-z_$][\w$]*)\s*\(")
+_JAVA_DECL = re.compile(r"(?<![\w.$])([A-Z][\w$]*)(?:<[^<>;()]*(?:<[^<>;()]*>[^<>;()]*)*>)?(?:\[\])?\s+([a-z_$][\w$]*)\s*(?=[=;,):])")
+_JAVA_IMPORT = re.compile(r"\s*import\s+(static\s+)?([\w.]+)\.([\w$]+|\*)\s*;")
+_JAVA_PACKAGE_DECL = re.compile(r"\s*package\s+([\w.]+)\s*;")
+
+
+def _java_code_lines(text: str) -> list[str]:
+    """The file's lines with string literals and comments blanked (same line numbers)."""
+    out, in_block = [], False
+    for ln in text.splitlines():
+        s = _JAVA_STRING.sub('""', ln)
+        if in_block:
+            end = s.find("*/")
+            if end < 0:
+                out.append("")
+                continue
+            s, in_block = s[end + 2:], False
+        while "/*" in s:
+            a = s.find("/*")
+            b = s.find("*/", a + 2)
+            if b < 0:
+                s, in_block = s[:a], True
+                break
+            s = s[:a] + " " + s[b + 2:]
+        out.append(s.split("//", 1)[0])
+    return out
+
+
+def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
+    """``calls`` edges for Java ``Cls.method(...)`` and ``var.method(...)`` the extractor did not record.
+
+    Graphify's Java pass drops a call when the class name is ambiguous in the repository (a
+    reference copy of the code, two ``Wisp`` classes) and never follows typed variables. Here a
+    class is resolved the way javac does it for the file: an explicit import of that class, the
+    file's own package, or a ``pkg.*`` import; with none of these, or with an import from another
+    package, no edge is made. ``var.method()`` follows the declared type of a parameter, local or
+    field (``Wisp w = ...``). Edges are ``INFERRED`` with ``_origin=verinoda.java_calls``.
+    """
+    classes: dict[str, list[tuple[str, str]]] = {}
+    methods: dict[tuple[str, str], str] = {}
+    for n, d in g.G.nodes(data=True):
+        f = d.get("source_file") or ""
+        if f.endswith(".java") and d.get("_callable_class"):
+            classes.setdefault(d.get("label", ""), []).append((n, f))
+    if not classes:
+        return []
+    by_file: dict[str, list[str]] = {}
+    for n, d in g.G.nodes(data=True):
+        f = d.get("source_file") or ""
+        if f.endswith(".java") and d.get("_callable") and not d.get("_callable_class"):
+            by_file.setdefault(f, []).append(n)
+    # a method belongs to the innermost class whose span holds it (the extractor's `method` edge
+    # can be lost when the method also calls its own class's constructor)
+    class_spans: dict[str, list[tuple[int, int, str]]] = {}
+    for lst in classes.values():
+        for cid, cf in lst:
+            sp = g.span(cid)
+            if sp:
+                class_spans.setdefault(cf, []).append((sp[0], sp[1], cid))
+    for f, ms in by_file.items():
+        for m in ms:
+            line = g.line(m)
+            owners = [(b - a, cid) for a, b, cid in class_spans.get(f, []) if line and a <= line <= b]
+            if owners:
+                methods.setdefault((min(owners)[1], g.label(m).strip(".()")), m)
+    if read is None:
+        def read(f: str) -> str | None:
+            try:
+                return (g.root / f).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                return None
+    have = {(u, v) for u, v, d in g.G.edges(data=True) if d.get("relation") == "calls"}
+    out: list[tuple[str, str, dict]] = []
+    for f in sorted(by_file):
+        text = read(f)
+        if text is None:
+            continue
+        raw = text.splitlines()
+        code = _java_code_lines(text)
+        imports = [m.groups() for ln in raw if (m := _JAVA_IMPORT.match(ln))]
+        pkg = next((m.group(1) for ln in raw if (m := _JAVA_PACKAGE_DECL.match(ln))), None)
+        here = str(PurePosixPath(f).parent)
+
+        def resolve(cls: str) -> str | None:
+            cands = classes.get(cls) or []
+            if not cands:
+                return None
+
+            def pkg_of(cf: str, name: str) -> bool:
+                return str(PurePosixPath(cf).parent).replace("\\", "/").endswith("/" + name.replace(".", "/")) \
+                    or str(PurePosixPath(cf).parent) == name.replace(".", "/")
+
+            explicit = [p for st, p, c in imports if c == cls and not st]
+            if explicit:
+                hit = [cid for cid, cf in cands if any(pkg_of(cf, p) for p in explicit)]
+            else:
+                hit = [cid for cid, cf in cands if str(PurePosixPath(cf).parent) == here
+                       or (pkg is not None and pkg_of(cf, pkg))]
+                if not hit:
+                    wild = [p for st, p, c in imports if c == "*" and not st]
+                    hit = [cid for cid, cf in cands if any(pkg_of(cf, p) for p in wild)]
+            return hit[0] if len(hit) == 1 else None
+
+        fields = {m.group(2): m.group(1) for ln in code for m in _JAVA_DECL.finditer(ln)
+                  if re.match(r"\s*(?:(?:private|protected|public|static|final|volatile|transient)\s+)+", ln)}
+        for n in by_file[f]:
+            sp = g.span(n)
+            if not sp:
+                continue
+            a, b = sp[0], min(sp[1], len(code))
+            local = dict(fields)
+            for i in range(a, b + 1):
+                for m in _JAVA_DECL.finditer(code[i - 1]):
+                    local[m.group(2)] = m.group(1)
+            for i in range(a, b + 1):
+                for m in _JAVA_CALL.finditer(code[i - 1]):
+                    recv, meth = m.group(1), m.group(2)
+                    if recv[0].isupper():
+                        cls, how = recv, "class"
+                    elif recv in local and recv not in ("this", "super"):
+                        cls, how = local[recv], "typed"
+                    else:
+                        continue
+                    cid = resolve(cls)
+                    target = methods.get((cid, meth)) if cid else None
+                    if not target or target == n or (n, target) in have:
+                        continue
+                    have.add((n, target))
+                    ctx = f"{recv}.{meth}()" + ("" if how == "class" else f" on {cls}")
+                    out.append((n, target, {"relation": "calls", "confidence": "INFERRED",
+                                            "confidence_score": 0.9 if how == "class" else 0.75,
+                                            "_origin": JAVA_CALL_ORIGIN, "source_file": f,
+                                            "source_location": f"L{i}", "context": ctx}))
+    return out
+
+
 def _apply_edges(g: Graph, edges) -> int:
     g.__dict__.pop("_ppr_adj", None)  # search_index caches weighted neighbours per graph
     added = 0
@@ -842,8 +982,8 @@ def _apply_edges(g: Graph, edges) -> int:
 
 
 def augment_python_receiver_calls(g: Graph) -> int:
-    """Compute and add the receiver-call edges in memory; returns the number added."""
-    return _apply_edges(g, receiver_call_edges(g))
+    """Compute and add the receiver-call (and Java call) edges in memory; returns the number added."""
+    return _apply_edges(g, receiver_call_edges(g) + java_call_edges(g))
 
 
 def _read_sidecar(repo: Path) -> dict | None:
@@ -883,7 +1023,7 @@ def refresh_receiver_sidecar(repo: Path, g: Graph | None = None) -> dict:
         files[f] = {"sha256": sha, "facts": None if facts is None else {str(k): v for k, v in facts.items()}}
         return files[f]["facts"]
 
-    edges = receiver_call_edges(g, facts_for)
+    edges = receiver_call_edges(g, facts_for) + java_call_edges(g)
     sidecar = {"version": RECEIVER_SIDECAR_VERSION, "graph": graph_identity(g.path),
                "files": files, "edges": [[u, v, d] for u, v, d in edges]}
     write_json_atomic(receiver_calls_path(repo), sidecar)

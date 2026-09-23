@@ -496,6 +496,36 @@ def _read_claude_user_entry(path: Path) -> tuple[dict | None, str | None]:
     return (cur if isinstance(cur, dict) else None), None
 
 
+def _claude_local_entries(path: Path, project_dir: Path) -> list[tuple[str, dict]]:
+    """``verinoda`` servers registered with ``claude mcp add --scope local`` for ``project_dir`` or a folder above it.
+
+    Claude Code keys local-scope servers by the folder a session was started in (under
+    ``projects`` in ~/.claude.json), and such an entry overrides the user-scope one there.
+    Read only; the installer never writes local scope.
+    """
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return []
+    projects = data.get("projects") if isinstance(data, dict) else None
+    if not isinstance(projects, dict):
+        return []
+
+    def norm(p) -> str:
+        return os.path.normcase(os.path.normpath(str(p)))
+
+    want = {norm(p) for p in (project_dir, *project_dir.parents)}
+    out = []
+    for folder, conf in projects.items():
+        servers = conf.get("mcpServers") if isinstance(conf, dict) else None
+        cur = servers.get(NAME) if isinstance(servers, dict) else None
+        if isinstance(cur, dict) and norm(folder) in want:
+            out.append((folder, cur))
+    return sorted(out)
+
+
 def _claude_matches(cur: dict | None, command: str, args: list[str]) -> bool:
     return (isinstance(cur, dict) and cur.get("command") == command and list(cur.get("args") or []) == list(args)
             and cur.get("type", "stdio") == "stdio")
@@ -992,6 +1022,12 @@ def status(project_dir, home=None) -> dict:
                     if it is not None:
                         info["modified"] = _sha(data) != it.get("sha256")
                 info["mcp_registered"], info["mcp"] = _mcp_status(t)
+                if t.mcp_kind == "claude_cli":
+                    local = _claude_local_entries(t.mcp_path, project_dir)
+                    if local:
+                        info["mcp_local"] = [{"folder": f, "server": _short(cur, t)} for f, cur in local]
+                        info["mcp"] += "".join(f"; local scope for {f}: {NAME} -> {_short(cur, t)} (used instead "
+                                               "of the user entry by sessions started there)" for f, cur in local)
             except OSError as exc:
                 info["error"] = str(exc)
             out[f"{agent}:{scope}"] = info

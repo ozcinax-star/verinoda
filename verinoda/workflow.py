@@ -64,10 +64,19 @@ def _graph_counts(repo: Path, stats: dict) -> dict:
     return {**stats, "nodes": len(data.get("nodes", [])), "edges": len(data.get("links", data.get("edges", [])))}
 
 
-def _no_missing_files(repo: Path, stats: dict) -> tuple[dict, list[str]]:
-    """The graph must never describe a deleted file: prune what the indexer kept."""
+def _no_missing_files(repo: Path, stats: dict, known=()) -> tuple[dict, list[str], list[str]]:
+    """The graph must never describe a missing file: prune what the indexer kept.
+
+    Returns ``(stats, deleted, dangling)``. ``deleted`` were files of the previous snapshot
+    (``known``); ``dangling`` never were: other files name them (a project file referencing
+    another project, an import of a file that is not in the repository) and the indexer
+    made nodes for them anyway.
+    """
     pruned = index.prune_missing_files(repo)
-    return (_graph_counts(repo, stats) if pruned else stats), pruned
+    known = set(known)
+    deleted = [f for f in pruned if f in known]
+    dangling = [f for f in pruned if f not in known]
+    return (_graph_counts(repo, stats) if pruned else stats), deleted, dangling
 
 
 def _call_hook(fn, *args, **kwargs) -> dict:
@@ -140,7 +149,8 @@ def scan(store: Store, repo: Path, *, force: bool = False) -> dict:
     t_index = time.monotonic() - t0
     if not stats.get("ok", True):
         return {**_index_refused(store, repo, stats, force=force), "index_seconds": round(t_index, 3)}
-    stats, pruned = _no_missing_files(repo, stats)
+    before = store.latest_snapshot()
+    stats, pruned, dangling = _no_missing_files(repo, stats, store.snapshot_files(before["id"]) if before else ())
     snap = take_snapshot(store, repo, graph_stats=stats)
     stale = invalidate_stale(store, snap)
     files = store.snapshot_files(snap["id"])
@@ -152,6 +162,8 @@ def scan(store: Store, repo: Path, *, force: bool = False) -> dict:
         out["forced_for_deleted_files"] = missing_before[:20]
     if pruned:
         out["pruned_missing_files"] = pruned[:20]
+    if dangling:
+        out["dropped_dangling_references"] = {"count": len(dangling), "files": dangling[:20]}
     return out
 
 
@@ -209,8 +221,9 @@ def update(store: Store, repo: Path) -> dict:
                 "index_mode": "none", "index_seconds": 0.0,
                 **({"untracked_citations": untracked[:20]} if untracked else {})}
     pruned: list[str] = []
+    dangling: list[str] = []
     if stats is not None:
-        stats, pruned = _no_missing_files(repo, stats)
+        stats, pruned, dangling = _no_missing_files(repo, stats, store.snapshot_files(prev["id"]))
     snap = take_snapshot(store, repo, graph_stats=stats or {
         "graph_path": prev["graph_path"], "nodes": prev["graph_nodes"], "edges": prev["graph_edges"]})
     stale = invalidate_stale(store, snap)
@@ -222,6 +235,8 @@ def update(store: Store, repo: Path) -> dict:
                                  tree=snap.get("tree_hash"))
     if pruned:
         out["pruned_missing_files"] = pruned[:20]
+    if dangling:
+        out["dropped_dangling_references"] = {"count": len(dangling), "files": dangling[:20]}
     return out
 
 

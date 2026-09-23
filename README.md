@@ -9,16 +9,17 @@
 > any purpose is given (see also the Apache-2.0 "AS IS" terms in `LICENSE`).
 > Not published to PyPI yet. Formerly developed under the working name "RepoAtlas".
 
-### What is in this snapshot (2026-09-23)
+### What is in this snapshot (2026-09-24)
 
 | Part | State |
 |---|---|
 | Graphify port (`verinoda/project_index`, `tests_upstream/`) | done. Upstream suite at port time: 5436 passed / 50 failed, and every failure also fails on unmodified upstream on the same Windows machine; not re-run since (`docs/UPSTREAM.md`) |
 | Core: claims, evidence, critique, experiments, research/compare, feedback, memory, installers, MCP server (23 tools) | implemented |
 | Round 3: search engine, question plans with Turkish support, reference resolver, trust engine (anchors, entailment, facet-level staleness), runtime observation, precise call resolution | implemented and wired into the CLI, MCP and `analyze`; gaps per decision in `docs/DESIGN.md` ("Implementation status") |
-| Product test suite | 1,134 passed, 1 skipped, 2 deselected (slow packaging and installer checks), Windows 11 / Python 3.12, 2026-09-23 |
+| Product test suite | 1,172 passed, 1 skipped, 2 deselected (slow packaging and installer checks), Windows 11 / Python 3.12, 2026-09-24 |
 | Agent integration | Claude Code (`/verinoda`) and Codex (`$verinoda`) verified in real headless sessions with the earlier skill text (`docs/AGENT-VERIFICATION.md`); the round-3 skill text (understand-first and references protocols) has no such record yet |
 | Benchmarks (measured, `docs/BENCHMARKS.md`, chars/4 token estimates, gold facts found in the delivered context; no model in the loop) | Graphify's own code (226 files, 37 facts, in-sample): Verinoda text retrieval 36/37 at 1,424 tokens/question, ~0.14 s; Graphify 7/37. Set on Verinoda's own earlier code (33 facts): 25/33 vs Graphify 8/33 and raw reading 9/33; it was held out until the 2026-09-23 ranking change, which was chosen with it in view (22/33 before). Turkish paraphrases of the example app: 32/32. Regressions: `analyze` on the example app 32 -> 31/32, the one-off scan of the large corpus got slower (6.7 s -> 14.7 s cold), and the 2026-09-23 change adds about 0.03 s per retrieval on the large sets |
+| Game mods and data files (2026-09-24) | data packs, JSON/yml configs and other data files indexed; resource-id links between code and data; reference trees; Java calls the extractor drops; translation pairs from locale files. New example set `glow_mod` (a small fictional Fabric mod, 50 facts): Verinoda text retrieval 48/50, JSON 41, analyze 39, against raw reading 33 and Graphify 13; at `32a5bd4` it was 34 / 25 / 18. Held out only for its first measurement (46 / 32 / 25). The five earlier sets: unchanged except one fact lost by one JSON cell (`docs/BENCHMARKS.md`) |
 | Cross-platform | tested on Windows 11 only; the CI workflow (Linux/macOS/Windows) exists but is manual and has not been run |
 
 **Known limitations** (see also `docs/DESIGN.md` for per-decision gaps):
@@ -33,9 +34,13 @@ Open findings of the second acceptance audit (2026-09-23 05:00), not yet fixed:
 
 Found by running Verinoda on its own repository (2026-09-23), not yet fixed:
 
-- Command names in a question ("the `scan` command", "`scan` komutu") are not mapped to their handler functions (`cmd_scan`) unless the names match, so "do `init` and `scan` refuse the home directory?" does not reach the guard in `paths.py`.
-- On a repository of about 2,000 files an incremental `update` after a two-file edit took about 33 s, almost all of it in the graph rebuild. `analyze` refreshes first and can spend its default 60 s budget on that; run `verinoda update .` before asking.
-- In this repository the frozen benchmark snapshot (`benchmarks/corpora/heldout_repoatlas_7371990/`) duplicates many hits of self-queries.
+- On a repository of about 2,000 files an incremental `update` after a two-file edit took about 33 s, almost all of it in the graph rebuild, and 47-85 s when a file was added (a new file forces a full graph rebuild). `analyze` refreshes first and can spend its default 60 s budget on that; run `verinoda update .` before asking.
+- A frozen copy of the code inside the repository (here `benchmarks/corpora/heldout_repoatlas_7371990/`) still answers self-queries unless it is marked: `verinoda setup . --reference benchmarks/corpora=heldout,snapshot`. (Fixed on 2026-09-24: command names now map to their handlers, `scan` komutu -> `cmd_scan`.)
+
+Game mods and data files (2026-09-24):
+
+- The kind of resource an id names is taken from a fixed table of command words and JSON keys; an id in plain Java is "kind not stated" (an inference) unless one file carries it. Bare names count only as an argument of an id constructor or of a helper whose name says what it loads.
+- The extra call pass is Java only. Turkish stems that folding merges (`öl` die / `ol` be) are not in the seed dictionary, so "öldüğünde" is not understood.
 
 - Windows only so far. The POSIX resource limits and the container isolation
   path (docker/podman) are coded but have never been run.
@@ -190,10 +195,10 @@ give the copy a `.venv` with pytest installed.
 | Command | What it does |
 |---|---|
 | `doctor` | Python, package layout, upstream base, graph/snapshot freshness, schema, claim counts, search index, lexicon, precise/SCIP availability, `sys.monitoring`, reference network mode, agent skills, MCP config, optional deps; secrets shown only as set/unset |
-| `setup [path] [--agents auto\|all\|none\|claude,codex] [--scope project\|user] [--no-mcp]` | One step per project, safe to re-run: `init`, `scan` on the first run and `update` afterwards, then skills + MCP for the agents found on PATH (default `auto`); prints what is left to do by hand. Refuses the home directory unless `--allow-home` |
+| `setup [path] [--agents auto\|all\|none\|claude,codex] [--scope project\|user] [--no-mcp] [--reference PATH[=ALIAS,...]]` | One step per project, safe to re-run: `init`, `scan` on the first run and `update` afterwards, then skills + MCP for the agents found on PATH (default `auto`); prints what is left to do by hand. `--reference` marks a folder of reference code (an original being ported, a vendored or frozen copy) that ranks below the project's own code unless a question names it or an alias (repeatable). Refuses the home directory unless `--allow-home` |
 | `init [path]` | Create `.verinoda/` (database, config) |
 | `scan <repo> [--force] [--precise] [--scip FILE]` / `update <repo>` | Full / incremental index + snapshot, then the derived search index, lexicon and symbol facts; `update` marks claims whose dependencies changed `stale`. `--precise` resolves the call sites of changed `.py` files; `--scip` adopts a SCIP index you produced |
-| `map <repo> [--view …]` | hierarchy, dependencies, dataflow, config, tests, history, impact (`--target`, default: git changes) |
+| `map [<repo>] [--repo DIR] [--view …]` | hierarchy, dependencies, dataflow, config, tests, history, impact (`--target`, default: git changes) |
 | `query "<q>" [--max-items N] [--max-chars N]` | Bounded retrieval from the passage index; plain text for a model by default (skeleton first, each item with why it was chosen), `--json` for programs |
 | `trace <a> <b> [--mode flow\|any]` | Directed paths, each hop with relation, confidence and call-site location; hints when an endpoint does not resolve |
 | `plan draft\|check\|schema\|audit` | Question plans: draft from the message (TR/EN rules), check and ground a plan file, print the schema, re-judge an analysis' sub-questions later |
@@ -219,6 +224,48 @@ Exit codes: 0 done, 1 error, 2 usage error / invalid plan / blocked command,
 3 "needs more" (clarification, partial resolution, refused experiment,
 incomplete observation, no precise answer). Every command except `memory`,
 `mcp serve` and `index` accepts `--json` (`plan schema` always prints JSON).
+
+## Game mods, data packs and other data files
+
+Code often names its data only through strings: a Minecraft mod runs the
+data-pack function `mymod:wisp_death`, loads `config/mymod.yml`, registers
+the item whose model is `assets/mymod/models/item/x.json`. Verinoda indexes
+those files too and follows the strings between them.
+
+- **Data files are searchable.** Text files the code graph has no node for
+  (`.mcfunction`, JSON, YAML/TOML/INI/properties configs, SQL, shaders, CSV,
+  Gradle scripts, skipped sources) become `data` units; configs are split by
+  top-level section. Files it leaves out are listed with the reason
+  (`binary`, `may hold secrets` - the graph's own secret rule -,
+  `.graphifyignore`, dependency or build-output folder, generated output such
+  as `results/` or `logs/`, large generated JSON, minified); `doctor` counts
+  them and a query names a left-out file whose name matches the question.
+- **Resource ids link code and data** in repositories that are packs or mods
+  (a `pack.mcmeta` or a Fabric/Quilt/Forge/NeoForge manifest): `ns:path`
+  ids, `#ns:tags`, worldgen ids, `function ns:x`, translation keys
+  `"item.ns.x"`, `Identifier.of("ns", "x")`, full asset paths, and bare names
+  passed to an id constructor or a helper whose name says what it loads
+  (`runFunction(server, "wisp_death")`). The context picks the registry
+  (`advancement revoke ... only ns:x` names an advancement, `"parent"` a
+  model). Query output shows `names:` / `named by:` lines; a link whose
+  namespace is assumed or whose kind the line does not state is marked
+  inferred, and an `analyze` claim built from it is `strong_inference`.
+- **Identical copies** of a data file (a data pack shipped twice) rank once,
+  as the copy in the source set; the others are listed as `same content:`.
+- **Java calls** the extractor drops (a class name that exists twice in the
+  repository, calls through typed variables) are added when the file's
+  imports or package bind the class, and graded like any call site.
+- **Reference trees**: `verinoda setup --reference original-plugin/=original,plugin`
+  keeps an original implementation searchable but ranks it at 0.6x unless
+  the question says "original", "plugin" or the folder name.
+- **Turkish names from the repository**: parallel locale files
+  (`lang/en_us.json` + `lang/tr_tr.json`, `locales/en.json` + `locales/tr.json`)
+  teach the lexicon that "Fener Asası" is `lantern_staff`.
+
+`examples/glow_mod/` is a small fictional Fabric mod with a data pack, a
+config file, a reference tree and a copied data pack; its question set
+(`glow_mod`, 14 questions, 7 Turkish) was written without running Verinoda
+on it. Results: `docs/BENCHMARKS.md`.
 
 ## Coding agents
 

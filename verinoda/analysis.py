@@ -85,6 +85,8 @@ LEGACY_INTENT = {"locate": "location", "define": "location"}
 LEGACY_ORDER = ("why", "flow", "dataflow", "config", "tests", "impact", "location", "callers", "behaviour",
                 "history", "compare_reference", "performance", "architecture", "usage")
 RELEVANCE_MIN = 0.25        # share of the grounded question words an item must carry
+JAVA_BOUND = re.compile(r"\((imported|same package|fully qualified|imported with \*)\)$")
+CALLERS_LISTED = 6          # calling functions turned into claims; the rest are named in an unknown
 LOCATION_FIRST = {"locate", "define", "behaviour", "performance", "architecture", "usage"}
 UNGROUNDED_MAJORITY = 0.5   # more than this share of content words absent from the repo -> unknown
 MIN_STATUS_DEFAULT = "strong_inference"
@@ -370,6 +372,17 @@ def _precise(rec: _Recorder, at: str, target_label: str, target_path: str | None
     return res, ev, False
 
 
+def _disp(g: index.Graph, n: str) -> str:
+    """A Java method's label with its class (``Wisp.spawn()``, not ``.spawn()``): Java labels
+    methods without the class, and a mod has many ``spawn`` methods. Other labels are unchanged."""
+    lab = g.label(n)
+    if lab.startswith(".") and str(g.file(n) or "").endswith(".java"):
+        cls = next((c for c, _ in g.in_edges(n, {"method"})), None)
+        if cls is not None:
+            return f"{g.label(cls).strip()}{lab}"
+    return lab
+
+
 def _edge_claim(rec: _Recorder, g: index.Graph, u: str, v: str, d: dict, commit: str | None) -> dict | None:
     at = retrieval._at(d)
     rel = d.get("relation")
@@ -389,11 +402,15 @@ def _edge_claim(rec: _Recorder, g: index.Graph, u: str, v: str, d: dict, commit:
         evs.append((site_ev, "supports"))
         if matched:
             unc.append(f"{at} calls it through the import alias '{matched}'")
+    # A Java `Cls.m(...)` graded full had its class resolved by the file's imports or package
+    # against the target's file (entail._java_qualified_grade): which `m` is meant is settled.
+    resolved = (grade.reason if grade is not None and grade.grade == "full" and grade.code == "call"
+                and str(g.file(v) or "").endswith(".java") and JAVA_BOUND.search(grade.reason) else None)
     if grade is not None and grade.grade == "full":
         # The line calls the target, but for an INFERRED edge *which* symbol of
         # that name is meant is the extractor's inference - not verified.
-        status = "statically_verified" if extracted else "strong_inference"
-        if not extracted:
+        status = "statically_verified" if extracted or resolved else "strong_inference"
+        if not extracted and not resolved:
             unc.append(f"{at} names '{label}', but resolving it to {g.file(v)} is INFERRED")
     elif grade is not None and grade.grade == "partial":
         status = "strong_inference"
@@ -434,14 +451,17 @@ def _edge_claim(rec: _Recorder, g: index.Graph, u: str, v: str, d: dict, commit:
             if capped or res.get("kind") != "dynamic" or grade is None or grade.grade == "full":
                 why = str(res.get("reason") or "").split(":")[0][:90]
                 unc.append(f"{tool}: {res.get('kind')}" + (f" ({why})" if why else ""))
-    if str(d.get("_origin", "")).startswith("verinoda"):
-        unc.append(f"edge derived by {d['_origin']} (type-annotation resolution)")
+    origin = str(d.get("_origin", ""))
+    if origin.startswith("verinoda") and not resolved:
+        how = "Java class and import resolution" if origin == index.JAVA_CALL_ORIGIN else "type-annotation resolution"
+        unc.append(f"edge derived by {origin} ({how})")
     return rec.claim(
-        f"`{g.label(u)}` {rel} `{label}`" + (f" ({at})" if at else ""),
+        f"`{_disp(g, u)}` {rel} `{_disp(g, v)}`" + (f" ({at})" if at else ""),
         kind="relation", status=status, evidence=evs,
         subjects=[f"{g.file(u)}::{g.label(u)}", f"{g.file(v)}::{label}"],
         spec={"source": u, "target": v, "target_label": label, "relation": rel, "at": at,
-              "confidence": d.get("confidence"), "origin": d.get("_origin")},
+              "confidence": d.get("confidence"), "origin": d.get("_origin"),
+              **({"resolved": resolved} if resolved else {})},
         uncertainties=unc,
     )
 
@@ -659,6 +679,127 @@ def _exact_span(ctx: _Ctx, nid: str, path: str, name: str, sp: tuple[int, int]) 
     return a, b, f"end line {b} ({basis}) is not confirmed by syntax facts for this file"
 
 
+LINK_CHAIN_CLAIMS = 3   # relation claims around code that names a data resource (per analysis step)
+
+
+def search_index_data_suffixes() -> tuple[str, ...]:
+    from verinoda import resources
+
+    return resources.DATA_REF_SUFFIXES + (".yml", ".yaml", ".toml")
+
+
+def _link_chain(ctx: _Ctx, src: str, ln: int, done: int) -> int:
+    """The code path around a line that names a data resource: the call made on that line
+    (``Datapack.run(...)`` - what actually loads it) and the functions that call the naming
+    function (how the game reaches it). Returns the number of claims made."""
+    g = ctx.g
+    fn = g.symbol_at(src, ln)
+    if fn is None or done >= LINK_CHAIN_CLAIMS:
+        return 0
+    made = 0
+    here = [(u, v, d) for u, v, d in g.G.out_edges(fn, data=True)
+            if d.get("relation") == "calls" and d.get("source_location") == f"L{ln}"]
+    callers = sorted(g.in_edges(fn, {"calls"}), key=lambda x: (x[1].get("confidence") != "EXTRACTED",
+                                                                am.is_test_file(g.file(x[0])), g.file(x[0]) or ""))
+    for u, v, d in here[:1] + [(c, fn, d) for c, d in callers[:2]]:
+        if done + made >= LINK_CHAIN_CLAIMS or not ctx.budget.ok:
+            break
+        if _edge_claim(ctx.rec, g, u, v, d, ctx.commit) is not None:
+            made += 1
+    return made
+
+
+def _unit_name(ctx: _Ctx, file: str, line: int) -> str:
+    """The search index's name for the unit holding ``file:line`` (one label source for both link ends)."""
+    from verinoda import search_index
+
+    try:
+        h = search_index.open_for(ctx.g, sync=False)
+    except Exception:  # noqa: BLE001 - the name is cosmetic; the file stands in
+        return ""
+    u = search_index.unit_at(h, file, line)
+    return h.units[u][3] if u is not None else ""
+
+
+def _best_line(repo: Path, it: dict, words: list[str]) -> tuple[int, str] | None:
+    """The line of an item's window that carries the most question words (else its first non-blank line)."""
+    a, b = it["lines"]
+    lines = index.file_lines(repo / it["file"]) or []
+    stems = [tn.fold_tr(w).lower()[:5] for w in words if len(w) >= 3]
+    best = None
+    for n in range(a, min(b, len(lines)) + 1):
+        s = lines[n - 1].strip()
+        if not s:
+            continue
+        low = tn.fold_tr(s).lower()
+        hits = sum(1 for w in stems if w in low)
+        if best is None or hits > best[0]:
+            best = (hits, n, s)
+    return (best[1], best[2]) if best else None
+
+
+def _data_link_claims(ctx: _Ctx, sub: _Sub, raw_items: list[dict]) -> None:
+    """Claims for data-file hits (``file:line contains: ...``) and for resource links between code and data.
+
+    A link claim quotes the line that names the id (verified verbatim); that the id is the other
+    file is the resource-location rule, and for a bare name also an assumed namespace (uncertain).
+    """
+    rec, repo, commit = ctx.rec, ctx.repo, ctx.commit
+    data_items = [i for i in sub.items if i.get("kind") == "data"]
+    if sub.sq.get("intent") == "config":
+        # "where is this setting?": the config file's line is the answer even when code outranks it
+        from verinoda.search_index import CONFIG_SUFFIXES
+
+        data_items += [i for i in raw_items[:retrieval.OUTLINE_ITEMS * 3] if i.get("kind") == "data"
+                       and i["file"].lower().endswith(CONFIG_SUFFIXES) and i not in data_items]
+    data_items = data_items[:2]
+    linked = [i for i in raw_items[:retrieval.OUTLINE_ITEMS] if i.get("links")]
+    if not (data_items or linked) or not _begin(ctx, sub, "location"):
+        return
+    for it in data_items:
+        found = _best_line(repo, it, sub.words)
+        if not found or not ctx.budget.ok:
+            continue
+        ln, text = found
+        rec.claim(f"{it['file']}:{ln} contains: {text[:140]}", kind="location", status="statically_verified",
+                  evidence=[(_src_ev(repo, it["file"], ln, ln, commit), "supports")], subjects=[it["file"]])
+    made = chained = 0
+    seen: set[tuple] = set()
+    for it in linked:
+        pairs = [(e["file"], e["line"], e["unit"], e["rid"], e["form"], e.get("sure", True), it["file"])
+                 for e in it["links"].get("named_by", [])[:2]]
+        for e in it["links"].get("names", []):
+            # retrieval lists a target only when it is itself a ranked candidate
+            tgt = next((t for t in e["targets"] if t != it["file"]), None)
+            if tgt:
+                pairs.append((it["file"], e["line"], "", e["rid"], e["form"], e.get("sure", True), tgt))
+        for src, ln, unit, rid, form, sure, target in pairs:
+            if made >= 3 or not ctx.budget.ok:
+                break
+            if (src, ln, rid, target) in seen:  # the same link seen from both of its ends
+                continue
+            seen.add((src, ln, rid, target))
+            lines = index.file_lines(repo / src) or []
+            if not 0 < ln <= len(lines):
+                continue
+            unit = unit or _unit_name(ctx, src, ln)
+            unc = []
+            if form == "bare":
+                unc.append(f"`{rid}` is a bare name: it was matched to {target} by file name, the namespace is "
+                           "not written on the line")
+            elif not sure:
+                unc.append(f"the line does not say which kind of resource `{rid}` is; {target} is one of several "
+                           "files with this id")
+            if rec.claim(f"`{unit or src}` names `{rid}` ({target}); {src}:{ln} contains: {lines[ln - 1].strip()[:140]}",
+                         kind="general", status="strong_inference" if unc else "statically_verified",
+                         evidence=[(_src_ev(repo, src, ln, ln, commit), "supports")],
+                         subjects=[src, target], spec={"rid": rid, "form": form, "target": target},
+                         uncertainties=unc) is not None:
+                made += 1
+                if src != target and not src.lower().endswith(search_index_data_suffixes()):
+                    chained += _link_chain(ctx, src, ln, chained)
+
+
 def _context_claims(ctx: _Ctx, sub: _Sub, raw_items: list[dict]) -> None:
     g, rec, commit, repo = ctx.g, ctx.rec, ctx.commit, ctx.repo
     items = sub.prod or sub.items
@@ -691,6 +832,7 @@ def _context_claims(ctx: _Ctx, sub: _Sub, raw_items: list[dict]) -> None:
             rec.claim(f"{it['file']}:{a}" + (f"-{b}" if b != a else "") + f" contains: {first[:120]}",
                       kind="location", status="statically_verified",
                       evidence=[(_src_ev(repo, it["file"], a, b, commit), "supports")], subjects=[it["file"]])
+    _data_link_claims(ctx, sub, raw_items)
     # relation claims among the retrieved items, at least one end relevant (cheap and useful)
     relevant = {i["id"] for i in sub.items}
     chosen = {i["id"]: i["score"] for i in raw_items if i["id"] in g.G}
@@ -902,8 +1044,13 @@ def _h_callers(ctx: _Ctx, sub: _Sub) -> None:
     if not _begin(ctx, sub, "callers"):
         return
     for t in _targets(ctx, sub):
-        callers = sorted(g.in_edges(t, {"calls"}), key=lambda x: (x[1].get("confidence") != "EXTRACTED", x[0]))
-        ctx.step("callers", f"{g.label(t)}: {len(callers)} call edge(s)")
+        # extracted edges first, product code before tests, one claim per calling function
+        callers = sorted(g.in_edges(t, {"calls"}), key=lambda x: (x[1].get("confidence") != "EXTRACTED",
+                                                                   am.is_test_file(g.file(x[0])),
+                                                                   g.file(x[0]) or "", x[0]))
+        seen_callers: set[str] = set()
+        callers = [c for c in callers if not (c[0] in seen_callers or seen_callers.add(c[0]))]
+        ctx.step("callers", f"{g.label(t)}: {len(callers)} calling function(s)")
         if not callers:
             sub.flags.setdefault("empty_sets", []).append(g.label(t))
             _unknown(ctx, sub, {"question": f"which code calls {g.label(t)}?",
@@ -912,11 +1059,20 @@ def _h_callers(ctx: _Ctx, sub: _Sub) -> None:
                                 "next_step": f"search for '{callsite.target_token(g.label(t))}(' in the code, or "
                                              "observe it at runtime"})
             continue
-        for u, d in callers[:5]:
+        for u, d in callers[:CALLERS_LISTED]:
             if not ctx.budget.ok:
                 ctx.rec.skipped["callers"] += 1
                 continue
             _edge_claim(ctx.rec, g, u, t, d, ctx.commit)
+        rest = callers[CALLERS_LISTED:]
+        if rest:
+            more = ", ".join(f"{g.label(u)} ({g.file(u) or '?'})" for u, _ in rest[:4])
+            _unknown(ctx, sub, {"question": f"which other code calls {g.label(t)}?",
+                                "why": f"{len(rest)} more calling function(s) in the graph were not turned into "
+                                       f"claims (the list is capped at {CALLERS_LISTED}): {more}"
+                                       + (", ..." if len(rest) > 4 else ""),
+                                "next_step": f"ask about one of them, or search for "
+                                             f"'{callsite.target_token(g.label(t))}(' in the code"})
 
 
 def _h_config(ctx: _Ctx, sub: _Sub) -> None:

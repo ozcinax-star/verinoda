@@ -1,0 +1,9 @@
+name: GlowPlugin
+version: 1.4.2
+main: com.example.glowplugin.GlowPlugin
+api-version: '1.20'
+description: Wisps and a lantern staff for Paper servers
+commands:
+  glow:
+    description: Glow admin command (wisp, reload)
+    permission: glow.admin

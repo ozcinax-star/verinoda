@@ -484,7 +484,8 @@ def challenge(store: Store, repo: Path, cid: str, *, graph=None, actor: str = "c
     # ambiguity for inferred relations and every INFERRED hop of a flow
     if graph is not None:
         pairs: list[tuple[str, str | None]] = []
-        if c["kind"] == "relation" and spec.get("confidence") != "EXTRACTED":
+        # a call whose class the file's imports bind to the target is not ambiguous (spec "resolved")
+        if c["kind"] == "relation" and spec.get("confidence") != "EXTRACTED" and not spec.get("resolved"):
             node = spec.get("target")
             subjects = [str(s) for s in c.get("subjects") or []]
             if node is None and len(subjects) > 1 and "::" in subjects[1]:

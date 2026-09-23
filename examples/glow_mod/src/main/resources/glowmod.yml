@@ -1,0 +1,18 @@
+# Glow Mod settings. Copied to config/glowmod.yml on first start; edit that copy,
+# then run /glow reload (or restart the server).
+
+wisp:
+  # how many wisps the lantern ritual calls around the altar
+  ritual_count: 4
+  # chance (0..1) that a freshly loaded swamp chunk gets a wisp at night
+  natural_chance: 0.02
+
+repair:
+  # how many blocks burnt by the ritual are put back per server tick
+  blocks_per_tick: 8
+  # ticks to wait after the ritual before repairing starts (20 ticks = 1 second)
+  delay_ticks: 40
+
+network:
+  # a client may only ask for a wisp this many blocks away from the player
+  max_summon_distance: 8

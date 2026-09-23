@@ -245,3 +245,31 @@ def test_call_site_contract(repo):
     assert entail.call_site(repo, "orders/api.py", 999, "x").code == "unreadable"
     assert entail.call_site(repo, "orders/api.py", 2, "x").code == "blank"
     assert entail.GRADES == ("none", "partial", "full") and entail.at_least("full", "partial")
+
+
+@pytest.mark.parametrize("name, caller_dir, text, grade, code", [
+    ("imported from the target's package", "com/other", "import com.mod.Spirits;\n", "full", "call"),
+    ("same-named class of another package", "com/other", "import com.thirdparty.Spirits;\n", "none", "wrong_module"),
+    ("wildcard import of the target's package", "com/other", "import com.mod.*;\n", "full", "call"),
+    ("wildcard import of a package that only ends like it", "com/other", "import od.*;\n", "partial", "unbound"),
+    ("same package", "com/mod", "", "full", "call"),
+    ("not imported", "com/other", "", "partial", "unbound"),
+])
+def test_java_class_qualified_calls_resolve_the_class_by_package(name, caller_dir, text, grade, code):
+    pkg = caller_dir.replace("/", ".")
+    src = f"package {pkg};\n{text}class C {{ void f() {{ Spirits.spawn(3); }} }}\n"
+    line = src.splitlines().index("class C { void f() { Spirits.spawn(3); } }") + 1
+    g = entail._other_call_grade(src, f"src/main/java/{caller_dir}/C.java", line, "spawn",
+                                 target_path="src/main/java/com/mod/Spirits.java")
+    assert (g.grade, g.code) == (grade, code), name
+
+
+@pytest.mark.parametrize("qualifier, grade, code", [
+    ("com.mod.Spirits", "full", "call"), ("com.other.Spirits", "none", "wrong_module"),
+    ("this.Spirits", "partial", "method_unresolved"), ("Outer.Spirits", "partial", "method_unresolved"),
+])
+def test_java_dotted_qualifiers_are_packages_only_when_written_like_one(qualifier, grade, code):
+    src = f"package com.other;\nclass C {{ void f() {{ {qualifier}.spawn(3); }} }}\n"
+    g = entail._other_call_grade(src, "src/main/java/com/other/C.java", 2, "spawn",
+                                 target_path="src/main/java/com/mod/Spirits.java")
+    assert (g.grade, g.code) == (grade, code)

@@ -743,3 +743,20 @@ def test_example_project_roundtrip_leaves_git_clean(env, tmp_path):
     for agent in ("claude", "codex"):
         assert agents.uninstall(agent, "project", project_dir=repo, home=env.home)["result"] == "uninstalled"
     assert git("status", "--porcelain", "--untracked-files=all", "--ignored") == ""
+
+
+def test_status_reports_claude_local_scope_servers_for_the_project_or_a_parent(env):
+    cfg = env.home / ".claude.json"
+    ws = env.tmp / "workspace"
+    proj = ws / "tool"
+    proj.mkdir(parents=True)
+    entry = {"type": "stdio", "command": env.exe, "args": ["mcp", "serve", "--repo", str(proj)]}
+    cfg.write_text(json.dumps({"projects": {
+        ws.as_posix(): {"mcpServers": {"verinoda": entry}},          # a session opened one level above
+        str(env.tmp / "unrelated"): {"mcpServers": {"verinoda": entry}},
+        str(proj): {"mcpServers": {"other": entry}},
+    }}), encoding="utf-8")
+    st = agents.status(proj, home=env.home)["claude:user"]
+    assert st["mcp_local"] == [{"folder": ws.as_posix(), "server": "verinoda.exe mcp serve --repo <project>"}]
+    assert f"local scope for {ws.as_posix()}" in st["mcp"] and not st["mcp_registered"]
+    assert "mcp_local" not in agents.status(env.proj, home=env.home)["claude:user"]

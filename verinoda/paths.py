@@ -50,6 +50,10 @@ DEFAULT_CONFIG: dict = {
     # verinoda.question_plan.THRESHOLDS (tests/test_cli.py keeps the two equal).
     "understanding": {"link": 0.70, "weak": 0.40, "margin": 0.15, "fuzzy": 90, "did_you_mean": 85,
                       "max_clarifications": 3},
+    # Reference trees (an original implementation being ported, a vendored copy): paths, or
+    # {"path": ..., "aliases": [...]}, whose code ranks lower unless the question names the path
+    # or an alias (verinoda.search_index.REFERENCE_FACTOR). `verinoda setup --reference PATH` adds one.
+    "index": {"reference": []},
 }
 
 NETWORK_MODES = ("off", "cache", "on")

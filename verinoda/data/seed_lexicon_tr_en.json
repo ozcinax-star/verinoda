@@ -124,6 +124,10 @@
    "success",
    "successful"
   ],
+  "basarim": [
+   "advancement",
+   "achievement"
+  ],
   "basarisiz": [
    "fail",
    "failed",
@@ -192,6 +196,9 @@
    "join",
    "combine"
   ],
+  "blok": [
+   "block"
+  ],
   "bolum": [
    "section",
    "chapter"
@@ -212,7 +219,8 @@
    "blank"
   ],
   "boyut": [
-   "size"
+   "size",
+   "dimension"
   ],
   "bul": [
    "find",
@@ -224,6 +232,11 @@
   ],
   "buton": [
    "button"
+  ],
+  "buyu": [
+   "spell",
+   "magic",
+   "enchant"
   ],
   "cagir": [
    "call",
@@ -246,6 +259,10 @@
   "calistir": [
    "run",
    "execute"
+  ],
+  "canavar": [
+   "monster",
+   "mob"
   ],
   "cari": [
    "account",
@@ -282,6 +299,10 @@
   ],
   "cizge": [
    "graph"
+  ],
+  "comel": [
+   "sneak",
+   "crouch"
   ],
   "coz": [
    "solve",
@@ -370,6 +391,9 @@
    "dir",
    "index"
   ],
+  "dogma": [
+   "spawn"
+  ],
   "dogrula": [
    "validate",
    "verify",
@@ -379,6 +403,9 @@
    "validation",
    "verification",
    "validate"
+  ],
+  "doku": [
+   "texture"
   ],
   "dokuman": [
    "doc",
@@ -417,6 +444,13 @@
    "status",
    "state"
   ],
+  "dus": [
+   "drop",
+   "fall"
+  ],
+  "dusur": [
+   "drop"
+  ],
   "duzelt": [
    "fix",
    "correct"
@@ -450,6 +484,9 @@
   "entegrasyon": [
    "integration"
   ],
+  "envanter": [
+   "inventory"
+  ],
   "eposta": [
    "email",
    "mail"
@@ -465,6 +502,9 @@
   ],
   "esitle": [
    "sync"
+  ],
+  "esya": [
+   "item"
   ],
   "eszamanli": [
    "concurrent",
@@ -516,6 +556,9 @@
   "fonksiyon": [
    "function",
    "func"
+  ],
+  "ganimet": [
+   "loot"
   ],
   "gecerli": [
    "valid"
@@ -653,6 +696,9 @@
   "icerik": [
    "content"
   ],
+  "iksir": [
+   "potion"
+  ],
   "ileti": [
    "message",
    "msg"
@@ -693,6 +739,9 @@
   ],
   "is parcacigi": [
    "thread"
+  ],
+  "isinla": [
+   "teleport"
   ],
   "isle": [
    "process",
@@ -751,6 +800,10 @@
   "kampanya": [
    "campaign",
    "promotion"
+  ],
+  "kanat": [
+   "wing",
+   "wings"
   ],
   "kapat": [
    "close",
@@ -814,6 +867,9 @@
   ],
   "kenar": [
    "edge"
+  ],
+  "kilic": [
+   "sword"
   ],
   "kilit": [
    "lock"
@@ -967,11 +1023,23 @@
    "measure",
    "measurement"
   ],
+  "oldur": [
+   "kill"
+  ],
+  "olum": [
+   "death",
+   "die",
+   "dead"
+  ],
   "olustur": [
    "create",
    "build",
    "make",
    "new"
+  ],
+  "onar": [
+   "repair",
+   "restore"
   ],
   "onay": [
    "confirm",
@@ -1008,6 +1076,9 @@
    "session",
    "login"
   ],
+  "oyuncu": [
+   "player"
+  ],
   "ozellik": [
    "property",
    "attribute",
@@ -1030,6 +1101,9 @@
    "param",
    "parameter",
    "arg"
+  ],
+  "parcacik": [
+   "particle"
   ],
   "parola": [
    "password"
@@ -1060,6 +1134,10 @@
   "rol": [
    "role"
   ],
+  "ruh": [
+   "soul",
+   "spirit"
+  ],
   "saat": [
    "hour",
    "clock",
@@ -1071,6 +1149,19 @@
   ],
   "sablon": [
    "template"
+  ],
+  "sag tik": [
+   "right_click",
+   "use",
+   "interact"
+  ],
+  "sag tikla": [
+   "right_click",
+   "use",
+   "interact"
+  ],
+  "saldir": [
+   "attack"
   ],
   "satir": [
    "row",
@@ -1109,6 +1200,9 @@
   ],
   "servis": [
    "service"
+  ],
+  "ses": [
+   "sound"
   ],
   "sifre": [
    "password",
@@ -1237,6 +1331,9 @@
   "tarayici": [
    "browser"
   ],
+  "tarif": [
+   "recipe"
+  ],
   "tarih": [
    "date"
   ],
@@ -1285,6 +1382,9 @@
   "tetikle": [
    "trigger"
   ],
+  "tikla": [
+   "click"
+  ],
   "topla": [
    "sum",
    "collect"
@@ -1303,6 +1403,10 @@
   ],
   "uc nokta": [
    "endpoint"
+  ],
+  "ucus": [
+   "flight",
+   "fly"
   ],
   "ulke": [
    "country"
@@ -1333,6 +1437,9 @@
   ],
   "uzanti": [
    "extension"
+  ],
+  "varlik": [
+   "entity"
   ],
   "varsayilan": [
    "default"
@@ -1375,6 +1482,11 @@
    "configuration",
    "settings"
   ],
+  "yaratik": [
+   "mob",
+   "creature",
+   "entity"
+  ],
   "yavas": [
    "slow"
   ],
@@ -1405,6 +1517,10 @@
   ],
   "yeniden dene": [
    "retry"
+  ],
+  "yetenek": [
+   "ability",
+   "skill"
   ],
   "yetki": [
    "permission",
@@ -1475,6 +1591,12 @@
   ],
   "zeyil": [
    "endorsement"
+  ],
+  "zipla": [
+   "jump"
+  ],
+  "zirh": [
+   "armor"
   ]
  }
 }

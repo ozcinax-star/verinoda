@@ -669,6 +669,49 @@ _TS_CALL_TYPES = ("call_expression", "call", "method_invocation", "invocation_ex
                   "new_expression", "object_creation_expression", "method_call_expression")
 
 
+_JAVA_PACKAGE = re.compile(r"[a-z_][\w]*(?:\.[a-z_][\w]*)*")
+
+
+def _java_qualified_grade(lines: list[str], rel: str, line: int, token: str, qualified: str,
+                          target_path: str) -> Grade:
+    """``Cls.token(...)`` (``qualified`` = ``Cls`` or ``pkg.Cls``): is ``Cls`` the target's class?
+
+    Yes when the qualifier is the target's package, or ``Cls`` is imported from it (explicitly or
+    with ``pkg.*``), or the caller is in the same package. An import of a same-named class from
+    another package means another class; a qualifier that is not a package (``Outer.Cls``, a
+    field) is left unresolved.
+    """
+    prefix, _, cls = qualified.rpartition(".")
+    pkg_dir = PurePosixPath(target_path).parent.as_posix()
+
+    def names_target_pkg(pkg: str) -> bool:
+        p = pkg.replace(".", "/")
+        return bool(p) and (pkg_dir == p or pkg_dir.endswith("/" + p))
+
+    call = f"`{qualified}.{token}` at line {line}"
+    if prefix:
+        if not _JAVA_PACKAGE.fullmatch(prefix) or prefix.split(".")[0] in ("this", "super"):
+            return Grade("partial", f"call {call}; `{prefix}` is not a package name, so `{cls}` is not resolved",
+                         "method_unresolved")
+        if names_target_pkg(prefix):
+            return Grade("full", f"syntax-tree call {call} (fully qualified)", "call")
+        return Grade("none", f"call {call} names another package's `{cls}`", "wrong_module")
+    explicit = [m.group(2) for ln in lines if (m := re.match(rf"\s*import\s+(static\s+)?([\w.]+)\.{re.escape(cls)}\s*;", ln))]
+    if explicit:
+        if any(names_target_pkg(p) for p in explicit):
+            return Grade("full", f"syntax-tree call {call} (imported)", "call")
+        return Grade("none", f"call {call}; `{cls}` is imported from {explicit[0]}, not from the target's package",
+                     "wrong_module")
+    declared = next((m.group(1) for ln in lines if (m := re.match(r"\s*package\s+([\w.]+)\s*;", ln))), None)
+    same_pkg = PurePosixPath(rel).parent.as_posix() == pkg_dir or (declared is not None and names_target_pkg(declared))
+    if same_pkg:
+        return Grade("full", f"syntax-tree call {call} (same package)", "call")
+    wildcard = [m.group(1) for ln in lines if (m := re.match(r"\s*import\s+([\w.]+)\.\*\s*;", ln))]
+    if any(names_target_pkg(p) for p in wildcard):
+        return Grade("full", f"syntax-tree call {call} (imported with *)", "call")
+    return Grade("partial", f"call {call}; `{cls}` is not imported in this file", "unbound")
+
+
 def _other_call_grade(text: str, rel: str, line: int, token: str, *, target_path: str | None) -> Grade:
     lines = text.splitlines()
     src = lines[line - 1] if 0 < line <= len(lines) else ""
@@ -679,6 +722,8 @@ def _other_call_grade(text: str, rel: str, line: int, token: str, *, target_path
             return Grade("partial", f"line {line} looks like a call to `{token}` (no grammar: textual)", "no_grammar")
         return Grade("none", f"line {line} does not name `{token}`", "absent")
     tree = parser.parse(text.encode("utf-8", "surrogatepass"))
+    target_cls = PurePosixPath(target_path).stem if target_path else None
+    qualified: str | None = None
     stack = [tree.root_node]
     while stack:
         n = stack.pop()
@@ -689,11 +734,22 @@ def _other_call_grade(text: str, rel: str, line: int, token: str, *, target_path
                 n.child_by_field_name("method") or n.child_by_field_name("constructor")
             ft = fn.text.decode("utf-8", "replace") if fn is not None else ""
             if fn is not None and fn.end_point[0] == line - 1:
-                if ft == token:
+                obj = n.child_by_field_name("object") if n.type == "method_invocation" else None
+                ot = obj.text.decode("utf-8", "replace") if obj is not None else ""
+                if ft == token and obj is not None and ot not in ("this", "super"):
+                    # Java `Wisp.spawn(...)`: a class qualifier names the target's class;
+                    # any other receiver (`npc.spawn()`) is a method call on an unresolved type
+                    if target_cls and ot.rpartition(".")[2] == target_cls:
+                        qualified = ot
+                    else:
+                        member = True
+                elif ft == token:
                     direct = True
                 elif re.search(rf"[.:>]{re.escape(token)}$", ft):
                     member = True
         stack.extend(n.children)
+    if qualified:
+        return _java_qualified_grade(lines, rel, line, token, qualified, target_path)
     if direct:
         same_file = target_path in (None, rel)
         imported = any(token in ln and re.search(r"\b(import|require|use|include)\b", ln) for ln in lines)

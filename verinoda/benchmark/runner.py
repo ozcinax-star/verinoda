@@ -424,6 +424,16 @@ def run_benchmark(repo: Path, *, questions=None, out=None, graphify_cmd: str | N
         from verinoda.store import open_store
 
         workflow.init(ra_root)
+        if corpus_spec.get("verinoda_config"):
+            # project settings the set declares (for example index.reference roots), recorded in the result
+            from verinoda.paths import atlas_dir
+
+            cfg_p = atlas_dir(ra_root) / "config.json"
+            cfg = json.loads(cfg_p.read_text(encoding="utf-8")) if cfg_p.exists() else {}
+            for k, v in corpus_spec["verinoda_config"].items():
+                cfg[k] = {**cfg.get(k, {}), **v} if isinstance(v, dict) and isinstance(cfg.get(k), dict) else v
+            cfg_p.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+            res["verinoda_config"] = corpus_spec["verinoda_config"]
         store = open_store(ra_root)
         say("verinoda scan (cold)")
         t0 = time.perf_counter()

@@ -1,0 +1,11 @@
+{
+  "item.glowmod.lantern_staff": "Lantern Staff",
+  "item.glowmod.ember_shard": "Ember Shard",
+  "item.glowmod.wisp_heart": "Wisp Heart",
+  "entity.glowmod.wisp": "Wisp",
+  "key.glowmod.summon_wisp": "Call a Wisp",
+  "category.glowmod": "Glow Mod",
+  "command.glowmod.wisp.spawned": "A wisp appears.",
+  "command.glowmod.wisp.failed": "The wisp would not come.",
+  "command.glowmod.reload.done": "Glow Mod settings reloaded."
+}

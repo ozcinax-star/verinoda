@@ -218,6 +218,30 @@ def test_search_index_versions_graph_and_stale_files(tmp_path):
     assert checks[0]["ok"] and checks[0]["detail"].startswith("generation 4, 7 units in 1 files")
 
 
+
+def test_index_coverage_counts_data_files_and_groups_skipped_files(tmp_path):
+    from verinoda import search_index
+    from verinoda.index import graph_identity
+
+    gp = _graph(tmp_path)
+    db = _search_db(tmp_path, {"schema_version": search_index.SCHEMA_VERSION,
+                               "tokenizer_version": search_index.TOKENIZER_VERSION,
+                               "graph": graph_identity(gp), "generation": 1, "n_units": 2, "data_files": 1}, [])
+    conn = sqlite3.connect(str(db))
+    conn.execute("CREATE TABLE unindexed (file TEXT PRIMARY KEY, reason TEXT NOT NULL)")
+    conn.executemany("INSERT INTO unindexed VALUES (?, ?)", [("a.png", "binary"), ("b.png", "binary"),
+                                                             ("LICENSE", "type not indexed (no suffix)"),
+                                                             ("x.dm", "type not indexed (.dm)")])
+    conn.commit()
+    conn.close()
+    checks: list = []
+    info = doctor._search_index(tmp_path, gp, checks)
+    assert info["coverage"] == {"data_files": 1, "not_indexed": 4,
+                                "not_indexed_by_reason": {"binary": 2, "type not indexed (.dm)": 1,
+                                                          "type not indexed (no suffix)": 1}}
+    cov = next(c for c in checks if c["check"] == "index_coverage")
+    assert cov["ok"] and "4 not indexed (2 binary; 2 type not indexed (.dm 1, no suffix 1))" in cov["detail"]
+
 def test_missing_search_index_and_receiver_sidecar_are_warnings(tmp_path):
     from verinoda.index import RECEIVER_SIDECAR_VERSION, graph_identity
     from verinoda.paths import receiver_calls_path

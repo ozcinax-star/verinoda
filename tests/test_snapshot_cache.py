@@ -137,7 +137,9 @@ def test_git_info_uses_one_status_call_and_matches_the_old_answer(tmp_path, monk
     assert calls == [("status", "--porcelain=v2")]
     calls.clear()
     state = snapshot.current_state(repo)
-    assert len(calls) == 2  # status + ls-files (it was rev-parse x2 + status + ls-files)
+    # status + ls-files --cached + ls-files --others (tracked build/ folders are kept, untracked
+    # ones are not); it was rev-parse x2 + status + ls-files
+    assert len(calls) == 3
     assert state["commit"] == old["commit"] and state["branch"] == old["branch"]
 
 

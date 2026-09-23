@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,96 @@ Sections: [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-24: data files, game mods, Java calls
+
+The goal of this round: questions about a Minecraft mod, whose behaviour lives
+partly in its data pack (`.mcfunction`), its JSON resources and a yml config,
+which Graphify and Verinoda did not index. What changed (see the README
+section "Game mods, data packs and other data files"):
+
+* data files (data packs, JSON, yml/toml/ini configs, SQL, shaders, ...) are
+  indexed as `data` units; files left out are listed with the reason;
+* resource ids link code and data in pack/mod repositories, with the
+  registry taken from the context; inferred links are marked as such;
+* byte-identical data files rank once; reference trees (`setup --reference`)
+  rank at 0.6x unless the question names them; generic data files that are
+  neither configuration nor a pack resource rank at 0.6x unless named;
+* Java calls the extractor drops are added when imports or the package bind
+  the class (the original plugin kept next to a port makes `Wisp.spawn`
+  ambiguous by name, and the extractor then records no call at all);
+* `analyze` follows a line that names a data resource to the call on that
+  line and to the callers of its function, and quotes the config file line
+  for a settings question;
+* the `called by` outline lists product code before tests and each caller
+  once (a mod's `src/gametest/` sorts before `src/main/`);
+* Turkish: passive caller questions ("kimler tarafından çağrılıyor"), the
+  command-name mapping (`scan` komutu -> `cmd_scan`), translation pairs from
+  parallel locale files, and game/mod words in the seed dictionary.
+
+Four independent reviewer agents read the change before any of it was
+measured and reproduced about twenty defects, all fixed. The serious ones:
+the data pass indexed files the graph skips as secrets (`credentials.json`)
+and printed them in query output; any `data/<a>/<b>/` folder of an ordinary
+repository produced resource links; an id resolved to every registry, and a
+link to the wrong kind of file was stated as `statically_verified`; a Java
+call through a same-named class of another package was graded as a verified
+call; the copy rule hid live code behind a frozen snapshot of it.
+
+**The new set, `glow_mod`** (`examples/glow_mod`, 14 questions, 50 facts, 7
+questions in Turkish; see [Question sets](#question-sets)). It was written by
+an agent that never ran Verinoda on it. It was held out for the first
+measurement only: the Java call pass, the translation pairs, the game words of
+the seed dictionary and the link chain in `analyze` were added after looking at
+the misses of q01, q03, q04 and q13, so the last column is in-sample for those
+changes. `repeat = 1`, no upstream CLI; `32a5bd4` is the last pushed commit
+and knows nothing of the set's reference tree (`corpus.verinoda_config`).
+Facts found (pinpointed), tokens per question:
+
+| approach | `32a5bd4` | first measurement (held out) | now |
+|---|---|---|---|
+| raw grep+read | 33 (29), 2,695 | 33 (29), 2,695 | 33 (29), 2,695 |
+| Graphify (vendored renderer) | 13 (13), 1,200 | 13 (13), 1,200 | 13 (13), 1,200 |
+| Verinoda analyze | 18 (17), 672 | 25 (24), 774 | **39 (37)**, 991 |
+| Verinoda retrieve (JSON) | 25 (25), 1,327 | 32 (32), 1,396 | **41 (41)**, 1,430 |
+| Verinoda retrieve (text) | 34 (32), 1,381 | 46 (44), 1,431 | **48 (45)**, 1,482 |
+
+No approach stated any of the 12 negative facts. Raw grep+read is strong here
+because the example is small (37 files) and its identifiers are in the
+questions; it still missed 17 facts at almost twice the context. Result files:
+`benchmarks/results/mods-2026-09-24/` (`glow_mod_at_32a5bd4.json`,
+`glow_mod_first_measurement.json`, `glow_mod.json`).
+
+**The five earlier sets** (regression check, same harness, `repeat = 1`, no
+upstream CLI, against `dogfood-2026-09-23/`): 24 of the 25 Verinoda cells and
+every raw and Graphify cell found exactly the same number of facts. One cell
+lost one fact: `graphify_core_tr` retrieve JSON 16 -> 15. On that question
+(g08) the ranking now folds the identical `update.md` copies of the skill
+folders into one item; the next items then include two call edges whose
+characters pushed the `more` list, which held the `dispatch_command` locator,
+out of the JSON budget. The text format of the same question is unchanged.
+Before the generic-data factor, `heldout_repoatlas` text lost a fact to the
+1,290-line seed dictionary JSON of that corpus, which outranked the code; that
+is what the factor is for.
+
+**A private mod.** The work was driven by the owner's own Fabric mod (Java,
+a data pack, a yml config and the original Paper plugin kept as a reference
+tree). Its question set and results are not published.
+
+**Costs.** Scan time did not grow measurably (`graphify_core` cold 14.7 s,
+round 3 14.7 s; the data pass reads the non-graph files once more, about 0.3 s
+on Verinoda's own repository). Retrieval medians stayed within noise of the
+previous round (`graphify_core` text 0.141 s, `heldout_repoatlas` 0.135 s).
+Analyze contexts grew on `glow_mod` (774 -> 991 tokens) with the link-chain
+claims. The search index schema is now 4; an older `search.db` is rebuilt on
+first use.
+
+**Not done / known limits.** Resource kinds are inferred from a fixed table
+of command words and JSON keys; an id in plain Java is "kind not stated"
+unless one file has it. Bare names count only as an argument of an id
+constructor or of a helper whose name says what it loads. Folding merges
+Turkish stems such as `öl` (die) and `ol` (be), so "öldüğünde" is not
+understood. Only Java gets the extra call pass.
 
 ## Update 2026-09-23: dogfooding fixes
 
@@ -1033,6 +1123,7 @@ since `05890a1`; `tests/test_benchmark.py` pins the sha256 of both arrays.
 | `heldout_repoatlas` | the product (then named RepoAtlas) at commit `7371990` of the pre-rename history, shipped as a snapshot: `repoatlas/` without `project_index/` and `benchmark/questions/`, plus `tests/` without `fixtures/` (106 files) | 8: where ×2, config, flow, impact, behaviour, why, tests | 33 | 0 | the retrieval research agent, after its prototype was built and before it ran on this corpus; gold reviewed and re-anchored to `7371990` by the measurement step | no (held out from the design; seen by the search track, which reports no tuning on it) |
 | `orders_app_tr` | as `orders_app` | the 10 `orders_app` questions in Turkish | 32 (same) | 15 (same) | the question-understanding rule author, while tuning the Turkish rules | yes |
 | `graphify_core_tr` | as `graphify_core` | the 9 `graphify_core` questions in Turkish | 37 (same) | 7 (same) | the question-understanding rule author, while tuning the Turkish rules | yes |
+| `glow_mod` | `examples/glow_mod` (37 files: a fictional Fabric mod - Java, a data pack, assets, a yml config, a reference tree `reference/` configured through `corpus.verinoda_config`, and a copied data pack) | 14, 7 of them Turkish: callers, cross-layer (code <-> data pack), config, resources, flow, behaviour, where | 50 | 12 (in 10 questions) | an agent that never ran Verinoda on it, after the Minecraft support was written | held out for its first measurement only: the Java call pass, the translation pairs, the game words of the seed dictionary and the link chain were added after looking at the misses of q01, q03, q04 and q13 |
 
 The held-out review, fact by fact, is stored in the set:
 

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "glowmod",
+  "version": "${version}",
+  "name": "Glow Mod",
+  "description": "Wisps, a lantern staff and a small lantern ritual.",
+  "authors": ["Verinoda examples"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.example.glowmod.GlowMod"],
+    "client": ["com.example.glowmod.client.GlowModClient"],
+    "fabric-gametest": ["com.example.glowmod.test.WispTests"]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
