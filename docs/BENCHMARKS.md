@@ -148,6 +148,15 @@ expansions of one question word as one term (`graphify_core_tr` -1 text, -1
 analyze) and splitting a registry class's prior among the items it names
 (`forge_mod` JSON -4).
 
+Then a question that spells a resource id (`emberforge:forging`,
+`#emberforge:forge_fuels`) reaches every passage that writes that id, and the
+data file defined as it, as surely as a spelled identifier reaches its code;
+only namespaces the index knows as resource namespaces count, so `key:value`
+text in other repositories is untouched. `forge_mod` q03 (the recipe type
+whose two recipes were missed): text 4 -> 6, analyze 1 -> 2; the set: text
+64 -> **66**, analyze 40 -> **41**, JSON 50 (q03 +1, q04 -1). Every other set
+unchanged.
+
 **The five earlier sets** (regression check, same harness, `repeat = 1`, no
 upstream CLI, against `dogfood-2026-09-23/`): 24 of the 25 Verinoda cells and
 every raw and Graphify cell found exactly the same number of facts. One cell

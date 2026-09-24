@@ -840,6 +840,8 @@ Aynı turda eklenenler: depodaki dil dosyalarından Türkçe etiketler ("Kor Oca
 üretimi kelimeleri (`biyom`, `dünya`, `cevher`, `oluş`, `üret`) ve sözlüğün bir kez yüklenmesi. `forge_mod`
 bu değişiklikler için artık örneklem içi (üç sorusunun hatalarına bakıldı): metin 63 -> **64**, JSON
 45 -> **50**, analyze 38 -> **40**; diğer kümeler aynı, yalnızca `graphify_core_tr` metin 25 -> 26.
+Ardından soruda yazılan kaynak kimliği (`emberforge:forging`) onu yazan her pasaja ulaşıyor: `forge_mod`
+metin 64 -> **66**, analyze 40 -> **41**.
 
 Önceki beş kümede (gerileme kontrolü) Verinoda'nın 25 hücresinden 24'ü ve
 Graphify ile ham okumanın bütün hücreleri aynı sayıda bilgi buldu; bir hücre

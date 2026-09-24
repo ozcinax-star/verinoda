@@ -1531,6 +1531,50 @@ def _proximity(g, conn: sqlite3.Connection, h: "Handle", q: "QueryTerms",
     return hit_p, hit_u
 
 
+_SPELLED_RID = re.compile(r"(?<![\w:/.#@-])#?([a-z0-9_.-]+:[a-z0-9_./-]*[a-z0-9_])(?![\w:/@])")
+MAX_RID_PASSAGES = 300            # passages re-read to confirm a resource id the question spells
+
+
+def _spelled_resource_ids(g, conn: sqlite3.Connection, h: "Handle", question: str,
+                          acc: dict[int, dict[str, float]], p_uid: dict[int, int]) -> dict[int, tuple[int | None, str]]:
+    """uid -> (pid, id) for units that write a resource id the question spells (``emberforge:forging``),
+    and units defined as that id. Only ids of a namespace the index knows as a resource namespace
+    count, so ``key:value`` prose or a URL scheme is not one. Passage text is re-read to confirm
+    the id itself, not just its tokens (``forging`` also occurs as ``forge``)."""
+    out: dict[int, tuple[int | None, str]] = {}
+    for m in _SPELLED_RID.finditer(question):
+        rid = m.group(1).lower()
+        ns = rid.split(":", 1)[0]
+        known = conn.execute("SELECT 1 FROM refs WHERE rid LIKE ? LIMIT 1", (ns + ":%",)).fetchone() or \
+            conn.execute("SELECT 1 FROM units WHERE kind = 'data' AND (name LIKE ? OR name LIKE ?) LIMIT 1",
+                         (ns + ":%", "#" + ns + ":%")).fetchone()
+        if not known:
+            continue
+        for uid, row in h.units.items():  # the unit defined as that id (a data file named by it)
+            if row[2] == "data" and (row[3] or "").lower().lstrip("#") == rid:
+                out.setdefault(uid, (None, m.group(0)))
+        toks = [x for x in dict.fromkeys(tokens(rid)) if x]
+        cand = [pid for pid, a_p in acc.items() if toks and all(x in a_p for x in toks)][:MAX_RID_PASSAGES]
+        if not cand:
+            continue
+        rows = _fetch(conn, "SELECT p.pid, p.a, p.b, u.file FROM passages p JOIN units u ON u.uid = p.uid "
+                            "WHERE p.pid IN ({ph})", sorted(cand))
+        root = Path(getattr(g, "root", None) or ".")
+        texts: dict[str, list[str] | None] = {}
+        for pid, a, b, f in rows:
+            if f not in texts:
+                try:
+                    texts[f] = (root / f).read_text(encoding="utf-8", errors="replace").splitlines()
+                except OSError:
+                    texts[f] = None
+            lines = texts[f]
+            if lines and rid in "\n".join(lines[max(0, a - 1):b]).lower():
+                uid = p_uid.get(pid)
+                if uid is not None and uid not in out:
+                    out[uid] = (pid, m.group(0))
+    return out
+
+
 def _fetch(conn: sqlite3.Connection, sql: str, keys: list, extra: tuple = ()) -> list:
     out: list = []
     for k in range(0, len(keys), 900):
@@ -1650,6 +1694,14 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
             reasons[uid].append(f"plan: {why}" if why else "plan seed")
             if uid not in per_unit and h.units[uid][7] is not None:
                 per_unit[uid] = [(0.0, h.units[uid][7])]
+        for uid, (pid, rid) in _spelled_resource_ids(g, conn, h, question, acc, p_uid).items():
+            if not include_tests and is_test_file(h.units[uid][0]):
+                continue
+            lex[uid] = max(lex.get(uid, 0.0), ref_factor(uid))
+            reasons[uid].append(f"question names {rid}")
+            rest = [x for x in per_unit.get(uid, []) if x[1] != pid]
+            per_unit[uid] = [(max((x[0] for x in rest), default=0.0), pid)] + rest if pid is not None else \
+                (per_unit.get(uid) or ([(0.0, h.units[uid][7])] if h.units[uid][7] is not None else []))
         # byte-identical data files (a data pack shipped twice) rank once, as their canonical copy
         canon = _canonical(h, conn, ref_roots)
         _fold_copies(h, lex, canon, include_tests)
