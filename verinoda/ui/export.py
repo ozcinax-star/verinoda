@@ -235,10 +235,10 @@ def _sha256(text: str) -> str:
 
 def render(data: dict) -> str:
     """The page with its script, style and data inline."""
-    page, css, js = _static("index.html"), _static("app.css"), _static("app.js")
-    if "</script" in js.lower() or "</style" in css.lower():
+    page, css, js, g3 = _static("index.html"), _static("app.css"), _static("app.js"), _static("graph3d.js")
+    if "</script" in js.lower() or "</script" in g3.lower() or "</style" in css.lower():
         raise ValueError("the page's script or style would end its own element")
-    csp = (f"default-src 'none'; script-src {_sha256(js)}; style-src {_sha256(css)}; img-src data:; "
+    csp = (f"default-src 'none'; script-src {_sha256(g3)} {_sha256(js)}; style-src {_sha256(css)}; img-src data:; "
            "base-uri 'none'; form-action 'none'")
     title = f"{data['stats'].get('project') or 'project'} · Verinoda"
     esc = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -247,6 +247,7 @@ def render(data: dict) -> str:
         (head_old, f'{head_old}\n<meta http-equiv="Content-Security-Policy" content="{csp}">'),
         ("<title>Verinoda</title>", f"<title>{esc}</title>"),
         ('<link rel="stylesheet" href="app.css">', f"<style>{css}</style>"),
+        ('<script src="graph3d.js"></script>', f"<script>{g3}</script>"),
         ('<script src="app.js"></script>',
          f'<script type="application/json" id="verinoda-data">{_json_for_html(data)}</script>\n<script>{js}</script>'),
     ]

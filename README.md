@@ -16,11 +16,11 @@
 | Graphify port (`verinoda/project_index`, `tests_upstream/`) | done. Upstream suite at port time: 5436 passed / 50 failed, and every failure also fails on unmodified upstream on the same Windows machine; not re-run since (`docs/UPSTREAM.md`) |
 | Core: claims, evidence, critique, experiments, research/compare, feedback, memory, installers, MCP server (23 tools) | implemented |
 | Round 3: search engine, question plans with Turkish support, reference resolver, trust engine (anchors, entailment, facet-level staleness), runtime observation, precise call resolution | implemented and wired into the CLI, MCP and `analyze`; gaps per decision in `docs/DESIGN.md` ("Implementation status") |
-| Product test suite | 1,300 passed, 1 skipped, 2 deselected (slow packaging and installer checks; the nine browser tests run when Chrome, Edge or Chromium is found), Windows 11 / Python 3.12, 2026-09-24 |
+| Product test suite | 1,300 passed, 1 skipped, 2 deselected (slow packaging and installer checks; the twelve browser tests run when Chrome, Edge or Chromium is found), Windows 11 / Python 3.12, 2026-09-24 |
 | Agent integration | Claude Code (`/verinoda`) and Codex (`$verinoda`) verified in real headless sessions with the earlier skill text (`docs/AGENT-VERIFICATION.md`); the round-3 skill text (understand-first and references protocols) has no such record yet |
 | Benchmarks (measured, `docs/BENCHMARKS.md`, chars/4 token estimates, gold facts found in the delivered context; no model in the loop) | Graphify's own code (226 files, 37 facts, in-sample): Verinoda text retrieval 36/37 at 1,424 tokens/question, ~0.14 s; Graphify 7/37. Set on Verinoda's own earlier code (33 facts): 25/33 vs Graphify 8/33 and raw reading 9/33; it was held out until the 2026-09-23 ranking change, which was chosen with it in view (22/33 before). Turkish paraphrases of the example app: 32/32. Regressions: `analyze` on the example app 32 -> 31/32, the one-off scan of the large corpus got slower (6.7 s -> 14.7 s cold), and the 2026-09-23 change adds about 0.03 s per retrieval on the large sets |
 | Game mods and data files (2026-09-24) | data packs, JSON/yml configs and other data files indexed; resource-id links between code and data; reference trees; Java calls the extractor drops; translation pairs from locale files. New example set `glow_mod` (a small fictional Fabric mod, 50 facts): Verinoda text retrieval 48/50, JSON 44, analyze 43, against raw reading 33 and Graphify 13; at `32a5bd4` it was 34 / 25 / 18. Held out only for its first measurement (46 / 32 / 25). A second set written afterwards and measured once, `forge_mod` (NeoForge, Java and Kotlin, 68 facts): text 63, JSON 45, analyze 38 (at `32a5bd4`: 43 / 28 / 26), raw reading 36, Graphify 12; after two more review rounds that looked at four of its questions (so in-sample), final official run: 66 / 50 / 42. The five earlier sets against the pre-mod baseline `dogfood-2026-09-23`: `graphify_core` analyze 30 -> 29, `graphify_core_tr` JSON 16 -> 15 and text 25 -> 26, `heldout_repoatlas` JSON 20 -> 21, the rest unchanged (`docs/BENCHMARKS.md`, `benchmarks/results/mods-2026-09-24/final/`) |
-| Notes and graph view (`verinoda ui`, 2026-09-24) | a note per symbol, file, section and data file with its code and links, the line each link is written on and editor links; a preview on hover; notes of your own anchored to the code (up to date / code changed / code gone, `verinoda notes`); impact and path; what changed since the index; the answer to a question; local graph per note, global graph at file level, search, file tree; the open page follows the index (`--watch` also runs `update`); a one-file export; a local server that writes only your notes, no external assets. Checked in Chrome on the forge_mod example and on Verinoda's own repository (1,115 files in the global graph); nine browser tests drive it in headless Chrome or Edge (skipped without one); measured on Python's standard library as a project (2,305 files, 79,526 notes: *Notes and graph view*) |
+| Notes and graph view (`verinoda ui`, 2026-09-24) | a note per symbol, file, section and data file with its code and links, the line each link is written on and editor links; a 3D graph with a panel that says what is in view, follow, a walk through a file's links, regions and a tour; a command bar (`Ctrl+K`, English or Turkish); a preview on hover; notes of your own anchored to the code (up to date / code changed / code gone, `verinoda notes`); impact and path; what changed since the index; the answer to a question; local graph per note, global graph at file level, search, file tree; the open page follows the index (`--watch` also runs `update`); a one-file export; a local server that writes only your notes, no external assets. Checked in Chrome on the forge_mod example and on Verinoda's own repository (1,115 files in the global graph); twelve browser tests drive it in headless Chrome or Edge (skipped without one); measured on Python's standard library as a project (2,305 files, 79,526 notes: *Notes and graph view*) |
 | Cross-platform | tested on Windows 11 only; the CI workflow (Linux/macOS/Windows) exists but is manual and has not been run |
 
 **Known limitations** (see also `docs/DESIGN.md` for per-decision gaps):
@@ -251,6 +251,25 @@ Obsidian, built from Verinoda's own index rather than from hand-written notes:
   highlights matching notes; files with no links ring the linked ones, and a
   note's links list the project's own code before tests. Both are force-directed: drag, zoom, hover to see a note's
   neighbours, click to open it.
+- **The graph in 3D** (*3D* in the graph view, or `V`): the same files and links
+  laid out in three dimensions and drawn with perspective, no WebGL or library;
+  the flat graph inflates into depth when you switch. Click a file and the camera
+  flies to it; a panel says what it is in words ("extract.py is used by 136 files
+  and uses 42"; a document *mentions* files, a data file is *named by* code) and
+  numbers its linked files: `1`-`9` fly to one, `N` walks round all of them,
+  `Backspace` goes back along your trail, `F` follows the file (the camera circles
+  it), `I` lights up what a change to it may affect, `Enter` opens its note. A
+  *region* (a folder, or a community when coloured by community) is framed with
+  its busiest files and the regions it works with most; `[` and `]` step through
+  them, and *Tour* (`T`) visits the product's own regions first, then tests,
+  examples and docs, one sentence each. Measured on Python's standard library as
+  a project: about 60 frames a second in Chrome with 1,745 files and 8,259 links.
+- **Command bar** (`Ctrl+K`), in English or Turkish: `focus rank` / `odak rank`
+  flies to a note in 3D, `region ui` / `bölge ui` frames a region, `impact store` /
+  `etki store` and `path parse to rank` / `yol parse ile rank` light up the files
+  concerned, `tour`, `changed`, `open …`, or a question, which is answered as
+  below; with an empty bar it lists what it can do. `?` shows every shortcut;
+  `Esc` undoes one step at a time (the tour, what is lit, the view).
 - **Search** by name (exact, prefix, part of the name, path) or with a question,
   which runs the same ranking as `verinoda query`; a file tree; back and forward;
   Turkish and English; light and dark. A question (three words or more, a

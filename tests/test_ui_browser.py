@@ -366,8 +366,91 @@ def test_the_exported_file_works_from_disk(page, glow, tmp_path):
     out = export.write(glow, tmp_path / "glow-graph.html")
     _open(page, Path(out["path"]).as_uri())  # it opens on the graph view
     page.wait(r"!document.querySelector('#graphview').hidden && /\d/.test(document.querySelector('#graph-info').textContent)")
+    if not page.js("document.querySelector('#graph-3d').classList.contains('on')"):  # the 3D view works from the file too
+        page.js("document.querySelector('#graph-3d').click()")
+    page.wait("window.__verinoda.g3.active && window.__verinoda.g3.frames > 5")
+    page.js("document.querySelector('#graph-3d').click()")
     page.js("document.querySelector('#graph-close').click()")
     page.wait("document.querySelector('#note .home h1')")
     _search_open(page, "Wisp", "Wisp")  # a symbol opens the note of its file
     page.wait("document.querySelector('#note h2.sec')")
     assert page.js("document.querySelectorAll('#note .code').length") == 0  # no code in the file
+
+
+# -- the graph in three dimensions, the command bar, the tour ------------------------------------------
+
+def _in_3d(page, site):
+    _open(page, site + "#/graph")
+    page.wait("window.__verinoda.g3 && (window.__verinoda.global.nodes.length > 0 || window.__verinoda.g3.nodes.length > 0)")
+    if not page.js("document.querySelector('#graph-3d').classList.contains('on')"):
+        page.js("document.querySelector('#graph-3d').click()")
+    page.wait("window.__verinoda.g3.active && window.__verinoda.g3.nodes.length > 0 && window.__verinoda.g3.frames > 5")
+
+
+def _key(page, key, **mods):
+    flags = ", ".join(f"{k}: true" for k in mods)
+    page.js(f"document.dispatchEvent(new KeyboardEvent('keydown', {{key: {json.dumps(key)}, bubbles: true{', ' + flags if flags else ''}}}))")
+
+
+def test_the_3d_view_flies_to_a_file_walks_its_links_and_follows_it(page, site):
+    _in_3d(page, site)
+    hub = page.js("""(() => {
+      const g = window.__verinoda.g3, n = [...g.nodes].sort((a, b) => b.deg - a.deg)[0], p = g.screenOf(n.id);
+      const c = document.querySelector('#global3d'), r = c.getBoundingClientRect();
+      for (const type of ['pointerdown', 'pointerup'])
+        c.dispatchEvent(new PointerEvent(type, {clientX: r.left + p.x, clientY: r.top + p.y, bubbles: true, button: 0, pointerId: 1}));
+      return {id: n.id, title: n.title};
+    })()""")
+    page.wait(f"!document.querySelector('#hud').hidden && document.querySelector('#hud strong').textContent === {json.dumps(hub['title'])}")
+    assert page.js("window.__verinoda.g3.selected.id") == hub["id"]
+    _key(page, "1")  # the first linked file in the panel
+    page.wait(f"window.__verinoda.g3.selected.id !== {json.dumps(hub['id'])}")
+    assert page.js(f"window.__verinoda.g3.adj.get({json.dumps(hub['id'])}).has(window.__verinoda.g3.selected.id)")
+    _key(page, "f")
+    page.wait("window.__verinoda.g3.follow === window.__verinoda.g3.selected")
+    _key(page, "Backspace")  # back along the trail
+    page.wait(f"window.__verinoda.g3.selected.id === {json.dumps(hub['id'])}")
+    _key(page, "Enter")
+    page.wait(f"location.hash === '#/n/' + encodeURIComponent({json.dumps(hub['id'])})")
+    page.wait("document.querySelector('#note h1')")
+
+
+def test_the_command_bar_frames_a_region_shows_an_impact_and_asks(page, site):
+    _in_3d(page, site)
+    region = page.js(r"document.querySelector('#legend .it span:last-child').textContent.replace(/ \(\d+\)$/, '')")
+
+    def say(text):
+        _key(page, "k", ctrlKey=True)
+        page.wait("!document.querySelector('#palette').hidden")
+        page.js(f"(() => {{ const i = document.querySelector('#pal-input'); i.value = {json.dumps(text)}; i.dispatchEvent(new Event('input')); }})()")
+        page.wait("document.querySelector('#pal-list .pal-it.active')")
+        time.sleep(0.3)  # the list for this text, not the one before it
+        page.js("document.querySelector('#pal-input').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))")
+        page.wait("document.querySelector('#palette').hidden")
+
+    say(f"region {region}")
+    page.wait(f"window.__verinoda.g3.region && document.querySelector('#hud strong').textContent === {json.dumps(region)}")
+    say("impact spawn")
+    page.wait("document.querySelector('#hud strong') && /Impact/.test(document.querySelector('#hud strong').textContent)")
+    assert page.js("window.__verinoda.g3.region.size") > 1
+    say("how does a wisp spawn?")
+    page.wait("location.hash.startsWith('#/q/')")
+
+
+def test_the_tour_goes_round_the_regions_and_every_key_is_listed(page, site):
+    _in_3d(page, site)
+    _key(page, "t")
+    page.wait("!document.querySelector('#hud').hidden && document.querySelector('#hud .hud-progress')")
+    first = page.js("document.querySelector('#hud strong').textContent")
+    _key(page, "]")
+    page.wait(f"document.querySelector('#hud strong').textContent !== {json.dumps(first)}")
+    _key(page, "Escape")  # the tour stops; the region stays lit
+    page.wait("!document.querySelector('#hud .hud-progress')")
+    _key(page, "Escape")  # then what is lit clears
+    page.wait("document.querySelector('#hud').hidden && !window.__verinoda.g3.region")
+    _key(page, "?")
+    page.wait("!document.querySelector('#keys').hidden && document.querySelectorAll('#keys kbd').length > 20")
+    _key(page, "Escape")
+    page.wait("document.querySelector('#keys').hidden")
+    _key(page, "v")  # and back to the flat graph
+    page.wait("!document.querySelector('#global').hidden && document.querySelector('#global3d').hidden")

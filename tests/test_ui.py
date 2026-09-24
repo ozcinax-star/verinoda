@@ -236,7 +236,7 @@ def test_the_server_refuses_other_hosts_writes_and_unknown_paths(served):
 
 
 def test_the_page_loads_nothing_from_outside():
-    for name in ("index.html", "app.js", "app.css"):
+    for name in ("index.html", "app.js", "graph3d.js", "app.css"):
         text = resources.files("verinoda.ui").joinpath("static", name).read_text(encoding="utf-8")
         text = text.replace("http://www.w3.org/2000/svg", "")  # the icon's SVG namespace names, it loads nothing
         assert not re.search(r"https?://", text), name   # no CDN, no fonts, no telemetry
@@ -368,10 +368,11 @@ def test_the_export_is_one_file_that_fetches_nothing(glow, tmp_path):
     csp = re.search(r'<meta http-equiv="Content-Security-Policy" content="([^"]+)">', html).group(1)
     assert "default-src 'none'" in csp and "connect-src" not in csp and "unsafe" not in csp
     inline = {"script": re.findall(r"<script>(.*?)</script>", html, re.DOTALL), "style": re.findall(r"<style>(.*?)</style>", html, re.DOTALL)}
-    assert len(inline["script"]) == len(inline["style"]) == 1
-    for kind, (body,) in inline.items():  # the policy allows exactly the page's own script and style
-        digest = base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode()
-        assert f"{kind}-src 'sha256-{digest}'" in csp
+    assert len(inline["script"]) == 2 and len(inline["style"]) == 1  # the 3D graph, the page; its style
+    for kind, bodies in inline.items():  # the policy allows exactly the page's own scripts and style
+        src = re.search(rf"{kind}-src ([^;]+)", csp).group(1).split()
+        assert sorted(src) == sorted("'sha256-" + base64.b64encode(hashlib.sha256(b.encode("utf-8")).digest()).decode() + "'"
+                                     for b in bodies)
     assert str(glow.resolve()) not in html and glow.resolve().as_posix() not in html
     assert "root" not in data["stats"]
 

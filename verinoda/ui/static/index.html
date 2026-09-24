@@ -70,17 +70,30 @@
       <option value="community" data-i18n="byCommunity"></option>
     </select></label>
     <button id="graph-fit" data-i18n="fit"></button>
+    <button id="graph-3d" class="toggle" data-i18n-title="mode3dTitle">3D</button>
+    <button id="graph-tour" data-i18n="tour" data-i18n-title="tourTitle"></button>
+    <button id="graph-keys" class="icon" data-i18n-title="keysTitle" aria-label="Shortcuts">?</button>
     <span class="spacer"></span>
     <span id="graph-info" class="muted"></span>
     <button id="graph-close" class="icon" data-i18n-title="close" aria-label="Close">&#10005;</button>
   </div>
   <div id="graph-body">
-    <div class="canvas-wrap" id="global-wrap"><canvas id="global"></canvas></div>
+    <div class="canvas-wrap" id="global-wrap"><canvas id="global"></canvas><canvas id="global3d" hidden></canvas></div>
     <div id="legend"></div>
+    <div id="hud" hidden></div>
   </div>
 </div>
 <div id="tooltip" hidden></div>
 <div id="preview" hidden></div>
+<div id="palette" hidden>
+  <div class="pal-box" role="dialog" aria-label="Commands">
+    <input id="pal-input" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="palHint">
+    <div id="pal-list" role="listbox"></div>
+    <div class="pal-foot muted small" data-i18n="palFoot"></div>
+  </div>
+</div>
+<div id="keys" hidden></div>
+<script src="graph3d.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

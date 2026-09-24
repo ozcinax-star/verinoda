@@ -50,7 +50,7 @@
   // -- language ------------------------------------------------------------------------------
   const I18N = {
     en: {
-      search: "Search notes, or ask a question  (Ctrl+K)", files: "Files", localGraph: "Local graph", depth: "Depth",
+      search: "Search notes, or ask a question  (/)   ·   commands: Ctrl+K", files: "Files", localGraph: "Local graph", depth: "Depth",
       tests: "Tests", dataFiles: "Data files", external: "External", outline: "Outline", graphView: "Graph view",
       highlight: "Highlight notes…", labels: "Labels", fit: "Fit", close: "Close", back: "Back", forward: "Forward",
       colorBy: "Colour by", byFolder: "folder", byCommunity: "community",
@@ -69,7 +69,7 @@
       pathBack: "(the other way round: the target reaches this note)", pathTitle: "Path", close2: "close",
       noteOn: "on", noNotes: "No notes of your own yet: open a note and press + Note.",
       theme: "Light / dark", toggleFiles: "Show or hide files", toggleGraph: "Show or hide the local graph",
-      searchOffline: "Search files and symbols  (Ctrl+K)",
+      searchOffline: "Search files and symbols  (/)   ·   commands: Ctrl+K",
       offlineHome: "Exported view: the graph and a note per file, without the code; `verinoda ui` in the project shows every note with its code. Exported",
       offlineCode: "the code is not in the exported file; `verinoda ui` shows it",
       offlineMissing: "This note is not in the exported file (it holds the graph and the file notes); `verinoda ui` shows every note.",
@@ -91,9 +91,45 @@
         data: "data file", symbol: "symbol", external: "external", claim: "claim",
       },
       why: { name: "name", "name starts with": "name starts with", "name contains": "in the name", path: "in the path", question: "for the question" },
+      legendTitle: "click: hide or show · double-click: fly to this region", mode3dTitle: "Show the graph in three dimensions (V)", tour: "Tour", tourTitle: "A guided tour of the project's regions (T)",
+      keysTitle: "Keyboard shortcuts",
+      palHint: "focus X · region X · impact X · path A to B · tour · or ask a question",
+      palFoot: "↑↓ choose · ↵ run · Tab complete · Esc close",
+      hint3d: "3D: drag to turn, wheel to zoom, click a file to fly to it. Ctrl+K gives commands, ? shows every shortcut.",
+      hudOpen: "Open", hudFollow: "Follow", hudUnfollow: "Stop following", hudWalk: "Next linked", hudWalkMore: "N walks through them all",
+      hudLinked: "Linked files", hudRegionTitle: "Fly to this region", hudInOut: "links in · links out", following: "following",
+      walkAt: "{i} of {n} linked to {name} (N / Shift+N)", hudTop: "Most connected here", hudAll: "Everything",
+      prevRegion: "Previous", nextRegion: "Next", tourResume: "Resume", tourPause: "Pause", tourAt: "Tour: region {i} of {n}",
+      tourDone: "That was the tour: the whole project again.",
+      say: {
+        data: "A data file: code names it by its resource id.",
+        docOut: "{name} mentions {outs} files of the project.", docIn: "{name} is mentioned by {ins} files.",
+        docBoth: "{name} mentions {outs} files of the project and is mentioned by {ins}.",
+        both: "{name} is used by {ins} files and uses {outs}.",
+        used: "{name} is used by {ins} files and uses none of the project's files: something the rest stands on.",
+        uses: "{name} uses {outs} files and nothing uses it: an entry point, a script or a test.",
+        alone: "{name} has no links to other files.",
+        region: "{name}: {n} files, {links} links among them.",
+        talks: "It works most with {list}.",
+        island: "It has no links to other regions.",
+        impact: "Changing {name} may affect {n} notes in {files} files (up to three links back).",
+      },
+      verb: { focus: "Fly to", open: "Open" },
+      cmd: { graph: "Open the graph view", to3d: "Show the graph in 3D", to2d: "Show the graph flat (2D)", tour: "Take the tour of the project's regions",
+        changes: "Show what changed since the index", fit: "Show everything", home: "Start page", lang: "Türkçe" },
+      pal: { commands: "Commands", ask: "Question", notes: "Notes", regions: "Regions", try: "Try" },
+      ex: { focus: "fly to a note in 3D", region: "frame a part of the project", impact: "what a change may affect",
+        path: "how two notes are linked: path A to B", open: "read a note", ask: "a question, answered from the code" },
+      palNoMatch: "No note matches one of the two names.", step1: "direct", stepN: "{n} steps away", spaceK: "Space",
+      keys: { general: "Everywhere", palette: "Command bar", search: "Search box", graph: "Graph view", esc: "Close, clear, go back", help: "This list",
+        graphH: "Graph view", view: "2D / 3D", dragK: "drag", drag: "Turn (3D) or move (2D)", rdragK: "right-drag", rdrag: "Move sideways",
+        wheelK: "wheel", wheel: "Zoom", orbit: "Turn", zoom: "Zoom", clickK: "click", click: "Fly to a file", dblK: "double-click", open: "Open its note",
+        num: "Fly to a numbered file in the panel", walk: "Walk the selected file's links", back: "Back along your trail", follow: "Follow the selected file",
+        spin: "Turn slowly / stop (pause the tour)", regions: "Previous / next region", tour: "Tour of the regions", impact: "Impact of the selected file",
+        changes: "What changed since the index", labels: "Labels", reset: "Show everything" },
     },
     tr: {
-      search: "Not ara ya da soru sor  (Ctrl+K)", files: "Dosyalar", localGraph: "Yerel graf", depth: "Derinlik",
+      search: "Not ara ya da soru sor  (/)   ·   komutlar: Ctrl+K", files: "Dosyalar", localGraph: "Yerel graf", depth: "Derinlik",
       tests: "Testler", dataFiles: "Veri dosyaları", external: "Dış", outline: "Ana hat", graphView: "Graf görünümü",
       highlight: "Notları vurgula…", labels: "Etiketler", fit: "Sığdır", close: "Kapat", back: "Geri", forward: "İleri",
       colorBy: "Renk", byFolder: "klasör", byCommunity: "topluluk",
@@ -112,7 +148,7 @@
       pathBack: "(ters yönde: hedef bu nota ulaşıyor)", pathTitle: "Yol", close2: "kapat",
       noteOn: "", noNotes: "Henüz kendi notun yok: bir not aç ve + Not'a bas.",
       theme: "Açık / koyu", toggleFiles: "Dosyaları göster ya da gizle", toggleGraph: "Yerel grafı göster ya da gizle",
-      searchOffline: "Dosya ya da sembol ara  (Ctrl+K)",
+      searchOffline: "Dosya ya da sembol ara  (/)   ·   komutlar: Ctrl+K",
       offlineHome: "Dışa aktarılmış görünüm: graf ve her dosyanın notu, kod olmadan; projede `verinoda ui` her notu koduyla gösterir. Dışa aktarım",
       offlineCode: "kod dışa aktarılan dosyada yok; `verinoda ui` gösterir",
       offlineMissing: "Bu not dışa aktarılan dosyada yok (graf ve dosya notları var); `verinoda ui` her notu gösterir.",
@@ -135,6 +171,42 @@
         data: "veri dosyası", symbol: "sembol", external: "dış", claim: "iddia",
       },
       why: { name: "ad", "name starts with": "ad böyle başlıyor", "name contains": "adında geçiyor", path: "yolunda geçiyor", question: "soruya göre" },
+      legendTitle: "tıkla: gizle ya da göster · çift tıkla: bu bölgeye uç", mode3dTitle: "Grafı üç boyutlu göster (V)", tour: "Tur", tourTitle: "Projenin bölgelerinde rehberli tur (T)",
+      keysTitle: "Klavye kısayolları",
+      palHint: "odak X · bölge X · etki X · yol A ile B · tur · ya da bir soru sor",
+      palFoot: "↑↓ seç · ↵ çalıştır · Tab tamamla · Esc kapat",
+      hint3d: "3D: sürükleyerek döndür, tekerlekle yakınlaş, bir dosyaya tıkla ve ona uç. Ctrl+K komutları, ? bütün kısayolları gösterir.",
+      hudOpen: "Aç", hudFollow: "İzle", hudUnfollow: "İzlemeyi bırak", hudWalk: "Sıradaki bağlantı", hudWalkMore: "N hepsini tek tek gezer",
+      hudLinked: "Bağlı dosyalar", hudRegionTitle: "Bu bölgeye uç", hudInOut: "gelen · giden bağlantı", following: "izleniyor",
+      walkAt: "{name} ile bağlantılı {n} dosyanın {i}. (N / Shift+N)", hudTop: "Burada en çok bağlantılı", hudAll: "Hepsi",
+      prevRegion: "Önceki", nextRegion: "Sonraki", tourResume: "Sürdür", tourPause: "Duraklat", tourAt: "Tur: {n} bölgenin {i}.",
+      tourDone: "Tur bitti: projenin tamamı yeniden karşında.",
+      say: {
+        data: "Bir veri dosyası: kod onu kaynak kimliğiyle anıyor.",
+        docOut: "{name} projenin {outs} dosyasından söz ediyor.", docIn: "{ins} dosya {name} belgesinden söz ediyor.",
+        docBoth: "{name} projenin {outs} dosyasından söz ediyor, {ins} dosya da ondan söz ediyor.",
+        both: "{name}: {ins} dosya onu kullanıyor, o {outs} dosyayı kullanıyor.",
+        used: "{name}: {ins} dosya onu kullanıyor, kendisi projenin hiçbir dosyasını kullanmıyor: geri kalanın dayandığı bir parça.",
+        uses: "{name}: {outs} dosyayı kullanıyor, onu kullanan yok: bir giriş noktası, betik ya da test.",
+        alone: "{name} başka dosyalara bağlı değil.",
+        region: "{name}: {n} dosya, aralarında {links} bağlantı.",
+        talks: "En çok birlikte çalıştığı: {list}.",
+        island: "Başka bölgelerle bağlantısı yok.",
+        impact: "{name} değişirse {files} dosyada {n} not etkilenebilir (en çok üç bağlantı geri).",
+      },
+      verb: { focus: "Uç", open: "Aç" },
+      cmd: { graph: "Graf görünümünü aç", to3d: "Grafı 3D göster", to2d: "Grafı düz (2D) göster", tour: "Projenin bölgelerinde tur at",
+        changes: "İndeksten sonra değişenleri göster", fit: "Hepsini göster", home: "Başlangıç sayfası", lang: "English" },
+      pal: { commands: "Komutlar", ask: "Soru", notes: "Notlar", regions: "Bölgeler", try: "Dene" },
+      ex: { focus: "3D'de bir nota uç", region: "projenin bir bölümüne odaklan", impact: "bir değişiklik neyi etkileyebilir",
+        path: "iki not nasıl bağlı: yol A ile B", open: "bir notu oku", ask: "koddan cevaplanan bir soru" },
+      palNoMatch: "İki addan biriyle eşleşen not yok.", step1: "doğrudan", stepN: "{n} adım öte", spaceK: "Boşluk",
+      keys: { general: "Her yerde", palette: "Komut çubuğu", search: "Arama kutusu", graph: "Graf görünümü", esc: "Kapat, temizle, geri dön", help: "Bu liste",
+        graphH: "Graf görünümü", view: "2D / 3D", dragK: "sürükle", drag: "Döndür (3D) ya da kaydır (2D)", rdragK: "sağ sürükle", rdrag: "Yana kaydır",
+        wheelK: "tekerlek", wheel: "Yakınlaş", orbit: "Döndür", zoom: "Yakınlaş", clickK: "tıkla", click: "Dosyaya uç", dblK: "çift tık", open: "Notunu aç",
+        num: "Paneldeki numaralı dosyaya uç", walk: "Seçili dosyanın bağlantılarını gez", back: "İzinden geri dön", follow: "Seçili dosyayı izle",
+        spin: "Yavaşça döndür / durdur (turu duraklat)", regions: "Önceki / sonraki bölge", tour: "Bölgelerde tur", impact: "Seçili dosyanın etkisi",
+        changes: "İndeksten sonra değişenler", labels: "Etiketler", reset: "Hepsini göster" },
     },
   };
   let lang = store.get("vn.lang", (navigator.language || "").toLowerCase().startsWith("tr") ? "tr" : "en");
@@ -155,6 +227,7 @@
     const cs = getComputedStyle(document.documentElement);
     for (const k of ["bg", "text", "muted", "faint", "accent", "data", "border"]) colors[k] = cs.getPropertyValue("--" + k).trim();
     for (const g of graphs) g.dirty = true, g.kick();
+    if (G3) { G3.dirty = true; G3.kick(); }
   }
 
   // -- code highlighting (a light tokenizer: comments, strings, numbers, keywords, calls) --------
@@ -275,6 +348,7 @@
   }
 
   function renderNote(n) {
+    lastNote = { id: n.id, file: n.file, shown: false }; // the graph view opens on it
     const parts = [];
     const crumbs = el("div", { class: "crumbs" });
     (n.breadcrumb || []).forEach((c, i) => { if (i) crumbs.append(" / "); crumbs.append(noteLink(c)); });
@@ -1021,18 +1095,22 @@
   let globalKey = null, globalData = null, globalSeq = 0;
   async function showGraph() {
     $("#graphview").hidden = false;
-    globalG.resize();
+    graphChrome();
+    if (mode3d) G3.setActive(true); else globalG.resize();
     const key = `${$("#global-tests").checked}|${$("#global-data").checked}`;
-    if (key === globalKey) { globalG.fit(); return; }
+    if (key === globalKey) {
+      if (mode3d) { enter3d(false); focusCurrent(); } else { ensure2d(); globalG.fit(); }
+      return;
+    }
     const seq = ++globalSeq;
     $("#graph-info").textContent = t("loading");
     let g;
     try { g = await api(`/api/global?tests=${$("#global-tests").checked ? 1 : 0}&data=${$("#global-data").checked ? 1 : 0}`); }
     catch (e) { if (seq === globalSeq) $("#graph-info").textContent = e.message; return; }
     if (seq !== globalSeq) return; // a newer request (the boxes changed again) is on its way
-    globalKey = key; globalData = g;
+    globalKey = key; globalData = g; globalGen++;
     applyColors(g.nodes);
-    globalG.setData(g.nodes, g.edges);
+    if (mode3d) { enter3d(false); focusCurrent(); } else ensure2d(); // the other view is filled when it is shown
     $("#graph-info").textContent = `${g.nodes.length} ${t("filesN")}, ${g.edges.length} ${t("links")}` +
       (g.hidden_files ? ` · ${g.hidden_files} ${t("hidden")}` : "");
     renderLegend(g);
@@ -1055,9 +1133,12 @@
     colorBy = ev.target.value === "community" ? "community" : "folder";
     store.set("vn.colorBy", colorBy);
     if (!globalData) return;
-    applyColors(globalG.nodes);
+    if (globalG.nodes.length) applyColors(globalG.nodes);
+    if (G3 && G3.nodes.length) applyColors(G3.nodes);
+    applyColors(globalData.nodes); // the next view filled from it gets the same colours
     globalG.hidden.clear(); globalG.dirty = true; globalG.kick();
-    renderLegend({ nodes: globalG.nodes, groups: globalData.groups });
+    if (G3) { G3.dirty = true; G3.kick(); if (!G3.region && G3.selected) hudNode(G3.selected); }
+    renderLegend({ nodes: globalData.nodes, groups: globalData.groups });
   });
   function renderLegend(g) {
     const used = new Map();
@@ -1067,27 +1148,32 @@
     $("#legend").replaceChildren(...order.map(([grp, count]) => {
       const sw = el("span", { class: "sw" });
       sw.style.background = groupColor(/^-?\d+$/.test(grp) ? Number(grp) : grp);
-      const it = el("div", { class: "it" + (globalG.hidden.has(grp) ? " off" : "") }, sw,
+      const it = el("div", { class: "it" + (globalG.hidden.has(grp) ? " off" : ""), title: G3 ? t("legendTitle") : null }, sw,
         el("span", { text: `${grp === "data" ? t("dataFiles") : grp.startsWith("@") ? grp.slice(1) : names.get(grp) || grp} (${count})` }));
       it.addEventListener("click", () => {
         if (globalG.hidden.has(grp)) globalG.hidden.delete(grp); else globalG.hidden.add(grp);
         it.classList.toggle("off"); globalG.dirty = true; globalG.kick();
+        if (G3) { G3.dirty = true; G3.kick(); }
       });
+      it.addEventListener("dblclick", () => { if (G3 && mode3d) { globalG.hidden.delete(grp); it.classList.remove("off"); focusRegion(grp); } });
       return it;
     }));
   }
   $("#changes-box").hidden = !!OFFLINE; // an exported file has no working tree to compare
   async function showChanges(on) {
     globalG.marks = null;
+    if (G3) G3.marks = null;
     if (on) {
       let r;
       try { r = await api("/api/changes"); } catch (e) { $("#graph-info").textContent = e.message; return; }
       const marks = new Map();
       for (const c of [...r.edited, ...r.deleted]) if (c.id) marks.set(c.id, "changed");
       const users = new Map(); // the files that use a changed one (one link back)
-      for (const l of globalG.links) if (marks.get(l.t.id) === "changed" && !marks.has(l.s.id)) users.set(l.s.id, "affected");
+      const links = mode3d && G3 ? G3.links : globalG.links;
+      for (const l of links) if (marks.get(l.t.id) === "changed" && !marks.has(l.s.id)) users.set(l.s.id, "affected");
       for (const [id, v] of users) marks.set(id, v);
       globalG.marks = marks;
+      if (G3) G3.marks = marks;
       const changed = r.edited.length + r.deleted.length;
       $("#graph-info").textContent = `${changed} ${t("changedInfo")}` + (r.added.length ? ` (+${r.added.length})` : "") +
         ` · ${users.size} ${t("affectedInfo")}`;
@@ -1095,15 +1181,543 @@
       $("#graph-info").textContent = `${globalData.nodes.length} ${t("filesN")}, ${globalData.edges.length} ${t("links")}`;
     }
     globalG.dirty = true; globalG.kick();
+    if (G3) { G3.dirty = true; G3.kick(); }
   }
   $("#global-changes").addEventListener("change", (ev) => showChanges(ev.target.checked));
-  $("#graph-filter").addEventListener("input", (ev) => { globalG.filter = ev.target.value.trim().toLowerCase(); globalG.dirty = true; globalG.kick(); });
-  $("#global-labels").addEventListener("change", (ev) => { globalG.o.labels = ev.target.checked; globalG.dirty = true; globalG.kick(); });
+  $("#graph-filter").addEventListener("input", (ev) => {
+    globalG.filter = ev.target.value.trim().toLowerCase(); globalG.dirty = true; globalG.kick();
+    if (G3) { G3.filter = globalG.filter; G3.dirty = true; G3.kick(); }
+  });
+  $("#global-labels").addEventListener("change", (ev) => {
+    globalG.o.labels = ev.target.checked; globalG.dirty = true; globalG.kick();
+    if (G3) { G3.o.labels = ev.target.checked; G3.dirty = true; G3.kick(); }
+  });
   for (const id of ["global-tests", "global-data"]) $("#" + id).addEventListener("change", () => showGraph());
-  $("#graph-fit").addEventListener("click", () => { globalG.autoFit = true; globalG.fit(); });
+  $("#graph-fit").addEventListener("click", () => graphKey({ key: "r" }));
   let beforeGraph = "#/";
   $("#graph-close").addEventListener("click", () => { location.hash = beforeGraph; });
   $("#btn-graph").addEventListener("click", () => { location.hash = "#/graph"; });
+
+  // -- the graph in three dimensions: fly to a file, follow it, walk its links, regions, a tour ------
+  const G3 = window.VerinodaGraph3D ? new window.VerinodaGraph3D($("#global3d"), {
+    color: (n) => groupColor(n.group), linkColor: (l) => REL_COLOR[l.relation] || "#777", theme: () => colors,
+    onSelect: (n) => { stopTour(); if (n) select3d(n); else clear3d(); },
+    onOpen: (n) => { location.hash = noteHref(n.id); },
+    onHover: (n, ev) => {
+      const tip = $("#tooltip");
+      if (!n || !ev) { tip.hidden = true; return; }
+      tip.hidden = false; tip.textContent = n.file ? `${n.title} — ${n.file}` : n.title;
+      tip.style.left = `${ev.clientX + 14}px`; tip.style.top = `${ev.clientY + 12}px`;
+    },
+  }) : null;
+  if (G3) G3.hidden = globalG.hidden; // one legend hides groups in both views
+  let mode3d = !!G3 && store.get("vn.graph3d", "0") === "1";
+  let globalGen = 0, hudTargets = [], walk = null, tour = null, lastNote = null, regionKey = null;
+  const trail = [], hud = $("#hud");
+  const fill = (s, v) => String(s).replace(/\{(\w+)\}/g, (_, k) => (v[k] !== undefined ? v[k] : ""));
+  const until = (f, ms = 10000) => new Promise((ok) => {
+    const t0 = performance.now();
+    (function check() { if (f() || performance.now() - t0 > ms) ok(); else setTimeout(check, 40); })();
+  });
+
+  function graphChrome() {
+    for (const id of ["graph-3d", "graph-tour"]) $("#" + id).hidden = !G3;
+    $("#graph-3d").classList.toggle("on", mode3d);
+    $("#global").hidden = mode3d; $("#global3d").hidden = !mode3d;
+    if (!mode3d) hud.hidden = true;
+  }
+  function ensure2d() {
+    if (globalData && globalG.dataKey !== globalGen) { globalG.setData(globalData.nodes, globalData.edges); globalG.dataKey = globalGen; }
+  }
+  function enter3d(inflate) {
+    if (!G3 || !globalData) return;
+    G3.setActive(true);
+    G3.filter = globalG.filter; G3.marks = globalG.marks; G3.o.labels = globalG.o.labels;
+    if (G3.dataKey !== globalGen) {
+      const first = !G3.nodes.length;
+      // the flat graph the user was looking at: it inflates into depth instead of starting over
+      const flat = inflate && globalG.dataKey === globalGen && globalG.nodes.length ? new Map(globalG.nodes.map((n) => [n.id, { x: n.x, y: n.y }])) : null;
+      G3.setData(globalData.nodes, globalData.edges, { init: flat });
+      G3.dataKey = globalGen;
+      if (first) {
+        if (flat) { G3.cam.yaw = 0; G3.cam.pitch = 0; }
+        G3.fit(0);
+        G3.flyTo({ yaw: 0.55, pitch: 0.32 }, flat ? 1800 : 1200);
+        G3.spin = true;
+      }
+      if (G3.selected && !G3.region) hudNode(G3.selected);
+    }
+    if (store.get("vn.hint3d", "0") !== "1") { store.set("vn.hint3d", "1"); toast(t("hint3d")); }
+  }
+  function setMode(on) {
+    if (on && !G3) return;
+    mode3d = on; store.set("vn.graph3d", on ? "1" : "0");
+    graphChrome();
+    if (on) enter3d(true);
+    else {
+      stopTour(); if (G3) G3.setActive(false);
+      ensure2d(); globalG.resize(); globalG.autoFit = true; globalG.fit();
+    }
+  }
+  function focusCurrent() { // opened from a note: fly to its file
+    if (!G3 || !lastNote || lastNote.shown) return;
+    lastNote.shown = true;
+    const id = fileNodeId(lastNote);
+    if (id) select3d(G3.byId.get(id));
+  }
+  function fileNodeId(x) { // a note of the page -> its file, as the graph view shows files
+    if (!G3 || !x) return null;
+    if (G3.byId.has(x.id)) return x.id;
+    if (!x.file) return null;
+    const hit = G3.nodes.find((n) => n.file === x.file);
+    return hit ? hit.id : null;
+  }
+  function groupName(key) {
+    const names = new Map(((globalData && globalData.groups) || []).map((x) => [String(x.id), x.name]));
+    return key === "data" ? t("dataFiles") : key.startsWith("@") ? key.slice(1) || "/" : names.get(key) || key;
+  }
+  function regions() { // the parts of the project as the graph is coloured: folders, or communities
+    const src = G3 && G3.nodes.length ? G3.nodes : (globalData && globalData.nodes) || [], map = new Map();
+    for (const n of src) {
+      const k = String(n.group);
+      if (globalG.hidden.has(k)) continue;
+      if (!map.has(k)) map.set(k, { key: k, ids: [], name: groupName(k), color: groupColor(n.group) });
+      map.get(k).ids.push(n.id);
+    }
+    return [...map.values()].sort((a, b) => b.ids.length - a.ids.length || (a.name < b.name ? -1 : 1));
+  }
+
+  // the panel beside the 3D graph: what is in view, in words, with numbered places to fly to
+  const hudBtn = (label, key, run, cls) => el("button", { class: cls || null, title: key ? `${label} (${key})` : label, onclick: run },
+    label, key ? " " : null, key ? el("kbd", { text: key }) : null);
+  function hudRow(i, n, extra) {
+    return el("li", {}, i < 9 ? el("kbd", { text: String(i + 1) }) : el("span", { class: "muted small", text: "·" }),
+      el("a", { href: "#", title: n.file || n.title, onclick: (ev) => { ev.preventDefault(); stopTour(); select3d(n); } }, n.title),
+      extra ? el("span", { class: "muted small", text: extra }) : null);
+  }
+  function trailView() {
+    const last = trail.slice(-6).map((id) => G3.byId.get(id)).filter(Boolean);
+    if (!last.length) return null;
+    return el("div", { class: "hud-trail muted small" }, el("kbd", { text: "⌫" }), " ",
+      ...last.map((n) => el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); back3d(n.id); } }, n.title)));
+  }
+  const stepsAway = (d) => (d <= 1 ? t("step1") : fill(t("stepN"), { n: d }));
+  function showHud(...kids) { hud.replaceChildren(...kids.filter(Boolean)); hud.hidden = false; }
+  function swatch(color) { const s = el("span", { class: "sw" }); s.style.background = color; return s; }
+
+  function select3d(n, { fly = true, push = true, keepWalk = false } = {}) {
+    if (!G3 || !n) return;
+    const node = G3.byId.get(n.id) || G3.byId.get(fileNodeId(n));
+    if (!node) return;
+    if (push && G3.selected && G3.selected !== node) { trail.push(G3.selected.id); if (trail.length > 40) trail.shift(); }
+    if (!keepWalk) walk = null;
+    regionKey = null; G3.selected = node; G3.region = null; G3.path = null;
+    if (G3.follow) G3.follow = node;
+    else G3.spin = false;
+    if (fly) G3.flyToNode(node.id);
+    hudNode(node);
+    G3.dirty = true; G3.kick();
+  }
+  function clear3d() {
+    walk = null; regionKey = null;
+    if (!G3) return;
+    G3.selected = null; G3.follow = null; G3.region = null; G3.path = null; G3.dirty = true; G3.kick();
+    hud.hidden = true; hudTargets = [];
+  }
+  function back3d(id) {
+    if (!G3 || !trail.length) return;
+    let to = trail.pop();
+    while (id && trail.length && to !== id) to = trail.pop();
+    const n = G3.byId.get(to);
+    if (n) select3d(n, { push: false });
+  }
+  function neighbours(n) {
+    return [...G3.adj.get(n.id)].map((id) => G3.byId.get(id)).filter((m) => m && G3.visible(m))
+      .sort((a, b) => b.deg - a.deg || (a.title < b.title ? -1 : 1));
+  }
+  function hudNode(n) {
+    const nb = neighbours(n);
+    let ins = 0, outs = 0;
+    for (const l of G3.links) { if (l.t === n) ins++; else if (l.s === n) outs++; }
+    hudTargets = nb.slice(0, 9).map((m) => m.id);
+    const g = String(n.group);
+    const say = n.kind === "data" ? t("say.data")
+      : n.kind === "doc" ? (ins && outs ? t("say.docBoth") : outs ? t("say.docOut") : ins ? t("say.docIn") : t("say.alone")) // a document mentions, it does not use
+      : ins && outs ? t("say.both") : ins ? t("say.used") : outs ? t("say.uses") : t("say.alone");
+    showHud(
+      el("div", { class: "hud-head" }, kindBadge(n.kind), el("strong", { text: n.title })),
+      el("div", { class: "hud-sub muted small mono", text: n.file || "" }),
+      el("div", { class: "hud-chips" },
+        el("a", { href: "#", class: "chip", title: t("hudRegionTitle"), onclick: (ev) => { ev.preventDefault(); focusRegion(g); } },
+          swatch(groupColor(n.group)), groupName(g)),
+        el("span", { class: "chip", title: t("hudInOut") }, `← ${ins} · ${outs} →`),
+        G3.follow === n ? el("span", { class: "chip", text: t("following") }) : null),
+      el("div", { class: "hud-say", text: fill(say, { name: n.title, ins, outs }) }),
+      walk ? el("div", { class: "muted small", text: fill(t("walkAt"), { i: walk.i + 1, n: walk.list.length, name: (G3.byId.get(walk.from) || {}).title || "" }) }) : null,
+      el("div", { class: "hud-bar" },
+        hudBtn(t("hudOpen"), "↵", () => { location.hash = noteHref(n.id); }, "primary"),
+        hudBtn(G3.follow === n ? t("hudUnfollow") : t("hudFollow"), "F", toggleFollow),
+        hudBtn(t("impact"), "I", () => impact3d(n)),
+        nb.length ? hudBtn(t("hudWalk"), "N", () => walkStep(1)) : null),
+      nb.length ? el("div", { class: "sec small", text: `${t("hudLinked")} · ${nb.length}` }) : null,
+      nb.length ? el("ol", { class: "hud-list" }, nb.slice(0, 9).map((m, i) => hudRow(i, m, String(m.deg)))) : null,
+      nb.length > 9 ? el("div", { class: "muted small", text: `+${nb.length - 9} ${t("more")} · ${t("hudWalkMore")}` }) : null,
+      trailView());
+  }
+  function toggleFollow() {
+    if (!G3 || !G3.selected) return;
+    G3.follow = G3.follow === G3.selected ? null : G3.selected;
+    G3.spin = !!G3.follow; // following: the camera circles it slowly
+    if (G3.follow) G3.flyToNode(G3.follow.id);
+    hudNode(G3.selected); G3.kick();
+  }
+  function walkStep(d) { // round a file: its linked files one by one, the file itself kept on the trail
+    if (!G3 || !G3.selected) return;
+    let first = false;
+    if (!walk) {
+      const list = neighbours(G3.selected).map((m) => m.id);
+      if (!list.length) return;
+      walk = { from: G3.selected.id, list, i: d > 0 ? -1 : 0 };
+      first = true;
+    }
+    walk.i = (walk.i + d + walk.list.length) % walk.list.length;
+    select3d(G3.byId.get(walk.list[walk.i]), { keepWalk: true, push: first });
+  }
+
+  function focusRegion(key) {
+    if (!G3) return;
+    const r = regions().find((x) => x.key === key);
+    if (!r) return;
+    walk = null; regionKey = key;
+    G3.selected = null; G3.follow = null; G3.path = null; G3.region = new Set(r.ids); G3.spin = true;
+    G3.fit(1100, r.ids);
+    hudRegion(r);
+  }
+  function hudRegion(r) {
+    const inside = new Set(r.ids), talk = new Map();
+    let links = 0;
+    for (const l of G3.links) {
+      const a = inside.has(l.s.id), b = inside.has(l.t.id);
+      if (a && b) links++;
+      else if (a || b) { const k = String((a ? l.t : l.s).group); talk.set(k, (talk.get(k) || 0) + 1); }
+    }
+    const top = r.ids.map((id) => G3.byId.get(id)).filter(Boolean).sort((a, b) => b.deg - a.deg).slice(0, 9);
+    hudTargets = top.map((n) => n.id);
+    const partners = [...talk.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const say = fill(t("say.region"), { name: r.name, n: r.ids.length, links }) + " " +
+      (partners.length ? fill(t("say.talks"), { list: partners.map(([k, c]) => `${groupName(k)} (${c})`).join(", ") }) : t("say.island"));
+    const bar = el("div", { class: "hud-progress" }, el("div"));
+    if (tour) bar.firstChild.style.width = `${Math.round(((tour.i + 1) / tour.rs.length) * 100)}%`;
+    showHud(
+      el("div", { class: "hud-head" }, swatch(r.color), el("strong", { text: r.name })),
+      tour ? el("div", { class: "muted small", text: fill(t("tourAt"), { i: tour.i + 1, n: tour.rs.length }) }) : null,
+      tour ? bar : null,
+      el("div", { class: "hud-say", text: say }),
+      el("div", { class: "hud-bar" },
+        hudBtn(t("prevRegion"), "[", () => regionStep(-1)), hudBtn(t("nextRegion"), "]", () => regionStep(1)),
+        tour ? hudBtn(tour.paused ? t("tourResume") : t("tourPause"), t("spaceK"), pauseTour) : hudBtn(t("tour"), "T", startTour),
+        hudBtn(t("hudAll"), "R", () => graphKey({ key: "r" }))),
+      el("div", { class: "sec small", text: t("hudTop") }),
+      el("ol", { class: "hud-list" }, top.map((n, i) => hudRow(i, n, String(n.deg)))));
+  }
+  function regionStep(d) {
+    if (!G3) return;
+    if (tour) { nextStop(d); return; }
+    const rs = regions();
+    if (!rs.length) return;
+    const cur = rs.findIndex((r) => r.key === regionKey);
+    const i = cur < 0 ? (d > 0 ? 0 : rs.length - 1) : (cur + d + rs.length) % rs.length;
+    focusRegion(rs[i].key);
+  }
+
+  // a tour: the largest parts of the project one after another, each said in a sentence
+  const TOUR_MS = 7000;
+  const SIDE_PART = /^(tests?|.*_tests?|tests?_.*|fixtures?|examples?|samples?|benchmarks?|bench|docs?|vendor|third_party|scripts?)$/i;
+  function tourStops() { // what a newcomer should see first: the product's own code, its busiest parts first
+    const side = (r) => r.key === "data" || r.name.split("/").some((p) => SIDE_PART.test(p));
+    const weight = (r) => r.ids.reduce((s, id) => s + ((G3.byId.get(id) || {}).deg || 0), 0);
+    return regions().filter((r) => weight(r) > 0).sort((a, b) => side(a) - side(b) || weight(b) - weight(a)).slice(0, 10);
+  }
+  function startTour() {
+    if (!G3) return;
+    if (!mode3d) setMode(true);
+    const rs = tourStops();
+    if (!rs.length) return;
+    tour = { rs, i: -1, timer: null, paused: false };
+    $("#graph-tour").classList.add("on");
+    nextStop(1);
+  }
+  function nextStop(d = 1) {
+    if (!tour) return;
+    clearTimeout(tour.timer);
+    tour.i = Math.max(0, tour.i + d);
+    if (tour.i >= tour.rs.length) { stopTour(true); return; }
+    focusRegion(tour.rs[tour.i].key);
+    if (!tour.paused) tour.timer = setTimeout(() => nextStop(1), TOUR_MS);
+  }
+  function pauseTour() {
+    if (!tour) return;
+    tour.paused = !tour.paused;
+    clearTimeout(tour.timer);
+    if (!tour.paused) tour.timer = setTimeout(() => nextStop(1), TOUR_MS);
+    const r = tour.rs[tour.i];
+    if (r) hudRegion(r);
+  }
+  function stopTour(done) {
+    if (!tour) return;
+    clearTimeout(tour.timer); tour = null;
+    $("#graph-tour").classList.remove("on");
+    if (done) { clear3d(); G3.fit(1400); G3.spin = true; toast(t("tourDone")); }
+    else if (regionKey) { const r = regions().find((x) => x.key === regionKey); if (r) hudRegion(r); }
+  }
+
+  // impact and paths in 3D: the files concerned lit, the rest dimmed, the list in the panel
+  async function impact3d(x) {
+    if (!G3) return;
+    let r;
+    try { r = await api(`/api/impact?id=${encodeURIComponent(x.id)}&depth=3&tests=1`); } catch (e) { toast(e.message); return; }
+    const start = fileNodeId(x), depth = new Map();
+    if (start) depth.set(start, 0);
+    for (const it of r.items) { const id = fileNodeId(it); if (id && !depth.has(id)) depth.set(id, it.depth); }
+    const ids = [...depth.keys()];
+    walk = null; regionKey = null; G3.path = null; G3.follow = null;
+    G3.selected = start ? G3.byId.get(start) : null; G3.region = new Set(ids);
+    G3.fit(1100, ids);
+    const rows = ids.filter((id) => id !== start).map((id) => G3.byId.get(id)).filter(Boolean)
+      .sort((a, b) => depth.get(a.id) - depth.get(b.id) || b.deg - a.deg);
+    hudTargets = rows.slice(0, 9).map((n) => n.id);
+    showHud(
+      el("div", { class: "hud-head" }, el("strong", { text: `${t("impact")} · ${x.title}` })),
+      el("div", { class: "hud-say", text: rows.length ? fill(t("say.impact"), { name: x.title, n: r.count, files: rows.length }) : t("impactNone") }),
+      el("ol", { class: "hud-list" }, rows.slice(0, 30).map((n, i) => hudRow(i, n, stepsAway(depth.get(n.id))))),
+      rows.length > 30 ? el("div", { class: "muted small", text: `+${rows.length - 30} ${t("more")}` }) : null,
+      el("div", { class: "hud-bar" }, hudBtn(t("hudOpen"), null, () => { location.hash = noteHref(x.id); }),
+        hudBtn(t("hudAll"), "R", () => graphKey({ key: "r" }))));
+    G3.dirty = true; G3.kick();
+  }
+  async function path3d(a, b) {
+    if (!G3) return;
+    let r;
+    try { r = await api(`/api/path?from=${encodeURIComponent(a.id)}&to=${encodeURIComponent(b.id)}`); } catch (e) { toast(e.message); return; }
+    if (!r.found) { toast(t("pathNone")); return; }
+    const chain = [];
+    for (const s of r.steps) { const id = fileNodeId(s); if (id && chain[chain.length - 1] !== id) chain.push(id); }
+    walk = null; regionKey = null; G3.follow = null; G3.selected = null;
+    G3.path = chain; G3.region = new Set(chain); G3.fit(1100, chain);
+    hudTargets = r.steps.slice(0, 9).map((s) => fileNodeId(s));
+    showHud(
+      el("div", { class: "hud-head" }, el("strong", { text: `${t("pathTitle")}: ${a.title} → ${b.title}` })),
+      r.direction === "backward" ? el("div", { class: "muted small", text: t("pathBack") }) : null,
+      el("ol", { class: "hud-list" }, r.steps.map((s, i) => el("li", {}, i < 9 ? el("kbd", { text: String(i + 1) }) : null,
+        el("a", { href: noteHref(s.id), title: s.file || "" }, s.title), i ? el("span", { class: "muted small", text: s.relation }) : null))),
+      el("div", { class: "hud-bar" }, hudBtn(t("hudAll"), "R", () => graphKey({ key: "r" }))));
+    G3.dirty = true; G3.kick();
+  }
+
+  // keys of the graph view (the page's own keys are at the end)
+  function graphKey(ev) {
+    const k = ev.key;
+    if (k === "v" || k === "V") { if (!G3) return false; setMode(!mode3d); return true; }
+    if (k === "r" || k === "R") {
+      if (mode3d && G3) { stopTour(); clear3d(); G3.fit(900); } else { globalG.autoFit = true; globalG.fit(); }
+      return true;
+    }
+    if (k === "t" || k === "T") { if (!G3) return false; if (tour) stopTour(); else startTour(); return true; }
+    if (k === "c") { const box = $("#changes-box"); if (box.hidden) return false; const b = $("#global-changes"); b.checked = !b.checked; showChanges(b.checked); return true; }
+    if (k === "l") { const b = $("#global-labels"); b.checked = !b.checked; b.dispatchEvent(new Event("change")); return true; }
+    if (!mode3d || !G3) return false;
+    const sel = G3.selected;
+    switch (k) {
+      case "ArrowLeft": case "a": G3.spin = false; G3.orbit(0.14, 0); return true;
+      case "ArrowRight": case "d": G3.spin = false; G3.orbit(-0.14, 0); return true;
+      case "ArrowUp": case "w": G3.orbit(0, 0.1); return true;
+      case "ArrowDown": case "s": G3.orbit(0, -0.1); return true;
+      case "+": case "=": G3.zoom(0.8); return true;
+      case "-": case "_": G3.zoom(1.25); return true;
+      case " ": if (tour) pauseTour(); else { G3.spin = !G3.spin; G3.kick(); } return true;
+      case "f": case "F": toggleFollow(); return true;
+      case "n": walkStep(1); return true;
+      case "N": walkStep(-1); return true;
+      case "Enter": if (sel) location.hash = noteHref(sel.id); return !!sel;
+      case "Backspace": back3d(); return true;
+      case "[": regionStep(-1); return true;
+      case "]": regionStep(1); return true;
+      case "i": case "I": if (sel) impact3d(sel); return !!sel;
+      default:
+        if (/^[1-9]$/.test(k) && hudTargets[Number(k) - 1]) { stopTour(); select3d(G3.byId.get(hudTargets[Number(k) - 1])); return true; }
+    }
+    return false;
+  }
+  $("#graph-3d").addEventListener("click", () => setMode(!mode3d));
+  $("#graph-tour").addEventListener("click", () => { if (tour) stopTour(); else startTour(); });
+  $("#graph-keys").addEventListener("click", () => showKeys());
+
+  // -- the command bar (Ctrl+K): say what to do, in Turkish or English ---------------------------------
+  const pal = { box: $("#palette"), input: $("#pal-input"), list: $("#pal-list"), items: [], active: 0, seq: 0, timer: null };
+  const fold = (s) => String(s).toLowerCase().replace(/ı/g, "i").replace(/i̇/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g")
+    .replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c");
+  const VERBS = [
+    { verb: "path", re: /^(?:path|route|yol)\s+(.+?)\s*(?:\s(?:to|ile|and|ve)\s|->|→|>)\s*(.+)$/i },
+    { verb: "path", re: /^(?:path|route|yol)\s+(\S+)\s+(\S+)$/i },
+    { verb: "focus", re: /^(?:focus|fly|go|find|show|odak|odaklan|uç|git|bul|göster)\s+(.+)$/i },
+    { verb: "open", re: /^(?:open|read|aç|oku)\s+(.+)$/i },
+    { verb: "impact", re: /^(?:impact|affects?|etki|etkisi|etkiler)\s+(.+)$/i },
+    { verb: "region", re: /^(?:region|area|bölge|alan)\s+(.+)$/i },
+    { verb: "ask", re: /^(?:ask|sor)\s+(.+)$/i },
+  ];
+  function openPalette(text = "") {
+    pal.box.hidden = false; pal.input.value = text; pal.active = 0;
+    runPalette(); pal.input.focus();
+  }
+  function closePalette() { pal.box.hidden = true; pal.seq++; clearTimeout(pal.timer); pal.timer = null; }
+  async function goGraph() {
+    if ($("#graphview").hidden) location.hash = "#/graph";
+    await until(() => !$("#graphview").hidden && globalData && (mode3d ? G3.dataKey === globalGen : globalG.dataKey === globalGen));
+  }
+  async function goGraph3d() {
+    if (!G3) return;
+    if ($("#graphview").hidden) { mode3d = true; store.set("vn.graph3d", "1"); }
+    await goGraph();
+    if (!mode3d) setMode(true);
+    await until(() => G3.dataKey === globalGen);
+  }
+  const goNote = (x) => { location.hash = noteHref(x.id); };
+  function flyTo(x) {
+    if (!G3) { goNote(x); return; }
+    goGraph3d().then(() => { const id = fileNodeId(x); if (id) { stopTour(); select3d(G3.byId.get(id)); } else goNote(x); });
+  }
+  async function searchNotes(q) {
+    try { return (await api("/api/search?q=" + encodeURIComponent(q))).results || []; } catch (_) { return []; }
+  }
+  function commands() {
+    const cs = [
+      { words: "graph graf view görünüm harita map", label: t("cmd.graph"), key: "G", run: () => { location.hash = "#/graph"; } },
+      G3 ? { words: "3d 2d view görünüm mode boyut üç düz", label: mode3d ? t("cmd.to2d") : t("cmd.to3d"), key: "V",
+        run: () => { if ($("#graphview").hidden) { mode3d = !mode3d; store.set("vn.graph3d", mode3d ? "1" : "0"); location.hash = "#/graph"; } else setMode(!mode3d); } } : null,
+      G3 ? { words: "tour tur gezinti gez bölgeler regions overview özet", label: t("cmd.tour"), key: "T", run: () => goGraph3d().then(() => { if (!tour) startTour(); }) } : null,
+      OFFLINE ? null : { words: "changed changes değişen değişenler what ne diff", label: t("cmd.changes"), key: "C",
+        run: () => goGraph().then(() => { const b = $("#global-changes"); b.checked = true; showChanges(true); }) },
+      { words: "fit all hepsi hepsini sığdır reset everything", label: t("cmd.fit"), key: "R", run: () => goGraph().then(() => graphKey({ key: "r" })) },
+      { words: "home start başlangıç ana sayfa", label: t("cmd.home"), run: () => { location.hash = "#/"; } },
+      { words: "notes notlarım my notes kendi", label: t("myNotes"), run: () => { location.hash = "#/"; } },
+      { words: "theme tema dark light koyu açık", label: t("theme"), run: () => $("#btn-theme").click() },
+      { words: "language dil türkçe english ingilizce", label: t("cmd.lang"), run: () => $("#btn-lang").click() },
+      { words: "help keys shortcuts kısayol kısayollar yardım tuşlar", label: t("keysTitle"), key: "?", run: () => showKeys() },
+    ];
+    return cs.filter(Boolean);
+  }
+  function matchCommands(q) {
+    const cs = commands();
+    if (!q) return cs;
+    const words = fold(q).split(/\s+/).filter(Boolean);
+    return cs.filter((c) => {
+      const hay = fold(`${c.words} ${c.label}`).split(/[\s/·,:()]+/);
+      return words.every((w) => hay.some((h) => h.startsWith(w)));
+    });
+  }
+  function regionItems(q) {
+    const f = fold(q);
+    return regions().filter((r) => fold(r.name).includes(f)).slice(0, 6).map((r) => ({
+      sec: t("pal.regions"), icon: swatch(r.color), label: `${t("hudRegionTitle")}: ${r.name}`, hint: `${r.ids.length} ${t("filesN")}`,
+      run: () => goGraph3d().then(() => { stopTour(); focusRegion(r.key); }) }));
+  }
+  async function verbItems(verb, m) {
+    if (verb === "ask") return [{ icon: "?", label: `${t("ask")}: «${m[1]}»`, run: () => { location.hash = "#/q/" + encodeURIComponent(m[1]); } }];
+    if (verb === "region") return regionItems(m[1]);
+    if (verb === "path") {
+      const [a, b] = await Promise.all([searchNotes(m[1]), searchNotes(m[2])]);
+      if (!a.length || !b.length) return [{ label: t("palNoMatch"), run: () => openPalette(pal.input.value) }];
+      return [{ icon: "⇢", label: `${t("pathTitle")}: ${a[0].title} → ${b[0].title}`, hint: `${a[0].file || ""} → ${b[0].file || ""}`,
+        run: () => (G3 ? goGraph3d().then(() => path3d(a[0], b[0])) : goNote(a[0])) }];
+    }
+    const hits = (await searchNotes(m[1])).slice(0, 8);
+    const word = verb === "open" ? t("verb.open") : verb === "impact" ? t("impact") : t("verb.focus");
+    return hits.map((x) => ({ icon: kindBadge(x.kind), label: `${word}: ${x.title}`, hint: x.file || "",
+      run: () => (verb === "open" ? goNote(x) : verb === "impact" ? (G3 ? goGraph3d().then(() => impact3d(x)) : goNote(x)) : flyTo(x)) }));
+  }
+  async function runPalette() {
+    const q = pal.input.value.trim(), my = ++pal.seq;
+    let items = [];
+    const hit = VERBS.map((v) => [v, q.match(v.re)]).find(([, m]) => m);
+    if (hit) items = await verbItems(hit[0].verb, hit[1]);
+    else if (!q) {
+      items = matchCommands("").map((c) => ({ sec: t("pal.commands"), icon: "›", label: c.label, key: c.key, run: c.run }));
+      const ex = lang === "tr" ? ["odak ", "bölge ", "etki ", "yol ", "aç ", "sor "] : ["focus ", "region ", "impact ", "path ", "open ", "ask "];
+      const why = ["focus", "region", "impact", "path", "open", "ask"];
+      items.push(...ex.map((w, i) => ({ sec: t("pal.try"), icon: "›", label: `${w.trim()} …`, hint: t("ex." + why[i]), complete: w })));
+    } else {
+      items = matchCommands(q).map((c) => ({ sec: t("pal.commands"), icon: "›", label: c.label, key: c.key, run: c.run }));
+      if (!OFFLINE && isQuestion(q)) items.unshift({ sec: t("pal.ask"), icon: "?", label: `${t("ask")}: «${q}»`, run: () => { location.hash = "#/q/" + encodeURIComponent(q); } });
+      items.push(...regionItems(q));
+      const inGraph = !$("#graphview").hidden && mode3d;
+      items.push(...(await searchNotes(q)).slice(0, 8).map((x) => ({ sec: t("pal.notes"), icon: kindBadge(x.kind), label: x.title, hint: x.file || "",
+        run: () => (inGraph ? flyTo(x) : goNote(x)) })));
+    }
+    if (my !== pal.seq) return;
+    pal.items = items; pal.active = 0; paintPalette();
+  }
+  function paintPalette() {
+    let sec = null;
+    const kids = [];
+    pal.items.forEach((it, i) => {
+      if (it.sec && it.sec !== sec) { sec = it.sec; kids.push(el("div", { class: "pal-sec", text: sec })); }
+      kids.push(el("div", { class: "pal-it" + (i === pal.active ? " active" : ""), role: "option", onclick: () => runItem(it),
+        onmousemove: () => markActive(i) },
+      typeof it.icon === "string" ? el("span", { class: "muted", text: it.icon }) : it.icon || null,
+      el("span", { class: "l", text: it.label }), it.hint ? el("span", { class: "h", text: it.hint }) : null,
+      it.key ? el("kbd", { text: it.key }) : null));
+    });
+    if (!pal.items.length) kids.push(el("div", { class: "pal-sec", text: t("noResults") }));
+    pal.list.replaceChildren(...kids);
+  }
+  function markActive(i) {
+    pal.active = i;
+    const its = [...pal.list.querySelectorAll(".pal-it")];
+    its.forEach((e, j) => e.classList.toggle("active", j === i));
+    if (its[i]) its[i].scrollIntoView({ block: "nearest" });
+  }
+  function runItem(it) {
+    if (!it) return;
+    if (it.complete) { pal.input.value = it.complete; pal.input.focus(); runPalette(); return; }
+    closePalette(); it.run();
+  }
+  pal.box.addEventListener("mousedown", (ev) => { if (ev.target === pal.box) closePalette(); });
+  pal.input.addEventListener("input", () => { clearTimeout(pal.timer); pal.timer = setTimeout(() => { pal.timer = null; runPalette(); }, 110); });
+  pal.input.addEventListener("keydown", async (ev) => {
+    if (ev.key === "Escape") { ev.preventDefault(); closePalette(); }
+    else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+      ev.preventDefault();
+      if (pal.items.length) markActive((pal.active + (ev.key === "ArrowDown" ? 1 : -1) + pal.items.length) % pal.items.length);
+    } else if (ev.key === "Enter") {
+      ev.preventDefault();
+      if (pal.timer) { clearTimeout(pal.timer); pal.timer = null; await runPalette(); } // what is on screen is for an older text
+      runItem(pal.items[pal.active]);
+    } else if (ev.key === "Tab") {
+      ev.preventDefault();
+      const it = pal.items[pal.active];
+      if (it && it.complete) runItem(it);
+    }
+  });
+
+  // -- every shortcut on one sheet (?) -----------------------------------------------------------------
+  function showKeys() {
+    const H = "h", rows = [
+      [H, t("keys.general")], ["Ctrl K", t("keys.palette")], ["/", t("keys.search")], ["G", t("keys.graph")], ["Esc", t("keys.esc")], ["?", t("keys.help")],
+      [H, t("keys.graphH")], ["V", t("keys.view")], [t("keys.dragK"), t("keys.drag")], [t("keys.rdragK"), t("keys.rdrag")],
+      [t("keys.wheelK"), t("keys.wheel")], ["← → ↑ ↓", t("keys.orbit")], ["+ −", t("keys.zoom")], [t("keys.clickK"), t("keys.click")],
+      [`↵ · ${t("keys.dblK")}`, t("keys.open")], ["1 – 9", t("keys.num")], ["N · Shift N", t("keys.walk")], ["⌫", t("keys.back")],
+      ["F", t("keys.follow")], [t("spaceK"), t("keys.spin")], ["[ ]", t("keys.regions")], ["T", t("keys.tour")], ["I", t("keys.impact")],
+      ["C", t("keys.changes")], ["L", t("keys.labels")], ["R", t("keys.reset")],
+    ];
+    const box = el("div", { class: "keys-box", role: "dialog" },
+      el("div", { class: "hud-head" }, el("strong", { text: t("keysTitle") }), el("span", { class: "spacer" }),
+        el("button", { class: "linkish", onclick: () => { $("#keys").hidden = true; } }, t("close2"))),
+      el("div", { class: "keys-cols" }, rows.map(([k, v]) => (k === H ? el("h3", { text: v })
+        : el("div", { class: "keys-row" }, el("span", { text: v }), el("kbd", { text: k }))))));
+    $("#keys").replaceChildren(box);
+    $("#keys").hidden = false;
+  }
+  $("#keys").addEventListener("mousedown", (ev) => { if (ev.target.id === "keys") $("#keys").hidden = true; });
 
   // -- the API of an exported file, answered from its data ---------------------------------------
   function notFound(message) { const e = new Error(message); e.status = 404; e.code = "not_found"; return e; }
@@ -1342,6 +1956,7 @@
     const h = location.hash || "#/";
     if (h === "#/graph") { showGraph(); return; }
     $("#graphview").hidden = true;
+    if (G3) { stopTour(); G3.setActive(false); }
     $("#tooltip").hidden = true;
     beforeGraph = h;
     if (h.startsWith("#/n/")) openNote(decodeURIComponent(h.slice(4)));
@@ -1374,14 +1989,25 @@
   if (store.get("vn.noRight", "0") === "1") $("#app").classList.add("no-right");
   document.addEventListener("keydown", (ev) => {
     const typing = /INPUT|SELECT|TEXTAREA/.test((ev.target && ev.target.tagName) || "");
-    if ((ev.key === "k" && (ev.ctrlKey || ev.metaKey)) || (ev.key === "/" && !typing)) { ev.preventDefault(); input.focus(); input.select(); }
-    else if (ev.key === "Escape" && !preview.hidden) { hidePreview(); }
-    else if (ev.key === "Escape" && !$("#graphview").hidden) { location.hash = beforeGraph; }
-    else if (ev.key === "g" && !typing && !ev.ctrlKey && !ev.metaKey) { location.hash = "#/graph"; }
+    if ((ev.key === "k" || ev.key === "K") && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); if (pal.box.hidden) openPalette(); else closePalette(); return; }
+    if (!pal.box.hidden) return; // the command bar has its own keys
+    if (!$("#keys").hidden) { if (ev.key === "Escape" || ev.key === "?") { ev.preventDefault(); $("#keys").hidden = true; } return; }
+    if (ev.key === "/" && !typing) { ev.preventDefault(); input.focus(); input.select(); return; }
+    if (ev.key === "?" && !typing) { ev.preventDefault(); showKeys(); return; }
+    if (ev.key === "Escape" && !preview.hidden) { hidePreview(); return; }
+    if (ev.key === "Escape" && !$("#graphview").hidden) { // one step back at a time: the tour, what is lit, the view
+      if (typing) { ev.target.blur(); return; }
+      if (tour) { stopTour(); return; }
+      if (mode3d && G3 && (G3.selected || G3.region || G3.path)) { clear3d(); return; }
+      location.hash = beforeGraph; return;
+    }
+    if (typing || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (!$("#graphview").hidden && graphKey(ev)) { ev.preventDefault(); return; }
+    if (ev.key === "g") location.hash = "#/graph";
   });
 
   // -- start -----------------------------------------------------------------------------------
-  window.__verinoda = { local, global: globalG, offline: !!OFFLINE }; // for tests and debugging
+  window.__verinoda = { local, global: globalG, g3: G3, offline: !!OFFLINE }; // for tests and debugging
   if (OFFLINE) {
     $("#search").dataset.i18nPlaceholder = "searchOffline";
     if (!location.hash) { // an exported file opens on its graph

@@ -250,7 +250,19 @@ pasajlar, satırları (renkli, editörde açılır), neden seçildikleri ve notl
 geri/ileri, Türkçe/İngilizce, açık/koyu tema. Yereldir: 127.0.0.1 üzerinde standart
 kütüphaneyle çalışan bir sunucu, yalnızca kendi adresine gelen isteklere yanıt verir (yazdığı tek şey
 aşağıdaki kendi notlarındır); sayfa dışarıdan hiçbir şey yüklemez (CDN, yazı tipi, telemetri yok).
-`verinoda ui --graph` doğrudan graf görünümünde açar. Bir nota giden bağlantının üzerinde durunca notun
+`verinoda ui --graph` doğrudan graf görünümünde açar. **3D graf** (graf görünümünde *3D* ya da `V`): aynı
+dosyalar ve bağlantılar üç boyutta, perspektifle çizilir (WebGL ya da kütüphane yok); geçişte düz graf derinliğe
+açılır. Bir dosyaya tıklayınca kamera ona uçar; yandaki panel onu sözle anlatır ("extract.py'yi 136 dosya
+kullanıyor, o 42 dosyayı kullanıyor"; bir belge dosyalardan *söz eder*, bir veri dosyasını kod *adıyla anar*) ve
+bağlı dosyaları numaralar: `1`-`9` birine uçar, `N` hepsini tek tek gezer, `Backspace` izinden geri döner, `F`
+dosyayı izler (kamera etrafında döner), `I` bir değişikliğin neyi etkileyebileceğini yakar, `Enter` notunu açar.
+Bir *bölge* (klasör, ya da topluluğa göre renklendirilmişse topluluk) en çok bağlantılı dosyaları ve en çok
+birlikte çalıştığı bölgelerle çerçevelenir; `[` ve `]` bölgeler arasında gezer, *Tur* (`T`) önce ürünün kendi
+bölgelerini, sonra testleri, örnekleri ve belgeleri birer cümleyle dolaşır. **Komut çubuğu** (`Ctrl+K`), Türkçe ya
+da İngilizce: `odak rank` 3D'de bir nota uçar, `bölge ui` bir bölgeyi çerçeveler, `etki store` ve `yol parse ile
+rank` ilgili dosyaları yakar; `tur`, `değişenler`, `aç …` ya da bir soru (aşağıdaki gibi cevaplanır). `?` bütün
+kısayolları gösterir, `Esc` her seferinde bir adım geri alır. Python standart kütüphanesinde (1.745 dosya, 8.259
+bağlantı) Chrome'da saniyede yaklaşık 60 kare. Bir nota giden bağlantının üzerinde durunca notun
 önizlemesi açılır (tür, dosya ve satır, imza, belgenin ilk satırları, notun, bağlantı sayıları, kodun ilk
 satırları). Sayfa indeksi izler: `verinoda update`'ten birkaç saniye sonra açık not ya da graf yeniden
 çizilir (kaydırma yeri korunur) ve bunu söyler (görünmeyen sekme, gösterildiğinde bakar);
