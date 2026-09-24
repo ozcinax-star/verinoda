@@ -414,7 +414,9 @@ def _scan_scip(repo: Path, src: Path, idx) -> dict:
 def cmd_scan(args) -> int:
     from verinoda import workflow
 
-    repo = Path(args.path).resolve()
+    if not (args.repo or args.path):  # never the working directory by accident: scanning is heavy
+        raise SystemExit("verinoda scan: give the project folder (PATH or --repo), for example `verinoda scan .`")
+    repo = Path(args.repo or args.path).resolve()
     scip_src = Path(args.scip).resolve() if args.scip else None
     scip_idx = _load_scip(scip_src) if scip_src else None   # fail fast, before the (long) scan
     workflow.init(repo)
@@ -475,7 +477,8 @@ def cmd_scan(args) -> int:
 def cmd_update(args) -> int:
     from verinoda import workflow
 
-    repo = Path(args.path).resolve()
+    given = args.repo or args.path
+    repo = Path(given).resolve() if given else find_repo_root()
     st = _store(repo, create=True)
     res = workflow.update(st, repo)
     _emit(args, res, _r_update)
@@ -1352,7 +1355,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("init", cmd_init, "create .verinoda/ (database + config) in a project", repo=False)
     sp.add_argument("path", nargs="?", default=".")
     sp = add("scan", cmd_scan, "index a repository (AST, no LLM) and record a snapshot", repo=False)
-    sp.add_argument("path")
+    sp.add_argument("path", nargs="?")
+    sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--force", action="store_true", help="rebuild even if the graph shrinks")
     sp.add_argument("--precise", action="store_true",
                     help="also resolve every call site of the .py files changed since the previous snapshot "
@@ -1360,7 +1364,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--scip", metavar="FILE",
                     help="use this SCIP index (copied to .verinoda/index/index.scip; freshness reported)")
     sp = add("update", cmd_update, "re-index changed files, record a snapshot, mark affected claims stale", repo=False)
-    sp.add_argument("path")
+    sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
+    sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp = add("map", cmd_map, "top-down architecture views", repo=False)
     sp.add_argument("path", nargs="?", default=".")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")

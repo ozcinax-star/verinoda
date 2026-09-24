@@ -115,6 +115,11 @@ def test_doctor_json_never_prints_secret_values(repo):
 def test_update_is_noop_on_unchanged_tree(repo):
     res = ok_json("update", str(repo), "--json", cwd=repo)
     assert res["mode"] == "noop" and res["changed_count"] == 0 and res["stale"] == []
+    # the same project as --repo (as for query), or found from the working directory
+    assert ok_json("update", "--repo", str(repo), "--json", cwd=repo.parent)["mode"] == "noop"
+    assert ok_json("update", "--json", cwd=repo / "orders")["mode"] == "noop"
+    r = ra("scan", cwd=repo)  # scanning is never implied: a path or --repo is required
+    assert r.returncode != 0 and "verinoda scan ." in (r.stderr + r.stdout)
     r = ra("update", str(repo), cwd=repo)
     assert r.returncode == 0 and r.stdout.startswith("noop")
     if res.get("index_mode"):
