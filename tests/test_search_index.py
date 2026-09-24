@@ -435,3 +435,13 @@ def test_a_qualified_name_floors_the_method_of_that_owner_only(tmp_path):
     text = retrieval.render_text(retrieval.retrieve(g, "Who calls Wisp.spawn?"), 6000)
     assert "## game/wisp.py:122-123 def spawn(self, world)" in text
     assert "called by: summon (game/rituals.py:5)" in text
+
+
+def test_two_adjacent_words_the_code_writes_as_one_name_count_as_that_name(mini):
+    q = _query(mini, "Where is the needle marker?")
+    assert {"from": "needle marker", "to": "needle_marker", "via": "joined words", "weight": 1.0} in q.expansions
+    tr = _query(mini, "Sipariş oluşturma nerede?")  # a confirmed stem of each word joins too
+    assert any(e["to"] == "siparis_olustur" and e["via"] == "joined words" for e in tr.expansions)
+    assert not [e for e in _query(mini, "Which environment variables?").expansions if e["via"] == "joined words"]
+    # one dotted token ("needle.marker", like graph.json) is not a two-word phrase
+    assert not [e for e in _query(mini, "Where is needle.marker set?").expansions if e["via"] == "joined words"]

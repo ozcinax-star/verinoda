@@ -169,6 +169,15 @@ printed. The private set's text format went from 22 to 31 of 39 facts (three
 in-sample: found while looking at those questions); `forge_mod` text 66 -> 65
 (q08: more sections share the budget); every other set unchanged.
 
+Last of the night: two adjacent question words that the code writes as one
+name ("needle marker" -> `needle_marker`, "order service" -> `OrderService`,
+a Turkish word through its confirmed stem) count as that name, spelled; a
+dotted token such as `graph.json` is not two words. `forge_mod` analyze
+41 -> 42 and text 65 -> 66, `glow_mod` analyze 41 -> 43 and JSON 43 -> 44,
+`heldout_repoatlas` JSON 20 -> 21, the private set text 31 -> 32 and JSON
+23 -> 24; `graphify_core` analyze 30 -> 29 ("query terms" now also names
+`_query_terms`). The other sets unchanged.
+
 **The five earlier sets** (regression check, same harness, `repeat = 1`, no
 upstream CLI, against `dogfood-2026-09-23/`): 24 of the 25 Verinoda cells and
 every raw and Graphify cell found exactly the same number of facts. One cell

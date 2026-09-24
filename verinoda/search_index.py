@@ -1254,11 +1254,13 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
     named = named_identifiers(question)
     words: list[str] = []
     dropped: list[str] = []
+    solo: list[bool] = []   # the word is a whole whitespace token ("graph.json" gives two that are not)
     for raw in question.split():
         base, suffix = textnorm.split_apostrophe(raw.strip(".,;:!?()[]{}\"`"))
         if suffix:
             dropped.append("'" + suffix.rstrip(".,;:!?()[]{}\"`"))
-        for w in _WORD.findall(base):
+        parts = _WORD.findall(base)
+        for w in parts:
             f = textnorm.fold_tr(w)
             if f in EN_STOPWORDS or f in textnorm.TR_STOPWORDS:
                 dropped.append(w)
@@ -1267,6 +1269,7 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
                 dropped.append(w)
                 continue
             words.append(w)
+            solo.append(len(parts) == 1)
     if not words:  # a question made only of stopwords still searches on something
         words = [w for raw in textnorm.raw_tokens(question) for w in _WORD.findall(raw) if len(w) >= 2]
     weights: dict[str, float] = {}
@@ -1305,6 +1308,20 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
                 if f not in have:
                     for term, _df in _vocab_prefixed(conn, st, 3):
                         add(w, term, f"turkish stem '{st}'", EXPANSION_WEIGHT)
+    # Two adjacent words that the code writes as one name ("sipariş oluştur" -> siparis_olustur,
+    # "retry policy" -> retry_policy, "order service" -> OrderService): that name, as if spelled
+    stems_of: dict[str, set[str]] = defaultdict(set)
+    for e in exps:
+        if str(e["via"]).startswith("turkish stem"):
+            stems_of[e["from"]].add(e["to"])
+    for k, (w1, w2) in enumerate(zip(words, words[1:])):
+        if k + 1 >= len(solo) or not (solo[k] and solo[k + 1]):
+            continue  # a file name or dotted name split into words is not two words of a phrase
+        f1 = {textnorm.fold_tr(w1).lower()} | stems_of.get(w1, set())
+        f2 = {textnorm.fold_tr(w2).lower()} | stems_of.get(w2, set())
+        joined = sorted({a + sep + b for a in f1 for b in f2 for sep in ("_", "") if len(a) >= 3 and len(b) >= 3})
+        for term in sorted(_vocab_has(conn, joined)):
+            add(f"{w1} {w2}", term, "joined words", 1.0)
     # Abbreviations: fixed map (both directions) and corpus prefixes of long words.
     base_terms = list(weights)
     cand: dict[str, tuple[str, str]] = {}

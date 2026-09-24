@@ -843,7 +843,9 @@ bu değişiklikler için artık örneklem içi (üç sorusunun hatalarına bakı
 Ardından soruda yazılan kaynak kimliği (`emberforge:forging`) onu yazan her pasaja ulaşıyor: `forge_mod`
 metin 64 -> **66**, analyze 40 -> **41**. Soruda yazılan `Sınıf.metot` artık yalnızca o sınıfın
 metodunu öne çıkarıyor ve düz metin biçimi, uzun bir sınıf bölümünün içindeki metodu (çağıranlarıyla)
-ayrıca gösteriyor: özel kümede metin 22 -> 31 / 39 (örneklem içi).
+ayrıca gösteriyor: özel kümede metin 22 -> 31 / 39 (örneklem içi). Son olarak, kodun tek bir ad olarak
+yazdığı yan yana iki kelime ("sipariş oluştur" -> `siparis_olustur` gibi, `x_y` / `XY`) o ad sayılıyor: `glow_mod` analyze 41 -> 43,
+`forge_mod` analyze 41 -> 42, özel küme metin 31 -> 32; `graphify_core` analyze 30 -> 29.
 
 Önceki beş kümede (gerileme kontrolü) Verinoda'nın 25 hücresinden 24'ü ve
 Graphify ile ham okumanın bütün hücreleri aynı sayıda bilgi buldu; bir hücre
