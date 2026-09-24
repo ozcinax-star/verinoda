@@ -362,8 +362,9 @@ def test_unchallenged_claims_say_why(proj):
     off = analysis.analyze(st, repo, q, challenge=False)
     assert off["claims"] and all(c["not_challenged_reason"] == "disabled" for c in off["claims"])
     capped = analysis.analyze(st, repo, q, max_claims=1)
-    assert "not_challenged_reason" not in capped["claims"][0]
-    assert all(c["not_challenged_reason"] == "claim_limit" for c in capped["claims"][1:])
+    challenged = [c for c in capped["claims"] if "not_challenged_reason" not in c]  # claims are listed answer first
+    assert len(challenged) == 1
+    assert all(c["not_challenged_reason"] == "claim_limit" for c in capped["claims"] if c not in challenged)
     broke = analysis.analyze(st, repo, q, budget=analysis.Budget(tool_calls=3))
     assert all(c["challenged"] is False and c["not_challenged_reason"] == "budget" for c in broke["claims"])
 
@@ -1187,3 +1188,14 @@ def test_an_analysis_carries_the_passages_query_gives(proj, flow):
     assert flow["passages"] == want.splitlines()
     assert any(ln.startswith("## ") for ln in flow["passages"])
     assert all("\n" not in ln for ln in flow["passages"])  # a list of lines: no escaped line breaks in JSON
+
+
+def test_the_claims_that_answer_come_first(proj):
+    """A reader sees the answer before what the search found on the way."""
+    repo, st = proj
+    res = analysis.analyze(st, repo, "Who calls place_order?")
+    q1 = res["subquestions"][0]
+    assert q1["answer_claim_ids"] and res["claims"][0]["id"] == q1["answer_claim_ids"][0]
+    assert "create_order_handler" in res["claims"][0]["text"]  # the product's own caller, before the tests
+    res = analysis.analyze(st, repo, "Where is an order written to the database?")
+    assert "orders/repository.py:17" in res["claims"][0]["text"]  # the INSERT, not a settings loader

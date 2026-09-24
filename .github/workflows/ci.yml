@@ -28,7 +28,7 @@ jobs:
       - name: venv + install
         run: |
           uv venv --python ${{ matrix.python }} .venv
-          uv pip install --python .venv -e . pytest hypothesis
+          uv pip install --python .venv -e ".[precise]" pytest hypothesis
       - name: product tests
         shell: bash
         run: |

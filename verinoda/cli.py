@@ -212,7 +212,13 @@ def _r_claims(res: dict) -> None:
             print(f"  {s['id']} [{s.get('status') or '?'}] {s.get('intent')}: {s.get('text') or ''}  "
                   f"({n_claims} claim(s){f', {n_unknowns} unknown(s)' if n_unknowns else ''})")
     print()
+    answering = {cid for s in subs for cid in s.get("answer_claim_ids") or []}
+    shown_head = None
     for c in res.get("claims") or []:
+        head = ("answer:" if c["id"] in answering else "context (found on the way; not what answers):") if answering else None
+        if head and head != shown_head:
+            print(("" if shown_head is None else "\n") + head)
+            shown_head = head
         print(f"[{c['status']} {c['confidence']:.2f}] {c['text']}  ({c['id']}){_not_challenged_mark(c)}")
         for e in c["evidence"][:3]:
             print(f"      {e}")

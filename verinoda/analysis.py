@@ -198,6 +198,7 @@ class _Recorder:
         self.skipped: Counter = Counter()
         self.sq: str | None = None
         self.by_sq: dict[str, list[str]] = defaultdict(list)
+        self.made_in: dict[str, set] = defaultdict(set)  # claim id -> {(sub-question, section)} that produced it
         self.sq_skipped: Counter = Counter()
         self.sq_cap: int | None = None
         self.sq_used = 0
@@ -216,6 +217,7 @@ class _Recorder:
         self.sq, self.sq_cap, self.sq_used, self.plan_ref, self.sq_extra = sq_id, cap_chars, 0, plan_ref, extra
 
     def _note(self, cid: str) -> None:
+        self.made_in[cid].add((self.sq, self.section))
         if self.sq and cid not in self.by_sq[self.sq]:
             self.by_sq[self.sq].append(cid)
         for u in self.sq_extra:
@@ -819,6 +821,7 @@ def _data_link_claims(ctx: _Ctx, sub: _Sub, raw_items: list[dict]) -> None:
 
 
 ON_SUBJECT_RELATIONS = {"method", "contains"}
+CONTEXT_SECTIONS = {"location", "relations"}  # _context_claims: what the search found around the question
 
 
 def _on_subject(ctx: _Ctx, sub: _Sub, it: dict) -> bool:
@@ -1105,6 +1108,8 @@ def _targets(ctx: _Ctx, sub: _Sub, n: int = 2) -> list[str]:
         return g.is_symbol(nid) and Path(f).suffix.lower() in _CODE_SUFFIXES
 
     out = [nid for nid in sub.seeds if nid in g.G and code(nid)]
+    if out:  # "who calls place_order?": the callers of place_order, not of whatever ranked next to it
+        return out[:n]
     for it in sub.prod:
         if it["id"] in g.G and it["id"] not in out and code(it["id"]):
             out.append(it["id"])
@@ -1915,6 +1920,10 @@ def _finish_sub(ctx: _Ctx, sub: _Sub, out: dict, handler: str) -> dict:
     out["claim_ids"] = list(ctx.rec.by_sq.get(sub.sq["id"], []))
     out["unknowns"] = sub.unknowns
     out["_flags"] = sub.flags
+    # made for this sub-question only as context (definitions of search hits, links among them), not by
+    # its handler: a claim is shared by text, so a caller a handler found stays an answer
+    out["_context"] = [cid for cid in ctx.rec.by_sq.get(sub.sq["id"], [])
+                       if {sec for sq, sec in ctx.rec.made_in.get(cid, ()) if sq == sub.sq["id"]} <= CONTEXT_SECTIONS]
     if sub.extra.get("proposition") is not None:
         out["proposition"] = sub.extra["proposition"]
     if sub.extra.get("references"):
@@ -1941,6 +1950,39 @@ CLAIM_EXISTS_KINDS = {
 _RANK = {s: i for i, s in enumerate(ORDER)}
 
 
+def _verdict_kinds(sq: dict) -> tuple[str, str, set]:
+    """``(done_when kind, min_status, claim kinds that can meet it)`` for a sub-question."""
+    dw = sq.get("done_when") or {}
+    kind = dw.get("kind") or qp.DEFAULT_DONE.get(sq.get("intent"), ("claim_exists",))[0]
+    min_status = dw.get("min_status") or qp.DEFAULT_DONE.get(sq.get("intent"), (None, MIN_STATUS_DEFAULT))[1]
+    kinds = DONE_CLAIM_KINDS.get(kind) or set()
+    if kind == "claim_exists":
+        kinds = CLAIM_EXISTS_KINDS.get(sq.get("intent"), {"location", "flow", "config", "relation"})
+    if kind == "set_enumerated" and sq.get("intent") in CLAIM_EXISTS_KINDS:
+        kinds = CLAIM_EXISTS_KINDS[sq["intent"]]
+    return kind, min_status, kinds
+
+
+def answer_claims(sq: dict, claims: list[dict], flags: dict | None = None) -> list[str]:
+    """The claims that answer a sub-question, strongest first: of a kind its ``done_when`` asks for,
+    about its subject (not ``off_subject`` context), not stale, contradicted or unknown."""
+    _kind, _min, kinds = _verdict_kinds(sq)
+    off = set((flags or {}).get("off_subject") or [])
+    ans = [c for c in claims if c.get("kind") in kinds and c["id"] not in off
+           and c.get("status") in _RANK and c["status"] not in ("unknown", "stale", "contradicted")]
+    def in_tests(c: dict) -> bool:  # the product's own code first (a caller in the API before one in a test)
+        subs = c.get("subjects") or []
+        if isinstance(subs, str):
+            try:
+                subs = json.loads(subs)
+            except ValueError:
+                subs = [subs]
+        first = next((str(s).split("::", 1)[0] for s in subs if s), "")  # a relation's first subject: the caller
+        return bool(first) and am.is_test_file(first)
+
+    return [c["id"] for c in sorted(ans, key=lambda c: (in_tests(c), _RANK[c["status"]]))]
+
+
 def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
     """Verdict of one sub-question from the current state of the claims it produced.
 
@@ -1954,14 +1996,7 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
     flags = flags or {}
     if flags.get("blocked"):
         return "blocked_by_clarification"
-    dw = sq.get("done_when") or {}
-    kind = dw.get("kind") or qp.DEFAULT_DONE.get(sq.get("intent"), ("claim_exists",))[0]
-    min_status = dw.get("min_status") or qp.DEFAULT_DONE.get(sq.get("intent"), (None, MIN_STATUS_DEFAULT))[1]
-    kinds = DONE_CLAIM_KINDS.get(kind)
-    if kind == "claim_exists":
-        kinds = CLAIM_EXISTS_KINDS.get(sq.get("intent"), {"location", "flow", "config", "relation"})
-    if kind == "set_enumerated" and sq.get("intent") in CLAIM_EXISTS_KINDS:
-        kinds = CLAIM_EXISTS_KINDS[sq["intent"]]
+    kind, min_status, kinds = _verdict_kinds(sq)
     live = [c for c in claims if c.get("kind") in kinds and c.get("status") in _RANK and c["status"] != "unknown"]
     off = set(flags.get("off_subject") or [])
     about = [c for c in live if c["id"] not in off]  # context claims about other code than the question's
@@ -2247,13 +2282,26 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
             or any(f["result"] != "pass" for f in c["findings"]) or c["claim"] in replaced]
     budget.chars += sum(_size(c) for c in crit)
     # 9. verdicts against done_when, on the claims as critique left them
+    answering: list[str] = []
     for s in subs:
         s["claim_ids"] = list(dict.fromkeys(replaced.get(c, c) for c in s["claim_ids"]))
         flags = s.pop("_flags", {})
-        s["status"] = judge(by_id[s["id"]], _claim_rows(store, s["claim_ids"]), flags)
+        if flags.get("off_subject"):  # critique may have superseded some: the new claim is context too
+            flags["off_subject"] = list(dict.fromkeys(replaced.get(c, c) for c in flags["off_subject"]))
+        context = {replaced.get(c, c) for c in s.pop("_context", [])}
+        rows = _claim_rows(store, s["claim_ids"])
+        s["status"] = judge(by_id[s["id"]], rows, flags)
+        ans = answer_claims(by_id[s["id"]], rows, flags)
+        # what the sub-question's own handler found (the write site, the callers) before definitions
+        # of items the search ranked near the question
+        s["answer_claim_ids"] = [c for c in ans if c not in context] + [c for c in ans if c in context]
+        answering += s["answer_claim_ids"]
         s["flags"] = {k: v for k, v in flags.items() if v}
         if not s["flags"]:
             del s["flags"]
+    # what answers comes first (a reader, and a size cap that keeps the head, see it); the rest is context
+    rank = {cid: i for i, cid in enumerate(dict.fromkeys(answering))}
+    out_claims = sorted(out_claims, key=lambda c: rank.get(c["id"], len(rank)))
     result = {**base, "status": "answered", "plan_check": qp.compact_check(check_res), "subquestions": subs,
               "claims": out_claims, "unknowns": unknowns, "critique": crit, "steps": steps}
     if question.strip():
@@ -2265,7 +2313,7 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
     pb = rec.precise_budget
     if pb is not None and (pb.sites or pb.skipped):
         result["usage"]["precise"] = pb.as_dict()
-    _store_analysis(store, aid, question, snap, budget, result, out_ids, plan_id, "answered")
+    _store_analysis(store, aid, question, snap, budget, result, [c["id"] for c in out_claims], plan_id, "answered")
     return result
 
 
