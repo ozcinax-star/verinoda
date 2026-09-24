@@ -2297,7 +2297,8 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
         ans = answer_claims(by_id[s["id"]], rows, flags)
         # what the sub-question's own handler found (the write site, the callers) before definitions
         # of items the search ranked near the question
-        s["answer_claim_ids"] = [c for c in ans if c not in context] + [c for c in ans if c in context]
+        # (a plain "where is X defined?" has no handler finding: its on-subject definitions answer)
+        s["answer_claim_ids"] = [c for c in ans if c not in context] or [c for c in ans if c in context]
         answering += s["answer_claim_ids"]
         s["flags"] = {k: v for k, v in flags.items() if v}
         if not s["flags"]:

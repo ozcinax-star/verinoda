@@ -179,6 +179,9 @@ def _r_clarifications(clar: list[dict], indent: str = "  ") -> None:
             print(f"{indent}   - {o.get('value')}: {o.get('label')}{ev}")
 
 
+CONTEXT_LINES = 8  # context claims shown in the text output of an analysis
+
+
 def _r_claims(res: dict) -> None:
     snap = res.get("snapshot") or {}
     head = f"analysis {res['analysis_id']}"
@@ -213,17 +216,27 @@ def _r_claims(res: dict) -> None:
                   f"({n_claims} claim(s){f', {n_unknowns} unknown(s)' if n_unknowns else ''})")
     print()
     answering = {cid for s in subs for cid in s.get("answer_claim_ids") or []}
-    shown_head = None
+    shown_head, context_shown, context_more = None, 0, 0
     for c in res.get("claims") or []:
-        head = ("answer:" if c["id"] in answering else "context (found on the way; not what answers):") if answering else None
+        is_context = bool(answering) and c["id"] not in answering
+        head = ("context (found on the way; not what answers):" if is_context else "answer:") if answering else None
         if head and head != shown_head:
             print(("" if shown_head is None else "\n") + head)
             shown_head = head
+        if is_context:  # one line each, and not all of them: the answer is what a reader came for
+            if context_shown >= CONTEXT_LINES:
+                context_more += 1
+                continue
+            context_shown += 1
+            print(f"  [{c['status']}] {c['text'][:140]}  ({c['id']})")
+            continue
         print(f"[{c['status']} {c['confidence']:.2f}] {c['text']}  ({c['id']}){_not_challenged_mark(c)}")
         for e in c["evidence"][:3]:
             print(f"      {e}")
         for u in c["uncertainties"][:2]:
             print(f"      ? {u}")
+    if context_more:
+        print(f"  +{context_more} more (all of them, with evidence: --json)")
     if res.get("unknowns"):
         print("\nunknown:")
         for u in res["unknowns"]:
