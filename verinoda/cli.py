@@ -508,8 +508,16 @@ def cmd_ui(args) -> int:
         except OSError as exc:
             print(f"error: cannot write {args.export or export.default_path(repo)}: {exc}", file=sys.stderr)
             return 2
+        uri = Path(out["path"]).as_uri()
         print(f"wrote {out['path']} ({out['bytes'] / 1e6:.1f} MB: {out['graph_files']} files in the graph, "
-              f"{out['notes']} file notes, no code); open it in a browser, no server needed")
+              f"{out['notes']} file notes, no code); open it in a browser, no server needed:\n  {uri}")
+        if args.open:
+            import webbrowser
+
+            try:
+                webbrowser.open(uri)
+            except Exception as exc:  # noqa: BLE001 - the address is printed; opening it is a convenience
+                print(f"could not open a browser ({type(exc).__name__}); open the address above", file=sys.stderr)
         return 0
     try:
         serve(repo, port=args.port, open_browser=not args.no_browser, open_at="#/graph" if args.graph else "")
@@ -1412,6 +1420,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--export", nargs="?", const="", default=None, metavar="FILE",
                     help="write the graph and the file notes as one HTML file that opens without a server "
                          "(no code in it; default .verinoda/index/verinoda-graph.html) and exit")
+    sp.add_argument("--open", action="store_true", help="with --export: open the written file in the browser")
     sp = add("map", cmd_map, "top-down architecture views", repo=False)
     sp.add_argument("path", nargs="?", default=".")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")

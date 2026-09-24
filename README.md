@@ -175,7 +175,7 @@ verinoda setup                           # once: index + agent skills (or `verin
 verinoda map . --view dataflow           # entry points -> persistence, with limits stated
 verinoda ui                              # notes + graph in the browser (local, read-only)
 verinoda ui --graph                      # ... opened straight on the graph view
-verinoda ui --export                     # the graph + file notes as one HTML file, no server
+verinoda ui --export --open              # the graph + file notes as one HTML file, no server
 verinoda query "where is the discount threshold configured?"     # plain-text context
 verinoda trace create_order_handler OrderRepository.save
 verinoda plan draft "Sipariş API'den veritabanına nasıl ulaşıyor?"   # -> .verinoda/plans/plan-001.json
@@ -202,7 +202,7 @@ give the copy a `.venv` with pytest installed.
 | `setup [path] [--agents auto\|all\|none\|claude,codex] [--scope project\|user] [--no-mcp] [--reference PATH[=ALIAS,...]]` | One step per project, safe to re-run: `init`, `scan` on the first run and `update` afterwards, then skills + MCP for the agents found on PATH (default `auto`); prints what is left to do by hand. `--reference` marks a folder of reference code (an original being ported, a vendored or frozen copy) that ranks below the project's own code unless a question names it or an alias (repeatable). Setup also points out folders that look like such a copy (most of their code files sit at the same relative path under a larger folder and hold mostly the same lines) and prints the `--reference` command; it never applies it. Refuses the home directory unless `--allow-home` |
 | `init [path]` | Create `.verinoda/` (database, config) |
 | `scan <repo> [--force] [--precise] [--scip FILE]` / `update <repo>` | Full / incremental index + snapshot, then the derived search index, lexicon and symbol facts; `update` marks claims whose dependencies changed `stale`. `--precise` resolves the call sites of changed `.py` files; `--scip` adopts a SCIP index you produced `--repo R` works for both as for `query`; `update` without a path takes the nearest project |
-| `ui [<repo>] [--repo DIR] [--port N] [--no-browser] [--graph] [--export [FILE]]` | notes and graph of the project in the browser: a note per symbol, file and data file, local and global graphs, search (see *Notes and graph view*); `--graph` opens on the graph view; `--export` writes the graph and the file notes as one HTML file that opens without a server |
+| `ui [<repo>] [--repo DIR] [--port N] [--no-browser] [--graph] [--export [FILE] [--open]]` | notes and graph of the project in the browser: a note per symbol, file and data file, local and global graphs, search (see *Notes and graph view*); `--graph` opens on the graph view; `--export` writes the graph and the file notes as one HTML file that opens without a server (`--open` opens it) |
 | `map [<repo>] [--repo DIR] [--view …]` | hierarchy, dependencies, dataflow, config, tests, history, impact (`--target`, default: git changes) |
 | `query "<q>" [--max-items N] [--max-chars N]` | Bounded retrieval from the passage index; plain text for a model by default (skeleton first, each item with why it was chosen), `--json` for programs |
 | `trace <a> <b> [--mode flow\|any]` | Directed paths, each hop with relation, confidence and call-site location; hints when an endpoint does not resolve |
@@ -263,7 +263,9 @@ graph view.
 **One file, no server.** `verinoda ui --export [FILE]` writes the graph view and
 a note per source file, document and data file into one HTML file (default
 `.verinoda/index/verinoda-graph.html`; about 4.4 MB for Verinoda's own 1,150
-files) that opens with a double click. It is the same page with its data inside:
+files) that opens with a double click, or with `--open` right away; the command
+also prints its `file:///` address. Checked in Chrome and Edge from `file://`.
+It is the same page with its data inside:
 the graph with its filters and colours, the file tree, each file's links, outline
 and claims, a file-level local graph and a name search (a symbol opens the note
 of its file). It holds no code (`verinoda ui` shows it) and no path of the

@@ -913,7 +913,10 @@
   window.__verinoda = { local, global: globalG, offline: !!OFFLINE }; // for tests and debugging
   if (OFFLINE) {
     $("#search").dataset.i18nPlaceholder = "searchOffline";
-    if (!location.hash) history.replaceState(null, "", "#/graph"); // an exported file opens on its graph
+    if (!location.hash) { // an exported file opens on its graph
+      // a browser that refuses to rewrite a file:// address still gets there, through the hash itself
+      try { history.replaceState(null, "", "#/graph"); } catch (_) { location.hash = "#/graph"; }
+    }
   }
   applyI18n();
   applyTheme();

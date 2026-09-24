@@ -245,7 +245,8 @@ kütüphaneyle çalışan bir sunucu, yalnızca kendi adresine gelen GET istekle
 dışarıdan hiçbir şey yüklemez (CDN, yazı tipi, telemetri yok). `verinoda ui --graph` doğrudan graf
 görünümünde açar. `verinoda ui --export [DOSYA]` grafı ve her kaynak dosyanın, belgenin, veri
 dosyasının notunu sunucu gerektirmeyen tek bir HTML dosyasına yazar (varsayılan
-`.verinoda/index/verinoda-graph.html`); çift tıklayınca açılır: graf, dosya ağacı, dosya notları
+`.verinoda/index/verinoda-graph.html`); çift tıklayınca ya da `--open` ile hemen açılır, komut
+`file:///` adresini de yazar (Chrome ve Edge'de `file://` üzerinden denendi): graf, dosya ağacı, dosya notları
 (bağlantılar, ana hat, iddialar), dosya düzeyinde yerel graf ve ad araması. Kod ve makinenin yolları
 (proje kökü, ev klasörü) içinde yoktur; CSP yalnızca kendi betiğine ve stiline izin verir, hiçbir
 bağlantı kurmaz. Sınırlar: graf görünümü en çok 2.500 dosya gösterir (en çok bağlantılı olanlar);

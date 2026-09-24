@@ -519,11 +519,19 @@ def test_an_export_into_a_new_folder(glow, tmp_path):
 
 
 def test_ui_export_and_graph_flags(glow, tmp_path, monkeypatch, capsys):
+    import webbrowser
+
     from verinoda import cli
 
     out = tmp_path / "g.html"
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url) or True)
     assert cli.main(["ui", str(glow), "--export", str(out)]) == 0
-    assert out.stat().st_size > 1000 and "no server needed" in capsys.readouterr().out
+    printed = capsys.readouterr().out
+    assert out.stat().st_size > 1000 and "no server needed" in printed and not opened
+    assert out.resolve().as_uri() in printed  # an address to paste into a browser
+    assert cli.main(["ui", str(glow), "--export", str(out), "--open"]) == 0
+    assert opened == [out.resolve().as_uri()]
     seen = {}
     monkeypatch.setattr(uiserver, "serve", lambda repo, **kw: seen.update(kw))
     assert cli.main(["ui", str(glow), "--graph", "--no-browser"]) == 0
