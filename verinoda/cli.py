@@ -497,8 +497,22 @@ def cmd_ui(args) -> int:
 
     given = args.repo or args.path
     repo = Path(given).resolve() if given else find_repo_root()
+    if args.export is not None:
+        from verinoda.ui import export
+
+        try:
+            out = export.write(repo, args.export or None)
+        except FileNotFoundError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        except OSError as exc:
+            print(f"error: cannot write {args.export or export.default_path(repo)}: {exc}", file=sys.stderr)
+            return 2
+        print(f"wrote {out['path']} ({out['bytes'] / 1e6:.1f} MB: {out['graph_files']} files in the graph, "
+              f"{out['notes']} file notes, no code); open it in a browser, no server needed")
+        return 0
     try:
-        serve(repo, port=args.port, open_browser=not args.no_browser)
+        serve(repo, port=args.port, open_browser=not args.no_browser, open_at="#/graph" if args.graph else "")
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -1394,6 +1408,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--port", type=_port, default=0, help="port on 127.0.0.1 (default: a free one)")
     sp.add_argument("--no-browser", action="store_true", help="print the address, do not open a browser")
+    sp.add_argument("--graph", action="store_true", help="open on the graph view instead of the start page")
+    sp.add_argument("--export", nargs="?", const="", default=None, metavar="FILE",
+                    help="write the graph and the file notes as one HTML file that opens without a server "
+                         "(no code in it; default .verinoda/index/verinoda-graph.html) and exit")
     sp = add("map", cmd_map, "top-down architecture views", repo=False)
     sp.add_argument("path", nargs="?", default=".")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")

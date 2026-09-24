@@ -21,13 +21,19 @@ Note ids are graph node ids; a data-file unit, which has no graph node, is ``dat
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
+import time
 from collections import Counter, defaultdict
+from functools import lru_cache
 from pathlib import Path, PurePosixPath
 
 from verinoda import index
 from verinoda.architecture_map import is_test_file
+
+_is_test = lru_cache(maxsize=1 << 16)(is_test_file)  # asked for every link of every note
+RACY_NS = 2_000_000_000  # a file written this close to now may change again within the same clock tick
 
 MAX_CODE_LINES = 160        # lines of a symbol shown in its note
 MAX_FILE_LINES = 80         # lines of a file shown in its note (its outline lists the rest)
@@ -185,6 +191,7 @@ class Snapshot:
         self._tree: dict | None = None
         self._file_notes: dict[str, str] | None = None
         self._dbf: dict[str, list] | None = None
+        self._claim_cache: tuple | None = None
         self._refs = self._reference_roots()
 
     # -- files ---------------------------------------------------------------------------------
@@ -391,7 +398,7 @@ class Snapshot:
         kinds = Counter(self.kind(n) for n in g.G)
         files = {g.file(n) for n in g.G if self.kind(n) not in HIDDEN_KINDS} | {row[0] for row in self._data.values()}
         hubs = sorted((n for n in g.G if self.kind(n) in ("class", "function", "method", "file")
-                       and not is_test_file(g.file(n) or "") and not self.in_reference(g.file(n))),
+                       and not _is_test(g.file(n) or "") and not self.in_reference(g.file(n))),
                       key=lambda n: (-g.G.degree(n), self.title(n)))[:16]
         shown = sum(v for k, v in kinds.items() if k not in HIDDEN_KINDS)
         return {"project": self.repo.name, "root": str(self.repo), "notes": shown + len(self._data),
@@ -439,11 +446,11 @@ class Snapshot:
                     if k in HIDDEN_KINDS:
                         continue
                     f = self.g.file(n) or ""
-                    pen = (0.3 if is_test_file(f) else 0.0) + (0.5 if self.in_reference(f) else 0.0)
+                    pen = (0.3 if _is_test(f) else 0.0) + (0.5 if self.in_reference(f) else 0.0)
                     rows.append((self.own_name(n).lower(), self.title(n).lower().removesuffix("()"),
                                  PurePosixPath(f).name.lower() if k in ("file", "doc") else "", f.lower(), n, pen, k))
                 for nid, (f, name, _a, _b) in self._data.items():
-                    pen = (0.3 if is_test_file(f) else 0.0) + (0.5 if self.in_reference(f) else 0.0)
+                    pen = (0.3 if _is_test(f) else 0.0) + (0.5 if self.in_reference(f) else 0.0)
                     rows.append((self.own_name(nid).lower(), (name or "").lower(), "", f.lower(), nid, pen, "data"))
                 self._rows = rows
             return self._rows
@@ -510,7 +517,7 @@ class Snapshot:
             at = str(_at(x[1]) or "")
             path, _, ln = at.rpartition(":")
             of = g.file(x[0]) or ""
-            place = 2 if self.in_reference(of) else 1 if is_test_file(of) else 0
+            place = 2 if self.in_reference(of) else 1 if _is_test(of) else 0
             return (place, _conf_rank(x[1]), path if ln.isdigit() else at, int(ln) if ln.isdigit() else 0, x[0])
 
         edges = sorted([(v, d, True) for v, d in g.out_edges(nid)] + [(u, d, False) for u, d in g.in_edges(nid)],
@@ -528,7 +535,8 @@ class Snapshot:
                                   "context": d.get("context"),
                                   "derived_by": d.get("_origin") if str(d.get("_origin", "")).startswith("verinoda")
                                   else None})
-        span = g.span(nid) if f else None
+        # a file's note is the whole file: its span is not derived (that parses the file)
+        span = g.span(nid) if f and k not in ("file", "doc") else None
         code = None
         if f and k in ("file", "doc"):
             lines = self.read_lines(f)
@@ -564,7 +572,7 @@ class Snapshot:
                 "signature": sig or None, "doc": doc or None, "qualified": qual or None,
                 "breadcrumb": self._breadcrumb(nid), "code": code, "outline": outline,
                 "community": {"id": g.G.nodes[nid].get("community"), "name": g.G.nodes[nid].get("community_name")},
-                "sections": self._sections(sections), "test": bool(f and is_test_file(f)),
+                "sections": self._sections(sections), "test": bool(f and _is_test(f)),
                 "degree": g.G.degree(nid)}
 
     def _sections(self, sections: dict[str, list[dict]]) -> list[dict]:
@@ -624,28 +632,56 @@ class Snapshot:
         """The innermost note holding ``f:line``: a symbol, else a data unit, else the file."""
         return self.g.symbol_at(f, line) or self.data_note_for(f, line) or self._file_note(f)
 
-    def _claims(self, subjects: list[str]) -> list[dict]:
-        """Current claims whose subjects list one of ``subjects`` exactly (``file::label`` or ``file``)."""
+    def _claim_rows(self) -> list[tuple]:
+        """Current claims, newest first: (id, text, status, confidence, subjects).
+
+        Read once and kept while atlas.db and its write-ahead log are unchanged (claims change
+        without the graph changing); a file written just now is read again on the next call.
+        """
         from verinoda.paths import atlas_dir
 
         db = atlas_dir(self.repo) / "atlas.db"
-        if not db.exists() or not subjects:
+        key = (_stat(db), _stat(Path(str(db) + "-wal")))
+        with self._lock:
+            if self._claim_cache is not None and self._claim_cache[0] == key:
+                return self._claim_cache[1]
+        rows: list[tuple] = []
+        if key[0] is not None:
+            try:
+                conn = sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True, timeout=5)
+            except sqlite3.Error:
+                return []
+            try:
+                for cid, text, status, conf, subj in conn.execute(
+                        "SELECT id, text, status, confidence, subjects FROM claims WHERE superseded_by IS NULL "
+                        "ORDER BY updated_at DESC"):
+                    try:
+                        listed = json.loads(subj or "[]")
+                    except ValueError:
+                        listed = []
+                    names = frozenset(s for s in listed if isinstance(s, str)) if isinstance(listed, list)                         else frozenset()
+                    rows.append((cid, text, status, conf, names))
+            except sqlite3.Error:
+                rows = []
+            finally:
+                conn.close()
+        racy = any(st is not None and st[0] >= time.time_ns() - RACY_NS for st in key)
+        with self._lock:
+            self._claim_cache = None if racy else (key, rows)
+        return rows
+
+    def _claims(self, subjects: list[str]) -> list[dict]:
+        """Current claims whose subjects list one of ``subjects`` exactly (``file::label`` or ``file``)."""
+        want = set(subjects)
+        if not want:
             return []
-        try:
-            conn = sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True, timeout=5)
-        except sqlite3.Error:
-            return []
-        try:
-            rows = conn.execute(
-                "SELECT id, text, status, confidence FROM claims WHERE superseded_by IS NULL AND EXISTS "
-                f"(SELECT 1 FROM json_each(claims.subjects) WHERE value IN ({','.join('?' * len(subjects))})) "
-                "ORDER BY updated_at DESC LIMIT ?", (*subjects, MAX_SECTION_ITEMS)).fetchall()
-        except sqlite3.Error:
-            rows = []
-        finally:
-            conn.close()
-        return [{"id": cid, "title": text, "kind": "claim", "status": status, "score": conf}
-                for cid, text, status, conf in rows]
+        out = []
+        for cid, text, status, conf, names in self._claim_rows():
+            if names & want:
+                out.append({"id": cid, "title": text, "kind": "claim", "status": status, "score": conf})
+                if len(out) >= MAX_SECTION_ITEMS:
+                    break
+        return out
 
     def _data_note(self, nid: str) -> dict:
         row = self._data.get(nid)
@@ -665,7 +701,7 @@ class Snapshot:
                 "breadcrumb": [], "outline": [self.brief(x) for x in others][:200],
                 "code": {"start": a, "end": end, "lines": lines[a - 1:end], "total": b - a + 1, "lang": self._lang(f)},
                 "community": {"id": None, "name": None}, "sections": self._sections(sections),
-                "test": is_test_file(f), "degree": sum(len(v) for v in sections.values())}
+                "test": _is_test(f), "degree": sum(len(v) for v in sections.values())}
 
     # -- graphs ----------------------------------------------------------------------------------
     def local_graph(self, nid: str, depth: int = 1, relations: set[str] | None = None, *,
@@ -687,7 +723,7 @@ class Snapshot:
             k = self.kind(n)
             if k in HIDDEN_KINDS and not (external and k == "external"):
                 return False
-            return tests or not is_test_file(g.file(n) or "")
+            return tests or not _is_test(g.file(n) or "")
 
         def priority(u: str, item: tuple) -> int:  # a note's own members last; its parent is one node
             rel = str(item[1].get("relation"))
@@ -761,11 +797,15 @@ class Snapshot:
             yield it["id"], {"relation": "names", "confidence": it["confidence"], "source_file": ff,
                              "source_location": f"L{ln}"}, it["id"], u
 
-    def global_graph(self, *, tests: bool = True, data: bool = True, relations: set[str] | None = None) -> dict:
-        """Files as nodes; links between them counted over their symbols' links and their resource ids."""
+    def global_graph(self, *, tests: bool = True, data: bool = True, relations: set[str] | None = None,
+                     cap: int | None = MAX_GLOBAL_NODES) -> dict:
+        """Files as nodes; links between them counted over their symbols' links and their resource ids.
+
+        At most ``cap`` files, the best connected (None: every file, for the exported page, which
+        applies the same cut after its own filters)."""
         g = self.g
         rels = set(relations) if relations else set(GRAPH_RELATIONS) - set(MEMBER_RELATIONS)
-        cache_key = (tests, data, tuple(sorted(rels)))
+        cache_key = (tests, data, tuple(sorted(rels)), cap)
         with self._lock:
             if cache_key in self._global:
                 return self._global[cache_key]
@@ -775,7 +815,7 @@ class Snapshot:
         community: dict[str, Counter] = defaultdict(Counter)
         for n, d in g.G.nodes(data=True):
             f = d.get("source_file")
-            if not f or self.kind(n) in HIDDEN_KINDS or (not tests and is_test_file(f)):
+            if not f or self.kind(n) in HIDDEN_KINDS or (not tests and _is_test(f)):
                 continue
             size[f] += 1
             if isinstance(d.get("community"), int):
@@ -801,7 +841,7 @@ class Snapshot:
                 self.h.release(conn)
             for f, t in refs:
                 if f == t or not self.inside(f) or not self.inside(t) or \
-                        (not tests and (is_test_file(f) or is_test_file(t))):
+                        (not tests and (_is_test(f) or _is_test(t))):
                     continue
                 for x in (f, t):
                     size[x] = size[x] or 1
@@ -813,15 +853,16 @@ class Snapshot:
             degree[b] += w
         files = [f for f in sorted(size, key=lambda f: (-degree[f], f))
                  if self._file_note(f) or self.data_note_for(f)]   # a file without a note (a texture) is left out
-        hidden = max(0, len(files) - MAX_GLOBAL_NODES)
+        keep = len(files) if cap is None else cap
+        hidden = max(0, len(files) - keep)
         nodes = []
-        for f in sorted(files[:MAX_GLOBAL_NODES]):
+        for f in sorted(files[:keep]):
             nid = self._file_note(f) or self.data_note_for(f)
             grp = community[f].most_common(1)[0][0] if community[f] else ("data" if nid.startswith(DATA_PREFIX)
                                                                           else "other")
             nodes.append({"id": nid, "title": PurePosixPath(f).name, "file": f,
                           "kind": "data" if nid.startswith(DATA_PREFIX) else self.kind(nid), "group": grp,
-                          "size": size[f], "degree": degree[f], "test": is_test_file(f),
+                          "size": size[f], "degree": degree[f], "test": _is_test(f),
                           "folder": str(PurePosixPath(f).parent), "area": _area(str(PurePosixPath(f).parent))})
         by_file = {n["file"]: n["id"] for n in nodes}
         edges = [{"source": by_file[a], "target": by_file[b], "weight": w,

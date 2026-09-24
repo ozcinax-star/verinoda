@@ -22,7 +22,14 @@
     set(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* private mode: not remembered */ } },
   };
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // an exported file (`verinoda ui --export`) carries its data and answers the API itself
+  const OFFLINE = (() => {
+    const e = document.getElementById("verinoda-data");
+    if (!e) return null;
+    try { const d = JSON.parse(e.textContent); return d && d.format === "verinoda-export" ? d : null; } catch (_) { return null; }
+  })();
   async function api(path) {
+    if (OFFLINE) return offlineApi(path);
     const r = await fetch(path, { headers: { Accept: "application/json" } });
     let j = {};
     try { j = await r.json(); } catch (_) { /* not JSON */ }
@@ -39,6 +46,10 @@
       highlight: "Highlight notes…", labels: "Labels", fit: "Fit", close: "Close", back: "Back", forward: "Forward",
       colorBy: "Colour by", byFolder: "folder", byCommunity: "community",
       theme: "Light / dark", toggleFiles: "Show or hide files", toggleGraph: "Show or hide the local graph",
+      searchOffline: "Search files and symbols  (Ctrl+K)",
+      offlineHome: "Exported view: the graph and a note per file, without the code; `verinoda ui` in the project shows every note with its code. Exported",
+      offlineCode: "the code is not in the exported file; `verinoda ui` shows it",
+      offlineMissing: "This note is not in the exported file (it holds the graph and the file notes); `verinoda ui` shows every note.",
       notes: "notes", filesN: "files", links: "links", dataNotes: "data notes", hubs: "Most connected",
       welcome: "Every symbol, file and data file of the project is a note. Search above, browse the files, or open the graph view.",
       lines: "lines", line: "line", more: "more", moreLines: "more lines in the file", noResults: "No notes match.",
@@ -64,6 +75,10 @@
       highlight: "Notları vurgula…", labels: "Etiketler", fit: "Sığdır", close: "Kapat", back: "Geri", forward: "İleri",
       colorBy: "Renk", byFolder: "klasör", byCommunity: "topluluk",
       theme: "Açık / koyu", toggleFiles: "Dosyaları göster ya da gizle", toggleGraph: "Yerel grafı göster ya da gizle",
+      searchOffline: "Dosya ya da sembol ara  (Ctrl+K)",
+      offlineHome: "Dışa aktarılmış görünüm: graf ve her dosyanın notu, kod olmadan; projede `verinoda ui` her notu koduyla gösterir. Dışa aktarım",
+      offlineCode: "kod dışa aktarılan dosyada yok; `verinoda ui` gösterir",
+      offlineMissing: "Bu not dışa aktarılan dosyada yok (graf ve dosya notları var); `verinoda ui` her notu gösterir.",
       notes: "not", filesN: "dosya", links: "bağlantı", dataNotes: "veri notu", hubs: "En çok bağlantılı",
       welcome: "Projenin her sembolü, dosyası ve veri dosyası bir not. Yukarıdan ara, dosyalara göz at ya da graf görünümünü aç.",
       lines: "satır", line: "satır", more: "daha", moreLines: "satır daha var", noResults: "Eşleşen not yok.",
@@ -168,6 +183,7 @@
   const KIND_LETTER = { class: "C", method: "M", function: "F", file: "F", doc: "D", section: "§", data: "{}", symbol: "S", external: "E", claim: "!" };
   const kindBadge = (kind) => el("span", { class: "kbadge k-" + (kind || "symbol"), title: t("kind." + kind), text: KIND_LETTER[kind] || "·" });
   function noteLink(item, cls) {
+    if (!item.id) return el("span", { class: cls || "", title: item.file || "" }, item.title); // no note to open
     return el("a", { href: noteHref(item.id), class: cls || "", title: [item.file, item.line ? `:${item.line}` : ""].join("") }, item.title);
   }
   let current = null;
@@ -210,6 +226,7 @@
     if (n.span) meta.append(el("span", { class: "chip", title: n.span_basis || "", text: `${n.span[0]}–${n.span[1]} (${n.span[1] - n.span[0] + 1} ${t("lines")})` }));
     if (n.test) meta.append(el("span", { class: "chip", text: t("test") }));
     parts.push(meta);
+    if (OFFLINE && n.code_lines) parts.push(el("div", { class: "muted small", text: `${n.code_lines} ${t("lines")} · ${t("offlineCode")}` }));
     if (n.signature) parts.push(el("pre", { class: "sig mono", text: n.signature }));
     if (n.doc) parts.push(el("div", { class: "doc", text: n.doc }));
     if (n.outline && n.outline.length) {
@@ -238,7 +255,7 @@
   function linkItem(it, key) {
     if (key === "claims") {
       return el("li", {}, el("span", { class: "status st-" + it.status, text: it.status.replace(/_/g, " ") }),
-        el("span", { text: it.title }));
+        el("span", { text: it.title }), it.at ? el("span", { class: "at mono", text: it.at }) : null);
     }
     const inferred = it.confidence && it.confidence !== "EXTRACTED";
     const kids = [kindBadge(it.kind), noteLink(it, inferred ? "inferred" : "")];
@@ -291,6 +308,7 @@
     const hubs = el("ul", { class: "links" }, (s.hubs || []).map((h) => el("li", {}, kindBadge(h.kind), noteLink(h),
       el("span", { class: "at mono", text: `${h.degree} · ${h.file || ""}` }))));
     setMain(el("div", { class: "home" }, el("h1", { text: s.project }), el("p", { class: "muted", text: t("welcome") }),
+      OFFLINE ? el("p", { class: "muted small", text: `${t("offlineHome")} ${OFFLINE.generated || ""}` }) : null,
       cards, sectionHeader("hubs", (s.hubs || []).length), hubs));
     $("#outline").replaceChildren();
     local.setData([], []);
@@ -769,6 +787,94 @@
   $("#graph-close").addEventListener("click", () => { location.hash = beforeGraph; });
   $("#btn-graph").addEventListener("click", () => { location.hash = "#/graph"; });
 
+  // -- the API of an exported file, answered from its data ---------------------------------------
+  function notFound(message) { const e = new Error(message); e.status = 404; e.code = "not_found"; return e; }
+  function offlineApi(path) {
+    const q = path.indexOf("?"), route = q < 0 ? path : path.slice(0, q);
+    const p = new URLSearchParams(q < 0 ? "" : path.slice(q + 1)), D = OFFLINE;
+    const flag = (k) => p.get(k) !== "0";
+    switch (route) {
+      case "/api/stats": return D.stats;
+      case "/api/tree": return D.tree;
+      case "/api/note": {
+        const id = p.get("id") || "";
+        if (!Object.prototype.hasOwnProperty.call(D.notes, id)) throw notFound(t("offlineMissing"));
+        return D.notes[id];
+      }
+      case "/api/search": return { results: offlineSearch(p.get("q") || "") };
+      case "/api/global": return offlineGlobal(flag("tests"), flag("data"));
+      case "/api/local": return offlineLocal(p.get("id") || "", Math.min(3, Math.max(1, Number(p.get("depth")) || 1)), flag("tests"), flag("data"));
+      default: throw notFound(route);
+    }
+  }
+  const keepNode = (tests, data) => (n) => (tests || !n.test) && (data || n.kind !== "data");
+  function offlineGlobal(tests, data) {
+    // as the server does: the filters first, then the best connected files up to the cap
+    const G = OFFLINE.global, cap = G.cap || 2500;
+    const all = G.nodes.filter(keepNode(tests, data)), inAll = new Set(all.map((n) => n.id));
+    const edges = G.edges.filter((e) => inAll.has(e.source) && inAll.has(e.target));
+    const degree = new Map();
+    for (const e of edges) for (const x of [e.source, e.target]) degree.set(x, (degree.get(x) || 0) + (e.weight || 1));
+    const best = all.slice().sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0)).slice(0, cap);
+    const kept = new Set(best.map((n) => n.id));
+    const nodes = best.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0))
+      .map((n) => Object.assign({}, n, { degree: degree.get(n.id) || 0 }));
+    return { nodes, edges: edges.filter((e) => kept.has(e.source) && kept.has(e.target)), hidden_files: all.length - nodes.length, groups: G.groups };
+  }
+  let offNodes = null, offAdj = null;
+  function offlineLocal(id, depth, tests, data) {
+    const G = OFFLINE.global;
+    if (!offAdj) {
+      offNodes = new Map(G.nodes.map((n) => [n.id, n]));
+      offAdj = new Map(G.nodes.map((n) => [n.id, []]));
+      for (const e of G.edges) if (offAdj.has(e.source) && offAdj.has(e.target)) { offAdj.get(e.source).push(e.target); offAdj.get(e.target).push(e.source); }
+    }
+    if (!offNodes.has(id)) { // a note that is not in the file-level graph: itself only
+      const n = Object.prototype.hasOwnProperty.call(OFFLINE.notes, id) ? OFFLINE.notes[id] : null;
+      return { center: id, nodes: n ? [{ id, title: n.title, kind: n.kind, file: n.file, group: "other" }] : [], edges: [] };
+    }
+    const keep = keepNode(tests, data), dist = new Map([[id, 0]]);
+    let frontier = [id];
+    for (let d = 1; d <= depth && frontier.length && dist.size < 220; d++) {
+      const next = [];
+      for (const u of frontier) for (const v of offAdj.get(u)) {
+        if (dist.size >= 220) break;
+        if (dist.has(v) || !keep(offNodes.get(v))) continue;
+        dist.set(v, d); next.push(v);
+      }
+      frontier = next;
+    }
+    return { center: id, nodes: [...dist.keys()].map((k) => Object.assign({}, offNodes.get(k), { depth: dist.get(k) })),
+      edges: G.edges.filter((e) => dist.has(e.source) && dist.has(e.target)) };
+  }
+  let offRows = null;
+  function offlineSearch(query) {
+    const q = query.trim().split(/\s+/).join(" ").toLowerCase().replace(/\(\)$/, "");
+    if (!q) return [];
+    if (!offRows) { // a file's note and the symbols of its outline; a symbol opens the note of its file
+      offRows = [];
+      for (const n of Object.values(OFFLINE.notes)) {
+        const name = String(n.title).toLowerCase();
+        offRows.push({ id: n.id, title: n.title, kind: n.kind, file: n.file || "", name, own: name, path: String(n.file || "").toLowerCase(), test: !!n.test });
+        for (const o of n.outline || []) {
+          const nm = String(o.title).replace(/\(\)$/, "").toLowerCase();
+          offRows.push({ id: n.id, title: o.title, kind: o.kind, file: n.file || "", line: o.line, name: nm, own: nm.split(".").pop(), path: "", test: !!n.test });
+        }
+      }
+    }
+    const dotted = q.includes("."), out = [];
+    for (const r of offRows) {
+      let s = 0, why = "";
+      if (r.own === q || r.name === q) { s = 3; why = "name"; }
+      else if (r.own.startsWith(q) || (dotted && r.name.startsWith(q))) { s = 2; why = "name starts with"; }
+      else if (r.own.includes(q) || (dotted && r.name.includes(q))) { s = 1.5; why = "name contains"; }
+      else if (r.path.includes(q)) { s = 1; why = "path"; }
+      if (s) out.push({ s: s - (r.test ? 0.3 : 0), r, why });
+    }
+    out.sort((a, b) => b.s - a.s || a.r.title.length - b.r.title.length || (a.r.title < b.r.title ? -1 : a.r.title > b.r.title ? 1 : 0));
+    return out.slice(0, 40).map(({ r, why }) => ({ id: r.id, title: r.title, kind: r.kind, file: r.line ? `${r.file}:${r.line}` : r.file, why }));
+  }
+
   // -- routing and chrome ----------------------------------------------------------------------
   function route() {
     const h = location.hash || "#/";
@@ -804,7 +910,11 @@
   });
 
   // -- start -----------------------------------------------------------------------------------
-  window.__verinoda = { local, global: globalG }; // for tests and debugging
+  window.__verinoda = { local, global: globalG, offline: !!OFFLINE }; // for tests and debugging
+  if (OFFLINE) {
+    $("#search").dataset.i18nPlaceholder = "searchOffline";
+    if (!location.hash) history.replaceState(null, "", "#/graph"); // an exported file opens on its graph
+  }
   applyI18n();
   applyTheme();
   api("/api/stats").then((s) => { $("#project").textContent = s.project; }).catch(() => {});

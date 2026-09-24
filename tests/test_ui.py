@@ -285,6 +285,26 @@ def test_claims_are_matched_exactly_including_file_claims(glow):
     assert not any(s["key"] == "claims" for s in spawn["sections"])  # a path that only ends like its own
 
 
+def test_a_claim_recorded_after_a_note_was_read_is_shown(glow, monkeypatch):
+    from verinoda.claims import Claims
+
+    monkeypatch.setattr(uidata, "RACY_NS", 0)  # keep what was read, however recent: the cache must follow atlas.db
+    a = uidata.Atlas(glow)
+    fid = _find(a, "GlowMod.java", "file")["id"]
+
+    def claims():
+        return [x["title"] for s in a.note(fid)["sections"] if s["key"] == "claims" for x in s["items"]]
+
+    assert "GlowMod.java registers the mod" not in claims()
+    st = open_store(glow)
+    try:
+        Claims(st, glow).create("GlowMod.java registers the mod", project=str(glow), snapshot=st.latest_snapshot(),
+                                subjects=["src/main/java/com/example/glowmod/GlowMod.java"])
+    finally:
+        st.close()
+    assert "GlowMod.java registers the mod" in claims()
+
+
 def test_only_files_inside_the_project_are_read(atlas):
     snap = atlas.snapshot()
     assert snap.inside("src/main/java/com/example/glowmod/entity/Wisp.java")
@@ -324,3 +344,187 @@ def test_a_capped_local_graph_shows_users_before_members(atlas, monkeypatch):
     monkeypatch.setattr(uidata, "MAX_LOCAL_NODES", 1 + len(others))
     capped = atlas.snapshot().local_graph(cls["id"], 3)
     assert capped["truncated"] and {n["id"] for n in capped["nodes"]} - {cls["id"]} == others
+
+
+# -- the exported file (`verinoda ui --export`) ----------------------------------------------------
+
+def _exported(glow, tmp_path) -> tuple[str, dict]:
+    from verinoda.ui import export
+
+    out = export.write(glow, tmp_path / "graph.html")
+    html = Path(out["path"]).read_text(encoding="utf-8")
+    raw = re.search(r'<script type="application/json" id="verinoda-data">(.*?)</script>', html, re.DOTALL).group(1)
+    return html, json.loads(raw)
+
+
+def test_the_export_is_one_file_that_fetches_nothing(glow, tmp_path):
+    import base64
+    import hashlib
+
+    html, data = _exported(glow, tmp_path)
+    assert data["format"] == "verinoda-export" and data["global"]["nodes"] and data["notes"]
+    assert not re.search(r'<(script|link|img)[^>]+(src|href)=', html)  # nothing loaded from anywhere
+    csp = re.search(r'<meta http-equiv="Content-Security-Policy" content="([^"]+)">', html).group(1)
+    assert "default-src 'none'" in csp and "connect-src" not in csp and "unsafe" not in csp
+    inline = {"script": re.findall(r"<script>(.*?)</script>", html, re.DOTALL), "style": re.findall(r"<style>(.*?)</style>", html, re.DOTALL)}
+    assert len(inline["script"]) == len(inline["style"]) == 1
+    for kind, (body,) in inline.items():  # the policy allows exactly the page's own script and style
+        digest = base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode()
+        assert f"{kind}-src 'sha256-{digest}'" in csp
+    assert str(glow.resolve()) not in html and glow.resolve().as_posix() not in html
+    assert "root" not in data["stats"]
+
+
+def test_every_link_in_the_export_opens_a_note_it_holds(glow, tmp_path):
+    _html, data = _exported(glow, tmp_path)
+    notes = data["notes"]
+    assert all(n["kind"] in ("file", "doc", "data") and n["code"] is None for n in notes.values())
+    links = [it for n in notes.values() for s in n["sections"] for it in s["items"]]
+    links += [c for n in notes.values() for c in n["breadcrumb"]] + data["stats"]["hubs"]
+    assert links and all(it["id"] in notes for it in links if "id" in it)
+    assert all("id" not in o for n in notes.values() for o in n["outline"])  # a file's own symbols: text
+    tree_ids = []
+    stack = [data["tree"]]
+    while stack:
+        node = stack.pop()
+        stack.extend(node.get("children", []))
+        if "id" in node:
+            tree_ids.append(node["id"])
+    assert tree_ids and set(tree_ids) <= set(notes)
+    assert {n["id"] for n in data["global"]["nodes"]} <= set(notes)
+    # a symbol that calls into another file leads to that file's note
+    spawn_file = next(n for n in notes.values() if n["title"] == "Wisp.java")
+    assert any(it.get("id") and it["id"] != spawn_file["id"] for s in spawn_file["sections"] for it in s["items"])
+
+
+def _machine(monkeypatch, name: str):
+    """A root and a home folder of a user called ``name``, in this platform's form."""
+    from verinoda.ui import export
+
+    base = Path(f"C:/Users/{name}") if os.name == "nt" else Path(f"/home/{name}")
+    monkeypatch.setattr(export.Path, "home", classmethod(lambda cls: base))
+    return base / "src" / "proj", base
+
+
+@pytest.mark.parametrize("user", ["someone", "Çınar", "Jürgen"])
+def test_the_export_carries_no_path_of_this_machine(monkeypatch, user):
+    from verinoda.project_index.ids import make_id
+    from verinoda.ui import export
+
+    root, home = _machine(monkeypatch, user)
+    scrub = export._scrubber(root)
+    assert scrub(str(root / "pkg" / "a.py")) == str(Path("pkg") / "a.py")
+    assert scrub(root.as_posix() + "/pkg/a.py") == "pkg/a.py"
+    # an unresolved import is named after its absolute path, folded the way the index folds it
+    assert scrub(make_id(str(root / "tests" / "foundation"))) == "tests_foundation"
+    assert scrub("see " + make_id(str(root / "lib" / "helpers")) + ".") == "see lib_helpers."
+    elsewhere = scrub("cache in " + str(home / "other" / "b.py"))
+    assert elsewhere.startswith("cache in ~/") and user.lower() not in elsewhere.lower()
+
+
+@pytest.mark.parametrize("user", ["user", "me", "dev"])
+def test_the_scrub_leaves_ordinary_names_alone(monkeypatch, user):
+    from verinoda.ui import export
+
+    root, _home = _machine(monkeypatch, user)
+    scrub = export._scrubber(root)
+    for text in ("src/components/home/UserCard.tsx", "pages/home/menu.tsx", "src/home/devices.ts",
+                 "get_home_user_dir()", "HOME_USER_ID", "tasks/sync_users_members.py", "sync_users_members",
+                 "users_me_panel", "src/app/page.tsx", "ordinary text about a user"):
+        assert scrub(text) == text
+    for short in (Path("/app"), Path("/workspace"), Path("D:/code")):  # a short root is a word as well
+        s = export._scrubber(short)
+        assert s("src/app/page.tsx") == "src/app/page.tsx" and s("workspace_settings") == "workspace_settings"
+        assert s("unused_code") == "unused_code"
+
+
+def test_note_ids_are_never_rewritten(glow, tmp_path, monkeypatch):
+    from verinoda.ui import export
+
+    # a home folder whose name is also a folder of the project: ids and paths must stay distinct
+    monkeypatch.setattr(export.Path, "home", classmethod(lambda cls: Path("/src")))
+    _html, data = _exported(glow, tmp_path)
+    ids = [n["id"] for n in data["global"]["nodes"]]
+    assert len(ids) == len(set(ids)) and set(ids) <= set(data["notes"])
+    assert all(k == n["id"] for k, n in data["notes"].items())
+
+
+def test_the_export_keeps_the_claims_on_a_files_symbols(glow, tmp_path):
+    from verinoda.claims import Claims
+
+    st = open_store(glow)
+    try:
+        Claims(st, glow).create("spawn is only called on the server", project=str(glow), snapshot=st.latest_snapshot(),
+                                subjects=["src/main/java/com/example/glowmod/entity/Wisp.java::.spawn()"])
+    finally:
+        st.close()
+    _html, data = _exported(glow, tmp_path)
+    wisp = next(n for n in data["notes"].values() if n["file"] == "src/main/java/com/example/glowmod/entity/Wisp.java")
+    claims = next(s for s in wisp["sections"] if s["key"] == "claims")["items"]
+    assert {"title": "spawn is only called on the server", "at": ".spawn()"}.items() <= next(
+        c for c in claims if c["title"] == "spawn is only called on the server").items()
+    assert all("id" not in c for c in claims)  # a claim is not a note to open
+
+
+def test_the_export_outline_is_every_symbol(glow, tmp_path, monkeypatch):
+    from verinoda.ui import export
+
+    real = export.Atlas.snapshot
+
+    def small_view(self):  # the note view keeps a few; the export still lists them all
+        snap = real(self)
+        orig = snap.note
+
+        def note(nid):
+            n = orig(nid)
+            return {**n, "outline": (n.get("outline") or [])[:1]}
+
+        snap.note = note
+        return snap
+
+    monkeypatch.setattr(export.Atlas, "snapshot", small_view)
+    _html, data = _exported(glow, tmp_path)
+    wisp = next(n for n in data["notes"].values() if n["title"] == "Wisp.java")
+    titles = [o["title"] for o in wisp["outline"]]
+    assert len(titles) > 1 and "Wisp.spawn()" in titles
+
+
+def test_the_exported_graph_is_the_whole_graph_with_the_cap_to_apply(glow, tmp_path):
+    _html, data = _exported(glow, tmp_path)
+    g = data["global"]
+    assert g["cap"] == uidata.MAX_GLOBAL_NODES and g["hidden_files"] == 0
+    served = uidata.Atlas(glow).global_graph()
+    assert {n["id"] for n in served["nodes"]} <= {n["id"] for n in g["nodes"]}
+
+
+def test_a_failed_export_leaves_nothing_behind(glow, tmp_path, monkeypatch):
+    from verinoda.ui import export
+
+    def fail(src, dst):
+        raise PermissionError("held by another program")
+
+    monkeypatch.setattr(export.os, "replace", fail)
+    with pytest.raises(PermissionError):
+        export.write(glow, tmp_path / "g.html")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_an_export_into_a_new_folder(glow, tmp_path):
+    from verinoda.ui import export
+
+    out = export.write(glow, str(tmp_path / "new") + "/")
+    assert Path(out["path"]) == (tmp_path / "new" / export.DEFAULT_NAME).resolve()
+    assert export.target_path(glow, tmp_path) == tmp_path / export.DEFAULT_NAME  # an existing folder
+    assert export.target_path(glow, None) == export.default_path(glow)
+
+
+def test_ui_export_and_graph_flags(glow, tmp_path, monkeypatch, capsys):
+    from verinoda import cli
+
+    out = tmp_path / "g.html"
+    assert cli.main(["ui", str(glow), "--export", str(out)]) == 0
+    assert out.stat().st_size > 1000 and "no server needed" in capsys.readouterr().out
+    seen = {}
+    monkeypatch.setattr(uiserver, "serve", lambda repo, **kw: seen.update(kw))
+    assert cli.main(["ui", str(glow), "--graph", "--no-browser"]) == 0
+    assert seen["open_at"] == "#/graph" and seen["open_browser"] is False

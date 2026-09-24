@@ -242,8 +242,14 @@ vurgu filtresiyle; bağlantısız dosyalar dışta bir halka oluşturur) vardır
 parlar, tıklayınca not açılır. Arama adla ya da soruyla (`verinoda query` sıralamasıyla), dosya ağacı,
 geri/ileri, Türkçe/İngilizce, açık/koyu tema. Salt okunur ve yereldir: 127.0.0.1 üzerinde standart
 kütüphaneyle çalışan bir sunucu, yalnızca kendi adresine gelen GET isteklerine yanıt verir; sayfa
-dışarıdan hiçbir şey yüklemez (CDN, yazı tipi, telemetri yok). Sınırlar: graf görünümü en çok 2.500
-dosya gösterir (en çok bağlantılı olanlar); düzenleme ve kendi not metni yok.
+dışarıdan hiçbir şey yüklemez (CDN, yazı tipi, telemetri yok). `verinoda ui --graph` doğrudan graf
+görünümünde açar. `verinoda ui --export [DOSYA]` grafı ve her kaynak dosyanın, belgenin, veri
+dosyasının notunu sunucu gerektirmeyen tek bir HTML dosyasına yazar (varsayılan
+`.verinoda/index/verinoda-graph.html`); çift tıklayınca açılır: graf, dosya ağacı, dosya notları
+(bağlantılar, ana hat, iddialar), dosya düzeyinde yerel graf ve ad araması. Kod ve makinenin yolları
+(proje kökü, ev klasörü) içinde yoktur; CSP yalnızca kendi betiğine ve stiline izin verir, hiçbir
+bağlantı kurmaz. Sınırlar: graf görünümü en çok 2.500 dosya gösterir (en çok bağlantılı olanlar);
+düzenleme ve kendi not metni yok; dışa aktarılan dosyada sembol notları, kod ve soruyla arama yok.
 
 ### 4.2 Soru planları ve Türkçe desteği (`question_plan`, `textnorm`, `lexicon`) — Çalışıyor (plan revizyonu kısmi)
 

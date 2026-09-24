@@ -155,9 +155,10 @@ def start(repo: Path | str, *, port: int = 0) -> tuple[ThreadingHTTPServer, str]
     return server, f"http://127.0.0.1:{holder[0]}/"
 
 
-def serve(repo: Path | str, *, port: int = 0, open_browser: bool = True) -> None:
-    """`verinoda ui`: serve until Ctrl+C."""
+def serve(repo: Path | str, *, port: int = 0, open_browser: bool = True, open_at: str = "") -> None:
+    """`verinoda ui`: serve until Ctrl+C; ``open_at`` is the page to open first (``#/graph``)."""
     server, url = start(repo, port=port)
+    url += open_at
     print(f"Verinoda notes and graph for {Path(repo).resolve()}: {url}  (Ctrl+C to stop)", flush=True)
     if open_browser:
         try:
