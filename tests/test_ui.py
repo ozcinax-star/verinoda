@@ -477,8 +477,8 @@ def test_the_export_outline_is_every_symbol(glow, tmp_path, monkeypatch):
         snap = real(self)
         orig = snap.note
 
-        def note(nid):
-            n = orig(nid)
+        def note(nid, **kw):
+            n = orig(nid, **kw)
             return {**n, "outline": (n.get("outline") or [])[:1]}
 
         snap.note = note
@@ -691,3 +691,52 @@ def test_watch_runs_one_update_after_a_burst_of_edits(tmp_path):
     finally:
         w.stop.set()
         w.join(2)
+
+
+# -- a large repository (step measured on the Python standard library: 2,305 files, 79,526 nodes) ---
+
+def test_stats_are_made_once_per_load(atlas):
+    assert atlas.stats() is atlas.stats()  # the start page asks on every visit
+
+
+def test_a_lean_note_has_the_same_links_without_their_lines(atlas):
+    snap = atlas.snapshot()
+    nid = _find(atlas, "Wisp.spawn()")["id"]
+    full, lean = snap.note(nid), snap.note(nid, lean=True)
+    assert any(it.get("snippet") for s in full["sections"] for it in s["items"])
+    assert not any(it.get("snippet") for s in lean["sections"] for it in s["items"])
+    assert "user_note" in full and "user_note" not in lean
+    assert [(s["key"], [it["id"] for it in s["items"]]) for s in full["sections"]] == \
+        [(s["key"], [it["id"] for it in s["items"]]) for s in lean["sections"]]
+
+
+def test_a_pinned_search_db_connection_is_shared_until_the_block_ends(tmp_path):
+    import threading
+
+    from verinoda.search_index import Handle
+
+    h = Handle(db=str(tmp_path / "search.db"), meta={}, units={}, nid_uid={})
+    with h.pinned():
+        a = h.connect()
+        h.release(a)
+        b = h.connect()
+        assert a is b and b.execute("SELECT 1").fetchone() == (1,)  # released, still open
+        h.release(b)
+        other = []
+
+        def elsewhere():  # another thread gets its own connection, closed on release
+            conn = h.connect()
+            other.append(conn is a)
+            h.release(conn)
+
+        t = threading.Thread(target=elsewhere)
+        t.start()
+        t.join()
+        assert other == [False]
+    c = h.connect()
+    try:
+        assert c is not a
+    finally:
+        h.release(c)
+    with pytest.raises(Exception):
+        a.execute("SELECT 1")  # closed with the block

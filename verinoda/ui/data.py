@@ -21,6 +21,7 @@ Note ids are graph node ids; a data-file unit, which has no graph node, is ``dat
 
 from __future__ import annotations
 
+import heapq
 import json
 import sqlite3
 import threading
@@ -258,6 +259,7 @@ class Snapshot:
         self._claim_cache: tuple | None = None
         self._subject_cache: dict[str, dict[str, str]] = {}
         self._fresh_files: dict[str, tuple] = {}
+        self._stats: dict | None = None
         self._refs = self._reference_roots()
 
     # -- files ---------------------------------------------------------------------------------
@@ -498,12 +500,22 @@ class Snapshot:
 
     # -- stats and tree --------------------------------------------------------------------------
     def stats(self) -> dict:
+        """Counts and the best connected notes; made once per load (the start page asks every visit)."""
+        with self._lock:
+            if self._stats is None:
+                self._stats = self._make_stats()
+            return self._stats
+
+    def _make_stats(self) -> dict:
         g = self.g
         kinds = Counter(self.kind(n) for n in g.G)
         files = {g.file(n) for n in g.G if self.kind(n) not in HIDDEN_KINDS} | {row[0] for row in self._data.values()}
-        hubs = sorted((n for n in g.G if self.kind(n) in ("class", "function", "method", "file")
-                       and not _is_test(g.file(n) or "") and not self.in_reference(g.file(n))),
-                      key=lambda n: (-g.G.degree(n), self.title(n)))[:16]
+        cands = [(g.G.degree(n), n) for n in g.G if self.kind(n) in ("class", "function", "method", "file")
+                 and not _is_test(g.file(n) or "") and not self.in_reference(g.file(n))]
+        # titles only for the notes that can make the list: every one as connected as the 16th
+        floor = heapq.nlargest(16, (d for d, _ in cands))[-1] if cands else 0
+        hubs = [n for _, n in sorted(((d, n) for d, n in cands if d >= floor),
+                                     key=lambda x: (-x[0], self.title(x[1])))[:16]]
         shown = sum(v for k, v in kinds.items() if k not in HIDDEN_KINDS)
         return {"project": self.repo.name, "root": str(self.repo), "notes": shown + len(self._data),
                 "files": len(files), "links": g.G.number_of_edges(), "kinds": dict(sorted(kinds.items())),
@@ -603,7 +615,9 @@ class Snapshot:
         return {"query": q, "results": [{**self.brief(n), "why": why} for n, (_s, why) in best]}
 
     # -- a note ----------------------------------------------------------------------------------
-    def note(self, nid: str) -> dict:
+    def note(self, nid: str, *, lean: bool = False) -> dict:
+        """A note with its code and links. ``lean`` (the export, which drops them): no line under
+        each link and no note of your own."""
         g = self.g
         if nid.startswith(DATA_PREFIX):
             return self._data_note(nid)
@@ -673,14 +687,15 @@ class Snapshot:
                 sections["members"] = rest
             else:
                 sections.pop("members", None)
-        return self._with_user_note(nid, {"id": nid, "title": self.title(nid), "kind": k, "file": f, "line": g.line(nid),
+        out = {"id": nid, "title": self.title(nid), "kind": k, "file": f, "line": g.line(nid),
                 "span": list(span) if span else None,
                 "span_basis": ("file" if k in ("file", "doc") else g.span_basis(nid)) if span else None,
                 "signature": sig or None, "doc": doc or None, "qualified": qual or None,
                 "breadcrumb": self._breadcrumb(nid), "code": code, "outline": outline,
                 "community": {"id": g.G.nodes[nid].get("community"), "name": g.G.nodes[nid].get("community_name")},
-                "sections": self._sections(sections), "test": bool(f and _is_test(f)),
-                "degree": g.G.degree(nid)})
+                "sections": self._sections(sections, snippets=not lean), "test": bool(f and _is_test(f)),
+                "degree": g.G.degree(nid)}
+        return out if lean else self._with_user_note(nid, out)
 
     # -- what changed since the index was built ---------------------------------------------------
     def changes(self) -> dict:
@@ -938,7 +953,7 @@ class Snapshot:
             out.append({**usernotes.as_dict(self.repo, n, resolves=nid is not None), "id": nid})
         return sorted(out, key=lambda x: (order.get(x["status"], 3), x["subject"]))
 
-    def _sections(self, sections: dict[str, list[dict]]) -> list[dict]:
+    def _sections(self, sections: dict[str, list[dict]], *, snippets: bool = True) -> list[dict]:
         out = []
         for key in SECTION_ORDER:
             items = sections.get(key) or []
@@ -947,7 +962,7 @@ class Snapshot:
                 shown = {id(it) for it in kept}
                 for it in items:  # the line a link is written on: read for the links shown only
                     at = it.pop("_snip", None)
-                    if at and id(it) in shown:
+                    if at and snippets and id(it) in shown:
                         it["snippet"] = self.line_at(at)
                 out.append({"key": key, "count": len(items), "items": kept})
         return out

@@ -58,8 +58,10 @@ import math
 import os
 import re
 import sqlite3
+import threading
 import time
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
@@ -1004,12 +1006,31 @@ class Handle:
     by_file: dict[str, list[tuple[int, int, int, int]]] | None = None   # file -> (span, a, b, uid), innermost first
     copies: dict[str, list[str]] | None = None    # file -> other files with byte-identical content
     unindexed: list[tuple[str, str, frozenset]] | None = None   # (file, reason, name tokens), loaded once
+    _pin: threading.local = field(default_factory=threading.local, repr=False, compare=False)
 
     def connect(self) -> sqlite3.Connection:
-        return self.memory if self.memory is not None else sqlite3.connect(self.db, timeout=30)
+        if self.memory is not None:
+            return self.memory
+        pinned = getattr(self._pin, "conn", None)
+        return pinned if pinned is not None else sqlite3.connect(self.db, timeout=30)
 
     def release(self, conn: sqlite3.Connection) -> None:
-        if conn is not self.memory:
+        if conn is not self.memory and conn is not getattr(self._pin, "conn", None):
+            conn.close()
+
+    @contextmanager
+    def pinned(self):
+        """This thread's reads share one connection until the block ends (a batch of many small
+        lookups, such as an export's notes, would otherwise open and close one per lookup)."""
+        if self.memory is not None or getattr(self._pin, "conn", None) is not None:
+            yield
+            return
+        conn = sqlite3.connect(self.db, timeout=30)
+        self._pin.conn = conn
+        try:
+            yield
+        finally:
+            self._pin.conn = None
             conn.close()
 
     @property

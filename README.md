@@ -35,7 +35,7 @@ Open findings of the second acceptance audit (2026-09-23 05:00), not yet fixed:
 
 Found by running Verinoda on its own repository (2026-09-23), not yet fixed:
 
-- `update` rebuilds the code graph over the whole corpus when a file of the graph or a new code file changed (unchanged files come from the AST cache): about 33 s on a repository of about 2,100 files; edits to other files (data files, documents outside the graph) only refresh the search index. The upstream incremental pass was faster (about 20 s) but lost the cross-file edges of every file it re-extracted, so after an edit a function's imports and calls into other files were missing until the next full scan (fixed 2026-09-24). `analyze` refreshes first and can spend its default 60 s budget on that; run `verinoda update .` before asking.
+- `update` rebuilds the code graph over the whole corpus when a file of the graph or a new code file changed (unchanged files come from the AST cache): about 33 s on a repository of about 2,100 files, 42 s on Verinoda's own 1,163 files and 94 s on Python's standard library copied as a project (2,305 files, 79,526 nodes), so `verinoda ui --watch` trails an edit by that much; edits to other files (data files, documents outside the graph) only refresh the search index. The upstream incremental pass was faster (about 20 s) but lost the cross-file edges of every file it re-extracted, so after an edit a function's imports and calls into other files were missing until the next full scan (fixed 2026-09-24). `analyze` refreshes first and can spend its default 60 s budget on that; run `verinoda update .` before asking.
 - A frozen copy of the code inside the repository (here `benchmarks/corpora/heldout_repoatlas_7371990/`) answered self-queries unless it was marked by hand (`verinoda setup . --reference benchmarks/corpora=heldout,snapshot`). Since 2026-09-24 scan and update find such copies themselves and rank them the same way (see *Reference trees*); a copy they cannot tell apart from the original still needs `--reference`. (Fixed on 2026-09-24: command names now map to their handlers, `scan` komutu -> `cmd_scan`.)
 
 Game mods and data files (2026-09-24):
@@ -321,6 +321,15 @@ Limits: the global graph shows at most 2,500 files (the best connected ones,
 and it says how many it left out); code is read, not edited; the exported file
 has file notes only (no symbol notes, no code, no question search) and shows
 your notes read-only.
+
+Measured on Python's standard library copied as a project (2,305 files, 79,526
+notes, 140,342 links; Windows 11, headless Chrome): the server starts in 1.6 s,
+the start page shows in 1.5 s, a search in 0.8 s, a note in 0.5 s; the graph
+view (1,745 files, 8,249 links) draws in 0.4 s and runs at about 60 frames a
+second while it settles; impact and path on the most connected notes take
+under 20 ms. `--export` writes 9.3 MB in about 6 s. With `--watch` each look at
+the tree takes 0.2 s, and an update takes as long as `verinoda update` (above,
+*Known issues*).
 
 ## Game mods, data packs and other data files
 

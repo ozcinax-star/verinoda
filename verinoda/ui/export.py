@@ -116,11 +116,12 @@ def build(repo: Path | str) -> dict:
     stats = {k: v for k, v in snap.stats().items() if k != "root"}  # no absolute path of this machine
     tree = snap.tree()
     raw = {}
-    for f in _files(tree):
-        try:
-            raw[f["id"]] = snap.note(f["id"])
-        except KeyError:
-            continue
+    with snap.h.pinned():  # thousands of small link lookups: one search.db connection
+        for f in _files(tree):
+            try:
+                raw[f["id"]] = snap.note(f["id"], lean=True)
+            except KeyError:
+                continue
     ids = set(raw)
     target = {n["file"]: nid for nid, n in raw.items() if n.get("file") and n["kind"] in ("file", "doc")}
     claims = _file_claims(snap)

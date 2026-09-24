@@ -255,7 +255,10 @@ aşağıdaki kendi notlarındır); sayfa dışarıdan hiçbir şey yüklemez (CD
 satırları). Sayfa indeksi izler: `verinoda update`'ten birkaç saniye sonra açık not ya da graf yeniden
 çizilir (kaydırma yeri korunur) ve bunu söyler (görünmeyen sekme, gösterildiğinde bakar);
 `verinoda ui --watch` dosyalar değişince `verinoda update`'i kendisi de çalıştırır (düzenlemeler durunca,
-aynı anda tek güncelleme). `verinoda ui --export [DOSYA]` grafı ve her kaynak dosyanın, belgenin, veri
+aynı anda tek güncelleme; güncelleme grafı bütün proje üzerinden yeniden kurduğu için Verinoda'nın 1.163
+dosyasında yaklaşık 45 sn, Python standart kütüphanesinin 2.305 dosyasında yaklaşık 95 sn sürer). O büyüklükte
+(79.526 not) sunucu 1,6 sn'de açılır, başlangıç sayfası 1,5, arama 0,8, bir not 0,5 sn'de gelir; graf görünümü
+(1.745 dosya) 0,4 sn'de çizilir ve saniyede yaklaşık 60 kare akar; `--export` 9,3 MB'ı yaklaşık 6 sn'de yazar. `verinoda ui --export [DOSYA]` grafı ve her kaynak dosyanın, belgenin, veri
 dosyasının notunu sunucu gerektirmeyen tek bir HTML dosyasına yazar (varsayılan
 `.verinoda/index/verinoda-graph.html`); çift tıklayınca ya da `--open` ile hemen açılır, komut
 `file:///` adresini de yazar (Chrome ve Edge'de `file://` üzerinden denendi): graf, dosya ağacı, dosya notları
