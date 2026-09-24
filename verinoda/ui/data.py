@@ -86,6 +86,32 @@ def _stat(p: Path) -> tuple | None:
     return (st.st_mtime_ns, st.st_size)
 
 
+def _area(folder: str) -> str:
+    """The part of the tree a file belongs to, for colouring the graph: its first two folders."""
+    parts = [p for p in folder.split("/") if p and p != "."]
+    return "/".join(parts[:2]) or "/"
+
+
+def _group_names(nodes: list[dict]) -> list[dict]:
+    """A name for each community shown: the folder most of its files are in, by its last two parts
+    (the index's own community names come from one node's label, often an imported module such as
+    ``pathlib``). Two communities with the same name are told apart by their best connected file."""
+    folders: dict[int, Counter] = defaultdict(Counter)
+    best: dict[int, dict] = {}
+    for n in nodes:
+        c = n["group"]
+        if not isinstance(c, int):
+            continue
+        parts = [p for p in n["folder"].split("/") if p and p != "."]
+        folders[c]["/".join(parts[-2:]) or "/"] += 1
+        if c not in best or (n["degree"], n["file"]) > (best[c]["degree"], best[c]["file"]):
+            best[c] = n
+    names = {c: fc.most_common(1)[0][0] for c, fc in folders.items()}
+    taken = Counter(names.values())
+    return [{"id": c, "name": names[c] if taken[names[c]] == 1 else f"{names[c]} · {best[c]['title']}"}
+            for c in sorted(names)]
+
+
 class Atlas:
     """The view model of one project: hands out the current :class:`Snapshot` (thread-safe)."""
 
@@ -478,10 +504,14 @@ class Snapshot:
         sections: dict[str, list[dict]] = defaultdict(list)
         seen: set[tuple[str, str, str]] = set()
 
-        def order(x: tuple) -> tuple:  # stated links first, then by file and line (71 before 123)
+        def order(x: tuple) -> tuple:
+            # the product's own code before tests and reference trees, stated links before inferred ones,
+            # then by file and line (71 before 123)
             at = str(_at(x[1]) or "")
             path, _, ln = at.rpartition(":")
-            return (_conf_rank(x[1]), path if ln.isdigit() else at, int(ln) if ln.isdigit() else 0, x[0])
+            of = g.file(x[0]) or ""
+            place = 2 if self.in_reference(of) else 1 if is_test_file(of) else 0
+            return (place, _conf_rank(x[1]), path if ln.isdigit() else at, int(ln) if ln.isdigit() else 0, x[0])
 
         edges = sorted([(v, d, True) for v, d in g.out_edges(nid)] + [(u, d, False) for u, d in g.in_edges(nid)],
                        key=order)
@@ -521,6 +551,13 @@ class Snapshot:
         if k in ("file", "doc") and f:
             outline = [self.brief(s) for s in (g.symbols_in(f) if k == "file" else g.headings_in(f))
                        if self.kind(s) not in HIDDEN_KINDS][:200]
+            # the outline already lists the file's own symbols by line: members repeat only the rest
+            listed = {o["id"] for o in outline}
+            rest = [m for m in sections.get("members", []) if m["id"] not in listed]
+            if rest:
+                sections["members"] = rest
+            else:
+                sections.pop("members", None)
         return {"id": nid, "title": self.title(nid), "kind": k, "file": f, "line": g.line(nid),
                 "span": list(span) if span else None,
                 "span_basis": ("file" if k in ("file", "doc") else g.span_basis(nid)) if span else None,
@@ -785,18 +822,12 @@ class Snapshot:
             nodes.append({"id": nid, "title": PurePosixPath(f).name, "file": f,
                           "kind": "data" if nid.startswith(DATA_PREFIX) else self.kind(nid), "group": grp,
                           "size": size[f], "degree": degree[f], "test": is_test_file(f),
-                          "folder": str(PurePosixPath(f).parent)})
+                          "folder": str(PurePosixPath(f).parent), "area": _area(str(PurePosixPath(f).parent))})
         by_file = {n["file"]: n["id"] for n in nodes}
         edges = [{"source": by_file[a], "target": by_file[b], "weight": w,
                   "relation": rel_of[(a, b)].most_common(1)[0][0]}
                  for (a, b), w in sorted(weight.items()) if a in by_file and b in by_file]
-        names = {}
-        for _n, d in g.G.nodes(data=True):
-            c = d.get("community")
-            if isinstance(c, int) and c not in names and d.get("community_name"):
-                names[c] = d["community_name"]
-        out = {"nodes": nodes, "edges": edges, "hidden_files": hidden,
-               "groups": [{"id": c, "name": names[c]} for c in sorted(names)]}
+        out = {"nodes": nodes, "edges": edges, "hidden_files": hidden, "groups": _group_names(nodes)}
         with self._lock:
             self._global[cache_key] = out
         return out

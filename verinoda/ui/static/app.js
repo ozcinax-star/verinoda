@@ -37,6 +37,7 @@
       search: "Search notes, or ask a question  (Ctrl+K)", files: "Files", localGraph: "Local graph", depth: "Depth",
       tests: "Tests", dataFiles: "Data files", external: "External", outline: "Outline", graphView: "Graph view",
       highlight: "Highlight notes…", labels: "Labels", fit: "Fit", close: "Close", back: "Back", forward: "Forward",
+      colorBy: "Colour by", byFolder: "folder", byCommunity: "community",
       theme: "Light / dark", toggleFiles: "Show or hide files", toggleGraph: "Show or hide the local graph",
       notes: "notes", filesN: "files", links: "links", dataNotes: "data notes", hubs: "Most connected",
       welcome: "Every symbol, file and data file of the project is a note. Search above, browse the files, or open the graph view.",
@@ -61,6 +62,7 @@
       search: "Not ara ya da soru sor  (Ctrl+K)", files: "Dosyalar", localGraph: "Yerel graf", depth: "Derinlik",
       tests: "Testler", dataFiles: "Veri dosyaları", external: "Dış", outline: "Ana hat", graphView: "Graf görünümü",
       highlight: "Notları vurgula…", labels: "Etiketler", fit: "Sığdır", close: "Kapat", back: "Geri", forward: "İleri",
+      colorBy: "Renk", byFolder: "klasör", byCommunity: "topluluk",
       theme: "Açık / koyu", toggleFiles: "Dosyaları göster ya da gizle", toggleGraph: "Yerel grafı göster ya da gizle",
       notes: "not", filesN: "dosya", links: "bağlantı", dataNotes: "veri notu", hubs: "En çok bağlantılı",
       welcome: "Projenin her sembolü, dosyası ve veri dosyası bir not. Yukarıdan ara, dosyalara göz at ya da graf görünümünü aç.",
@@ -206,7 +208,6 @@
     const meta = el("div", { class: "meta" }, el("span", { class: "chip kind", text: t("kind." + n.kind) }));
     if (n.file) meta.append(el("span", { class: "chip mono", text: n.line ? `${n.file}:${n.line}` : n.file }));
     if (n.span) meta.append(el("span", { class: "chip", title: n.span_basis || "", text: `${n.span[0]}–${n.span[1]} (${n.span[1] - n.span[0] + 1} ${t("lines")})` }));
-    if (n.community && n.community.name) meta.append(el("span", { class: "chip", text: n.community.name }));
     if (n.test) meta.append(el("span", { class: "chip", text: t("test") }));
     parts.push(meta);
     if (n.signature) parts.push(el("pre", { class: "sig mono", text: n.signature }));
@@ -388,7 +389,9 @@
     "#8fa3ff", "#f08aa6", "#7fbf5a", "#d98c4f", "#6fd3a0", "#b88ae6", "#e6c36a", "#5aa0c8"];
   const REL_COLOR = { calls: "#8e7cf5", imports: "#5a7fa8", imports_from: "#5a7fa8", references: "#808088", uses: "#808088",
     method: "#66666e", contains: "#66666e", inherits: "#e0a34a", implements: "#e0a34a", names: "#3fb8a8" };
+  const areaColor = new Map(); // "@folder" -> colour, the largest part of the tree first
   const groupColor = (g) => g === "data" ? (colors.data || "#3fb8a8") : g === "external" ? "#6a6a70"
+    : typeof g === "string" && g.startsWith("@") ? areaColor.get(g) || "#8a8f98"
     : g === "other" || g === null || g === undefined ? "#8a8f98" : PALETTE[Math.abs(Number(g)) % PALETTE.length];
 
   function quadChild(q, n) {
@@ -474,6 +477,8 @@
         const size = n.size !== undefined ? n.size : n.deg;
         n.r = 3.2 + Math.min(14, Math.sqrt(Math.max(size, n.deg)) * 1.5);
       }
+      const unlinked = this.nodes.filter((n) => !n.deg).length;
+      this.orphans = unlinked > 0 && unlinked < this.nodes.length; // a ring needs linked notes to go round
       this.center = opts.center ? this.byId.get(opts.center) || null : null;
       if (this.center) { this.center.x = this.center.y = 0; this.center.fx = 0; this.center.fy = 0; this.center.r += 3; }
       this.hover = null;
@@ -500,9 +505,22 @@
         const bias = s.deg / (s.deg + t.deg || 1);
         t.vx -= dx * bias; t.vy -= dy * bias; s.vx += dx * (1 - bias); s.vy += dy * (1 - bias);
       }
+      // unlinked notes ring the linked ones (as in Obsidian) instead of piling up among them
+      let ring = 0;
+      if (this.orphans) {
+        const d2 = [];
+        for (const n of ns) if (n.deg) d2.push(n.x * n.x + n.y * n.y);
+        d2.sort((x, y) => x - y);
+        ring = Math.sqrt(d2[Math.floor(d2.length * 0.8)]) * 1.1 + 40;
+      }
       for (const n of ns) {
-        const gr = n.deg ? o.gravity : o.gravity * 6; // an unlinked note would otherwise drift to the edge
-        n.vx -= n.x * gr * a; n.vy -= n.y * gr * a;
+        if (!n.deg && ring) { // a firm spring: the whole graph's charge pushes them outwards
+          const d = Math.sqrt(n.x * n.x + n.y * n.y) || 1e-6, k = ((d - ring) / d) * 0.5 * a;
+          n.vx -= n.x * k; n.vy -= n.y * k;
+        } else {
+          const gr = n.deg ? o.gravity : o.gravity * 6; // an unlinked note would otherwise drift away
+          n.vx -= n.x * gr * a; n.vy -= n.y * gr * a;
+        }
         if (n.fx !== null) { n.x = n.fx; n.y = n.fy; n.vx = n.vy = 0; continue; }
         n.vx *= 0.6; n.vy *= 0.6; n.x += n.vx; n.y += n.vy;
         if (!isFinite(n.x) || !isFinite(n.y)) { // never let one bad value spread through the quadtree
@@ -627,8 +645,10 @@
         else this.pan = { sx, sy, x: this.tf.x, y: this.tf.y, moved: false };
       });
       window.addEventListener("mousemove", (ev) => {
-        if ((this.drag || this.pan) && ev.buttons === 0) release(); // the button came up outside the page
-        const [sx, sy] = pos(ev);
+        const [sx, sy] = pos(ev), held = this.drag || this.pan;
+        // the button came up outside the page: a move with no button down, away from where it went down
+        // (a browser also sends moves with no button while it is held and the pointer is still)
+        if (held && ev.buttons === 0 && Math.abs(sx - held.sx) + Math.abs(sy - held.sy) > 3) release();
         if (this.drag) {
           if (Math.abs(sx - this.drag.sx) + Math.abs(sy - this.drag.sy) > 3) this.drag.moved = true;
           if (this.drag.moved && this.drag.n !== this.center) {
@@ -696,11 +716,34 @@
     catch (e) { if (seq === globalSeq) $("#graph-info").textContent = e.message; return; }
     if (seq !== globalSeq) return; // a newer request (the boxes changed again) is on its way
     globalKey = key; globalData = g;
+    applyColors(g.nodes);
     globalG.setData(g.nodes, g.edges);
     $("#graph-info").textContent = `${g.nodes.length} ${t("filesN")}, ${g.edges.length} ${t("links")}` +
       (g.hidden_files ? ` · ${g.hidden_files} ${t("hidden")}` : "");
     renderLegend(g);
   }
+  // colour the files by the part of the tree they are in (default) or by the index's communities
+  let colorBy = store.get("vn.colorBy", "folder") === "community" ? "community" : "folder";
+  $("#graph-color").value = colorBy;
+  function applyColors(nodes) {
+    const count = new Map();
+    for (const n of nodes) {
+      if (n.community === undefined) n.community = n.group;
+      n.group = n.kind === "data" ? "data" : colorBy === "folder" ? "@" + n.area : n.community;
+      if (String(n.group).startsWith("@")) count.set(n.group, (count.get(n.group) || 0) + 1);
+    }
+    areaColor.clear();
+    [...count.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+      .forEach(([k], i) => areaColor.set(k, PALETTE[i % PALETTE.length]));
+  }
+  $("#graph-color").addEventListener("change", (ev) => {
+    colorBy = ev.target.value === "community" ? "community" : "folder";
+    store.set("vn.colorBy", colorBy);
+    if (!globalData) return;
+    applyColors(globalG.nodes);
+    globalG.hidden.clear(); globalG.dirty = true; globalG.kick();
+    renderLegend({ nodes: globalG.nodes, groups: globalData.groups });
+  });
   function renderLegend(g) {
     const used = new Map();
     for (const n of g.nodes) used.set(String(n.group), (used.get(String(n.group)) || 0) + 1);
@@ -708,9 +751,9 @@
     const order = [...used.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24);
     $("#legend").replaceChildren(...order.map(([grp, count]) => {
       const sw = el("span", { class: "sw" });
-      sw.style.background = groupColor(grp === "data" || grp === "other" || grp === "external" ? grp : Number(grp));
+      sw.style.background = groupColor(/^-?\d+$/.test(grp) ? Number(grp) : grp);
       const it = el("div", { class: "it" + (globalG.hidden.has(grp) ? " off" : "") }, sw,
-        el("span", { text: `${grp === "data" ? t("dataFiles") : names.get(grp) || grp} (${count})` }));
+        el("span", { text: `${grp === "data" ? t("dataFiles") : grp.startsWith("@") ? grp.slice(1) : names.get(grp) || grp} (${count})` }));
       it.addEventListener("click", () => {
         if (globalG.hidden.has(grp)) globalG.hidden.delete(grp); else globalG.hidden.add(grp);
         it.classList.toggle("off"); globalG.dirty = true; globalG.kick();

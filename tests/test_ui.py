@@ -79,6 +79,55 @@ def test_members_are_listed_by_line(atlas):
     assert lines == sorted(lines)
 
 
+def test_own_code_is_listed_before_tests_and_the_reference_copy(atlas):
+    snap = atlas.snapshot()
+
+    def place(item):
+        f = item.get("file") or ""
+        return 2 if snap.in_reference(f) else 1 if uidata.is_test_file(f) else 0
+
+    mixed = 0
+    for hit in [_find(atlas, "Wisp.spawn()")] + atlas.stats()["hubs"]:
+        for s in atlas.note(hit["id"])["sections"]:
+            if s["key"] == "claims":
+                continue
+            places = [place(it) for it in s["items"]]
+            assert places == sorted(places), (hit["title"], s["key"])
+            mixed += len(set(places)) > 1
+    assert mixed  # the order was checked where it matters
+
+
+def test_a_file_note_does_not_repeat_its_outline_as_members(atlas):
+    cls = _find(atlas, "Wisp", "class")
+    fnote = next(r for r in atlas.search(cls["file"].rsplit("/", 1)[1])["results"] if r["kind"] == "file")
+    n = atlas.note(fnote["id"])
+    assert n["outline"] and any(o["id"] == cls["id"] for o in n["outline"])
+    members = next((s["items"] for s in n["sections"] if s["key"] == "members"), [])
+    assert not {o["id"] for o in n["outline"]} & {m["id"] for m in members}
+
+
+def test_graph_groups_are_named_by_their_folder(atlas):
+    g = atlas.global_graph()
+    names = [x["name"] for x in g["groups"]]
+    assert names and len(names) == len(set(names))  # two communities never share a name
+    folders: dict = {}
+    for n in g["nodes"]:
+        if isinstance(n["group"], int):
+            folders.setdefault(n["group"], set()).add("/" + n["folder"].strip("./"))
+    for x in g["groups"]:
+        short = x["name"].split(" · ")[0]
+        assert short.count("/") <= 1 and any(f.endswith("/" + short.strip("/")) for f in folders[x["id"]])
+
+
+def test_graph_areas_are_the_first_two_folders(atlas):
+    g = atlas.global_graph()
+    for n in g["nodes"]:
+        parts = [p for p in n["folder"].split("/") if p not in ("", ".")]
+        assert n["area"] == ("/".join(parts[:2]) or "/")
+    assert len({n["area"] for n in g["nodes"]}) > 1
+    assert uidata._area("") == uidata._area(".") == "/" and uidata._area("a/b/c") == "a/b"
+
+
 def test_a_data_file_is_a_note_linked_to_the_code_that_names_it(atlas):
     death = next(r for r in atlas.search("wisp_death")["results"] if r["kind"] == "data")
     n = atlas.note(death["id"])
