@@ -243,17 +243,19 @@ def _why(g: Graph, h: "search_index.Hit", hit_line: int | None, higher: dict[str
 
 
 def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_tests: bool = True,
-             seeds: dict[str, str] | None = None, expansions: dict[str, list[str]] | None = None) -> dict:
+             seeds: dict[str, str] | None = None, expansions: dict[str, list[str]] | None = None,
+             handle: search_index.Handle | None = None) -> dict:
     """Rank, then pack a JSON result into ``budget`` (see the module docstring).
 
     ``seeds`` maps graph node ids to the reason they were linked (for example by
     a question plan); they enter with lexical score 1.0. ``expansions`` maps a
     question word to extra words to search for (weighted below the question's
     own words). Both are reported in the items' ``why`` / the ``expansions`` list.
+    ``handle``: an index already open (the notes view's, which never writes search.db).
     """
     budget = budget or Budget()
     rk = search_index.rank(g, question, include_tests=include_tests, seeds=seeds, expansions=expansions,
-                           limit=RANK_LIMIT)
+                           limit=RANK_LIMIT, handle=handle)
     q = rk.query
     ranked_files = {x.file for x in rk.hits[:40]}
     # the question's content words (folded), as the index saw them before tokenizing
@@ -277,7 +279,7 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
     prose, prose_skipped = 0, 0
     higher: dict[str, float] = {}
     rest_from = len(rk.hits)
-    handle = search_index.open_for(g)  # the index rank() just used: links and copies read from it
+    handle = handle or search_index.open_for(g)  # the index rank() just used: links and copies read from it
     for k, h in enumerate(rk.hits):
         if len(items) >= budget.max_items:
             budget.truncated = True

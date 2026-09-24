@@ -208,6 +208,8 @@ def make_handler(atlas: Atlas, port: list[int], token: str = ""):
                     obj = atlas.user_notes()
                 elif route == "impact":
                     obj = atlas.impact(nid, int((qs.get("depth") or ["3"])[0] or 3), tests=_flag(qs, "tests", True))
+                elif route == "answer":
+                    obj = atlas.answer((qs.get("q") or [""])[0])
                 elif route == "path":
                     obj = atlas.path((qs.get("from") or [""])[0], (qs.get("to") or [""])[0])
                 elif route == "global":

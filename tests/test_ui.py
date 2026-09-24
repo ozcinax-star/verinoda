@@ -608,3 +608,27 @@ def test_impact_and_path_are_served(served, atlas):
     status, _h, body = _get(served, f"/api/path?from={caller}&to={spawn['id']}")
     assert status == 200 and json.loads(body)["found"]
     assert _get(served, "/api/path?from=x&to=y")[0] == 404
+
+
+def test_a_question_is_answered_with_the_passages_of_verinoda_query(atlas, glow):
+    from verinoda.paths import search_db_path
+
+    db = search_db_path(glow)
+    before = db.stat().st_mtime_ns
+    r = atlas.answer("what happens when a wisp dies?")
+    assert r["items"] and r["question"] == "what happens when a wisp dies?"
+    top = r["items"][0]
+    assert top["file"] and top["lines"] and top["excerpt"] and top["why"]
+    assert any(it["id"] for it in r["items"])
+    for it in r["items"]:
+        if it["id"]:
+            assert atlas.note(it["id"])["id"] == it["id"]  # a passage opens its note
+    assert db.stat().st_mtime_ns == before  # answering never writes the search index
+    with pytest.raises(ValueError):
+        atlas.answer("   ")
+
+
+def test_a_question_is_answered_by_the_server(served):
+    status, _h, body = _get(served, "/api/answer?q=" + "which%20class%20spawns%20the%20wisp%3F")
+    assert status == 200 and json.loads(body)["items"]
+    assert _get(served, "/api/answer?q=")[0] == 400

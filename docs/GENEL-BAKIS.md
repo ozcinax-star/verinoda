@@ -243,7 +243,10 @@ adlandırdığı veri dosyaları ve onu adlandıran satırlar, kendisi hakkında
 durumları. Araç kodda okumayıp çıkardığı bağlantıları `?` ile işaretler. Her notun yanında yerel graf
 (derinlik 1-3), ayrıca bütün projenin dosya düzeyinde graf görünümü (klasöre ya da topluluğa göre renkli,
 vurgu filtresiyle; bağlantısız dosyalar dışta bir halka oluşturur) vardır; ikisi de kuvvet yönelimli: sürükle, yakınlaştır, üzerine gelince komşuları
-parlar, tıklayınca not açılır. Arama adla ya da soruyla (`verinoda query` sıralamasıyla), dosya ağacı,
+parlar, tıklayınca not açılır. Arama adla ya da soruyla (`verinoda query` sıralamasıyla); bir soru (üç ya da
+daha çok kelime, soru sözcüğü ya da `?`) "Soruyu cevapla" satırını da getirir: `verinoda query`'nin cevap verdiği
+pasajlar, satırları (renkli, editörde açılır), neden seçildikleri ve notlarıyla, ardından bulunan öbür yerler
+(arama indeksine yazılmaz; kod içermeyen dışa aktarılan dosyada yok). Dosya ağacı,
 geri/ileri, Türkçe/İngilizce, açık/koyu tema. Salt okunur ve yereldir: 127.0.0.1 üzerinde standart
 kütüphaneyle çalışan bir sunucu, yalnızca kendi adresine gelen GET isteklerine yanıt verir; sayfa
 dışarıdan hiçbir şey yüklemez (CDN, yazı tipi, telemetri yok). `verinoda ui --graph` doğrudan graf

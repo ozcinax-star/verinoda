@@ -58,6 +58,8 @@
       myNote: "My note", myNotes: "My notes", addNote: "+ Note", edit: "Edit", save: "Save", cancel: "Cancel",
       del: "Delete", sure: "Delete it?", keep: "Read it: still right", noteHint: "Markdown: **bold**, `code`, - lists, [[Name]] links a note. Ctrl+Enter saves.",
       nst: { fresh: "up to date", changed: "code changed", gone: "code gone" },
+      ask: "Answer the question", answerFor: "Answer", answerMore: "Also relevant", answerNone: "Nothing in the project answers it.",
+      answerStale: "changed since the index (the lines may be off):", answerExp: "also searched",
       impact: "Impact", impactTitle: "What may be affected", impactNone: "Nothing in the project uses it.",
       impactDepth: "links back", impactStop: "stopped at", impactTests: "in tests", withTests: "with tests",
       pathBtn: "Path…", pathTo: "Search the note to reach…", pathNone: "No chain of calls, imports or references links them.",
@@ -79,7 +81,7 @@
         extends: "Extends / implements", extended_by: "Subclasses / implementations", imports: "Imports",
         imported_by: "Imported by", references: "References", referenced_by: "Referenced by",
         names_data: "Names (resource ids)", named_by: "Named by", other_out: "Other links", other_in: "Other backlinks",
-        claims: "Claims", outline: "Outline", hubs: "Most connected", myNotes: "My notes",
+        claims: "Claims", outline: "Outline", hubs: "Most connected", myNotes: "My notes", answerMore: "Also relevant",
       },
       kind: {
         class: "class", method: "method", function: "function", file: "file", doc: "document", section: "section",
@@ -96,6 +98,8 @@
       myNote: "Notum", myNotes: "Notlarım", addNote: "+ Not", edit: "Düzenle", save: "Kaydet", cancel: "Vazgeç",
       del: "Sil", sure: "Silinsin mi?", keep: "Okudum: hâlâ doğru", noteHint: "Markdown: **kalın**, `kod`, - liste, [[Ad]] bir nota bağlar. Ctrl+Enter kaydeder.",
       nst: { fresh: "güncel", changed: "kod değişti", gone: "kod yok" },
+      ask: "Soruyu cevapla", answerFor: "Cevap", answerMore: "Ayrıca ilgili", answerNone: "Projede bunu cevaplayan bir şey yok.",
+      answerStale: "indeksten sonra değişti (satırlar kaymış olabilir):", answerExp: "ayrıca arandı",
       impact: "Etki", impactTitle: "Etkilenebilecekler", impactNone: "Projede bunu kullanan yok.",
       impactDepth: "bağlantı geri", impactStop: "şurada durdu:", impactTests: "testlerde", withTests: "testlerle",
       pathBtn: "Yol…", pathTo: "Ulaşılacak notu ara…", pathNone: "Aralarında çağrı, import ya da başvuru zinciri yok.",
@@ -118,7 +122,7 @@
         imported_by: "İçe aktaranlar", references: "Başvurdukları", referenced_by: "Başvuranlar",
         names_data: "Adlandırdığı kaynaklar", named_by: "Adlandıranlar", other_out: "Diğer bağlantılar",
         other_in: "Diğer geri bağlantılar", claims: "İddialar", outline: "Ana hat", hubs: "En çok bağlantılı",
-        myNotes: "Notlarım",
+        myNotes: "Notlarım", answerMore: "Ayrıca ilgili",
       },
       kind: {
         class: "sınıf", method: "metot", function: "fonksiyon", file: "dosya", doc: "belge", section: "bölüm",
@@ -227,7 +231,7 @@
   }
 
   // -- note rendering --------------------------------------------------------------------------
-  const KIND_LETTER = { class: "C", method: "M", function: "F", file: "F", doc: "D", section: "§", data: "{}", symbol: "S", external: "E", claim: "!" };
+  const KIND_LETTER = { class: "C", method: "M", function: "F", file: "F", doc: "D", section: "§", data: "{}", symbol: "S", external: "E", claim: "!", question: "?" };
   const kindBadge = (kind) => el("span", { class: "kbadge k-" + (kind || "symbol"), title: t("kind." + kind), text: KIND_LETTER[kind] || "·" });
   function noteLink(item, cls) {
     if (!item.id) return el("span", { class: cls || "", title: item.file || "" }, item.title); // no note to open
@@ -617,7 +621,7 @@
         await runSearch();
       }
       if (active < 0 && items.length) active = 0;
-      if (items[active]) go(items[active].id);
+      if (items[active]) go(items[active].id, items[active].question);
     } else if (ev.key === "Escape") { cancelSearch(); results.hidden = true; input.blur(); }
   });
   input.addEventListener("focus", () => { if (items.length) results.hidden = false; });
@@ -631,9 +635,11 @@
     if (seq !== searchSeq) return;
     shownSeq = seq;
     items = r.results || [];
+    if (!OFFLINE && isQuestion(q)) items = [{ id: null, question: q, title: `${t("ask")}: «${q}»`, kind: "question" }, ...items];
     active = items.length ? 0 : -1;
     results.replaceChildren(...(items.length ? items.map((it, i) => el("div", {
-      class: "result", role: "option", onclick: () => go(it.id), onmousemove: () => { active = i; paintActive(); },
+      class: "result" + (it.question ? " ask" : ""), role: "option", onclick: () => go(it.id, it.question),
+      onmousemove: () => { active = i; paintActive(); },
     }, kindBadge(it.kind), el("span", { class: "t", text: it.title }), el("span", { class: "p", text: it.file || "" }),
     el("span", { class: "w", text: (I18N[lang].why || {})[it.why] || it.why || "" }))) : [el("div", { class: "result muted", text: t("noResults") })]));
     results.hidden = false;
@@ -643,7 +649,40 @@
     [...results.children].forEach((c, i) => c.classList.toggle("active", i === active));
     const a = results.children[active]; if (a) a.scrollIntoView({ block: "nearest" });
   }
-  function go(id) { cancelSearch(); results.hidden = true; input.blur(); location.hash = noteHref(id); }
+  function go(id, question) {
+    cancelSearch(); results.hidden = true; input.blur();
+    location.hash = question ? "#/q/" + encodeURIComponent(question) : noteHref(id);
+  }
+  const QUESTION_WORDS = /^(how|what|where|why|which|who|when|does|do|is|are|can|nasıl|ne|neden|nerede|hangi|kim|niçin|niye)\b/i;
+  function isQuestion(q) { return /\?\s*$/.test(q) || QUESTION_WORDS.test(q) || q.trim().split(/\s+/).length >= 3; }
+
+  // -- an answer to a question: the passages `verinoda query` would give ---------------------------
+  async function renderAnswer(question) {
+    current = null;
+    document.title = `${question} · Verinoda`;
+    setMain(el("div", { class: "empty", text: t("loading") }));
+    $("#outline").replaceChildren(); local.setData([], []); markTree(null);
+    let r;
+    try { r = await api("/api/answer?q=" + encodeURIComponent(question)); } catch (e) { showError(e); return; }
+    if (location.hash !== "#/q/" + encodeURIComponent(question)) return; // another page was opened meanwhile
+    const parts = [el("div", { class: "crumbs", text: t("answerFor") }), el("h1", { text: r.question })];
+    if (r.expansions.length) parts.push(el("div", { class: "muted small", text: `${t("answerExp")}: ${r.expansions.join(", ")}` }));
+    if (r.stale_files.length) parts.push(el("div", { class: "muted small", text: `${t("answerStale")} ${r.stale_files.join(", ")}` }));
+    if (!r.items.length) parts.push(el("p", { class: "muted", text: t("answerNone") }));
+    r.items.forEach((it, k) => {
+      const first = it.lines ? it.lines[0] : null;
+      const head = el("h2", { class: "sec", id: "ans-" + k }, kindBadge(it.kind), " ", it.id ? noteLink(it) : el("span", { text: it.title }),
+        " ", atLink(first ? `${it.file}:${first}` : it.file));
+      const lines = String(it.excerpt || "").split("\n");
+      parts.push(head, el("div", { class: "why" }, it.why.map((w) => el("span", { class: "chip", text: w }))));
+      if (it.excerpt) parts.push(codeBlock({ start: first || 1, end: (first || 1) + lines.length - 1, lines, total: lines.length, lang: it.lang }, it.file));
+    });
+    if (r.more.length) parts.push(sectionHeader("answerMore", r.more.length), el("ul", { class: "links" },
+      r.more.map((m) => { const at = m.split(" ")[0]; return el("li", {}, atLink(at.replace(/-\d+$/, "")), el("span", { class: "rel", text: m.slice(at.length + 1) })); })));
+    setMain(el("div", { class: "answer" }, ...parts));
+    const box = $("#outline");
+    r.items.forEach((it, k) => box.append(el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); const h = $("#ans-" + k); if (h) h.scrollIntoView({ behavior: "smooth", block: "start" }); } }, it.title)));
+  }
 
   // -- force-directed graph on a canvas ---------------------------------------------------------
   const PALETTE = ["#8e7cf5", "#4fa3d9", "#e0a34a", "#5cc08a", "#e0605a", "#c77dd6", "#56c2c9", "#d9d05a",
@@ -1182,6 +1221,7 @@
     $("#tooltip").hidden = true;
     beforeGraph = h;
     if (h.startsWith("#/n/")) openNote(decodeURIComponent(h.slice(4)));
+    else if (h.startsWith("#/q/") && !OFFLINE) renderAnswer(decodeURIComponent(h.slice(4)));
     else renderHome();
   }
   window.addEventListener("hashchange", route);

@@ -69,6 +69,8 @@ MEMBER_RELATIONS = ("method", "contains")
 # the links along which a change travels: the source USES the target (calls, imports, extends it, names it)
 USE_RELATIONS = ("calls", "imports", "imports_from", "references", "uses", "inherits", "implements")
 MAX_IMPACT = 400            # notes an impact lists (it says when it stopped)
+MAX_ANSWER_ITEMS = 8        # passages in an answer (the rest are listed by place)
+MAX_ANSWER_CHARS = 16_000   # characters of quoted code in an answer
 MAX_PATH_VISIT = 50_000     # notes a path search looks at before it gives up
 CODE_SUFFIX_LANG = {".py": "python", ".java": "java", ".kt": "kotlin", ".kts": "kotlin", ".js": "js", ".jsx": "js",
                     ".mjs": "js", ".cjs": "js", ".ts": "ts", ".tsx": "ts", ".go": "go", ".rs": "rust", ".c": "c",
@@ -176,6 +178,9 @@ class Atlas:
 
     def impact(self, nid: str, depth: int = 3, *, tests: bool = True) -> dict:
         return self.snapshot().impact(nid, depth, tests=tests)
+
+    def answer(self, question: str) -> dict:
+        return self.snapshot().answer(question)
 
     def path(self, src: str, dst: str) -> dict:
         return self.snapshot().path(src, dst)
@@ -668,6 +673,32 @@ class Snapshot:
                 "community": {"id": g.G.nodes[nid].get("community"), "name": g.G.nodes[nid].get("community_name")},
                 "sections": self._sections(sections), "test": bool(f and _is_test(f)),
                 "degree": g.G.degree(nid)})
+
+    # -- answering a question (the ranking and evidence of `verinoda query`) -----------------------
+    def answer(self, question: str) -> dict:
+        """What ``verinoda query`` answers: the passages that answer the question, each with the
+        lines it quotes, why it was chosen and the note it belongs to; nothing is written."""
+        from verinoda import retrieval
+
+        q = " ".join(str(question or "").split())[:MAX_QUERY_CHARS]
+        if not q:
+            raise ValueError("an empty question")
+        res = retrieval.retrieve(self.g, q, retrieval.Budget(max_items=MAX_ANSWER_ITEMS, max_chars=MAX_ANSWER_CHARS),
+                                 handle=self.h)
+        items = []
+        for it in res.get("items") or []:
+            nid = it.get("id")
+            known = bool(nid) and nid in self.g.G and self.kind(nid) not in HIDDEN_KINDS
+            f = it.get("file")
+            items.append({"id": nid if known else None, "title": self.title(nid) if known else it.get("symbol") or f,
+                          "kind": self.kind(nid) if known else "file", "file": f, "lines": it.get("lines"),
+                          "excerpt": it.get("excerpt") or "", "why": list(it.get("why") or []),
+                          "lang": self._lang(f) if f else None, "score": it.get("score"),
+                          "test": bool(f and _is_test(f)), "reference": self.in_reference(f)})
+        b = res.get("budget") or {}
+        return {"question": q, "items": items, "more": list(b.get("more") or [])[:20],
+                "expansions": list(b.get("expansions") or []), "stale_files": list(b.get("stale_files") or []),
+                "truncated": bool(b.get("truncated")), "terms": list(res.get("terms") or [])}
 
     # -- impact and paths -------------------------------------------------------------------------
     def _seeds(self, nid: str) -> list[str]:

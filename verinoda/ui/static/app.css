@@ -128,6 +128,10 @@ a.at:hover, a.chip.editor:hover { color: var(--link); text-decoration: underline
 ul.links button.danger { background: none; border: 1px solid var(--border); border-radius: 5px; color: var(--bad);
   font-size: 11px; padding: 0 6px; cursor: pointer; }
 .unote.panel { border-left-color: var(--accent); }
+.answer .why { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px; }
+.answer h2.sec { display: flex; gap: 6px; align-items: baseline; text-transform: none; }
+.answer h2.sec .at { margin-left: auto; }
+#results .result.ask .t { color: var(--accent-2); font-weight: 600; }
 .unote .spacer { flex: 1; }
 button.linkish { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; }
 input.pathq { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--border);
