@@ -413,3 +413,25 @@ def test_locale_labels_expand_at_full_weight_instead_of_their_words(mini, monkey
     q = _query(mini, "Kor Ocağı nerede çalışıyor?", repo=mini.root)
     assert {"from": "kor ocagi", "to": runner_tok, "via": "locale label", "weight": 1.0} in q.expansions
     assert not [e for e in q.expansions if e["from"] in ("kor", "ocagi")]  # the label replaces its words
+
+
+def test_a_qualified_name_floors_the_method_of_that_owner_only(tmp_path):
+    root = tmp_path / "qual"
+    # the class's best passages are its comments near the top, not the spawn method at its end
+    filler = "".join(f"    def helper{i}(self):\n        # keeps the wisp lit\n        return {i}\n\n"
+                     for i in range(30))
+    _write(root, "game/wisp.py", "class Wisp:\n" + filler + "    def spawn(self, world):\n        return world\n")
+    _write(root, "game/ghost.py", "class Ghost:\n    def spawn(self, world):\n        return world\n")
+    _write(root, "game/rituals.py", "from game.wisp import Wisp\n\n\ndef summon(world):\n"
+                                    "    return Wisp().spawn(world)\n")
+    g = _scan(root)
+    hits = search_index.rank(g, "Who calls Wisp.spawn?").hits
+    floored = {h.qual for h in hits if "question names 'spawn'" in h.reasons}
+    assert floored == {"Wisp.spawn"}
+    # a module written before a function counts as its owner too
+    assert "summon" in {h.name for h in search_index.rank(g, "what does rituals.summon do?").hits
+                        if "question names 'summon'" in h.reasons}
+    # the method of a long class gets its own section (with its callers) after the class's
+    text = retrieval.render_text(retrieval.retrieve(g, "Who calls Wisp.spawn?"), 6000)
+    assert "## game/wisp.py:122-123 def spawn(self, world)" in text
+    assert "called by: summon (game/rituals.py:5)" in text

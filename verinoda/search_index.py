@@ -62,7 +62,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from verinoda import textnorm
 from verinoda.architecture_map import is_test_file
@@ -271,6 +271,19 @@ def named_identifiers(question: str) -> list[str]:
         if coded:
             out += [p for p in parts if len(p) >= 3]
     return list(dict.fromkeys(out))
+
+
+def qualified_owners(question: str) -> dict[str, set[str]]:
+    """``Wisp.spawn`` in the question -> ``{"spawn": {"wisp"}}``: the owner (class, module or
+    object) the question writes before a name."""
+    out: dict[str, set[str]] = defaultdict(set)
+    for m in IDENT_RE.finditer(question):
+        tok = m.group(0)
+        tok = tok[:-2] if tok.endswith("()") else tok
+        parts = tok.split(".")
+        if len(parts) > 1 and parts[-1].lower() not in FILE_EXTS and all(parts[-2:]):
+            out[parts[-1].lower()].add(parts[-2].lower())
+    return out
 
 
 def bare_label(label: str) -> str:
@@ -1676,10 +1689,26 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
         lex = {uid: s / top for uid, s in best.items() if s > 0}
         if q.named:
             want = {nm.strip("_").lower(): nm for nm in q.named}
-            rows = _fetch(conn, "SELECT uid, name FROM units WHERE uid IN (SELECT uid FROM names WHERE term IN ({ph}))",
+            rows = _fetch(conn, "SELECT uid, name, qual FROM units WHERE uid IN "
+                                "(SELECT uid FROM names WHERE term IN ({ph}))",
                           sorted({t for nm in want for t in word_tokens(nm)}))
-            for uid, name in rows:
+            # "Wisp.spawn": of the symbols named spawn, the one Wisp owns (its qualified name or
+            # its file); when none is owned by it, every spawn counts as before
+            owners = qualified_owners(question)
+
+            def owned(uid: int, name: str, qual: str | None) -> bool:
+                xs = owners.get(name.strip("_").lower())
+                if not xs:
+                    return True
+                scope = [s.lower() for s in (qual or "").split(".")[:-1]]
+                return any(x in scope or x == PurePosixPath(h.units[uid][0]).stem.lower() for x in xs)
+
+            has_owner = {name.strip("_").lower() for uid, name, qual in rows if uid in h.units and owned(uid, name, qual)
+                         and name.strip("_").lower() in owners}
+            for uid, name, qual in rows:
                 nm = want.get(name.strip("_").lower())
+                if nm and name.strip("_").lower() in has_owner and not owned(uid, name, qual):
+                    continue
                 if nm and uid in h.units and h.units[uid][2] == "symbol" and \
                         (include_tests or not is_test_file(h.units[uid][0])):
                     lex[uid] = max(lex.get(uid, 0.0), ref_factor(uid))

@@ -545,7 +545,9 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
         for x, y in sorted(wins):
             body = "\n".join(_clip(lines[j - 1], TEXT_LINE_CHARS) for j in range(x, min(y, len(lines)) + 1))
             add((f"  {h.file}:{x}-{y}\n" if (x, y) != (a, b) else "") + body)
-        shown[h.file].append((a, b))
+        # the lines printed, not the whole span: a method of a long class whose section showed two
+        # other passages still gets its own section (with its callers)
+        shown[h.file].extend(wins)
     if handle is not None:
         missing, n_missing = search_index.unindexed_matching(handle, rd.ranking.query)
         if missing:

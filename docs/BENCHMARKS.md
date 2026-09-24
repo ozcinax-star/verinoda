@@ -157,6 +157,18 @@ whose two recipes were missed): text 4 -> 6, analyze 1 -> 2; the set: text
 64 -> **66**, analyze 40 -> **41**, JSON 50 (q03 +1, q04 -1). Every other set
 unchanged.
 
+Two more fixes from the private set: a question that writes `Owner.name`
+("who calls Wisp.spawn?") gave every method called `spawn` the score of a
+spelled identifier; now only the one that `Owner` owns (its qualified name, or
+its file for a module function) gets it, unless no such method exists. And the
+text format skipped every unit inside a unit it had already shown, although a
+long class section prints only two passages: a method of that class, ranked
+second with its callers, was never shown. It now skips only lines already
+printed. The private set's text format went from 22 to 31 of 39 facts (three
+"who calls ..." questions from 0/4, 0/4 and 2/4 to 4/4 each, one other -1;
+in-sample: found while looking at those questions); `forge_mod` text 66 -> 65
+(q08: more sections share the budget); every other set unchanged.
+
 **The five earlier sets** (regression check, same harness, `repeat = 1`, no
 upstream CLI, against `dogfood-2026-09-23/`): 24 of the 25 Verinoda cells and
 every raw and Graphify cell found exactly the same number of facts. One cell
