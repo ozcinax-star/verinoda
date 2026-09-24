@@ -403,6 +403,14 @@ def test_the_3d_view_flies_to_a_file_walks_its_links_and_follows_it(page, site):
     })()""")
     page.wait(f"!document.querySelector('#hud').hidden && document.querySelector('#hud strong').textContent === {json.dumps(hub['title'])}")
     assert page.js("window.__verinoda.g3.selected.id") == hub["id"]
+    # a dot in front of the hub, just off its middle: a click on the middle is still the hub's
+    assert page.js(f"""(() => {{
+      const g = window.__verinoda.g3, hub = g.byId.get({json.dumps(hub['id'])});
+      const dot = [...g.nodes].find((m) => m !== hub && g.visible(m));
+      g.project();
+      dot.sx = hub.sx + g.rad(dot) + 1; dot.sy = hub.sy; dot.depth = hub.depth - 1; dot.sv = true;
+      return g.hit(hub.sx, hub.sy).id;
+    }})()""") == hub["id"]
     _key(page, "1")  # the first linked file in the panel
     page.wait(f"window.__verinoda.g3.selected.id !== {json.dumps(hub['id'])}")
     assert page.js(f"window.__verinoda.g3.adj.get({json.dumps(hub['id'])}).has(window.__verinoda.g3.selected.id)")
@@ -454,3 +462,46 @@ def test_the_tour_goes_round_the_regions_and_every_key_is_listed(page, site):
     page.wait("document.querySelector('#keys').hidden")
     _key(page, "v")  # and back to the flat graph
     page.wait("!document.querySelector('#global').hidden && document.querySelector('#global3d').hidden")
+
+
+def test_a_watched_file_that_changes_is_announced(page, site, glow):
+    _in_3d(page, site)
+    hub = page.js("""(() => {
+      const g = window.__verinoda.g3, n = [...g.nodes].filter((m) => m.file).sort((a, b) => b.deg - a.deg)[0], p = g.screenOf(n.id);
+      const c = document.querySelector('#global3d'), r = c.getBoundingClientRect();
+      for (const type of ['pointerdown', 'pointerup'])
+        c.dispatchEvent(new PointerEvent(type, {clientX: r.left + p.x, clientY: r.top + p.y, bubbles: true, button: 0, pointerId: 1}));
+      return {id: n.id, title: n.title, file: n.file};
+    })()""")
+    page.wait(f"window.__verinoda.g3.selected && window.__verinoda.g3.selected.id === {json.dumps(hub['id'])}")
+    _key(page, "p")  # watch it
+    page.wait("!document.querySelector('#watched').hidden && document.querySelector('#watched .chip')")
+    assert hub["title"] in page.js("document.querySelector('#watched').textContent")
+    assert json.loads(page.js("localStorage.getItem('vn.watched')"))[0]["id"] == hub["id"]
+    f = glow / hub["file"]
+    original = f.read_bytes()
+    f.write_bytes(original + b"\n// changed while watched\n")
+    try:
+        _key(page, "p")  # unwatch and watch again: the watch list looks at once
+        _key(page, "p")
+        page.wait("document.querySelector('#watched .chip.changed')", timeout=10)
+        page.wait("document.querySelector('#toast') && !document.querySelector('#toast').hidden", timeout=10)
+        assert hub["title"] in page.js("document.querySelector('#toast').textContent")
+    finally:
+        f.write_bytes(original)
+    _key(page, "p")  # unwatch
+    page.wait("document.querySelector('#watched').hidden")
+    # a watched folder is still found when the graph is coloured by community
+    _key(page, "]")
+    page.wait("window.__verinoda.g3.region && !window.__verinoda.g3.selected")
+    region = page.js("document.querySelector('#hud strong').textContent")
+    _key(page, "p")
+    page.wait("document.querySelector('#watched .chip')")
+    page.js("(() => { const s = document.querySelector('#graph-color'); s.value = 'community'; s.dispatchEvent(new Event('change')); })()")
+    _key(page, "Escape")
+    page.wait("!window.__verinoda.g3.region")
+    page.js("document.querySelector('#watched .chip').click()")
+    page.wait(f"document.querySelector('#graph-color').value === 'folder' && window.__verinoda.g3.region "
+              f"&& document.querySelector('#hud strong').textContent === {json.dumps(region)}")
+    _key(page, "p")
+    page.wait("document.querySelector('#watched').hidden")

@@ -101,6 +101,8 @@
       walkAt: "{i} of {n} linked to {name} (N / Shift+N)", hudTop: "Most connected here", hudAll: "Everything",
       prevRegion: "Previous", nextRegion: "Next", tourResume: "Resume", tourPause: "Pause", tourAt: "Tour: region {i} of {n}",
       tourDone: "That was the tour: the whole project again.",
+      hudPin: "Watch", hudUnpin: "Stop watching", watchedChanged: "Watched and changed since the index: {list}",
+      keysPin: "Watch the selected file or region (changes are announced)",
       say: {
         data: "A data file: code names it by its resource id.",
         docOut: "{name} mentions {outs} files of the project.", docIn: "{name} is mentioned by {ins} files.",
@@ -181,6 +183,8 @@
       walkAt: "{name} ile bağlantılı {n} dosyanın {i}. (N / Shift+N)", hudTop: "Burada en çok bağlantılı", hudAll: "Hepsi",
       prevRegion: "Önceki", nextRegion: "Sonraki", tourResume: "Sürdür", tourPause: "Duraklat", tourAt: "Tur: {n} bölgenin {i}.",
       tourDone: "Tur bitti: projenin tamamı yeniden karşında.",
+      hudPin: "İzlemeye al", hudUnpin: "İzlemeyi kaldır", watchedChanged: "İzlenen ve indeksten sonra değişen: {list}",
+      keysPin: "Seçili dosyayı ya da bölgeyi izle (değişince söylenir)",
       say: {
         data: "Bir veri dosyası: kod onu kaynak kimliğiyle anıyor.",
         docOut: "{name} projenin {outs} dosyasından söz ediyor.", docIn: "{ins} dosya {name} belgesinden söz ediyor.",
@@ -1222,6 +1226,7 @@
 
   function graphChrome() {
     for (const id of ["graph-3d", "graph-tour"]) $("#" + id).hidden = !G3;
+    setTimeout(() => { renderWatched(); checkWatched(); }, 0);
     $("#graph-3d").classList.toggle("on", mode3d);
     $("#global").hidden = mode3d; $("#global3d").hidden = !mode3d;
     if (!mode3d) hud.hidden = true;
@@ -1357,6 +1362,7 @@
       el("div", { class: "hud-bar" },
         hudBtn(t("hudOpen"), "↵", () => { location.hash = noteHref(n.id); }, "primary"),
         hudBtn(G3.follow === n ? t("hudUnfollow") : t("hudFollow"), "F", toggleFollow),
+        hudBtn(isPinned("n:" + n.id) ? t("hudUnpin") : t("hudPin"), "P", () => togglePin()),
         hudBtn(t("impact"), "I", () => impact3d(n)),
         nb.length ? hudBtn(t("hudWalk"), "N", () => walkStep(1)) : null),
       nb.length ? el("div", { class: "sec small", text: `${t("hudLinked")} · ${nb.length}` }) : null,
@@ -1416,6 +1422,7 @@
       el("div", { class: "hud-bar" },
         hudBtn(t("prevRegion"), "[", () => regionStep(-1)), hudBtn(t("nextRegion"), "]", () => regionStep(1)),
         tour ? hudBtn(tour.paused ? t("tourResume") : t("tourPause"), t("spaceK"), pauseTour) : hudBtn(t("tour"), "T", startTour),
+        hudBtn(isPinned("r:" + r.key) ? t("hudUnpin") : t("hudPin"), "P", () => togglePin()),
         hudBtn(t("hudAll"), "R", () => graphKey({ key: "r" }))),
       el("div", { class: "sec small", text: t("hudTop") }),
       el("ol", { class: "hud-list" }, top.map((n, i) => hudRow(i, n, String(n.deg)))));
@@ -1536,6 +1543,7 @@
       case "-": case "_": G3.zoom(1.25); return true;
       case " ": if (tour) pauseTour(); else { G3.spin = !G3.spin; G3.kick(); } return true;
       case "f": case "F": toggleFollow(); return true;
+      case "p": case "P": togglePin(); return true;
       case "n": walkStep(1); return true;
       case "N": walkStep(-1); return true;
       case "Enter": if (sel) location.hash = noteHref(sel.id); return !!sel;
@@ -1551,6 +1559,63 @@
   $("#graph-3d").addEventListener("click", () => setMode(!mode3d));
   $("#graph-tour").addEventListener("click", () => { if (tour) stopTour(); else startTour(); });
   $("#graph-keys").addEventListener("click", () => showKeys());
+
+  // -- a watch list: files and regions to keep an eye on; the page says when one of them changed ---------
+  const WATCH_KEY = "vn.watched";
+  let watched = (() => { try { return JSON.parse(store.get(WATCH_KEY, "[]")) || []; } catch (_) { return []; } })();
+  const isPinned = (key) => watched.some((w) => w.key === key);
+  let changedWatched = new Set(), announced = new Set();
+  function saveWatched() { store.set(WATCH_KEY, JSON.stringify(watched.slice(-20))); renderWatched(); }
+  function togglePin() {
+    if (!G3) return;
+    let item = null;
+    if (G3.selected) item = { key: "n:" + G3.selected.id, id: G3.selected.id, title: G3.selected.title, file: G3.selected.file };
+    else if (regionKey) item = { key: "r:" + regionKey, region: regionKey, title: groupName(regionKey) };
+    if (!item) return;
+    watched = isPinned(item.key) ? watched.filter((w) => w.key !== item.key) : [...watched, item];
+    saveWatched();
+    if (G3.selected) hudNode(G3.selected); else if (regionKey) { const r = regions().find((x) => x.key === regionKey); if (r) hudRegion(r); }
+    checkWatched();
+  }
+  // a region is a folder ("@path") or a community, whichever way the graph was coloured when it was watched
+  const inRegion = (n, key) => key === "data" ? n.kind === "data"
+    : n.kind !== "data" && (key.startsWith("@") ? "@" + n.area === key : String(n.community) === key);
+  function watchedFiles(w) { // the files a watched item stands for
+    if (w.file) return [w.file];
+    const src = (G3 && G3.nodes.length ? G3.nodes : (globalData && globalData.nodes) || []);
+    return w.region ? src.filter((n) => inRegion(n, w.region)).map((n) => n.file).filter(Boolean) : [];
+  }
+  function openWatched(w) {
+    stopTour();
+    if (w.id) { select3d({ id: w.id, file: w.file }); return; }
+    const mode = w.region === "data" ? colorBy : w.region.startsWith("@") ? "folder" : "community";
+    if (mode !== colorBy) { const s = $("#graph-color"); s.value = mode; s.dispatchEvent(new Event("change")); }
+    focusRegion(w.region);
+  }
+  function renderWatched() {
+    const box = $("#watched");
+    if (!G3) { box.hidden = true; return; }
+    G3.pinned = new Set(watched.filter((w) => w.id).map((w) => w.id));
+    box.replaceChildren(...watched.map((w) => el("span", {
+      class: "chip" + (changedWatched.has(w.key) ? " changed" : ""), title: w.file || w.title,
+      onclick: () => openWatched(w),
+    }, (w.region ? "◎ " : "◆ ") + w.title)));
+    box.hidden = !watched.length || !mode3d || $("#graphview").hidden;
+    if (G3) { G3.dirty = true; G3.kick(); }
+  }
+  async function checkWatched() {
+    if (OFFLINE || !watched.length || document.hidden) return;
+    let r;
+    try { r = await api("/api/changes"); } catch (_) { return; }
+    const touched = new Set([...(r.edited || []), ...(r.deleted || [])].map((c) => c.file));
+    changedWatched = new Set(watched.filter((w) => watchedFiles(w).some((f) => touched.has(f))).map((w) => w.key));
+    const fresh = watched.filter((w) => changedWatched.has(w.key) && !announced.has(w.key));
+    for (const w of fresh) announced.add(w.key);
+    for (const k of [...announced]) if (!changedWatched.has(k)) announced.delete(k); // said again if it changes again
+    if (fresh.length) toast(fill(t("watchedChanged"), { list: fresh.map((w) => w.title).join(", ") }));
+    renderWatched();
+  }
+  if (!OFFLINE) setInterval(checkWatched, 15000);
 
   // -- the command bar (Ctrl+K): say what to do, in Turkish or English ---------------------------------
   const pal = { box: $("#palette"), input: $("#pal-input"), list: $("#pal-list"), items: [], active: 0, seq: 0, timer: null };
@@ -1706,7 +1771,7 @@
       [H, t("keys.graphH")], ["V", t("keys.view")], [t("keys.dragK"), t("keys.drag")], [t("keys.rdragK"), t("keys.rdrag")],
       [t("keys.wheelK"), t("keys.wheel")], ["← → ↑ ↓", t("keys.orbit")], ["+ −", t("keys.zoom")], [t("keys.clickK"), t("keys.click")],
       [`↵ · ${t("keys.dblK")}`, t("keys.open")], ["1 – 9", t("keys.num")], ["N · Shift N", t("keys.walk")], ["⌫", t("keys.back")],
-      ["F", t("keys.follow")], [t("spaceK"), t("keys.spin")], ["[ ]", t("keys.regions")], ["T", t("keys.tour")], ["I", t("keys.impact")],
+      ["F", t("keys.follow")], ["P", t("keysPin")], [t("spaceK"), t("keys.spin")], ["[ ]", t("keys.regions")], ["T", t("keys.tour")], ["I", t("keys.impact")],
       ["C", t("keys.changes")], ["L", t("keys.labels")], ["R", t("keys.reset")],
     ];
     const box = el("div", { class: "keys-box", role: "dialog" },

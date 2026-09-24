@@ -258,7 +258,10 @@ bağlı dosyaları numaralar: `1`-`9` birine uçar, `N` hepsini tek tek gezer, `
 dosyayı izler (kamera etrafında döner), `I` bir değişikliğin neyi etkileyebileceğini yakar, `Enter` notunu açar.
 Bir *bölge* (klasör, ya da topluluğa göre renklendirilmişse topluluk) en çok bağlantılı dosyaları ve en çok
 birlikte çalıştığı bölgelerle çerçevelenir; `[` ve `]` bölgeler arasında gezer, *Tur* (`T`) önce ürünün kendi
-bölgelerini, sonra testleri, örnekleri ve belgeleri birer cümleyle dolaşır. **Komut çubuğu** (`Ctrl+K`), Türkçe ya
+bölgelerini, sonra testleri, örnekleri ve belgeleri birer cümleyle dolaşır. `P` seçili dosyayı ya da bölgeyi
+izleme listesine alır: alttaki bir etiket seni ona geri götürür, izlenen dosyanın üstünde küçük bir karo durur ve
+yerel sunucuyla açıldığında izlenen bir dosya indeksten sonra değişince sayfa bunu söyler (15 saniyede bir bakar;
+liste tarayıcında kalır). **Komut çubuğu** (`Ctrl+K`), Türkçe ya
 da İngilizce: `odak rank` 3D'de bir nota uçar, `bölge ui` bir bölgeyi çerçeveler, `etki store` ve `yol parse ile
 rank` ilgili dosyaları yakar; `tur`, `değişenler`, `aç …` ya da bir soru (aşağıdaki gibi cevaplanır). `?` bütün
 kısayolları gösterir, `Esc` her seferinde bir adım geri alır. Python standart kütüphanesinde (1.745 dosya, 8.259

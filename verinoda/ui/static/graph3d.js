@@ -336,6 +336,15 @@
           ctx.beginPath(); ctx.arc(n.sx, n.sy, r + 2, 0, TAU); ctx.stroke();
         }
       }
+      // watched notes: a small diamond above them
+      if (this.pinned && this.pinned.size) {
+        ctx.globalAlpha = 0.95; ctx.fillStyle = th.warn || "#e0a34a";
+        for (const n of order) {
+          if (!this.pinned.has(n.id)) continue;
+          const r = this.rad(n), x = n.sx, y = n.sy - r - 7;
+          ctx.beginPath(); ctx.moveTo(x, y - 4); ctx.lineTo(x + 4, y); ctx.lineTo(x, y + 4); ctx.lineTo(x - 4, y); ctx.closePath(); ctx.fill();
+        }
+      }
       // the selected note: a turning ring, and a finer one while the camera follows it
       const sel = this.selected;
       if (sel && sel.sv && this.visible(sel)) {
@@ -386,13 +395,17 @@
 
     // -- hit testing and input -------------------------------------------------------------------
     hit(sx, sy) {
-      let best = null;
+      // the frontmost disc under the pointer; the slack around small dots only when no disc is under it,
+      // so a dot in front of a hub does not take a click aimed at the hub's middle
+      let best = null, near = null, nearD = Infinity;
       for (const n of this.nodes) {
         if (!n.sv || !this.visible(n)) continue;
-        const r = Math.max(6, this.rad(n) + 3), dx = n.sx - sx, dy = n.sy - sy;
-        if (dx * dx + dy * dy <= r * r && (best === null || n.depth < best.depth)) best = n;
+        const r = this.rad(n), dx = n.sx - sx, dy = n.sy - sy, d2 = dx * dx + dy * dy;
+        if (d2 <= r * r) { if (best === null || n.depth < best.depth) best = n; continue; }
+        const slack = Math.max(6, r + 3);
+        if (d2 <= slack * slack && d2 < nearD) { near = n; nearD = d2; }
       }
-      return best;
+      return best || near;
     }
     bind() {
       const c = this.c, pos = (ev) => { const r = c.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };

@@ -23,8 +23,8 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python: ["3.10", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
       - name: venv + install
         run: |
           uv venv --python ${{ matrix.python }} .venv
@@ -44,8 +44,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
       - name: build wheel
         run: uv build --wheel --out-dir dist
       - name: install into a fresh environment and smoke-test
@@ -69,8 +69,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
       - run: |
           uv venv --python 3.12 .venv
           uv pip install --python .venv -e ".[mcp]" pytest hypothesis tree-sitter-hcl tree-sitter-ocaml tree-sitter-commonlisp

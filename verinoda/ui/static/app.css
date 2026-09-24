@@ -196,6 +196,11 @@ ul.links .at { color: var(--faint); font-size: 11.5px; margin-left: auto; white-
   border-top: 2px solid var(--accent); border-radius: 8px; padding: 10px 12px; font-size: 13px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35); backdrop-filter: blur(4px); }
 #hud[hidden] { display: none; }
+#watched { position: absolute; left: 50%; transform: translateX(-50%); bottom: 12px; display: flex; gap: 6px; flex-wrap: wrap;
+  max-width: 60%; justify-content: center; }
+#watched[hidden] { display: none; }
+#watched .chip { cursor: pointer; background: var(--panel); border: 1px solid var(--border); }
+#watched .chip.changed { border-color: var(--warn, #e0a34a); box-shadow: 0 0 0 1px var(--warn, #e0a34a); }
 #hud .hud-head { display: flex; gap: 6px; align-items: baseline; font-size: 15px; }
 #hud .hud-sub { margin: 2px 0 6px; }
 #hud .hud-say { margin: 6px 0; line-height: 1.45; }
