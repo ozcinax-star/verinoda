@@ -6,7 +6,8 @@ Everything lives under ``<repo>/.verinoda/``:
     index/          knowledge-graph output of project_index (graph.json, report)
                     plus Verinoda's derived, disposable files next to it:
                     search.db (passage index), receiver_calls.json (receiver-call
-                    edges), lexicon.json (repo-learned vocabulary)
+                    edges), lexicon.json (repo-learned vocabulary), python_facts.json
+                    (what each .py file imports and calls, kept between builds)
                     and, when the user supplies one, index.scip (a SCIP index read by
                     scip_reader; freshness state in scip_fresh.json)
     plans/          question-plan files (JSON is never passed on the command line)

@@ -82,9 +82,17 @@ tokens (quer vs query); they are one now. Fresh-index A/B: 2 of 333 results chan
 
 **Update time.** Each path is resolved once per build (the pipeline called `Path.resolve` about
 30,000 times per update of Verinoda's own repository) and compact JSON goes through the C encoder.
-`verinoda update` after a one-line edit of Verinoda's own 1,163 files: 35.1 s → 27.9 s (the build
-35-40 s → 28.9 s). graph.json is the same (byte for byte on the examples, node, link and attribute
-for attribute on Verinoda's own repository). Fresh-index A/B: 0 of 333 results differ.
+Then what each Python file imports and calls (two walks over every node of every `.py` file on each
+build) is kept between builds, keyed by a hash of the file (`verinoda/python_facts.py`); where an
+import points is still worked out on every build. `verinoda update` after a one-line edit of a copy
+of Verinoda's own repository (about 1,200 files), the command itself, wall clock, three alternating
+runs per version: 44.1-44.8 s → 36.6-38.1 s (resolve once) → 34.3-34.9 s (kept Python facts).
+graph.json is the same (byte for byte on the examples, on graphify_core and, with the kept facts, on
+Verinoda's own repository). Fresh-index A/B of the first change: 0 of 333 results differ.
+
+*Correction:* this section first said 35.1 s → 27.9 s. Those figures came from a timing script that
+imported the indexer before Verinoda had pointed it at `.verinoda/index`, so part of the pipeline
+used another directory and did less work. The figures above are the command's own.
 
 **A set of Turkish user questions about Verinoda (`verinoda_user_tr`, in-sample).** 12 questions (one
 a user's own words, the rest written in that style), 30 gold facts at commit 3bd1b94: query text

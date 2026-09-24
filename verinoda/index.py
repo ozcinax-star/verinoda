@@ -61,6 +61,7 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     facts are reused for files whose content did not change).
     """
     from verinoda.project_index.watch import _rebuild_code
+    from verinoda.python_facts import python_facts_cache
 
     install_path_identity_memo()
     repo = Path(repo).resolve()
@@ -69,7 +70,7 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     buf = io.StringIO()
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
-    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once():
+    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(),             python_facts_cache(index_dir(repo)):
         ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
     gp = graph_path(repo)
     if not ok and not gp.exists():
