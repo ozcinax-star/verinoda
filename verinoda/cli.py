@@ -188,6 +188,11 @@ def _r_claims(res: dict) -> None:
         print("\nunknown:")
         for u in res["unknowns"]:
             print(f"  - {u['question']}: {u['why']}\n    next: {u['next_step']}")
+    heads = [ln[3:] for ln in res.get("passages") or [] if ln.startswith("## ")]
+    if heads:  # the passages themselves are in --json; here, where they are
+        print("\npassages (as `verinoda query` gives them; full text with --json):")
+        for h in heads[:10]:
+            print(f"  {h[:150]}")
     if res.get("critique"):
         print("\ncritique:")
         for c in res["critique"]:
@@ -1439,7 +1444,8 @@ def cmd_benchmark(args) -> int:
     from verinoda.benchmark import render, run_benchmark
 
     res = run_benchmark(Path(args.repo or ".").resolve(), questions=args.questions, out=args.out,
-                        graphify_cmd=args.graphify_cmd, llm=args.llm, repeat=args.repeat)
+                        graphify_cmd=args.graphify_cmd, llm=args.llm, repeat=args.repeat,
+                        answer_cmd=getattr(args, "answer_cmd", None))
     _emit(args, res, render)
     return 0
 
@@ -1724,6 +1730,9 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--questions", help="questions JSON (default: built-in set for the repo)")
     c.add_argument("--out", help="write results JSON here")
     c.add_argument("--graphify-cmd", help="external `graphify` executable for a true upstream baseline")
+    c.add_argument("--answer-cmd", metavar="CMD",
+                   help="a command that writes the final answer from each context (prompt on stdin, e.g. "
+                        "\"claude -p\"); the answers are scored for gold facts and known-wrong statements")
     c.add_argument("--llm", choices=["none", "anthropic"], default="none",
                    help="also have a model answer from each context (needs ANTHROPIC_API_KEY)")
     c.add_argument("--repeat", type=int, default=2, help="runs per question (first = cold, rest = warm)")

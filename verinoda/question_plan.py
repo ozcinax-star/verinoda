@@ -414,13 +414,31 @@ _SPLITS = [
     re.compile(r",\s+(?=(?:what|where|which|how|why|who|when)\b)"),
     re.compile(r"\s+ve\s+(?=(?:\w+\s+)?(?:ne|neyi|neler|nerede|nereye|nereden|hangi|hangisi|nasil|neden|nicin|"
                r"niye|kim|kimi|kime)\b)"),
-    re.compile(r",\s*(?:ayrica|bir de|peki)\s+"),
+    re.compile(r",\s*(?:ayrica|bir de|peki|sonra|ardindan|daha sonra|ek olarak|bunun yaninda)\s+"),
     re.compile(r"\s+peki\s+|\s+bir de\s+|\s+hem de\s+"),
     re.compile(r",\s+(?=\w+(?:ysa|yse|sa|se)\b)"),
     re.compile(r",\s+(?=(?:ne|neyi|nerede|nereye|nereden|hangi|nasil|neden|kim)\b)"),
 ]
 _CONDITIONAL = re.compile(r"^\s*\w+(?:ysa|yse|sa|se)\b|^\s*if (?:so|yes|it does|they do)\b")
 _TR_VE = re.compile(r"\s+ve\s+")
+
+
+def _carry_dropped_subjects(sqs: list[dict], mentions: list[dict]) -> None:
+    """A later part that names no code asks about the code an earlier part named.
+
+    Turkish drops the subject ("export.write nerede tanımlı, hem de hangi dosyaları okuyor?": which
+    files does *it* read) and English can leave it out; a part with no code mention and at most one
+    word of its own gets ``subject_from`` the nearest earlier part that names code. A part with its
+    own words ("... and how are orders saved?") keeps its own subject."""
+    ms = {m["id"]: m for m in mentions}
+    names_code = [any(ms[x].get("kind") != "domain_concept" for x in sq["mentions"] if x in ms) for sq in sqs]
+    for i in range(1, len(sqs)):
+        sq = sqs[i]
+        if sq.get("subject_from") or sq.get("depends_on") or names_code[i]:
+            continue
+        prev = next((j for j in range(i - 1, -1, -1) if names_code[j]), None)
+        if prev is not None and len([x for x in sq["mentions"] if x in ms]) <= 1:
+            sq["subject_from"] = sqs[prev]["id"]
 
 
 def _has_question_word(folded: str) -> bool:
@@ -1658,6 +1676,7 @@ def draft(question: str, graph, lexicon=None) -> dict:
         if not sq["references"]:
             del sq["references"]
         sqs.append(sq)
+    _carry_dropped_subjects(sqs, mentions)
     plan = {"schema": SCHEMA_ID, "user_message": question, "language": lang if lang != "other" else "other",
             "restated_goal": _goal_en(sqs, mentions), "restated_goal_user_lang": _goal_user(sqs, mentions, lang),
             "sub_questions": sqs, "mentions": mentions, "references": references,

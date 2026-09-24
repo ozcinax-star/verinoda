@@ -650,3 +650,22 @@ def test_compact_check_is_small(orders):
                           "intent_divergence"}
     assert len(json.dumps(small, ensure_ascii=False)) < len(json.dumps(res, ensure_ascii=False))
     assert all({"mention", "text", "status"} <= set(lk) for lk in small["links"])
+
+
+# -- multi-part questions ---------------------------------------------------------------------------
+
+def test_a_later_part_that_names_no_code_asks_about_the_earlier_subject(orders):
+    """Turkish drops the subject: "... hem de hangi dosyaları okuyor?" is which files does *it* read."""
+    repo, g, lex = orders
+    p = qp.draft("Hem place_order nerede tanımlı hem de hangi fonksiyonları çağırıyor?", g, lex)
+    q1, q2 = p["sub_questions"]
+    assert q2["subject_from"] == "q1" and qp.validate(p) == []
+    p = qp.draft("Where is place_order defined and how are orders priced?", g, lex)  # its own words: its own subject
+    assert not p["sub_questions"][1].get("subject_from")
+
+
+def test_then_splits_a_question_in_two(orders):
+    repo, g, lex = orders
+    p = qp.draft("Sipariş nerede kaydediliyor, sonra bunu hangi testler kapsıyor?", g, lex)
+    assert [sq["intent"] for sq in p["sub_questions"]][1] == "tests"
+    assert p["sub_questions"][1]["subject_from"] == "q1"

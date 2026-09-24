@@ -1,0 +1,563 @@
+{
+ "schema": 1,
+ "name": "verinoda_user_tr",
+ "description": "Verinoda's own source at commit 3bd1b94 (the verinoda package without the vendored project_index and data files): 12 Turkish questions a user of Verinoda asks about Verinoda itself - how copies are found, how to open the graph, how the page follows the index, where notes live, what impact counts, how machine paths leave an export, why graph.html is gone, when a sub-question is met, why update is slow, how the UI server is protected, what portable ids are for, how --watch notices edits.",
+ "verified_by": "Gold written by reading the code at 3bd1b94; every fact's line was found by its source.contains text in `git show` of that commit, and is re-checked against the benchmark copy before scoring (metrics.validate_gold).",
+ "provenance": {
+  "questions_written_by": "u02 is a user's own question from a session (2026-09-24), as typed; the other 11 were written in the same style by the agent that built these features, on 2026-09-25",
+  "gold_written_by": "the same agent, by reading the code at the pinned commit",
+  "in_sample": true,
+  "caveat": "not a log of real users' questions (Verinoda keeps none); written after the 2026-09-25 retrieval and analysis changes by their author, so treat results as in-sample"
+ },
+ "corpus": {
+  "detect": [
+   "verinoda/copies.py",
+   "verinoda/ui/data.py",
+   "verinoda/portable_ids.py"
+  ],
+  "include": [
+   "verinoda",
+   "pyproject.toml"
+  ],
+  "exclude": [
+   "verinoda/project_index/*",
+   "verinoda/benchmark/questions/*",
+   "verinoda/data/*",
+   "*/__pycache__/*"
+  ],
+  "git_commit": "3bd1b94a5cfcd8689d423bcb0dafa06974f8769f"
+ },
+ "questions": [
+  {
+   "id": "u01",
+   "category": "how",
+   "question": "Kopya klasörler nasıl bulunuyor?",
+   "facts": [
+    {
+     "id": "u01.detect",
+     "fact": "copies.detect finds folders that copy the project's own code (verinoda/copies.py:72)",
+     "source": {
+      "at": "verinoda/copies.py:72",
+      "contains": "def detect("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/copies.py:72-74"
+      },
+      {
+       "text": "copies.detect"
+      }
+     ]
+    },
+    {
+     "id": "u01.share",
+     "fact": "a folder counts as a copy when enough of its files are copies (verinoda/copies.py:33)",
+     "source": {
+      "at": "verinoda/copies.py:33",
+      "contains": "MIN_COPY_SHARE ="
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/copies.py:33"
+      },
+      {
+       "text": "MIN_COPY_SHARE"
+      }
+     ]
+    },
+    {
+     "id": "u01.names",
+     "fact": "twin files must share most of the names they define (verinoda/copies.py:37)",
+     "source": {
+      "at": "verinoda/copies.py:37",
+      "contains": "MIN_SIMILARITY ="
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/copies.py:37"
+      },
+      {
+       "text": "MIN_SIMILARITY"
+      }
+     ]
+    }
+   ],
+   "negatives": []
+  },
+  {
+   "id": "u02",
+   "category": "how",
+   "question": "kullanıcının doğrudan bu grafiği açmasının bir yolu yok mu",
+   "facts": [
+    {
+     "id": "u02.graph",
+     "fact": "`verinoda ui --graph` opens straight on the graph view (verinoda/cli.py:1497)",
+     "source": {
+      "at": "verinoda/cli.py:1497",
+      "contains": "sp.add_argument(\"--graph\""
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/cli.py:1497"
+      }
+     ]
+    },
+    {
+     "id": "u02.export",
+     "fact": "`verinoda ui --export` writes the graph as one HTML file (verinoda/cli.py:1498)",
+     "source": {
+      "at": "verinoda/cli.py:1498",
+      "contains": "sp.add_argument(\"--export\""
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/cli.py:1498"
+      }
+     ]
+    },
+    {
+     "id": "u02.write",
+     "fact": "export.write builds and writes that file (verinoda/ui/export.py:273)",
+     "source": {
+      "at": "verinoda/ui/export.py:273",
+      "contains": "def write("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/export.py:273-275"
+      }
+     ]
+    }
+   ],
+   "negatives": []
+  },
+  {
+   "id": "u03",
+   "category": "flow",
+   "question": "Sayfa indeks değişince kendini nasıl yeniliyor?",
+   "facts": [
+    {
+     "id": "u03.version",
+     "fact": "Atlas.version is the index's key (graph.json and search.db stats) (verinoda/ui/data.py:189)",
+     "source": {
+      "at": "verinoda/ui/data.py:189",
+      "contains": "    def version(self) -> str:"
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/data.py:189-191"
+      }
+     ]
+    },
+    {
+     "id": "u03.route",
+     "fact": "the server answers /api/version with it (verinoda/ui/server.py:288)",
+     "source": {
+      "at": "verinoda/ui/server.py:288",
+      "contains": "route == \"version\""
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/server.py:288-289"
+      }
+     ]
+    },
+    {
+     "id": "u03.poll",
+     "fact": "the page polls it and redraws on a change (followIndex) (verinoda/ui/static/app.js:1934)",
+     "source": {
+      "at": "verinoda/ui/static/app.js:1934",
+      "contains": "async function followIndex("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/static/app.js:1934-1936"
+      },
+      {
+       "text": "followIndex"
+      }
+     ]
+    }
+   ],
+   "negatives": []
+  },
+  {
+   "id": "u04",
+   "category": "where",
+   "question": "Kendi notlarım nerede saklanıyor?",
+   "facts": [
+    {
+     "id": "u04.dir",
+     "fact": "usernotes.notes_dir: .verinoda/notes, or the notes.dir setting (verinoda/usernotes.py:60)",
+     "source": {
+      "at": "verinoda/usernotes.py:60",
+      "contains": "def notes_dir("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/usernotes.py:60-62"
+      },
+      {
+       "text": "notes_dir"
+      }
+     ]
+    },
+    {
+     "id": "u04.save",
+     "fact": "usernotes.save writes a note as a Markdown file (verinoda/usernotes.py:171)",
+     "source": {
+      "at": "verinoda/usernotes.py:171",
+      "contains": "def save("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/usernotes.py:171-173"
+      }
+     ]
+    }
+   ],
+   "negatives": []
+  },
+  {
+   "id": "u05",
+   "category": "impact",
+   "question": "Etki analizi hangi bağlantıları sayıyor?",
+   "facts": [
+    {
+     "id": "u05.rels",
+     "fact": "impact follows the use links: calls, imports, references, inheritance (verinoda/ui/data.py:71)",
+     "source": {
+      "at": "verinoda/ui/data.py:71",
+      "contains": "USE_RELATIONS ="
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/data.py:71"
+      },
+      {
+       "text": "USE_RELATIONS"
+      }
+     ]
+    },
+    {
+     "id": "u05.impact",
+     "fact": "Snapshot.impact walks them backwards from a note (verinoda/ui/data.py:180)",
+     "source": {
+      "at": "verinoda/ui/data.py:180",
+      "contains": "    def impact(self, nid: str, depth: int = 3"
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/data.py:180-182"
+      }
+     ]
+    },
+    {
+     "id": "u05.cap",
+     "fact": "it stops after MAX_IMPACT notes (verinoda/ui/data.py:72)",
+     "source": {
+      "at": "verinoda/ui/data.py:72",
+      "contains": "MAX_IMPACT ="
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/data.py:72"
+      },
+      {
+       "text": "MAX_IMPACT"
+      }
+     ]
+    }
+   ],
+   "negatives": []
+  },
+  {
+   "id": "u06",
+   "category": "how",
+   "question": "Dışa aktarılan dosyada makinenin yolları nasıl siliniyor?",
+   "facts": [
+    {
+     "id": "u06.scrubber",
+     "fact": "export._scrubber builds the replacement for the project root and the home folder (verinoda/ui/export.py:185)",
+     "source": {
+      "at": "verinoda/ui/export.py:185",
+      "contains": "def _scrubber("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/export.py:185-187"
+      },
+      {
+       "text": "_scrubber"
+      }
+     ]
+    },
+    {
+     "id": "u06.scrub",
+     "fact": "export._scrub applies it to every string of the data (verinoda/ui/export.py:212)",
+     "source": {
+      "at": "verinoda/ui/export.py:212",
+      "contains": "def _scrub("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/export.py:212-214"
+      }
+     ]
+    }
+   ],
+   "negatives": []
+  },
+  {
+   "id": "u07",
+   "category": "why",
+   "question": "graph.html neden artık yazılmıyor?",
+   "facts": [
+    {
+     "id": "u07.switch",
+     "fact": "index builds run with _without_upstream_html (verinoda/index.py:98)",
+     "source": {
+      "at": "verinoda/index.py:98",
+      "contains": "class _without_upstream_html"
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/index.py:98-100"
+      },
+      {
+       "text": "_without_upstream_html"
+      }
+     ]
+    },
+    {
+     "id": "u07.var",
+     "fact": "it sets the upstream switch GRAPHIFY_VIZ_NODE_LIMIT to 0 unless the user set it (verinoda/index.py:108)",
+     "source": {
+      "at": "verinoda/index.py:108",
+      "contains": "VAR = \"GRAPHIFY_VIZ_NODE_LIMIT\""
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/index.py:108"
+      },
+      {
+       "text": "GRAPHIFY_VIZ_NODE_LIMIT"
+      }
+     ]
+    }
+   ],
+   "negatives": []
+  },
+  {
+   "id": "u08",
+   "category": "behaviour",
+   "question": "analyze bir alt soruyu ne zaman karşılandı sayıyor?",
+   "facts": [
+    {
+     "id": "u08.judge",
+     "fact": "analysis.judge gives each sub-question its verdict (verinoda/analysis.py:1866)",
+     "source": {
+      "at": "verinoda/analysis.py:1866",
+      "contains": "def judge("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/analysis.py:1866-1868"
+      }
+     ]
+    },
+    {
+     "id": "u08.met",
+     "fact": "met: the strongest relevant claim is verified at the required level (verinoda/analysis.py:1895)",
+     "source": {
+      "at": "verinoda/analysis.py:1895",
+      "contains": "        return \"met\""
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/analysis.py:1895"
+      }
+     ]
+    }
+   ],
+   "negatives": []
+  },
+  {
+   "id": "u09",
+   "category": "why",
+   "question": "update neden bu kadar uzun sürüyor?",
+   "facts": [
+    {
+     "id": "u09.update",
+     "fact": "workflow.update refreshes the index after edits (verinoda/workflow.py:195)",
+     "source": {
+      "at": "verinoda/workflow.py:195",
+      "contains": "def update(store: Store, repo: Path)"
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/workflow.py:195-197"
+      }
+     ]
+    },
+    {
+     "id": "u09.full",
+     "fact": "it rebuilds the code graph over the whole corpus (index.build) (verinoda/workflow.py:241)",
+     "source": {
+      "at": "verinoda/workflow.py:241",
+      "contains": "        stats = index.build(repo)"
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/workflow.py:241"
+      }
+     ]
+    },
+    {
+     "id": "u09.affected",
+     "fact": "whenever a file of the graph changed (_graph_affected) (verinoda/workflow.py:173)",
+     "source": {
+      "at": "verinoda/workflow.py:173",
+      "contains": "def _graph_affected("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/workflow.py:173-175"
+      },
+      {
+       "text": "_graph_affected"
+      }
+     ]
+    }
+   ],
+   "negatives": []
+  },
+  {
+   "id": "u10",
+   "category": "how",
+   "question": "Arayüz sunucusu başka sitelerden gelen isteklere karşı nasıl korunuyor?",
+   "facts": [
+    {
+     "id": "u10.csp",
+     "fact": "a strict Content-Security-Policy on every page (verinoda/ui/server.py:36)",
+     "source": {
+      "at": "verinoda/ui/server.py:36",
+      "contains": "CSP = ("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/server.py:36-37"
+      }
+     ]
+    },
+    {
+     "id": "u10.reject",
+     "fact": "_reject turns away a write without the token, JSON or this origin (verinoda/ui/server.py:177)",
+     "source": {
+      "at": "verinoda/ui/server.py:177",
+      "contains": "def _reject("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/server.py:177-179"
+      },
+      {
+       "text": "_reject"
+      }
+     ]
+    },
+    {
+     "id": "u10.token",
+     "fact": "the page's per-run token travels in X-Verinoda-Token (verinoda/ui/server.py:138)",
+     "source": {
+      "at": "verinoda/ui/server.py:138",
+      "contains": "X-Verinoda-Token"
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/server.py:138"
+      },
+      {
+       "text": "X-Verinoda-Token"
+      }
+     ]
+    }
+   ],
+   "negatives": []
+  },
+  {
+   "id": "u11",
+   "category": "behaviour",
+   "question": "Portable id'ler ne işe yarıyor?",
+   "facts": [
+    {
+     "id": "u11.strip",
+     "fact": "strip_root_from_ids takes the scan root out of ids minted from an absolute path (verinoda/portable_ids.py:28)",
+     "source": {
+      "at": "verinoda/portable_ids.py:28",
+      "contains": "def strip_root_from_ids("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/portable_ids.py:28-30"
+      },
+      {
+       "text": "strip_root_from_ids"
+      }
+     ]
+    },
+    {
+     "id": "u11.file",
+     "fact": "make_graph_portable rewrites graph.json after each build (verinoda/portable_ids.py:94)",
+     "source": {
+      "at": "verinoda/portable_ids.py:94",
+      "contains": "def make_graph_portable("
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/portable_ids.py:94-96"
+      },
+      {
+       "text": "make_graph_portable"
+      }
+     ]
+    }
+   ],
+   "negatives": []
+  },
+  {
+   "id": "u12",
+   "category": "flow",
+   "question": "--watch dosya değişikliğini nasıl fark ediyor?",
+   "facts": [
+    {
+     "id": "u12.sig",
+     "fact": "Watcher.signature: size and time of every listed file (verinoda/ui/server.py:76)",
+     "source": {
+      "at": "verinoda/ui/server.py:76",
+      "contains": "    def signature(self) -> tuple:"
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/server.py:76-78"
+      }
+     ]
+    },
+    {
+     "id": "u12.burst",
+     "fact": "it updates only once the signature stops changing (verinoda/ui/server.py:117)",
+     "source": {
+      "at": "verinoda/ui/server.py:117",
+      "contains": "if now != pending:"
+     },
+     "match_any": [
+      {
+       "loc": "verinoda/ui/server.py:117"
+      }
+     ]
+    }
+   ],
+   "negatives": []
+  }
+ ]
+}

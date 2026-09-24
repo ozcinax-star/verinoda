@@ -21,6 +21,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import statistics
 import sys
 import tempfile
@@ -197,6 +198,11 @@ def score(approach: str, q: dict, text: str, meta: dict, root: Path) -> dict:
         out["claims"] = _claim_stats(meta["claims"], text)
         out["unknowns"] = len(meta["unknowns"])
         out["analysis_usage"] = meta["usage"]
+        verdicts = meta.get("verdicts") or []
+        in_claims = mx.score_facts(q["facts"], "\n".join(json.dumps({"text": c["text"], "evidence": c["evidence"]},
+                                                                   ensure_ascii=False) for c in meta["claims"]))
+        out["verdict"] = {"met": bool(verdicts) and all(v == "met" for v in verdicts), "verdicts": verdicts,
+                          "facts_in_claims": in_claims["found_n"]}
     negs = []
     for neg in q.get("negatives", []):
         hits = mx.match_negative(neg, assertions)
@@ -230,6 +236,17 @@ def score(approach: str, q: dict, text: str, meta: dict, root: Path) -> dict:
 
 def _med(xs: list[float]) -> float | None:
     return round(statistics.median(xs), 3) if xs else None
+
+
+def score_answer(q: dict, answer: str) -> dict:
+    """A model's final answer against the gold: the facts it states and the known-wrong statements it
+    makes (a negative's ``assertion_regex`` over the answer's sentences). Correct: every fact, no
+    wrong statement."""
+    facts = mx.score_facts(q["facts"], answer)
+    sentences = [{"text": s.strip()} for s in re.split(r"(?<=[.!?])\s+|\n+", answer or "") if s.strip()]
+    wrong = [n["id"] for n in q.get("negatives", []) if mx.match_negative(n, sentences)]
+    return {"answer_facts": facts, "answer_negatives": wrong,
+            "answer_correct": facts["found_n"] == facts["total"] and not wrong}
 
 
 def summarize(res: dict) -> dict:
@@ -274,6 +291,17 @@ def summarize(res: dict) -> dict:
                 for k, v in c["by_status"].items():
                     by[k] = by.get(k, 0) + v
             tot = sum(c["total"] for c in cs)
+            vs = [r["score"].get("verdict") or {} for r in ok]
+            met = [v for v in vs if v.get("met")]
+            total_of = {id(r["score"].get("verdict")): r["score"]["facts"]["total"] for r in ok}
+            s["verdicts"] = {  # "met" should mean the claims carry what was asked
+                "questions_met": len(met),
+                "met_backed_fully": sum(1 for v in met if v["facts_in_claims"] == total_of[id(v)]),
+                "met_backed_partly": sum(1 for v in met if 0 < v["facts_in_claims"] < total_of[id(v)]),
+                "met_unbacked": sum(1 for v in met if v["facts_in_claims"] == 0),
+                "not_met_but_claims_complete": sum(1 for v in vs if not v.get("met") and v.get("facts_in_claims")
+                                                   == total_of[id(v)]),
+            }
             s["claims"] = {
                 "total": tot, "by_status": by,
                 "verified_share": round(sum(by.get(k, 0) for k in VERIFIED) / tot, 3) if tot else None,
@@ -301,6 +329,9 @@ def summarize(res: dict) -> dict:
                 "input_tokens": sum(m["input_tokens"] for m in ms), "output_tokens": sum(m["output_tokens"] for m in ms),
                 "cost_usd": round(sum(m["cost_usd"] or 0 for m in ms), 6),
                 "answer_facts_found": sum(m["answer_facts"]["found_n"] for m in ms),
+                "answers_all_facts": sum(1 for m in ms if m["answer_facts"]["found_n"] == m["answer_facts"]["total"]),
+                "answers_with_wrong_statements": sum(1 for m in ms if m.get("answer_negatives")),
+                "answers_correct": sum(1 for m in ms if m.get("answer_correct")),
             }
         base, tokens = ap.split_approach(a)
         if tokens is not None:
@@ -329,14 +360,15 @@ def run_benchmark(repo: Path, *, questions=None, out=None, graphify_cmd: str | N
                   repeat: int = 2, model: str | None = None, workdir: Path | None = None,
                   keep_workdir: bool = False, progress: Callable[[str], None] | None = None,
                   sweep: list[int] | tuple[int, ...] | None = None, at: str | None = None,
-                  sweep_only: bool = False) -> dict:
+                  sweep_only: bool = False, answer_cmd: str | None = None) -> dict:
     """Run the comparison and return the full result dict (see docs/BENCHMARKS.md).
 
     ``sweep``: token budgets (chars/4) at which the budgeted approaches also run;
     with ``sweep_only`` only those sweep points run (the default configurations
     are skipped, so their timings stay those of a run without a sweep).
     ``at``: take the corpus from this commit of ``repo`` (default: the set's
-    ``corpus.git_commit``, else the working tree).
+    ``corpus.git_commit``, else the working tree). ``answer_cmd``: a command that writes the final
+    answer from each approach's context (the prompt on its standard input), scored like the API model's.
     """
     say = progress or (lambda _m: None)
     repo = Path(repo).resolve()
@@ -355,7 +387,9 @@ def run_benchmark(repo: Path, *, questions=None, out=None, graphify_cmd: str | N
     base = Path(tempfile.mkdtemp(prefix="verinoda-bench-", dir=str(workdir) if workdir else None))
     ra_root, cli_root = base / "verinoda", base / "graphify_cli"
     model = model or os.environ.get("VERINODA_BENCH_MODEL") or llmmod.DEFAULT_MODEL
-    llm_on, llm_reason = llmmod.status(llm)
+    llm_on, llm_reason = (True, "measured") if answer_cmd else llmmod.status(llm)
+    if answer_cmd:
+        model = f"cmd: {answer_cmd}"[:200]
     gcmd = ap.resolve_cmd(graphify_cmd) if graphify_cmd else None
     res: dict = {
         "benchmark": "verinoda raw-vs-graphify-vs-verinoda", "schema": SCHEMA,
@@ -516,9 +550,10 @@ def run_benchmark(repo: Path, *, questions=None, out=None, graphify_cmd: str | N
                     continue
                 if llm_on:
                     say(f"model {q['id']} {a}")
-                    m = llmmod.ask(slot["_text"], q["question"], model=model)
+                    m = (llmmod.ask_cmd(slot["_text"], q["question"], answer_cmd) if answer_cmd
+                         else llmmod.ask(slot["_text"], q["question"], model=model))
                     if m.get("status") == "measured":
-                        m["answer_facts"] = mx.score_facts(q["facts"], m["answer"])
+                        m.update(score_answer(q, m["answer"]))
                         m["answer"] = m["answer"][:4000]
                     slot["model"] = m
                 else:

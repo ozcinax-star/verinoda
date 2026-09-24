@@ -405,6 +405,8 @@ def analyze_context(res: dict) -> str:
         claims.append({k: c[k] for k in ("id", "text", "status", "confidence", "evidence", "uncertainties", "challenged")
                        if k in c})
     body = {"question": res["question"], "intents": res["intents"], "claims": claims, "unknowns": res["unknowns"]}
+    if res.get("passages"):
+        body["passages"] = res["passages"]
     return json.dumps(body, ensure_ascii=False, separators=(",", ":"))
 
 
@@ -415,6 +417,7 @@ def verinoda_analyze(store, root: Path, question: str) -> tuple[str, dict]:
     res = analysis.analyze(store, Path(root), question)
     ids = [c["id"] for c in res["claims"]]
     meta = {"agent_tool_calls": 1, "claims": res["claims"], "unknowns": res["unknowns"], "intents": res["intents"],
+            "verdicts": [s.get("status") for s in res.get("subquestions") or []],
             "usage": res["usage"], "steps": len(res["steps"]),
             "claims_reused": sum(1 for i in ids if i in before), "claims_new": sum(1 for i in ids if i not in before)}
     return analyze_context(res), meta

@@ -55,6 +55,32 @@ def cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
     return round(input_tokens / 1e6 * p["input"] + output_tokens / 1e6 * p["output"], 6)
 
 
+def ask_cmd(context: str, question: str, cmd: str, *, timeout: float = 600) -> dict:
+    """The final answer from any command (``--answer-cmd``): the prompt goes to its standard input.
+
+    The prompt is the one the API call sends (system text, context, question), so a local model or a
+    command-line client (``claude -p``, ``ollama run ...``) answers what an API model would. Tokens
+    are estimated (chars/4) and cost is not known."""
+    import shlex
+    import subprocess
+
+    prompt = f"{SYSTEM_PROMPT}\n\n<context>\n{context}\n</context>\n\nQuestion: {question}\n"
+    t0 = time.perf_counter()
+    try:
+        argv = cmd if os.name == "nt" else shlex.split(cmd)  # Windows takes the command line as written
+        proc = subprocess.run(argv, input=prompt, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=timeout)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        return {"status": "error", "error": f"{type(exc).__name__}: {exc}"[:300], "seconds": round(time.perf_counter() - t0, 3)}
+    if proc.returncode != 0:
+        return {"status": "error", "error": f"exit {proc.returncode}: {(proc.stderr or '')[:300]}",
+                "seconds": round(time.perf_counter() - t0, 3)}
+    answer = proc.stdout or ""
+    return {"status": "measured", "model": f"cmd: {cmd}"[:200], "seconds": round(time.perf_counter() - t0, 3),
+            "input_tokens": len(prompt) // 4, "output_tokens": len(answer) // 4, "token_count_method": "chars/4 estimate",
+            "cost_usd": None, "answer": answer}
+
+
 def ask(context: str, question: str, *, model: str = DEFAULT_MODEL) -> dict:
     """One Messages API call; returns usage, cost and the answer text (or the error)."""
     import anthropic  # type: ignore[import-not-found]

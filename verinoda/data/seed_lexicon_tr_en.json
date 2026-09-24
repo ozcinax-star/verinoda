@@ -1,5 +1,5 @@
 {
- "version": 1,
+ "version": 2,
  "description": "Turkish -> English seed glossary for question understanding (docs/DESIGN.md D6). Keys are fold_tr-folded Turkish stems (a space joins multi-word terms); values are English words. An expansion is used only when its English word occurs in the repository's own vocabulary, and it only proposes candidates - it is never evidence. Keys in \"exact\" keep their Turkish letters: they are stems that folding merges with another word (öl die / ol be) and match only the word as written.",
  "entries": {
   "abone": [
@@ -34,6 +34,9 @@
   "agac": [
    "tree"
   ],
+  "agirlik": [
+   "weight"
+  ],
   "akis": [
    "flow",
    "stream"
@@ -47,6 +50,10 @@
   ],
   "anahtar": [
    "key"
+  ],
+  "anlam": [
+   "meaning",
+   "semantic"
   ],
   "ara katman": [
    "middleware"
@@ -148,6 +155,12 @@
    "title",
    "header"
   ],
+  "bayat": [
+   "stale"
+  ],
+  "bayrak": [
+   "flag"
+  ],
   "bekle": [
    "wait",
    "await"
@@ -165,6 +178,9 @@
   ],
   "bellek": [
    "memory"
+  ],
+  "benzerlik": [
+   "similarity"
   ],
   "benzersiz": [
    "unique"
@@ -187,6 +203,9 @@
   "bildirim": [
    "notification",
    "notify"
+  ],
+  "birim": [
+   "unit"
   ],
   "birincil anahtar": [
    "primary_key"
@@ -238,6 +257,9 @@
   "bulut": [
    "cloud"
   ],
+  "butce": [
+   "budget"
+  ],
   "buton": [
    "button"
   ],
@@ -256,6 +278,10 @@
   "cagri": [
    "call",
    "invocation"
+  ],
+  "cagri yigini": [
+   "stack",
+   "call stack"
   ],
   "cakisma": [
    "conflict"
@@ -276,6 +302,10 @@
    "account",
    "customer",
    "ledger"
+  ],
+  "celiski": [
+   "contradiction",
+   "conflict"
   ],
   "cerceve": [
    "framework"
@@ -320,10 +350,17 @@
    "resolve",
    "decode"
   ],
+  "cozum": [
+   "solution",
+   "fix"
+  ],
   "cozumle": [
    "resolve",
    "parse",
    "decode"
+  ],
+  "cumle": [
+   "sentence"
   ],
   "dagitim": [
    "deploy",
@@ -335,6 +372,13 @@
   ],
   "deger": [
    "value"
+  ],
+  "degisiklik": [
+   "change",
+   "diff"
+  ],
+  "degisim": [
+   "change"
   ],
   "degisken": [
    "variable",
@@ -393,6 +437,9 @@
    "listener"
   ],
   "disa aktar": [
+   "export"
+  ],
+  "disa aktarim": [
    "export"
   ],
   "dizi": [
@@ -521,6 +568,17 @@
   "esitle": [
    "sync"
   ],
+  "esleme": [
+   "mapping",
+   "map"
+  ],
+  "esles": [
+   "match"
+  ],
+  "eslesme": [
+   "match",
+   "matching"
+  ],
   "esya": [
    "item"
   ],
@@ -532,6 +590,14 @@
   "etiket": [
    "tag",
    "label"
+  ],
+  "etki": [
+   "impact",
+   "effect"
+  ],
+  "etkile": [
+   "affect",
+   "impact"
   ],
   "ev dizin": [
    "home"
@@ -597,6 +663,13 @@
    "income",
    "revenue"
   ],
+  "genislik": [
+   "width"
+  ],
+  "gerekce": [
+   "rationale",
+   "reason"
+  ],
   "geri al": [
    "undo",
    "rollback",
@@ -641,11 +714,22 @@
    "task",
    "job"
   ],
+  "gorsel": [
+   "visual",
+   "image"
+  ],
   "gorunum": [
    "view"
   ],
   "govde": [
    "body"
+  ],
+  "graf": [
+   "graph"
+  ],
+  "grafik": [
+   "graph",
+   "chart"
   ],
   "grup": [
    "group"
@@ -659,6 +743,10 @@
   "gunluk": [
    "log",
    "logging"
+  ],
+  "guven": [
+   "trust",
+   "confidence"
   ],
   "guvenlik": [
    "security"
@@ -704,6 +792,15 @@
    "compute",
    "calculate"
   ],
+  "hiz": [
+   "speed",
+   "fast"
+  ],
+  "hizlandir": [
+   "speed",
+   "accelerate",
+   "optimize"
+  ],
   "hizli": [
    "fast"
   ],
@@ -714,8 +811,14 @@
   "ice aktar": [
    "import"
   ],
+  "ice aktarim": [
+   "import"
+  ],
   "icerik": [
    "content"
+  ],
+  "iddia": [
+   "claim"
   ],
   "iksir": [
    "potion"
@@ -777,6 +880,10 @@
    "function",
    "func"
   ],
+  "istatistik": [
+   "statistics",
+   "stats"
+  ],
   "istek": [
    "request",
    "req"
@@ -786,6 +893,9 @@
   ],
   "istisna": [
    "exception"
+  ],
+  "iz sur": [
+   "trace"
   ],
   "izin": [
    "permission",
@@ -818,6 +928,10 @@
    "persist",
    "durable"
   ],
+  "kalitim": [
+   "inheritance",
+   "inherit"
+  ],
   "kampanya": [
    "campaign",
    "promotion"
@@ -825,6 +939,10 @@
   "kanat": [
    "wing",
    "wings"
+  ],
+  "kanit": [
+   "evidence",
+   "proof"
   ],
   "kapat": [
    "close",
@@ -837,10 +955,22 @@
   "kapsayici": [
    "container"
   ],
+  "karakter": [
+   "character",
+   "char"
+  ],
+  "karar": [
+   "decision",
+   "decide"
+  ],
   "kargo": [
    "shipping",
    "shipment",
    "cargo"
+  ],
+  "karsilastir": [
+   "compare",
+   "diff"
   ],
   "kasa": [
    "cash",
@@ -898,8 +1028,21 @@
    "vat",
    "tax"
   ],
+  "kelime": [
+   "word",
+   "term",
+   "token"
+  ],
   "kenar": [
    "edge"
+  ],
+  "kes": [
+   "cut",
+   "truncate"
+  ],
+  "kesil": [
+   "cut",
+   "truncate"
   ],
   "kilic": [
    "sword"
@@ -921,10 +1064,27 @@
   "kiraci": [
    "tenant"
   ],
+  "kirp": [
+   "trim",
+   "truncate",
+   "clip",
+   "crop"
+  ],
+  "kirpil": [
+   "trim",
+   "truncate",
+   "clip"
+  ],
+  "kisayol": [
+   "shortcut"
+  ],
   "klasor": [
    "folder",
    "dir",
    "directory"
+  ],
+  "klavye": [
+   "keyboard"
   ],
   "kod": [
    "code"
@@ -955,8 +1115,17 @@
    "control",
    "validate"
   ],
+  "kopya": [
+   "copy",
+   "duplicate",
+   "clone"
+  ],
   "kopyala": [
    "copy"
+  ],
+  "kopyasi": [
+   "copy",
+   "duplicate"
   ],
   "kosul": [
    "condition"
@@ -1011,6 +1180,13 @@
   "maliyet": [
    "cost"
   ],
+  "merkez": [
+   "center",
+   "hub"
+  ],
+  "mesafe": [
+   "distance"
+  ],
   "mesaj": [
    "message",
    "msg"
@@ -1025,6 +1201,13 @@
   ],
   "metrik": [
    "metric"
+  ],
+  "mimari": [
+   "architecture"
+  ],
+  "miras": [
+   "inheritance",
+   "inherit"
   ],
   "mizan": [
    "trial_balance",
@@ -1104,6 +1287,13 @@
    "previous",
    "prev"
   ],
+  "onizleme": [
+   "preview"
+  ],
+  "oran": [
+   "ratio",
+   "rate"
+  ],
   "ornek": [
    "example",
    "sample",
@@ -1135,6 +1325,17 @@
    "attribute",
    "feature"
   ],
+  "ozet": [
+   "summary"
+  ],
+  "ozetle": [
+   "summarize",
+   "summary"
+  ],
+  "ozyineleme": [
+   "recursion",
+   "recursive"
+  ],
   "paket": [
    "package",
    "pkg"
@@ -1161,8 +1362,19 @@
   "parcacik": [
    "particle"
   ],
+  "parcala": [
+   "split",
+   "chunk"
+  ],
+  "parcalar": [
+   "chunks",
+   "parts"
+  ],
   "parola": [
    "password"
+  ],
+  "pencere": [
+   "window"
   ],
   "performans": [
    "performance",
@@ -1178,6 +1390,14 @@
   ],
   "prim": [
    "premium"
+  ],
+  "puan": [
+   "score",
+   "points"
+  ],
+  "puanla": [
+   "score",
+   "rank"
   ],
   "rapor": [
    "report"
@@ -1243,6 +1463,9 @@
    "count",
    "num"
   ],
+  "secenek": [
+   "option"
+  ],
   "sehir": [
    "city"
   ],
@@ -1275,6 +1498,9 @@
    "encryption",
    "encrypt"
   ],
+  "sigdir": [
+   "fit"
+  ],
   "sigorta": [
    "insurance"
   ],
@@ -1296,11 +1522,21 @@
    "bound",
    "max"
   ],
+  "sinirla": [
+   "limit",
+   "restrict",
+   "cap"
+  ],
   "siparis": [
    "order"
   ],
   "sirala": [
    "sort"
+  ],
+  "siralama": [
+   "ranking",
+   "sort",
+   "order"
   ],
   "sirket": [
    "company",
@@ -1320,6 +1556,15 @@
   ],
   "sorgu": [
    "query"
+  ],
+  "soru": [
+   "question",
+   "query"
+  ],
+  "sorun": [
+   "problem",
+   "issue",
+   "bug"
   ],
   "sozlesme": [
    "contract",
@@ -1396,8 +1641,17 @@
   "tarih": [
    "date"
   ],
+  "tas": [
+   "overflow"
+  ],
+  "tasarim": [
+   "design"
+  ],
   "tasi": [
    "move"
+  ],
+  "tazele": [
+   "refresh"
   ],
   "tazminat": [
    "compensation",
@@ -1430,6 +1684,9 @@
    "coverage",
    "guarantee"
   ],
+  "terim": [
+   "term"
+  ],
   "teslim": [
    "deliver",
    "delivery",
@@ -1455,9 +1712,17 @@
    "total",
    "sum"
   ],
+  "topluluk": [
+   "community",
+   "cluster"
+  ],
   "tur": [
    "type",
    "kind"
+  ],
+  "tus": [
+   "key",
+   "keyboard"
   ],
   "tutar": [
    "amount",
@@ -1476,6 +1741,9 @@
   "uret": [
    "generate",
    "produce",
+   "generator"
+  ],
+  "uretec": [
    "generator"
   ],
   "urun": [
@@ -1502,8 +1770,15 @@
    "app",
    "implementation"
   ],
+  "uzaklik": [
+   "distance"
+  ],
   "uzanti": [
    "extension"
+  ],
+  "uzunluk": [
+   "length",
+   "len"
   ],
   "varlik": [
    "entity"
@@ -1529,6 +1804,10 @@
   ],
   "yabanci anahtar": [
    "foreign_key"
+  ],
+  "yakinlik": [
+   "proximity",
+   "closeness"
   ],
   "yama": [
    "patch"
@@ -1585,6 +1864,11 @@
   "yeniden dene": [
    "retry"
   ],
+  "yenile": [
+   "refresh",
+   "reload",
+   "renew"
+  ],
   "yerlestir": [
    "place",
    "placement"
@@ -1607,6 +1891,13 @@
   "yigin": [
    "stack",
    "heap"
+  ],
+  "yinelen": [
+   "duplicate",
+   "repeat"
+  ],
+  "yineleyici": [
+   "iterator"
   ],
   "yol": [
    "path",
@@ -1639,9 +1930,16 @@
   "yukseklik": [
    "height"
   ],
+  "yukselt": [
+   "upgrade"
+  ],
   "yurut": [
    "execute",
    "run"
+  ],
+  "yuzde": [
+   "percent",
+   "percentage"
   ],
   "zaman": [
    "time",
@@ -1665,6 +1963,9 @@
   ],
   "zeyil": [
    "endorsement"
+  ],
+  "zincir": [
+   "chain"
   ],
   "zindan": [
    "dungeon"
@@ -1701,6 +2002,17 @@
   "şans": [
    "chance",
    "luck"
+  ],
+  "böl": [
+   "split",
+   "divide"
+  ],
+  "ağ": [
+   "network",
+   "net"
+  ],
+  "sığ": [
+   "fit"
   ]
  }
 }

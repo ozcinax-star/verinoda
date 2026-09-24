@@ -565,6 +565,24 @@ def _retrieve(ctx: _Ctx, inputs: dict, include_tests: bool) -> dict:
     return retrieval.retrieve(ctx.g, query, budget, **kw)
 
 
+PASSAGE_CHARS = 6000  # the budget `verinoda query` renders its passages with
+
+
+def _passages(g, question: str) -> list[str]:
+    """What `verinoda query` gives for the same question (its text, to the same budget), line by line
+    (in JSON a list of lines reads as the text does; one string would carry every line break escaped).
+
+    Claims hold what was verified; these are the passages the claims were chosen from and the
+    ones no claim covers, so an answer built on an analysis never has less to go on than a search
+    (on the seven public benchmark sets analyze had lost 62 gold facts query found, over 33 of 74
+    questions)."""
+    try:
+        res = retrieval.retrieve(g, question, retrieval.Budget(max_items=10, max_chars=PASSAGE_CHARS))
+        return retrieval.render_text(res, PASSAGE_CHARS).splitlines()
+    except Exception:  # noqa: BLE001 - passages are an addition; the claims stand without them
+        return []
+
+
 def _content_words(text: str) -> list[str]:
     out = []
     for w in tn.words(text):
@@ -800,6 +818,38 @@ def _data_link_claims(ctx: _Ctx, sub: _Sub, raw_items: list[dict]) -> None:
                     chained += _link_chain(ctx, src, ln, chained)
 
 
+ON_SUBJECT_RELATIONS = {"method", "contains"}
+
+
+def _on_subject(ctx: _Ctx, sub: _Sub, it: dict) -> bool:
+    """Is a retrieved item what the sub-question is about, rather than something ranked near it?
+
+    A symbol the question names or links (or a member / the owner of one), or an item that carries
+    every group of the question's grounded words. Location claims made for other items are context:
+    they never make the sub-question met on their own (a verified definition of the wrong function
+    is still the wrong answer)."""
+    g, anchored = ctx.g, sub.extra.get("anchored") or set()
+    nid = it.get("id")
+    if nid in anchored:
+        return True
+    if nid in g.G:
+        near = {u for u, _ in g.in_edges(nid, ON_SUBJECT_RELATIONS)} | {v for v, _ in g.out_edges(nid, ON_SUBJECT_RELATIONS)}
+        if near & anchored:
+            return True
+    elif any(n in g.G and g.file(n) == it.get("file") and qp._bare(g.label(n)) in (it.get("excerpt") or "")
+             for n in anchored):
+        return True  # a module-level block that holds a named symbol
+    groups = sub.extra.get("groups") or []
+    return bool(groups) and len(groups) >= 2 and _relevance(it, groups) >= 1.0
+
+
+def _mark_context(ctx: _Ctx, sub: _Sub, it: dict, c: dict | None) -> None:
+    if c is not None and not _on_subject(ctx, sub, it):
+        off = sub.flags.setdefault("off_subject", [])
+        if c["id"] not in off:
+            off.append(c["id"])
+
+
 def _context_claims(ctx: _Ctx, sub: _Sub, raw_items: list[dict]) -> None:
     g, rec, commit, repo = ctx.g, ctx.rec, ctx.commit, ctx.repo
     items = sub.prod or sub.items
@@ -816,11 +866,13 @@ def _context_claims(ctx: _Ctx, sub: _Sub, raw_items: list[dict]) -> None:
                 rec.skipped["location"] += 1
                 continue
             a, b, inexact = _exact_span(ctx, it["id"], it["file"], it["symbol"], sp)
-            if rec.claim(f"`{it['symbol']}` is defined at {it['file']}:{a}-{b}", kind="location",
-                         status="strong_inference" if inexact else "statically_verified",
-                         evidence=[(_src_ev(repo, it["file"], a, b, commit, symbol=it["symbol"]), "supports")],
-                         subjects=[f"{it['file']}::{it['symbol']}"], spec={"symbol": it["symbol"]},
-                         uncertainties=[inexact] if inexact else []) is not None:
+            made = rec.claim(f"`{it['symbol']}` is defined at {it['file']}:{a}-{b}", kind="location",
+                             status="strong_inference" if inexact else "statically_verified",
+                             evidence=[(_src_ev(repo, it["file"], a, b, commit, symbol=it["symbol"]), "supports")],
+                             subjects=[f"{it['file']}::{it['symbol']}"], spec={"symbol": it["symbol"]},
+                             uncertainties=[inexact] if inexact else [])
+            _mark_context(ctx, sub, it, made)
+            if made is not None:
                 ctx.step("verify_source", f"{it['file']}:{a}-{b}")
                 ctx.located.setdefault(sub.sq["id"], {})[it["id"]] = f"located for {sub.sq['id']}"
         for it in module_blocks[:2]:
@@ -829,9 +881,10 @@ def _context_claims(ctx: _Ctx, sub: _Sub, raw_items: list[dict]) -> None:
                 continue
             a, b = it["lines"]
             first = next((ln.strip() for ln in (it["excerpt"] or "").splitlines() if ln.strip()), "")
-            rec.claim(f"{it['file']}:{a}" + (f"-{b}" if b != a else "") + f" contains: {first[:120]}",
-                      kind="location", status="statically_verified",
-                      evidence=[(_src_ev(repo, it["file"], a, b, commit), "supports")], subjects=[it["file"]])
+            _mark_context(ctx, sub, it, rec.claim(f"{it['file']}:{a}" + (f"-{b}" if b != a else "") + f" contains: {first[:120]}",
+                                                  kind="location", status="statically_verified",
+                                                  evidence=[(_src_ev(repo, it["file"], a, b, commit), "supports")],
+                                                  subjects=[it["file"]]))
     _data_link_claims(ctx, sub, raw_items)
     # relation claims among the retrieved items, at least one end relevant (cheap and useful)
     relevant = {i["id"] for i in sub.items}
@@ -1011,12 +1064,36 @@ def _dataflow_paths(ctx: _Ctx, sub: _Sub, src: list[str]) -> None:
                        base_unc=["entry point and sink detection are heuristics"]) is not None:
             ctx.step("verify_path", chain)
             made += 1
+        _sink_claims(ctx, p)
     if not touched:
         sub.flags["no_path"] = True
         why = ("no entry->sink path found over call edges" if not df["paths"] else
                f"none of the {len(df['paths'])} entry->sink paths passes through the code this question is about")
         _unknown(ctx, sub, {"question": SUBQUESTIONS["flow"], "why": why,
                             "next_step": "name the entry function and the storage function: `verinoda trace A B`"})
+
+
+def _sink_claims(ctx: _Ctx, p: dict) -> None:
+    """Where a data path touches storage, as read in the source: ``file:line`` and the line itself.
+
+    The path claim says the data gets there; these say where "there" is, which is what a
+    question like "where is an order written to the database?" asks for."""
+    kinds = ", ".join(p.get("sink_kinds") or [])
+    for sl in list(p.get("sink_lines") or [])[:2]:
+        path, _, ln = sl.rpartition(":")
+        if not (path and ln.isdigit()) or not ctx.budget.ok:
+            continue
+        try:
+            lines = (ctx.repo / path).read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        n = int(ln)
+        if not 1 <= n <= len(lines) or not lines[n - 1].strip():
+            continue
+        ctx.rec.claim(f"{path}:{n} touches storage ({kinds}): {lines[n - 1].strip()[:140]}", kind="location",
+                      status="statically_verified",
+                      evidence=[(_src_ev(ctx.repo, path, n, n, ctx.commit, sink=True), "supports")], subjects=[path],
+                      uncertainties=["which storage operation a line is comes from a pattern over the source"])
 
 
 def _targets(ctx: _Ctx, sub: _Sub, n: int = 2) -> list[str]:
@@ -1781,6 +1858,7 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
     anchored = set(inputs["seeds"]) | set(subject_nodes)
     for lk in links:
         anchored |= set(qp.mention_nodes(lk))
+    sub.extra["anchored"], sub.extra["groups"] = anchored, groups
     rel = []
     for it in raw:
         score = _relevance(it, groups)
@@ -1868,8 +1946,9 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
 
     ``met``: the strongest relevant claim is verified and at least
     ``done_when.min_status``; ``met_with_inference``: relevant claims exist but
-    only at a weaker level; ``unmet``: none (stale, contradicted and unknown
-    claims never count); ``not_supported`` / ``blocked_by_clarification`` come
+    only at a weaker level, or only about code ranked near the subject rather than
+    the subject itself (``flags["off_subject"]``: context claims for other symbols);
+    ``unmet``: none (stale, contradicted and unknown claims never count); ``not_supported`` / ``blocked_by_clarification`` come
     from the handler.
     """
     flags = flags or {}
@@ -1884,6 +1963,11 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
     if kind == "set_enumerated" and sq.get("intent") in CLAIM_EXISTS_KINDS:
         kinds = CLAIM_EXISTS_KINDS[sq["intent"]]
     live = [c for c in claims if c.get("kind") in kinds and c.get("status") in _RANK and c["status"] != "unknown"]
+    off = set(flags.get("off_subject") or [])
+    about = [c for c in live if c["id"] not in off]  # context claims about other code than the question's
+    if live and not about:
+        return "met_with_inference"  # evidence exists, but none of it is shown to be about what was asked
+    live = about
     if not live:
         if flags.get("not_supported"):
             return "not_supported"
@@ -2172,6 +2256,9 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
             del s["flags"]
     result = {**base, "status": "answered", "plan_check": qp.compact_check(check_res), "subquestions": subs,
               "claims": out_claims, "unknowns": unknowns, "critique": crit, "steps": steps}
+    if question.strip():
+        result["passages"] = _passages(g, question)
+        budget.chars += sum(len(ln) + 1 for ln in result["passages"])
     if extra_unc:
         result["index_refresh_error"] = extra_unc[0]
     result["usage"] = budget.usage()

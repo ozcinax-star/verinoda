@@ -553,3 +553,29 @@ def test_module_entry_passes_sweep_pin_and_compares(monkeypatch, tmp_path, capsy
     # schema-1 results have no facts_per_1k_tokens: it is computed from their totals
     assert "| raw grep+read | 2/4 -> 3/4 | 1 -> 1 | n/a -> n/a | 500 -> 500 | 2.00 -> 3.00 |" in out
     assert "| Verinoda retrieve (text) | n/a -> 3/4 |" in out
+
+
+def test_a_final_answer_from_any_command_is_scored_for_facts_and_wrong_statements(orders_copy, orders_questions, tmp_path):
+    """--answer-cmd: the prompt goes to the command's stdin; its answer is scored like an API model's."""
+    import sys
+
+    from verinoda.benchmark.runner import score_answer
+
+    echo = tmp_path / "echo_answer.py"  # an "answerer" that repeats the context: every fact the context has
+    echo.write_text("import sys\nprint(sys.stdin.read())\n", encoding="utf-8")
+    subset = dict(orders_questions, questions=[q for q in orders_questions["questions"] if q["id"] == "q01"])
+    res = run_benchmark(orders_copy, questions=subset, repeat=1, workdir=tmp_path / "w",
+                        answer_cmd=f'"{sys.executable}" "{echo}"')
+    assert res["status"] == "ok" and res["llm"]["enabled"]
+    s = res["summary"]
+    for a in ("verinoda_analyze", "verinoda_retrieve_text"):
+        m = res["questions"][0]["approaches"][a]["model"]
+        assert m["status"] == "measured" and m["answer_facts"]["found_n"] == \
+            res["questions"][0]["approaches"][a]["score"]["facts"]["found_n"]
+        assert s[a]["model"]["answers"] == 1 and "answers_correct" in s[a]["model"]
+    v = s["verinoda_analyze"]["verdicts"]
+    assert v["questions_met"] == v["met_backed_fully"] + v["met_backed_partly"] + v["met_unbacked"]
+    q = {"facts": subset["questions"][0]["facts"],
+         "negatives": [{"id": "n1", "statement": "it writes to a cache", "assertion_regex": "writes? (?:it )?to a cache"}]}
+    wrong = score_answer(q, "The order goes to OrderRepository.save. It writes to a cache first.")
+    assert wrong["answer_negatives"] == ["n1"] and wrong["answer_correct"] is False

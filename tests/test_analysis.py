@@ -1175,3 +1175,15 @@ def test_unresolved_reference_is_an_unknown_with_the_resolvers_next_step(proj):
     u = next(u for u in sq["unknowns"] if "unresolved" in u["why"])
     assert "network is off" in u["why"] and u["next_step"]
     assert not any(c for c in res["claims"] if "requests" in c["text"])  # nothing claimed about it
+
+
+def test_an_analysis_carries_the_passages_query_gives(proj, flow):
+    """Nothing `verinoda query` finds is lost by analyzing: its passages travel with the claims, line by line."""
+    from verinoda import index, retrieval
+
+    repo, _ = proj
+    g = index.load(repo)
+    want = retrieval.render_text(retrieval.retrieve(g, FLOW_Q, retrieval.Budget(max_items=10, max_chars=6000)), 6000)
+    assert flow["passages"] == want.splitlines()
+    assert any(ln.startswith("## ") for ln in flow["passages"])
+    assert all("\n" not in ln for ln in flow["passages"])  # a list of lines: no escaped line breaks in JSON
