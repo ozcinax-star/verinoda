@@ -182,6 +182,9 @@ class Atlas:
     def answer(self, question: str) -> dict:
         return self.snapshot().answer(question)
 
+    def changes(self) -> dict:
+        return self.snapshot().changes()
+
     def path(self, src: str, dst: str) -> dict:
         return self.snapshot().path(src, dst)
 
@@ -674,6 +677,58 @@ class Snapshot:
                 "sections": self._sections(sections), "test": bool(f and _is_test(f)),
                 "degree": g.G.degree(nid)})
 
+    # -- what changed since the index was built ---------------------------------------------------
+    def changes(self) -> dict:
+        """Files edited, added or deleted since the index was built (``verinoda update`` takes them in).
+        Added: files of a kind the index holds (by extension) that it does not hold yet."""
+        from verinoda import search_index
+        from verinoda.snapshot import list_files
+
+        conn = self.h.connect()
+        try:
+            indexed = [r[0] for r in conn.execute("SELECT file FROM files")]
+        except sqlite3.Error:
+            indexed = []
+        finally:
+            self.h.release(conn)
+        stale = set(search_index.stale_files(self.h, self._root, indexed)) if indexed else set()
+        deleted = sorted(f for f in stale if not (self._root / f).exists())
+        edited = sorted(stale - set(deleted))
+        # added: in the working tree, not in the last snapshot (what `verinoda update` compares with)
+        known = self._snapshot_files()
+        try:
+            present = set(list_files(self._root)) if known is not None else set()
+        except Exception:  # noqa: BLE001 - no listing: no added files, the rest still holds
+            present = set()
+        added = sorted(f for f in present - (known or set()) if self.inside(f))
+
+        def note(f: str) -> dict:
+            return {"file": f, "id": self._file_note(f) or self.data_note_for(f)}
+
+        return {"edited": [note(f) for f in edited], "added": [{"file": f, "id": None} for f in added],
+                "deleted": [note(f) for f in deleted], "checked": len(indexed)}
+
+    def _snapshot_files(self) -> set[str] | None:
+        """The files of the last snapshot (atlas.db, read only); None when there is none."""
+        from verinoda.paths import atlas_dir
+
+        db = atlas_dir(self.repo) / "atlas.db"
+        if not db.exists():
+            return None
+        try:
+            conn = sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True, timeout=5)
+        except sqlite3.Error:
+            return None
+        try:
+            row = conn.execute("SELECT id FROM snapshots ORDER BY created_at DESC, rowid DESC LIMIT 1").fetchone()
+            if row is None:
+                return None
+            return {r[0] for r in conn.execute("SELECT path FROM snapshot_files WHERE snapshot_id = ?", (row[0],))}
+        except sqlite3.Error:
+            return None
+        finally:
+            conn.close()
+
     # -- answering a question (the ranking and evidence of `verinoda query`) -----------------------
     def answer(self, question: str) -> dict:
         """What ``verinoda query`` answers: the passages that answer the question, each with the
@@ -857,6 +912,9 @@ class Snapshot:
 
     def _with_user_note(self, nid: str, out: dict) -> dict:
         from verinoda import usernotes
+
+        f = out.get("file")
+        out["stale"] = bool(f) and self.inside(f) and not self._fresh(f)  # edited since the index
 
         sub = self.subject_of(nid)
         out["can_note"] = sub is not None

@@ -632,3 +632,28 @@ def test_a_question_is_answered_by_the_server(served):
     status, _h, body = _get(served, "/api/answer?q=" + "which%20class%20spawns%20the%20wisp%3F")
     assert status == 200 and json.loads(body)["items"]
     assert _get(served, "/api/answer?q=")[0] == 400
+
+
+def test_changes_since_the_index_and_a_stale_note(tmp_path):
+    repo = tmp_path / "orders"
+    shutil.copytree(ROOT / "examples" / "orders_app", repo, ignore=shutil.ignore_patterns(".verinoda", "__pycache__"))
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+    finally:
+        st.close()
+    a = uidata.Atlas(repo)
+    assert a.changes()["edited"] == [] and a.changes()["added"] == [] and a.changes()["deleted"] == []
+    files = sorted(p.relative_to(repo).as_posix() for p in repo.rglob("*.py") if ".verinoda" not in p.parts)
+    edited, gone = files[0], files[1]
+    (repo / edited).write_text((repo / edited).read_text(encoding="utf-8") + "\n# edited\n", encoding="utf-8")
+    (repo / gone).unlink()
+    (repo / "new_module.py").write_text("def fresh():\n    return 1\n", encoding="utf-8")
+    ch = a.changes()
+    assert [c["file"] for c in ch["edited"]] == [edited] and ch["edited"][0]["id"]
+    assert [c["file"] for c in ch["deleted"]] == [gone]
+    assert [c["file"] for c in ch["added"]] == ["new_module.py"]
+    assert a.note(ch["edited"][0]["id"])["stale"] is True
+    fresh = next(f for f in files[2:] if a.snapshot()._file_note(f))
+    assert a.note(a.snapshot()._file_note(fresh))["stale"] is False

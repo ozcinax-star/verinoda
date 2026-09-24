@@ -258,7 +258,10 @@ dosyasının notunu sunucu gerektirmeyen tek bir HTML dosyasına yazar (varsayı
 (proje kökü, ev klasörü) içinde yoktur; CSP yalnızca kendi betiğine ve stiline izin verir, hiçbir
 bağlantı kurmaz. Her bağlantının altında yazıldığı satır görünür (indeksten sonra değişmiş dosyada
 görünmez: satır numaraları başka yeri gösterir); her `dosya:satır` ve her nottaki düğme o satırı VS Code,
-Cursor ya da VSCodium'da açar. **Etki ve yol:** bir notta *Etki*, o değişirse neyin etkilenebileceğini
+Cursor ya da VSCodium'da açar. **Ne değişti:** graf görünümünde *Değişenler*, indeksten sonra düzenlenen,
+eklenen ya da silinen dosyaları (`verinoda update`'in alacaklarını) ve başka renkle onları kullanan dosyaları
+halkayla işaretler; dosyası indeksten sonra değişmiş bir not bunu söyler (bağlantıları ve satırları kaymış
+olabilir). **Etki ve yol:** bir notta *Etki*, o değişirse neyin etkilenebileceğini
 listeler (onu çağıran, içe aktaran, genişleten ya da adlandıran, sonra onları kullanan; en çok üç bağlantı
 geri, önce projenin kendi kodu, testler açılıp kapanabilir) ve yerel grafı bu kümeye çevirir; *Yol…* nottan
 başka bir nota (ya da tersine) en kısa çağrı / import / başvuru zincirini bulur. Dışa aktarılan dosyada ikisi

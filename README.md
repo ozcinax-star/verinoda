@@ -262,6 +262,10 @@ Obsidian, built from Verinoda's own index rather than from hand-written notes:
   would point elsewhere), and **open in your editor**: every `file:line` and a
   button on each note open VS Code, Cursor or VSCodium at that line (chosen at the
   top of the page).
+- **What changed**: *Changed* in the graph view rings the files edited, added
+  or deleted since the index (what `verinoda update` would take in) and, in
+  another colour, the files that use them; a note whose file changed since the
+  index says so, since its links and lines may be off.
 - **Impact and path**: *Impact* on a note lists what may be affected when it
   changes: what calls, imports, extends or names it, then what uses those, up to
   three links back (the project's own code first, tests on or off), and turns the

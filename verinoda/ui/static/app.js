@@ -58,6 +58,8 @@
       myNote: "My note", myNotes: "My notes", addNote: "+ Note", edit: "Edit", save: "Save", cancel: "Cancel",
       del: "Delete", sure: "Delete it?", keep: "Read it: still right", noteHint: "Markdown: **bold**, `code`, - lists, [[Name]] links a note. Ctrl+Enter saves.",
       nst: { fresh: "up to date", changed: "code changed", gone: "code gone" },
+      changedSince: "Changed", changedInfo: "changed since the index", affectedInfo: "use them",
+      staleNote: "This file changed since the index: the links and lines may be off. `verinoda update` takes it in.",
       ask: "Answer the question", answerFor: "Answer", answerMore: "Also relevant", answerNone: "Nothing in the project answers it.",
       answerStale: "changed since the index (the lines may be off):", answerExp: "also searched",
       impact: "Impact", impactTitle: "What may be affected", impactNone: "Nothing in the project uses it.",
@@ -98,6 +100,8 @@
       myNote: "Notum", myNotes: "Notlarım", addNote: "+ Not", edit: "Düzenle", save: "Kaydet", cancel: "Vazgeç",
       del: "Sil", sure: "Silinsin mi?", keep: "Okudum: hâlâ doğru", noteHint: "Markdown: **kalın**, `kod`, - liste, [[Ad]] bir nota bağlar. Ctrl+Enter kaydeder.",
       nst: { fresh: "güncel", changed: "kod değişti", gone: "kod yok" },
+      changedSince: "Değişenler", changedInfo: "indeksten sonra değişti", affectedInfo: "bunları kullanıyor",
+      staleNote: "Bu dosya indeksten sonra değişti: bağlantılar ve satırlar kaymış olabilir. `verinoda update` onu alır.",
       ask: "Soruyu cevapla", answerFor: "Cevap", answerMore: "Ayrıca ilgili", answerNone: "Projede bunu cevaplayan bir şey yok.",
       answerStale: "indeksten sonra değişti (satırlar kaymış olabilir):", answerExp: "ayrıca arandı",
       impact: "Etki", impactTitle: "Etkilenebilecekler", impactNone: "Projede bunu kullanan yok.",
@@ -280,6 +284,7 @@
     const own = n.file && n.kind !== "data" ? editorHref(n.file, n.line) : n.file ? editorHref(n.file, n.span && n.span[0]) : null;
     if (own) meta.append(el("a", { class: "chip editor", href: own, title: `${n.file}${n.line ? ":" + n.line : ""}` }, `↗ ${EDITORS[editor][0]}`));
     parts.push(meta);
+    if (n.stale) parts.push(el("div", { class: "unote st-changed small", text: t("staleNote") }));
     if (OFFLINE && n.code_lines) parts.push(el("div", { class: "muted small", text: `${n.code_lines} ${t("lines")} · ${t("offlineCode")}` }));
     const editable = !OFFLINE && TOKEN && n.can_note;
     if (!n.user_note && editable) meta.append(el("button", { class: "chip addnote", onclick: () => editUserNote(n, "") }, t("addNote")));
@@ -870,6 +875,7 @@
       return best;
     }
     matches(n) { return this.filter && (n.title || "").toLowerCase().includes(this.filter); }
+    marked(n) { return this.marks && this.marks.get(n.id); }
     draw() {
       const ctx = this.ctx, k = this.tf.k;
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -877,10 +883,11 @@
       ctx.translate(this.w / 2 + this.tf.x, this.h / 2 + this.tf.y);
       ctx.scale(k, k);
       const focus = this.hover, nb = focus ? this.adj.get(focus.id) : null;
-      const dim = !!focus || !!this.filter;
+      const dim = !!focus || !!this.filter || !!(this.marks && this.marks.size);
       for (const l of this.links) {
         if (!this.visible(l.s) || !this.visible(l.t)) continue;
-        const on = focus ? (l.s === focus || l.t === focus) : this.filter ? (this.matches(l.s) || this.matches(l.t)) : true;
+        const on = focus ? (l.s === focus || l.t === focus) : this.filter ? (this.matches(l.s) || this.matches(l.t))
+          : this.marks && this.marks.size ? (this.marked(l.s) && this.marked(l.t)) : true;
         ctx.globalAlpha = dim ? (on ? 0.85 : 0.05) : 0.4;
         ctx.strokeStyle = REL_COLOR[l.relation] || "#777";
         ctx.lineWidth = (l.weight ? Math.min(4, 0.7 + Math.log2(1 + l.weight) * 0.6) : 1) / Math.max(0.35, k);
@@ -891,10 +898,14 @@
       ctx.setLineDash([]);
       for (const n of this.nodes) {
         if (!this.visible(n)) continue;
-        const on = focus ? (n === focus || nb.has(n.id)) : this.filter ? this.matches(n) : true;
+        const mark = this.marked(n);
+        const on = focus ? (n === focus || nb.has(n.id)) : this.filter ? this.matches(n) : this.marks && this.marks.size ? !!mark : true;
         ctx.globalAlpha = dim ? (on ? 1 : 0.15) : 1;
         ctx.fillStyle = groupColor(n.group);
         ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2); ctx.fill();
+        if (mark) { // what changed since the index, and what uses it
+          ctx.lineWidth = 3 / k; ctx.strokeStyle = mark === "changed" ? (colors.warn || "#e0a34a") : "#d9d05a"; ctx.stroke();
+        }
         if (n === this.center || n === focus || (this.filter && this.matches(n))) {
           ctx.lineWidth = 2.2 / k; ctx.strokeStyle = colors.accent || "#8e7cf5"; ctx.stroke();
         }
@@ -904,7 +915,7 @@
       ctx.font = `${12 / k}px system-ui, -apple-system, "Segoe UI", sans-serif`;
       for (const n of this.nodes) {
         if (!this.visible(n)) continue;
-        const near = n === focus || (nb && nb.has(n.id)) || n === this.center || this.matches(n);
+        const near = n === focus || (nb && nb.has(n.id)) || n === this.center || this.matches(n) || this.marked(n) === "changed";
         if (!near && !(this.o.labels && (this.nodes.length <= 40 || k * n.r > 7.5))) continue;
         if (dim && !near) continue;
         ctx.globalAlpha = near || !dim ? 1 : 0.3;
@@ -1061,6 +1072,27 @@
       return it;
     }));
   }
+  $("#changes-box").hidden = !!OFFLINE; // an exported file has no working tree to compare
+  async function showChanges(on) {
+    globalG.marks = null;
+    if (on) {
+      let r;
+      try { r = await api("/api/changes"); } catch (e) { $("#graph-info").textContent = e.message; return; }
+      const marks = new Map();
+      for (const c of [...r.edited, ...r.deleted]) if (c.id) marks.set(c.id, "changed");
+      const users = new Map(); // the files that use a changed one (one link back)
+      for (const l of globalG.links) if (marks.get(l.t.id) === "changed" && !marks.has(l.s.id)) users.set(l.s.id, "affected");
+      for (const [id, v] of users) marks.set(id, v);
+      globalG.marks = marks;
+      const changed = r.edited.length + r.deleted.length;
+      $("#graph-info").textContent = `${changed} ${t("changedInfo")}` + (r.added.length ? ` (+${r.added.length})` : "") +
+        ` · ${users.size} ${t("affectedInfo")}`;
+    } else if (globalData) {
+      $("#graph-info").textContent = `${globalData.nodes.length} ${t("filesN")}, ${globalData.edges.length} ${t("links")}`;
+    }
+    globalG.dirty = true; globalG.kick();
+  }
+  $("#global-changes").addEventListener("change", (ev) => showChanges(ev.target.checked));
   $("#graph-filter").addEventListener("input", (ev) => { globalG.filter = ev.target.value.trim().toLowerCase(); globalG.dirty = true; globalG.kick(); });
   $("#global-labels").addEventListener("change", (ev) => { globalG.o.labels = ev.target.checked; globalG.dirty = true; globalG.kick(); });
   for (const id of ["global-tests", "global-data"]) $("#" + id).addEventListener("change", () => showGraph());
