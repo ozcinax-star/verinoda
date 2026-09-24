@@ -69,7 +69,7 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     buf = io.StringIO()
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
-    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html():
+    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once():
         ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
     gp = graph_path(repo)
     if not ok and not gp.exists():
@@ -93,6 +93,37 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
         except (OSError, ValueError) as exc:  # the sidecar is derived data; load() recomputes it
             out["receiver_calls"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
     return out
+
+
+class _resolve_once:
+    """Each path resolved once per build.
+
+    The pipeline calls ``Path.resolve`` on the same paths again and again - about 30,000 calls in
+    an update of Verinoda's own 1,163 files, each a file-system call on Windows. During a build the
+    tree does not move, so the first answer for a path (with the working directory, for a relative
+    one) is kept until the build ends; what raises (``strict=True`` on a missing file) is not kept.
+    """
+
+    def __enter__(self):
+        import pathlib
+
+        self.cls, self.real, cache = pathlib.Path, pathlib.Path.resolve, {}
+        real = self.real
+
+        def resolve(p, strict=False):
+            s = str(p)
+            key = (type(p), s, strict, None if p.is_absolute() else os.getcwd())
+            hit = cache.get(key)
+            if hit is None:
+                hit = cache[key] = real(p, strict=strict)
+            return hit
+
+        self.cls.resolve = resolve
+        return self
+
+    def __exit__(self, *a):
+        self.cls.resolve = self.real
+        return False
 
 
 class _without_upstream_html:
@@ -809,7 +840,9 @@ def write_json_atomic(p: Path, obj) -> None:
     fd, tmp = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp", dir=str(p.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
-            json.dump(obj, f, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+            # json.dumps, not json.dump: the same text, through the C encoder (json.dump to a file
+            # always takes the pure-Python one)
+            f.write(json.dumps(obj, ensure_ascii=False, separators=(",", ":"), sort_keys=True))
         os.replace(tmp, p)
     except BaseException:
         try:

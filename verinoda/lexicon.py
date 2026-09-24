@@ -920,7 +920,7 @@ def build(repo: Path, graph=None, changed=None, *, file_hashes: dict[str, str] |
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".json.tmp")
     with open(tmp, "w", encoding="utf-8", newline="") as fh:
-        json.dump(raw, fh, ensure_ascii=False, separators=(",", ":"))
+        fh.write(json.dumps(raw, ensure_ascii=False, separators=(",", ":")))  # the C encoder: same text, faster
     tmp.replace(path)
     return {"path": str(path), "files": len(files), "reparsed": reparsed, "units": n_units,
             "words": len(pairs), "pairs": sum(len(v) for v in pairs.values()),
