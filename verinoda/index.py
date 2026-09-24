@@ -856,6 +856,9 @@ def receiver_call_edges(g: Graph, facts_for=None) -> list[tuple[str, str, dict]]
 
 _JAVA_STRING = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
 _JAVA_CALL = re.compile(r"(?<![\w.$])([A-Za-z_$][\w$]*)\s*\.\s*([a-z_$][\w$]*)\s*\(")
+# `EmberNetwork::handleStoke`, `this::onTick`: a method handed over to be called back (a handler,
+# listener, ticker); `::new` is a constructor reference and is left to the extractor
+_JAVA_METHOD_REF = re.compile(r"(?<![\w.$])([A-Z][\w$]*|this)\s*::\s*([a-z_$][\w$]*)\b(?!\s*\()")
 _JAVA_DECL = re.compile(r"(?<![\w.$])([A-Z][\w$]*)(?:<[^<>;()]*(?:<[^<>;()]*>[^<>;()]*)*>)?(?:\[\])?\s+([a-z_$][\w$]*)\s*(?=[=;,):])")
 # matched on comment-free lines (_java_code_lines): `import a.B; // NOPMD`, Kotlin `import a.B as C`
 _JAVA_IMPORT = re.compile(r"\s*import\s+(static\s+)?([\w.]+)\.([\w$]+|\*)\s*(?:;|\s+as\s+\w+|$)")
@@ -916,7 +919,9 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
     class is resolved the way javac does it for the file: an explicit import of that class, the
     file's own package, or a ``pkg.*`` import; with none of these, or with an import from another
     package, no edge is made. ``var.method()`` follows the declared type of a parameter, local or
-    field (``Wisp w = ...``). Edges are ``INFERRED`` with ``_origin=verinoda.java_calls``.
+    field (``Wisp w = ...``). A method reference (``Handlers::onStoke``, ``this::tick``) is a call
+    too: the method is handed over to be called back. Edges are ``INFERRED`` with
+    ``_origin=verinoda.java_calls``.
     """
     classes: dict[str, list[tuple[str, str]]] = {}
     methods: dict[tuple[str, str], str] = {}
@@ -1002,23 +1007,30 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
             for i in range(a, b + 1):
                 for var, typ in decls(code[i - 1]):
                     local[var] = typ
+            owner = next((cid for _s, cid in sorted((b2 - a2, cid) for a2, b2, cid in class_spans.get(f, [])
+                                                   if a2 <= a <= b2)), None)
             for i in range(a, b + 1):
-                for m in _JAVA_CALL.finditer(code[i - 1]):
-                    recv, meth = m.group(1), m.group(2)
-                    if recv[0].isupper():
+                refs = [(m.group(1), m.group(2), "ref") for m in _JAVA_METHOD_REF.finditer(code[i - 1])
+                        if m.group(2) != "new"]
+                for recv, meth, how0 in [(m.group(1), m.group(2), "call") for m in _JAVA_CALL.finditer(code[i - 1])] \
+                        + refs:
+                    if how0 == "ref":
+                        cls, how = recv, "reference"
+                    elif recv[0].isupper():
                         cls, how = recv, "class"
                     elif recv in local and recv not in ("this", "super"):
                         cls, how = local[recv], "typed"
                     else:
                         continue
-                    cid = resolve(cls)
+                    cid = owner if cls == "this" else resolve(cls)
                     target = methods.get((cid, meth)) if cid else None
                     if not target or target == n or (n, target) in have:
                         continue
                     have.add((n, target))
-                    ctx = f"{recv}.{meth}()" + ("" if how == "class" else f" on {cls}")
+                    ctx = f"{recv}::{meth} (method reference, called back)" if how == "reference" else \
+                        f"{recv}.{meth}()" + ("" if how == "class" else f" on {cls}")
                     out.append((n, target, {"relation": "calls", "confidence": "INFERRED",
-                                            "confidence_score": 0.9 if how == "class" else 0.75,
+                                            "confidence_score": {"class": 0.9, "reference": 0.8}.get(how, 0.75),
                                             "_origin": JAVA_CALL_ORIGIN, "source_file": f,
                                             "source_location": f"L{i}", "context": ctx}))
     return out

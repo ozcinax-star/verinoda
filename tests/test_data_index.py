@@ -505,3 +505,33 @@ def test_a_resource_id_the_question_spells_finds_every_file_that_writes_it(tmp_p
     # not a resource namespace of this project: "retry:3" is text, not an id
     assert not any("question names" in r for h in search_index.rank(g, "what does retry:3 mean").hits
                    for r in h.reasons)
+
+
+def test_method_references_are_calls_back(tmp_path):
+    root = tmp_path / "mref"
+    _mod(root)
+    _write(root, "src/main/java/com/glow/net/Net.java", """package com.glow.net;
+
+import com.glow.entity.Wisp;
+
+public class Net {
+    public static void register(Object registrar) {
+        listen(registrar, Net::onSummon);
+        listen(registrar, Wisp::new);
+    }
+
+    static void listen(Object registrar, Object handler) { }
+
+    static void onSummon(Object payload) { }
+
+    void start() {
+        listen(null, this::tick);
+    }
+
+    void tick(Object server) { }
+}
+""")
+    _scan(root)
+    g = index.load(root, augment=False)
+    refs = {(g.label(u), g.label(v)) for u, v, d in index.java_call_edges(g) if "method reference" in d["context"]}
+    assert refs == {(".register()", ".onSummon()"), (".start()", ".tick()")}  # ::new is a constructor
