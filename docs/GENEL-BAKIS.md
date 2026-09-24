@@ -228,6 +228,23 @@ dosyaları hiç okumuyordu.
 - **Komut adları:** "`scan` komutu", "init ve scan komutları" gibi ifadeler
   `cmd_scan`, `scan_command`, `ScanCommand` gibi işleyicilere bağlanır.
 
+### 4.1b Notlar ve graf görünümü (`verinoda ui`)
+
+`verinoda ui` projeyi tarayıcıda, Obsidian'daki gibi birbirine bağlı notlar olarak açar; notları
+kimse yazmaz, Verinoda'nın indeksinden çıkar. Her sembol, kaynak dosya, belge bölümü ve veri dosyası
+bir nottur: nitelikli adı (`Wisp.spawn()`), imzası, açıklaması, kodu (renklendirilmiş, satır
+numaralı) ve bağlantıları bölümler hâlinde: tanımlandığı yer, üyeler, çağırdıkları, çağıranlar,
+genişlettiği / uyguladığı, içe aktardıkları ve aktaranlar, başvurdukları, kaynak kimliğiyle
+adlandırdığı veri dosyaları ve onu adlandıran satırlar, kendisi hakkında kaydedilmiş iddialar ve
+durumları. Araç kodda okumayıp çıkardığı bağlantıları `?` ile işaretler. Her notun yanında yerel graf
+(derinlik 1-3), ayrıca bütün projenin dosya düzeyinde graf görünümü (topluluklara göre renkli, vurgu
+filtresiyle) vardır; ikisi de kuvvet yönelimli: sürükle, yakınlaştır, üzerine gelince komşuları
+parlar, tıklayınca not açılır. Arama adla ya da soruyla (`verinoda query` sıralamasıyla), dosya ağacı,
+geri/ileri, Türkçe/İngilizce, açık/koyu tema. Salt okunur ve yereldir: 127.0.0.1 üzerinde standart
+kütüphaneyle çalışan bir sunucu, yalnızca kendi adresine gelen GET isteklerine yanıt verir; sayfa
+dışarıdan hiçbir şey yüklemez (CDN, yazı tipi, telemetri yok). Sınırlar: graf görünümü en çok 2.500
+dosya gösterir (en çok bağlantılı olanlar); düzenleme ve kendi not metni yok.
+
 ### 4.2 Soru planları ve Türkçe desteği (`question_plan`, `textnorm`, `lexicon`) — Çalışıyor (plan revizyonu kısmi)
 
 - **Soru planı** (`verinoda.question_plan/1`): kullanıcının mesajı olduğu

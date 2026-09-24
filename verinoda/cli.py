@@ -485,6 +485,29 @@ def cmd_update(args) -> int:
     return 1 if res.get("error") else 0
 
 
+def _port(value: str) -> int:
+    n = int(value)
+    if not 0 <= n <= 65535:
+        raise argparse.ArgumentTypeError(f"{value} is not a port (0-65535; 0 picks a free one)")
+    return n
+
+
+def cmd_ui(args) -> int:
+    from verinoda.ui.server import serve
+
+    given = args.repo or args.path
+    repo = Path(given).resolve() if given else find_repo_root()
+    try:
+        serve(repo, port=args.port, open_browser=not args.no_browser)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:  # the port is taken
+        print(f"error: cannot listen on 127.0.0.1:{args.port}: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_map(args) -> int:
     from verinoda import architecture_map as am
     from verinoda import index
@@ -1366,6 +1389,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("update", cmd_update, "re-index changed files, record a snapshot, mark affected claims stale", repo=False)
     sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
+    sp = add("ui", cmd_ui, "notes and graph of the project in the browser (local, read-only)", repo=False, js=False)
+    sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
+    sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
+    sp.add_argument("--port", type=_port, default=0, help="port on 127.0.0.1 (default: a free one)")
+    sp.add_argument("--no-browser", action="store_true", help="print the address, do not open a browser")
     sp = add("map", cmd_map, "top-down architecture views", repo=False)
     sp.add_argument("path", nargs="?", default=".")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")

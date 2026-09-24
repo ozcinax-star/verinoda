@@ -16,10 +16,11 @@
 | Graphify port (`verinoda/project_index`, `tests_upstream/`) | done. Upstream suite at port time: 5436 passed / 50 failed, and every failure also fails on unmodified upstream on the same Windows machine; not re-run since (`docs/UPSTREAM.md`) |
 | Core: claims, evidence, critique, experiments, research/compare, feedback, memory, installers, MCP server (23 tools) | implemented |
 | Round 3: search engine, question plans with Turkish support, reference resolver, trust engine (anchors, entailment, facet-level staleness), runtime observation, precise call resolution | implemented and wired into the CLI, MCP and `analyze`; gaps per decision in `docs/DESIGN.md` ("Implementation status") |
-| Product test suite | 1,213 passed, 1 skipped, 2 deselected (slow packaging and installer checks), Windows 11 / Python 3.12, 2026-09-24 |
+| Product test suite | 1,232 passed, 1 skipped, 2 deselected (slow packaging and installer checks), Windows 11 / Python 3.12, 2026-09-24 |
 | Agent integration | Claude Code (`/verinoda`) and Codex (`$verinoda`) verified in real headless sessions with the earlier skill text (`docs/AGENT-VERIFICATION.md`); the round-3 skill text (understand-first and references protocols) has no such record yet |
 | Benchmarks (measured, `docs/BENCHMARKS.md`, chars/4 token estimates, gold facts found in the delivered context; no model in the loop) | Graphify's own code (226 files, 37 facts, in-sample): Verinoda text retrieval 36/37 at 1,424 tokens/question, ~0.14 s; Graphify 7/37. Set on Verinoda's own earlier code (33 facts): 25/33 vs Graphify 8/33 and raw reading 9/33; it was held out until the 2026-09-23 ranking change, which was chosen with it in view (22/33 before). Turkish paraphrases of the example app: 32/32. Regressions: `analyze` on the example app 32 -> 31/32, the one-off scan of the large corpus got slower (6.7 s -> 14.7 s cold), and the 2026-09-23 change adds about 0.03 s per retrieval on the large sets |
 | Game mods and data files (2026-09-24) | data packs, JSON/yml configs and other data files indexed; resource-id links between code and data; reference trees; Java calls the extractor drops; translation pairs from locale files. New example set `glow_mod` (a small fictional Fabric mod, 50 facts): Verinoda text retrieval 48/50, JSON 44, analyze 43, against raw reading 33 and Graphify 13; at `32a5bd4` it was 34 / 25 / 18. Held out only for its first measurement (46 / 32 / 25). A second set written afterwards and measured once, `forge_mod` (NeoForge, Java and Kotlin, 68 facts): text 63, JSON 45, analyze 38 (at `32a5bd4`: 43 / 28 / 26), raw reading 36, Graphify 12; after two more review rounds that looked at four of its questions (so in-sample), final official run: 66 / 50 / 42. The five earlier sets against the pre-mod baseline `dogfood-2026-09-23`: `graphify_core` analyze 30 -> 29, `graphify_core_tr` JSON 16 -> 15 and text 25 -> 26, `heldout_repoatlas` JSON 20 -> 21, the rest unchanged (`docs/BENCHMARKS.md`, `benchmarks/results/mods-2026-09-24/final/`) |
+| Notes and graph view (`verinoda ui`, 2026-09-24) | a note per symbol, file, section and data file with its code and links; local graph per note, global graph at file level, search, file tree; local read-only server, no external assets. Checked in Chrome on the forge_mod example and on Verinoda's own repository (1,115 files in the global graph) |
 | Cross-platform | tested on Windows 11 only; the CI workflow (Linux/macOS/Windows) exists but is manual and has not been run |
 
 **Known limitations** (see also `docs/DESIGN.md` for per-decision gaps):
@@ -172,6 +173,7 @@ is hardlinked or editable.
 cd my-project
 verinoda setup                           # once: index + agent skills (or `verinoda scan .` for the index only)
 verinoda map . --view dataflow           # entry points -> persistence, with limits stated
+verinoda ui                              # notes + graph in the browser (local, read-only)
 verinoda query "where is the discount threshold configured?"     # plain-text context
 verinoda trace create_order_handler OrderRepository.save
 verinoda plan draft "Sipariş API'den veritabanına nasıl ulaşıyor?"   # -> .verinoda/plans/plan-001.json
@@ -198,6 +200,7 @@ give the copy a `.venv` with pytest installed.
 | `setup [path] [--agents auto\|all\|none\|claude,codex] [--scope project\|user] [--no-mcp] [--reference PATH[=ALIAS,...]]` | One step per project, safe to re-run: `init`, `scan` on the first run and `update` afterwards, then skills + MCP for the agents found on PATH (default `auto`); prints what is left to do by hand. `--reference` marks a folder of reference code (an original being ported, a vendored or frozen copy) that ranks below the project's own code unless a question names it or an alias (repeatable). Setup also points out folders that look like such a copy (most of their code files sit at the same relative path under a larger folder and hold mostly the same lines) and prints the `--reference` command; it never applies it. Refuses the home directory unless `--allow-home` |
 | `init [path]` | Create `.verinoda/` (database, config) |
 | `scan <repo> [--force] [--precise] [--scip FILE]` / `update <repo>` | Full / incremental index + snapshot, then the derived search index, lexicon and symbol facts; `update` marks claims whose dependencies changed `stale`. `--precise` resolves the call sites of changed `.py` files; `--scip` adopts a SCIP index you produced `--repo R` works for both as for `query`; `update` without a path takes the nearest project |
+| `ui [<repo>] [--repo DIR] [--port N] [--no-browser]` | notes and graph of the project in the browser: a note per symbol, file and data file, local and global graphs, search (see *Notes and graph view*) |
 | `map [<repo>] [--repo DIR] [--view …]` | hierarchy, dependencies, dataflow, config, tests, history, impact (`--target`, default: git changes) |
 | `query "<q>" [--max-items N] [--max-chars N]` | Bounded retrieval from the passage index; plain text for a model by default (skeleton first, each item with why it was chosen), `--json` for programs |
 | `trace <a> <b> [--mode flow\|any]` | Directed paths, each hop with relation, confidence and call-site location; hints when an endpoint does not resolve |
@@ -224,6 +227,36 @@ Exit codes: 0 done, 1 error, 2 usage error / invalid plan / blocked command,
 3 "needs more" (clarification, partial resolution, refused experiment,
 incomplete observation, no precise answer). Every command except `memory`,
 `mcp serve` and `index` accepts `--json` (`plan schema` always prints JSON).
+
+## Notes and graph view
+
+`verinoda ui` opens the project as linked notes in the browser, in the manner of
+Obsidian, built from Verinoda's own index rather than from hand-written notes:
+
+- **A note per symbol, source file, document section and data file**: qualified
+  name (`Wisp.spawn()`, `search_index.rank()`), signature, doc text, the code
+  (highlighted, with line numbers), and its links in sections: defined in,
+  members, calls, called by, extends / implemented by, imports, imported by,
+  references, the data files it names by resource id and the lines that name it,
+  and the claims recorded about it with their status. A link the tool inferred
+  rather than read in the code is marked `?`.
+- **Local graph** beside every note (depth 1 to 3; tests, data files and
+  external types can be hidden) and a **graph view** of the whole project at
+  file level, coloured by community, with a filter that highlights matching
+  notes. Both are force-directed: drag, zoom, hover to see a note's
+  neighbours, click to open it.
+- **Search** by name (exact, prefix, part of the name, path) or with a question,
+  which runs the same ranking as `verinoda query`; a file tree; back and forward;
+  Turkish and English; light and dark.
+
+It is read-only and local: a standard-library server on `127.0.0.1` (a free port
+unless `--port` is given) that answers only requests addressed to that host
+and port and only `GET`/`HEAD`; the page loads nothing from outside (no CDN,
+fonts or telemetry; `Content-Security-Policy: default-src 'none'`, scripts and
+styles only from the server). It follows the index: after `verinoda update` the
+next page load shows the new graph. Limits: the global graph shows at most 2,500
+files (the best connected ones, and it says how many it left out); no editing,
+no note text of your own, no export of the view.
 
 ## Game mods, data packs and other data files
 

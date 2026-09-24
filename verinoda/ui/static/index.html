@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verinoda</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <button id="btn-left" class="icon" data-i18n-title="toggleFiles" aria-label="Files">&#9776;</button>
+    <a id="project" href="#/"></a>
+    <div id="searchbox">
+      <input id="search" type="search" autocomplete="off" spellcheck="false" data-i18n-placeholder="search">
+      <div id="results" role="listbox" hidden></div>
+    </div>
+    <nav id="actions">
+      <button id="btn-back" class="icon" data-i18n-title="back" aria-label="Back">&#8592;</button>
+      <button id="btn-forward" class="icon" data-i18n-title="forward" aria-label="Forward">&#8594;</button>
+      <button id="btn-graph" data-i18n="graphView"></button>
+      <button id="btn-lang" class="icon" aria-label="Language"></button>
+      <button id="btn-theme" class="icon" data-i18n-title="theme" aria-label="Theme">&#9680;</button>
+      <button id="btn-right" class="icon" data-i18n-title="toggleGraph" aria-label="Local graph">&#9737;</button>
+    </nav>
+  </header>
+  <aside id="left">
+    <div class="pane-title" data-i18n="files"></div>
+    <div id="tree" role="tree"></div>
+  </aside>
+  <main id="main">
+    <article id="note"></article>
+  </main>
+  <aside id="right">
+    <div class="pane-title">
+      <span data-i18n="localGraph"></span>
+      <span class="spacer"></span>
+      <label class="small"><span data-i18n="depth"></span>
+        <select id="local-depth"><option selected>1</option><option>2</option><option>3</option></select>
+      </label>
+    </div>
+    <div class="toggles" id="local-toggles">
+      <label><input type="checkbox" id="local-tests" checked> <span data-i18n="tests"></span></label>
+      <label><input type="checkbox" id="local-data" checked> <span data-i18n="dataFiles"></span></label>
+      <label><input type="checkbox" id="local-external"> <span data-i18n="external"></span></label>
+    </div>
+    <div class="canvas-wrap" id="local-wrap"><canvas id="local"></canvas></div>
+    <div class="pane-title" data-i18n="outline"></div>
+    <div id="outline"></div>
+  </aside>
+</div>
+<div id="graphview" hidden>
+  <div id="graph-toolbar">
+    <strong data-i18n="graphView"></strong>
+    <input id="graph-filter" type="search" autocomplete="off" data-i18n-placeholder="highlight">
+    <label><input type="checkbox" id="global-tests" checked> <span data-i18n="tests"></span></label>
+    <label><input type="checkbox" id="global-data" checked> <span data-i18n="dataFiles"></span></label>
+    <label><input type="checkbox" id="global-labels" checked> <span data-i18n="labels"></span></label>
+    <button id="graph-fit" data-i18n="fit"></button>
+    <span class="spacer"></span>
+    <span id="graph-info" class="muted"></span>
+    <button id="graph-close" class="icon" data-i18n-title="close" aria-label="Close">&#10005;</button>
+  </div>
+  <div id="graph-body">
+    <div class="canvas-wrap" id="global-wrap"><canvas id="global"></canvas></div>
+    <div id="legend"></div>
+  </div>
+</div>
+<div id="tooltip" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -188,6 +188,8 @@ include = ["verinoda*"]
 "verinoda.benchmark" = ["questions/*.json"]
 # round 3 (docs/DESIGN.md): question-plan schema, TR->EN seed lexicon
 "verinoda" = ["schemas/*.json", "data/*.json"]
+# `verinoda ui`: the page, its script and style (no third-party assets)
+"verinoda.ui" = ["static/*.html", "static/*.js", "static/*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -150,7 +150,17 @@ def analysis(tools) -> dict:
 def fresh_repo(tmp_path) -> Path:
     r = _copy_example(tmp_path / "orders_app")
     _scan(r)
+    _clock_past_writes(r)
     return r
+
+
+def _clock_past_writes(repo: Path) -> None:
+    """Wait until the clock has moved past the newest file write in ``repo``: on a coarse clock
+    (Windows) a file stamped in the same tick as a later call's start counts as modified during that
+    call (racy) and nothing read from it is kept."""
+    newest = max(p.stat().st_mtime_ns for p in repo.rglob("*") if p.is_file())
+    while time.time_ns() <= newest:
+        time.sleep(0.001)
 
 
 @pytest.fixture
@@ -492,6 +502,7 @@ def test_project_query_answers_are_kept_until_an_input_changes(fresh_repo, monke
 
     # re-indexing rewrites graph.json and the search index: nothing is served from before
     assert t.index_update()["mode"] == "incremental"
+    _clock_past_writes(fresh_repo)
     reindexed = t.project_query(QUESTION, max_items=5)
     assert len(calls) == 5 and "changed since indexing" not in reindexed["text"]
     hits = t.cache_stats["query_memo_hits"]
