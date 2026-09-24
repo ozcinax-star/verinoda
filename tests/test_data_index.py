@@ -491,7 +491,8 @@ def test_english_words_keep_their_abbreviations_and_turkish_stems_are_long_enoug
 def test_a_resource_id_the_question_spells_finds_every_file_that_writes_it(tmp_path):
     root = tmp_path / "rid"
     _mod(root)
-    for name, typ in (("ember_ingot", "glow:forging"), ("wisp_lamp", "glow:forging"), ("ash", "minecraft:smelting")):
+    for name, typ in (("ember_ingot", "glow:forging"), ("wisp_lamp", "glow:forging"), ("ash", "minecraft:smelting"),
+                      ("slag", "glow:forging/legacy"), ("dust", "xglow:forging")):  # longer ids: not the one asked
         _write(root, RES + f"data/glow/recipe/{name}.json",
                '{\n  "type": "%s",\n  "ingredient": {"item": "glow:wisp_heart"},\n  "result": {"id": "glow:%s"}\n}\n'
                % (typ, name))
@@ -501,7 +502,7 @@ def test_a_resource_id_the_question_spells_finds_every_file_that_writes_it(tmp_p
     hits = search_index.rank(g, "Which recipes use glow:forging?").hits
     named = {h.file.rsplit("/", 1)[-1] for h in hits if "question names glow:forging" in h.reasons}
     assert named == {"ember_ingot.json", "wisp_lamp.json"}
-    assert named <= {h.file.rsplit("/", 1)[-1] for h in hits[:4]}  # as high as the best lexical match
+    assert named <= {h.file.rsplit("/", 1)[-1] for h in hits[:6]}  # as high as the best lexical matches
     # not a resource namespace of this project: "retry:3" is text, not an id
     assert not any("question names" in r for h in search_index.rank(g, "what does retry:3 mean").hits
                    for r in h.reasons)

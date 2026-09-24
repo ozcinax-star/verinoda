@@ -456,3 +456,25 @@ def test_the_stem_most_units_use_wins_over_an_english_stem_artifact(tmp_path):
     q = _query(g, "Melekten ne kalıyor?")
     stems = [e["to"] for e in q.expansions if str(e["via"]).startswith("turkish stem")]
     assert stems[:1] == ["melek"]
+
+
+def test_the_longest_stem_wins_over_a_shorter_more_common_english_word(tmp_path):
+    root = tmp_path / "even"
+    _write(root, "a/events.py", "def dispatch_event(event):\n    return event\n")
+    _write(root, "a/maths.py", "".join(f"def is_even_{i}(n):\n    return n % 2 == 0  # even\n\n" for i in range(8)))
+    g = _scan(root)
+    stems = [e["to"] for e in _query(g, "Eventleri hangi fonksiyon işliyor?").expansions
+             if str(e["via"]).startswith("turkish stem")]
+    assert stems[:1] == ["event"]
+
+
+def test_a_module_qualifier_is_the_module_not_a_class_of_that_name(tmp_path):
+    root = tmp_path / "owner"
+    _write(root, "store/__init__.py", "def save(record):\n    return record\n")
+    _write(root, "cache/memory.py", "class Store:\n    def save(self, record):\n        return record\n")
+    _write(root, "app/main.py", "import store\n\n\ndef run(r):\n    return store.save(r)\n")
+    g = _scan(root)
+    floored = {h.file for h in search_index.rank(g, "Who calls store.save?").hits if "question names 'save'" in h.reasons}
+    assert floored == {"store/__init__.py"}
+    floored = {h.file for h in search_index.rank(g, "Who calls Store.save?").hits if "question names 'save'" in h.reasons}
+    assert floored == {"cache/memory.py"}

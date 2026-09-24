@@ -274,7 +274,7 @@ def named_identifiers(question: str) -> list[str]:
 
 
 def qualified_owners(question: str) -> dict[str, set[str]]:
-    """``Wisp.spawn`` in the question -> ``{"spawn": {"wisp"}}``: the owner (class, module or
+    """``Wisp.spawn`` in the question -> ``{"spawn": {"Wisp"}}``: the owner (class, module or
     object) the question writes before a name."""
     out: dict[str, set[str]] = defaultdict(set)
     for m in IDENT_RE.finditer(question):
@@ -282,7 +282,7 @@ def qualified_owners(question: str) -> dict[str, set[str]]:
         tok = tok[:-2] if tok.endswith("()") else tok
         parts = tok.split(".")
         if len(parts) > 1 and parts[-1].lower() not in FILE_EXTS and all(parts[-2:]):
-            out[parts[-1].lower()].add(parts[-2].lower())
+            out[parts[-1].lower()].add(parts[-2])
     return out
 
 
@@ -1300,9 +1300,14 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
             cands = [f[:k] for k in range(len(f) - 1, shortest - 1, -1) if textnorm.is_suffix_chain(f[k:])
                      and not f[k:].startswith(TR_DERIVATIONAL)]  # oyuncu (player) is not oyun (game)
             known = _vocab_has(conn, cands)
-            # the stem most units use ("melekten" -> melek, not melekt: the English stem of "melekte");
-            # the longer one on a tie
-            exact = max((c for c in cands if c in known), key=lambda c: (known[c], len(c)), default=None)
+            # the longest indexed stem ("eventleri" -> event, not even), unless it is what the English
+            # stemmer made of another inflection: the word goes on with the "e" it dropped
+            # ("melekten" -> melek, not melekt from "melekte")
+            found = [c for c in cands if c in known]
+            exact = found[0] if found else None
+            if exact and len(found) > 1 and found[1] == exact[:-1] and f[len(exact):len(exact) + 1] == "e" \
+                    and known[found[1]] > known[exact]:
+                exact = found[1]
             if exact:  # an inflected form the index also knows as a word keeps the lower weight
                 add(w, exact, f"turkish stem '{exact}'", EXPANSION_WEIGHT if f in have else TR_STEM_WEIGHT)
             st = textnorm.tr_stem(f, lambda p: bool(_vocab_prefixed(conn, p, 1)))
@@ -1564,7 +1569,7 @@ def _proximity(g, conn: sqlite3.Connection, h: "Handle", q: "QueryTerms",
 
 
 _SPELLED_RID = re.compile(r"(?<![\w:/.#@-])#?([a-z0-9_.-]+:[a-z0-9_./-]*[a-z0-9_])(?![\w:/@])")
-MAX_RID_PASSAGES = 300            # passages re-read to confirm a resource id the question spells
+MAX_RID_FILES = 300               # files re-read to confirm a resource id the question spells
 
 
 def _spelled_resource_ids(g, conn: sqlite3.Connection, h: "Handle", question: str,
@@ -1574,8 +1579,12 @@ def _spelled_resource_ids(g, conn: sqlite3.Connection, h: "Handle", question: st
     count, so ``key:value`` prose or a URL scheme is not one. Passage text is re-read to confirm
     the id itself, not just its tokens (``forging`` also occurs as ``forge``)."""
     out: dict[int, tuple[int | None, str]] = {}
+    root = Path(getattr(g, "root", None) or ".")
+    texts: dict[str, str | None] = {}   # file -> lowered text, shared by every id of the question
     for m in _SPELLED_RID.finditer(question):
         rid = m.group(1).lower()
+        # the id itself, not a longer one (minecraft:item/generated) nor another namespace (magic:ores)
+        rid_rx = re.compile(r"(?<![a-z0-9_.:#-])#?" + re.escape(rid) + r"(?![a-z0-9_./-])")
         ns = rid.split(":", 1)[0]
         known = conn.execute("SELECT 1 FROM refs WHERE rid LIKE ? LIMIT 1", (ns + ":%",)).fetchone() or \
             conn.execute("SELECT 1 FROM units WHERE kind = 'data' AND (name LIKE ? OR name LIKE ?) LIMIT 1",
@@ -1586,24 +1595,32 @@ def _spelled_resource_ids(g, conn: sqlite3.Connection, h: "Handle", question: st
             if row[2] == "data" and (row[3] or "").lower().lstrip("#") == rid:
                 out.setdefault(uid, (None, m.group(0)))
         toks = [x for x in dict.fromkeys(tokens(rid)) if x]
-        cand = [pid for pid, a_p in acc.items() if toks and all(x in a_p for x in toks)][:MAX_RID_PASSAGES]
+        cand = [pid for pid, a_p in acc.items() if toks and all(x in a_p for x in toks)]
         if not cand:
             continue
-        rows = _fetch(conn, "SELECT p.pid, p.a, p.b, u.file FROM passages p JOIN units u ON u.uid = p.uid "
+        rows = _fetch(conn, "SELECT p.pid, p.a, p.b, u.file, u.kind FROM passages p JOIN units u ON u.uid = p.uid "
                             "WHERE p.pid IN ({ph})", sorted(cand))
-        root = Path(getattr(g, "root", None) or ".")
-        texts: dict[str, list[str] | None] = {}
-        for pid, a, b, f in rows:
+        by_file: dict[str, list[tuple[int, int, int]]] = defaultdict(list)
+        kind_of: dict[str, str] = {}
+        for pid, a, b, f, kind in rows:
+            by_file[f].append((pid, a, b))
+            kind_of[f] = kind
+        # data files write ids; read them first, and each file once
+        for f in sorted(by_file, key=lambda x: (kind_of[x] != "data", x))[:MAX_RID_FILES]:
             if f not in texts:
                 try:
-                    texts[f] = (root / f).read_text(encoding="utf-8", errors="replace").splitlines()
+                    texts[f] = (root / f).read_text(encoding="utf-8", errors="replace").lower()
                 except OSError:
                     texts[f] = None
-            lines = texts[f]
-            if lines and rid in "\n".join(lines[max(0, a - 1):b]).lower():
-                uid = p_uid.get(pid)
-                if uid is not None and uid not in out:
-                    out[uid] = (pid, m.group(0))
+            text = texts[f]
+            if not text or not rid_rx.search(text):
+                continue
+            lines = text.splitlines()
+            for pid, a, b in sorted(by_file[f], key=lambda x: x[1]):
+                if rid_rx.search("\n".join(lines[max(0, a - 1):b])):
+                    uid = p_uid.get(pid)
+                    if uid is not None and uid not in out:
+                        out[uid] = (pid, m.group(0))
     return out
 
 
@@ -1719,8 +1736,12 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
                 xs = owners.get(name.strip("_").lower())
                 if not xs:
                     return True
-                scope = [s.lower() for s in (qual or "").split(".")[:-1]]
-                return any(x in scope or x == PurePosixPath(h.units[uid][0]).stem.lower() for x in xs)
+                scope = (qual or "").split(".")[:-1]
+                path = PurePosixPath(h.units[uid][0])
+                # "Store.save": the class Store (or Store.java); "store.save": the module or package
+                # store (store.py, store/__init__.py, a Go package folder), not a class Store
+                return any(x in scope or (x == path.stem if x[:1].isupper() else
+                                          x.lower() in (path.stem.lower(), path.parent.name.lower())) for x in xs)
 
             has_owner = {name.strip("_").lower() for uid, name, qual in rows if uid in h.units and owned(uid, name, qual)
                          and name.strip("_").lower() in owners}
