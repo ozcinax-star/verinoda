@@ -111,10 +111,22 @@ scan root folded into `_` parts, user name included.
 - **What it changes:** only ids that start with the root's folded form and
   belong to no node with a source file, and the `_elem_<root>_` part of `.dmf`
   ids; an id that would take one another thing already has gets `_unresolved`;
-  nothing under a root of one folder. graph.json is written back in the
+  nothing under a root of one folder. The `label` and `norm_label` of a node
+  whose id is rewritten lose the root the same way (the pipeline labels such a
+  node with its id: until 2026-09-24 the name shown for it kept the path). graph.json is written back in the
   pipeline's own format (indent 2, key order kept). On the eight benchmark
   corpora no id carries the root, so they are unchanged (fresh-index A/B,
   2026-09-24: identical results).
+
+**No upstream graph.html.** `verinoda.index.build()` runs the pipeline with
+`GRAPHIFY_VIZ_NODE_LIMIT=0` (the upstream switch; `_without_upstream_html`)
+unless the variable is set, so no `graph.html` is written and the pipeline
+removes an old one itself. That page loaded vis-network from a CDN when opened;
+`verinoda ui` and `verinoda ui --export` show the graph with nothing from
+outside. It cost about a second and 3 MB per build on Python's standard library
+as a project (2,305 files). A positive value keeps the page. graph.json and
+GRAPH_REPORT.md are the same either way (orders_app, forge_mod, glow_mod byte
+for byte; Verinoda's own repository node for node and link for link, 2026-09-24).
 
 ## Notes on vendored modules Verinoda does not use
 
@@ -138,7 +150,7 @@ scan root folded into `_` parts, user name included.
 | Tree-sitter AST extraction (Python, JS/TS, Go, Rust, Java, C/C++, C#, Ruby, Kotlin, Scala, PHP, Swift, Lua, Zig, PowerShell, Elixir, ObjC, Julia, Verilog, Fortran, Bash, JSON, Groovy + optional grammars) | `extract.py`, `extractors/` | the knowledge graph behind every Verinoda view. Upstream already resolves method calls by receiver type in about ten languages (Swift, TS/JS, C++, C#, Java, ObjC, Kotlin, Ruby, Rust); for Python it resolves only `ClassName.method()`. Verinoda adds a narrow Python pass for annotated parameters and `x = Cls()` locals, marked `INFERRED` + `derived_by=verinoda.receiver`. |
 | Graph build, dedup, symbol resolution | `build.py`, `dedup.py`, `symbol_resolution.py`, … | same |
 | Code-only rebuild (no LLM), incremental rebuild with changed paths, per-repo lock | `watch._rebuild_code` | `verinoda scan` (full) and `verinoda update` (changed files only), with the path-identity memo above |
-| Community detection, report, HTML graph | `cluster.py`, `report.py`, `export.py` | produced in `.verinoda/index/` on every build (GRAPH_REPORT.md, graph.html) |
+| Community detection, report, HTML graph | `cluster.py`, `report.py`, `export.py` | produced in `.verinoda/index/` on every build (GRAPH_REPORT.md; graph.html only when `GRAPHIFY_VIZ_NODE_LIMIT` is a positive number, see above) |
 | Query term extraction and node scoring | `serve._query_terms`, `_score_query`, `_score_nodes`, `_pick_scored_endpoint` | fuzzy name resolution in `index.Graph.resolve` (trace endpoints, node lookups) after Verinoda's exact id/path/`Class.method` rules, and `retrieval.terms_for` (the term list of the benchmark's raw baseline). Ranking for `query`/`analyze` now comes from Verinoda's own `search_index.py`. |
 | Graphify query renderer | `serve._query_graph_text` | the "Graphify baseline" in `verinoda benchmark` |
 | Confidence labels on edges (EXTRACTED / INFERRED / AMBIGUOUS) | extraction schema | kept on every edge; Verinoda never treats them as verification |

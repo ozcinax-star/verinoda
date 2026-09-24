@@ -96,7 +96,7 @@ it is also rebuilt automatically:
 
 | File | Built by | Rebuilt automatically when |
 |---|---|---|
-| `graph.json`, `GRAPH_REPORT.md`, `graph.html`, `cache/` | `scan` / `update` (vendored Graphify pipeline) | the working tree changed (`update`, or `analyze` refreshing first) |
+| `graph.json`, `GRAPH_REPORT.md`, `cache/` (and `graph.html` only with `GRAPHIFY_VIZ_NODE_LIMIT` set; an old one is removed) | `scan` / `update` (vendored Graphify pipeline) | the working tree changed (`update`, or `analyze` refreshing first) |
 | `search.db` | `scan` / `update` (`search_index.update`) | its schema or tokenizer version differs (the next query rebuilds it) |
 | `receiver_calls.json` | `scan` / `update` (receiver-call pass) | it does not match `graph.json` (it is recomputed) |
 | `lexicon.json` | `scan` / `update` (`lexicon.build`, incremental by file hash) | the next `scan` / `update` |

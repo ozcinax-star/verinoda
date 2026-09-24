@@ -69,7 +69,7 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     buf = io.StringIO()
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
-    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions():
+    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html():
         ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
     gp = graph_path(repo)
     if not ok and not gp.exists():
@@ -93,6 +93,30 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
         except (OSError, ValueError) as exc:  # the sidecar is derived data; load() recomputes it
             out["receiver_calls"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
     return out
+
+
+class _without_upstream_html:
+    """No upstream Graphify ``graph.html`` from a build (an old one is removed by the pipeline itself).
+
+    That page loaded vis-network from a CDN when opened; ``verinoda ui`` and ``verinoda ui --export``
+    show the project's graph without anything from outside. On the Python standard library as a
+    project it cost about a second and 3 MB per build. The upstream switch is used:
+    ``GRAPHIFY_VIZ_NODE_LIMIT=0`` for the build, unless the variable is set (a positive number keeps
+    the page).
+    """
+
+    VAR = "GRAPHIFY_VIZ_NODE_LIMIT"
+
+    def __enter__(self):
+        self.ours = self.VAR not in os.environ
+        if self.ours:
+            os.environ[self.VAR] = "0"
+        return self
+
+    def __exit__(self, *a):
+        if self.ours:
+            os.environ.pop(self.VAR, None)
+        return False
 
 
 class _without_report_questions:

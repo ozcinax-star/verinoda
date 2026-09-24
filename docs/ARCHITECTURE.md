@@ -98,7 +98,7 @@ The design decisions (D1-D30) and their implementation status are in
                             are derived caches)
   config.json               budgets, experiment allowlist, research.network, understanding thresholds
   index/                    DERIVED, DISPOSABLE - rebuilt by `verinoda scan --force`
-    graph.json ...          project_index output (+ GRAPH_REPORT.md, graph.html, cache/)
+    graph.json ...          project_index output (+ GRAPH_REPORT.md, cache/; no graph.html unless asked)
     search.db               passage index (search_index.py)
     receiver_calls.json     receiver-call edges, keyed by graph.json's identity
     lexicon.json            repo-learned lexicon (lexicon.py)

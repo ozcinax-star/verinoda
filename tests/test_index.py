@@ -51,6 +51,18 @@ def test_build_writes_the_graph_under_verinoda(built):
     assert len(stats["log"]) <= 2000
 
 
+def test_the_upstream_graph_html_is_not_written_unless_asked(built, monkeypatch):
+    repo, _ = built
+    html = index_dir(repo) / "graph.html"
+    assert not html.exists() and "GRAPHIFY_VIZ_NODE_LIMIT" not in os.environ  # `verinoda ui` shows the graph
+    monkeypatch.setenv("GRAPHIFY_VIZ_NODE_LIMIT", "5000")  # the upstream switch: a positive limit keeps it
+    try:
+        assert index.build(repo, force=True)["ok"] and html.is_file()
+    finally:
+        monkeypatch.delenv("GRAPHIFY_VIZ_NODE_LIMIT")
+    assert index.build(repo, force=True)["ok"] and not html.exists()  # and the next build removes it
+
+
 def test_quiet_build_prints_nothing(built, capfd):
     repo, _ = built
     (repo / "orders" / "extra.py").write_text("def extra():\n    return 1\n", encoding="utf-8")

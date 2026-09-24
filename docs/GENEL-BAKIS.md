@@ -264,7 +264,8 @@ dosyasının notunu sunucu gerektirmeyen tek bir HTML dosyasına yazar (varsayı
 `file:///` adresini de yazar (Chrome ve Edge'de `file://` üzerinden denendi): graf, dosya ağacı, dosya notları
 (bağlantılar, ana hat, iddialar), dosya düzeyinde yerel graf ve ad araması. Kod ve makinenin yolları
 (proje kökü, ev klasörü) içinde yoktur; CSP yalnızca kendi betiğine ve stiline izin verir, hiçbir
-bağlantı kurmaz. Her bağlantının altında yazıldığı satır görünür (indeksten sonra değişmiş dosyada
+bağlantı kurmaz. İndeks adımı artık upstream Graphify'ın `graph.html`'ini (açılınca vis-network'ü
+CDN'den yüklüyordu) yazmaz, eskisini siler; `GRAPHIFY_VIZ_NODE_LIMIT` pozitif bir sayıysa yazar. Her bağlantının altında yazıldığı satır görünür (indeksten sonra değişmiş dosyada
 görünmez: satır numaraları başka yeri gösterir); her `dosya:satır` ve her nottaki düğme o satırı VS Code,
 Cursor ya da VSCodium'da açar. **Ne değişti:** graf görünümünde *Değişenler*, indeksten sonra düzenlenen,
 eklenen ya da silinen dosyaları (`verinoda update`'in alacaklarını) ve başka renkle onları kullanan dosyaları
