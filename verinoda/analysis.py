@@ -2238,7 +2238,10 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
     not_challenged: dict[str, str] = {}
     kw = _challenge_kwargs(critique, g, state.get("files"))
     replaced: dict[str, str] = dict(ctx.replaced)  # superseded during the analysis (observed reach sets)
-    for i, cid in enumerate(list(rec.ids)):
+    # what the handlers found is checked before what the search found around the question: with a
+    # claim limit, the answer is what must not go unchallenged
+    order = sorted(rec.ids, key=lambda c: all(sec in CONTEXT_SECTIONS for _sq, sec in rec.made_in.get(c, ())))
+    for i, cid in enumerate(order):
         if cid in replaced:
             not_challenged[cid] = "superseded"
         elif not challenge:
