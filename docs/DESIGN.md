@@ -209,6 +209,14 @@ into `.verinoda/index/lexicon.json`):
 - The budget is split across sub-questions.
 - Each sub-question gets a verdict against its `done_when`: `met`,
   `met_with_inference`, `unmet`, `not_supported` or `blocked_by_clarification`.
+  Since 2026-09-25 a context claim (the definition of an item the search ranked
+  near the question) counts for `met` only when it is about the sub-question's
+  subject: a symbol the question names or links, a member or owner of one, or an
+  item carrying every group of the question's words (`flags.off_subject` lists the
+  others). Before, "where is an order written to the database?" could be met on
+  a verified definition of the settings loader.
+- An analysis carries the passages `verinoda query` gives for the same question
+  (`passages`, a list of lines), so it never has less to go on than a search.
 - `verinoda plan audit <analysis>` recomputes the verdicts later and marks a
   sub-question `stale` when a claim it relies on went stale.
 

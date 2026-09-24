@@ -1,0 +1,764 @@
+{
+ "forge_mod": {
+  "questions": 14,
+  "met": 9,
+  "met_wrong": 0,
+  "met_partial": 8,
+  "met_full": 1,
+  "unmet_but_full": 1,
+  "rows": [
+   {
+    "id": "q01",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 2,
+    "in_claims": 2
+   },
+   {
+    "id": "q02",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 5,
+    "in_claims": 4
+   },
+   {
+    "id": "q03",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 6,
+    "in_claims": 2
+   },
+   {
+    "id": "q04",
+    "verdicts": [
+     "met",
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 5,
+    "in_claims": 4
+   },
+   {
+    "id": "q05",
+    "verdicts": [
+     "met",
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 0
+   },
+   {
+    "id": "q06",
+    "verdicts": [
+     "met",
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 5,
+    "in_claims": 4
+   },
+   {
+    "id": "q07",
+    "verdicts": [
+     "unmet",
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 3
+   },
+   {
+    "id": "q08",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 6,
+    "in_claims": 2
+   },
+   {
+    "id": "q09",
+    "verdicts": [
+     "met",
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 5,
+    "in_claims": 3
+   },
+   {
+    "id": "q10",
+    "verdicts": [
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 6,
+    "in_claims": 3
+   },
+   {
+    "id": "q11",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 6,
+    "in_claims": 6
+   },
+   {
+    "id": "q12",
+    "verdicts": [
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 6,
+    "in_claims": 4
+   },
+   {
+    "id": "q13",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 2
+   },
+   {
+    "id": "q14",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 5,
+    "in_claims": 3
+   }
+  ]
+ },
+ "glow_mod": {
+  "questions": 14,
+  "met": 9,
+  "met_wrong": 0,
+  "met_partial": 4,
+  "met_full": 5,
+  "unmet_but_full": 4,
+  "rows": [
+   {
+    "id": "q01",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 6,
+    "in_claims": 6
+   },
+   {
+    "id": "q02",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 2,
+    "in_claims": 2
+   },
+   {
+    "id": "q03",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 2
+   },
+   {
+    "id": "q04",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 4
+   },
+   {
+    "id": "q05",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q06",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 5,
+    "in_claims": 4
+   },
+   {
+    "id": "q07",
+    "verdicts": [
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q08",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 2
+   },
+   {
+    "id": "q09",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 3
+   },
+   {
+    "id": "q10",
+    "verdicts": [
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 5,
+    "in_claims": 3
+   },
+   {
+    "id": "q11",
+    "verdicts": [
+     "not_supported"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q12",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q13",
+    "verdicts": [
+     "not_supported"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q14",
+    "verdicts": [
+     "met",
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 2,
+    "in_claims": 2
+   }
+  ]
+ },
+ "orders_app": {
+  "questions": 10,
+  "met": 7,
+  "met_wrong": 0,
+  "met_partial": 0,
+  "met_full": 7,
+  "unmet_but_full": 2,
+  "rows": [
+   {
+    "id": "q01",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q02",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q03",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q04",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 4
+   },
+   {
+    "id": "q05",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q06",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q07",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q08",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 4
+   },
+   {
+    "id": "q09",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q10",
+    "verdicts": [
+     "not_supported"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 2
+   }
+  ]
+ },
+ "orders_app_tr": {
+  "questions": 10,
+  "met": 7,
+  "met_wrong": 0,
+  "met_partial": 0,
+  "met_full": 7,
+  "unmet_but_full": 2,
+  "rows": [
+   {
+    "id": "q01",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q02",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q03",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q04",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 4
+   },
+   {
+    "id": "q05",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q06",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q07",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q08",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 4
+   },
+   {
+    "id": "q09",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "q10",
+    "verdicts": [
+     "not_supported"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 1
+   }
+  ]
+ },
+ "graphify_core": {
+  "questions": 9,
+  "met": 6,
+  "met_wrong": 0,
+  "met_partial": 2,
+  "met_full": 4,
+  "unmet_but_full": 0,
+  "rows": [
+   {
+    "id": "g01",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 4
+   },
+   {
+    "id": "g02",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 6,
+    "in_claims": 6
+   },
+   {
+    "id": "g03",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 4
+   },
+   {
+    "id": "g04",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 1
+   },
+   {
+    "id": "g05",
+    "verdicts": [
+     "met",
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 2
+   },
+   {
+    "id": "g06",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 2
+   },
+   {
+    "id": "g07",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 3
+   },
+   {
+    "id": "g08",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 6,
+    "in_claims": 6
+   },
+   {
+    "id": "g09",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 1
+   }
+  ]
+ },
+ "graphify_core_tr": {
+  "questions": 9,
+  "met": 6,
+  "met_wrong": 2,
+  "met_partial": 2,
+  "met_full": 2,
+  "unmet_but_full": 0,
+  "rows": [
+   {
+    "id": "g01",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 0
+   },
+   {
+    "id": "g02",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 6,
+    "in_claims": 1
+   },
+   {
+    "id": "g03",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 4
+   },
+   {
+    "id": "g04",
+    "verdicts": [
+     "met",
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 3
+   },
+   {
+    "id": "g05",
+    "verdicts": [
+     "met",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 2
+   },
+   {
+    "id": "g06",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 3
+   },
+   {
+    "id": "g07",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 2
+   },
+   {
+    "id": "g08",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 6,
+    "in_claims": 0
+   },
+   {
+    "id": "g09",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 1
+   }
+  ]
+ },
+ "heldout_repoatlas": {
+  "questions": 8,
+  "met": 2,
+  "met_wrong": 0,
+  "met_partial": 1,
+  "met_full": 1,
+  "unmet_but_full": 0,
+  "rows": [
+   {
+    "id": "h01",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 4
+   },
+   {
+    "id": "h02",
+    "verdicts": [
+     "unmet",
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 2
+   },
+   {
+    "id": "h03",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 5,
+    "in_claims": 3
+   },
+   {
+    "id": "h04",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 5,
+    "in_claims": 0
+   },
+   {
+    "id": "h05",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 1
+   },
+   {
+    "id": "h06",
+    "verdicts": [
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 2,
+    "in_claims": 1
+   },
+   {
+    "id": "h07",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 4,
+    "in_claims": 2
+   },
+   {
+    "id": "h08",
+    "verdicts": [
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 5,
+    "in_claims": 0
+   }
+  ]
+ }
+}

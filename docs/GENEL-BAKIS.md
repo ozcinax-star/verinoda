@@ -102,7 +102,7 @@ satır; ürün testleri yaklaşık 15.300 satır.
 | 4 | Konum, ilişki, akış, yapılandırma, test, "neden", etki iddiaları üretilir. Her kanıtın iddiayı gerçekten söyleyip söylemediği mekanik olarak derecelendirilir (tam / kısmi / yok). | `analysis`, `entail` |
 | 5 | Precise eki kuruluysa bir çağrının hangi tanıma gittiği jedi ile sorulur. İstenirse testler yalıtılmış kopyada çalıştırılır ya da çağrı izleyiciyle gözlenir. | `precise`, `experiments`, `runtime` |
 | 6 | Her iddiaya karşıt kontrol uygulanır; zayıfsa durum ve güven düşer, asla yükselmez. | `critique` |
-| 7 | Her alt soru `done_when` ölçütüne göre yargılanır: `met`, `met_with_inference`, `unmet`, `not_supported`, `blocked_by_clarification`. | `analysis` |
+| 7 | Her alt soru `done_when` ölçütüne göre yargılanır: `met`, `met_with_inference`, `unmet`, `not_supported`, `blocked_by_clarification`. Bağlam iddiası (aramada soruya yakın çıkan bir öğenin tanımı) yalnız sorunun konusuyla ilgiliyse `met` sayılır (2026-09-25); analiz, `verinoda query`'nin aynı soru için verdiği pasajları da taşır. | `analysis` |
 
 Döngünün süre, araç çağrısı ve bağlam bütçesi vardır (varsayılan 60 sn,
 40 çağrı, ~6.000 token). İndeks yenileme ve test çalıştırmaları süre

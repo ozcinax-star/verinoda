@@ -1,0 +1,120 @@
+{
+ "verinoda_user_tr": {
+  "questions": 12,
+  "met": 5,
+  "met_wrong": 3,
+  "met_partial": 0,
+  "met_full": 2,
+  "unmet_but_full": 1,
+  "rows": [
+   {
+    "id": "u01",
+    "verdicts": [
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 0
+   },
+   {
+    "id": "u02",
+    "verdicts": [
+     "not_supported"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 0
+   },
+   {
+    "id": "u03",
+    "verdicts": [
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 0
+   },
+   {
+    "id": "u04",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 2,
+    "in_claims": 0
+   },
+   {
+    "id": "u05",
+    "verdicts": [
+     "met_with_inference"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 0
+   },
+   {
+    "id": "u06",
+    "verdicts": [
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 2,
+    "in_claims": 0
+   },
+   {
+    "id": "u07",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 2,
+    "in_claims": 2
+   },
+   {
+    "id": "u08",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 2,
+    "in_claims": 0
+   },
+   {
+    "id": "u09",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 0
+   },
+   {
+    "id": "u10",
+    "verdicts": [
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 3,
+    "in_claims": 2
+   },
+   {
+    "id": "u11",
+    "verdicts": [
+     "met"
+    ],
+    "status": "answered",
+    "facts": 2,
+    "in_claims": 2
+   },
+   {
+    "id": "u12",
+    "verdicts": [
+     "unmet"
+    ],
+    "status": "answered",
+    "facts": 2,
+    "in_claims": 2
+   }
+  ]
+ }
+}

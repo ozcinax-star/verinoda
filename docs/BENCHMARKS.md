@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,78 @@ Sections: [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-25: analyze keeps what query found, grounded verdicts, Turkish, update time
+
+Measured with the fast harness (`benchmarks/results/fast-2026-09-25/`, its README says how): the
+Verinoda approaches only, scored exactly like `verinoda bench run`, on the seven public sets and
+one private set (left out of the files; it moved the same way). Fresh-index A/B where the change
+touches the index.
+
+**analyze no longer loses what query finds.** An analysis carried only its claims; the passages its
+own search had found were dropped. On the seven public sets it delivered fewer gold facts than
+`verinoda query` on 33 of 74 questions (62 facts). It now carries the passages `query` gives for
+the same question, as a list of lines (one JSON string would escape every line break, and the
+locators in it could no longer be read). Negatives unchanged. The output grows by up to 6,000
+characters; over MCP (12,000 characters) the passages are cut before any claim.
+
+| set | analyze before | analyze after | query text |
+|---|---|---|---|
+| forge_mod (68) | 42 | 66 | 66 |
+| glow_mod (50) | 43 | 48 | 48 |
+| orders_app (32) | 31 | 32 | 32 |
+| orders_app_tr (32) | 30 | 32 | 32 |
+| graphify_core (37) | 29 | 36 | 36 |
+| graphify_core_tr (37) | 16 | 27 | 26 |
+| heldout_repoatlas (33) | 13 | 26 | 25 |
+| **total (289)** | **204** | **267** | **265** |
+
+**"met" means the claims are about the question.** A verdict audit (`audit-*.json`) compares each
+question's verdict with the gold facts its claims carry (the passages left out). "Met on the wrong
+sources": every sub-question met, none of the gold facts in the claims. Before, context claims (a
+verified definition of whatever ranked near the question) could make a sub-question met: "Where is
+an order written to the database?" was met on `load_settings()` and a config line. Now a context
+claim counts only when it is about the question's subject (a named or linked symbol, a member or
+owner of one, or an item carrying every group of the question's words), and the data-path handler
+states the write sites it found as verified locations. Public sets, 74 questions:
+
+| | before | after |
+|---|---|---|
+| met with none of the gold facts in the claims | 2 | 0 |
+| met, claims carry some of them | 18 | 20 |
+| met, claims carry all of them | 27 | 27 |
+
+**Turkish.** 82 more generic stems in the seed glossary (budget, cut, truncate, fit, score, weight,
+evidence, claim, decision, design, architecture, option, flag ...; `yapı` left out, `yapıyor`
+would read as structure): `graphify_core_tr` query text 26 → 30, analyze 27 → 31, retrieve 15 →
+18; the other sets unchanged. Multi-part questions: ", sonra / ardından / ek olarak" split a
+question, and a later part that names no code and at most one word of its own asks about the
+earlier subject (Turkish drops it); no fact moved on the sets, one more backed verdict.
+
+**Stemmer.** `query`/`queries`, `copy`/`copies`, `entry`/`entries`, `key`/`keys` were different
+tokens (quer vs query); they are one now. Fresh-index A/B: 2 of 333 results change, both up
+(retrieve JSON on `orders_app_tr` and `graphify_core_tr`).
+
+**Update time.** Each path is resolved once per build (the pipeline called `Path.resolve` about
+30,000 times per update of Verinoda's own repository) and compact JSON goes through the C encoder.
+`verinoda update` after a one-line edit of Verinoda's own 1,163 files: 35.1 s → 27.9 s (the build
+35-40 s → 28.9 s). graph.json is the same (byte for byte on the examples, node, link and attribute
+for attribute on Verinoda's own repository). Fresh-index A/B: 0 of 333 results differ.
+
+**A set of Turkish user questions about Verinoda (`verinoda_user_tr`, in-sample).** 12 questions (one
+a user's own words, the rest written in that style), 30 gold facts at commit 3bd1b94: query text
+11/30, analyze 8 → 11 with this round; of 5 questions judged met, 3 have none of their gold facts
+in the claims. It shows a weak spot the other sets did not: in a repository whose code is English
+but whose UI strings and docs are Turkish, the Turkish words of a question find the Turkish text
+first. Two attempts were measured and not kept: 29 passive verb stems (4 results up, 6 down) and
+weighing a Turkish word no code name contains below its translation (user set +3, but `forge_mod`
+retrieve 50 → 45: in a mod, those words are how the data files are found).
+
+**Final answers.** `verinoda bench run --answer-cmd CMD` hands each approach's context and the
+question to any command (a local model, a command-line client) and scores the answer it writes:
+gold facts, known-wrong statements, `answers_correct` (every fact, no wrong statement); analyze's
+summary reports whether "met" is backed by gold facts in its claims. No model was run for this
+update: final-answer accuracy is still **not measured**.
 
 ## Update 2026-09-24: data files, game mods, Java calls
 

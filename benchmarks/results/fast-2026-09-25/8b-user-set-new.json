@@ -1,0 +1,76 @@
+{
+ "verinoda_user_tr": {
+  "verinoda_analyze": 11,
+  "verinoda_retrieve": 8,
+  "verinoda_retrieve_text": 11,
+  "per_q": {
+   "u01": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u02": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u03": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "u04": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u05": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u06": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u07": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 1,
+    "verinoda_retrieve_text": 2
+   },
+   "u08": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u09": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u10": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 2
+   },
+   "u11": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 2
+   },
+   "u12": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 2
+   }
+  },
+  "negatives": {
+   "verinoda_analyze": 0,
+   "verinoda_retrieve": 0,
+   "verinoda_retrieve_text": 0
+  },
+  "facts": 30,
+  "seconds": 16.9
+ }
+}
