@@ -178,6 +178,31 @@ dotted token such as `graph.json` is not two words. `forge_mod` analyze
 23 -> 24; `graphify_core` analyze 30 -> 29 ("query terms" now also names
 `_query_terms`). The other sets unchanged.
 
+**End of the night: one official run of every set on the final code**
+(`benchmarks/results/mods-2026-09-24/final/`, `repeat = 1`, each corpus
+indexed from scratch). Facts found; the first number is this update's earlier
+result file for the set (`forge_mod`: its held-out measurement), bold where
+the final run found more:
+
+| set | facts | raw | Graphify | analyze | JSON | text |
+|---|---|---|---|---|---|---|
+| `forge_mod` | 68 | 36 | 12 | 38 -> **42** | 45 -> **46** | 63 -> **66** |
+| `glow_mod` | 50 | 33 | 13 | 41 -> **42** | 43 -> **45** | 48 |
+| `orders_app` | 32 | 31 | 16 | 31 | 31 | 32 |
+| `orders_app_tr` | 32 | 10 | 6 | 30 | 28 | 32 |
+| `graphify_core` | 37 | 4 | 7 | 30 -> 29 | 27 | 36 |
+| `graphify_core_tr` | 37 | 5 | 2 | 16 | 15 | 25 -> **26** |
+| `heldout_repoatlas` | 33 | 9 | 8 | 13 | 20 -> **21** | 25 |
+
+No approach stated a negative on the mod sets; the one analyze negative on
+`orders_app` and `orders_app_tr` is the same as before. The per-change numbers
+above were measured on indexes built at the start of the night (only the
+ranking changed between them); built from scratch, `forge_mod` JSON is 46
+rather than 50 (q11: its JSON packing drops the tick method's body when the
+graph prior shifts; the text format finds all six facts either way) and
+`glow_mod` analyze 42 rather than 43. The private set, run the same way: text
+32, JSON 24, analyze 23 of 39 facts (22 / 23 / 24 before this round).
+
 **The five earlier sets** (regression check, same harness, `repeat = 1`, no
 upstream CLI, against `dogfood-2026-09-23/`): 24 of the 25 Verinoda cells and
 every raw and Graphify cell found exactly the same number of facts. One cell

@@ -846,6 +846,10 @@ metodunu öne çıkarıyor ve düz metin biçimi, uzun bir sınıf bölümünün
 ayrıca gösteriyor: özel kümede metin 22 -> 31 / 39 (örneklem içi). Son olarak, kodun tek bir ad olarak
 yazdığı yan yana iki kelime ("sipariş oluştur" -> `siparis_olustur` gibi, `x_y` / `XY`) o ad sayılıyor: `glow_mod` analyze 41 -> 43,
 `forge_mod` analyze 41 -> 42, özel küme metin 31 -> 32; `graphify_core` analyze 30 -> 29.
+Gecenin sonunda son kodla her küme sıfırdan bir kez resmi olarak ölçüldü
+(`benchmarks/results/mods-2026-09-24/final/`): `forge_mod` metin 66, JSON 46, analyze 42 (ilk ölçüm 63 / 45 / 38);
+`glow_mod` 48 / 45 / 42; önceki beş kümede yalnızca `graphify_core` analyze 30 -> 29, `graphify_core_tr` metin
+25 -> 26, `heldout_repoatlas` JSON 20 -> 21. Özel küme: metin 32, JSON 24, analyze 23 / 39.
 
 Önceki beş kümede (gerileme kontrolü) Verinoda'nın 25 hücresinden 24'ü ve
 Graphify ile ham okumanın bütün hücreleri aynı sayıda bilgi buldu; bir hücre
