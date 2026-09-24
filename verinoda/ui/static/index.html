@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="verinoda-token" content="">
 <title>Verinoda</title>
 <link rel="stylesheet" href="app.css">
 </head>
@@ -19,6 +20,12 @@
       <button id="btn-back" class="icon" data-i18n-title="back" aria-label="Back">&#8592;</button>
       <button id="btn-forward" class="icon" data-i18n-title="forward" aria-label="Forward">&#8594;</button>
       <button id="btn-graph" data-i18n="graphView"></button>
+      <select id="editor" data-i18n-title="editor" aria-label="Editor">
+        <option value="vscode">VS Code</option>
+        <option value="cursor">Cursor</option>
+        <option value="vscodium">VSCodium</option>
+        <option value="none" data-i18n="noEditor"></option>
+      </select>
       <button id="btn-lang" class="icon" aria-label="Language"></button>
       <button id="btn-theme" class="icon" data-i18n-title="theme" aria-label="Theme">&#9680;</button>
       <button id="btn-right" class="icon" data-i18n-title="toggleGraph" aria-label="Local graph">&#9737;</button>

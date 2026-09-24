@@ -305,6 +305,10 @@ def _r_derived(r: dict) -> None:
         print(f"  warning: derived data not refreshed: {r['derived']['error']}")
     if r.get("pruned_missing_files"):
         print(f"  pruned from the graph (files no longer exist): {', '.join(r['pruned_missing_files'][:5])}")
+    found = ((r.get("derived") or {}).get("copies") or {}).get("copies") if isinstance(r.get("derived"), dict) else None
+    if found:
+        print(f"  note: {', '.join(found[:3])}{', ...' if len(found) > 3 else ''} hold a copy of the project's own code; "
+              "ranked lower unless a question names them (index.not_copies in .verinoda/config.json to undo)")
     dd = r.get("dropped_dangling_references") or {}
     if dd.get("count"):
         print(f"  note: {dd['count']} file(s) named by other files are not in the repository; the graph keeps no "
@@ -520,7 +524,8 @@ def cmd_ui(args) -> int:
                 print(f"could not open a browser ({type(exc).__name__}); open the address above", file=sys.stderr)
         return 0
     try:
-        serve(repo, port=args.port, open_browser=not args.no_browser, open_at="#/graph" if args.graph else "")
+        serve(repo, port=args.port, open_browser=not args.no_browser, open_at="#/graph" if args.graph else "",
+              read_only=args.read_only)
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -528,6 +533,79 @@ def cmd_ui(args) -> int:
         print(f"error: cannot listen on 127.0.0.1:{args.port}: {exc}", file=sys.stderr)
         return 2
     return 0
+
+
+def _r_notes(res: dict) -> None:
+    mark = {"fresh": "ok     ", "changed": "CHANGED", "gone": "GONE   "}
+    notes = res.get("notes") or []
+    if not notes:
+        print(f"no notes of your own (write them in `verinoda ui`; they live in {res.get('dir')})")
+    for n in notes:
+        first = (n["text"].strip().split("\n") or [""])[0][:70]
+        where = f"{n['file']}:{(n.get('now') or n['lines'])[0]}"
+        print(f"  {mark.get(n['status'], n['status'])} {n['subject']}  ({where})  {first}")
+        if n["status"] != "fresh" and n.get("why"):
+            print(f"          {n['why']}")
+    for k in res.get("kept") or []:
+        print(f"  kept: {k} (anchored to the code as it is now)")
+    for k in res.get("deleted") or []:
+        print(f"  deleted: {k}")
+    if res.get("changed"):
+        print(f"{res['changed']} note(s) whose code changed or is gone: read a changed one again, then "
+              "`verinoda notes --keep SUBJECT`; delete a gone one with `verinoda notes --delete SUBJECT` "
+              "(or both in `verinoda ui`)")
+
+
+def cmd_notes(args) -> int:
+    from verinoda import usernotes
+
+    repo = Path(args.repo or args.path).resolve() if (args.repo or args.path) else find_repo_root()
+    snap = None
+    try:  # with an index, a note whose symbol was renamed or deleted is gone, and --keep knows its lines
+        from verinoda.ui.data import Atlas
+
+        snap = Atlas(repo).snapshot()
+    except (FileNotFoundError, OSError, ValueError):
+        snap = None
+
+    def resolves(subject: str) -> bool | None:
+        return None if snap is None else snap.note_for_subject(subject) is not None
+
+    kept, deleted = [], []
+    for subject in args.delete or []:
+        if not usernotes.delete(repo, subject):
+            print(f"error: no note of your own on {subject!r} (`verinoda notes` lists them)", file=sys.stderr)
+            return 2
+        deleted.append(subject)
+    for subject in args.keep or []:
+        n = usernotes.find(repo, subject)
+        if n is None:
+            print(f"error: no note of your own on {subject!r} (`verinoda notes` lists them)", file=sys.stderr)
+            return 2
+        span = None
+        if snap is not None and "text" in (n.anchor or {}):  # pinned by lines: the index says where they are
+            from verinoda import search_index
+
+            nid = snap.note_for_subject(subject)
+            sub = snap.subject_of(nid) if nid else None
+            if sub is not None and search_index.stale_files(snap.h, repo, [sub[1]]):
+                print(f"error: {sub[1]} changed since the index was built: run `verinoda update`, then keep",
+                      file=sys.stderr)
+                return 2
+            span = (sub[2], sub[3]) if sub is not None else None
+        try:
+            usernotes.keep(repo, n, span=span, resolves=resolves(subject))
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        kept.append(subject)
+    notes = [usernotes.as_dict(repo, n, resolves=resolves(n.subject)) for n in usernotes.load_all(repo)]
+    bad = [n for n in notes if n["status"] != "fresh"]
+    shown = bad if args.changed else notes
+    res = {"dir": str(usernotes.notes_dir(repo)), "notes": shown, "changed": len(bad), "kept": kept,
+           "deleted": deleted}
+    _emit(args, res, _r_notes)
+    return 1 if args.changed and bad else 0
 
 
 def cmd_map(args) -> int:
@@ -1421,6 +1499,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="write the graph and the file notes as one HTML file that opens without a server "
                          "(no code in it; default .verinoda/index/verinoda-graph.html) and exit")
     sp.add_argument("--open", action="store_true", help="with --export: open the written file in the browser")
+    sp.add_argument("--read-only", action="store_true", help="do not let the page write notes of your own")
+    sp = add("notes", cmd_notes, "your own notes on the code and whether the code changed since they were written",
+             repo=False)
+    sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
+    sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
+    sp.add_argument("--changed", action="store_true",
+                    help="only the notes whose code changed or is gone; exit 1 when there are any (for CI)")
+    sp.add_argument("--keep", action="append", metavar="SUBJECT",
+                    help="after reading a changed note again: anchor it to the code as it is now; repeatable")
+    sp.add_argument("--delete", action="append", metavar="SUBJECT",
+                    help="delete a note (one whose code is gone, for instance); repeatable")
     sp = add("map", cmd_map, "top-down architecture views", repo=False)
     sp.add_argument("path", nargs="?", default=".")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")

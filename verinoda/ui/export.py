@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from importlib import resources
 from pathlib import Path
 
+from verinoda import usernotes
 from verinoda.ui.data import HIDDEN_KINDS, MAX_GLOBAL_NODES, MAX_SECTION_ITEMS, Atlas
 
 FORMAT = "verinoda-export"
@@ -149,8 +150,21 @@ def build(repo: Path | str) -> dict:
     kept_ids = {n["id"] for n in kept}
     graph = {**graph, "nodes": kept, "cap": MAX_GLOBAL_NODES,
              "edges": [e for e in graph["edges"] if e["source"] in kept_ids and e["target"] in kept_ids]}
+    # notes of your own: on the file's note (a symbol's under its label), read-only, and listed on the start page
+    mine = []
+    for u in usernotes.load_all(Path(repo)):
+        d = usernotes.as_dict(Path(repo), u)
+        home = target.get(u.file) or snap.data_note_for(u.file)
+        item = {k: d[k] for k in ("subject", "text", "status", "written", "why")}
+        item["label"] = u.subject.partition("::")[2] or None
+        if home in notes:
+            if u.subject == u.file:
+                notes[home]["user_note"] = item
+            else:
+                notes[home].setdefault("user_notes", []).append(item)
+        mine.append({**item, "id": home if home in notes else None})
     data = {"stats": stats, "tree": _prune_tree(tree, ids) or {**tree, "children": []}, "global": graph,
-            "notes": notes}
+            "notes": notes, "user_notes": mine}
     # the file is made to be passed on: no path of this machine in its text
     data = _scrub(data, _scrubber(Path(repo).resolve()))
     return {"format": FORMAT, "version": VERSION,

@@ -382,6 +382,7 @@ def test_every_link_in_the_export_opens_a_note_it_holds(glow, tmp_path):
     links = [it for n in notes.values() for s in n["sections"] for it in s["items"]]
     links += [c for n in notes.values() for c in n["breadcrumb"]] + data["stats"]["hubs"]
     assert links and all(it["id"] in notes for it in links if "id" in it)
+    assert not any("snippet" in it for it in links)  # a line of code is code: not in the exported file
     assert all("id" not in o for n in notes.values() for o in n["outline"])  # a file's own symbols: text
     tree_ids = []
     stack = [data["tree"]]
@@ -536,3 +537,34 @@ def test_ui_export_and_graph_flags(glow, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(uiserver, "serve", lambda repo, **kw: seen.update(kw))
     assert cli.main(["ui", str(glow), "--graph", "--no-browser"]) == 0
     assert seen["open_at"] == "#/graph" and seen["open_browser"] is False
+
+
+def test_a_link_shows_the_line_it_is_written_on(atlas, glow):
+    hit = atlas.search("spawn")["results"][0]
+    n = atlas.note(hit["id"])
+    secs = {s["key"]: s["items"] for s in n["sections"]}
+    callers = [c for c in secs["called_by"] if c.get("at")]
+    assert callers and all(c["snippet"] for c in callers)
+    for c in callers:
+        f, _, ln = c["at"].rpartition(":")
+        line = (glow / f).read_text(encoding="utf-8").split("\n")[int(ln) - 1].strip()
+        assert c["snippet"] == line[:uidata.MAX_SNIPPET] or c["snippet"].endswith("…")
+    assert all(i.get("snippet") is None for k in uidata.STRUCTURAL_SECTIONS for i in secs.get(k, []))
+    assert atlas.snapshot().line_at("../outside.py:1") is None and atlas.snapshot().line_at(None) is None
+
+
+def test_a_link_line_is_not_shown_from_a_file_edited_since_the_index(glow):
+    a = uidata.Atlas(glow)
+    hit = next(r for r in a.search("spawn")["results"] if r["title"] == "Wisp.spawn()")
+    callers = next(s["items"] for s in a.note(hit["id"])["sections"] if s["key"] == "called_by")
+    edited = next(c["at"].rpartition(":")[0] for c in callers if c.get("snippet"))
+    p = glow / edited
+    before = p.read_bytes()
+    try:
+        p.write_bytes(b"// a line added on top\n" + before)
+        again = next(s["items"] for s in a.note(hit["id"])["sections"] if s["key"] == "called_by")
+        assert all(c.get("snippet") is None for c in again if c["at"].startswith(edited + ":"))
+    finally:
+        p.write_bytes(before)
+    assert any(c.get("snippet") for c in next(s["items"] for s in a.note(hit["id"])["sections"]
+                                               if s["key"] == "called_by"))

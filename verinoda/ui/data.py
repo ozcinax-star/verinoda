@@ -36,6 +36,8 @@ _is_test = lru_cache(maxsize=1 << 16)(is_test_file)  # asked for every link of e
 RACY_NS = 2_000_000_000  # a file written this close to now may change again within the same clock tick
 
 MAX_CODE_LINES = 160        # lines of a symbol shown in its note
+MAX_SNIPPET = 160           # characters of the line a link is written on
+STRUCTURAL_SECTIONS = ("defined_in", "members")  # where a link's line is the definition itself
 MAX_FILE_LINES = 80         # lines of a file shown in its note (its outline lists the rest)
 MAX_SECTION_ITEMS = 60      # links per note section (the section says how many more)
 MAX_LOCAL_NODES = 220       # nodes of a local graph
@@ -168,6 +170,45 @@ class Atlas:
     def global_graph(self, **kw) -> dict:
         return self.snapshot().global_graph(**kw)
 
+    def user_notes(self) -> dict:
+        return {"notes": self.snapshot().user_notes()}
+
+    def delete_user_note(self, subject: str) -> dict:
+        """Remove the note on ``subject``, whatever became of its code (a note whose symbol is gone)."""
+        from verinoda import usernotes
+
+        if not usernotes.delete(self.repo, subject):
+            raise KeyError(f"no note of your own on {subject!r}")
+        return {"user_note": None, "deleted": subject}
+
+    def write_user_note(self, nid: str, text: str, *, keep: bool = False) -> dict:
+        """Write, delete (empty ``text``) or keep (re-anchor) the note of your own on ``nid``.
+
+        Refused (ValueError) when ``nid`` has no code in the project, and (LookupError) when its
+        file changed since the index was built: the lines the index knows would be the wrong ones.
+        """
+        from verinoda import search_index, usernotes
+
+        snap = self.snapshot()
+        sub = snap.subject_of(nid)
+        if sub is None:
+            raise KeyError(f"no note of your own can be written on {nid!r}")
+        subject, f, start, end = sub
+        stale = bool(search_index.stale_files(snap.h, self.repo, [f]))
+        if keep:
+            found = usernotes.find(self.repo, subject)
+            if found is None:
+                raise KeyError(f"no note of your own on {nid!r}")
+            pinned_by_lines = "text" in (found.anchor or {})
+            if pinned_by_lines and stale:
+                raise LookupError(f"{f} changed since the index was built: run `verinoda update`, then keep")
+            saved = usernotes.keep(self.repo, found, span=(start, end), resolves=True)
+        else:
+            if text.strip() and stale:
+                raise LookupError(f"{f} changed since the index was built: run `verinoda update`, then write")
+            saved = usernotes.save(self.repo, subject, f, start, end, text)
+        return {"user_note": usernotes.as_dict(self.repo, saved) if saved is not None else None}
+
 
 class Snapshot:
     """One load of the index and everything derived from it; caches only ever describe this load."""
@@ -192,6 +233,8 @@ class Snapshot:
         self._file_notes: dict[str, str] | None = None
         self._dbf: dict[str, list] | None = None
         self._claim_cache: tuple | None = None
+        self._subject_cache: dict[str, dict[str, str]] = {}
+        self._fresh_files: dict[str, tuple] = {}
         self._refs = self._reference_roots()
 
     # -- files ---------------------------------------------------------------------------------
@@ -209,6 +252,37 @@ class Snapshot:
                 except (ValueError, OSError):
                     ok = False
             self._inside[f] = ok
+        return ok
+
+    def line_at(self, at: str | None) -> str | None:
+        """The text of ``file:line`` (stripped, at most :data:`MAX_SNIPPET` characters), or None."""
+        if not at:
+            return None
+        f, _, ln = at.rpartition(":")
+        if not ln.isdigit() or not self.inside(f) or not self._fresh(f):
+            return None  # a file edited since the index: its line numbers point elsewhere now
+        lines = self.read_lines(f)
+        n = int(ln)
+        if not 1 <= n <= len(lines):
+            return None
+        text = lines[n - 1].strip()
+        return (text[:MAX_SNIPPET - 1] + "…" if len(text) > MAX_SNIPPET else text) or None
+
+    def _fresh(self, f: str) -> bool:
+        """Is ``f`` as the index saw it (so the index's line numbers point at the right lines)?"""
+        from verinoda import search_index
+
+        st = _stat(self._root / f)
+        with self._lock:
+            hit = self._fresh_files.get(f)
+        if hit is not None and hit[0] == st:
+            return hit[1]
+        try:
+            ok = not search_index.stale_files(self.h, self._root, [f])
+        except Exception:  # noqa: BLE001 - unknown: do not show a line that may be the wrong one
+            ok = False
+        with self._lock:
+            self._fresh_files[f] = (st, ok)
         return ok
 
     def read_lines(self, f: str) -> list[str]:
@@ -248,9 +322,16 @@ class Snapshot:
         from verinoda.paths import load_config
 
         try:
-            entries = (load_config(self.repo).get("index") or {}).get("reference") or []
+            entries = list((load_config(self.repo).get("index") or {}).get("reference") or [])
         except Exception:  # noqa: BLE001 - an unreadable config only means no reference trees
             return ()
+        try:  # and the folders detected as copies of the project's own code
+            from verinoda import copies
+
+            detected = [c["path"] for c in copies.load(self.repo)]
+        except Exception:  # noqa: BLE001 - no detection result: the configured trees only
+            detected = []
+        entries += detected
         roots = [(e.get("path") if isinstance(e, dict) else e) for e in entries]
         return tuple(r.strip("/").lower() + "/" for r in roots if isinstance(r, str) and r.strip("/"))
 
@@ -530,11 +611,14 @@ class Snapshot:
             if (sec, other, rel) in seen:
                 continue
             seen.add((sec, other, rel))
-            sections[sec].append({**self.brief(other), "relation": rel, "at": _at(d),
+            at = _at(d)
+            sections[sec].append({**self.brief(other), "relation": rel, "at": at,
                                   "confidence": d.get("confidence"), "score": d.get("confidence_score"),
                                   "context": d.get("context"),
                                   "derived_by": d.get("_origin") if str(d.get("_origin", "")).startswith("verinoda")
-                                  else None})
+                                  else None,
+                                  # the line the link is written on: a call, an import, a reference
+                                  "snippet": None, "_snip": None if sec in STRUCTURAL_SECTIONS else at})
         # a file's note is the whole file: its span is not derived (that parses the file)
         span = g.span(nid) if f and k not in ("file", "doc") else None
         code = None
@@ -566,21 +650,110 @@ class Snapshot:
                 sections["members"] = rest
             else:
                 sections.pop("members", None)
-        return {"id": nid, "title": self.title(nid), "kind": k, "file": f, "line": g.line(nid),
+        return self._with_user_note(nid, {"id": nid, "title": self.title(nid), "kind": k, "file": f, "line": g.line(nid),
                 "span": list(span) if span else None,
                 "span_basis": ("file" if k in ("file", "doc") else g.span_basis(nid)) if span else None,
                 "signature": sig or None, "doc": doc or None, "qualified": qual or None,
                 "breadcrumb": self._breadcrumb(nid), "code": code, "outline": outline,
                 "community": {"id": g.G.nodes[nid].get("community"), "name": g.G.nodes[nid].get("community_name")},
                 "sections": self._sections(sections), "test": bool(f and _is_test(f)),
-                "degree": g.G.degree(nid)}
+                "degree": g.G.degree(nid)})
+
+    # -- notes of your own (verinoda.usernotes) -----------------------------------------------------
+    def _subjects_in(self, f: str) -> dict[str, str]:
+        """Note id -> subject for the symbols, headings and data units of ``f``, unique in the file:
+        the qualified name (``B.__init__()``, not ``.__init__()``), and a second one of the same name
+        (a Java overload, a repeated ``Usage`` heading) ``#2`` by line."""
+        with self._lock:
+            hit = self._subject_cache.get(f)
+        if hit is not None:
+            return hit
+        g = self.g
+        named: list[tuple[int, str, str]] = []
+        for n in list(g.symbols_in(f)) + list(g.headings_in(f)):
+            if self.kind(n) in HIDDEN_KINDS:
+                continue
+            label = str(g.label(n) or "").strip()
+            qual = (self._facts.get(n) or ("",))[0]
+            name = (qual or label.lstrip(".")).strip() or n
+            if label.endswith("()") and not name.endswith("()"):
+                name += "()"
+            named.append((g.line(n) or 0, n, name))
+        for x, _r in self._data_by_file().get(f, []):
+            _f, name, a, _b = self._data[x]
+            named.append((a, x, name or f"line {a}"))
+        seen: Counter = Counter()
+        out: dict[str, str] = {}
+        for _line, n, name in sorted(named):
+            seen[name] += 1
+            out[n] = f"{f}::{name}" if seen[name] == 1 else f"{f}::{name}#{seen[name]}"
+        with self._lock:
+            self._subject_cache[f] = out
+        return out
+
+    def subject_of(self, nid: str) -> tuple[str, str, int, int] | None:
+        """What a note of your own on ``nid`` is about: (subject, file, first line, last line); None
+        for what has no code in the project (an external type, a comment)."""
+        g = self.g
+        if nid.startswith(DATA_PREFIX):
+            row = self._data.get(nid)
+            if row is None or not self.inside(row[0]):
+                return None
+            f, _name, a, b = row
+            return self._subjects_in(f).get(nid, f), f, a, b
+        if nid not in g.G:
+            return None
+        k = self.kind(nid)
+        f = g.file(nid)
+        if k in HIDDEN_KINDS or not f or not self.inside(f):
+            return None
+        if k in ("file", "doc"):
+            return f, f, 1, max(1, len(self.read_lines(f)))
+        subject = self._subjects_in(f).get(nid)
+        if subject is None:
+            return None
+        span = g.span(nid) or ((g.line(nid) or 1),) * 2
+        return subject, f, span[0], span[1]
+
+    def note_for_subject(self, subject: str) -> str | None:
+        """The note a subject (``file::Name`` or ``file``) is about now, when the index still has it."""
+        f, sep, _name = subject.partition("::")
+        if not sep:
+            return self._file_note(f) or self.data_note_for(f)
+        return next((n for n, s in self._subjects_in(f).items() if s == subject), None)
+
+    def _with_user_note(self, nid: str, out: dict) -> dict:
+        from verinoda import usernotes
+
+        sub = self.subject_of(nid)
+        out["can_note"] = sub is not None
+        found = usernotes.find(self.repo, sub[0]) if sub is not None else None
+        out["user_note"] = usernotes.as_dict(self.repo, found, resolves=True) if found is not None else None
+        return out
+
+    def user_notes(self) -> list[dict]:
+        """Every note of your own with its status, those whose code changed or is gone first."""
+        from verinoda import usernotes
+
+        order = {"changed": 0, "gone": 1, "fresh": 2}
+        out = []
+        for n in usernotes.load_all(self.repo):
+            nid = self.note_for_subject(n.subject)
+            out.append({**usernotes.as_dict(self.repo, n, resolves=nid is not None), "id": nid})
+        return sorted(out, key=lambda x: (order.get(x["status"], 3), x["subject"]))
 
     def _sections(self, sections: dict[str, list[dict]]) -> list[dict]:
         out = []
         for key in SECTION_ORDER:
             items = sections.get(key) or []
             if items:
-                out.append({"key": key, "count": len(items), "items": items[:MAX_SECTION_ITEMS]})
+                kept = items[:MAX_SECTION_ITEMS]
+                shown = {id(it) for it in kept}
+                for it in items:  # the line a link is written on: read for the links shown only
+                    at = it.pop("_snip", None)
+                    if at and id(it) in shown:
+                        it["snippet"] = self.line_at(at)
+                out.append({"key": key, "count": len(items), "items": kept})
         return out
 
     def _breadcrumb(self, nid: str) -> list[dict]:
@@ -618,14 +791,16 @@ class Snapshot:
             for t in e.get("targets") or []:
                 target = self.data_note_for(t) or self._file_note(t)
                 if target and self.kind(target) not in HIDDEN_KINDS:
+                    at = f"{file}:{e['line']}"
                     sections["names_data"].append({**self.brief(target), "relation": f"names {e['rid']}",
-                                                   "at": f"{file}:{e['line']}", "sure": e.get("sure"),
+                                                   "at": at, "sure": e.get("sure"), "snippet": None, "_snip": at,
                                                    "confidence": "EXTRACTED" if e.get("sure") else "INFERRED"})
         for e in lk.get("named_by") or []:
             src = self._note_at(e["file"], e["line"])
             if src and self.kind(src) not in HIDDEN_KINDS:
+                at = f"{e['file']}:{e['line']}"
                 sections["named_by"].append({**self.brief(src), "relation": f"names {e['rid']}",
-                                             "at": f"{e['file']}:{e['line']}", "sure": e.get("sure"),
+                                             "at": at, "sure": e.get("sure"), "snippet": None, "_snip": at,
                                              "confidence": "EXTRACTED" if e.get("sure") else "INFERRED"})
 
     def _note_at(self, f: str, line: int) -> str | None:
@@ -696,12 +871,12 @@ class Snapshot:
         if claims:
             sections["claims"] = claims
         others = [x for x, _r in self._data_by_file().get(f, []) if x != nid]
-        return {"id": nid, "title": name or PurePosixPath(f).name, "kind": "data", "file": f, "line": a,
+        return self._with_user_note(nid, {"id": nid, "title": name or PurePosixPath(f).name, "kind": "data", "file": f, "line": a,
                 "span": [a, b], "span_basis": "data unit", "signature": None, "doc": None, "qualified": None,
                 "breadcrumb": [], "outline": [self.brief(x) for x in others][:200],
                 "code": {"start": a, "end": end, "lines": lines[a - 1:end], "total": b - a + 1, "lang": self._lang(f)},
                 "community": {"id": None, "name": None}, "sections": self._sections(sections),
-                "test": _is_test(f), "degree": sum(len(v) for v in sections.values())}
+                "test": _is_test(f), "degree": sum(len(v) for v in sections.values())})
 
     # -- graphs ----------------------------------------------------------------------------------
     def local_graph(self, nid: str, depth: int = 1, relations: set[str] | None = None, *,

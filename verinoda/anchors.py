@@ -908,15 +908,17 @@ def relocate_in(anchor: dict, facts: dict | None, text: str, content_hash: str |
     return Relocation("changed", cand, cand + n - 1, {"why": f"{what} changed since the evidence was recorded"})
 
 
-def anchor_for_file(path: Path, rel: str, start: int, end: int) -> dict | None:
-    """Anchor for lines of a file on disk (facts computed in-process, no store)."""
+def facts_for_path(path: Path, rel: str) -> tuple[dict | None, str | None]:
+    """(facts, text) of a file on disk, facts computed in-process (no store); facts None when the
+    language has none or the file does not parse, text None when the file cannot be read."""
     try:
         data = path.read_bytes()
     except OSError:
-        return None
+        return None, None
+    text = data.decode("utf-8", errors="replace")
     scheme = scheme_for(rel)
     if scheme is None:
-        return None
+        return None, text
     sha = hashlib.sha256(data).hexdigest()
     facts = _mem_get(sha, scheme)
     if facts is None:
@@ -924,9 +926,14 @@ def anchor_for_file(path: Path, rel: str, start: int, end: int) -> dict | None:
         if facts is not None:
             facts["sha256"] = sha
             _mem_put(sha, scheme, facts)
-    if not usable(facts):
+    return (facts if usable(facts) else None), text
+
+
+def anchor_for_file(path: Path, rel: str, start: int, end: int) -> dict | None:
+    """Anchor for lines of a file on disk (facts computed in-process, no store)."""
+    facts, text = facts_for_path(path, rel)
+    if facts is None or text is None:
         return None
-    text = data.decode("utf-8", errors="replace")
     return make_anchor(facts, text, start, end)
 
 

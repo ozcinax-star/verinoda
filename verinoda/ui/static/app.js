@@ -37,6 +37,15 @@
     return j;
   }
   const noteHref = (id) => "#/n/" + encodeURIComponent(id);
+  const TOKEN = OFFLINE ? "" : (($("meta[name=verinoda-token]") || {}).content || "");
+  async function apiPost(path, body) {
+    const r = await fetch(path, { method: "POST", body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json", "X-Verinoda-Token": TOKEN, Accept: "application/json" } });
+    let j = {};
+    try { j = await r.json(); } catch (_) { /* not JSON */ }
+    if (!r.ok) { const e = new Error(j.message || r.statusText); e.code = j.error; e.status = r.status; throw e; }
+    return j;
+  }
 
   // -- language ------------------------------------------------------------------------------
   const I18N = {
@@ -45,6 +54,11 @@
       tests: "Tests", dataFiles: "Data files", external: "External", outline: "Outline", graphView: "Graph view",
       highlight: "Highlight notes…", labels: "Labels", fit: "Fit", close: "Close", back: "Back", forward: "Forward",
       colorBy: "Colour by", byFolder: "folder", byCommunity: "community",
+      editor: "Editor", openIn: "Open in", noEditor: "no editor",
+      myNote: "My note", myNotes: "My notes", addNote: "+ Note", edit: "Edit", save: "Save", cancel: "Cancel",
+      del: "Delete", sure: "Delete it?", keep: "Read it: still right", noteHint: "Markdown: **bold**, `code`, - lists, [[Name]] links a note. Ctrl+Enter saves.",
+      nst: { fresh: "up to date", changed: "code changed", gone: "code gone" },
+      noteOn: "on", noNotes: "No notes of your own yet: open a note and press + Note.",
       theme: "Light / dark", toggleFiles: "Show or hide files", toggleGraph: "Show or hide the local graph",
       searchOffline: "Search files and symbols  (Ctrl+K)",
       offlineHome: "Exported view: the graph and a note per file, without the code; `verinoda ui` in the project shows every note with its code. Exported",
@@ -61,7 +75,7 @@
         extends: "Extends / implements", extended_by: "Subclasses / implementations", imports: "Imports",
         imported_by: "Imported by", references: "References", referenced_by: "Referenced by",
         names_data: "Names (resource ids)", named_by: "Named by", other_out: "Other links", other_in: "Other backlinks",
-        claims: "Claims", outline: "Outline", hubs: "Most connected",
+        claims: "Claims", outline: "Outline", hubs: "Most connected", myNotes: "My notes",
       },
       kind: {
         class: "class", method: "method", function: "function", file: "file", doc: "document", section: "section",
@@ -74,6 +88,11 @@
       tests: "Testler", dataFiles: "Veri dosyaları", external: "Dış", outline: "Ana hat", graphView: "Graf görünümü",
       highlight: "Notları vurgula…", labels: "Etiketler", fit: "Sığdır", close: "Kapat", back: "Geri", forward: "İleri",
       colorBy: "Renk", byFolder: "klasör", byCommunity: "topluluk",
+      editor: "Editör", openIn: "Aç:", noEditor: "editör yok",
+      myNote: "Notum", myNotes: "Notlarım", addNote: "+ Not", edit: "Düzenle", save: "Kaydet", cancel: "Vazgeç",
+      del: "Sil", sure: "Silinsin mi?", keep: "Okudum: hâlâ doğru", noteHint: "Markdown: **kalın**, `kod`, - liste, [[Ad]] bir nota bağlar. Ctrl+Enter kaydeder.",
+      nst: { fresh: "güncel", changed: "kod değişti", gone: "kod yok" },
+      noteOn: "", noNotes: "Henüz kendi notun yok: bir not aç ve + Not'a bas.",
       theme: "Açık / koyu", toggleFiles: "Dosyaları göster ya da gizle", toggleGraph: "Yerel grafı göster ya da gizle",
       searchOffline: "Dosya ya da sembol ara  (Ctrl+K)",
       offlineHome: "Dışa aktarılmış görünüm: graf ve her dosyanın notu, kod olmadan; projede `verinoda ui` her notu koduyla gösterir. Dışa aktarım",
@@ -91,6 +110,7 @@
         imported_by: "İçe aktaranlar", references: "Başvurdukları", referenced_by: "Başvuranlar",
         names_data: "Adlandırdığı kaynaklar", named_by: "Adlandıranlar", other_out: "Diğer bağlantılar",
         other_in: "Diğer geri bağlantılar", claims: "İddialar", outline: "Ana hat", hubs: "En çok bağlantılı",
+        myNotes: "Notlarım",
       },
       kind: {
         class: "sınıf", method: "metot", function: "fonksiyon", file: "dosya", doc: "belge", section: "bölüm",
@@ -179,6 +199,25 @@
     });
   }
 
+  // -- open in an editor (a served page knows the project's folder; an exported file does not) --------
+  const EDITORS = { vscode: ["VS Code", "vscode"], cursor: ["Cursor", "cursor"], vscodium: ["VSCodium", "vscodium"] };
+  let editor = store.get("vn.editor", "vscode");
+  if (editor !== "none" && !EDITORS[editor]) editor = "vscode";
+  let projectRoot = null; // from /api/stats
+  let statsReady = Promise.resolve(null); // a note is drawn once the project's folder is known
+  function editorHref(file, line) {
+    if (OFFLINE || !projectRoot || !file || editor === "none") return null;
+    const abs = (projectRoot.replace(/\\/g, "/").replace(/\/+$/, "") + "/" + file).replace(/^\/+/, "");
+    const path = encodeURI(abs).replace(/#/g, "%23").replace(/\?/g, "%3F");
+    return `${EDITORS[editor][1]}://file/${path}${line ? ":" + line : ""}`;
+  }
+  function atLink(at) { // "file:line" as a link that opens the editor there (text when it cannot)
+    const m = /^(.*):(\d+)$/.exec(at || "");
+    const href = m ? editorHref(m[1], m[2]) : editorHref(at, null);
+    return href ? el("a", { class: "at mono", href, title: `${t("openIn")} ${EDITORS[editor][0]}` }, at)
+      : el("span", { class: "at mono", text: at });
+  }
+
   // -- note rendering --------------------------------------------------------------------------
   const KIND_LETTER = { class: "C", method: "M", function: "F", file: "F", doc: "D", section: "§", data: "{}", symbol: "S", external: "E", claim: "!" };
   const kindBadge = (kind) => el("span", { class: "kbadge k-" + (kind || "symbol"), title: t("kind." + kind), text: KIND_LETTER[kind] || "·" });
@@ -203,6 +242,7 @@
       }
       return;
     }
+    await statsReady;
     if (current !== id) return;
     renderNote(n);
     loadLocal(id);
@@ -225,8 +265,14 @@
     if (n.file) meta.append(el("span", { class: "chip mono", text: n.line ? `${n.file}:${n.line}` : n.file }));
     if (n.span) meta.append(el("span", { class: "chip", title: n.span_basis || "", text: `${n.span[0]}–${n.span[1]} (${n.span[1] - n.span[0] + 1} ${t("lines")})` }));
     if (n.test) meta.append(el("span", { class: "chip", text: t("test") }));
+    const own = n.file && n.kind !== "data" ? editorHref(n.file, n.line) : n.file ? editorHref(n.file, n.span && n.span[0]) : null;
+    if (own) meta.append(el("a", { class: "chip editor", href: own, title: `${n.file}${n.line ? ":" + n.line : ""}` }, `↗ ${EDITORS[editor][0]}`));
     parts.push(meta);
     if (OFFLINE && n.code_lines) parts.push(el("div", { class: "muted small", text: `${n.code_lines} ${t("lines")} · ${t("offlineCode")}` }));
+    const editable = !OFFLINE && TOKEN && n.can_note;
+    if (!n.user_note && editable) meta.append(el("button", { class: "chip addnote", onclick: () => editUserNote(n, "") }, t("addNote")));
+    if (n.user_note) parts.push(userNoteBox(n));
+    for (const u of n.user_notes || []) parts.push(userNoteBox(n, u)); // an exported file: the notes on the file's symbols
     if (n.signature) parts.push(el("pre", { class: "sig mono", text: n.signature }));
     if (n.doc) parts.push(el("div", { class: "doc", text: n.doc }));
     if (n.outline && n.outline.length) {
@@ -248,6 +294,101 @@
     renderOutline(n);
   }
 
+  // -- notes of your own -------------------------------------------------------------------------
+  function mdInline(text) { // `code`, **bold**, [[Name]]: DOM nodes, never HTML
+    const out = [];
+    const rx = /`([^`]+)`|\*\*([^*]+)\*\*|\[\[([^\]]+)\]\]/g;
+    let last = 0, m;
+    while ((m = rx.exec(text))) {
+      if (m.index > last) out.push(text.slice(last, m.index));
+      if (m[1] !== undefined) out.push(el("code", { text: m[1] }));
+      else if (m[2] !== undefined) out.push(el("strong", { text: m[2] }));
+      else {
+        const name = m[3].trim();
+        out.push(el("a", { href: "#", class: "wikilink", onclick: (ev) => { ev.preventDefault(); openByName(name); } }, name));
+      }
+      last = rx.lastIndex;
+    }
+    if (last < text.length) out.push(text.slice(last));
+    return out;
+  }
+  function mdBlocks(text) {
+    const lines = text.replace(/\r\n/g, "\n").split("\n"), out = [];
+    for (let i = 0; i < lines.length;) {
+      if (/^```/.test(lines[i])) { // fenced code
+        const body = [];
+        for (i++; i < lines.length && !/^```/.test(lines[i]); i++) body.push(lines[i]);
+        i++;
+        out.push(el("pre", { class: "mono", text: body.join("\n") }));
+      } else if (/^\s*[-*] /.test(lines[i])) {
+        const ul = el("ul");
+        for (; i < lines.length && /^\s*[-*] /.test(lines[i]); i++) ul.append(el("li", {}, mdInline(lines[i].replace(/^\s*[-*] /, ""))));
+        out.push(ul);
+      } else if (!lines[i].trim()) { i++; }
+      else {
+        const para = el("p");
+        for (let first = true; i < lines.length && lines[i].trim() && !/^```/.test(lines[i]) && !/^\s*[-*] /.test(lines[i]); i++, first = false) {
+          if (!first) para.append(el("br"));
+          para.append(...mdInline(lines[i]));
+        }
+        out.push(para);
+      }
+    }
+    return out;
+  }
+  async function openByName(name) { // [[Name]]: the note of that name, else the best match
+    let r;
+    try { r = await api("/api/search?q=" + encodeURIComponent(name)); } catch (_) { return; }
+    const items = r.results || [], lower = name.toLowerCase().replace(/\(\)$/, "");
+    const hit = items.find((x) => x.title.toLowerCase().replace(/\(\)$/, "") === lower) || items[0];
+    if (hit) location.hash = noteHref(hit.id);
+  }
+  function userNoteBox(n, u) {
+    const note = u || n.user_note, own = !u;
+    const st = note.status || "fresh";
+    const head = el("div", { class: "unote-head" }, el("strong", { text: own ? t("myNote") : `${t("myNote")} · ${note.label || note.subject}` }),
+      el("span", { class: "unote-st st-" + st, title: note.why || "", text: t("nst." + st) }));
+    if (note.written) head.append(el("span", { class: "muted small", text: note.written.replace("T", " ").replace("Z", " UTC") }));
+    const box = el("div", { class: "unote st-" + st, id: own ? "sec-mynote" : null }, head, el("div", { class: "unote-body" }, mdBlocks(note.text || "")));
+    if (st !== "fresh" && note.why) box.append(el("div", { class: "muted small", text: note.why }));
+    if (own && !OFFLINE && TOKEN) {
+      const bar = el("div", { class: "unote-bar" }, el("button", { onclick: () => editUserNote(n, note.text) }, t("edit")));
+      if (st === "changed") bar.append(el("button", { onclick: () => writeUserNote(n, "", true) }, t("keep")));
+      const del = el("button", { class: "danger" }, t("del"));
+      del.addEventListener("click", () => { // two steps, no dialog
+        if (del.dataset.armed) writeUserNote(n, ""); else { del.dataset.armed = "1"; del.textContent = t("sure"); }
+      });
+      bar.append(del);
+      box.append(bar);
+    }
+    return box;
+  }
+  function editUserNote(n, text) {
+    const area = el("textarea", { class: "mono", rows: 8, spellcheck: "true" });
+    area.value = text || "";
+    const save = () => writeUserNote(n, area.value), cancel = () => route();
+    area.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); save(); }
+      else if (ev.key === "Escape") { ev.preventDefault(); cancel(); }
+    });
+    const box = el("div", { class: "unote editing", id: "sec-mynote" }, el("div", { class: "unote-head" }, el("strong", { text: t("myNote") })),
+      area, el("div", { class: "muted small", text: t("noteHint") }),
+      el("div", { class: "unote-bar" }, el("button", { class: "primary", onclick: save }, t("save")), el("button", { onclick: cancel }, t("cancel"))));
+    const old = $("#sec-mynote");
+    if (old) old.replaceWith(box);
+    else { const meta = $("#note .meta"); if (meta) meta.after(box); else main.prepend(box); }
+    area.focus();
+  }
+  async function writeUserNote(n, text, keep = false) {
+    try { await apiPost("/api/usernote", { id: n.id, text, keep }); }
+    catch (e) {
+      const box = $("#sec-mynote") || main;
+      box.append(el("div", { class: "empty error", text: `${e.status || ""} ${e.message}` }));
+      return;
+    }
+    route(); // the note again, from the server
+  }
+
   function sectionHeader(key, count) {
     return el("h2", { class: "sec", id: "sec-" + key }, t("sec." + key), el("span", { class: "n", text: String(count) }));
   }
@@ -265,12 +406,14 @@
       const rid = (it.relation || "").replace(/^names /, "");
       if (rid && rid !== it.title) kids.push(el("span", { class: "rel mono", text: rid }));
       const where = key === "names_data" ? it.file : it.at;
-      if (where) kids.push(el("span", { class: "at mono", text: where }));
+      if (where) kids.push(atLink(where));
+      if (it.snippet) kids.push(el("div", { class: "snip mono", text: it.snippet }));
       return el("li", {}, kids);
     }
     const rel = it.relation && !["calls", "method", "contains", "imports", "references"].includes(it.relation) ? it.relation : "";
     if (rel) kids.push(el("span", { class: "rel", text: rel }));
-    if (it.at) kids.push(el("span", { class: "at mono", text: it.at }));
+    if (it.at) kids.push(atLink(it.at));
+    if (it.snippet) kids.push(el("div", { class: "snip mono", text: it.snippet })); // the line the link is written on
     return el("li", {}, kids);
   }
 
@@ -291,6 +434,8 @@
   function renderOutline(n) {
     const box = $("#outline");
     box.replaceChildren();
+    if (n.user_note) box.append(el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); const h = $("#sec-mynote"); if (h) h.scrollIntoView({ behavior: "smooth", block: "start" }); } },
+      `${t("myNote")} · ${t("nst." + (n.user_note.status || "fresh"))}`));
     for (const s of n.sections || []) {
       box.append(el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); const h = document.getElementById("sec-" + s.key); if (h) h.scrollIntoView({ behavior: "smooth", block: "start" }); } },
         `${t("sec." + s.key)} (${s.count})`));
@@ -307,9 +452,27 @@
         .map(([v, l]) => el("div", { class: "card" }, el("div", { class: "v", text: Number(v).toLocaleString() }), el("div", { class: "l", text: l }))));
     const hubs = el("ul", { class: "links" }, (s.hubs || []).map((h) => el("li", {}, kindBadge(h.kind), noteLink(h),
       el("span", { class: "at mono", text: `${h.degree} · ${h.file || ""}` }))));
+    let mine = [];
+    try { mine = OFFLINE ? (OFFLINE.user_notes || []) : ((await api("/api/usernotes")).notes || []); } catch (_) { mine = []; }
+    const notesList = mine.length ? el("ul", { class: "links" }, mine.map((u) => {
+      const li = el("li", {},
+        el("span", { class: "unote-st st-" + u.status, title: u.why || "", text: t("nst." + u.status) }),
+        u.id ? el("a", { href: noteHref(u.id) }, u.subject) : el("span", { text: u.subject }),
+        el("span", { class: "at", text: (u.text || "").split("\n")[0].slice(0, 80) }));
+      if (!OFFLINE && TOKEN && (u.status === "gone" || !u.id)) { // its code is gone: no note page to delete it on
+        const del = el("button", { class: "danger small" }, t("del"));
+        del.addEventListener("click", async () => {
+          if (!del.dataset.armed) { del.dataset.armed = "1"; del.textContent = t("sure"); return; }
+          try { await apiPost("/api/usernote", { subject: u.subject, delete: true }); } catch (e) { del.textContent = e.message; return; }
+          route();
+        });
+        li.append(del);
+      }
+      return li;
+    })) : el("p", { class: "muted small", text: t("noNotes") });
     setMain(el("div", { class: "home" }, el("h1", { text: s.project }), el("p", { class: "muted", text: t("welcome") }),
       OFFLINE ? el("p", { class: "muted small", text: `${t("offlineHome")} ${OFFLINE.generated || ""}` }) : null,
-      cards, sectionHeader("hubs", (s.hubs || []).length), hubs));
+      cards, sectionHeader("myNotes", mine.length), notesList, sectionHeader("hubs", (s.hubs || []).length), hubs));
     $("#outline").replaceChildren();
     local.setData([], []);
   }
@@ -893,6 +1056,13 @@
     if (globalData) renderLegend(globalData);
     route();
   });
+  $("#editor").value = editor;
+  $("#editor").hidden = !!OFFLINE; // an exported file cannot know where the project is
+  $("#editor").addEventListener("change", (ev) => {
+    editor = ev.target.value === "none" || EDITORS[ev.target.value] ? ev.target.value : "vscode";
+    store.set("vn.editor", editor);
+    route();
+  });
   $("#btn-theme").addEventListener("click", () => { theme = theme === "dark" ? "light" : "dark"; store.set("vn.theme", theme); applyTheme(); });
   const togglePane = (cls, key) => {
     const app = $("#app"); app.classList.toggle(cls); store.set(key, app.classList.contains(cls) ? "1" : "0");
@@ -920,7 +1090,11 @@
   }
   applyI18n();
   applyTheme();
-  api("/api/stats").then((s) => { $("#project").textContent = s.project; }).catch(() => {});
+  statsReady = api("/api/stats").then((s) => {
+    $("#project").textContent = s.project;
+    if (!OFFLINE && s.root) projectRoot = s.root; // editor links need the project's folder
+    return s;
+  }).catch(() => null);
   loadTree();
   route();
 })();

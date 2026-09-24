@@ -222,7 +222,11 @@ dosyaları hiç okumuyordu.
   özgün uygulamayı aranabilir tutar, ama soru "orijinal", "eklenti" ya da klasör
   adını anmadıkça 0,6 katsayıyla sıralar. `setup`, kod dosyalarının çoğu daha büyük bir klasördeki
   dosyalarla aynı adı taşıyan klasörleri (özgün eklenti, donmuş kopya) bulup bu komutu önerir;
-  kendisi uygulamaz.
+  kendisi uygulamaz. Projenin kendi kodunun bir kopyasını tutan klasörü (eski sürümü taşıyan bir
+  benchmark derlemi, vendored bir anlık görüntü) ise her tarama ve güncellemede kendisi bulur ve aynı
+  biçimde sıralar: dosyalarının çoğunun başka yerde aynı adları tanımlayan bir ikizi vardır, dışarıdan
+  kullanılmaz ve ikizleri projenin kullandığı koddadır (`copies.json`; `index.not_copies` ya da
+  `index.detect_copies: false` geri alır). Birbirini kullanmayan bir port ile özgünü `--reference`'a kalır.
 - **Depodan Türkçe adlar:** paralel dil dosyaları (`lang/en_us.json` +
   `lang/tr_tr.json`) sözlüğe "Fener Asası" = `lantern_staff` bilgisini öğretir.
 - **Komut adları:** "`scan` komutu", "init ve scan komutları" gibi ifadeler
@@ -249,8 +253,20 @@ dosyasının notunu sunucu gerektirmeyen tek bir HTML dosyasına yazar (varsayı
 `file:///` adresini de yazar (Chrome ve Edge'de `file://` üzerinden denendi): graf, dosya ağacı, dosya notları
 (bağlantılar, ana hat, iddialar), dosya düzeyinde yerel graf ve ad araması. Kod ve makinenin yolları
 (proje kökü, ev klasörü) içinde yoktur; CSP yalnızca kendi betiğine ve stiline izin verir, hiçbir
-bağlantı kurmaz. Sınırlar: graf görünümü en çok 2.500 dosya gösterir (en çok bağlantılı olanlar);
-düzenleme ve kendi not metni yok; dışa aktarılan dosyada sembol notları, kod ve soruyla arama yok.
+bağlantı kurmaz. Her bağlantının altında yazıldığı satır görünür (indeksten sonra değişmiş dosyada
+görünmez: satır numaraları başka yeri gösterir); her `dosya:satır` ve her nottaki düğme o satırı VS Code,
+Cursor ya da VSCodium'da açar. **Kendi notların:** her sembole, dosyaya, bölüme ya da veri birimine
+Markdown not yazılabilir (`**kalın**`, `` `kod` ``, liste, `[[Ad]]` başka nota bağlar); notlar
+`.verinoda/notes/` altında `.md` dosyalarıdır (`notes.dir` ile commit edilen bir klasöre konabilir).
+Not yazıldığı koda bağlanır (sembol ya da bölüm parmak iziyle, yeri değişse de bulunur; dosya ya da veri
+birimi satır özetiyle) ve durumunu gösterir: güncel, kod değişti (yeniden oku, "Okudum: hâlâ doğru" onu
+bugünkü koda bağlar) ya da kod yok (sembol silindi ya da adı değişti: taşı ya da sil). Ana sayfa notları
+listeler, değişenler önde; `verinoda notes --changed` aynısını komut satırında yapar ve okunması gereken not
+varsa 1 ile çıkar (CI için). Sunucunun yazdığı tek şey bu notlardır: `POST /api/usernote` o çalışmanın
+rastgele anahtarını (yalnızca sunduğu sayfada bulunur), JSON'u ve aynı kaynağı ister; `--read-only`
+yazmayı kapatır. Sınırlar: graf görünümü en çok 2.500 dosya gösterir (en çok bağlantılı olanlar); kod
+okunur, düzenlenmez; dışa aktarılan dosyada sembol notları, kod ve soruyla arama yok, kendi notların salt
+okunur görünür.
 
 ### 4.2 Soru planları ve Türkçe desteği (`question_plan`, `textnorm`, `lexicon`) — Çalışıyor (plan revizyonu kısmi)
 
