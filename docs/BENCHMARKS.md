@@ -64,6 +64,11 @@ states the write sites it found as verified locations. Public sets, 74 questions
 | met, claims carry some of them | 18 | 20 |
 | met, claims carry all of them | 27 | 27 |
 
+The claims that answer are then listed first (`answer_claim_ids` per sub-question: what the
+sub-question's own handler found, the product's code before tests, the strongest first), and a
+question that names a symbol has its callers or tests looked up for that symbol only. Fact results:
+0 of 333 change; one more met fully backed (`graphify_core_tr` 2 -> 3).
+
 **Turkish.** 82 more generic stems in the seed glossary (budget, cut, truncate, fit, score, weight,
 evidence, claim, decision, design, architecture, option, flag ...; `yapı` left out, `yapıyor`
 would read as structure): `graphify_core_tr` query text 26 → 30, analyze 27 → 31, retrieve 15 →
