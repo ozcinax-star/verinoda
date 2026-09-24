@@ -445,3 +445,14 @@ def test_two_adjacent_words_the_code_writes_as_one_name_count_as_that_name(mini)
     assert not [e for e in _query(mini, "Which environment variables?").expansions if e["via"] == "joined words"]
     # one dotted token ("needle.marker", like graph.json) is not a two-word phrase
     assert not [e for e in _query(mini, "Where is needle.marker set?").expansions if e["via"] == "joined words"]
+
+
+def test_the_stem_most_units_use_wins_over_an_english_stem_artifact(tmp_path):
+    # "melekte" is indexed as "melekt" (a final e stripped); "melekten" still means melek
+    root = tmp_path / "stem"
+    _write(root, "a/melek.py", "".join(f"def melek_{i}():\n    return {i}\n\n" for i in range(6)))
+    _write(root, "a/notes.py", '"""Bu not melekte kalir."""\n')
+    g = _scan(root)
+    q = _query(g, "Melekten ne kalıyor?")
+    stems = [e["to"] for e in q.expansions if str(e["via"]).startswith("turkish stem")]
+    assert stems[:1] == ["melek"]

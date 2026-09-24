@@ -1300,7 +1300,9 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
             cands = [f[:k] for k in range(len(f) - 1, shortest - 1, -1) if textnorm.is_suffix_chain(f[k:])
                      and not f[k:].startswith(TR_DERIVATIONAL)]  # oyuncu (player) is not oyun (game)
             known = _vocab_has(conn, cands)
-            exact = next((c for c in cands if c in known), None)
+            # the stem most units use ("melekten" -> melek, not melekt: the English stem of "melekte");
+            # the longer one on a tie
+            exact = max((c for c in cands if c in known), key=lambda c: (known[c], len(c)), default=None)
             if exact:  # an inflected form the index also knows as a word keeps the lower weight
                 add(w, exact, f"turkish stem '{exact}'", EXPANSION_WEIGHT if f in have else TR_STEM_WEIGHT)
             st = textnorm.tr_stem(f, lambda p: bool(_vocab_prefixed(conn, p, 1)))
