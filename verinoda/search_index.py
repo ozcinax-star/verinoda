@@ -2059,15 +2059,23 @@ def _linked_prior(conn: sqlite3.Connection, h: Handle, lex: dict[int, float], pp
 
 
 def _reference_roots(root, q: "QueryTerms", q_text: str = "") -> tuple[str, ...]:
-    """Path prefixes of config ``index.reference`` that the question does not name (they count less)."""
+    """Path prefixes of config ``index.reference`` and of the folders detected as copies of the
+    project (``verinoda.copies``) that the question does not name (they count less)."""
     if root is None:
         return ()
     try:
         from verinoda.paths import load_config
 
-        entries = (load_config(Path(root)).get("index") or {}).get("reference") or []
+        entries = list((load_config(Path(root)).get("index") or {}).get("reference") or [])
     except Exception:  # noqa: BLE001 - an unreadable config only means no reference trees
         return ()
+    try:
+        from verinoda import copies
+
+        detected = [c["path"] for c in copies.load(Path(root))]
+    except Exception:  # noqa: BLE001 - no detection result: the configured trees only
+        detected = []
+    entries += detected
     words = {textnorm.fold_tr(w) for w in q.words}
     text = textnorm.fold_tr(q_text)
     roots = []

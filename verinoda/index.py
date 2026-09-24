@@ -74,9 +74,19 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     gp = graph_path(repo)
     if not ok and not gp.exists():
         raise RuntimeError("index build failed:\n" + buf.getvalue()[-2000:])
+    portable = None
+    if ok:  # before the sidecar: it is keyed by the graph file as it ends up
+        from verinoda.portable_ids import make_graph_portable
+
+        try:
+            portable = make_graph_portable(gp, repo)
+        except (OSError, ValueError) as exc:  # the ids stay as the pipeline wrote them
+            portable = {"error": f"{type(exc).__name__}: {exc}"[:300]}
     data = json.loads(gp.read_text(encoding="utf-8"))
     out = {"ok": bool(ok), "graph_path": str(gp), "nodes": len(data.get("nodes", [])),
            "edges": len(data.get("links", data.get("edges", []))), "log": buf.getvalue()[-2000:]}
+    if portable is not None:
+        out["portable_ids"] = portable
     if ok:
         try:
             out["receiver_calls"] = refresh_receiver_sidecar(repo)

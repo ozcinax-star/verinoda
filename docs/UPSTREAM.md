@@ -97,6 +97,25 @@ therefore memoises them per instance.
   `built_at_commit`, because each measured copy was its own git repository.
   The memoised methods took about 60% of such an update before the patch.
 
+## Post-processing of graph.json from outside the vendored tree
+
+**Portable ids.** An id with no file of its own keeps what the upstream
+pipeline minted it from: the target of an import whose file does not exist
+(`require('./missing')`, resolved against the importer's absolute path) and the
+element ids of a `.dmf` interface file (they embed the window's id) carry the
+scan root folded into `_` parts, user name included.
+
+- **Where:** `verinoda.portable_ids.make_graph_portable()`, called from
+  `verinoda.index.build()` after the pipeline wrote graph.json and before the
+  receiver-call sidecar is refreshed. No vendored file changes.
+- **What it changes:** only ids that start with the root's folded form and
+  belong to no node with a source file, and the `_elem_<root>_` part of `.dmf`
+  ids; an id that would take one another thing already has gets `_unresolved`;
+  nothing under a root of one folder. graph.json is written back in the
+  pipeline's own format (indent 2, key order kept). On the eight benchmark
+  corpora no id carries the root, so they are unchanged (fresh-index A/B,
+  2026-09-24: identical results).
+
 ## Notes on vendored modules Verinoda does not use
 
 - **`project_index/scip_ingest.py`** (left untouched) is upstream's skeleton

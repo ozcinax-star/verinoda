@@ -250,11 +250,20 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
         st.close()
     snap = res.get("snapshot") or {}
     try:
+        from verinoda import copies
         from verinoda.paths import load_config
         from verinoda.snapshot import list_files
 
+        detected = copies.load(repo)  # the scan above found them and ranks them lower already
+        for c in detected:
+            report.setdefault("copies", []).append(c["path"])
+            report["warnings"].append(
+                f"{c['path']} holds a copy of the project's own code ({c['copies']} of its {c['files']} code files "
+                f"have a twin in {', '.join(c.get('of') or []) or 'the project'}); it ranks below your own code "
+                "unless a question names it (index.not_copies in .verinoda/config.json to undo)")
         configured = [e.get("path") if isinstance(e, dict) else e
                       for e in (load_config(repo).get("index") or {}).get("reference") or []]
+        configured += [c["path"] for c in detected]  # not suggested again
         sugg = reference_suggestions(repo, list_files(repo), [c for c in configured if isinstance(c, str)])
     except Exception:  # noqa: BLE001 - a suggestion never fails setup
         sugg = []

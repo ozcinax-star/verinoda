@@ -109,6 +109,9 @@ def _derive(store: Store, repo: Path, *, changed: list[str] | None, all_files: l
     except (OSError, ValueError) as exc:
         return {"error": f"graph not loadable: {type(exc).__name__}: {exc}"[:300]}
     out["search_index"] = _call_hook(search_index.update, repo, g, changed)
+    from verinoda import copies
+
+    out["copies"] = _call_hook(copies.update, repo, g)
     for mod_name, fn_name in (("verinoda.lexicon", "build"), ("verinoda.anchors", "update_facts")):
         try:
             mod = importlib.import_module(mod_name)
