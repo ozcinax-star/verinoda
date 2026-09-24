@@ -247,10 +247,15 @@ parlar, tıklayınca not açılır. Arama adla ya da soruyla (`verinoda query` s
 daha çok kelime, soru sözcüğü ya da `?`) "Soruyu cevapla" satırını da getirir: `verinoda query`'nin cevap verdiği
 pasajlar, satırları (renkli, editörde açılır), neden seçildikleri ve notlarıyla, ardından bulunan öbür yerler
 (arama indeksine yazılmaz; kod içermeyen dışa aktarılan dosyada yok). Dosya ağacı,
-geri/ileri, Türkçe/İngilizce, açık/koyu tema. Salt okunur ve yereldir: 127.0.0.1 üzerinde standart
-kütüphaneyle çalışan bir sunucu, yalnızca kendi adresine gelen GET isteklerine yanıt verir; sayfa
-dışarıdan hiçbir şey yüklemez (CDN, yazı tipi, telemetri yok). `verinoda ui --graph` doğrudan graf
-görünümünde açar. `verinoda ui --export [DOSYA]` grafı ve her kaynak dosyanın, belgenin, veri
+geri/ileri, Türkçe/İngilizce, açık/koyu tema. Yereldir: 127.0.0.1 üzerinde standart
+kütüphaneyle çalışan bir sunucu, yalnızca kendi adresine gelen isteklere yanıt verir (yazdığı tek şey
+aşağıdaki kendi notlarındır); sayfa dışarıdan hiçbir şey yüklemez (CDN, yazı tipi, telemetri yok).
+`verinoda ui --graph` doğrudan graf görünümünde açar. Bir nota giden bağlantının üzerinde durunca notun
+önizlemesi açılır (tür, dosya ve satır, imza, belgenin ilk satırları, notun, bağlantı sayıları, kodun ilk
+satırları). Sayfa indeksi izler: `verinoda update`'ten birkaç saniye sonra açık not ya da graf yeniden
+çizilir (kaydırma yeri korunur) ve bunu söyler (görünmeyen sekme, gösterildiğinde bakar);
+`verinoda ui --watch` dosyalar değişince `verinoda update`'i kendisi de çalıştırır (düzenlemeler durunca,
+aynı anda tek güncelleme). `verinoda ui --export [DOSYA]` grafı ve her kaynak dosyanın, belgenin, veri
 dosyasının notunu sunucu gerektirmeyen tek bir HTML dosyasına yazar (varsayılan
 `.verinoda/index/verinoda-graph.html`); çift tıklayınca ya da `--open` ile hemen açılır, komut
 `file:///` adresini de yazar (Chrome ve Edge'de `file://` üzerinden denendi): graf, dosya ağacı, dosya notları

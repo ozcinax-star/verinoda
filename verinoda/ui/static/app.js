@@ -59,6 +59,7 @@
       del: "Delete", sure: "Delete it?", keep: "Read it: still right", noteHint: "Markdown: **bold**, `code`, - lists, [[Name]] links a note. Ctrl+Enter saves.",
       nst: { fresh: "up to date", changed: "code changed", gone: "code gone" },
       changedSince: "Changed", changedInfo: "changed since the index", affectedInfo: "use them",
+      refreshed: "The index was updated: the page shows it now.", updating: "Updating the index…",
       staleNote: "This file changed since the index: the links and lines may be off. `verinoda update` takes it in.",
       ask: "Answer the question", answerFor: "Answer", answerMore: "Also relevant", answerNone: "Nothing in the project answers it.",
       answerStale: "changed since the index (the lines may be off):", answerExp: "also searched",
@@ -101,6 +102,7 @@
       del: "Sil", sure: "Silinsin mi?", keep: "Okudum: hâlâ doğru", noteHint: "Markdown: **kalın**, `kod`, - liste, [[Ad]] bir nota bağlar. Ctrl+Enter kaydeder.",
       nst: { fresh: "güncel", changed: "kod değişti", gone: "kod yok" },
       changedSince: "Değişenler", changedInfo: "indeksten sonra değişti", affectedInfo: "bunları kullanıyor",
+      refreshed: "İndeks güncellendi: sayfa artık onu gösteriyor.", updating: "İndeks güncelleniyor…",
       staleNote: "Bu dosya indeksten sonra değişti: bağlantılar ve satırlar kaymış olabilir. `verinoda update` onu alır.",
       ask: "Soruyu cevapla", answerFor: "Cevap", answerMore: "Ayrıca ilgili", answerNone: "Projede bunu cevaplayan bir şey yok.",
       answerStale: "indeksten sonra değişti (satırlar kaymış olabilir):", answerExp: "ayrıca arandı",
@@ -246,9 +248,10 @@
 
   function setMain(...kids) { main.replaceChildren(...kids); $("#main").scrollTop = 0; }
 
-  async function openNote(id) {
+  async function openNote(id, quiet = false) {
     current = id;
-    setMain(el("div", { class: "empty", text: t("loading") }));
+    const keep = quiet ? $("#main").scrollTop : null;
+    if (!quiet) setMain(el("div", { class: "empty", text: t("loading") }));
     let n;
     try { n = await api("/api/note?id=" + encodeURIComponent(id)); }
     catch (e) {
@@ -261,6 +264,7 @@
     await statsReady;
     if (current !== id) return;
     renderNote(n);
+    if (keep !== null) $("#main").scrollTop = keep;
     loadLocal(id);
     markTree(n.file);
     document.title = `${n.title} · Verinoda`;
@@ -1245,6 +1249,94 @@
     return out.slice(0, 40).map(({ r, why }) => ({ id: r.id, title: r.title, kind: r.kind, file: r.line ? `${r.file}:${r.line}` : r.file, why }));
   }
 
+  // -- a note's preview when a link to it is hovered -------------------------------------------------
+  const preview = $("#preview"), previewCache = new Map();
+  let previewTimer = null, previewFor = null;
+  async function notePreview(id) {
+    if (previewCache.has(id)) return previewCache.get(id);
+    const n = await api("/api/note?id=" + encodeURIComponent(id));
+    if (previewCache.size > 60) previewCache.delete(previewCache.keys().next().value);
+    previewCache.set(id, n);
+    return n;
+  }
+  function hidePreview() { clearTimeout(previewTimer); previewTimer = null; previewFor = null; preview.hidden = true; }
+  function placePreview(a) {
+    const r = a.getBoundingClientRect(), w = Math.min(460, window.innerWidth - 24);
+    preview.style.width = w + "px";
+    preview.style.left = Math.max(12, Math.min(r.left, window.innerWidth - w - 12)) + "px";
+    const below = r.bottom + 8, h = preview.offsetHeight || 220;
+    preview.style.top = (below + h < window.innerHeight - 8 ? below : Math.max(8, r.top - h - 8)) + "px";
+  }
+  async function showPreview(a, id) {
+    let n;
+    try { n = await notePreview(id); } catch (_) { return; }
+    if (previewFor !== id) return;
+    const kids = [el("div", { class: "pv-head" }, kindBadge(n.kind), el("strong", { text: n.title })),
+      el("div", { class: "muted small mono", text: n.file ? `${n.file}${n.line ? ":" + n.line : ""}` : "" })];
+    if (n.signature) kids.push(el("pre", { class: "sig mono", text: n.signature }));
+    if (n.doc) kids.push(el("div", { class: "pv-doc", text: n.doc.split("\n").slice(0, 4).join("\n") }));
+    if (n.user_note) kids.push(el("div", { class: "pv-mine" }, el("span", { class: "unote-st st-" + n.user_note.status, text: t("nst." + n.user_note.status) }),
+      " " + n.user_note.text.split("\n")[0].slice(0, 140)));
+    const counts = (n.sections || []).filter((s) => s.key !== "claims").slice(0, 5).map((s) => `${t("sec." + s.key)} ${s.count}`);
+    if (counts.length) kids.push(el("div", { class: "muted small", text: counts.join(" · ") }));
+    if (n.code && n.code.lines && n.code.lines.length) {
+      const c = n.code, k = Math.min(8, c.lines.length);
+      kids.push(codeBlock({ start: c.start, end: c.start + k - 1, lines: c.lines.slice(0, k), total: k, lang: c.lang }, n.file));
+    }
+    preview.replaceChildren(...kids);
+    preview.hidden = false;
+    placePreview(a);
+  }
+  document.addEventListener("mouseover", (ev) => {
+    if (preview.contains(ev.target)) { clearTimeout(previewTimer); return; } // reading the card
+    const a = ev.target.closest && ev.target.closest('a[href^="#/n/"]');
+    if (!a) return;
+    const id = decodeURIComponent(a.getAttribute("href").slice(4));
+    if (id === current || id === previewFor) return;
+    clearTimeout(previewTimer);
+    previewFor = id;
+    previewTimer = setTimeout(() => showPreview(a, id), 350);
+  });
+  document.addEventListener("mouseout", (ev) => {
+    const a = ev.target.closest && ev.target.closest('a[href^="#/n/"], #preview');
+    if (!a) return;
+    const to = ev.relatedTarget;
+    if (to && (preview.contains(to) || (to.closest && to.closest('a[href^="#/n/"]') === a))) return;
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(hidePreview, 250);
+  });
+  for (const evName of ["scroll", "click"]) document.addEventListener(evName, (ev) => { if (!preview.contains(ev.target)) hidePreview(); }, true);
+  window.addEventListener("hashchange", hidePreview);
+
+  // -- the page follows the index: when `verinoda update` (or --watch) rebuilt it, redraw ----------
+  let indexKey = null, toastTimer = null;
+  function toast(text, sticky = false) {
+    let box = $("#toast");
+    if (!box) { box = el("div", { id: "toast" }); document.body.append(box); }
+    box.textContent = text; box.hidden = false;
+    clearTimeout(toastTimer);
+    if (!sticky) toastTimer = setTimeout(() => { box.hidden = true; }, 3500);
+  }
+  async function followIndex(first = false) { // first: the key of the index the page was drawn from, even in a hidden tab
+    if (OFFLINE || (document.hidden && !first)) return;
+    let r;
+    try { r = await api("/api/version"); } catch (_) { return; }
+    if (r.watch && r.watch.running) toast(t("updating"), true);
+    if (indexKey === null) { indexKey = r.key; return; }
+    if (r.key === indexKey) { if (!(r.watch && r.watch.running) && $("#toast") && $("#toast").textContent === t("updating")) $("#toast").hidden = true; return; }
+    indexKey = r.key;
+    previewCache.clear();
+    globalKey = null;
+    loadTree();
+    const h = location.hash || "#/";
+    if (h === "#/graph") showGraph();
+    else if (h.startsWith("#/n/")) openNote(decodeURIComponent(h.slice(4)), true);
+    else route();
+    toast(t("refreshed"));
+  }
+  if (!OFFLINE) setInterval(() => followIndex(), 3000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) followIndex(); }); // back to the tab: look now
+
   // -- routing and chrome ----------------------------------------------------------------------
   function route() {
     const h = location.hash || "#/";
@@ -1283,6 +1375,7 @@
   document.addEventListener("keydown", (ev) => {
     const typing = /INPUT|SELECT|TEXTAREA/.test((ev.target && ev.target.tagName) || "");
     if ((ev.key === "k" && (ev.ctrlKey || ev.metaKey)) || (ev.key === "/" && !typing)) { ev.preventDefault(); input.focus(); input.select(); }
+    else if (ev.key === "Escape" && !preview.hidden) { hidePreview(); }
     else if (ev.key === "Escape" && !$("#graphview").hidden) { location.hash = beforeGraph; }
     else if (ev.key === "g" && !typing && !ev.ctrlKey && !ev.metaKey) { location.hash = "#/graph"; }
   });
@@ -1305,4 +1398,5 @@
   }).catch(() => null);
   loadTree();
   route();
+  followIndex(true);
 })();

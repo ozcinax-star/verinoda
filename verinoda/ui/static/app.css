@@ -143,6 +143,17 @@ ol.chain li > * { margin-right: 6px; }
 .unote-st.st-changed { border-color: var(--warn); color: var(--warn); }
 .unote-st.st-gone { border-color: var(--bad); color: var(--bad); }
 a.wikilink { color: var(--link); }
+#toast { position: fixed; right: 16px; bottom: 16px; z-index: 60; background: var(--panel); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: 6px; padding: 8px 12px; font-size: 13px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); }
+#preview { position: fixed; z-index: 50; max-height: 360px; overflow: hidden; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  font-size: 13px; }
+#preview .pv-head { display: flex; gap: 6px; align-items: baseline; margin-bottom: 2px; }
+#preview .pv-doc { white-space: pre-wrap; color: var(--muted); margin: 4px 0; }
+#preview .pv-mine { margin: 4px 0; }
+#preview .code { max-height: 150px; overflow: hidden; margin-top: 6px; }
+#preview pre.sig { margin: 4px 0; }
 #editor { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 2px 4px; font-size: 12px; }
 ul.links li:hover { background: var(--panel); }
 ul.links .rel { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }

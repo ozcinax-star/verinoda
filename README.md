@@ -173,8 +173,9 @@ is hardlinked or editable.
 cd my-project
 verinoda setup                           # once: index + agent skills (or `verinoda scan .` for the index only)
 verinoda map . --view dataflow           # entry points -> persistence, with limits stated
-verinoda ui                              # notes + graph in the browser (local, read-only)
+verinoda ui                              # notes + graph in the browser (local)
 verinoda ui --graph                      # ... opened straight on the graph view
+verinoda ui --watch                      # ... and kept up to date while you edit
 verinoda ui --export --open              # the graph + file notes as one HTML file, no server
 verinoda notes --changed                 # your own notes whose code changed since you wrote them
 verinoda query "where is the discount threshold configured?"     # plain-text context
@@ -204,7 +205,7 @@ give the copy a `.venv` with pytest installed.
 | `init [path]` | Create `.verinoda/` (database, config) |
 | `scan <repo> [--force] [--precise] [--scip FILE]` / `update <repo>` | Full / incremental index + snapshot, then the derived search index, lexicon and symbol facts; `update` marks claims whose dependencies changed `stale`. `--precise` resolves the call sites of changed `.py` files; `--scip` adopts a SCIP index you produced `--repo R` works for both as for `query`; `update` without a path takes the nearest project |
 | `notes [<repo>] [--changed] [--keep SUBJECT] [--delete SUBJECT]` | Your own notes on the code (written in `verinoda ui`) with their status: `fresh`, `changed` (the code was edited since) or `gone`; `--changed` lists only those and exits 1 when there are any (for CI); `--keep` anchors a note you read again to the code as it is now; `--delete` removes one |
-| `ui [<repo>] [--repo DIR] [--port N] [--no-browser] [--graph] [--read-only] [--export [FILE] [--open]]` | notes and graph of the project in the browser: a note per symbol, file and data file, local and global graphs, search (see *Notes and graph view*); `--graph` opens on the graph view; `--export` writes the graph and the file notes as one HTML file that opens without a server (`--open` opens it) |
+| `ui [<repo>] [--repo DIR] [--port N] [--no-browser] [--graph] [--read-only] [--watch] [--export [FILE] [--open]]` | notes and graph of the project in the browser: a note per symbol, file and data file, local and global graphs, search (see *Notes and graph view*); `--graph` opens on the graph view; `--watch` runs `verinoda update` when files change; `--export` writes the graph and the file notes as one HTML file that opens without a server (`--open` opens it) |
 | `map [<repo>] [--repo DIR] [--view …]` | hierarchy, dependencies, dataflow, config, tests, history, impact (`--target`, default: git changes) |
 | `query "<q>" [--max-items N] [--max-chars N]` | Bounded retrieval from the passage index; plain text for a model by default (skeleton first, each item with why it was chosen), `--json` for programs |
 | `trace <a> <b> [--mode flow\|any]` | Directed paths, each hop with relation, confidence and call-site location; hints when an endpoint does not resolve |
@@ -262,6 +263,9 @@ Obsidian, built from Verinoda's own index rather than from hand-written notes:
   would point elsewhere), and **open in your editor**: every `file:line` and a
   button on each note open VS Code, Cursor or VSCodium at that line (chosen at the
   top of the page).
+- **Preview on hover**: resting the mouse on a link to a note shows its kind,
+  file and line, signature, first doc lines, your note on it, its link counts and
+  the first lines of its code, without leaving the page.
 - **What changed**: *Changed* in the graph view rings the files edited, added
   or deleted since the index (what `verinoda update` would take in) and, in
   another colour, the files that use them; a note whose file changed since the
@@ -291,9 +295,12 @@ the page loads nothing from outside (no CDN, fonts or telemetry;
 server). The one thing it writes is your notes: `POST /api/usernote` needs the
 random token of that server run, which only the page it serves carries, JSON, and
 this origin, so another site cannot write through it; `--read-only` turns writing
-off. It follows the index: after `verinoda update` the
-next page load shows the new graph. `verinoda ui --graph` opens straight on the
-graph view.
+off. It follows the index: a few seconds after `verinoda update` (or any
+rebuild) the open page redraws the note or graph it shows, keeping its scroll
+position, and says so (an unseen tab looks when it is shown again).
+`verinoda ui --watch` also runs `verinoda update` itself when the project's files
+change (once the edits stop; one update at a time). `verinoda ui --graph` opens
+straight on the graph view.
 
 **One file, no server.** `verinoda ui --export [FILE]` writes the graph view and
 a note per source file, document and data file into one HTML file (default

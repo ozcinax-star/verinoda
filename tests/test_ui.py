@@ -238,6 +238,7 @@ def test_the_server_refuses_other_hosts_writes_and_unknown_paths(served):
 def test_the_page_loads_nothing_from_outside():
     for name in ("index.html", "app.js", "app.css"):
         text = resources.files("verinoda.ui").joinpath("static", name).read_text(encoding="utf-8")
+        text = text.replace("http://www.w3.org/2000/svg", "")  # the icon's SVG namespace names, it loads nothing
         assert not re.search(r"https?://", text), name   # no CDN, no fonts, no telemetry
     html = resources.files("verinoda.ui").joinpath("static", "index.html").read_text(encoding="utf-8")
     assert "<script>" not in html and " style=" not in html   # nothing inline (the CSP allows only 'self')
@@ -363,7 +364,7 @@ def test_the_export_is_one_file_that_fetches_nothing(glow, tmp_path):
 
     html, data = _exported(glow, tmp_path)
     assert data["format"] == "verinoda-export" and data["global"]["nodes"] and data["notes"]
-    assert not re.search(r'<(script|link|img)[^>]+(src|href)=', html)  # nothing loaded from anywhere
+    assert not re.search(r'<(script|link|img)[^>]+(src|href)="(?!data:)', html)  # nothing loaded from anywhere
     csp = re.search(r'<meta http-equiv="Content-Security-Policy" content="([^"]+)">', html).group(1)
     assert "default-src 'none'" in csp and "connect-src" not in csp and "unsafe" not in csp
     inline = {"script": re.findall(r"<script>(.*?)</script>", html, re.DOTALL), "style": re.findall(r"<style>(.*?)</style>", html, re.DOTALL)}
@@ -537,6 +538,7 @@ def test_ui_export_and_graph_flags(glow, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(uiserver, "serve", lambda repo, **kw: seen.update(kw))
     assert cli.main(["ui", str(glow), "--graph", "--no-browser"]) == 0
     assert seen["open_at"] == "#/graph" and seen["open_browser"] is False
+    assert cli.main(["ui", str(glow), "--watch", "--no-browser"]) == 0 and seen["watch"] is True
 
 
 def test_a_link_shows_the_line_it_is_written_on(atlas, glow):
@@ -657,3 +659,35 @@ def test_changes_since_the_index_and_a_stale_note(tmp_path):
     assert a.note(ch["edited"][0]["id"])["stale"] is True
     fresh = next(f for f in files[2:] if a.snapshot()._file_note(f))
     assert a.note(a.snapshot()._file_note(fresh))["stale"] is False
+
+
+
+def test_the_page_can_tell_when_the_index_changed(glow):
+    a = uidata.Atlas(glow)
+    k1 = a.version()
+    gp = graph_path(glow)
+    st = gp.stat()
+    os.utime(gp, ns=(st.st_atime_ns, st.st_mtime_ns + 10_000_000))
+    assert a.version() != k1
+
+
+def test_watch_runs_one_update_after_a_burst_of_edits(tmp_path):
+    import time as _t
+
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    calls = []
+    w = uiserver.Watcher(tmp_path, interval=0.05, run_update=lambda: calls.append(_t.perf_counter()))
+    w.start()
+    try:
+        _t.sleep(0.3)
+        assert calls == []  # nothing changed
+        for i in range(3):  # a save that writes several files
+            (tmp_path / f"b{i}.py").write_text(f"y = {i}\n", encoding="utf-8")
+        deadline = _t.perf_counter() + 5
+        while not calls and _t.perf_counter() < deadline:
+            _t.sleep(0.05)
+        _t.sleep(0.4)
+        assert len(calls) == 1 and w.updates == 1 and w.error is None
+    finally:
+        w.stop.set()
+        w.join(2)

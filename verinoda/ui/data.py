@@ -185,6 +185,11 @@ class Atlas:
     def changes(self) -> dict:
         return self.snapshot().changes()
 
+    def version(self) -> str:
+        """Which index the page sees: it changes when graph.json or search.db does (a page polls it)."""
+        g, s = self._key()
+        return f"{g[0]}-{g[1]}-{(s or (0, 0))[0]}-{(s or (0, 0))[1]}"
+
     def path(self, src: str, dst: str) -> dict:
         return self.snapshot().path(src, dst)
 

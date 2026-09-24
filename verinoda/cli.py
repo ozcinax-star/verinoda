@@ -525,7 +525,7 @@ def cmd_ui(args) -> int:
         return 0
     try:
         serve(repo, port=args.port, open_browser=not args.no_browser, open_at="#/graph" if args.graph else "",
-              read_only=args.read_only)
+              read_only=args.read_only, watch=args.watch)
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -1489,7 +1489,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("update", cmd_update, "re-index changed files, record a snapshot, mark affected claims stale", repo=False)
     sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
-    sp = add("ui", cmd_ui, "notes and graph of the project in the browser (local, read-only)", repo=False, js=False)
+    sp = add("ui", cmd_ui, "notes and graph of the project in the browser (local)", repo=False, js=False)
     sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--port", type=_port, default=0, help="port on 127.0.0.1 (default: a free one)")
@@ -1500,6 +1500,8 @@ def build_parser() -> argparse.ArgumentParser:
                          "(no code in it; default .verinoda/index/verinoda-graph.html) and exit")
     sp.add_argument("--open", action="store_true", help="with --export: open the written file in the browser")
     sp.add_argument("--read-only", action="store_true", help="do not let the page write notes of your own")
+    sp.add_argument("--watch", action="store_true",
+                    help="run `verinoda update` when files change; the page follows the index either way")
     sp = add("notes", cmd_notes, "your own notes on the code and whether the code changed since they were written",
              repo=False)
     sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
