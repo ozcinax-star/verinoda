@@ -127,6 +127,14 @@ a.at:hover, a.chip.editor:hover { color: var(--link); text-decoration: underline
 .unote-bar button.danger { color: var(--bad); }
 ul.links button.danger { background: none; border: 1px solid var(--border); border-radius: 5px; color: var(--bad);
   font-size: 11px; padding: 0 6px; cursor: pointer; }
+.unote.panel { border-left-color: var(--accent); }
+.unote .spacer { flex: 1; }
+button.linkish { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; }
+input.pathq { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 8px; margin: 4px 0; }
+ol.chain { list-style: decimal; padding-left: 24px; }
+ol.chain li { display: list-item; padding: 2px 0; }
+ol.chain li > * { margin-right: 6px; }
 .unote-st { font-size: 11px; padding: 0 7px; border-radius: 9px; border: 1px solid var(--ok); color: var(--ok); white-space: nowrap; }
 .unote-st.st-changed { border-color: var(--warn); color: var(--warn); }
 .unote-st.st-gone { border-color: var(--bad); color: var(--bad); }

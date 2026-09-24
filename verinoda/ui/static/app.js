@@ -58,6 +58,10 @@
       myNote: "My note", myNotes: "My notes", addNote: "+ Note", edit: "Edit", save: "Save", cancel: "Cancel",
       del: "Delete", sure: "Delete it?", keep: "Read it: still right", noteHint: "Markdown: **bold**, `code`, - lists, [[Name]] links a note. Ctrl+Enter saves.",
       nst: { fresh: "up to date", changed: "code changed", gone: "code gone" },
+      impact: "Impact", impactTitle: "What may be affected", impactNone: "Nothing in the project uses it.",
+      impactDepth: "links back", impactStop: "stopped at", impactTests: "in tests", withTests: "with tests",
+      pathBtn: "Path…", pathTo: "Search the note to reach…", pathNone: "No chain of calls, imports or references links them.",
+      pathBack: "(the other way round: the target reaches this note)", pathTitle: "Path", close2: "close",
       noteOn: "on", noNotes: "No notes of your own yet: open a note and press + Note.",
       theme: "Light / dark", toggleFiles: "Show or hide files", toggleGraph: "Show or hide the local graph",
       searchOffline: "Search files and symbols  (Ctrl+K)",
@@ -92,6 +96,10 @@
       myNote: "Notum", myNotes: "Notlarım", addNote: "+ Not", edit: "Düzenle", save: "Kaydet", cancel: "Vazgeç",
       del: "Sil", sure: "Silinsin mi?", keep: "Okudum: hâlâ doğru", noteHint: "Markdown: **kalın**, `kod`, - liste, [[Ad]] bir nota bağlar. Ctrl+Enter kaydeder.",
       nst: { fresh: "güncel", changed: "kod değişti", gone: "kod yok" },
+      impact: "Etki", impactTitle: "Etkilenebilecekler", impactNone: "Projede bunu kullanan yok.",
+      impactDepth: "bağlantı geri", impactStop: "şurada durdu:", impactTests: "testlerde", withTests: "testlerle",
+      pathBtn: "Yol…", pathTo: "Ulaşılacak notu ara…", pathNone: "Aralarında çağrı, import ya da başvuru zinciri yok.",
+      pathBack: "(ters yönde: hedef bu nota ulaşıyor)", pathTitle: "Yol", close2: "kapat",
       noteOn: "", noNotes: "Henüz kendi notun yok: bir not aç ve + Not'a bas.",
       theme: "Açık / koyu", toggleFiles: "Dosyaları göster ya da gizle", toggleGraph: "Yerel grafı göster ya da gizle",
       searchOffline: "Dosya ya da sembol ara  (Ctrl+K)",
@@ -271,6 +279,10 @@
     if (OFFLINE && n.code_lines) parts.push(el("div", { class: "muted small", text: `${n.code_lines} ${t("lines")} · ${t("offlineCode")}` }));
     const editable = !OFFLINE && TOKEN && n.can_note;
     if (!n.user_note && editable) meta.append(el("button", { class: "chip addnote", onclick: () => editUserNote(n, "") }, t("addNote")));
+    if (n.kind !== "data" && n.kind !== "external") {
+      meta.append(el("button", { class: "chip addnote", onclick: () => showImpact(n) }, t("impact")));
+      meta.append(el("button", { class: "chip addnote", onclick: () => askPath(n) }, t("pathBtn")));
+    }
     if (n.user_note) parts.push(userNoteBox(n));
     for (const u of n.user_notes || []) parts.push(userNoteBox(n, u)); // an exported file: the notes on the file's symbols
     if (n.signature) parts.push(el("pre", { class: "sig mono", text: n.signature }));
@@ -292,6 +304,74 @@
     parts.push(...(linksFirst ? [...sections, ...code] : [...code, ...sections]));
     setMain(...parts);
     renderOutline(n);
+  }
+
+  // -- impact and paths --------------------------------------------------------------------------
+  function panel(id, title, ...kids) { // one panel under the note's header, replacing an earlier one
+    const box = el("div", { class: "unote panel", id }, el("div", { class: "unote-head" }, el("strong", { text: title }),
+      el("span", { class: "spacer" }), el("button", { class: "linkish", onclick: () => box.remove() }, t("close2"))), ...kids);
+    const old = $("#" + id);
+    if (old) old.replaceWith(box);
+    else { const meta = $("#note .meta"); if (meta) meta.after(box); else main.prepend(box); }
+    return box;
+  }
+  async function showImpact(n, tests = true) {
+    const box = panel("impact", t("impactTitle"), el("div", { class: "muted small", text: t("loading") }));
+    let r;
+    try { r = await api(`/api/impact?id=${encodeURIComponent(n.id)}&depth=3&tests=${tests ? 1 : 0}`); }
+    catch (e) { box.append(el("div", { class: "empty error", text: e.message })); return; }
+    if (current !== n.id) return;
+    const toggle = el("label", { class: "small" }, el("input", { type: "checkbox", checked: tests, onchange: (ev) => showImpact(n, ev.target.checked) }), " " + t("withTests"));
+    const head = el("div", { class: "muted small" }, `${r.count} ${t("notes")} · ${r.files} ${t("filesN")}` +
+      (r.tests ? ` (${r.tests} ${t("impactTests")})` : "") + (r.truncated ? ` · ${t("impactStop")} ${r.count}` : ""), " ", toggle);
+    const body = [head];
+    if (!r.items.length) body.push(el("p", { class: "muted", text: t("impactNone") }));
+    for (const d of [...new Set(r.items.map((x) => x.depth))]) {
+      const group = r.items.filter((x) => x.depth === d);
+      body.push(el("div", { class: "sec small", text: `${d} ${t("impactDepth")} · ${group.length}` }));
+      body.push(el("ul", { class: "links" }, group.slice(0, 80).map((it) => el("li", {}, kindBadge(it.kind), noteLink(it),
+        el("span", { class: "rel", text: `${it.relation} → ${it.via_title}` }), it.at ? atLink(it.at) : null))));
+      if (group.length > 80) body.push(el("div", { class: "muted small", text: `+${group.length - 80} ${t("more")}` }));
+    }
+    box.replaceWith(panel("impact", `${t("impactTitle")} · ${n.title}`, ...body));
+    // the right pane shows the same: the note and what depends on it
+    const ids = new Set([n.id, ...r.items.map((x) => x.id)]);
+    local.setData([{ id: n.id, title: n.title, kind: n.kind, group: n.community ? n.community.id : "other" },
+      ...r.items.slice(0, 220).map((x) => ({ id: x.id, title: x.title, kind: x.kind, group: x.group, depth: x.depth }))],
+      r.items.slice(0, 220).filter((x) => ids.has(x.via)).map((x) => ({ source: x.id, target: x.via, relation: x.relation })), { center: n.id });
+  }
+  function askPath(n) {
+    const input = el("input", { type: "search", class: "pathq", placeholder: t("pathTo"), autocomplete: "off" });
+    const list = el("ul", { class: "links" });
+    const out = el("div");
+    let seq = 0, timer = null;
+    input.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const q = input.value.trim(), my = ++seq;
+        if (!q) { list.replaceChildren(); return; }
+        let r;
+        try { r = await api("/api/search?q=" + encodeURIComponent(q)); } catch (_) { return; }
+        if (my !== seq) return;
+        list.replaceChildren(...(r.results || []).slice(0, 8).map((it) => el("li", {}, kindBadge(it.kind),
+          el("a", { href: "#", onclick: (ev) => { ev.preventDefault(); showPath(n, it, out); } }, it.title),
+          el("span", { class: "at mono", text: it.file || "" }))));
+      }, 150);
+    });
+    panel("path", `${t("pathTitle")} · ${n.title}`, input, list, out);
+    input.focus();
+  }
+  async function showPath(n, target, out) {
+    let r;
+    try { r = await api(`/api/path?from=${encodeURIComponent(n.id)}&to=${encodeURIComponent(target.id)}`); }
+    catch (e) { out.replaceChildren(el("div", { class: "empty error", text: e.message })); return; }
+    if (!r.found) { out.replaceChildren(el("p", { class: "muted", text: t("pathNone") })); return; }
+    const chain = el("ol", { class: "links chain" }, r.steps.map((s, i) => el("li", {},
+      i ? el("span", { class: "rel", text: `↳ ${s.relation}` }) : null, kindBadge(s.kind), noteLink(s), s.at ? atLink(s.at) : null)));
+    out.replaceChildren(r.direction === "backward" ? el("p", { class: "muted small", text: t("pathBack") }) : "", chain);
+    const ids = r.steps.map((s) => s.id);
+    local.setData(r.steps.map((s) => ({ id: s.id, title: s.title, kind: s.kind, group: s.group })),
+      ids.slice(1).map((id, i) => ({ source: ids[i], target: id, relation: r.steps[i + 1].relation })), { center: n.id });
   }
 
   // -- notes of your own -------------------------------------------------------------------------
@@ -966,6 +1046,8 @@
       }
       case "/api/search": return { results: offlineSearch(p.get("q") || "") };
       case "/api/global": return offlineGlobal(flag("tests"), flag("data"));
+      case "/api/impact": return offlineImpact(p.get("id") || "", flag("tests"));
+      case "/api/path": return offlinePath(p.get("from") || "", p.get("to") || "");
       case "/api/local": return offlineLocal(p.get("id") || "", Math.min(3, Math.max(1, Number(p.get("depth")) || 1)), flag("tests"), flag("data"));
       default: throw notFound(route);
     }
@@ -1009,6 +1091,60 @@
     }
     return { center: id, nodes: [...dist.keys()].map((k) => Object.assign({}, offNodes.get(k), { depth: dist.get(k) })),
       edges: G.edges.filter((e) => dist.has(e.source) && dist.has(e.target)) };
+  }
+  function offlineGraph() { // file -> the files it uses, and the files that use it
+    if (!offlineGraph.out) {
+      const out = new Map(), inn = new Map(), byId = new Map(OFFLINE.global.nodes.map((n) => [n.id, n]));
+      for (const e of OFFLINE.global.edges) {
+        if (!out.has(e.source)) out.set(e.source, []);
+        if (!inn.has(e.target)) inn.set(e.target, []);
+        out.get(e.source).push(e); inn.get(e.target).push(e);
+      }
+      Object.assign(offlineGraph, { out, inn, byId });
+    }
+    return offlineGraph;
+  }
+  function offlineImpact(id, tests) { // at file level: an exported file has no symbol graph
+    const G = offlineGraph();
+    if (!G.byId.has(id)) throw notFound(t("offlineMissing"));
+    const dist = new Map([[id, 0]]), via = new Map(), items = [];
+    let frontier = [id];
+    for (let d = 1; d <= 3; d++) {
+      const next = [];
+      for (const v of frontier) for (const e of G.inn.get(v) || []) {
+        const n = G.byId.get(e.source);
+        if (!n || dist.has(e.source) || (!tests && n.test)) continue;
+        dist.set(e.source, d); via.set(e.source, v); next.push(e.source);
+        items.push(Object.assign({}, n, { depth: d, relation: e.relation, via: v, via_title: G.byId.get(v).title }));
+      }
+      frontier = next;
+    }
+    return { id, depth: 3, count: items.length, files: items.length, tests: items.filter((x) => x.test).length, truncated: false, items };
+  }
+  function offlinePath(from, to) {
+    const G = offlineGraph();
+    if (!G.byId.has(from) || !G.byId.has(to)) throw notFound(t("offlineMissing"));
+    for (const [dir, a, b] of [["forward", from, to], ["backward", to, from]]) {
+      const prev = new Map([[a, null]]);
+      let queue = [a];
+      while (queue.length && !prev.has(b)) {
+        const next = [];
+        for (const u of queue) for (const e of G.out.get(u) || []) {
+          if (prev.has(e.target)) continue;
+          prev.set(e.target, { u, rel: e.relation }); next.push(e.target);
+        }
+        queue = next;
+      }
+      if (prev.has(b)) {
+        const steps = [];
+        for (let cur = b; cur !== null; cur = prev.get(cur) ? prev.get(cur).u : null) {
+          const st = prev.get(cur);
+          steps.push(Object.assign({}, G.byId.get(cur), { relation: st ? st.rel : null }));
+        }
+        return { from, to, found: true, direction: dir, steps: steps.reverse() };
+      }
+    }
+    return { from, to, found: false, direction: null, steps: [] };
   }
   let offRows = null;
   function offlineSearch(query) {

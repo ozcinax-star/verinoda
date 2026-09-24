@@ -206,6 +206,10 @@ def make_handler(atlas: Atlas, port: list[int], token: str = ""):
                                             data=_flag(qs, "data", True))
                 elif route == "usernotes":
                     obj = atlas.user_notes()
+                elif route == "impact":
+                    obj = atlas.impact(nid, int((qs.get("depth") or ["3"])[0] or 3), tests=_flag(qs, "tests", True))
+                elif route == "path":
+                    obj = atlas.path((qs.get("from") or [""])[0], (qs.get("to") or [""])[0])
                 elif route == "global":
                     obj = atlas.global_graph(tests=_flag(qs, "tests", True), data=_flag(qs, "data", True),
                                              relations=_relations(qs))

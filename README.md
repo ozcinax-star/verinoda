@@ -258,6 +258,12 @@ Obsidian, built from Verinoda's own index rather than from hand-written notes:
   would point elsewhere), and **open in your editor**: every `file:line` and a
   button on each note open VS Code, Cursor or VSCodium at that line (chosen at the
   top of the page).
+- **Impact and path**: *Impact* on a note lists what may be affected when it
+  changes: what calls, imports, extends or names it, then what uses those, up to
+  three links back (the project's own code first, tests on or off), and turns the
+  local graph into that set; *Path…* finds the shortest chain of calls, imports
+  and references from the note to another one, or the other way round. In an
+  exported file both work at file level.
 - **Notes of your own** on any symbol, file, section or data unit: plain Markdown
   (`**bold**`, `` `code` ``, lists, `[[Name]]` links another note), kept as `.md`
   files in `.verinoda/notes/` (`notes.dir` in `.verinoda/config.json` puts them

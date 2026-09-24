@@ -255,7 +255,11 @@ dosyasının notunu sunucu gerektirmeyen tek bir HTML dosyasına yazar (varsayı
 (proje kökü, ev klasörü) içinde yoktur; CSP yalnızca kendi betiğine ve stiline izin verir, hiçbir
 bağlantı kurmaz. Her bağlantının altında yazıldığı satır görünür (indeksten sonra değişmiş dosyada
 görünmez: satır numaraları başka yeri gösterir); her `dosya:satır` ve her nottaki düğme o satırı VS Code,
-Cursor ya da VSCodium'da açar. **Kendi notların:** her sembole, dosyaya, bölüme ya da veri birimine
+Cursor ya da VSCodium'da açar. **Etki ve yol:** bir notta *Etki*, o değişirse neyin etkilenebileceğini
+listeler (onu çağıran, içe aktaran, genişleten ya da adlandıran, sonra onları kullanan; en çok üç bağlantı
+geri, önce projenin kendi kodu, testler açılıp kapanabilir) ve yerel grafı bu kümeye çevirir; *Yol…* nottan
+başka bir nota (ya da tersine) en kısa çağrı / import / başvuru zincirini bulur. Dışa aktarılan dosyada ikisi
+de dosya düzeyinde çalışır. **Kendi notların:** her sembole, dosyaya, bölüme ya da veri birimine
 Markdown not yazılabilir (`**kalın**`, `` `kod` ``, liste, `[[Ad]]` başka nota bağlar); notlar
 `.verinoda/notes/` altında `.md` dosyalarıdır (`notes.dir` ile commit edilen bir klasöre konabilir).
 Not yazıldığı koda bağlanır (sembol ya da bölüm parmak iziyle, yeri değişse de bulunur; dosya ya da veri

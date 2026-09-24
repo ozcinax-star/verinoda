@@ -568,3 +568,43 @@ def test_a_link_line_is_not_shown_from_a_file_edited_since_the_index(glow):
         p.write_bytes(before)
     assert any(c.get("snippet") for c in next(s["items"] for s in a.note(hit["id"])["sections"]
                                                if s["key"] == "called_by"))
+
+
+def test_impact_lists_what_depends_on_a_note_by_distance(atlas):
+    spawn = _find(atlas, "Wisp.spawn()")
+    n = atlas.note(spawn["id"])
+    callers = {c["id"] for s in n["sections"] if s["key"] == "called_by" for c in s["items"]}
+    r = atlas.impact(spawn["id"], 3)
+    first = {x["id"] for x in r["items"] if x["depth"] == 1}
+    assert callers and callers <= first  # every direct caller, one link back
+    assert all(x["via"] == spawn["id"] for x in r["items"] if x["depth"] == 1)
+    assert [x["depth"] for x in r["items"]] == sorted(x["depth"] for x in r["items"])
+    no_tests = atlas.impact(spawn["id"], 3, tests=False)
+    assert not any(uidata.is_test_file(x["file"] or "") for x in no_tests["items"])
+    wisp_file = atlas.note(_find(atlas, "Wisp", "class")["id"])["breadcrumb"][0]["id"]
+    assert first <= {x["id"] for x in atlas.impact(wisp_file, 1)["items"]}  # a file: what uses anything it defines
+    with pytest.raises(KeyError):
+        atlas.impact("no such note")
+
+
+def test_path_finds_the_chain_of_uses_either_way(atlas):
+    spawn = _find(atlas, "Wisp.spawn()")
+    caller = atlas.impact(spawn["id"], 1)["items"][0]
+    fwd = atlas.path(caller["id"], spawn["id"])
+    assert fwd["found"] and fwd["direction"] == "forward"
+    assert fwd["steps"][0]["id"] == caller["id"] and fwd["steps"][-1]["id"] == spawn["id"]
+    assert fwd["steps"][-1]["relation"] and fwd["steps"][0]["relation"] is None
+    back = atlas.path(spawn["id"], caller["id"])
+    assert back["found"] and back["direction"] == "backward"
+    with pytest.raises(KeyError):
+        atlas.path("nope", spawn["id"])
+
+
+def test_impact_and_path_are_served(served, atlas):
+    spawn = _find(atlas, "Wisp.spawn()")
+    status, _h, body = _get(served, "/api/impact?id=" + spawn["id"] + "&depth=2&tests=0")
+    assert status == 200 and json.loads(body)["depth"] == 2
+    caller = atlas.impact(spawn["id"], 1)["items"][0]["id"]
+    status, _h, body = _get(served, f"/api/path?from={caller}&to={spawn['id']}")
+    assert status == 200 and json.loads(body)["found"]
+    assert _get(served, "/api/path?from=x&to=y")[0] == 404

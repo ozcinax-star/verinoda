@@ -66,6 +66,10 @@ SECTION_ORDER = ["defined_in", "members", "calls", "called_by", "extends", "exte
 GRAPH_RELATIONS = ("calls", "method", "contains", "imports", "imports_from", "references", "uses", "inherits",
                    "implements")
 MEMBER_RELATIONS = ("method", "contains")
+# the links along which a change travels: the source USES the target (calls, imports, extends it, names it)
+USE_RELATIONS = ("calls", "imports", "imports_from", "references", "uses", "inherits", "implements")
+MAX_IMPACT = 400            # notes an impact lists (it says when it stopped)
+MAX_PATH_VISIT = 50_000     # notes a path search looks at before it gives up
 CODE_SUFFIX_LANG = {".py": "python", ".java": "java", ".kt": "kotlin", ".kts": "kotlin", ".js": "js", ".jsx": "js",
                     ".mjs": "js", ".cjs": "js", ".ts": "ts", ".tsx": "ts", ".go": "go", ".rs": "rust", ".c": "c",
                     ".h": "c", ".cpp": "cpp", ".cc": "cpp", ".hpp": "cpp", ".cs": "csharp", ".rb": "ruby",
@@ -169,6 +173,12 @@ class Atlas:
 
     def global_graph(self, **kw) -> dict:
         return self.snapshot().global_graph(**kw)
+
+    def impact(self, nid: str, depth: int = 3, *, tests: bool = True) -> dict:
+        return self.snapshot().impact(nid, depth, tests=tests)
+
+    def path(self, src: str, dst: str) -> dict:
+        return self.snapshot().path(src, dst)
 
     def user_notes(self) -> dict:
         return {"notes": self.snapshot().user_notes()}
@@ -658,6 +668,98 @@ class Snapshot:
                 "community": {"id": g.G.nodes[nid].get("community"), "name": g.G.nodes[nid].get("community_name")},
                 "sections": self._sections(sections), "test": bool(f and _is_test(f)),
                 "degree": g.G.degree(nid)})
+
+    # -- impact and paths -------------------------------------------------------------------------
+    def _seeds(self, nid: str) -> list[str]:
+        """A note and, for a file or a document, everything defined in it."""
+        g = self.g
+        if self.kind(nid) in ("file", "doc") and g.file(nid):
+            return [nid] + [s for s in g.symbols_in(g.file(nid)) if self.kind(s) not in HIDDEN_KINDS]
+        return [nid]
+
+    def impact(self, nid: str, depth: int = 3, *, tests: bool = True) -> dict:
+        """What may be affected when ``nid`` changes: what calls, imports, extends or names it, then
+        what uses those, up to ``depth`` links back (a file: everything defined in it counts)."""
+        g = self.g
+        if nid not in g.G or self.kind(nid) in HIDDEN_KINDS:
+            raise KeyError(f"no note {nid!r}")
+        depth = max(1, min(int(depth), 6))
+        seeds = self._seeds(nid)
+        dist: dict[str, int] = {s: 0 for s in seeds}
+        via: dict[str, tuple[str, str, str | None]] = {}
+        frontier, truncated = list(seeds), False
+        for d in range(1, depth + 1):
+            nxt = []
+            for v in frontier:
+                for u, data in g.in_edges(v, set(USE_RELATIONS)):
+                    if u in dist or self.kind(u) in HIDDEN_KINDS:
+                        continue
+                    if not tests and _is_test(g.file(u) or ""):
+                        continue
+                    if len(dist) - len(seeds) >= MAX_IMPACT:
+                        truncated = True
+                        break
+                    dist[u] = d
+                    via[u] = (v, str(data.get("relation")), _at(data))
+                    nxt.append(u)
+            frontier = nxt
+        items = []
+        for u, d in dist.items():
+            if d == 0:
+                continue
+            v, rel, at = via[u]
+            items.append({**self.brief(u), "depth": d, "relation": rel, "at": at, "via": v, "via_title": self.title(v)})
+        def place(f: str) -> int:  # the project's own code first, then tests, then reference trees
+            return 2 if self.in_reference(f) else 1 if _is_test(f) else 0
+
+        items.sort(key=lambda x: (x["depth"], place(x.get("file") or ""), x.get("file") or "", x.get("line") or 0,
+                                  x["id"]))
+        files = Counter(x.get("file") for x in items if x.get("file"))
+        return {"id": nid, "depth": depth, "count": len(items), "files": len(files), "truncated": truncated,
+                "tests": sum(1 for f in files if _is_test(f)), "items": items}
+
+    def path(self, src: str, dst: str) -> dict:
+        """The shortest chain of uses from ``src`` to ``dst`` (it calls / imports / extends / names the
+        next), or, when there is none, from ``dst`` to ``src`` (``direction: backward``)."""
+        g = self.g
+        for n in (src, dst):
+            if n not in g.G or self.kind(n) in HIDDEN_KINDS:
+                raise KeyError(f"no note {n!r}")
+        for direction, a, b in (("forward", src, dst), ("backward", dst, src)):
+            steps = self._bfs(a, b)
+            if steps is not None:
+                return {"from": src, "to": dst, "found": True, "direction": direction, "steps": steps}
+        return {"from": src, "to": dst, "found": False, "direction": None, "steps": []}
+
+    def _bfs(self, a: str, b: str) -> list[dict] | None:
+        g = self.g
+        targets = set(self._seeds(b))
+        prev: dict[str, tuple[str, str, str | None] | None] = {s: None for s in self._seeds(a)}
+        queue = list(prev)
+        found = next((s for s in queue if s in targets), None)
+        while queue and found is None and len(prev) < MAX_PATH_VISIT:
+            nxt = []
+            for u in queue:
+                for v, data in g.out_edges(u, set(USE_RELATIONS)):
+                    if v in prev or self.kind(v) in HIDDEN_KINDS:
+                        continue
+                    prev[v] = (u, str(data.get("relation")), _at(data))
+                    if v in targets:
+                        found = v
+                        break
+                    nxt.append(v)
+                if found is not None:
+                    break
+            queue = nxt
+        if found is None:
+            return None
+        chain = []
+        cur: str | None = found
+        while cur is not None:
+            step = prev[cur]
+            chain.append({**self.brief(cur), "relation": step[1] if step else None, "at": step[2] if step else None})
+            cur = step[0] if step else None
+        return list(reversed(chain))
 
     # -- notes of your own (verinoda.usernotes) -----------------------------------------------------
     def _subjects_in(self, f: str) -> dict[str, str]:
