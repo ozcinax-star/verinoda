@@ -108,7 +108,7 @@ NETWORK_MODES = ("off", "cache", "on")
 QUERY_FORMATS = ("text", "json")
 # analyze: what the agent reads first and what is cut last (the interpretation and the per-sub-question verdicts)
 ANALYZE_KEEP = ("understood_as", "subquestions", "plan_check")
-ANALYZE_FIRST_CUT = ("steps", "critique")
+ANALYZE_FIRST_CUT = ("steps", "critique", "passages")  # passages: `query` gives them in full; claims come first
 PLAN_HINT = "call question_plan_draft, or see `verinoda plan schema` for the plan format"
 # A file modified this close to (or after) the start of a call may have changed while it was read, or
 # within the file system's timestamp granularity: what was derived from it is not kept (git's racy-clean rule).
