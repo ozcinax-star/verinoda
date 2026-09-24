@@ -70,7 +70,7 @@ from verinoda import textnorm
 from verinoda.architecture_map import is_test_file
 
 SCHEMA_VERSION = 4
-TOKENIZER_VERSION = 2
+TOKENIZER_VERSION = 3  # 3: y-final words meet their -ies/-ied forms (query/queries)
 DB_NAME = "search.db"
 
 WINDOW, STRIDE = 12, 6            # passage length and stride, in own non-blank lines
@@ -201,6 +201,7 @@ def stem(term: str) -> str:
 
 
 _E_KEEP = frozenset({"not", "the", "one", "are", "use", "see", "ref"})
+_VOWELS_Y = frozenset("aeiouy")
 
 
 def word_stem(part: str) -> str:
@@ -211,8 +212,20 @@ def word_stem(part: str) -> str:
     least three letters, and never producing a common short word such as
     ``not`` from ``note``) makes ``save``/``saved``/``saves``,
     ``cache``/``cached``/``caches`` and ``update``/``updated`` one token.
+
+    A consonant and ``y`` end the same stem as ``-ies``/``-ied``: ``query``, ``queries`` and
+    ``querying`` are ``queri``, ``copy``/``copies``/``copied`` are ``copi`` (``stem`` alone made
+    ``query``/``quer`` and ``copy``/``copi``, so a question never met the plural in the code); a short
+    ``keys``/``days`` loses its ``s``.
     """
     t = stem(part)
+    if t.isalpha() and part.isalpha():
+        if len(part) >= 5 and part.endswith(("ies", "ied")):
+            return part[:-3] + "i"
+        if len(t) >= 3 and t.endswith("y") and t[-2] not in _VOWELS_Y:
+            return t[:-1] + "i"
+        if len(part) == 4 and part.endswith("ys") and part[-3] in _VOWELS_Y:
+            return part[:-1]
     if len(t) >= 4 and t.endswith("e") and t.isalpha() and t[:-1] not in _E_KEEP:
         return t[:-1]
     return t

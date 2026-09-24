@@ -107,7 +107,7 @@ def _units(g) -> list[dict]:
 
 def test_tokens_are_identifier_aware_and_folded():
     assert search_index.tokens("getOrderRepo_v2") == ["getorderrepo_v2", "get", "order", "repo", "v2"]
-    assert search_index.tokens("_query_terms") == ["query_terms", "query", "term"]
+    assert search_index.tokens("_query_terms") == ["query_terms", "queri", "term"]  # query/queries/queried: one stem
     # Turkish letters are folded first; the light English stem then applies to every word alike
     assert search_index.tokens("İndirim ŞİPARİŞ siparis") == ["indirim", "sipari", "sipari"]
     assert search_index.tokens("x = 1") == []  # single characters are not tokens
@@ -355,8 +355,8 @@ def test_near_and_query_pairs():
     assert not search_index._near(["directory", "of", "hom"], a, b)          # adjacent only (gap 1)
     assert not search_index._near(["hom", "x", "y", "z", "directory"], a, b)
     pairs = search_index._query_pairs(["home", "directory", "resolution"])
-    assert pairs == [(frozenset({"hom"}), frozenset({"directory"})),
-                     (frozenset({"directory"}), frozenset({"resolution"}))]
+    assert pairs == [(frozenset({"hom"}), frozenset({"directori"})),
+                     (frozenset({"directori"}), frozenset({"resolution"}))]
     assert search_index._query_pairs(["home"]) == []
 
 
@@ -478,3 +478,11 @@ def test_a_module_qualifier_is_the_module_not_a_class_of_that_name(tmp_path):
     assert floored == {"store/__init__.py"}
     floored = {h.file for h in search_index.rank(g, "Who calls Store.save?").hits if "question names 'save'" in h.reasons}
     assert floored == {"cache/memory.py"}
+
+
+@pytest.mark.parametrize("family", [("query", "queries", "queried", "querying"), ("copy", "copies", "copied"),
+                                    ("entry", "entries"), ("dependency", "dependencies"), ("retry", "retries"),
+                                    ("key", "keys"), ("play", "plays"), ("save", "saved", "saves")])
+def test_a_word_and_its_inflections_are_one_token(family):
+    """A question saying "query" meets code saying "queries" (they were quer / query before)."""
+    assert len({search_index.word_stem(w) for w in family}) == 1
