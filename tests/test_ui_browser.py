@@ -350,6 +350,24 @@ def test_a_question_is_answered_in_the_page(page, site):
     page.wait("document.querySelectorAll('#note .code').length > 0", timeout=30)
 
 
+def test_a_slow_start_page_does_not_replace_a_note_opened_meanwhile(page, site):
+    _open(page, site + "#/")
+    _search_open(page, "spawn", "Wisp.spawn()")
+    note = page.js("location.hash")
+    # the start page's numbers come late; a note is opened before they do
+    page.js("""(() => { const real = window.fetch; window.__fetch = real;
+      window.fetch = (u, o) => String(u).includes('/api/stats') ? new Promise((ok) => setTimeout(() => ok(real(u, o)), 1200)) : real(u, o); })()""")
+    page.js("location.hash = '#/'")
+    time.sleep(0.2)
+    page.js(f"location.hash = {json.dumps(note)}")
+    page.wait("document.querySelector('#note h1') && document.querySelector('#note h1').textContent.includes('Wisp.spawn()')")
+    time.sleep(1.6)  # the numbers have come
+    try:
+        assert page.js("!!document.querySelector('#note h1') && !document.querySelector('.home')")
+    finally:
+        page.js("window.fetch = window.__fetch")
+
+
 def test_the_page_redraws_when_the_index_changes(page, site, glow):
     _open(page, site + "#/")
     _search_open(page, "spawn", "Wisp.spawn()")

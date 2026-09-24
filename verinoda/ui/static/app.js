@@ -613,11 +613,14 @@
     }
   }
 
+  // the start page is what the address shows when it names nothing else
+  const onHome = () => { const h = location.hash || "#/"; return !(h === "#/graph" || h.startsWith("#/n/") || (h.startsWith("#/q/") && !OFFLINE)); };
   async function renderHome() {
     current = null;
     document.title = "Verinoda";
     let s;
-    try { s = await api("/api/stats"); } catch (e) { showError(e); return; }
+    try { s = await api("/api/stats"); } catch (e) { if (onHome()) showError(e); return; }
+    if (!onHome()) return; // a note was opened while the numbers came
     const cards = el("div", { class: "cards" },
       [[s.notes, t("notes")], [s.files, t("filesN")], [s.links, t("links")], [s.data_notes, t("dataNotes")]]
         .map(([v, l]) => el("div", { class: "card" }, el("div", { class: "v", text: Number(v).toLocaleString() }), el("div", { class: "l", text: l }))));
@@ -625,6 +628,7 @@
       el("span", { class: "at mono", text: `${h.degree} · ${h.file || ""}` }))));
     let mine = [];
     try { mine = OFFLINE ? (OFFLINE.user_notes || []) : ((await api("/api/usernotes")).notes || []); } catch (_) { mine = []; }
+    if (!onHome()) return;
     const notesList = mine.length ? el("ul", { class: "links" }, mine.map((u) => {
       const li = el("li", {},
         el("span", { class: "unote-st st-" + u.status, title: u.why || "", text: t("nst." + u.status) }),
