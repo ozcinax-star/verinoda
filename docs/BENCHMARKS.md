@@ -178,7 +178,27 @@ dotted token such as `graph.json` is not two words. `forge_mod` analyze
 23 -> 24; `graphify_core` analyze 30 -> 29 ("query terms" now also names
 `_query_terms`). The other sets unchanged.
 
-**End of the night: one official run of every set on the final code**
+**Third review, and the end of the night.** Three more review agents went
+through the commits after the second round. Their findings, each reproduced
+and fixed with a test: the Java/Kotlin method-reference edges (`Cls::m` as a
+call, commit `d70b801`) were not neutral as its message said. Those edges are
+stored when a project is scanned, and the per-change measurement had reused
+indexes built earlier, so it never saw them; built with them, `forge_mod` JSON
+was 46 (q11) and `glow_mod` analyze 42. They also let a reference hide a later
+direct call to the same method, could be lifted to a verified "calls" with a
+SCIP index, resolved `this::m` inside anonymous classes to the outer class,
+and read Java text blocks as code. The commit was reverted. The Turkish stem
+rule of `30847a1` (the stem most units use) picked short English words
+("eventleri" -> `even`): the longest indexed stem wins again, and the shorter
+one only when the longer is the English stem of another inflection (the word
+goes on with the `e` it dropped: "melekten" -> `melek`, not `melekt`). A
+spelled resource id is matched as a whole id (`minecraft:item` no longer
+matches `minecraft:item/generated`), each file is read once, data files
+first, capped by files. A lowercase owner (`store.save`) is a module or
+package, a capitalized one (`Store.save`) a class. Every measurement from here
+on builds each index from scratch.
+
+One official run of every set on the final code
 (`benchmarks/results/mods-2026-09-24/final/`, `repeat = 1`, each corpus
 indexed from scratch). Facts found; the first number is this update's earlier
 result file for the set (`forge_mod`: its held-out measurement), bold where
@@ -186,22 +206,21 @@ the final run found more:
 
 | set | facts | raw | Graphify | analyze | JSON | text |
 |---|---|---|---|---|---|---|
-| `forge_mod` | 68 | 36 | 12 | 38 -> **42** | 45 -> **46** | 63 -> **66** |
-| `glow_mod` | 50 | 33 | 13 | 41 -> **42** | 43 -> **45** | 48 |
+| `forge_mod` | 68 | 36 | 12 | 38 -> **42** | 45 -> **50** | 63 -> **66** |
+| `glow_mod` | 50 | 33 | 13 | 41 -> **43** | 43 -> **44** | 48 |
 | `orders_app` | 32 | 31 | 16 | 31 | 31 | 32 |
 | `orders_app_tr` | 32 | 10 | 6 | 30 | 28 | 32 |
 | `graphify_core` | 37 | 4 | 7 | 30 -> 29 | 27 | 36 |
 | `graphify_core_tr` | 37 | 5 | 2 | 16 | 15 | 25 -> **26** |
 | `heldout_repoatlas` | 33 | 9 | 8 | 13 | 20 -> **21** | 25 |
 
-No approach stated a negative on the mod sets; the one analyze negative on
-`orders_app` and `orders_app_tr` is the same as before. The per-change numbers
-above were measured on indexes built at the start of the night (only the
-ranking changed between them); built from scratch, `forge_mod` JSON is 46
-rather than 50 (q11: its JSON packing drops the tick method's body when the
-graph prior shifts; the text format finds all six facts either way) and
-`glow_mod` analyze 42 rather than 43. The private set, run the same way: text
-32, JSON 24, analyze 23 of 39 facts (22 / 23 / 24 before this round).
+Against the pre-mod baseline (`dogfood-2026-09-23`) the five earlier sets
+differ in four cells: `graphify_core` analyze 30 -> 29, `graphify_core_tr`
+JSON 16 -> 15 and text 25 -> 26, `heldout_repoatlas` JSON 20 -> 21. No
+approach stated a negative on the mod sets; the one analyze negative on
+`orders_app` and `orders_app_tr` is the one they had before. The private set,
+run the same way: text 32, JSON 24, analyze 24 of 39 facts (22 / 23 / 24
+before this round).
 
 **The five earlier sets** (regression check, same harness, `repeat = 1`, no
 upstream CLI, against `dogfood-2026-09-23/`): 24 of the 25 Verinoda cells and
@@ -1266,7 +1285,7 @@ since `05890a1`; `tests/test_benchmark.py` pins the sha256 of both arrays.
 | `heldout_repoatlas` | the product (then named RepoAtlas) at commit `7371990` of the pre-rename history, shipped as a snapshot: `repoatlas/` without `project_index/` and `benchmark/questions/`, plus `tests/` without `fixtures/` (106 files) | 8: where ×2, config, flow, impact, behaviour, why, tests | 33 | 0 | the retrieval research agent, after its prototype was built and before it ran on this corpus; gold reviewed and re-anchored to `7371990` by the measurement step | no (held out from the design; seen by the search track, which reports no tuning on it) |
 | `orders_app_tr` | as `orders_app` | the 10 `orders_app` questions in Turkish | 32 (same) | 15 (same) | the question-understanding rule author, while tuning the Turkish rules | yes |
 | `graphify_core_tr` | as `graphify_core` | the 9 `graphify_core` questions in Turkish | 37 (same) | 7 (same) | the question-understanding rule author, while tuning the Turkish rules | yes |
-| `forge_mod` | `examples/forge_mod` (55 files: a fictional NeoForge mod in Java and Kotlin with a data pack, worldgen, tags, lang files in two languages and JUnit tests) | 14, 7 of them Turkish: callers, cross-layer, config, resources, flow, behaviour, where | 68 | 19 | an agent that never ran Verinoda on it, after all the 2026-09-24 changes | held out for its first measurement; in-sample since: the Kotlin call pass, and q05, q09, q11 for the second review round |
+| `forge_mod` | `examples/forge_mod` (55 files: a fictional NeoForge mod in Java and Kotlin with a data pack, worldgen, tags, lang files in two languages and JUnit tests) | 14, 7 of them Turkish: callers, cross-layer, config, resources, flow, behaviour, where | 68 | 19 | an agent that never ran Verinoda on it, after all the 2026-09-24 changes | held out for its first measurement; in-sample since: the Kotlin call pass, q05, q09, q11 for the second review round, q03 for the spelled resource id |
 | `glow_mod` | `examples/glow_mod` (37 files: a fictional Fabric mod - Java, a data pack, assets, a yml config, a reference tree `reference/` configured through `corpus.verinoda_config`, and a copied data pack) | 14, 7 of them Turkish: callers, cross-layer (code <-> data pack), config, resources, flow, behaviour, where | 50 | 12 (in 10 questions) | an agent that never ran Verinoda on it, after the Minecraft support was written | held out for its first measurement only: the Java call pass, the translation pairs, the game words of the seed dictionary and the link chain were added after looking at the misses of q01, q03, q04 and q13 |
 
 The held-out review, fact by fact, is stored in the set:

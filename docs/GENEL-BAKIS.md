@@ -812,12 +812,12 @@ geçişi, dil dosyalarından çeviri çiftleri, sözlüğe oyun kelimeleri, anal
 zinciri) q01, q03, q04 ve q13'ün kaçırdıklarına bakılarak yapıldı. Bulunan
 bilgi (50 üzerinden):
 
-| Yaklaşım | `32a5bd4` | İlk ölçüm (ayrılmış) | Şimdi |
+| Yaklaşım | `32a5bd4` | İlk ölçüm (ayrılmış) | Gecenin sonu |
 |---|---|---|---|
 | Ham grep+okuma | 33 | 33 | 33 |
 | Graphify | 13 | 13 | 13 |
-| Verinoda analyze | 18 | 25 | **41** |
-| Verinoda retrieve (JSON) | 25 | 32 | **43** |
+| Verinoda analyze | 18 | 25 | **43** |
+| Verinoda retrieve (JSON) | 25 | 32 | **44** |
 | Verinoda retrieve (düz metin) | 34 | 46 | **48** |
 
 İkinci ayrılmış küme `forge_mod` (kurgusal bir NeoForge modu: Java ve Kotlin, özel tarif tipi,
@@ -838,7 +838,7 @@ yanlış alarm vermesi ve 48.000 dosyada 259 sn sürmesi (şimdi 0,3 sn); uzun a
 dosyalarının kalıcı olarak "değişti" görünmesi; belge/veri düzenlemesinde de grafın baştan kurulması.
 Aynı turda eklenenler: depodaki dil dosyalarından Türkçe etiketler ("Kor Ocağı" -> `ember_forge`), dünya
 üretimi kelimeleri (`biyom`, `dünya`, `cevher`, `oluş`, `üret`) ve sözlüğün bir kez yüklenmesi. `forge_mod`
-bu değişiklikler için artık örneklem içi (üç sorusunun hatalarına bakıldı): metin 63 -> **64**, JSON
+bu değişiklikler için artık örneklem içi (üç sorusunun, sonra q03'ün hatalarına bakıldı): metin 63 -> **64**, JSON
 45 -> **50**, analyze 38 -> **40**; diğer kümeler aynı, yalnızca `graphify_core_tr` metin 25 -> 26.
 Ardından soruda yazılan kaynak kimliği (`emberforge:forging`) onu yazan her pasaja ulaşıyor: `forge_mod`
 metin 64 -> **66**, analyze 40 -> **41**. Soruda yazılan `Sınıf.metot` artık yalnızca o sınıfın
@@ -846,10 +846,16 @@ metodunu öne çıkarıyor ve düz metin biçimi, uzun bir sınıf bölümünün
 ayrıca gösteriyor: özel kümede metin 22 -> 31 / 39 (örneklem içi). Son olarak, kodun tek bir ad olarak
 yazdığı yan yana iki kelime ("sipariş oluştur" -> `siparis_olustur` gibi, `x_y` / `XY`) o ad sayılıyor: `glow_mod` analyze 41 -> 43,
 `forge_mod` analyze 41 -> 42, özel küme metin 31 -> 32; `graphify_core` analyze 30 -> 29.
-Gecenin sonunda son kodla her küme sıfırdan bir kez resmi olarak ölçüldü
-(`benchmarks/results/mods-2026-09-24/final/`): `forge_mod` metin 66, JSON 46, analyze 42 (ilk ölçüm 63 / 45 / 38);
-`glow_mod` 48 / 45 / 42; önceki beş kümede yalnızca `graphify_core` analyze 30 -> 29, `graphify_core_tr` metin
-25 -> 26, `heldout_repoatlas` JSON 20 -> 21. Özel küme: metin 32, JSON 24, analyze 23 / 39.
+Üçüncü bir inceleme turu (üç ajan) Java/Kotlin metot referansı kenarlarının (`d70b801`) nötr olmadığını
+gösterdi: bu kenarlar tarama sırasında saklanıyor, değişiklik başına ölçüm ise önceden kurulmuş indeksleri
+kullanıyordu; onlarla `forge_mod` JSON 46, `glow_mod` analyze 42 idi ve dört doğruluk sorunu vardı: commit geri
+alındı. Aynı turda: Türkçe kök yine en uzun dizin kökü (`eventleri` -> `event`, `even` değil; yalnızca İngilizce
+kök kalıntısında kısası: `melekten` -> `melek`), yazılan kaynak kimliği yalnızca tam kimlik olarak eşleşiyor,
+küçük harfli sahip (`store.save`) modül/paket, büyük harfli (`Store.save`) sınıf. Gecenin sonunda son kodla her
+küme sıfırdan bir kez resmi olarak ölçüldü (`benchmarks/results/mods-2026-09-24/final/`): `forge_mod` metin 66,
+JSON 50, analyze 42 (ilk ölçüm 63 / 45 / 38); `glow_mod` 48 / 44 / 43; önceki beş kümede `dogfood-2026-09-23`e
+göre yalnızca `graphify_core` analyze 30 -> 29, `graphify_core_tr` JSON 16 -> 15 ve metin 25 -> 26,
+`heldout_repoatlas` JSON 20 -> 21. Özel küme: metin 32, JSON 24, analyze 24 / 39 (bu turdan önce 22 / 23 / 24).
 
 Önceki beş kümede (gerileme kontrolü) Verinoda'nın 25 hücresinden 24'ü ve
 Graphify ile ham okumanın bütün hücreleri aynı sayıda bilgi buldu; bir hücre

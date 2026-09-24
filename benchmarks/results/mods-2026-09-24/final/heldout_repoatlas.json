@@ -64,12 +64,12 @@
   "prices_usd_per_mtok": null,
   "price_source": null
  },
- "workdir": "<TMP>/verinoda-bench-hoplaixt",
+ "workdir": "<TMP>/verinoda-bench-o88ol57z",
  "workdir_kept": false,
  "corpus": {
   "source": "<REPO>/benchmarks/corpora/heldout_repoatlas_7371990",
-  "source_commit": "d70b801c0fae0ce597e95706a5c3452b7f19f97e",
-  "source_dirty": false,
+  "source_commit": "3c066ecfc6a24b07e5c1dd4de2d5b59ab2b5085d",
+  "source_dirty": true,
   "snapshot": "working tree (tracked + untracked, not ignored)",
   "include": [
    "repoatlas",
@@ -83,7 +83,7 @@
   ],
   "file_count": 106,
   "bytes": 2189328,
-  "workdir_commit": "d3234a08697720b4f8a9144dcbe8a72ea8837833"
+  "workdir_commit": "658727484c6e6a4c6cd29fa7d27cb7ec7712825d"
  },
  "gold_validation": {
   "ok": true,
@@ -99,7 +99,7 @@
   "verinoda_retrieve_text"
  ],
  "environment": {
-  "date_utc": "2026-09-24T00:29:58+00:00",
+  "date_utc": "2026-09-24T01:10:13+00:00",
   "os": "Windows-11-10.0.26200-SP0",
   "machine": "AMD64",
   "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
@@ -110,22 +110,24 @@
   "vendored_graphify_commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7",
   "graphify_cli": null,
   "git": "git version 2.53.0.windows.1",
-  "verinoda_source_commit": "d70b801c0fae0ce597e95706a5c3452b7f19f97e",
-  "verinoda_package_changes_vs_commit": [],
-  "verinoda_package_diff_sha256": null
+  "verinoda_source_commit": "3c066ecfc6a24b07e5c1dd4de2d5b59ab2b5085d",
+  "verinoda_package_changes_vs_commit": [
+   "M verinoda/search_index.py"
+  ],
+  "verinoda_package_diff_sha256": "bba11e8fcfb994b18c2470f3edb9ce33783bf9a13609f9229861069d140aa1cc"
  },
  "index": {
   "raw": {
    "note": "no index; every query greps and reads the working tree"
   },
   "verinoda": {
-   "cold_seconds": 11.816,
-   "warm_seconds": 4.325,
+   "cold_seconds": 12.669,
+   "warm_seconds": 4.363,
    "nodes": 3613,
    "edges": 9728,
    "warm_nodes": 3613,
    "warm_edges": 9728,
-   "cache_files": 106,
+   "cache_files": 107,
    "what": "workflow.scan = Graphify-derived AST index (in-process) + snapshot (file hashes) + stale-claim check; warm = same tree again with the AST cache present",
    "used_by": [
     "graphify_vendored",
@@ -148,7 +150,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.145,
+       "seconds": 0.1548,
        "chars": 23929,
        "sha256": "4307b570020b23e8be7e17022a1b76db2636b084201d1d285ad60694d236880a"
       }
@@ -224,7 +226,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.19,
+       "seconds": 0.1971,
        "chars": 6615,
        "sha256": "fcd85c8cbe8858bde9d42ffc1438c23074efd669eb001bbc352fa44817aa4b2c"
       }
@@ -286,9 +288,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 1.036,
+       "seconds": 1.278,
        "chars": 2867,
-       "sha256": "9d099fe8e14fe6a305a0a2d3e86062d02c111513b92f4f8768f392f6a1f24b21",
+       "sha256": "8b4bb034a431845ae56b4b14753f23082873ed25b3bd4d85f35ff83b61d421a8",
        "claims": 8,
        "claims_reused": 0,
        "claims_new": 8,
@@ -299,7 +301,7 @@
      "score": {
       "chars": 2867,
       "tokens": 717,
-      "sha256": "9d099fe8e14fe6a305a0a2d3e86062d02c111513b92f4f8768f392f6a1f24b21",
+      "sha256": "8b4bb034a431845ae56b4b14753f23082873ed25b3bd4d85f35ff83b61d421a8",
       "facts": {
        "total": 4,
        "found_n": 4,
@@ -350,9 +352,9 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 1.016,
+       "elapsed_s": 1.25,
        "tool_calls": 17,
-       "context_chars": 4175,
+       "context_chars": 4173,
        "context_tokens_est": 1043,
        "token_count_method": "chars/4 estimate",
        "exhausted": null,
@@ -360,7 +362,7 @@
         "max_sites": 20,
         "max_seconds": 1.5,
         "sites": 4,
-        "spent_s": 0.359,
+        "spent_s": 0.351,
         "skipped": 0
        }
       },
@@ -390,7 +392,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1237,
+       "seconds": 0.1104,
        "chars": 5735,
        "sha256": "046204b0bb2e011829153371f48c23f4b230b18c4a15c8a8ba11fccb9e4fe292"
       }
@@ -463,7 +465,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2209,
+       "seconds": 0.1294,
        "chars": 5945,
        "sha256": "c616be5478edf27e5cd1b791f47202c8e14ffb5492feeecada9bd0ed06b39079"
       }
@@ -543,7 +545,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1399,
+       "seconds": 0.1435,
        "chars": 23966,
        "sha256": "9dbbdd85bf74d1d22bf1268c5e738d750f82e045fa07e211a40d20bee3bfa18d"
       }
@@ -624,7 +626,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2151,
+       "seconds": 0.2026,
        "chars": 6712,
        "sha256": "192cea36dc49eb7478b2b5fb9b3281ba63d79c5ed9ce78e6eb5e784980f6f137"
       }
@@ -686,9 +688,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 1.4412,
+       "seconds": 1.8486,
        "chars": 4616,
-       "sha256": "2a723fe56c906e64777ada5b0e9855dc3f7a9c5aa89bcaedc523d2b88eb89b99",
+       "sha256": "23df04d308d39b9eed46df4accfee39045b2d4df26a2e7fee13c47ecd65c8aee",
        "claims": 13,
        "claims_reused": 1,
        "claims_new": 12,
@@ -699,7 +701,7 @@
      "score": {
       "chars": 4616,
       "tokens": 1154,
-      "sha256": "2a723fe56c906e64777ada5b0e9855dc3f7a9c5aa89bcaedc523d2b88eb89b99",
+      "sha256": "23df04d308d39b9eed46df4accfee39045b2d4df26a2e7fee13c47ecd65c8aee",
       "facts": {
        "total": 4,
        "found_n": 2,
@@ -750,9 +752,9 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 1.437,
+       "elapsed_s": 1.844,
        "tool_calls": 27,
-       "context_chars": 7021,
+       "context_chars": 7023,
        "context_tokens_est": 1755,
        "token_count_method": "chars/4 estimate",
        "exhausted": null,
@@ -760,7 +762,7 @@
         "max_sites": 20,
         "max_seconds": 1.5,
         "sites": 5,
-        "spent_s": 0.41,
+        "spent_s": 0.274,
         "skipped": 0
        }
       },
@@ -790,7 +792,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1213,
+       "seconds": 0.1196,
        "chars": 5742,
        "sha256": "38462a16648210effac3fe8a44ecacb2f384692f042c6c4332fdf607e4b1b4b9"
       }
@@ -865,7 +867,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1358,
+       "seconds": 0.2884,
        "chars": 5905,
        "sha256": "e8be4235cf7626c410a9f8801d90fe6bdd3f20dd0a710a8fbfe863905b268981"
       }
@@ -944,7 +946,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2085,
+       "seconds": 0.2071,
        "chars": 23990,
        "sha256": "b5aa0529c16bafc97de7cef37b40949ebd4e20cff2a9766a26943279c6c72392"
       }
@@ -1026,7 +1028,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2522,
+       "seconds": 0.2439,
        "chars": 6480,
        "sha256": "9a1219270b8a36f0475c2a5b98a45dd25a294b75fcf4d3f0999afa15209ec197"
       }
@@ -1092,9 +1094,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 1.1928,
+       "seconds": 1.5555,
        "chars": 4282,
-       "sha256": "c31af3b01fa6a6673c627585688f423b4ec74f3e1ba771f2b1555782c85caf7d",
+       "sha256": "7a9ab798f310c7fd5bef2862f7c03451a3bf16f60e6c8ca210b7c2e6d4fd613b",
        "claims": 8,
        "claims_reused": 0,
        "claims_new": 8,
@@ -1105,7 +1107,7 @@
      "score": {
       "chars": 4282,
       "tokens": 1071,
-      "sha256": "c31af3b01fa6a6673c627585688f423b4ec74f3e1ba771f2b1555782c85caf7d",
+      "sha256": "7a9ab798f310c7fd5bef2862f7c03451a3bf16f60e6c8ca210b7c2e6d4fd613b",
       "facts": {
        "total": 5,
        "found_n": 3,
@@ -1159,7 +1161,7 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 1.188,
+       "elapsed_s": 1.531,
        "tool_calls": 19,
        "context_chars": 6058,
        "context_tokens_est": 1514,
@@ -1169,7 +1171,7 @@
         "max_sites": 20,
         "max_seconds": 1.5,
         "sites": 3,
-        "spent_s": 0.194,
+        "spent_s": 0.183,
         "skipped": 0
        }
       },
@@ -1199,7 +1201,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.15,
+       "seconds": 0.1491,
        "chars": 5728,
        "sha256": "51f574a9b38b7f2d4b067338a1b103ab3ce7d16cdafb36bc26ed717070e212bc"
       }
@@ -1278,7 +1280,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.3304,
+       "seconds": 0.1511,
        "chars": 4997,
        "sha256": "990bb143b240ec1f77a8e2c463774fd94fba06dc6a745fc1799d73600206be08"
       }
@@ -1361,7 +1363,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1167,
+       "seconds": 0.1164,
        "chars": 23989,
        "sha256": "29c339ee1c622b695dd2b720c258877a42740aa7e3959fb6beee5f94d1c26b96"
       }
@@ -1436,7 +1438,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2347,
+       "seconds": 0.2247,
        "chars": 6476,
        "sha256": "64af15e782e7fd68ff951f698cbec6ae63d04440988e4c6fd0d76d4f34f1a0f7"
       }
@@ -1505,9 +1507,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.4464,
+       "seconds": 0.582,
        "chars": 2814,
-       "sha256": "9bcce5c3bf41edb2af33e38ef713e702238e0ef961769fdaf20fe3d11ba4ad23",
+       "sha256": "0676022a0ff90aac8d1d1c7a17242fc42490d7aae0bac3ee11bf56f70d9d31ac",
        "claims": 4,
        "claims_reused": 0,
        "claims_new": 4,
@@ -1518,7 +1520,7 @@
      "score": {
       "chars": 2814,
       "tokens": 704,
-      "sha256": "9bcce5c3bf41edb2af33e38ef713e702238e0ef961769fdaf20fe3d11ba4ad23",
+      "sha256": "0676022a0ff90aac8d1d1c7a17242fc42490d7aae0bac3ee11bf56f70d9d31ac",
       "facts": {
        "total": 5,
        "found_n": 0,
@@ -1567,9 +1569,9 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.438,
+       "elapsed_s": 0.578,
        "tool_calls": 10,
-       "context_chars": 4031,
+       "context_chars": 4030,
        "context_tokens_est": 1007,
        "token_count_method": "chars/4 estimate",
        "exhausted": null,
@@ -1577,7 +1579,7 @@
         "max_sites": 20,
         "max_seconds": 1.5,
         "sites": 1,
-        "spent_s": 0.051,
+        "spent_s": 0.047,
         "skipped": 0
        }
       },
@@ -1607,7 +1609,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1425,
+       "seconds": 0.3329,
        "chars": 5813,
        "sha256": "de9053dd82f63ead0b7f3d6db93872dd29b62668ca0daafafe2f51252a58bfa4"
       }
@@ -1682,7 +1684,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1535,
+       "seconds": 0.1451,
        "chars": 5997,
        "sha256": "6806299b042faf44101d5e91aa31a43388d6ed0d2ddf7b88eaf5b87e6041f713"
       }
@@ -1765,7 +1767,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.161,
+       "seconds": 0.1535,
        "chars": 23962,
        "sha256": "c772512c6e5bcec73d672be6d9b7f484b9f117f6a188170d02436e747c166759"
       }
@@ -1841,7 +1843,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2334,
+       "seconds": 0.2236,
        "chars": 6590,
        "sha256": "e08c995619a68de58cc5de9624b1abf4591e82d378dbe96225fbc61efc661b2e"
       }
@@ -1907,9 +1909,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.3233,
+       "seconds": 0.41,
        "chars": 1898,
-       "sha256": "5eb70248575d012562c709bc34f307dfd99abd1f2068d3428212c499cb365d05",
+       "sha256": "9fec688145111f31122377a1d850e4da979ee8e09dfaa23a1bf88eca72edf325",
        "claims": 3,
        "claims_reused": 1,
        "claims_new": 2,
@@ -1920,7 +1922,7 @@
      "score": {
       "chars": 1898,
       "tokens": 475,
-      "sha256": "5eb70248575d012562c709bc34f307dfd99abd1f2068d3428212c499cb365d05",
+      "sha256": "9fec688145111f31122377a1d850e4da979ee8e09dfaa23a1bf88eca72edf325",
       "facts": {
        "total": 4,
        "found_n": 1,
@@ -1969,7 +1971,7 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.312,
+       "elapsed_s": 0.406,
        "tool_calls": 8,
        "context_chars": 2999,
        "context_tokens_est": 749,
@@ -2002,7 +2004,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1401,
+       "seconds": 0.1357,
        "chars": 5765,
        "sha256": "82e9fb6ab46da9a5c08f25ed74ac20b2521a1977dac25721dd52ab626ee91f40"
       }
@@ -2066,7 +2068,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1584,
+       "seconds": 0.1543,
        "chars": 5575,
        "sha256": "f57372585c76b7cd015f9ff24318f117f387ba5b96adaffc53c640b4c3879730"
       }
@@ -2146,7 +2148,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1067,
+       "seconds": 0.1121,
        "chars": 23973,
        "sha256": "fd8d2fb3e9ef7e76aa04d7d7affe6c4e298ae23043d0de2390e930685db71138"
       }
@@ -2217,7 +2219,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2295,
+       "seconds": 0.2223,
        "chars": 6594,
        "sha256": "3af9092002e2fadb2e7d5abab0e730d27df4eb5fa20dbd3c38e2eab57cf4adfe"
       }
@@ -2277,9 +2279,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.6175,
+       "seconds": 0.6636,
        "chars": 1183,
-       "sha256": "c7506e4094b6c18e57caab0476ef2b6205ce582321883710d1162c80f02cb589",
+       "sha256": "5b6f6f6133fd724cb55f1c543cb84ceb510e0bad1aefedaa9b1590b1b7baed9e",
        "claims": 2,
        "claims_reused": 0,
        "claims_new": 2,
@@ -2290,7 +2292,7 @@
      "score": {
       "chars": 1183,
       "tokens": 296,
-      "sha256": "c7506e4094b6c18e57caab0476ef2b6205ce582321883710d1162c80f02cb589",
+      "sha256": "5b6f6f6133fd724cb55f1c543cb84ceb510e0bad1aefedaa9b1590b1b7baed9e",
       "facts": {
        "total": 2,
        "found_n": 1,
@@ -2335,9 +2337,9 @@
       },
       "unknowns": 2,
       "analysis_usage": {
-       "elapsed_s": 0.609,
+       "elapsed_s": 0.641,
        "tool_calls": 6,
-       "context_chars": 1914,
+       "context_chars": 1915,
        "context_tokens_est": 478,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
@@ -2368,7 +2370,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1185,
+       "seconds": 0.107,
        "chars": 5773,
        "sha256": "9cde37c00900d0cf07d4aaf348351b9423ee0e2e5c570598fdcce2b38a4b3d7e"
       }
@@ -2437,7 +2439,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1254,
+       "seconds": 0.1148,
        "chars": 5244,
        "sha256": "744e26c1c12dcc794d244a5490feb399ae9dad6520fdb793577d524ffbbbab7f"
       }
@@ -2514,7 +2516,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1622,
+       "seconds": 0.1599,
        "chars": 23943,
        "sha256": "3ba69b86ff9826f15262bbfd431f27ad30c2ad5bea96d0e755bbe9208fbbbe2e"
       }
@@ -2591,7 +2593,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2729,
+       "seconds": 0.2432,
        "chars": 6667,
        "sha256": "77e220383581c554e9980a67e7db0556a6ddf710213c31adcabb60d2f07e3b0c"
       }
@@ -2656,9 +2658,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.7223,
+       "seconds": 0.5841,
        "chars": 3209,
-       "sha256": "38c04b4a09a61888d0710cbb647b388f4c9108e0ac822dba225f3f14effe13be",
+       "sha256": "5cfe157fc47eb5cf0304c478173f39be58324b1fba48216873f6c7ef5eff4b10",
        "claims": 8,
        "claims_reused": 4,
        "claims_new": 4,
@@ -2669,7 +2671,7 @@
      "score": {
       "chars": 3209,
       "tokens": 803,
-      "sha256": "38c04b4a09a61888d0710cbb647b388f4c9108e0ac822dba225f3f14effe13be",
+      "sha256": "5cfe157fc47eb5cf0304c478173f39be58324b1fba48216873f6c7ef5eff4b10",
       "facts": {
        "total": 4,
        "found_n": 2,
@@ -2720,7 +2722,7 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.719,
+       "elapsed_s": 0.578,
        "tool_calls": 15,
        "context_chars": 4690,
        "context_tokens_est": 1172,
@@ -2760,7 +2762,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.132,
+       "seconds": 0.1145,
        "chars": 5794,
        "sha256": "11e3b7a653ff6aed0110ea97d993c16e01811b86c3b759d5c7b0cf7ee147b947"
       }
@@ -2833,7 +2835,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1496,
+       "seconds": 0.1225,
        "chars": 5856,
        "sha256": "a07b411fd3b57473b5bacad5427578cb3504f0669ef1a4d57ff13e7f17f53c11"
       }
@@ -2913,7 +2915,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1535,
+       "seconds": 0.1426,
        "chars": 23986,
        "sha256": "c89aa4f3be88bc84949d06349fc498c839a3f643ad1e3160762c7031d1daa1c8"
       }
@@ -2995,7 +2997,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2566,
+       "seconds": 0.2326,
        "chars": 6562,
        "sha256": "e352054564e91def82256d9db290100b34ec5cacba5c4324aea0785e26ebe2cb"
       }
@@ -3058,9 +3060,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.482,
+       "seconds": 0.6593,
        "chars": 676,
-       "sha256": "dfec3ab80c125908dc61dae65f1f19abe21f58cceb2ab1648623da0fb6a45442",
+       "sha256": "1117211e65d107bd0681373f6bc46ae6bef3e8cad62cf1505de45c9eb0d5e3eb",
        "claims": 2,
        "claims_reused": 0,
        "claims_new": 2,
@@ -3071,7 +3073,7 @@
      "score": {
       "chars": 676,
       "tokens": 169,
-      "sha256": "dfec3ab80c125908dc61dae65f1f19abe21f58cceb2ab1648623da0fb6a45442",
+      "sha256": "1117211e65d107bd0681373f6bc46ae6bef3e8cad62cf1505de45c9eb0d5e3eb",
       "facts": {
        "total": 5,
        "found_n": 0,
@@ -3116,9 +3118,9 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.469,
+       "elapsed_s": 0.641,
        "tool_calls": 7,
-       "context_chars": 1481,
+       "context_chars": 1480,
        "context_tokens_est": 370,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
@@ -3149,7 +3151,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1362,
+       "seconds": 0.1283,
        "chars": 5787,
        "sha256": "e19797059342d99e1ab4fde7051e32c1adeccc7d540d483049293b446d975756"
       }
@@ -3221,7 +3223,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1554,
+       "seconds": 0.1398,
        "chars": 5964,
        "sha256": "17733461239f61d2e7cb14aa5d4c1ae3d731196f7caa9dfa1c100590ddb1995e"
       }
@@ -3309,8 +3311,8 @@
    "pinpointed_per_1k_tokens": 0.06,
    "locators_distinct_mean": 41,
    "agent_tool_calls_mean": 2,
-   "seconds_cold_median": 0.149,
-   "seconds_cold_total": 1.194,
+   "seconds_cold_median": 0.148,
+   "seconds_cold_total": 1.19,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 8,
@@ -3338,8 +3340,8 @@
    "pinpointed_per_1k_tokens": 0.15,
    "locators_distinct_mean": 66.2,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.234,
-   "seconds_cold_total": 1.884,
+   "seconds_cold_median": 0.224,
+   "seconds_cold_total": 1.79,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 2,
@@ -3367,8 +3369,8 @@
    "pinpointed_per_1k_tokens": 1.3,
    "locators_distinct_mean": 6.8,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.67,
-   "seconds_cold_total": 6.261,
+   "seconds_cold_median": 0.661,
+   "seconds_cold_total": 7.581,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 11,
@@ -3422,8 +3424,8 @@
    "pinpointed_per_1k_tokens": 1.47,
    "locators_distinct_mean": 24.6,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.134,
-   "seconds_cold_total": 1.064,
+   "seconds_cold_median": 0.124,
+   "seconds_cold_total": 1.198,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 17,
@@ -3451,8 +3453,8 @@
    "pinpointed_per_1k_tokens": 1.58,
    "locators_distinct_mean": 25.2,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.154,
-   "seconds_cold_total": 1.429,
+   "seconds_cold_median": 0.142,
+   "seconds_cold_total": 1.245,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 21,

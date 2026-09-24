@@ -63,18 +63,18 @@
   "prices_usd_per_mtok": null,
   "price_source": null
  },
- "workdir": "<TMP>/verinoda-bench-xthipa7l",
+ "workdir": "<TMP>/verinoda-bench-dpjxxigz",
  "workdir_kept": false,
  "corpus": {
   "source": "<REPO>/examples/forge_mod",
-  "source_commit": "d70b801c0fae0ce597e95706a5c3452b7f19f97e",
-  "source_dirty": false,
+  "source_commit": "3c066ecfc6a24b07e5c1dd4de2d5b59ab2b5085d",
+  "source_dirty": true,
   "snapshot": "working tree (tracked + untracked, not ignored)",
   "include": null,
   "exclude": null,
   "file_count": 55,
   "bytes": 53429,
-  "workdir_commit": "8fa69670d5d3105bd37e3a9e831d0130b3cfe821"
+  "workdir_commit": "9f5cd81e5b2559bcc4cf5d4b8db599f12da60ab0"
  },
  "gold_validation": {
   "ok": true,
@@ -90,7 +90,7 @@
   "verinoda_retrieve_text"
  ],
  "environment": {
-  "date_utc": "2026-09-24T00:27:54+00:00",
+  "date_utc": "2026-09-24T01:08:06+00:00",
   "os": "Windows-11-10.0.26200-SP0",
   "machine": "AMD64",
   "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
@@ -101,17 +101,19 @@
   "vendored_graphify_commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7",
   "graphify_cli": null,
   "git": "git version 2.53.0.windows.1",
-  "verinoda_source_commit": "d70b801c0fae0ce597e95706a5c3452b7f19f97e",
-  "verinoda_package_changes_vs_commit": [],
-  "verinoda_package_diff_sha256": null
+  "verinoda_source_commit": "3c066ecfc6a24b07e5c1dd4de2d5b59ab2b5085d",
+  "verinoda_package_changes_vs_commit": [
+   "M verinoda/search_index.py"
+  ],
+  "verinoda_package_diff_sha256": "bba11e8fcfb994b18c2470f3edb9ce33783bf9a13609f9229861069d140aa1cc"
  },
  "index": {
   "raw": {
    "note": "no index; every query greps and reads the working tree"
   },
   "verinoda": {
-   "cold_seconds": 1.507,
-   "warm_seconds": 1.142,
+   "cold_seconds": 1.284,
+   "warm_seconds": 1.156,
    "nodes": 244,
    "edges": 553,
    "warm_nodes": 244,
@@ -139,7 +141,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0495,
+       "seconds": 0.0465,
        "chars": 23947,
        "sha256": "586db7e53cd2ab4563498c8acb74ef3e26a5092dccc9c3af12296318eb33e134"
       }
@@ -247,7 +249,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.019,
+       "seconds": 0.0177,
        "chars": 6439,
        "sha256": "9cb9790ea82d2b616103149dcdc220f94893f9a18936e6a4b4b5af0cf0d61126"
       }
@@ -307,9 +309,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2832,
+       "seconds": 0.2636,
        "chars": 3056,
-       "sha256": "13c96ed3e01437669a620f1af2c7573b881ccd86423ca5aa1a24865585e3baf1",
+       "sha256": "c280b944041bdcd431d0ae78feda43d1fd475cb0a6779b4a1b5886c2a0635d93",
        "claims": 5,
        "claims_reused": 0,
        "claims_new": 5,
@@ -320,7 +322,7 @@
      "score": {
       "chars": 3056,
       "tokens": 764,
-      "sha256": "13c96ed3e01437669a620f1af2c7573b881ccd86423ca5aa1a24865585e3baf1",
+      "sha256": "c280b944041bdcd431d0ae78feda43d1fd475cb0a6779b4a1b5886c2a0635d93",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -367,10 +369,10 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.265,
+       "elapsed_s": 0.25,
        "tool_calls": 12,
-       "context_chars": 4197,
-       "context_tokens_est": 1049,
+       "context_chars": 4200,
+       "context_tokens_est": 1050,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -400,15 +402,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0271,
-       "chars": 5760,
-       "sha256": "d5c7505f7f651c0ab4616ef5162790c64c4b63b97a1b20b55c3cc5b6af15d730"
+       "seconds": 0.0247,
+       "chars": 5700,
+       "sha256": "9cd0da73e80f913b06a229f877bfede3c015bf638916ed08aa233411ea4525e7"
       }
      ],
      "score": {
-      "chars": 5760,
-      "tokens": 1440,
-      "sha256": "d5c7505f7f651c0ab4616ef5162790c64c4b63b97a1b20b55c3cc5b6af15d730",
+      "chars": 5700,
+      "tokens": 1425,
+      "sha256": "9cd0da73e80f913b06a229f877bfede3c015bf638916ed08aa233411ea4525e7",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -426,27 +428,22 @@
       "locators": {
        "distinct": 16,
        "files": 4,
-       "point_or_short": 15
+       "point_or_short": 16
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
       "retrieve": {
-       "items": 6,
-       "edges": 2,
-       "edge_confidence": {
-        "EXTRACTED": 2
-       },
+       "items": 7,
+       "edges": 0,
+       "edge_confidence": {},
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5992,
+        "used_chars": 5925,
         "truncated": true,
         "expansions": [
          "emberforgeblockentity->emberforge (corpus prefix)",
          "stoke->inventory (lexicon)"
-        ],
-        "more": [
-         "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120 EmberForgeBlockEntity.serverTick"
         ]
        }
       },
@@ -456,7 +453,7 @@
        "matched": []
       },
       "relations": {
-       "asserted": 2,
+       "asserted": 0,
        "checked": 0,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
@@ -474,15 +471,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0362,
-       "chars": 5914,
-       "sha256": "7a209ab99d6f58aa27903b7bf7c10c4134b2842235d8378beb95920617af02c9"
+       "seconds": 0.0373,
+       "chars": 5922,
+       "sha256": "3b154ec6593bb24260cf64820875f075619b8c3f3d09d516ef3645dceef99209"
       }
      ],
      "score": {
-      "chars": 5914,
-      "tokens": 1479,
-      "sha256": "7a209ab99d6f58aa27903b7bf7c10c4134b2842235d8378beb95920617af02c9",
+      "chars": 5922,
+      "tokens": 1481,
+      "sha256": "3b154ec6593bb24260cf64820875f075619b8c3f3d09d516ef3645dceef99209",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -498,18 +495,18 @@
        }
       },
       "locators": {
-       "distinct": 27,
+       "distinct": 26,
        "files": 7,
-       "point_or_short": 24
+       "point_or_short": 23
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
       "retrieve_text": {
-       "items": 6,
-       "outline_edges": 6,
+       "items": 7,
+       "outline_edges": 5,
        "edge_confidence": {
         "EXTRACTED": 1,
-        "INFERRED": 5
+        "INFERRED": 4
        },
        "truncated_note": true,
        "params": {
@@ -524,9 +521,9 @@
        "matched": []
       },
       "relations": {
-       "asserted": 6,
-       "checked": 6,
-       "cited_line_missing_target": 3,
+       "asserted": 5,
+       "checked": 5,
+       "cited_line_missing_target": 2,
        "named_via_import_alias": 0,
        "examples": [
         {
@@ -538,11 +535,6 @@
          "assertion": "handleStoke -calls-> public @src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:39",
          "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:39",
          "line": "forge.stoke(player);"
-        },
-        {
-         "assertion": "register -calls-> static @src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24",
-         "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24",
-         "line": "registrar.playToServer(StokeForgePayload.TYPE, StokeForgePayload.STREAM_CODEC, EmberNetwork::handleStoke);"
         }
        ]
       },
@@ -567,7 +559,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0415,
+       "seconds": 0.0407,
        "chars": 12649,
        "sha256": "20f2e8cef9af21a88b13d890d464aa11fb17f746d3a53b853d070770ccf52ff7"
       }
@@ -663,7 +655,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0128,
+       "seconds": 0.0133,
        "chars": 3753,
        "sha256": "1f8f1eeed1a7234f639778ecb1cbcd5e791f4061ba2970a559f9cb7cbb742e1e"
       }
@@ -735,9 +727,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1983,
+       "seconds": 0.2077,
        "chars": 4238,
-       "sha256": "0b2bcb8e9b1d064850be06c96e31bfa35914a2163375d2ad1df8451da336ba5b",
+       "sha256": "d0b56edb542ac18fd51eb0d0fab105cb87a679a995635261326067c4eb3d30e2",
        "claims": 8,
        "claims_reused": 0,
        "claims_new": 8,
@@ -748,7 +740,7 @@
      "score": {
       "chars": 4238,
       "tokens": 1060,
-      "sha256": "0b2bcb8e9b1d064850be06c96e31bfa35914a2163375d2ad1df8451da336ba5b",
+      "sha256": "d0b56edb542ac18fd51eb0d0fab105cb87a679a995635261326067c4eb3d30e2",
       "facts": {
        "total": 5,
        "found_n": 4,
@@ -801,9 +793,9 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.188,
+       "elapsed_s": 0.203,
        "tool_calls": 20,
-       "context_chars": 5985,
+       "context_chars": 5987,
        "context_tokens_est": 1496,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
@@ -834,15 +826,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0211,
-       "chars": 5705,
-       "sha256": "33e87f5d907477b1cfefb684b50319ec83c8df365fab98000868883e8860b24a"
+       "seconds": 0.0188,
+       "chars": 5730,
+       "sha256": "648dfe3d2aa3f3566a43b69d309f5d1b38d94dcf04b1e08a1d66ace06bb8d30f"
       }
      ],
      "score": {
-      "chars": 5705,
-      "tokens": 1427,
-      "sha256": "33e87f5d907477b1cfefb684b50319ec83c8df365fab98000868883e8860b24a",
+      "chars": 5730,
+      "tokens": 1433,
+      "sha256": "648dfe3d2aa3f3566a43b69d309f5d1b38d94dcf04b1e08a1d66ace06bb8d30f",
       "facts": {
        "total": 5,
        "found_n": 5,
@@ -879,8 +871,11 @@
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5941,
-        "truncated": true
+        "used_chars": 5968,
+        "truncated": true,
+        "more": [
+         "src/test/java/net/ashvale/emberforge/HeatMathTest.java:9-13 HeatMathTest.noProgressBelowTheRecipesMinimumHeat"
+        ]
        }
       },
       "negatives": {
@@ -907,15 +902,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0315,
-       "chars": 5821,
-       "sha256": "5f897cb7058565bc8c520bec13b4f03dde21f883aefb9cf8961ba0623d0dea43"
+       "seconds": 0.032,
+       "chars": 5918,
+       "sha256": "99d5e7bbb9ae85b0e01ecea3c1714756595e486a98f828c9d895d0e18a0411d9"
       }
      ],
      "score": {
-      "chars": 5821,
-      "tokens": 1456,
-      "sha256": "5f897cb7058565bc8c520bec13b4f03dde21f883aefb9cf8961ba0623d0dea43",
+      "chars": 5918,
+      "tokens": 1480,
+      "sha256": "99d5e7bbb9ae85b0e01ecea3c1714756595e486a98f828c9d895d0e18a0411d9",
       "facts": {
        "total": 5,
        "found_n": 5,
@@ -945,10 +940,10 @@
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
       "retrieve_text": {
        "items": 7,
-       "outline_edges": 10,
+       "outline_edges": 9,
        "edge_confidence": {
         "EXTRACTED": 5,
-        "INFERRED": 5
+        "INFERRED": 4
        },
        "truncated_note": true,
        "params": {
@@ -963,16 +958,11 @@
        "matched": []
       },
       "relations": {
-       "asserted": 10,
-       "checked": 10,
-       "cited_line_missing_target": 3,
+       "asserted": 9,
+       "checked": 9,
+       "cited_line_missing_target": 2,
        "named_via_import_alias": 0,
        "examples": [
-        {
-         "assertion": "getTicker -calls-> public @src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72",
-         "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72",
-         "line": ": createTickerHelper(type, ModBlocks.EMBER_FORGE_ENTITY.get(), EmberForgeBlockEntity::serverTick);"
-        },
         {
          "assertion": "useItemOn -calls-> public @src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:83",
          "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:83",
@@ -1006,7 +996,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0436,
+       "seconds": 0.0452,
        "chars": 21739,
        "sha256": "eb856ca9190aee52861a7c033d18203fee16faa53e8a50411958446708a4cb37"
       }
@@ -1128,7 +1118,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0291,
+       "seconds": 0.0282,
        "chars": 6399,
        "sha256": "b9192e606c885a6584fa1581ef14b70563f89499ceb74a88d14f86d5e6aa68ca"
       }
@@ -1192,9 +1182,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.205,
+       "seconds": 0.2064,
        "chars": 2626,
-       "sha256": "1b76395acd35bdda7326f03f956c01ee683a6c753329d27c9286839dd9c04299",
+       "sha256": "fe78e25883d139665dbfb1d8132cca654ac0dcc41d4da38d540f077758781fbc",
        "claims": 7,
        "claims_reused": 0,
        "claims_new": 7,
@@ -1205,7 +1195,7 @@
      "score": {
       "chars": 2626,
       "tokens": 657,
-      "sha256": "1b76395acd35bdda7326f03f956c01ee683a6c753329d27c9286839dd9c04299",
+      "sha256": "fe78e25883d139665dbfb1d8132cca654ac0dcc41d4da38d540f077758781fbc",
       "facts": {
        "total": 6,
        "found_n": 2,
@@ -1290,15 +1280,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.033,
+       "seconds": 0.0457,
        "chars": 5705,
-       "sha256": "f944d33e065b213630db7c17fe3f9a3e924494ff8255dfa7b64fc1bc519c3112"
+       "sha256": "3b40b56d4cca427bca79a3830c5c52019251c371420840795262056de5415a00"
       }
      ],
      "score": {
       "chars": 5705,
       "tokens": 1427,
-      "sha256": "f944d33e065b213630db7c17fe3f9a3e924494ff8255dfa7b64fc1bc519c3112",
+      "sha256": "3b40b56d4cca427bca79a3830c5c52019251c371420840795262056de5415a00",
       "facts": {
        "total": 6,
        "found_n": 4,
@@ -1371,15 +1361,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0404,
+       "seconds": 0.04,
        "chars": 5884,
-       "sha256": "1dfdbb89a3916811992656e48a6a6881b2bdbf5bbfd7835226e454394181aa22"
+       "sha256": "5c951ec4425566d165d6d1e1aa9b05e6362a2ac0d9e5744d5c2772dd3089cca9"
       }
      ],
      "score": {
       "chars": 5884,
       "tokens": 1471,
-      "sha256": "1dfdbb89a3916811992656e48a6a6881b2bdbf5bbfd7835226e454394181aa22",
+      "sha256": "5c951ec4425566d165d6d1e1aa9b05e6362a2ac0d9e5744d5c2772dd3089cca9",
       "facts": {
        "total": 6,
        "found_n": 6,
@@ -1453,7 +1443,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0406,
+       "seconds": 0.0448,
        "chars": 23945,
        "sha256": "00faa5624c34d5443c9c292d7d2a047e8ed4416f64b2d3ba9fc4f6e047ba309e"
       }
@@ -1559,7 +1549,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.018,
+       "seconds": 0.0181,
        "chars": 6473,
        "sha256": "1da4d0d8af392f311fc5c7d6280922b1acd597106c8fc7218eadf249548e600f"
       }
@@ -1622,9 +1612,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1754,
+       "seconds": 0.1698,
        "chars": 2532,
-       "sha256": "498a977338d5452a461e2ce8a241dfd83e01efc5ca7f7ec1bcfe50dd0439d339",
+       "sha256": "ba3db46542e250179aa8d18d06fcbab0b25385e2b97f253312b9b3ea01371b8a",
        "claims": 7,
        "claims_reused": 4,
        "claims_new": 3,
@@ -1635,7 +1625,7 @@
      "score": {
       "chars": 2532,
       "tokens": 633,
-      "sha256": "498a977338d5452a461e2ce8a241dfd83e01efc5ca7f7ec1bcfe50dd0439d339",
+      "sha256": "ba3db46542e250179aa8d18d06fcbab0b25385e2b97f253312b9b3ea01371b8a",
       "facts": {
        "total": 5,
        "found_n": 4,
@@ -1689,8 +1679,8 @@
       "analysis_usage": {
        "elapsed_s": 0.172,
        "tool_calls": 20,
-       "context_chars": 4574,
-       "context_tokens_est": 1143,
+       "context_chars": 4577,
+       "context_tokens_est": 1144,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -1720,15 +1710,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0246,
+       "seconds": 0.0241,
        "chars": 5679,
-       "sha256": "5b1c59ca3bafa03308f5d60e6b825f0c0ad21608933d23568743342746a0a8e3"
+       "sha256": "3a555c6c757d59db3758becd46da242ca33bd62cda76db4e09ae84a8ecb23d77"
       }
      ],
      "score": {
       "chars": 5679,
       "tokens": 1420,
-      "sha256": "5b1c59ca3bafa03308f5d60e6b825f0c0ad21608933d23568743342746a0a8e3",
+      "sha256": "3a555c6c757d59db3758becd46da242ca33bd62cda76db4e09ae84a8ecb23d77",
       "facts": {
        "total": 5,
        "found_n": 3,
@@ -1793,7 +1783,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.036,
+       "seconds": 0.0354,
        "chars": 5949,
        "sha256": "56f316c6b0af3436a6f1f3de34b7802daea6b579a079fa11c00e27178d18af7d"
       }
@@ -1873,7 +1863,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0415,
+       "seconds": 0.0413,
        "chars": 1535,
        "sha256": "cc2a710430194d62d8b1a112a1ee9c36d31cf80ae9570cdb33af051100d88a9d"
       }
@@ -1950,7 +1940,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0125,
+       "seconds": 0.0105,
        "chars": 24,
        "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c"
       }
@@ -2012,9 +2002,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1589,
+       "seconds": 0.1553,
        "chars": 2330,
-       "sha256": "3d692dfe3ee841094419d64e682eff97ea901f93221dcad1ea76548d2ea48e44",
+       "sha256": "c6e611df96d90bbffeb18e7a7e65477168c6742d1870f5d2ecb8762870c89899",
        "claims": 5,
        "claims_reused": 0,
        "claims_new": 5,
@@ -2025,7 +2015,7 @@
      "score": {
       "chars": 2330,
       "tokens": 583,
-      "sha256": "3d692dfe3ee841094419d64e682eff97ea901f93221dcad1ea76548d2ea48e44",
+      "sha256": "c6e611df96d90bbffeb18e7a7e65477168c6742d1870f5d2ecb8762870c89899",
       "facts": {
        "total": 4,
        "found_n": 0,
@@ -2069,7 +2059,7 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.156,
+       "elapsed_s": 0.14,
        "tool_calls": 8,
        "context_chars": 3147,
        "context_tokens_est": 786,
@@ -2102,7 +2092,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0196,
+       "seconds": 0.0215,
        "chars": 5648,
        "sha256": "4d50372f2311286e184fcf4ace4960ecce60b1d5fef8124ace99a27c28ed2929"
       }
@@ -2178,7 +2168,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0325,
+       "seconds": 0.0324,
        "chars": 5949,
        "sha256": "237015ecbe6e56c2c7e6c6aecb49837accec7af23692a25ecb27390ec715a560"
       }
@@ -2256,7 +2246,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0399,
+       "seconds": 0.0403,
        "chars": 23941,
        "sha256": "2f7e712b4358ae1be5535fe432ad87acf56242d239a0ccfcfb1f417d3a4ae20e"
       }
@@ -2369,7 +2359,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0161,
+       "seconds": 0.0145,
        "chars": 6501,
        "sha256": "4666fd78c836f3cca6972c49c4681eb5a3e3c4908973077e3124217b3a6037aa"
       }
@@ -2435,9 +2425,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1742,
+       "seconds": 0.1761,
        "chars": 4518,
-       "sha256": "f3f25f3b25280fdd99a4a593c85cdd2cbbd894e8a445b0ada486c77aca0a3900",
+       "sha256": "830dd05c27fe46cf02b38569e15d2f78eae14b973dbd57af7480b4c3cac03b53",
        "claims": 11,
        "claims_reused": 8,
        "claims_new": 3,
@@ -2448,7 +2438,7 @@
      "score": {
       "chars": 4518,
       "tokens": 1130,
-      "sha256": "f3f25f3b25280fdd99a4a593c85cdd2cbbd894e8a445b0ada486c77aca0a3900",
+      "sha256": "830dd05c27fe46cf02b38569e15d2f78eae14b973dbd57af7480b4c3cac03b53",
       "facts": {
        "total": 5,
        "found_n": 4,
@@ -2501,10 +2491,10 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.172,
+       "elapsed_s": 0.187,
        "tool_calls": 30,
-       "context_chars": 7261,
-       "context_tokens_est": 1815,
+       "context_chars": 7257,
+       "context_tokens_est": 1814,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -2534,15 +2524,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0201,
-       "chars": 5700,
-       "sha256": "170a4f55bf377f9c9d923891f06bcb55cae641e7984f78955de3edfae2c29201"
+       "seconds": 0.0203,
+       "chars": 5702,
+       "sha256": "0bfded521011929231cc1e21f23098912e7998157faf8f7d1a7dd968890674bd"
       }
      ],
      "score": {
-      "chars": 5700,
-      "tokens": 1425,
-      "sha256": "170a4f55bf377f9c9d923891f06bcb55cae641e7984f78955de3edfae2c29201",
+      "chars": 5702,
+      "tokens": 1426,
+      "sha256": "0bfded521011929231cc1e21f23098912e7998157faf8f7d1a7dd968890674bd",
       "facts": {
        "total": 5,
        "found_n": 5,
@@ -2579,7 +2569,7 @@
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5934,
+        "used_chars": 5936,
         "truncated": true
        }
       },
@@ -2687,7 +2677,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0414,
+       "seconds": 0.0419,
        "chars": 11739,
        "sha256": "a873e5c3807db82d3bc8e36948f5e9e2c7c85a5c73c8583143d75cb879db476d"
       }
@@ -2801,7 +2791,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0164,
+       "seconds": 0.0168,
        "chars": 6412,
        "sha256": "8740a4b030508576bd241497a30fcff384b5134a6120ac972faa034da1a9299a"
       }
@@ -2863,9 +2853,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1927,
+       "seconds": 0.197,
        "chars": 3373,
-       "sha256": "a98145c2dae3cb474cd4692931cd64c42a976e59fad1c1d40992976b753ac337",
+       "sha256": "f4ee724ab754b62bc995a78591a11bced0f1334f70e0c82f819bc597ce65e200",
        "claims": 6,
        "claims_reused": 1,
        "claims_new": 5,
@@ -2876,7 +2866,7 @@
      "score": {
       "chars": 3373,
       "tokens": 844,
-      "sha256": "a98145c2dae3cb474cd4692931cd64c42a976e59fad1c1d40992976b753ac337",
+      "sha256": "f4ee724ab754b62bc995a78591a11bced0f1334f70e0c82f819bc597ce65e200",
       "facts": {
        "total": 4,
        "found_n": 3,
@@ -2927,9 +2917,9 @@
       },
       "unknowns": 2,
       "analysis_usage": {
-       "elapsed_s": 0.188,
+       "elapsed_s": 0.187,
        "tool_calls": 14,
-       "context_chars": 5206,
+       "context_chars": 5207,
        "context_tokens_est": 1301,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
@@ -2960,7 +2950,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.022,
+       "seconds": 0.0215,
        "chars": 5744,
        "sha256": "8c7dbb32401c79857ff1fd49285002545384df6d2032cf134807fdba926ebc6b"
       }
@@ -3041,7 +3031,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.034,
+       "seconds": 0.0327,
        "chars": 5926,
        "sha256": "4c46535619fdf612c1ad1c8fb23f6a283509db3e59ad85d0138cff3ec24e6548"
       }
@@ -3127,7 +3117,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0437,
+       "seconds": 0.0451,
        "chars": 23956,
        "sha256": "91f5866e104d460c659576f5986673466f42d932d842596daa7f1b507067594c"
       }
@@ -3242,7 +3232,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0179,
+       "seconds": 0.0166,
        "chars": 6510,
        "sha256": "cbe91edbde2b08ef5c6ceec93e0e8979ebcf38a56d0e4f481853f88dcf77afa1"
       }
@@ -3306,9 +3296,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2258,
+       "seconds": 0.2243,
        "chars": 5853,
-       "sha256": "84ee08764db33a1b279b041f0a199a4c8097a57ad3d66013b6b4b77febc590bd",
+       "sha256": "cf3cf0db888874fd5ef1cb6f4b4fd3d559cb77bdf0c09c238ef505b8cff26981",
        "claims": 12,
        "claims_reused": 3,
        "claims_new": 9,
@@ -3319,7 +3309,7 @@
      "score": {
       "chars": 5853,
       "tokens": 1464,
-      "sha256": "84ee08764db33a1b279b041f0a199a4c8097a57ad3d66013b6b4b77febc590bd",
+      "sha256": "cf3cf0db888874fd5ef1cb6f4b4fd3d559cb77bdf0c09c238ef505b8cff26981",
       "facts": {
        "total": 6,
        "found_n": 2,
@@ -3405,15 +3395,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0296,
+       "seconds": 0.0252,
        "chars": 5672,
-       "sha256": "2f3a28394a33a465f2dab1fecdb9f03768f4d42273a6253c62ed91a90b0b853d"
+       "sha256": "e90774c714afa02d85b209f71597cae9fd2d7fb3c948b211d32004bbb6b80b8e"
       }
      ],
      "score": {
       "chars": 5672,
       "tokens": 1418,
-      "sha256": "2f3a28394a33a465f2dab1fecdb9f03768f4d42273a6253c62ed91a90b0b853d",
+      "sha256": "e90774c714afa02d85b209f71597cae9fd2d7fb3c948b211d32004bbb6b80b8e",
       "facts": {
        "total": 6,
        "found_n": 4,
@@ -3485,7 +3475,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0365,
+       "seconds": 0.0366,
        "chars": 5848,
        "sha256": "e471c5ce8682b23eb117803ef8ebaf6de64c888b50617459b7004dea86fc011e"
       }
@@ -3664,7 +3654,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.013,
+       "seconds": 0.0139,
        "chars": 24,
        "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c"
       }
@@ -3727,9 +3717,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2615,
+       "seconds": 0.2628,
        "chars": 7304,
-       "sha256": "7ad1305a864f9d5260d6c236916508b7c3e78437c694bb423d4915555ef83b86",
+       "sha256": "da9eee7b20b30391fb4a00f17fb3b80707352267b7b94cf4388ac2d8a1ed8467",
        "claims": 16,
        "claims_reused": 6,
        "claims_new": 10,
@@ -3740,7 +3730,7 @@
      "score": {
       "chars": 7304,
       "tokens": 1826,
-      "sha256": "7ad1305a864f9d5260d6c236916508b7c3e78437c694bb423d4915555ef83b86",
+      "sha256": "da9eee7b20b30391fb4a00f17fb3b80707352267b7b94cf4388ac2d8a1ed8467",
       "facts": {
        "total": 5,
        "found_n": 3,
@@ -3826,7 +3816,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0272,
+       "seconds": 0.0265,
        "chars": 5694,
        "sha256": "ae2d57d32a5b8aa80d9eded675fcd22a925cc2575c240e6e6f7732f907c20cf2"
       }
@@ -3915,15 +3905,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0374,
+       "seconds": 0.0384,
        "chars": 5979,
-       "sha256": "108bc7a18981748c2933f2aa46d440a8ef00797b87730b61ef2ca533fd7eb091"
+       "sha256": "a0cd93ebcaacf88145f67214fbd77e6278eb95df3f1b8f54cd258c8f7791878a"
       }
      ],
      "score": {
       "chars": 5979,
       "tokens": 1495,
-      "sha256": "108bc7a18981748c2933f2aa46d440a8ef00797b87730b61ef2ca533fd7eb091",
+      "sha256": "a0cd93ebcaacf88145f67214fbd77e6278eb95df3f1b8f54cd258c8f7791878a",
       "facts": {
        "total": 5,
        "found_n": 4,
@@ -3947,7 +3937,7 @@
       "locators": {
        "distinct": 26,
        "files": 16,
-       "point_or_short": 23
+       "point_or_short": 24
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
@@ -3995,7 +3985,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0434,
+       "seconds": 0.0455,
        "chars": 23957,
        "sha256": "2c0fda5ce18ab9b7acaaf33692d09c26473b0bd94afaa61a9b7883b102cca4a0"
       }
@@ -4114,7 +4104,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0177,
+       "seconds": 0.0173,
        "chars": 6561,
        "sha256": "1c2346f306483a647c3c6bd5ca8579ecf84930b2eac1bc220c81e61f9165c7f0"
       }
@@ -4184,9 +4174,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1978,
+       "seconds": 0.1987,
        "chars": 3461,
-       "sha256": "e38afac3d347672853f57fbf5b7f6c066429c1764a9d60d68668df49b6a1814f",
+       "sha256": "f09fdc62ea3377a78a6b5fcd8491e095f3917ba86307c36238e5d6ad357897a4",
        "claims": 6,
        "claims_reused": 1,
        "claims_new": 5,
@@ -4197,7 +4187,7 @@
      "score": {
       "chars": 3461,
       "tokens": 866,
-      "sha256": "e38afac3d347672853f57fbf5b7f6c066429c1764a9d60d68668df49b6a1814f",
+      "sha256": "f09fdc62ea3377a78a6b5fcd8491e095f3917ba86307c36238e5d6ad357897a4",
       "facts": {
        "total": 6,
        "found_n": 3,
@@ -4250,7 +4240,7 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.188,
+       "elapsed_s": 0.204,
        "tool_calls": 14,
        "context_chars": 5399,
        "context_tokens_est": 1349,
@@ -4283,15 +4273,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0253,
-       "chars": 5680,
-       "sha256": "2460c2c90d6d25eac5fff82183a1ed65e4d6d017dbf2b5966452b5827c3f7813"
+       "seconds": 0.0248,
+       "chars": 5676,
+       "sha256": "413350c88afb556bb00272fa9c2b1c9095a84aeb93b108404a2a52770078c8f6"
       }
      ],
      "score": {
-      "chars": 5680,
-      "tokens": 1420,
-      "sha256": "2460c2c90d6d25eac5fff82183a1ed65e4d6d017dbf2b5966452b5827c3f7813",
+      "chars": 5676,
+      "tokens": 1419,
+      "sha256": "413350c88afb556bb00272fa9c2b1c9095a84aeb93b108404a2a52770078c8f6",
       "facts": {
        "total": 6,
        "found_n": 3,
@@ -4313,26 +4303,25 @@
        }
       },
       "locators": {
-       "distinct": 18,
-       "files": 7,
-       "point_or_short": 18
+       "distinct": 16,
+       "files": 5,
+       "point_or_short": 16
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
       "retrieve": {
        "items": 8,
-       "edges": 0,
-       "edge_confidence": {},
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5927,
+        "used_chars": 5928,
         "truncated": true,
         "expansions": [
          "button->but (corpus prefix)"
-        ],
-        "more": [
-         "config/emberforge-common.toml:5-23 emberforge-common.toml"
         ]
        }
       },
@@ -4342,8 +4331,8 @@
        "matched": []
       },
       "relations": {
-       "asserted": 0,
-       "checked": 0,
+       "asserted": 1,
+       "checked": 1,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
        "examples": []
@@ -4360,15 +4349,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0367,
-       "chars": 5958,
-       "sha256": "4d85d8ecb43a752c35ec54995361ce761b7500187cedd437ec46b9098dd7d505"
+       "seconds": 0.0327,
+       "chars": 5865,
+       "sha256": "8fa14de0a499bff87ea20b19055821da3b54f085e78544bed7a47cba9e39fdd1"
       }
      ],
      "score": {
-      "chars": 5958,
-      "tokens": 1490,
-      "sha256": "4d85d8ecb43a752c35ec54995361ce761b7500187cedd437ec46b9098dd7d505",
+      "chars": 5865,
+      "tokens": 1467,
+      "sha256": "8fa14de0a499bff87ea20b19055821da3b54f085e78544bed7a47cba9e39fdd1",
       "facts": {
        "total": 6,
        "found_n": 6,
@@ -4392,18 +4381,18 @@
        }
       },
       "locators": {
-       "distinct": 30,
-       "files": 12,
-       "point_or_short": 25
+       "distinct": 29,
+       "files": 10,
+       "point_or_short": 24
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
       "retrieve_text": {
        "items": 8,
-       "outline_edges": 12,
+       "outline_edges": 11,
        "edge_confidence": {
         "EXTRACTED": 9,
-        "INFERRED": 3
+        "INFERRED": 2
        },
        "truncated_note": true,
        "params": {
@@ -4418,9 +4407,9 @@
        "matched": []
       },
       "relations": {
-       "asserted": 12,
-       "checked": 12,
-       "cited_line_missing_target": 3,
+       "asserted": 11,
+       "checked": 11,
+       "cited_line_missing_target": 2,
        "named_via_import_alias": 0,
        "examples": [
         {
@@ -4432,11 +4421,6 @@
          "assertion": "init -calls-> override @src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:17",
          "at": "src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:17",
          "line": "super.init()"
-        },
-        {
-         "assertion": "getTicker -calls-> public @src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72",
-         "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72",
-         "line": ": createTickerHelper(type, ModBlocks.EMBER_FORGE_ENTITY.get(), EmberForgeBlockEntity::serverTick);"
         }
        ]
       },
@@ -4461,7 +4445,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.039,
+       "seconds": 0.0404,
        "chars": 22928,
        "sha256": "daee13068bce1ffcdd74da130633c570d511aa5d33cb9c6df5cd316a837e6c5d"
       }
@@ -4580,7 +4564,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0161,
+       "seconds": 0.0173,
        "chars": 6567,
        "sha256": "105b20a56875f12dd65e77c51fb1e948a4295a38fbe11eded7e3cd5d23aacd7b"
       }
@@ -4647,20 +4631,20 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.161,
-       "chars": 3401,
-       "sha256": "a3dcae6cf8f808c7041c2053adf6207d2cafe352ae262fabe4c11116a41d3635",
-       "claims": 8,
+       "seconds": 0.1437,
+       "chars": 2918,
+       "sha256": "d24803a9d958428428b91244a2c3cb9db11675c24019aa4aa019d19e7fab559c",
+       "claims": 7,
        "claims_reused": 5,
-       "claims_new": 3,
-       "internal_tool_calls": 14,
+       "claims_new": 2,
+       "internal_tool_calls": 11,
        "budget_exhausted": null
       }
      ],
      "score": {
-      "chars": 3401,
-      "tokens": 851,
-      "sha256": "a3dcae6cf8f808c7041c2053adf6207d2cafe352ae262fabe4c11116a41d3635",
+      "chars": 2918,
+      "tokens": 730,
+      "sha256": "d24803a9d958428428b91244a2c3cb9db11675c24019aa4aa019d19e7fab559c",
       "facts": {
        "total": 6,
        "found_n": 6,
@@ -4675,7 +4659,7 @@
        ],
        "missed": [],
        "via": {
-        "q11.ticker": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72",
+        "q11.ticker": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:69-73",
         "q11.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
         "q11.source": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
         "q11.forge": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
@@ -4684,41 +4668,40 @@
        }
       },
       "locators": {
-       "distinct": 8,
+       "distinct": 7,
        "files": 4,
        "point_or_short": 6
       },
       "agent_tool_calls": 1,
       "claims": {
-       "total": 8,
+       "total": 7,
        "by_status": {
-        "statically_verified": 7,
-        "weak_inference": 1
+        "statically_verified": 6,
+        "strong_inference": 1
        },
-       "verified": 7,
+       "verified": 6,
        "inference": 1,
-       "verified_share": 0.875,
-       "inference_share": 0.125,
-       "weak_or_unknown": 1,
+       "verified_share": 0.857,
+       "inference_share": 0.143,
+       "weak_or_unknown": 0,
        "weak_or_unknown_unlabelled": 0,
        "contradicted_shown": 0,
        "stale_shown": 0,
        "evidence_by_type": {
-        "source_code": 8,
-        "graph_edge": 1
+        "source_code": 7
        },
-       "evidence_verifying": 8,
-       "evidence_non_verifying": 1,
+       "evidence_verifying": 7,
+       "evidence_non_verifying": 0,
        "contradicted_relations": 0,
        "contradicted_but_cited_line_names_target": 0,
        "contradicted_named_via_import_alias": 0
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.156,
-       "tool_calls": 14,
-       "context_chars": 4902,
-       "context_tokens_est": 1225,
+       "elapsed_s": 0.141,
+       "tool_calls": 11,
+       "context_chars": 3967,
+       "context_tokens_est": 991,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -4748,49 +4731,52 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0243,
-       "chars": 5768,
-       "sha256": "44759596595ef8ae8b6081eb0f73e66b50ac29b48e83da1b154d7372b517f2fe"
+       "seconds": 0.024,
+       "chars": 5661,
+       "sha256": "e6ef261fefe61c909ff05bfffcbbfa4a51150fd7d4236b8e04be56bb40dac8db"
       }
      ],
      "score": {
-      "chars": 5768,
-      "tokens": 1442,
-      "sha256": "44759596595ef8ae8b6081eb0f73e66b50ac29b48e83da1b154d7372b517f2fe",
+      "chars": 5661,
+      "tokens": 1416,
+      "sha256": "e6ef261fefe61c909ff05bfffcbbfa4a51150fd7d4236b8e04be56bb40dac8db",
       "facts": {
        "total": 6,
-       "found_n": 2,
-       "pinpointed_n": 2,
+       "found_n": 6,
+       "pinpointed_n": 1,
        "found": [
         "q11.ticker",
-        "q11.cool"
-       ],
-       "missed": [
         "q11.fuel",
         "q11.source",
         "q11.forge",
+        "q11.cool",
         "q11.lit"
        ],
+       "missed": [],
        "via": {
-        "q11.ticker": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72",
-        "q11.cool": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:122"
+        "q11.ticker": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:70",
+        "q11.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179",
+        "q11.source": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179",
+        "q11.forge": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179",
+        "q11.cool": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179",
+        "q11.lit": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179"
        }
       },
       "locators": {
-       "distinct": 16,
-       "files": 6,
-       "point_or_short": 16
+       "distinct": 15,
+       "files": 7,
+       "point_or_short": 14
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
       "retrieve": {
-       "items": 6,
+       "items": 5,
        "edges": 0,
        "edge_confidence": {},
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 6000,
+        "used_chars": 5908,
         "truncated": true,
         "expansions": [
          "kor ocagi->ember_forge (locale label)",
@@ -4802,7 +4788,9 @@
          "varligi->entity (lexicon)"
         ],
         "more": [
-         "src/test/java/net/ashvale/emberforge/ForgeTickTest.java:10-14 ForgeTickTest.forgeCoolsOnlyOnDecayTicks"
+         "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179 EmberForgeBlockEntity",
+         "src/test/java/net/ashvale/emberforge/ForgeTickTest.java:10-14 ForgeTickTest.forgeCoolsOnlyOnDecayTicks",
+         "src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:18-40 ModBlocks"
         ]
        }
       },
@@ -4830,15 +4818,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0383,
-       "chars": 5981,
-       "sha256": "5eb2d45eb0eb1abcc7227796715af5d13989d348564d2a5b54b4a9c3667af06d"
+       "seconds": 0.0364,
+       "chars": 5864,
+       "sha256": "16de088557b76c57d9ac5c3e4c982e24a31fa696c989736fd3d52e3b83665534"
       }
      ],
      "score": {
-      "chars": 5981,
-      "tokens": 1496,
-      "sha256": "5eb2d45eb0eb1abcc7227796715af5d13989d348564d2a5b54b4a9c3667af06d",
+      "chars": 5864,
+      "tokens": 1466,
+      "sha256": "16de088557b76c57d9ac5c3e4c982e24a31fa696c989736fd3d52e3b83665534",
       "facts": {
        "total": 6,
        "found_n": 6,
@@ -4853,7 +4841,7 @@
        ],
        "missed": [],
        "via": {
-        "q11.ticker": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72",
+        "q11.ticker": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:69-73",
         "q11.fuel": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
         "q11.source": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
         "q11.forge": "loc src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120",
@@ -4862,18 +4850,18 @@
        }
       },
       "locators": {
-       "distinct": 21,
+       "distinct": 20,
        "files": 9,
-       "point_or_short": 18
+       "point_or_short": 17
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
       "retrieve_text": {
-       "items": 6,
-       "outline_edges": 7,
+       "items": 5,
+       "outline_edges": 6,
        "edge_confidence": {
         "EXTRACTED": 4,
-        "INFERRED": 3
+        "INFERRED": 2
        },
        "truncated_note": true,
        "params": {
@@ -4888,17 +4876,11 @@
        "matched": []
       },
       "relations": {
-       "asserted": 7,
-       "checked": 7,
-       "cited_line_missing_target": 1,
+       "asserted": 6,
+       "checked": 6,
+       "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
-       "examples": [
-        {
-         "assertion": "getTicker -calls-> public @src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72",
-         "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72",
-         "line": ": createTickerHelper(type, ModBlocks.EMBER_FORGE_ENTITY.get(), EmberForgeBlockEntity::serverTick);"
-        }
-       ]
+       "examples": []
       },
       "context_file": "raw/forge_mod/q11/verinoda_retrieve_text.txt"
      },
@@ -4921,7 +4903,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0395,
+       "seconds": 0.0419,
        "chars": 15956,
        "sha256": "5785a827b65d7628c38637e4f7c5804081dd449e8dc13c2563d0435578b8f279"
       }
@@ -5036,7 +5018,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0298,
+       "seconds": 0.0285,
        "chars": 6539,
        "sha256": "1d5a5c47af55e611bdd39aa39af7d7cd8db3783147e7b1fa3aab61eae9a98bcb"
       }
@@ -5103,9 +5085,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1519,
+       "seconds": 0.1579,
        "chars": 3958,
-       "sha256": "21c26cc224e79a781f43b68a7eeca414939e5c88c5fa2a0a670e3917421fca77",
+       "sha256": "340b9b05860b4dd4ad63c13f311439841ea235f6151849db8e805b2698d63c9b",
        "claims": 8,
        "claims_reused": 4,
        "claims_new": 4,
@@ -5116,7 +5098,7 @@
      "score": {
       "chars": 3958,
       "tokens": 990,
-      "sha256": "21c26cc224e79a781f43b68a7eeca414939e5c88c5fa2a0a670e3917421fca77",
+      "sha256": "340b9b05860b4dd4ad63c13f311439841ea235f6151849db8e805b2698d63c9b",
       "facts": {
        "total": 6,
        "found_n": 4,
@@ -5170,10 +5152,10 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.14,
+       "elapsed_s": 0.156,
        "tool_calls": 20,
-       "context_chars": 6239,
-       "context_tokens_est": 1559,
+       "context_chars": 6243,
+       "context_tokens_est": 1560,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -5203,7 +5185,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.023,
+       "seconds": 0.0201,
        "chars": 5758,
        "sha256": "736f3d238030e7a62156eba410c2b49457330bace1a53b7d0a4f2604dfaebbdc"
       }
@@ -5279,7 +5261,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0329,
+       "seconds": 0.0326,
        "chars": 5985,
        "sha256": "09d94fe36578a10e37beac777ef4e6ca389e8e9b4f264c6ae442aa82f8515c05"
       }
@@ -5361,7 +5343,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0423,
+       "seconds": 0.0426,
        "chars": 16080,
        "sha256": "2711f0c712db8c2c29238b074be571d10138259c2bd3c83df73025987ee44721"
       }
@@ -5472,7 +5454,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0174,
+       "seconds": 0.0169,
        "chars": 6451,
        "sha256": "eda382d81d3a7c971b4233cfbd6ae1dfce8bc1fae62a00348479d26a407d62ed"
       }
@@ -5533,9 +5515,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1621,
+       "seconds": 0.1614,
        "chars": 5034,
-       "sha256": "1c29d827a9706a36646e473723bac37547401bcfef2198689f46232cdd9b719e",
+       "sha256": "681be4eeea09b29f87db476eb3957d563f74961cce916360105768e9c4b7697b",
        "claims": 10,
        "claims_reused": 4,
        "claims_new": 6,
@@ -5546,7 +5528,7 @@
      "score": {
       "chars": 5034,
       "tokens": 1259,
-      "sha256": "1c29d827a9706a36646e473723bac37547401bcfef2198689f46232cdd9b719e",
+      "sha256": "681be4eeea09b29f87db476eb3957d563f74961cce916360105768e9c4b7697b",
       "facts": {
        "total": 3,
        "found_n": 2,
@@ -5596,9 +5578,9 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.157,
+       "elapsed_s": 0.156,
        "tool_calls": 17,
-       "context_chars": 6805,
+       "context_chars": 6804,
        "context_tokens_est": 1701,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
@@ -5629,7 +5611,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0248,
+       "seconds": 0.0232,
        "chars": 5704,
        "sha256": "a48ca18237b5c034c898bb7a1b49988c7a1b19cf989686e6a734938db82c153c"
       }
@@ -5705,7 +5687,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0316,
+       "seconds": 0.0337,
        "chars": 5729,
        "sha256": "99732e682e1230704cc5bb270c3e1e23c8d3f90fdef9633c2d57c32c934399a3"
       }
@@ -5781,7 +5763,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0427,
+       "seconds": 0.0422,
        "chars": 23997,
        "sha256": "58ac24f9793157e10b88e40d1eee015be3e5b3a6ea8e5db84583a01e15796f4e"
       }
@@ -5899,7 +5881,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0195,
+       "seconds": 0.0172,
        "chars": 6573,
        "sha256": "1a974b698d6b94adb526a602a3ac841363ac817eb74af18a46b94d93211678e2"
       }
@@ -5965,9 +5947,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2016,
+       "seconds": 0.2031,
        "chars": 2025,
-       "sha256": "94126250f074966290141e38cfcc116b64e29381ac27162e806dbe0ee2e6472f",
+       "sha256": "4330e0c924ab80261e20d9a06c8a6d5faf29ef147670124c808533dd1eda3c8a",
        "claims": 5,
        "claims_reused": 0,
        "claims_new": 5,
@@ -5978,7 +5960,7 @@
      "score": {
       "chars": 2025,
       "tokens": 507,
-      "sha256": "94126250f074966290141e38cfcc116b64e29381ac27162e806dbe0ee2e6472f",
+      "sha256": "4330e0c924ab80261e20d9a06c8a6d5faf29ef147670124c808533dd1eda3c8a",
       "facts": {
        "total": 5,
        "found_n": 3,
@@ -6031,7 +6013,7 @@
       "analysis_usage": {
        "elapsed_s": 0.203,
        "tool_calls": 14,
-       "context_chars": 3496,
+       "context_chars": 3498,
        "context_tokens_est": 874,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
@@ -6062,7 +6044,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0241,
+       "seconds": 0.0221,
        "chars": 5774,
        "sha256": "5068165d41c23becf73c83c7744e615cabd34fd03a71158dacc16b10353899b9"
       }
@@ -6141,7 +6123,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0355,
+       "seconds": 0.0362,
        "chars": 5934,
        "sha256": "4795ba163a80a0d4e33c96fd03aad01202851f184bab1c3238a57ac52a630450"
       }
@@ -6228,7 +6210,7 @@
    "locators_distinct_mean": 37.3,
    "agent_tool_calls_mean": 5.29,
    "seconds_cold_median": 0.042,
-   "seconds_cold_total": 0.593,
+   "seconds_cold_total": 0.603,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 36,
@@ -6256,8 +6238,8 @@
    "pinpointed_per_1k_tokens": 0.64,
    "locators_distinct_mean": 29.6,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.018,
-   "seconds_cold_total": 0.255,
+   "seconds_cold_median": 0.017,
+   "seconds_cold_total": 0.247,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 12,
@@ -6276,17 +6258,17 @@
    "facts_total": 68,
    "facts_pinpointed": 34,
    "questions_all_facts": 2,
-   "tokens_mean": 959.6,
-   "tokens_median": 858.5,
+   "tokens_mean": 950.9,
+   "tokens_median": 855.0,
    "tokens_max": 1826,
-   "tokens_total": 13434,
-   "chars_total": 53709,
-   "facts_per_1k_tokens": 3.13,
-   "pinpointed_per_1k_tokens": 2.53,
-   "locators_distinct_mean": 7.9,
+   "tokens_total": 13313,
+   "chars_total": 53226,
+   "facts_per_1k_tokens": 3.15,
+   "pinpointed_per_1k_tokens": 2.55,
+   "locators_distinct_mean": 7.8,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.195,
-   "seconds_cold_total": 2.749,
+   "seconds_cold_median": 0.198,
+   "seconds_cold_total": 2.728,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 42,
@@ -6298,16 +6280,16 @@
    "relations_cited_line_missing_target": 0,
    "relations_named_via_import_alias": 0,
    "claims": {
-    "total": 114,
+    "total": 113,
     "by_status": {
-     "statically_verified": 86,
-     "strong_inference": 10,
-     "weak_inference": 17,
+     "statically_verified": 85,
+     "strong_inference": 11,
+     "weak_inference": 16,
      "primary_source_verified": 1
     },
-    "verified_share": 0.763,
-    "inference_share": 0.237,
-    "weak_or_unknown": 17,
+    "verified_share": 0.761,
+    "inference_share": 0.239,
+    "weak_or_unknown": 16,
     "weak_or_unknown_unlabelled": 0,
     "negatives_presented_as_findings": 0,
     "contradicted_relations": 0,
@@ -6317,7 +6299,7 @@
    },
    "cache": {
     "method": "claims whose id already existed in atlas.db before the run (same text + snapshot)",
-    "cold_claims": 114,
+    "cold_claims": 113,
     "cold_reused": 36,
     "warm_claims": 0,
     "warm_reused": 0
@@ -6326,29 +6308,29 @@
   "verinoda_retrieve": {
    "questions": 14,
    "errors": 0,
-   "facts_found": 46,
+   "facts_found": 50,
    "facts_total": 68,
-   "facts_pinpointed": 46,
-   "questions_all_facts": 5,
-   "tokens_mean": 1428.6,
-   "tokens_median": 1426.5,
+   "facts_pinpointed": 45,
+   "questions_all_facts": 6,
+   "tokens_mean": 1426.1,
+   "tokens_median": 1425.5,
    "tokens_max": 1444,
-   "tokens_total": 20001,
-   "chars_total": 79991,
-   "facts_per_1k_tokens": 2.3,
-   "pinpointed_per_1k_tokens": 2.3,
-   "locators_distinct_mean": 17.1,
+   "tokens_total": 19966,
+   "chars_total": 79847,
+   "facts_per_1k_tokens": 2.5,
+   "pinpointed_per_1k_tokens": 2.25,
+   "locators_distinct_mean": 16.9,
    "agent_tool_calls_mean": 1,
    "seconds_cold_median": 0.024,
-   "seconds_cold_total": 0.346,
+   "seconds_cold_total": 0.342,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
-   "facts_found_via_locator": 46,
+   "facts_found_via_locator": 50,
    "assertions_scored": true,
    "negatives_matched": 0,
    "negatives_checked": 19,
-   "relations_asserted": 5,
-   "relations_checked": 2,
+   "relations_asserted": 4,
+   "relations_checked": 3,
    "relations_cited_line_missing_target": 0,
    "relations_named_via_import_alias": 0
   },
@@ -6359,26 +6341,26 @@
    "facts_total": 68,
    "facts_pinpointed": 59,
    "questions_all_facts": 12,
-   "tokens_mean": 1480.1,
-   "tokens_median": 1486.0,
+   "tokens_mean": 1478.1,
+   "tokens_median": 1481.5,
    "tokens_max": 1500,
-   "tokens_total": 20721,
-   "chars_total": 82856,
+   "tokens_total": 20694,
+   "chars_total": 82751,
    "facts_per_1k_tokens": 3.19,
    "pinpointed_per_1k_tokens": 2.85,
-   "locators_distinct_mean": 22.4,
+   "locators_distinct_mean": 22.2,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.036,
-   "seconds_cold_total": 0.492,
+   "seconds_cold_median": 0.035,
+   "seconds_cold_total": 0.489,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 66,
    "assertions_scored": true,
    "negatives_matched": 0,
    "negatives_checked": 19,
-   "relations_asserted": 36,
-   "relations_checked": 36,
-   "relations_cited_line_missing_target": 11,
+   "relations_asserted": 32,
+   "relations_checked": 32,
+   "relations_cited_line_missing_target": 7,
    "relations_named_via_import_alias": 0
   }
  },

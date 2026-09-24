@@ -63,18 +63,18 @@
   "prices_usd_per_mtok": null,
   "price_source": null
  },
- "workdir": "<TMP>/verinoda-bench-vwxm8v0f",
+ "workdir": "<TMP>/verinoda-bench-d9_gn5cj",
  "workdir_kept": false,
  "corpus": {
   "source": "<REPO>/examples/glow_mod",
-  "source_commit": "d70b801c0fae0ce597e95706a5c3452b7f19f97e",
-  "source_dirty": false,
+  "source_commit": "3c066ecfc6a24b07e5c1dd4de2d5b59ab2b5085d",
+  "source_dirty": true,
   "snapshot": "working tree (tracked + untracked, not ignored)",
   "include": null,
   "exclude": null,
   "file_count": 37,
   "bytes": 33709,
-  "workdir_commit": "50038ab048270c828a774e1a43dc1c0c9374c4c1"
+  "workdir_commit": "bc1c47bdd3ed673c3da854bd9b43a74312980c32"
  },
  "gold_validation": {
   "ok": true,
@@ -90,7 +90,7 @@
   "verinoda_retrieve_text"
  ],
  "environment": {
-  "date_utc": "2026-09-24T00:28:02+00:00",
+  "date_utc": "2026-09-24T01:08:14+00:00",
   "os": "Windows-11-10.0.26200-SP0",
   "machine": "AMD64",
   "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
@@ -101,9 +101,11 @@
   "vendored_graphify_commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7",
   "graphify_cli": null,
   "git": "git version 2.53.0.windows.1",
-  "verinoda_source_commit": "d70b801c0fae0ce597e95706a5c3452b7f19f97e",
-  "verinoda_package_changes_vs_commit": [],
-  "verinoda_package_diff_sha256": null
+  "verinoda_source_commit": "3c066ecfc6a24b07e5c1dd4de2d5b59ab2b5085d",
+  "verinoda_package_changes_vs_commit": [
+   "M verinoda/search_index.py"
+  ],
+  "verinoda_package_diff_sha256": "bba11e8fcfb994b18c2470f3edb9ce33783bf9a13609f9229861069d140aa1cc"
  },
  "verinoda_config": {
   "index": {
@@ -126,8 +128,8 @@
    "note": "no index; every query greps and reads the working tree"
   },
   "verinoda": {
-   "cold_seconds": 1.117,
-   "warm_seconds": 0.544,
+   "cold_seconds": 1.141,
+   "warm_seconds": 0.508,
    "nodes": 194,
    "edges": 351,
    "warm_nodes": 194,
@@ -155,7 +157,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0433,
+       "seconds": 0.041,
        "chars": 14354,
        "sha256": "41246ff434721809123616a6e6c5e770d9cea155251da1a61762be5c143c7c6e"
       }
@@ -269,7 +271,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0133,
+       "seconds": 0.0118,
        "chars": 6511,
        "sha256": "a42e1627fe555d51d7c6698635880e7d2982a5289f4b299c1d1ee94789bb14c0"
       }
@@ -337,20 +339,20 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.394,
-       "chars": 6930,
-       "sha256": "0c3014a64c245ad1248d6734abb0e0eda2aee0f8c553143c211610b851aaa8e6",
-       "claims": 12,
+       "seconds": 0.3429,
+       "chars": 6089,
+       "sha256": "d48214aa3daec32c761d0dd42b8a6e42e7682d7f64d9ebd88cf40b01d725bb4f",
+       "claims": 11,
        "claims_reused": 0,
-       "claims_new": 12,
-       "internal_tool_calls": 21,
+       "claims_new": 11,
+       "internal_tool_calls": 19,
        "budget_exhausted": null
       }
      ],
      "score": {
-      "chars": 6930,
-      "tokens": 1733,
-      "sha256": "0c3014a64c245ad1248d6734abb0e0eda2aee0f8c553143c211610b851aaa8e6",
+      "chars": 6089,
+      "tokens": 1523,
+      "sha256": "d48214aa3daec32c761d0dd42b8a6e42e7682d7f64d9ebd88cf40b01d725bb4f",
       "facts": {
        "total": 6,
        "found_n": 6,
@@ -374,42 +376,41 @@
        }
       },
       "locators": {
-       "distinct": 11,
+       "distinct": 10,
        "files": 8,
-       "point_or_short": 11
+       "point_or_short": 10
       },
       "agent_tool_calls": 1,
       "claims": {
-       "total": 12,
+       "total": 11,
        "by_status": {
         "statically_verified": 10,
-        "strong_inference": 1,
-        "weak_inference": 1
+        "strong_inference": 1
        },
        "verified": 10,
-       "inference": 2,
-       "verified_share": 0.833,
-       "inference_share": 0.167,
-       "weak_or_unknown": 1,
+       "inference": 1,
+       "verified_share": 0.909,
+       "inference_share": 0.091,
+       "weak_or_unknown": 0,
        "weak_or_unknown_unlabelled": 0,
        "contradicted_shown": 0,
        "stale_shown": 0,
        "evidence_by_type": {
-        "source_code": 12,
-        "graph_edge": 9
+        "source_code": 11,
+        "graph_edge": 8
        },
-       "evidence_verifying": 12,
-       "evidence_non_verifying": 9,
+       "evidence_verifying": 11,
+       "evidence_non_verifying": 8,
        "contradicted_relations": 0,
        "contradicted_but_cited_line_names_target": 0,
        "contradicted_named_via_import_alias": 0
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.391,
-       "tool_calls": 21,
-       "context_chars": 8545,
-       "context_tokens_est": 2136,
+       "elapsed_s": 0.312,
+       "tool_calls": 19,
+       "context_chars": 7383,
+       "context_tokens_est": 1845,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -421,7 +422,7 @@
        "labelled_not_findings": 0
       },
       "relations": {
-       "asserted": 10,
+       "asserted": 9,
        "checked": 8,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
@@ -439,15 +440,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0233,
+       "seconds": 0.0219,
        "chars": 5749,
-       "sha256": "78e0c41cb5c6b68e83e686f4ec97ccde1f298498416187788885b96643e41c4d"
+       "sha256": "bdeac93914512248ca37d60759ae1dca6e6eee4169b4f908d76eab13bf1fd15b"
       }
      ],
      "score": {
       "chars": 5749,
       "tokens": 1438,
-      "sha256": "78e0c41cb5c6b68e83e686f4ec97ccde1f298498416187788885b96643e41c4d",
+      "sha256": "bdeac93914512248ca37d60759ae1dca6e6eee4169b4f908d76eab13bf1fd15b",
       "facts": {
        "total": 6,
        "found_n": 6,
@@ -521,15 +522,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0377,
-       "chars": 5954,
-       "sha256": "a5e719267d6b7406b752de80379b326824a9e095611f3eca5636db1bc85499cf"
+       "seconds": 0.0347,
+       "chars": 5955,
+       "sha256": "90917c188827a8b665ac33194d879b9522fc686950b38760054df0877aebdfa2"
       }
      ],
      "score": {
-      "chars": 5954,
+      "chars": 5955,
       "tokens": 1489,
-      "sha256": "a5e719267d6b7406b752de80379b326824a9e095611f3eca5636db1bc85499cf",
+      "sha256": "90917c188827a8b665ac33194d879b9522fc686950b38760054df0877aebdfa2",
       "facts": {
        "total": 6,
        "found_n": 6,
@@ -631,7 +632,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0353,
+       "seconds": 0.0359,
        "chars": 16433,
        "sha256": "cc5351aa43afb2897235177eb8aeaff2b75993a5db0c960a929575ac8370ecfe"
       }
@@ -737,15 +738,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0095,
+       "seconds": 0.0119,
        "chars": 3340,
-       "sha256": "c0c933cda25552a3321c097d89988749b2409e2bed1ff7e1d150d29b896729ec"
+       "sha256": "232f6ffcdd0173772d9106f47afebc4aba271ec302d8893ac9d1111f515319b2"
       }
      ],
      "score": {
       "chars": 3340,
       "tokens": 835,
-      "sha256": "c0c933cda25552a3321c097d89988749b2409e2bed1ff7e1d150d29b896729ec",
+      "sha256": "232f6ffcdd0173772d9106f47afebc4aba271ec302d8893ac9d1111f515319b2",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -802,9 +803,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1482,
+       "seconds": 0.1595,
        "chars": 2236,
-       "sha256": "248d41634fb4c9895d374dee6785861f7e9f7de182a0fcd041f61739f94f8ecf",
+       "sha256": "2df4d540b712b67c40dc81ca26669077a94684e665c066b932950fa92fe5d76a",
        "claims": 5,
        "claims_reused": 0,
        "claims_new": 5,
@@ -815,7 +816,7 @@
      "score": {
       "chars": 2236,
       "tokens": 559,
-      "sha256": "248d41634fb4c9895d374dee6785861f7e9f7de182a0fcd041f61739f94f8ecf",
+      "sha256": "2df4d540b712b67c40dc81ca26669077a94684e665c066b932950fa92fe5d76a",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -862,9 +863,9 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.141,
+       "elapsed_s": 0.157,
        "tool_calls": 13,
-       "context_chars": 3591,
+       "context_chars": 3589,
        "context_tokens_est": 897,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
@@ -895,15 +896,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0198,
-       "chars": 5745,
-       "sha256": "1fbf20ce149804504eb0856e48c3a2176bca5593ee2c5f3ff21b92c6155fa6b1"
+       "seconds": 0.0195,
+       "chars": 5720,
+       "sha256": "0808fb93d8f66131ce39f0d900c1dac4f281a382ac6ba669891fae76605efad9"
       }
      ],
      "score": {
-      "chars": 5745,
-      "tokens": 1437,
-      "sha256": "1fbf20ce149804504eb0856e48c3a2176bca5593ee2c5f3ff21b92c6155fa6b1",
+      "chars": 5720,
+      "tokens": 1430,
+      "sha256": "0808fb93d8f66131ce39f0d900c1dac4f281a382ac6ba669891fae76605efad9",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -919,24 +920,23 @@
        }
       },
       "locators": {
-       "distinct": 22,
+       "distinct": 20,
        "files": 7,
-       "point_or_short": 22
+       "point_or_short": 20
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
       "retrieve": {
        "items": 7,
-       "edges": 0,
-       "edge_confidence": {},
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5971,
-        "truncated": true,
-        "more": [
-         "src/main/java/com/example/glowmod/config/GlowConfig.java:44-54 parse"
-        ]
+        "used_chars": 5951,
+        "truncated": true
        }
       },
       "negatives": {
@@ -945,7 +945,7 @@
        "matched": []
       },
       "relations": {
-       "asserted": 0,
+       "asserted": 1,
        "checked": 0,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
@@ -963,15 +963,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0317,
-       "chars": 5910,
-       "sha256": "4dedfb93c465da8d92771f58dc64ec20f979ceacb70b90221462f4c4f185a447"
+       "seconds": 0.0308,
+       "chars": 5920,
+       "sha256": "7db4550d6c4efe94c08b2d6e864a9863c59c697b4e75fb6ac5c39d0c62ef2948"
       }
      ],
      "score": {
-      "chars": 5910,
-      "tokens": 1478,
-      "sha256": "4dedfb93c465da8d92771f58dc64ec20f979ceacb70b90221462f4c4f185a447",
+      "chars": 5920,
+      "tokens": 1480,
+      "sha256": "7db4550d6c4efe94c08b2d6e864a9863c59c697b4e75fb6ac5c39d0c62ef2948",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -988,17 +988,16 @@
       },
       "locators": {
        "distinct": 33,
-       "files": 10,
+       "files": 12,
        "point_or_short": 31
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
       "retrieve_text": {
        "items": 7,
-       "outline_edges": 12,
+       "outline_edges": 11,
        "edge_confidence": {
-        "EXTRACTED": 11,
-        "INFERRED": 1
+        "EXTRACTED": 11
        },
        "truncated_note": true,
        "params": {
@@ -1013,9 +1012,9 @@
        "matched": []
       },
       "relations": {
-       "asserted": 12,
-       "checked": 12,
-       "cited_line_missing_target": 10,
+       "asserted": 11,
+       "checked": 11,
+       "cited_line_missing_target": 9,
        "named_via_import_alias": 0,
        "examples": [
         {
@@ -1034,14 +1033,14 @@
          "line": "GlowConfig.load();"
         },
         {
-         "assertion": "register -calls-> private @src/main/java/com/example/glowmod/command/GlowCommands.java:24",
-         "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:24",
-         "line": ".then(CommandManager.literal(\"reload\").executes(GlowCommands::reload))));"
-        },
-        {
          "assertion": "onSummonWisp -calls-> public @src/main/java/com/example/glowmod/network/ServerNetworking.java:25",
          "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:25",
          "line": "if (!player.getBlockPos().isWithinDistance(payload.pos(), GlowConfig.get().maxSummonDistance())) {"
+        },
+        {
+         "assertion": "kaydet -calls-> public @src/main/java/com/example/glowmod/repair/RepairScheduler.java:29",
+         "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:29",
+         "line": "long due = world.getServer().getTicks() + GlowConfig.get().repairDelayTicks();"
         }
        ]
       },
@@ -1066,7 +1065,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0402,
+       "seconds": 0.0367,
        "chars": 13085,
        "sha256": "71339f5ef24043d32e69c1a8e9bc2c8f7254d69c4e0103ad73ff7bd3a756ec85"
       }
@@ -1180,15 +1179,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0103,
+       "seconds": 0.0105,
        "chars": 5177,
-       "sha256": "2c2dfc282a6fc7fff7e7c70f8c37054fe4f1cc255698dbfa0451da297f13aa9d"
+       "sha256": "f4655d5a30a8100d6ffe680a5dff20517dd4ff9d22030f4ba1d15a4b3bb218da"
       }
      ],
      "score": {
       "chars": 5177,
       "tokens": 1295,
-      "sha256": "2c2dfc282a6fc7fff7e7c70f8c37054fe4f1cc255698dbfa0451da297f13aa9d",
+      "sha256": "f4655d5a30a8100d6ffe680a5dff20517dd4ff9d22030f4ba1d15a4b3bb218da",
       "facts": {
        "total": 4,
        "found_n": 0,
@@ -1244,9 +1243,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2385,
+       "seconds": 0.2367,
        "chars": 6990,
-       "sha256": "1dc874432afdc340d6025dc502b3d7701379f1ca7c0114844dbda31f55d41904",
+       "sha256": "58d67185e8e4e8e5227a4bd74026aec01eb8369a991bd0fb0df5b1b3ec484ce5",
        "claims": 15,
        "claims_reused": 2,
        "claims_new": 13,
@@ -1257,7 +1256,7 @@
      "score": {
       "chars": 6990,
       "tokens": 1748,
-      "sha256": "1dc874432afdc340d6025dc502b3d7701379f1ca7c0114844dbda31f55d41904",
+      "sha256": "58d67185e8e4e8e5227a4bd74026aec01eb8369a991bd0fb0df5b1b3ec484ce5",
       "facts": {
        "total": 4,
        "found_n": 2,
@@ -1341,7 +1340,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0203,
+       "seconds": 0.0219,
        "chars": 5733,
        "sha256": "32af1ea0d6beb02747d386fae09d1b1379e557ab1b694d7c5e185ee78917b4d1"
       }
@@ -1428,7 +1427,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0315,
+       "seconds": 0.0331,
        "chars": 5937,
        "sha256": "254e917a862fa5229e64c10304741267c34fa6d9d0c66491c917b9c0a1da0826"
       }
@@ -1505,7 +1504,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0387,
+       "seconds": 0.041,
        "chars": 15368,
        "sha256": "2e57b424da577dd0ae9370faf257b8afecab74e5686193ba59b2f71000765093"
       }
@@ -1621,7 +1620,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.012,
+       "seconds": 0.013,
        "chars": 6510,
        "sha256": "e6a22b23457b66b073aee2aca41a37e27e0fbe8abc90319ca0a16f3a8c6ba362"
       }
@@ -1688,9 +1687,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1897,
+       "seconds": 0.1942,
        "chars": 3935,
-       "sha256": "97e3a355e4bb226f6bd9a9d9ef52e168c15a1472abf98d56509b21efe31a84e7",
+       "sha256": "2dc9d31a216560da84ea3ead31c14b6d0635df5e53d98df4d6c25d63273391ba",
        "claims": 9,
        "claims_reused": 0,
        "claims_new": 9,
@@ -1701,7 +1700,7 @@
      "score": {
       "chars": 3935,
       "tokens": 984,
-      "sha256": "97e3a355e4bb226f6bd9a9d9ef52e168c15a1472abf98d56509b21efe31a84e7",
+      "sha256": "2dc9d31a216560da84ea3ead31c14b6d0635df5e53d98df4d6c25d63273391ba",
       "facts": {
        "total": 4,
        "found_n": 4,
@@ -1784,15 +1783,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0219,
+       "seconds": 0.021,
        "chars": 5711,
-       "sha256": "9fdf23436b066095a3fc70260790610eed78b8b96f316f22d36748407fd9e28a"
+       "sha256": "6b2498cd64ead7f7025771a49382506939f632799c050549059825383ccefffb"
       }
      ],
      "score": {
       "chars": 5711,
       "tokens": 1428,
-      "sha256": "9fdf23436b066095a3fc70260790610eed78b8b96f316f22d36748407fd9e28a",
+      "sha256": "6b2498cd64ead7f7025771a49382506939f632799c050549059825383ccefffb",
       "facts": {
        "total": 4,
        "found_n": 4,
@@ -1860,15 +1859,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0327,
+       "seconds": 0.0318,
        "chars": 5922,
-       "sha256": "e48f90c9c9aa99eeb02ed4139e5dc416aaf9507117a582dec23fd005ac021a36"
+       "sha256": "739c144bcc973b4b7921a0cc67afc753a6514455ee032f1c7150c725b4659a66"
       }
      ],
      "score": {
       "chars": 5922,
       "tokens": 1481,
-      "sha256": "e48f90c9c9aa99eeb02ed4139e5dc416aaf9507117a582dec23fd005ac021a36",
+      "sha256": "739c144bcc973b4b7921a0cc67afc753a6514455ee032f1c7150c725b4659a66",
       "facts": {
        "total": 4,
        "found_n": 4,
@@ -1889,7 +1888,7 @@
       },
       "locators": {
        "distinct": 27,
-       "files": 11,
+       "files": 12,
        "point_or_short": 25
       },
       "agent_tool_calls": 1,
@@ -1951,7 +1950,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0365,
+       "seconds": 0.0387,
        "chars": 12739,
        "sha256": "ba2814d210e369f1101ba6bbc577e027033e1e53ee9b2bebbd7f416ff872f1f3"
       }
@@ -2062,7 +2061,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0116,
+       "seconds": 0.0117,
        "chars": 6413,
        "sha256": "4621680d798fc252624d240e47dd26773563d09b2dc21839df3cae68e38ff3a5"
       }
@@ -2123,20 +2122,20 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1638,
-       "chars": 5216,
-       "sha256": "b5ce2e5536679597080c4f1722f592fb75a4220ef6bd4e64078c8e157caa38bd",
-       "claims": 10,
+       "seconds": 0.1482,
+       "chars": 4658,
+       "sha256": "d6a9439b902640c2863759f03fd908ab54ddf1b721518a01c3efc3719023d2aa",
+       "claims": 9,
        "claims_reused": 5,
-       "claims_new": 5,
-       "internal_tool_calls": 18,
+       "claims_new": 4,
+       "internal_tool_calls": 17,
        "budget_exhausted": null
       }
      ],
      "score": {
-      "chars": 5216,
-      "tokens": 1304,
-      "sha256": "b5ce2e5536679597080c4f1722f592fb75a4220ef6bd4e64078c8e157caa38bd",
+      "chars": 4658,
+      "tokens": 1165,
+      "sha256": "d6a9439b902640c2863759f03fd908ab54ddf1b721518a01c3efc3719023d2aa",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -2154,41 +2153,40 @@
        }
       },
       "locators": {
-       "distinct": 8,
+       "distinct": 7,
        "files": 4,
-       "point_or_short": 8
+       "point_or_short": 7
       },
       "agent_tool_calls": 1,
       "claims": {
-       "total": 10,
+       "total": 9,
        "by_status": {
-        "statically_verified": 9,
-        "weak_inference": 1
+        "statically_verified": 9
        },
        "verified": 9,
-       "inference": 1,
-       "verified_share": 0.9,
-       "inference_share": 0.1,
-       "weak_or_unknown": 1,
+       "inference": 0,
+       "verified_share": 1.0,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
        "weak_or_unknown_unlabelled": 0,
        "contradicted_shown": 0,
        "stale_shown": 0,
        "evidence_by_type": {
-        "source_code": 10,
-        "graph_edge": 4
+        "source_code": 9,
+        "graph_edge": 3
        },
-       "evidence_verifying": 10,
-       "evidence_non_verifying": 4,
+       "evidence_verifying": 9,
+       "evidence_non_verifying": 3,
        "contradicted_relations": 0,
        "contradicted_but_cited_line_names_target": 0,
        "contradicted_named_via_import_alias": 0
       },
-      "unknowns": 0,
+      "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.172,
-       "tool_calls": 18,
-       "context_chars": 6802,
-       "context_tokens_est": 1700,
+       "elapsed_s": 0.14,
+       "tool_calls": 17,
+       "context_chars": 6014,
+       "context_tokens_est": 1503,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -2200,7 +2198,7 @@
        "labelled_not_findings": 0
       },
       "relations": {
-       "asserted": 6,
+       "asserted": 5,
        "checked": 3,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
@@ -2218,15 +2216,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0228,
+       "seconds": 0.023,
        "chars": 5702,
-       "sha256": "a0db0390b5d47f4162c2c48c9301225135a6c285ce92dba60da9cce3f8d8ee9d"
+       "sha256": "212379579c45f3d711c5dd3f1029c502db328f6678c3a2d6fe88ad5a31e1738d"
       }
      ],
      "score": {
       "chars": 5702,
       "tokens": 1426,
-      "sha256": "a0db0390b5d47f4162c2c48c9301225135a6c285ce92dba60da9cce3f8d8ee9d",
+      "sha256": "212379579c45f3d711c5dd3f1029c502db328f6678c3a2d6fe88ad5a31e1738d",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -2292,15 +2290,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0326,
+       "seconds": 0.0361,
        "chars": 5918,
-       "sha256": "e490839fc71b0fad2b6209d4c2c6bce057ee43ba9403134fc0b5142e7742a894"
+       "sha256": "1c45d952f4cda6d05bac2d5ab65da19fbfb9e4e63ab5218983dd2c9d406cf69d"
       }
      ],
      "score": {
       "chars": 5918,
       "tokens": 1480,
-      "sha256": "e490839fc71b0fad2b6209d4c2c6bce057ee43ba9403134fc0b5142e7742a894",
+      "sha256": "1c45d952f4cda6d05bac2d5ab65da19fbfb9e4e63ab5218983dd2c9d406cf69d",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -2368,7 +2366,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0476,
+       "seconds": 0.0353,
        "chars": 13076,
        "sha256": "2c58f6be8ee4f4ef421da6e8c8e52cbe62f45e3fef0d4eaf366e730ed5578dee"
       }
@@ -2483,7 +2481,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0118,
+       "seconds": 0.0129,
        "chars": 6468,
        "sha256": "c64d4e345273ba7fb2337cbb0092655c847cfe0527fbaf06a7ad1919f3781112"
       }
@@ -2549,20 +2547,20 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1743,
-       "chars": 5885,
-       "sha256": "a5e8ec2bdd99a43e3b16402011734c0f9429e59fc872f20a4de551e94f061380",
+       "seconds": 0.184,
+       "chars": 5457,
+       "sha256": "2a64c185cb9d9c2c48fa3d59c2b79d63b47f06c03b552773f10be05b056427ca",
        "claims": 12,
-       "claims_reused": 7,
-       "claims_new": 5,
-       "internal_tool_calls": 28,
+       "claims_reused": 6,
+       "claims_new": 6,
+       "internal_tool_calls": 29,
        "budget_exhausted": null
       }
      ],
      "score": {
-      "chars": 5885,
-      "tokens": 1472,
-      "sha256": "a5e8ec2bdd99a43e3b16402011734c0f9429e59fc872f20a4de551e94f061380",
+      "chars": 5457,
+      "tokens": 1365,
+      "sha256": "2a64c185cb9d9c2c48fa3d59c2b79d63b47f06c03b552773f10be05b056427ca",
       "facts": {
        "total": 5,
        "found_n": 4,
@@ -2592,14 +2590,14 @@
       "claims": {
        "total": 12,
        "by_status": {
-        "statically_verified": 10,
-        "weak_inference": 2
+        "statically_verified": 11,
+        "weak_inference": 1
        },
-       "verified": 10,
-       "inference": 2,
-       "verified_share": 0.833,
-       "inference_share": 0.167,
-       "weak_or_unknown": 2,
+       "verified": 11,
+       "inference": 1,
+       "verified_share": 0.917,
+       "inference_share": 0.083,
+       "weak_or_unknown": 1,
        "weak_or_unknown_unlabelled": 0,
        "contradicted_shown": 0,
        "stale_shown": 0,
@@ -2615,10 +2613,10 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.172,
-       "tool_calls": 28,
-       "context_chars": 8456,
-       "context_tokens_est": 2114,
+       "elapsed_s": 0.187,
+       "tool_calls": 29,
+       "context_chars": 7867,
+       "context_tokens_est": 1966,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -2631,7 +2629,7 @@
       },
       "relations": {
        "asserted": 6,
-       "checked": 4,
+       "checked": 5,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
        "examples": []
@@ -2648,15 +2646,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0193,
-       "chars": 5696,
-       "sha256": "010bf641cf42040000b746df4b5e1005d4f48b5ab7cf6845fbbbe010dabc28cc"
+       "seconds": 0.0207,
+       "chars": 5744,
+       "sha256": "b19a2f860956b87d17b7b6bf7536c8f91bf30ac152cc116e45b9bf474b31a212"
       }
      ],
      "score": {
-      "chars": 5696,
-      "tokens": 1424,
-      "sha256": "010bf641cf42040000b746df4b5e1005d4f48b5ab7cf6845fbbbe010dabc28cc",
+      "chars": 5744,
+      "tokens": 1436,
+      "sha256": "b19a2f860956b87d17b7b6bf7536c8f91bf30ac152cc116e45b9bf474b31a212",
       "facts": {
        "total": 5,
        "found_n": 4,
@@ -2678,26 +2676,25 @@
        }
       },
       "locators": {
-       "distinct": 21,
+       "distinct": 20,
        "files": 5,
-       "point_or_short": 21
+       "point_or_short": 20
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
       "retrieve": {
        "items": 8,
-       "edges": 0,
-       "edge_confidence": {},
+       "edges": 1,
+       "edge_confidence": {
+        "EXTRACTED": 1
+       },
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5936,
+        "used_chars": 5991,
         "truncated": true,
         "expansions": [
          "glowmod->glow (corpus prefix)"
-        ],
-        "more": [
-         "src/main/java/com/example/glowmod/GlowMod.java:19-30 GlowMod.onInitialize"
         ]
        }
       },
@@ -2707,8 +2704,8 @@
        "matched": []
       },
       "relations": {
-       "asserted": 0,
-       "checked": 0,
+       "asserted": 1,
+       "checked": 1,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
        "examples": []
@@ -2725,15 +2722,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.04,
-       "chars": 5992,
-       "sha256": "d4d612b673651ae47e583cba757a0464646c8eb07853f423ca561e028c9ccedc"
+       "seconds": 0.0435,
+       "chars": 5929,
+       "sha256": "dc42d018b69804f02b5b62ce888d37b97f828313254578caf9db85ebe7eede73"
       }
      ],
      "score": {
-      "chars": 5992,
-      "tokens": 1498,
-      "sha256": "d4d612b673651ae47e583cba757a0464646c8eb07853f423ca561e028c9ccedc",
+      "chars": 5929,
+      "tokens": 1483,
+      "sha256": "dc42d018b69804f02b5b62ce888d37b97f828313254578caf9db85ebe7eede73",
       "facts": {
        "total": 5,
        "found_n": 5,
@@ -2828,7 +2825,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0364,
+       "seconds": 0.0359,
        "chars": 12882,
        "sha256": "0bac001f2d46cec8a63a2a6116a40d09a2b55eb8ee3dcef005ea39909f63d303"
       }
@@ -2940,7 +2937,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0113,
+       "seconds": 0.0118,
        "chars": 6471,
        "sha256": "79ac2ba14bd32d64279ceac8cf2014bceec2522bb39bdc3d8ef73403a40c89e8"
       }
@@ -3004,61 +3001,61 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1382,
-       "chars": 2211,
-       "sha256": "54e9809898364e901ed9621031e61e8ec013a40ab1c846761ea3d0b465065bd1",
-       "claims": 4,
+       "seconds": 0.1473,
+       "chars": 2494,
+       "sha256": "5624117ce5a15ed040f31564c02c3e7f60afbdd03d206daeacaa6beadd9444e2",
+       "claims": 5,
        "claims_reused": 2,
-       "claims_new": 2,
-       "internal_tool_calls": 11,
+       "claims_new": 3,
+       "internal_tool_calls": 12,
        "budget_exhausted": null
       }
      ],
      "score": {
-      "chars": 2211,
-      "tokens": 553,
-      "sha256": "54e9809898364e901ed9621031e61e8ec013a40ab1c846761ea3d0b465065bd1",
+      "chars": 2494,
+      "tokens": 624,
+      "sha256": "5624117ce5a15ed040f31564c02c3e7f60afbdd03d206daeacaa6beadd9444e2",
       "facts": {
        "total": 3,
-       "found_n": 2,
-       "pinpointed_n": 1,
+       "found_n": 3,
+       "pinpointed_n": 2,
        "found": [
+        "q07.yml",
         "q07.parse",
         "q07.use"
        ],
-       "missed": [
-        "q07.yml"
-       ],
+       "missed": [],
        "via": {
+        "q07.yml": "loc src/main/resources/glowmod.yml:11",
         "q07.parse": "loc src/main/java/com/example/glowmod/config/GlowConfig.java:15-64",
         "q07.use": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:33-39"
        }
       },
       "locators": {
-       "distinct": 4,
-       "files": 2,
-       "point_or_short": 3
+       "distinct": 5,
+       "files": 3,
+       "point_or_short": 4
       },
       "agent_tool_calls": 1,
       "claims": {
-       "total": 4,
+       "total": 5,
        "by_status": {
-        "statically_verified": 2,
+        "statically_verified": 3,
         "weak_inference": 2
        },
-       "verified": 2,
+       "verified": 3,
        "inference": 2,
-       "verified_share": 0.5,
-       "inference_share": 0.5,
+       "verified_share": 0.6,
+       "inference_share": 0.4,
        "weak_or_unknown": 2,
        "weak_or_unknown_unlabelled": 0,
        "contradicted_shown": 0,
        "stale_shown": 0,
        "evidence_by_type": {
-        "source_code": 4,
+        "source_code": 5,
         "graph_edge": 2
        },
-       "evidence_verifying": 4,
+       "evidence_verifying": 5,
        "evidence_non_verifying": 2,
        "contradicted_relations": 0,
        "contradicted_but_cited_line_names_target": 0,
@@ -3066,10 +3063,10 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.14,
-       "tool_calls": 11,
-       "context_chars": 3841,
-       "context_tokens_est": 960,
+       "elapsed_s": 0.156,
+       "tool_calls": 12,
+       "context_chars": 4132,
+       "context_tokens_est": 1033,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -3099,15 +3096,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0228,
-       "chars": 5758,
-       "sha256": "56a752cf92d4984b4903c2f00e165e4f3c615e7d98d9d2688fa5d8d9ee953950"
+       "seconds": 0.0491,
+       "chars": 5706,
+       "sha256": "310ed0ac6f27edc17d9ee8fac9618dd8cdaece87756c374a2e235594789ece4e"
       }
      ],
      "score": {
-      "chars": 5758,
-      "tokens": 1440,
-      "sha256": "56a752cf92d4984b4903c2f00e165e4f3c615e7d98d9d2688fa5d8d9ee953950",
+      "chars": 5706,
+      "tokens": 1427,
+      "sha256": "310ed0ac6f27edc17d9ee8fac9618dd8cdaece87756c374a2e235594789ece4e",
       "facts": {
        "total": 3,
        "found_n": 2,
@@ -3120,7 +3117,7 @@
         "q07.parse"
        ],
        "via": {
-        "q07.yml": "loc src/main/resources/glowmod.yml:10-14",
+        "q07.yml": "loc src/main/resources/glowmod.yml:11",
         "q07.use": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:33"
        }
       },
@@ -3132,15 +3129,13 @@
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
       "retrieve": {
-       "items": 7,
-       "edges": 1,
-       "edge_confidence": {
-        "EXTRACTED": 1
-       },
+       "items": 8,
+       "edges": 0,
+       "edge_confidence": {},
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5988,
+        "used_chars": 5937,
         "truncated": true,
         "expansions": [
          "ayarlanıyor->ayarlari (turkish stem 'ayarl')",
@@ -3148,9 +3143,6 @@
          "ayarlaniyor->sett (lexicon)",
          "ayarlaniyor->config (lexicon)",
          "ayarlaniyor->option (lexicon)"
-        ],
-        "more": [
-         "src/main/resources/glowmod.yml:10-14 glowmod.yml"
         ]
        }
       },
@@ -3160,8 +3152,8 @@
        "matched": []
       },
       "relations": {
-       "asserted": 1,
-       "checked": 1,
+       "asserted": 0,
+       "checked": 0,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
        "examples": []
@@ -3178,15 +3170,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0308,
-       "chars": 5953,
-       "sha256": "e08564f485dceb795e77f7de420c23b075d9137f8b9a5771174815506977dff8"
+       "seconds": 0.0318,
+       "chars": 5883,
+       "sha256": "2e4a00ce81d1aae309cfa0dafe297bcffbc44acdba28e7b6623fb76cd5e0d92e"
       }
      ],
      "score": {
-      "chars": 5953,
-      "tokens": 1489,
-      "sha256": "e08564f485dceb795e77f7de420c23b075d9137f8b9a5771174815506977dff8",
+      "chars": 5883,
+      "tokens": 1471,
+      "sha256": "2e4a00ce81d1aae309cfa0dafe297bcffbc44acdba28e7b6623fb76cd5e0d92e",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -3204,18 +3196,17 @@
        }
       },
       "locators": {
-       "distinct": 29,
+       "distinct": 28,
        "files": 11,
-       "point_or_short": 28
+       "point_or_short": 26
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
       "retrieve_text": {
-       "items": 7,
-       "outline_edges": 5,
+       "items": 8,
+       "outline_edges": 3,
        "edge_confidence": {
-        "EXTRACTED": 3,
-        "INFERRED": 2
+        "EXTRACTED": 3
        },
        "truncated_note": true,
        "params": {
@@ -3230,25 +3221,15 @@
        "matched": []
       },
       "relations": {
-       "asserted": 5,
-       "checked": 5,
-       "cited_line_missing_target": 3,
+       "asserted": 3,
+       "checked": 3,
+       "cited_line_missing_target": 1,
        "named_via_import_alias": 0,
        "examples": [
-        {
-         "assertion": "register -calls-> private @src/main/java/com/example/glowmod/repair/RepairScheduler.java:24",
-         "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:24",
-         "line": "ServerTickEvents.END_SERVER_TICK.register(RepairScheduler::tick);"
-        },
         {
          "assertion": "parse -calls-> public @src/main/java/com/example/glowmod/config/GlowConfig.java:48",
          "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:48",
          "line": "return new GlowConfig("
-        },
-        {
-         "assertion": "onInitializeClient -calls-> private @src/client/java/com/example/glowmod/client/GlowModClient.java:22",
-         "at": "src/client/java/com/example/glowmod/client/GlowModClient.java:22",
-         "line": "ClientTickEvents.END_CLIENT_TICK.register(GlowModClient::onEndTick);"
         }
        ]
       },
@@ -3273,7 +3254,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0377,
+       "seconds": 0.0351,
        "chars": 9192,
        "sha256": "5ca0ea2d57aad875f6ca8863a48bd1e02a9c3b4a5c90aa43c6ae1ec0d700536c"
       }
@@ -3383,7 +3364,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0114,
+       "seconds": 0.0107,
        "chars": 6430,
        "sha256": "f9eb2f2791bdbf891af5d4da904711cda1b6b79b453de2c37953b650e01aaf09"
       }
@@ -3444,9 +3425,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1902,
+       "seconds": 0.1933,
        "chars": 5764,
-       "sha256": "ea0f3c84bb2ed7671d4ed2fd65a7c34298c0d7fa82f4258accc613091668170c",
+       "sha256": "f3a16c8a94a5b09d0ff151eb583a19d7521a51068241a94cfbc0786ba5afeefc",
        "claims": 13,
        "claims_reused": 6,
        "claims_new": 7,
@@ -3457,7 +3438,7 @@
      "score": {
       "chars": 5764,
       "tokens": 1441,
-      "sha256": "ea0f3c84bb2ed7671d4ed2fd65a7c34298c0d7fa82f4258accc613091668170c",
+      "sha256": "f3a16c8a94a5b09d0ff151eb583a19d7521a51068241a94cfbc0786ba5afeefc",
       "facts": {
        "total": 3,
        "found_n": 2,
@@ -3507,7 +3488,7 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.203,
+       "elapsed_s": 0.187,
        "tool_calls": 24,
        "context_chars": 7735,
        "context_tokens_est": 1933,
@@ -3540,15 +3521,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0195,
+       "seconds": 0.0204,
        "chars": 5702,
-       "sha256": "1f1a396fe13993f5e81d5ba475aeab1fa23d02ae7881d440d18d02874a5cc255"
+       "sha256": "7211b770fcaebac039f0b1bc17a388f48330536aa28241ade449a2d615d4aece"
       }
      ],
      "score": {
       "chars": 5702,
       "tokens": 1426,
-      "sha256": "1f1a396fe13993f5e81d5ba475aeab1fa23d02ae7881d440d18d02874a5cc255",
+      "sha256": "7211b770fcaebac039f0b1bc17a388f48330536aa28241ade449a2d615d4aece",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -3612,15 +3593,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0288,
+       "seconds": 0.0308,
        "chars": 5979,
-       "sha256": "fefdcfc42ffc56482fdbfd35efb429d69fd68a0d7345ec6a7a525be6616ca67c"
+       "sha256": "c0079bdcba614f1bae23b390600ae5ceef895472b0f2c38c53bec12d17201019"
       }
      ],
      "score": {
       "chars": 5979,
       "tokens": 1495,
-      "sha256": "fefdcfc42ffc56482fdbfd35efb429d69fd68a0d7345ec6a7a525be6616ca67c",
+      "sha256": "c0079bdcba614f1bae23b390600ae5ceef895472b0f2c38c53bec12d17201019",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -3806,7 +3787,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0107,
+       "seconds": 0.0108,
        "chars": 6430,
        "sha256": "9a2326f4c9d6af66e385ca150d444b04ebe8dbc060d4519f5877ae02746b9209"
       }
@@ -3868,9 +3849,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1344,
+       "seconds": 0.1373,
        "chars": 3316,
-       "sha256": "66ef395b557145c7b1b56728966f58fd1b798c0a98ebd02796ef2844cba44d6b",
+       "sha256": "ddca17e25b5704f2cf2136433f373a18ecc06a60648c7624c2ad5bc83745510f",
        "claims": 7,
        "claims_reused": 6,
        "claims_new": 1,
@@ -3881,7 +3862,7 @@
      "score": {
       "chars": 3316,
       "tokens": 829,
-      "sha256": "66ef395b557145c7b1b56728966f58fd1b798c0a98ebd02796ef2844cba44d6b",
+      "sha256": "ddca17e25b5704f2cf2136433f373a18ecc06a60648c7624c2ad5bc83745510f",
       "facts": {
        "total": 4,
        "found_n": 3,
@@ -3931,7 +3912,7 @@
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.14,
+       "elapsed_s": 0.125,
        "tool_calls": 11,
        "context_chars": 4396,
        "context_tokens_est": 1099,
@@ -3964,15 +3945,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0225,
+       "seconds": 0.0248,
        "chars": 5670,
-       "sha256": "93a1a6b9207e1168600756f93968ef60f9084ca5f7381e4d065cca61a225906b"
+       "sha256": "0add5ab7905af4e3abcd72ac65b303fcfeaa76b7604c619ca3fada93c6f7088e"
       }
      ],
      "score": {
       "chars": 5670,
       "tokens": 1418,
-      "sha256": "93a1a6b9207e1168600756f93968ef60f9084ca5f7381e4d065cca61a225906b",
+      "sha256": "0add5ab7905af4e3abcd72ac65b303fcfeaa76b7604c619ca3fada93c6f7088e",
       "facts": {
        "total": 4,
        "found_n": 4,
@@ -4047,7 +4028,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0337,
+       "seconds": 0.0353,
        "chars": 5986,
        "sha256": "ab5a7ebc868824258b48b135510653b200b0b88fd55c1efe77e46c4c381156c4"
       }
@@ -4125,7 +4106,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0366,
+       "seconds": 0.0369,
        "chars": 10485,
        "sha256": "8f31fd410d9c1a195ff39ed6b6a93be6fffd1a4d8d471bab5984f35203426a7b"
       }
@@ -4241,7 +4222,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0124,
+       "seconds": 0.0126,
        "chars": 6540,
        "sha256": "8b82ce70ae22007f6bc4938d7a33909121af7fc658a7425b546bfd8c9e60fd7e"
       }
@@ -4309,20 +4290,20 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1741,
-       "chars": 3080,
-       "sha256": "189c8961dbc11f130df68f262c722cec6413b3ecf0f07ffe4b3bbc1de521a001",
-       "claims": 5,
+       "seconds": 0.155,
+       "chars": 2292,
+       "sha256": "5cf1036abccdbfb81ba9a190423c00735e59647cc5eb642a08b55f824d39d9eb",
+       "claims": 4,
        "claims_reused": 1,
-       "claims_new": 4,
-       "internal_tool_calls": 13,
+       "claims_new": 3,
+       "internal_tool_calls": 11,
        "budget_exhausted": null
       }
      ],
      "score": {
-      "chars": 3080,
-      "tokens": 770,
-      "sha256": "189c8961dbc11f130df68f262c722cec6413b3ecf0f07ffe4b3bbc1de521a001",
+      "chars": 2292,
+      "tokens": 573,
+      "sha256": "5cf1036abccdbfb81ba9a190423c00735e59647cc5eb642a08b55f824d39d9eb",
       "facts": {
        "total": 5,
        "found_n": 3,
@@ -4337,47 +4318,47 @@
         "q10.register"
        ],
        "via": {
-        "q10.key": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:22",
+        "q10.key": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:18-23",
         "q10.send": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:28",
         "q10.handler": "loc src/main/java/com/example/glowmod/network/ServerNetworking.java:29"
        }
       },
       "locators": {
-       "distinct": 5,
+       "distinct": 4,
        "files": 2,
-       "point_or_short": 5
+       "point_or_short": 4
       },
       "agent_tool_calls": 1,
       "claims": {
-       "total": 5,
+       "total": 4,
        "by_status": {
         "statically_verified": 3,
-        "weak_inference": 2
+        "weak_inference": 1
        },
        "verified": 3,
-       "inference": 2,
-       "verified_share": 0.6,
-       "inference_share": 0.4,
-       "weak_or_unknown": 2,
+       "inference": 1,
+       "verified_share": 0.75,
+       "inference_share": 0.25,
+       "weak_or_unknown": 1,
        "weak_or_unknown_unlabelled": 0,
        "contradicted_shown": 0,
        "stale_shown": 0,
        "evidence_by_type": {
-        "source_code": 5,
-        "graph_edge": 3
+        "source_code": 4,
+        "graph_edge": 2
        },
-       "evidence_verifying": 5,
-       "evidence_non_verifying": 3,
+       "evidence_verifying": 4,
+       "evidence_non_verifying": 2,
        "contradicted_relations": 0,
        "contradicted_but_cited_line_names_target": 0,
        "contradicted_named_via_import_alias": 0
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.172,
-       "tool_calls": 13,
-       "context_chars": 4777,
-       "context_tokens_est": 1194,
+       "elapsed_s": 0.14,
+       "tool_calls": 11,
+       "context_chars": 3657,
+       "context_tokens_est": 914,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -4389,7 +4370,7 @@
        "labelled_not_findings": 0
       },
       "relations": {
-       "asserted": 3,
+       "asserted": 2,
        "checked": 1,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
@@ -4407,56 +4388,55 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.021,
-       "chars": 5731,
-       "sha256": "fe9c336d0087b284aad16086b36dce42fd38794a0d904080a5ea7f54680d7cbd"
+       "seconds": 0.0227,
+       "chars": 5734,
+       "sha256": "37a49a0f2470dcefb90dae962a8de6120bc90db7f056655737fd1dda8f3ab7eb"
       }
      ],
      "score": {
-      "chars": 5731,
-      "tokens": 1433,
-      "sha256": "fe9c336d0087b284aad16086b36dce42fd38794a0d904080a5ea7f54680d7cbd",
+      "chars": 5734,
+      "tokens": 1434,
+      "sha256": "37a49a0f2470dcefb90dae962a8de6120bc90db7f056655737fd1dda8f3ab7eb",
       "facts": {
        "total": 5,
-       "found_n": 5,
-       "pinpointed_n": 5,
+       "found_n": 4,
+       "pinpointed_n": 4,
        "found": [
         "q10.key",
         "q10.send",
         "q10.payload",
-        "q10.register",
         "q10.handler"
        ],
-       "missed": [],
+       "missed": [
+        "q10.register"
+       ],
        "via": {
-        "q10.key": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:22",
+        "q10.key": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:19",
         "q10.send": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:25",
         "q10.payload": "loc src/main/java/com/example/glowmod/network/SummonWispPayload.java:11",
-        "q10.register": "loc src/main/java/com/example/glowmod/network/ServerNetworking.java:17",
         "q10.handler": "loc src/main/java/com/example/glowmod/network/ServerNetworking.java:20"
        }
       },
       "locators": {
-       "distinct": 22,
+       "distinct": 20,
        "files": 9,
-       "point_or_short": 22
+       "point_or_short": 20
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
       "retrieve": {
        "items": 6,
-       "edges": 0,
-       "edge_confidence": {},
+       "edges": 2,
+       "edge_confidence": {
+        "EXTRACTED": 2
+       },
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5942,
+        "used_chars": 5956,
         "truncated": true,
         "expansions": [
          "summon key->summonkey (joined words)"
-        ],
-        "more": [
-         "src/main/java/com/example/glowmod/world/WispSpawner.java:18-20 WispSpawner.register"
         ]
        }
       },
@@ -4466,7 +4446,7 @@
        "matched": []
       },
       "relations": {
-       "asserted": 0,
+       "asserted": 2,
        "checked": 0,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
@@ -4484,15 +4464,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0324,
-       "chars": 5964,
-       "sha256": "6bf9b3d54d3a806770f4d0345dffb97328f0a9a889b949b978a37741bb964719"
+       "seconds": 0.0322,
+       "chars": 5988,
+       "sha256": "cec43b5dd10fd6d1dea4c5c4d06c6592de291d63e8715bb947e46d55e0382832"
       }
      ],
      "score": {
-      "chars": 5964,
-      "tokens": 1491,
-      "sha256": "6bf9b3d54d3a806770f4d0345dffb97328f0a9a889b949b978a37741bb964719",
+      "chars": 5988,
+      "tokens": 1497,
+      "sha256": "cec43b5dd10fd6d1dea4c5c4d06c6592de291d63e8715bb947e46d55e0382832",
       "facts": {
        "total": 5,
        "found_n": 5,
@@ -4506,26 +4486,26 @@
        ],
        "missed": [],
        "via": {
-        "q10.key": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:22",
+        "q10.key": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:18-23",
         "q10.send": "loc src/client/java/com/example/glowmod/client/GlowModClient.java:28",
         "q10.payload": "loc src/main/java/com/example/glowmod/network/SummonWispPayload.java:11-21",
-        "q10.register": "loc src/main/java/com/example/glowmod/network/ServerNetworking.java:17",
+        "q10.register": "loc src/main/java/com/example/glowmod/network/ServerNetworking.java:15-18",
         "q10.handler": "loc src/main/java/com/example/glowmod/network/ServerNetworking.java:29"
        }
       },
       "locators": {
-       "distinct": 27,
-       "files": 13,
-       "point_or_short": 27
+       "distinct": 28,
+       "files": 15,
+       "point_or_short": 28
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
       "retrieve_text": {
        "items": 6,
-       "outline_edges": 14,
+       "outline_edges": 11,
        "edge_confidence": {
         "EXTRACTED": 4,
-        "INFERRED": 10
+        "INFERRED": 7
        },
        "truncated_note": true,
        "params": {
@@ -4540,21 +4520,11 @@
        "matched": []
       },
       "relations": {
-       "asserted": 14,
-       "checked": 14,
-       "cited_line_missing_target": 10,
+       "asserted": 11,
+       "checked": 11,
+       "cited_line_missing_target": 8,
        "named_via_import_alias": 0,
        "examples": [
-        {
-         "assertion": "onInitializeClient -calls-> private @src/client/java/com/example/glowmod/client/GlowModClient.java:22",
-         "at": "src/client/java/com/example/glowmod/client/GlowModClient.java:22",
-         "line": "ClientTickEvents.END_CLIENT_TICK.register(GlowModClient::onEndTick);"
-        },
-        {
-         "assertion": "register -calls-> private @src/main/java/com/example/glowmod/network/ServerNetworking.java:17",
-         "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:17",
-         "line": "ServerPlayNetworking.registerGlobalReceiver(SummonWispPayload.ID, ServerNetworking::onSummonWisp);"
-        },
         {
          "assertion": "onEndTick -calls-> public @src/client/java/com/example/glowmod/client/GlowModClient.java:28",
          "at": "src/client/java/com/example/glowmod/client/GlowModClient.java:28",
@@ -4569,6 +4539,16 @@
          "assertion": "etkinlestir -calls-> public @src/main/java/com/example/glowmod/event/LanternEvents.java:30",
          "at": "src/main/java/com/example/glowmod/event/LanternEvents.java:30",
          "line": "Wisp.spawn((ServerWorld) world, pos.up());"
+        },
+        {
+         "assertion": "onSummonWisp -calls-> public @src/main/java/com/example/glowmod/network/ServerNetworking.java:29",
+         "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:29",
+         "line": "Wisp.spawn(player.getServerWorld(), payload.pos().up());"
+        },
+        {
+         "assertion": "baslat -calls-> public @src/main/java/com/example/glowmod/ritual/Ritual.java:29",
+         "at": "src/main/java/com/example/glowmod/ritual/Ritual.java:29",
+         "line": "Wisp.spawn(world, at);"
         }
        ]
       },
@@ -4593,7 +4573,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0376,
+       "seconds": 0.0373,
        "chars": 100,
        "sha256": "4fcff59b054ee6cd265f5e2cb0a317cd8d67483d7487fff21dccf164ef89fa88"
       }
@@ -4720,24 +4700,24 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1945,
-       "chars": 4281,
-       "sha256": "b8b3953e17a834c55cf336ab652adb38aaadf546471c2e95ed26d76887d770e0",
-       "claims": 8,
-       "claims_reused": 1,
-       "claims_new": 7,
-       "internal_tool_calls": 17,
+       "seconds": 0.1546,
+       "chars": 2757,
+       "sha256": "d13120af80d554d2d8ed228d9411475f25eff33c91c461a202489bec4cbc0b33",
+       "claims": 6,
+       "claims_reused": 2,
+       "claims_new": 4,
+       "internal_tool_calls": 13,
        "budget_exhausted": null
       }
      ],
      "score": {
-      "chars": 4281,
-      "tokens": 1071,
-      "sha256": "b8b3953e17a834c55cf336ab652adb38aaadf546471c2e95ed26d76887d770e0",
+      "chars": 2757,
+      "tokens": 690,
+      "sha256": "d13120af80d554d2d8ed228d9411475f25eff33c91c461a202489bec4cbc0b33",
       "facts": {
        "total": 3,
        "found_n": 3,
-       "pinpointed_n": 3,
+       "pinpointed_n": 2,
        "found": [
         "q11.hook",
         "q11.restore",
@@ -4745,47 +4725,47 @@
        ],
        "missed": [],
        "via": {
-        "q11.hook": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:25",
+        "q11.hook": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:14-48",
         "q11.restore": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:42-47",
         "q11.clear": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:42-47"
        }
       },
       "locators": {
-       "distinct": 8,
+       "distinct": 6,
        "files": 3,
-       "point_or_short": 7
+       "point_or_short": 5
       },
       "agent_tool_calls": 1,
       "claims": {
-       "total": 8,
+       "total": 6,
        "by_status": {
         "statically_verified": 5,
-        "weak_inference": 3
+        "weak_inference": 1
        },
        "verified": 5,
-       "inference": 3,
-       "verified_share": 0.625,
-       "inference_share": 0.375,
-       "weak_or_unknown": 3,
+       "inference": 1,
+       "verified_share": 0.833,
+       "inference_share": 0.167,
+       "weak_or_unknown": 1,
        "weak_or_unknown_unlabelled": 0,
        "contradicted_shown": 0,
        "stale_shown": 0,
        "evidence_by_type": {
-        "source_code": 8,
-        "graph_edge": 4
+        "source_code": 6,
+        "graph_edge": 2
        },
-       "evidence_verifying": 8,
-       "evidence_non_verifying": 4,
+       "evidence_verifying": 6,
+       "evidence_non_verifying": 2,
        "contradicted_relations": 0,
        "contradicted_but_cited_line_names_target": 0,
        "contradicted_named_via_import_alias": 0
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.188,
-       "tool_calls": 17,
-       "context_chars": 6406,
-       "context_tokens_est": 1601,
+       "elapsed_s": 0.156,
+       "tool_calls": 13,
+       "context_chars": 4271,
+       "context_tokens_est": 1067,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -4797,7 +4777,7 @@
        "labelled_not_findings": 0
       },
       "relations": {
-       "asserted": 4,
+       "asserted": 2,
        "checked": 1,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
@@ -4815,15 +4795,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0206,
-       "chars": 5732,
-       "sha256": "e669c6e9b901a51d256686878625b00510b6055350f42af93bc9ea8f297e4166"
+       "seconds": 0.0233,
+       "chars": 5690,
+       "sha256": "7bddfbf130bf8af009d231df54562e20b65cf8dce7319d2b808fe6693577a7eb"
       }
      ],
      "score": {
-      "chars": 5732,
-      "tokens": 1433,
-      "sha256": "e669c6e9b901a51d256686878625b00510b6055350f42af93bc9ea8f297e4166",
+      "chars": 5690,
+      "tokens": 1423,
+      "sha256": "7bddfbf130bf8af009d231df54562e20b65cf8dce7319d2b808fe6693577a7eb",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -4835,36 +4815,33 @@
        ],
        "missed": [],
        "via": {
-        "q11.hook": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:25",
+        "q11.hook": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:24",
         "q11.restore": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:42",
         "q11.clear": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:42-47"
        }
       },
       "locators": {
-       "distinct": 19,
+       "distinct": 17,
        "files": 3,
-       "point_or_short": 19
+       "point_or_short": 17
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
       "retrieve": {
        "items": 8,
-       "edges": 1,
+       "edges": 2,
        "edge_confidence": {
-        "EXTRACTED": 1
+        "EXTRACTED": 2
        },
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5979,
+        "used_chars": 5941,
         "truncated": true,
         "expansions": [
          "sunucu->serv (lexicon)",
          "onarilmamis->repair (lexicon)",
          "bloklara->block (lexicon)"
-        ],
-        "more": [
-         "src/main/java/com/example/glowmod/repair/RepairScheduler.java:20-21 RepairScheduler.RepairScheduler"
         ]
        }
       },
@@ -4874,7 +4851,7 @@
        "matched": []
       },
       "relations": {
-       "asserted": 1,
+       "asserted": 2,
        "checked": 0,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
@@ -4892,15 +4869,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.031,
-       "chars": 5994,
-       "sha256": "a3e3b095021a246b4afedb5287861db7b0875e33744ce6651ad0949efe498d90"
+       "seconds": 0.039,
+       "chars": 5904,
+       "sha256": "48e521080eaf18b5a2d8a779fd90c07cafc5d8a9677c5a54d14b4df062140079"
       }
      ],
      "score": {
-      "chars": 5994,
-      "tokens": 1499,
-      "sha256": "a3e3b095021a246b4afedb5287861db7b0875e33744ce6651ad0949efe498d90",
+      "chars": 5904,
+      "tokens": 1476,
+      "sha256": "48e521080eaf18b5a2d8a779fd90c07cafc5d8a9677c5a54d14b4df062140079",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -4912,23 +4889,22 @@
        ],
        "missed": [],
        "via": {
-        "q11.hook": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:25",
+        "q11.hook": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:23-26",
         "q11.restore": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:40-42",
         "q11.clear": "loc src/main/java/com/example/glowmod/repair/RepairScheduler.java:42-47"
        }
       },
       "locators": {
        "distinct": 37,
-       "files": 16,
+       "files": 17,
        "point_or_short": 35
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
       "retrieve_text": {
        "items": 8,
-       "outline_edges": 4,
+       "outline_edges": 3,
        "edge_confidence": {
-        "INFERRED": 1,
         "EXTRACTED": 3
        },
        "truncated_note": true,
@@ -4944,16 +4920,11 @@
        "matched": []
       },
       "relations": {
-       "asserted": 4,
-       "checked": 4,
-       "cited_line_missing_target": 2,
+       "asserted": 3,
+       "checked": 3,
+       "cited_line_missing_target": 1,
        "named_via_import_alias": 0,
        "examples": [
-        {
-         "assertion": "register -calls-> private @src/main/java/com/example/glowmod/repair/RepairScheduler.java:25",
-         "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:25",
-         "line": "ServerLifecycleEvents.SERVER_STOPPING.register(RepairScheduler::temizle);"
-        },
         {
          "assertion": "alaniAc -calls-> public @src/main/java/com/example/glowmod/ritual/Ritual.java:38",
          "at": "src/main/java/com/example/glowmod/ritual/Ritual.java:38",
@@ -4982,7 +4953,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0354,
+       "seconds": 0.0399,
        "chars": 11444,
        "sha256": "8667ae1f6bf50e1181b3916bc8acb8bc7f18e3b085164053fd04d631cd0a17bc"
       }
@@ -5090,7 +5061,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0119,
+       "seconds": 0.0123,
        "chars": 6419,
        "sha256": "2e261e6e8a2f2c7079ffb13a13e42cf2fea48932ec3110f49d9c273158ce50bd"
       }
@@ -5154,9 +5125,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.1294,
+       "seconds": 0.1396,
        "chars": 3420,
-       "sha256": "bb656689bf278c43d56832da1a25ee04947e712088fa7479b2ef094603e801ee",
+       "sha256": "2a141fef7bcd7a0c03f1a01610055ff483d92efd948b80f1e9a6792b50e9a8e7",
        "claims": 8,
        "claims_reused": 6,
        "claims_new": 2,
@@ -5167,7 +5138,7 @@
      "score": {
       "chars": 3420,
       "tokens": 855,
-      "sha256": "bb656689bf278c43d56832da1a25ee04947e712088fa7479b2ef094603e801ee",
+      "sha256": "2a141fef7bcd7a0c03f1a01610055ff483d92efd948b80f1e9a6792b50e9a8e7",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -5217,10 +5188,10 @@
       },
       "unknowns": 0,
       "analysis_usage": {
-       "elapsed_s": 0.125,
+       "elapsed_s": 0.141,
        "tool_calls": 15,
-       "context_chars": 4751,
-       "context_tokens_est": 1187,
+       "context_chars": 4752,
+       "context_tokens_est": 1188,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -5250,15 +5221,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0207,
-       "chars": 5712,
-       "sha256": "19994aee822f619d5ac24d797b45ff9c90ca8d3945c919c239a65cf8578c2ed3"
+       "seconds": 0.0225,
+       "chars": 5711,
+       "sha256": "bedad7cfb8aa7759c0e951d4b9c0ebbb595da9a541ecbfb380a9432e8d3e6dde"
       }
      ],
      "score": {
-      "chars": 5712,
+      "chars": 5711,
       "tokens": 1428,
-      "sha256": "19994aee822f619d5ac24d797b45ff9c90ca8d3945c919c239a65cf8578c2ed3",
+      "sha256": "bedad7cfb8aa7759c0e951d4b9c0ebbb595da9a541ecbfb380a9432e8d3e6dde",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -5289,7 +5260,7 @@
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5960,
+        "used_chars": 5959,
         "truncated": true,
         "expansions": [
          "mod items->moditems (joined words)"
@@ -5323,15 +5294,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0318,
+       "seconds": 0.0343,
        "chars": 5911,
-       "sha256": "7c8c96b71a5a8a3ab5c15816c0a9649fc7ebdba223641bdca9b3ac38991222e4"
+       "sha256": "c97063c782966a08be06fe3aeb68e3c25fd77050b3b6183e90cecb32d79ff3b5"
       }
      ],
      "score": {
       "chars": 5911,
       "tokens": 1478,
-      "sha256": "7c8c96b71a5a8a3ab5c15816c0a9649fc7ebdba223641bdca9b3ac38991222e4",
+      "sha256": "c97063c782966a08be06fe3aeb68e3c25fd77050b3b6183e90cecb32d79ff3b5",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -5399,7 +5370,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0374,
+       "seconds": 0.054,
        "chars": 878,
        "sha256": "22fc228f2e5a8f0170ef300cacca2f5fbd33243c389dd6e1035da5a570744ab7"
       }
@@ -5477,7 +5448,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.009,
+       "seconds": 0.0104,
        "chars": 24,
        "sha256": "9ca4eb765f58885d3ebde299567073011abc003d9a2b00c1bdcb083546ccc82c"
       }
@@ -5538,9 +5509,9 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.129,
+       "seconds": 0.1294,
        "chars": 2723,
-       "sha256": "c4f1ac2b3a5346332be03e63817efe8fb783c3213515bb648c321a59339417aa",
+       "sha256": "6712776a2493f4d42435e0646f34687bdebd3700aa5240426258f82808da02e2",
        "claims": 6,
        "claims_reused": 6,
        "claims_new": 0,
@@ -5551,7 +5522,7 @@
      "score": {
       "chars": 2723,
       "tokens": 681,
-      "sha256": "c4f1ac2b3a5346332be03e63817efe8fb783c3213515bb648c321a59339417aa",
+      "sha256": "6712776a2493f4d42435e0646f34687bdebd3700aa5240426258f82808da02e2",
       "facts": {
        "total": 3,
        "found_n": 3,
@@ -5632,7 +5603,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0229,
+       "seconds": 0.0217,
        "chars": 5727,
        "sha256": "a002c0d31eeb50fc7fc0a2fe23c3d1c8e87c86e6da51c14413f04e16d750724e"
       }
@@ -5714,7 +5685,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.032,
+       "seconds": 0.0327,
        "chars": 5972,
        "sha256": "98d11fe452afcb901d1cb07b3077861a2d2365d0396267be8e0b61ecac27ac2c"
       }
@@ -5799,7 +5770,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0385,
+       "seconds": 0.037,
        "chars": 10281,
        "sha256": "84c0451950457dfef5e5f69b088b96a9caf390ec1a020f28c9469aef4e45260c"
       }
@@ -5908,7 +5879,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.011,
+       "seconds": 0.0106,
        "chars": 428,
        "sha256": "9fdedd69ec6d913d54fd734ca9c51fa814c83977d8b433e1051b8e18414f1454"
       }
@@ -5968,20 +5939,20 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.2131,
-       "chars": 5408,
-       "sha256": "a5a5fd048c2fefd129e6c44d5e4e154c51b420fee27db662abe99f1f881de7b2",
-       "claims": 12,
-       "claims_reused": 3,
+       "seconds": 0.2032,
+       "chars": 4567,
+       "sha256": "83543284792bc75fb2c625b9a480cb808275cc1bfdbbcf802095d34883707f89",
+       "claims": 11,
+       "claims_reused": 2,
        "claims_new": 9,
-       "internal_tool_calls": 25,
+       "internal_tool_calls": 23,
        "budget_exhausted": null
       }
      ],
      "score": {
-      "chars": 5408,
-      "tokens": 1352,
-      "sha256": "a5a5fd048c2fefd129e6c44d5e4e154c51b420fee27db662abe99f1f881de7b2",
+      "chars": 4567,
+      "tokens": 1142,
+      "sha256": "83543284792bc75fb2c625b9a480cb808275cc1bfdbbcf802095d34883707f89",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -5997,41 +5968,40 @@
        }
       },
       "locators": {
-       "distinct": 12,
+       "distinct": 11,
        "files": 8,
-       "point_or_short": 12
+       "point_or_short": 11
       },
       "agent_tool_calls": 1,
       "claims": {
-       "total": 12,
+       "total": 11,
        "by_status": {
-        "statically_verified": 11,
-        "weak_inference": 1
+        "statically_verified": 11
        },
        "verified": 11,
-       "inference": 1,
-       "verified_share": 0.917,
-       "inference_share": 0.083,
-       "weak_or_unknown": 1,
+       "inference": 0,
+       "verified_share": 1.0,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
        "weak_or_unknown_unlabelled": 0,
        "contradicted_shown": 0,
        "stale_shown": 0,
        "evidence_by_type": {
-        "source_code": 12,
-        "graph_edge": 4
+        "source_code": 11,
+        "graph_edge": 3
        },
-       "evidence_verifying": 12,
-       "evidence_non_verifying": 4,
+       "evidence_verifying": 11,
+       "evidence_non_verifying": 3,
        "contradicted_relations": 0,
        "contradicted_but_cited_line_names_target": 0,
        "contradicted_named_via_import_alias": 0
       },
       "unknowns": 1,
       "analysis_usage": {
-       "elapsed_s": 0.219,
-       "tool_calls": 25,
-       "context_chars": 7439,
-       "context_tokens_est": 1859,
+       "elapsed_s": 0.203,
+       "tool_calls": 23,
+       "context_chars": 6262,
+       "context_tokens_est": 1565,
        "token_count_method": "chars/4 estimate",
        "exhausted": null
       },
@@ -6043,7 +6013,7 @@
        "labelled_not_findings": 0
       },
       "relations": {
-       "asserted": 4,
+       "asserted": 3,
        "checked": 3,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
@@ -6061,15 +6031,15 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0217,
-       "chars": 5737,
-       "sha256": "6f85d97ec17a8db7b50ec46041d3050f567d1027f393af5d1e928780df6388e9"
+       "seconds": 0.0227,
+       "chars": 5715,
+       "sha256": "b5e3823a1d674bb73bef1834ecf00c4d8d9d0a3cc9a054438421b63de463e1db"
       }
      ],
      "score": {
-      "chars": 5737,
-      "tokens": 1435,
-      "sha256": "6f85d97ec17a8db7b50ec46041d3050f567d1027f393af5d1e928780df6388e9",
+      "chars": 5715,
+      "tokens": 1429,
+      "sha256": "b5e3823a1d674bb73bef1834ecf00c4d8d9d0a3cc9a054438421b63de463e1db",
       "facts": {
        "total": 2,
        "found_n": 2,
@@ -6085,20 +6055,23 @@
        }
       },
       "locators": {
-       "distinct": 24,
+       "distinct": 22,
        "files": 10,
-       "point_or_short": 24
+       "point_or_short": 22
       },
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
       "retrieve": {
-       "items": 9,
-       "edges": 0,
-       "edge_confidence": {},
+       "items": 8,
+       "edges": 2,
+       "edge_confidence": {
+        "INFERRED": 1,
+        "EXTRACTED": 1
+       },
        "budget": {
         "max_items": 10,
         "max_chars": 6000,
-        "used_chars": 5992,
+        "used_chars": 5973,
         "truncated": true
        }
       },
@@ -6108,8 +6081,8 @@
        "matched": []
       },
       "relations": {
-       "asserted": 0,
-       "checked": 0,
+       "asserted": 2,
+       "checked": 1,
        "cited_line_missing_target": 0,
        "named_via_import_alias": 0,
        "examples": []
@@ -6126,7 +6099,7 @@
       {
        "run": 1,
        "kind": "cold",
-       "seconds": 0.0313,
+       "seconds": 0.0346,
        "chars": 5933,
        "sha256": "6816245b4810a74ac1de7db3d01a002eb529e29a926ef58ebeb62076922cc24f"
       }
@@ -6157,7 +6130,7 @@
       "agent_tool_calls": 1,
       "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
       "retrieve_text": {
-       "items": 9,
+       "items": 8,
        "outline_edges": 8,
        "edge_confidence": {
         "INFERRED": 8
@@ -6234,8 +6207,8 @@
    "pinpointed_per_1k_tokens": 0.77,
    "locators_distinct_mean": 35.7,
    "agent_tool_calls_mean": 5.36,
-   "seconds_cold_median": 0.038,
-   "seconds_cold_total": 0.542,
+   "seconds_cold_median": 0.037,
+   "seconds_cold_total": 0.545,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 33,
@@ -6263,8 +6236,8 @@
    "pinpointed_per_1k_tokens": 0.77,
    "locators_distinct_mean": 30.7,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.011,
-   "seconds_cold_total": 0.155,
+   "seconds_cold_median": 0.012,
+   "seconds_cold_total": 0.16,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 13,
@@ -6279,52 +6252,52 @@
   "verinoda_analyze": {
    "questions": 14,
    "errors": 0,
-   "facts_found": 42,
+   "facts_found": 43,
    "facts_total": 50,
    "facts_pinpointed": 41,
-   "questions_all_facts": 8,
-   "tokens_mean": 1096.6,
-   "tokens_median": 1027.5,
+   "questions_all_facts": 9,
+   "tokens_mean": 1012.8,
+   "tokens_median": 919.5,
    "tokens_max": 1748,
-   "tokens_total": 15352,
-   "chars_total": 61395,
-   "facts_per_1k_tokens": 2.74,
-   "pinpointed_per_1k_tokens": 2.67,
-   "locators_distinct_mean": 8.6,
+   "tokens_total": 14179,
+   "chars_total": 56698,
+   "facts_per_1k_tokens": 3.03,
+   "pinpointed_per_1k_tokens": 2.89,
+   "locators_distinct_mean": 8.2,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.174,
-   "seconds_cold_total": 2.611,
+   "seconds_cold_median": 0.157,
+   "seconds_cold_total": 2.525,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
-   "facts_found_via_locator": 42,
+   "facts_found_via_locator": 43,
    "assertions_scored": true,
    "negatives_matched": 0,
    "negatives_checked": 12,
-   "relations_asserted": 66,
-   "relations_checked": 33,
+   "relations_asserted": 60,
+   "relations_checked": 34,
    "relations_cited_line_missing_target": 0,
    "relations_named_via_import_alias": 0,
    "claims": {
-    "total": 126,
+    "total": 121,
     "by_status": {
-     "statically_verified": 97,
+     "statically_verified": 99,
      "strong_inference": 12,
-     "weak_inference": 17
+     "weak_inference": 10
     },
-    "verified_share": 0.77,
-    "inference_share": 0.23,
-    "weak_or_unknown": 17,
+    "verified_share": 0.818,
+    "inference_share": 0.182,
+    "weak_or_unknown": 10,
     "weak_or_unknown_unlabelled": 0,
     "negatives_presented_as_findings": 0,
     "contradicted_relations": 0,
     "contradicted_but_cited_line_names_target": 0,
     "contradicted_named_via_import_alias": 0,
-    "unknowns": 6
+    "unknowns": 7
    },
    "cache": {
     "method": "claims whose id already existed in atlas.db before the run (same text + snapshot)",
-    "cold_claims": 126,
-    "cold_reused": 45,
+    "cold_claims": 121,
+    "cold_reused": 44,
     "warm_claims": 0,
     "warm_reused": 0
    }
@@ -6332,29 +6305,29 @@
   "verinoda_retrieve": {
    "questions": 14,
    "errors": 0,
-   "facts_found": 45,
+   "facts_found": 44,
    "facts_total": 50,
-   "facts_pinpointed": 45,
-   "questions_all_facts": 10,
-   "tokens_mean": 1430.9,
-   "tokens_median": 1432.5,
-   "tokens_max": 1440,
-   "tokens_total": 20032,
-   "chars_total": 80105,
-   "facts_per_1k_tokens": 2.25,
-   "pinpointed_per_1k_tokens": 2.25,
-   "locators_distinct_mean": 18.6,
+   "facts_pinpointed": 44,
+   "questions_all_facts": 9,
+   "tokens_mean": 1429.2,
+   "tokens_median": 1428.5,
+   "tokens_max": 1438,
+   "tokens_total": 20009,
+   "chars_total": 80014,
+   "facts_per_1k_tokens": 2.2,
+   "pinpointed_per_1k_tokens": 2.2,
+   "locators_distinct_mean": 18,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.021,
-   "seconds_cold_total": 0.299,
+   "seconds_cold_median": 0.022,
+   "seconds_cold_total": 0.335,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
-   "facts_found_via_locator": 45,
+   "facts_found_via_locator": 44,
    "assertions_scored": true,
    "negatives_matched": 0,
    "negatives_checked": 12,
-   "relations_asserted": 6,
-   "relations_checked": 2,
+   "relations_asserted": 12,
+   "relations_checked": 3,
    "relations_cited_line_missing_target": 0,
    "relations_named_via_import_alias": 0
   },
@@ -6365,26 +6338,26 @@
    "facts_total": 50,
    "facts_pinpointed": 48,
    "questions_all_facts": 13,
-   "tokens_mean": 1488.4,
-   "tokens_median": 1489.0,
-   "tokens_max": 1499,
-   "tokens_total": 20837,
-   "chars_total": 83325,
-   "facts_per_1k_tokens": 2.3,
-   "pinpointed_per_1k_tokens": 2.3,
+   "tokens_mean": 1484.9,
+   "tokens_median": 1483.5,
+   "tokens_max": 1497,
+   "tokens_total": 20789,
+   "chars_total": 83137,
+   "facts_per_1k_tokens": 2.31,
+   "pinpointed_per_1k_tokens": 2.31,
    "locators_distinct_mean": 25.5,
    "agent_tool_calls_mean": 1,
-   "seconds_cold_median": 0.032,
-   "seconds_cold_total": 0.458,
+   "seconds_cold_median": 0.034,
+   "seconds_cold_total": 0.481,
    "seconds_warm_median": null,
    "seconds_warm_total": null,
    "facts_found_via_locator": 48,
    "assertions_scored": true,
    "negatives_matched": 0,
    "negatives_checked": 12,
-   "relations_asserted": 61,
-   "relations_checked": 61,
-   "relations_cited_line_missing_target": 46,
+   "relations_asserted": 54,
+   "relations_checked": 54,
+   "relations_cited_line_missing_target": 40,
    "relations_named_via_import_alias": 0
   }
  },
