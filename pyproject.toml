@@ -198,6 +198,7 @@ testpaths = ["tests"]
 addopts = "-m 'not slow'"
 markers = [
     "slow: long-running packaging checks (wheel build, fresh venv, uv tool install); run with -m slow",
+    "browser: drives `verinoda ui` in headless Chrome, Edge or Chromium (skipped when none is found)",
 ]
 
 [tool.ruff]
