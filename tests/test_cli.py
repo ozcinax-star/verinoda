@@ -1169,3 +1169,37 @@ def test_benchmark_critique_eval_and_sanitize(tmp_path, capsys):
     body = f.read_text(encoding="utf-8")
     assert str(tmp_path) not in body and "<TMP>/" in body
     assert run_cli(capsys, "benchmark", "sanitize", str(f)).startswith("res.json: json changed False")
+
+
+# -- from install to the first answer ---------------------------------------------------------------
+
+def _git_copy(dst: Path) -> Path:
+    shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc", "*.db"))
+    for args in (["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"]):
+        subprocess.run(["git", *args], cwd=dst, check=True, capture_output=True)
+    return dst
+
+
+def test_the_first_question_in_a_project_indexes_it(tmp_path, capsys, monkeypatch):
+    from verinoda import cli
+
+    monkeypatch.delenv("VERINODA_NO_AUTO_INDEX", raising=False)
+    repo = _git_copy(tmp_path / "app")
+    assert cli.main(["query", "Where is an order written to the database?", "--repo", str(repo)]) == 0
+    cap = capsys.readouterr()
+    assert "orders/" in cap.out and (repo / ".verinoda" / "index" / "graph.json").is_file()
+    assert "first use in" in cap.err and "indexing it once" in cap.err  # said, on stderr
+
+
+def test_no_index_is_made_outside_a_project_or_when_turned_off(tmp_path, capsys, monkeypatch):
+    from verinoda import cli
+
+    plain = tmp_path / "plain"
+    shutil.copytree(EXAMPLE, plain, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc", "*.db"))
+    with pytest.raises(SystemExit, match="not a git work tree"):
+        cli.main(["query", "anything", "--repo", str(plain)])
+    assert not (plain / ".verinoda" / "index" / "graph.json").exists()
+    monkeypatch.setenv("VERINODA_NO_AUTO_INDEX", "1")
+    repo = _git_copy(tmp_path / "app")
+    with pytest.raises(SystemExit, match="has no index yet"):
+        cli.main(["query", "anything", "--repo", str(repo)])

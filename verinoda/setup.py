@@ -307,10 +307,32 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
             "this Verinoda install is hardlinked or editable; a sandboxed agent (Codex on Windows) may not be "
             "able to import it and will fall back to MCP. Reinstall with the command in the README "
             "(`uv tool install --force --reinstall-package verinoda --link-mode copy ...`)")
+    first = _first_question(repo)
+    if first:
+        report["next_steps"].insert(0, f"A first question about this project: `verinoda query \"{first}\"` "
+                                       "(or ask in your own words, English or Turkish)")
+    report["next_steps"].append("See it: `verinoda ui` opens notes and the graph (3D, Ctrl+K for commands) in the browser")
     report["next_steps"].append("Terminal: `verinoda query \"<question>\"` or `verinoda analyze \"<question>\"`; "
                                 "after big edits `verinoda update .`; if anything looks wrong `verinoda doctor`")
     report["ok"] = all(a["ok"] for a in report["agents"]) and not res.get("error")
     return report
+
+
+def _first_question(repo: Path) -> str | None:
+    """A question worth asking first: about the project's own most connected function or class."""
+    try:
+        from verinoda import index
+        from verinoda.architecture_map import is_test_file
+
+        g = index.load(repo)
+        best = max((n for n in g.G if g.is_symbol(n) and not is_test_file(g.file(n) or "")
+                    and not str(g.label(n)).startswith("_")), key=lambda n: g.G.degree(n), default=None)
+    except Exception:  # noqa: BLE001 - a suggestion only
+        return None
+    if best is None:
+        return None
+    name = str(g.label(best)).strip("()").lstrip(".")
+    return f"what does {name} do and what calls it?" if name else None
 
 
 def render(rep: dict) -> None:

@@ -136,6 +136,18 @@ verinoda setup        # index the code + connect Claude Code / Codex if they are
 
 `verinoda setup` is safe to re-run (it updates the index and leaves unchanged skills
 alone). `--agents claude,codex|all|none`, `--scope user` for all projects, `--no-mcp`.
+It ends with a first question about the project, built from its most connected
+function or class, and how to open the graph.
+
+Or skip it and just ask: in a git work tree without an index, the first
+`verinoda query`, `analyze`, `trace`, `map` or `ui` indexes the project once and
+says so on stderr (never outside a git work tree or in the home folder;
+`VERINODA_NO_AUTO_INDEX=1` turns it off):
+
+```bash
+cd my-project
+verinoda query "where is the discount threshold configured?"   # indexes first, then answers
+```
 
 ### Other ways to install
 

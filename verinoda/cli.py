@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -89,11 +90,44 @@ def _store(repo: Path, *, create: bool = False):
     return open_store(repo, create=create)
 
 
-def _need_graph(repo: Path) -> None:
+def _auto_index(repo: Path) -> bool:
+    """The first question asked in a project indexes it, once, and says so (on stderr).
+
+    Only a git work tree that is not the home folder, and never with ``VERINODA_NO_AUTO_INDEX`` set:
+    anywhere else the question gets the plain "run `verinoda scan`" error. Returns whether an index
+    exists afterwards."""
+    import time
+
     from verinoda.paths import graph_path
 
-    if not graph_path(repo).exists():
-        raise SystemExit(f"error: {repo} has no index yet - run `verinoda scan {repo}` first")
+    if graph_path(repo).exists():
+        return True
+    try:
+        home = Path.home().resolve()
+    except (RuntimeError, OSError):
+        home = None
+    if os.environ.get("VERINODA_NO_AUTO_INDEX") or not (repo / ".git").exists() or repo == home:
+        return False
+    from verinoda import workflow
+
+    print(f"first use in {repo}: indexing it once (keep it current with `verinoda update`; "
+          f"VERINODA_NO_AUTO_INDEX=1 turns this off)...", file=sys.stderr, flush=True)
+    t0 = time.monotonic()
+    workflow.init(repo)
+    st = _store(repo)
+    try:
+        res = workflow.scan(st, repo)
+    finally:
+        st.close()
+    snap = res.get("snapshot") or {}
+    print(f"indexed {snap.get('file_count', '?')} files in {time.monotonic() - t0:.0f} s", file=sys.stderr, flush=True)
+    return graph_path(repo).exists()
+
+
+def _need_graph(repo: Path) -> None:
+    if not _auto_index(repo):
+        why = "" if (repo / ".git").exists() else " (not a git work tree, so it is not indexed on its own)"
+        raise SystemExit(f"error: {repo} has no index yet - run `verinoda scan {repo}` first{why}")
 
 
 def _rel_in_repo(repo: Path, path: str, what: str) -> str:
@@ -506,6 +540,7 @@ def cmd_ui(args) -> int:
 
     given = args.repo or args.path
     repo = Path(given).resolve() if given else find_repo_root()
+    _auto_index(repo)  # no index and not a project: the error below says what to run
     if args.export is not None:
         from verinoda.ui import export
 

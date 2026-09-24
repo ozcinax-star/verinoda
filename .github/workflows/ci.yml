@@ -1,10 +1,17 @@
-# Cross-platform CI (Windows / Linux / macOS). Manual trigger only while the
-# project is unfinished, so pushes do not consume Actions minutes. Enable
-# push/pull_request triggers once the suite is stable.
+# Cross-platform CI (Windows / Linux / macOS) on every push to main and every pull request
+# (GitHub-hosted runners are free for a public repository). The ported upstream suite runs only
+# by hand: it carries 50 failures that fail on unmodified upstream too (docs/UPSTREAM.md).
 name: ci
 
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
+
+concurrency:  # a newer push replaces a run still going for the same branch
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   product:
@@ -59,6 +66,7 @@ jobs:
 
   upstream:
     name: ported upstream suite (ubuntu)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
