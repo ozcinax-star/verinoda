@@ -34,7 +34,7 @@ jobs:
         run: |
           if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=.venv/Scripts/python; fi
           git config --global user.name ci && git config --global user.email ci@example.invalid
-          $PY -m pytest tests -q -p no:cacheprovider
+          $PY -m pytest tests -q -rs -p no:cacheprovider
 
   wheel:
     name: clean wheel install (${{ matrix.os }})
@@ -54,7 +54,7 @@ jobs:
           uv venv --python 3.12 /tmp/clean || uv venv --python 3.12 "$RUNNER_TEMP/clean"
           ENV=/tmp/clean; [ -d "$ENV" ] || ENV="$RUNNER_TEMP/clean"
           if [ -x "$ENV/bin/python" ]; then BIN="$ENV/bin"; else BIN="$ENV/Scripts"; fi
-          uv pip install --python "$BIN/python" dist/*.whl
+          uv pip install --python "$ENV" dist/*.whl   # the environment folder: uv finds python(.exe) in it
           "$BIN/verinoda" --version
           "$BIN/verinoda" --help
           cp -r examples/orders_app "$RUNNER_TEMP/orders"

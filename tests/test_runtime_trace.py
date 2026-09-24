@@ -471,3 +471,18 @@ def test_importing_the_plugin_inside_verinoda_does_not_trace():
         assert "verinoda-calltrace" not in {sys.monitoring.get_tool(i) for i in range(6)}
     plugin.pytest_unconfigure(None)  # a no-op: nothing is written into the cwd
     assert not plugin._state["written"]
+
+
+def test_without_co_qualname_the_tracer_names_methods_from_the_source(tmp_path):
+    """Python 3.10 has no co_qualname: ``save`` must still become ``OrderRepository.save``."""
+    from verinoda.runtime import calltrace_plugin as ct
+
+    src = tmp_path / "mod.py"
+    src.write_text("import functools\n\nclass Repo:\n    def save(self):\n        return 1\n\n"
+                   "    @functools.lru_cache\n    @staticmethod\n    def cached():\n        return 2\n\n"
+                   "def outer():\n    def inner():\n        return 3\n    return inner\n", encoding="utf-8")
+    ns: dict = {}
+    exec(compile(src.read_text(encoding="utf-8"), str(src), "exec"), ns)
+    assert ct._qual_from_source(ns["Repo"].save.__code__) == "Repo.save"
+    assert ct._qual_from_source(ns["outer"]().__code__) == "outer.<locals>.inner"
+    assert ct._qual_from_source(ns["outer"].__code__) == "outer"

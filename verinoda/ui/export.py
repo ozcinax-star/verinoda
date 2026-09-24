@@ -182,14 +182,26 @@ def _slugs(p: Path) -> set[str]:
     return {s for s in (normalize_id(str(p)), re.sub(r"[^a-z0-9]+", "_", str(p).lower()).strip("_")) if s}
 
 
+def _resolved(p: Path) -> Path:
+    try:
+        return p.resolve()
+    except (OSError, RuntimeError):
+        return p
+
+
 def _scrubber(root: Path):
     """A function that takes this machine's paths out of a text: the project root (as a path, in
     either slash form, or folded into a name such as ``c_users_me_src_proj_mod``) and then the home
     folder (``~``). A path matches only as a whole path and a name only as whole ``_`` parts, so
     ``src/components/home/user.ts`` or ``sync_users_members`` are left alone."""
-    home = Path.home().resolve()
     rules = []
-    for base, into, into_slug in ((root, "", ""), (home, "~/", "home_")):
+    # both the form a path is written in and its resolved form: on macOS /home and /var are links
+    # (/System/Volumes/Data/home, /private/var), and a text may carry either
+    bases = []
+    for b, into, into_slug in ((Path(root), "", ""), (Path.home(), "~/", "home_")):
+        for form in dict.fromkeys((b, _resolved(b))):
+            bases.append((form, into, into_slug))
+    for base, into, into_slug in bases:
         for form in {str(base), base.as_posix()}:
             if len(form.strip("/\\")) < 2:  # a root of "/" or "C:" would match every path
                 continue

@@ -275,13 +275,24 @@ def _copy_repo(repo: Path, dst: Path) -> int:
 
 
 def _posix_limits(cpu_s: int, mem_mb: int):  # pragma: no cover - POSIX only
+    """Limits for the child, each one as far as the system allows it.
+
+    macOS refuses an address-space limit (``setrlimit(RLIMIT_AS)`` raises ValueError there), and a
+    raise in ``preexec_fn`` stopped every isolated run from starting at all; a limit the system
+    does not take is now skipped instead, the others still apply."""
+    limits = [("RLIMIT_CPU", cpu_s), ("RLIMIT_FSIZE", 256 << 20)]
+    if sys.platform != "darwin":
+        limits.insert(1, ("RLIMIT_AS", mem_mb << 20))
+
     def apply():
         import resource
 
         os.setsid()
-        resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s))
-        resource.setrlimit(resource.RLIMIT_AS, (mem_mb << 20, mem_mb << 20))
-        resource.setrlimit(resource.RLIMIT_FSIZE, (256 << 20, 256 << 20))
+        for name, value in limits:
+            try:
+                resource.setrlimit(getattr(resource, name), (value, value))
+            except (ValueError, OSError, AttributeError):
+                pass  # this system does not take it
     return apply
 
 

@@ -116,7 +116,51 @@ def _repo_code(code) -> bool:
 
 
 def _qual(code) -> str:
-    return getattr(code, "co_qualname", None) or code.co_name
+    q = getattr(code, "co_qualname", None)  # Python 3.11+
+    if q:
+        return q
+    q = _quals.get(code)
+    if q is None:
+        q = _quals[code] = _qual_from_source(code) or code.co_name
+    return q
+
+
+_quals: dict = {}          # code object -> qualified name (Python 3.10, no co_qualname)
+_source_quals: dict = {}   # file -> {(first line, name): qualified name}
+
+
+def _qual_from_source(code) -> str | None:
+    """``Class.method`` / ``outer.<locals>.inner`` for a code object, read from its file's syntax tree.
+
+    Python 3.10 code objects carry only the bare name (``save``, ``__lt__``); without the class the
+    calls cannot be matched to the graph's nodes, so on 3.10 the trace had no edge into any method.
+    A definition is keyed by its line and by each decorator's line (``co_firstlineno`` is the first
+    decorator's). Lambdas and comprehensions keep their bare name."""
+    f = code.co_filename
+    table = _source_quals.get(f)
+    if table is None:
+        table = _source_quals[f] = {}
+        try:
+            import ast
+
+            with open(f, encoding="utf-8") as fh:
+                tree = ast.parse(fh.read())
+        except (OSError, SyntaxError, ValueError, UnicodeDecodeError):
+            return None
+
+        def walk(node, prefix: str) -> None:
+            for ch in ast.iter_child_nodes(node):
+                if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    q = prefix + ch.name
+                    if not isinstance(ch, ast.ClassDef):
+                        for ln in [ch.lineno] + [d.lineno for d in ch.decorator_list]:
+                            table.setdefault((ln, ch.name), q)
+                    walk(ch, q + ("." if isinstance(ch, ast.ClassDef) else ".<locals>."))
+                else:
+                    walk(ch, prefix)
+
+        walk(tree, "")
+    return table.get((code.co_firstlineno, code.co_name))
 
 
 def _breach(reason: str) -> None:
