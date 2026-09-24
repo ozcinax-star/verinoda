@@ -9,7 +9,7 @@
 > any purpose is given (see also the Apache-2.0 "AS IS" terms in `LICENSE`).
 > Not published to PyPI yet. Formerly developed under the working name "RepoAtlas".
 
-### What is in this snapshot (2026-09-24)
+### What is in this snapshot (2026-09-25)
 
 | Part | State |
 |---|---|
