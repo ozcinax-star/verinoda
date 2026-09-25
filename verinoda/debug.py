@@ -967,8 +967,10 @@ def _suspects(repo: Path, sess: dict, prior: list[dict], cur: dict) -> list[dict
             add(fr.get("path"), fr.get("symbol"), f"on the traceback of attempt {cur['n']} "
                                                   f"({fr.get('path')}:{fr.get('line')})")
         add(f.get("path"), f.get("symbol"), f"crash site of attempt {cur['n']} ({f.get('path')}:{f.get('line')})")
+    # the last passing state of the code: a pass that edited or skipped the tests says nothing about the code
     passing = [a for a in prior if a["outcome"] == "pass" and a["kind"] in LOOP_KINDS and
-               (a.get("copy_source") or {}).get("kind", "worktree") == "worktree"]
+               (a.get("copy_source") or {}).get("kind", "worktree") == "worktree" and
+               not any(f.get("rule") in looprules.TEST_RULES for f in a.get("findings") or [])]
     if passing:
         ref = passing[-1]
         changes = treestate.diff_trees(repo, sess["base_commit"], ref.get("tree_files") or {},

@@ -1302,8 +1302,10 @@ records what the human chose and checks the code against it.
   and stops with `unknown`), then first-parent binary search in commit copies, commits that cannot run
   are skipped, without `--good` Verinoda steps back 1, 2, 4, ... commits, and the conclusion cites the
   attempt that shows each side; `observe`; `narrowing` (a suspect list: traceback symbols and symbols
-  changed since the last passing state, each with its evidence; only a complete trace in which a
-  changed function was called nowhere, with no child process started, rules it out);
+  changed since the last passing state - a pass with `test_edited` or `failing_tests_skipped` is not
+  one, else the changed code drops out behind the edited test - each with its evidence; only a
+  complete trace in which a changed function was called nowhere, with no child process started,
+  rules it out);
   `minimal_repro` (the repro narrowed to the failing tests; when a test passes alone and failed in
   the full repro on the same tree, the attempt reports the heuristic `order_dependent`); `ask_human`
   when a test rule fired or nothing else applies.
