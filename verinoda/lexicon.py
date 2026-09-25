@@ -638,6 +638,23 @@ def seed_lookup(words: list[str]) -> list[tuple[int, int, str, tuple[str, ...]]]
     return found
 
 
+@lru_cache(maxsize=1)
+def _seed_keys_by_english() -> dict[str, tuple[str, ...]]:
+    """English seed target (light stem) -> the one-word Turkish keys that translate to it."""
+    out: dict[str, list[str]] = defaultdict(list)
+    for key, targets in seed_entries().items():
+        if " " not in key:
+            for t in targets:
+                out[tn.en_stem(t.lower())].append(key)
+    return {k: tuple(v) for k, v in out.items()}
+
+
+def seed_translates(part: str, english: str) -> bool:
+    """Is the identifier part ``part`` (``baslat``) a seed key, maybe inflected, for ``english`` (``start``)?"""
+    p = tn.fold_tr(part).lower()
+    return any(seed_key_matches(k, p) for k in _seed_keys_by_english().get(tn.en_stem(english.lower()), ()))
+
+
 # -- the loaded lexicon -----------------------------------------------------------------------
 
 @dataclass

@@ -1,0 +1,1153 @@
+{
+ "about": "Turkish questions written in review to probe the Turkish-question change (not a benchmark set; the final version was made with them in view, so they are in-sample for it). rank = 1-based position in `verinoda query --json` of the first item whose file is an answer file and whose lines or unit span cover the answer line: [default budget, --max-items 40 --max-chars 500000]; null = not in that output. Indexes: copies of the fastbench prepared indexes (code d3165b8). first_version = commit 8ee8ef6.",
+ "questions": [
+  {
+   "id": "O1",
+   "set": "orders_app_tr",
+   "question": "Geçersiz bir sipariş gelince API hangi error kodunu döndürüyor?",
+   "answer": [
+    [
+     "orders/api.py",
+     20
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "O2",
+   "set": "orders_app_tr",
+   "question": "Siparişin toplam fiyatı nasıl hesaplanıyor?",
+   "answer": [
+    [
+     "orders/pricing.py",
+     7
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "O3",
+   "set": "orders_app_tr",
+   "question": "sqlite3.connect hangi sınıfta çağrılıyor?",
+   "answer": [
+    [
+     "orders/repository.py",
+     10
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "O4",
+   "set": "orders_app_tr",
+   "question": "Bir siparişe en fazla kaç kalem eklenebilir?",
+   "answer": [
+    [
+     "orders/config.py",
+     6
+    ],
+    [
+     "orders/service.py",
+     15
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     8,
+     8
+    ],
+    "first_version": [
+     8,
+     8
+    ],
+    "final": [
+     8,
+     8
+    ]
+   }
+  },
+  {
+   "id": "O5",
+   "set": "orders_app_tr",
+   "question": "Müşteri adı veritabanında hangi tabloya kaydediliyor?",
+   "answer": [
+    [
+     "orders/repository.py",
+     16
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "O6",
+   "set": "orders_app_tr",
+   "question": "validation error hangi fonksiyonda fırlatılıyor?",
+   "answer": [
+    [
+     "orders/service.py",
+     14
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     3,
+     3
+    ],
+    "first_version": [
+     2,
+     2
+    ],
+    "final": [
+     2,
+     2
+    ]
+   }
+  },
+  {
+   "id": "O7",
+   "set": "orders_app_tr",
+   "question": "Olmayan bir sipariş istenince 404 nerede dönüyor?",
+   "answer": [
+    [
+     "orders/api.py",
+     27
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "O8",
+   "set": "orders_app_tr",
+   "question": "Handler error durumunda hangi HTTP kodunu dönüyor?",
+   "answer": [
+    [
+     "orders/api.py",
+     20
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "W1",
+   "set": "glow_mod",
+   "question": "ritual start edilince ne oluyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/ritual/Ritual.java",
+     22
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     2,
+     2
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "W2",
+   "set": "glow_mod",
+   "question": "Ritüel alanındaki çimenler nasıl kaldırılıyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/ritual/Ritual.java",
+     36
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "W3",
+   "set": "glow_mod",
+   "question": "Wisp öldüğünde hangi veri paketi fonksiyonu çalışıyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/entity/Wisp.java",
+     42
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     4,
+     4
+    ],
+    "first_version": [
+     4,
+     4
+    ],
+    "final": [
+     4,
+     4
+    ]
+   }
+  },
+  {
+   "id": "W4",
+   "set": "glow_mod",
+   "question": "Doğal wispler hangi biyomlarda ortaya çıkıyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/world/WispSpawner.java",
+     30
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     2,
+     2
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "W5",
+   "set": "glow_mod",
+   "question": "Onarım kuyruğuna blok nerede kaydediliyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/repair/RepairScheduler.java",
+     30
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "W6",
+   "set": "glow_mod",
+   "question": "Fener asasının bekleme süresi ne kadar?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/event/LanternEvents.java",
+     12
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     null,
+     6
+    ],
+    "first_version": [
+     null,
+     6
+    ],
+    "final": [
+     null,
+     6
+    ]
+   }
+  },
+  {
+   "id": "W7",
+   "set": "glow_mod",
+   "question": "Wisp çağırma mesafesi sınırı nerede kontrol ediliyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/network/ServerNetworking.java",
+     25
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "W8",
+   "set": "glow_mod",
+   "question": "Fener olayları nerede etkinleştiriliyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/event/LanternEvents.java",
+     18
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "W9",
+   "set": "glow_mod",
+   "question": "Ritüel nasıl başlıyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/ritual/Ritual.java",
+     22
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "W10",
+   "set": "glow_mod",
+   "question": "Ritüel başlatılınca kaç wisp çağrılıyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/ritual/Ritual.java",
+     24
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "W11",
+   "set": "glow_mod",
+   "question": "Sunucu dururken kuyruk nasıl temizleniyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/repair/RepairScheduler.java",
+     43
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "W12",
+   "set": "glow_mod",
+   "question": "ritual start fonksiyonunu çağıran Java metodu hangisi?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/ritual/Ritual.java",
+     22
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     2,
+     2
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "C1",
+   "set": "graphify_core_tr",
+   "question": "Graphify URL indirirken özel IP adreslerini nasıl engelliyor?",
+   "answer": [
+    [
+     "graphify/security.py",
+     95
+    ],
+    [
+     "graphify/security.py",
+     130
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "C2",
+   "set": "graphify_core_tr",
+   "question": "SSRF saldırılarına karşı hangi kontrol yapılıyor?",
+   "answer": [
+    [
+     "graphify/security.py",
+     110
+    ],
+    [
+     "graphify/security.py",
+     95
+    ],
+    [
+     "graphify/security.py",
+     190
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "C3",
+   "set": "graphify_core_tr",
+   "question": "Düğüm etiketlerindeki kontrol karakterleri nerede temizleniyor?",
+   "answer": [
+    [
+     "graphify/security.py",
+     403
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     2,
+     2
+    ],
+    "first_version": [
+     2,
+     2
+    ],
+    "final": [
+     2,
+     2
+    ]
+   }
+  },
+  {
+   "id": "C4",
+   "set": "graphify_core_tr",
+   "question": "graph.json diske yarım kalmadan nasıl yazılıyor?",
+   "answer": [
+    [
+     "graphify/paths.py",
+     118
+    ],
+    [
+     "graphify/paths.py",
+     165
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     null,
+     null
+    ],
+    "first_version": [
+     null,
+     11
+    ],
+    "final": [
+     null,
+     11
+    ]
+   }
+  },
+  {
+   "id": "C5",
+   "set": "graphify_core_tr",
+   "question": "Leiden kurulu değilse topluluklar hangi algoritmayla bulunuyor?",
+   "answer": [
+    [
+     "graphify/cluster.py",
+     106
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     null,
+     9
+    ],
+    "first_version": [
+     4,
+     4
+    ],
+    "final": [
+     4,
+     4
+    ]
+   }
+  },
+  {
+   "id": "C6",
+   "set": "graphify_core_tr",
+   "question": "Düğüm id'leri nasıl normalize ediliyor?",
+   "answer": [
+    [
+     "graphify/ids.py",
+     75
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     2,
+     2
+    ],
+    "first_version": [
+     2,
+     2
+    ],
+    "final": [
+     2,
+     2
+    ]
+   }
+  },
+  {
+   "id": "C7",
+   "set": "graphify_core_tr",
+   "question": "Git hook nasıl kuruluyor?",
+   "answer": [
+    [
+     "graphify/hooks.py",
+     640
+    ],
+    [
+     "graphify/hooks.py",
+     870
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     null,
+     13
+    ],
+    "first_version": [
+     6,
+     6
+    ],
+    "final": [
+     6,
+     6
+    ]
+   }
+  },
+  {
+   "id": "C8",
+   "set": "graphify_core_tr",
+   "question": "Aynı varlık iki kez çıkarılırsa nasıl birleştiriliyor?",
+   "answer": [
+    [
+     "graphify/dedup.py",
+     600
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "C9",
+   "set": "graphify_core_tr",
+   "question": "İndirilen yanıtın boyutu nasıl sınırlanıyor?",
+   "answer": [
+    [
+     "graphify/security.py",
+     262
+    ],
+    [
+     "graphify/security.py",
+     280
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "C10",
+   "set": "graphify_core_tr",
+   "question": "duplicate düğümler nasıl birleştiriliyor?",
+   "answer": [
+    [
+     "graphify/dedup.py",
+     600
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     3,
+     3
+    ],
+    "first_version": [
+     null,
+     9
+    ],
+    "final": [
+     2,
+     2
+    ]
+   }
+  },
+  {
+   "id": "C11",
+   "set": "graphify_core_tr",
+   "question": "atomic write hangi fonksiyonda yapılıyor?",
+   "answer": [
+    [
+     "graphify/paths.py",
+     118
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     4,
+     4
+    ],
+    "first_version": [
+     4,
+     4
+    ],
+    "final": [
+     4,
+     4
+    ]
+   }
+  },
+  {
+   "id": "C12",
+   "set": "graphify_core_tr",
+   "question": "cohesion skoru nasıl hesaplanıyor?",
+   "answer": [
+    [
+     "graphify/cluster.py",
+     360
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     4,
+     4
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "P1",
+   "set": "graphify_core_tr",
+   "question": "Projenin adı grafik meta verisinde yoksa nasıl tahmin ediliyor?",
+   "answer": [
+    [
+     "graphify/callflow_html.py",
+     416
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     6,
+     6
+    ],
+    "first_version": [
+     8,
+     8
+    ],
+    "final": [
+     4,
+     4
+    ]
+   }
+  },
+  {
+   "id": "P2",
+   "set": "graphify_core_tr",
+   "question": "XAML dosyalarında projelerin kök klasörü nasıl bulunuyor?",
+   "answer": [
+    [
+     "graphify/extract.py",
+     5860
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "P3",
+   "set": "graphify_core_tr",
+   "question": "Skill dosyaları projeye nasıl kuruluyor?",
+   "answer": [
+    [
+     "graphify/install.py",
+     1630
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     null,
+     13
+    ],
+    "first_version": [
+     null,
+     null
+    ],
+    "final": [
+     7,
+     7
+    ]
+   }
+  },
+  {
+   "id": "P4",
+   "set": "graphify_core_tr",
+   "question": "MCP protokolünün sunucu yapılandırma dosyaları nasıl çıkarılıyor?",
+   "answer": [
+    [
+     "graphify/mcp_ingest.py",
+     100
+    ],
+    [
+     "graphify/mcp_ingest.py",
+     1
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     2,
+     2
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "P5",
+   "set": "graphify_core_tr",
+   "question": "Topluluk algoritması hangi kütüphaneden çağrılıyor?",
+   "answer": [
+    [
+     "graphify/cluster.py",
+     30
+    ],
+    [
+     "graphify/cluster.py",
+     106
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     8,
+     8
+    ],
+    "first_version": [
+     null,
+     9
+    ],
+    "final": [
+     8,
+     8
+    ]
+   }
+  },
+  {
+   "id": "P6",
+   "set": "orders_app_tr",
+   "question": "Orderlar veritabanına hangi sınıf üzerinden yazılıyor?",
+   "answer": [
+    [
+     "orders/repository.py",
+     16
+    ],
+    [
+     "orders/repository.py",
+     8
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     1,
+     1
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "P7",
+   "set": "glow_mod",
+   "question": "Wisplerin doğal olarak ortaya çıkması hangi olayda oluyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/world/WispSpawner.java",
+     30
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     2,
+     2
+    ],
+    "first_version": [
+     null,
+     19
+    ],
+    "final": [
+     2,
+     2
+    ]
+   }
+  },
+  {
+   "id": "P8",
+   "set": "glow_mod",
+   "question": "Wispler sunucuda hangi paketle çağrılıyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/network/SummonWispPayload.java",
+     11
+    ],
+    [
+     "src/main/java/com/example/glowmod/network/ServerNetworking.java",
+     20
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     null,
+     10
+    ],
+    "first_version": [
+     4,
+     4
+    ],
+    "final": [
+     null,
+     10
+    ]
+   }
+  },
+  {
+   "id": "C10en",
+   "set": "graphify_core_tr",
+   "question": "How are duplicate nodes merged?",
+   "answer": [
+    [
+     "graphify/dedup.py",
+     600
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     6,
+     6
+    ],
+    "first_version": [
+     6,
+     6
+    ],
+    "final": [
+     6,
+     6
+    ]
+   }
+  },
+  {
+   "id": "C10b",
+   "set": "graphify_core_tr",
+   "question": "duplicate node'lar hangi fonksiyonda birleştiriliyor?",
+   "answer": [
+    [
+     "graphify/dedup.py",
+     600
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     2,
+     2
+    ],
+    "first_version": [
+     null,
+     35
+    ],
+    "final": [
+     3,
+     3
+    ]
+   }
+  },
+  {
+   "id": "C10c",
+   "set": "graphify_core_tr",
+   "question": "Graphify duplicate entity'leri nasıl temizliyor?",
+   "answer": [
+    [
+     "graphify/dedup.py",
+     600
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     2,
+     2
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "id": "W1b",
+   "set": "glow_mod",
+   "question": "Ritüel start olunca alan nasıl açılıyor?",
+   "answer": [
+    [
+     "src/main/java/com/example/glowmod/ritual/Ritual.java",
+     22
+    ],
+    [
+     "src/main/java/com/example/glowmod/ritual/Ritual.java",
+     36
+    ]
+   ],
+   "rank": {
+    "d3165b8": [
+     1,
+     1
+    ],
+    "first_version": [
+     4,
+     4
+    ],
+    "final": [
+     1,
+     1
+    ]
+   }
+  }
+ ]
+}

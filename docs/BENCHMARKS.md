@@ -221,6 +221,44 @@ retrieve 50 → 45: in a mod, those words are how the data files are found), and
 `degis` → change (değişince, değişirse; 3 results down, all on one user question whose answer
 is not about changes, none up).
 
+**Turkish questions: code words, short stems.** An English word typed into a Turkish question took
+up to three of the lexicon's co-occurrence pairs (`update` -> issue, cli, audit; `graphify` ->
+install, uninstall, hook): names it occurs with, not what it means. An English question never gets
+them, and the question plan already skipped them for words the repository uses. Now a question word
+that is a name part of some indexed unit (a symbol, a test, a heading or a data key) keeps only the
+pairs that carry it: the repository's own translation pairs, a name built on the word (`duplicate`
+-> `deduplicate`) and a name the seed dictionary translates to it (`start` -> `baslat`). Two
+cleanups came with it. A Turkish word the index does not know expands through its stem as narrowly
+as the stem is short: a stem of 5+ letters to the three most frequent terms it begins, as before (a
+Turkish spelling of an English word: `projenin` -> `project`, `algoritması` -> `algorithm`,
+`protokolü` -> `protocol`); a 4-letter stem only to itself inflected, for a name its first part in
+snake_case or camelCase (`para_birimi`, `WispSpawner`; not `paragraph`, not `artifact` for
+`artırıyor`); a 3-letter stem only to itself, when the code names something with it (`sil` for
+`siliniyor`; `sayıyor` no longer reaches `sayfa`, `sığmak` `signal`, `sınır` `singleton`). And a term
+reached by several routes keeps its highest weight. Same prepared indexes (question-time change;
+`9-before-tr-question-words.json` -> `9-tr-question-words.json`), eight public sets: analyze 282 ->
+284, JSON 229 -> 231, text 280 -> 283, negatives unchanged. Five results change, all up:
+`verinoda_user_tr` u09 0 -> 2 / 1 / 2 (analyze / JSON / text; in-sample; the set is now 13 / 9 / 13
+of 30) and `graphify_core_tr` g04 text 2 -> 3, g08 JSON 0 -> 1 (the change was not tuned on that
+set). Measured one at a time on prototypes of the first version below, all of it came from the
+first change; the stem and weight changes moved rankings only.
+
+The first version of this change kept only translation pairs and expanded every stem as the 4-letter
+rule above; it scored the same on the eight sets but lost elsewhere. A review wrote 44 Turkish
+questions against `glow_mod`, `graphify_core_tr` and `orders_app_tr` (`9-tr-review-ranks.json`: the
+rank of the answer in `verinoda query`; not a benchmark set, and the final rules were made with them
+in view). Against d3165b8 the first version ranked the answer higher on 7 and lower on 11, where it
+dropped Turkish spellings of English words (proje, algoritma), camelCase names (`WispSpawner`) and
+pairs that carry the word (`deduplicate`, `baslat`). The final version: 9 higher, 1 lower
+(`duplicate node'lar ...` 2 -> 3: neighbours of `node` had helped there). Still lost against
+d3165b8: the co-occurrence pairs of a code word that do not carry it, even where they help. Noise
+that stays: a 3-letter stem still reaches an English name part spelled like it (`sığmak` -> `sig`
+in graphify), and a 5+ letter stem the English words that begin like it (`indirirken` ->
+`indirect`). The private set was not run for this change. The larger cause is still open: each
+dictionary gloss of a Turkish word scores as its own term (bul -> find, lookup, search), so correct
+additions hurt: Turkish verb forms (yeniliyor -> refresh) cost the user set 5 facts, the UI's own
+en/tr strings as glosses 1; neither was kept.
+
 **Final answers.** `verinoda bench run --answer-cmd CMD` hands each approach's context and the
 question to any command (a local model, a command-line client) and scores the answer it writes:
 gold facts, known-wrong statements, `answers_correct` (every fact, no wrong statement); analyze's
