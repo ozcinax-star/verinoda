@@ -361,10 +361,16 @@ def test_project_query_follows_the_question_shape_budget_when_it_is_on(repo, mon
     from verinoda import index, retrieval
 
     q = "where is compute_total defined?"  # one clause
+    monkeypatch.setattr(retrieval, "SHAPE_CHARS_NARROW", 900)  # the example is too small to fill 4800
+    t = AtlasTools(repo)
+    monkeypatch.setenv("VERINODA_SHAPE_BUDGET", "0")
+    wide = t.project_query(q)
     monkeypatch.setenv("VERINODA_SHAPE_BUDGET", "1")
-    res = AtlasTools(repo).project_query(q)
-    core = retrieval.retrieve(index.load(repo), q, retrieval.Budget(max_items=8, max_chars=4800))
-    assert res["text"] == retrieval.render_text(core, 4800)
+    res = t.project_query(q)  # the same server: the kept answer is not served for another budget
+    assert len(res["text"]) <= 900 < len(wide["text"])
+    for chars, got in ((6000, wide), (900, res)):
+        core = retrieval.retrieve(index.load(repo), q, retrieval.Budget(max_items=8, max_chars=chars))
+        assert got["text"] == retrieval.render_text(core, chars), chars
 
 
 def test_project_query_text_fits_a_small_cap(repo):

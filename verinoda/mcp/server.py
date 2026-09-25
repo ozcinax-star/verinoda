@@ -643,13 +643,13 @@ class AtlasTools:
             n = _clamp(max_items, 1, 25, "max_items")
             fmt = _choice(format, QUERY_FORMATS, "format")
             g = self._graph()
-            key = (q, n, fmt)
+            budget = retrieval.question_chars(q, self.repo)
+            key = (q, n, fmt, budget)  # the budget follows the config / environment, so it keys the memo too
             hit = self._query_memo.get(key)
             if hit is not None and hit[0] == self._query_deps(g, tuple(f for f, _ in hit[0][-1])):
                 self._query_memo.move_to_end(key)
                 self.cache_stats["query_memo_hits"] += 1
                 return hit[1]
-            budget = retrieval.question_chars(q, self.repo)
             res = retrieval.retrieve(g, q, retrieval.Budget(max_items=n, max_chars=budget))
             if fmt == "json":
                 out = _jsonable(res)
