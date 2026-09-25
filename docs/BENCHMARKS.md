@@ -98,6 +98,28 @@ Verinoda's own repository). Fresh-index A/B of the first change: 0 of 333 result
 imported the indexer before Verinoda had pointed it at `.verinoda/index`, so part of the pipeline
 used another directory and did less work. The figures above are the command's own.
 
+**Cross-file import pass.** The pass that turns `from ... import` statements into `uses` edges and
+repoints type references (`_resolve_cross_file_imports`) parsed every `.py` file with symbols and
+walked every node of it on each build (about 3.2 million calls). What that walk can use depends only
+on the file's bytes, so a pruned tree per file (its `from ... import` statements, its definitions and
+the identifiers inside a definition that an import binds) is now kept between builds, keyed by a
+hash of the file (`verinoda/python_cross.py`); the upstream function runs unchanged over it, and only
+while its source matches the version this was checked against. The pass alone, in-process, on the
+inputs captured from a real build of a copy of Verinoda (622 `.py` paths, 24.6k nodes, 52.5k edges):
+upstream 5.8-7.2 s, first build with the cache 5.0-5.7 s, later builds 0.68-0.78 s, after 6 edited
+files and a new module 0.96 s (7 files parsed). Python's standard library as a project (1,739 paths,
+80k nodes, 136k edges): upstream 16.7-21.1 s, first build 14.9-17.3 s, later builds 5.5 s. The output
+(new edges, nodes and edges after the pass) is identical element by element and in order in every
+case, first build, later builds and after edits (20 files and a new module on the standard library).
+`verinoda update` after a one-line edit of a copy of Verinoda's own repository, the command itself,
+wall clock, 8 rounds alternating which version went first, on a loaded machine (other jobs running):
+38.3-42.6 s (median 39.9) → 32.1-39.3 s (median 35.0); the kept trees were faster in 8 of 8 rounds,
+by 2.7-7.2 s (median 4.9). graph.json: the same in all 8 rounds between the two copies (root path
+set aside), and byte for byte on one copy updated from the same saved state with the old code, with
+the new code and kept trees, and with the new code and none. The kept file is 1.1 MB for Verinoda,
+1.7 MB for the standard library. Answers were not re-benchmarked: nothing downstream of graph.json
+changes.
+
 **A set of Turkish user questions about Verinoda (`verinoda_user_tr`, in-sample).** 12 questions (one
 a user's own words, the rest written in that style), 30 gold facts at commit 3bd1b94: query text
 11/30, analyze 8 → 11 with this round; of 5 questions judged met, 3 have none of their gold facts
