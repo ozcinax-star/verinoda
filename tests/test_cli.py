@@ -559,15 +559,6 @@ def run_cli(capsys, *argv: str, rc: int = 0) -> str:
     return cap.out
 
 
-def _git_copy(dst: Path) -> Path:
-    shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc",
-                                                                ".pytest_cache", "*.db"))
-    _git(dst, "init", "-q")
-    _git(dst, "add", "-A")
-    _git(dst, "commit", "-q", "-m", "init")
-    return dst
-
-
 def _scanned_copy(base: Path) -> Path:
     """A git-committed, scanned copy of orders_app (in-process) for tests that change the tree."""
     from verinoda import workflow
@@ -1274,7 +1265,8 @@ def test_benchmark_critique_eval_and_sanitize(tmp_path, capsys):
 # -- from install to the first answer ---------------------------------------------------------------
 
 def _git_copy(dst: Path) -> Path:
-    shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc", "*.db"))
+    shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc", ".pytest_cache",
+                                                                "*.db"))
     for args in (["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"]):
         subprocess.run(["git", *args], cwd=dst, check=True, capture_output=True)
     return dst
