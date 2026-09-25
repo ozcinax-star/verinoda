@@ -42,28 +42,28 @@
   },
   "fresh_clone_no_config": {
    "exit": 3,
-   "first_line": "decide check: 0 violated, 0 possible, 0 review, 0 trigger, 1 unknown (0 decision record(s) in .verinoda/decisions, 0.078 s)",
+   "first_line": "decide check: 0 violated, 0 possible, 0 review, 0 trigger, 1 unknown (0 decision record(s) in .verinoda/decisions, 0.297 s)",
    "silent": false
   },
   "fresh_clone_verinoda_toml": {
    "exit": 1,
-   "first_line": "decide check: 1 violated, 0 possible, 0 review, 0 trigger (1 decision record(s) in docs/decisions, 0.093 s)",
+   "first_line": "decide check: 1 violated, 0 possible, 0 review, 0 trigger (1 decision record(s) in docs/decisions, 0.828 s)",
    "silent": false
   },
   "check_java_file": {
-   "exit": 3,
+   "exit": 4,
    "files": 0,
    "status": "unsupported_language",
    "silent": false
   },
   "check_stdin_as_java": {
-   "exit": 3,
+   "exit": 4,
    "status": "unsupported_language",
    "parsed_as_python": false,
    "silent": false
   },
   "check_diff_ts_rename": {
-   "exit": 3,
+   "exit": 4,
    "status": "unsupported_language",
    "silent": false
   },

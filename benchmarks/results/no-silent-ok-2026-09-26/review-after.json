@@ -1,0 +1,71 @@
+{
+ "label": "after",
+ "cases": {
+  "workspace_nested_template": {
+   "status": "ok",
+   "exit": 0,
+   "violations": [],
+   "wrong": false
+  },
+  "workspace_dot_slash": {
+   "status": "violated",
+   "exit": 1,
+   "violations": [
+    "packages/a/package.json:4"
+   ],
+   "wrong": false
+  },
+  "workspace_build_demo_folders": {
+   "status": "violated",
+   "exit": 1,
+   "violations": [
+    "apps/demo/package.json:4",
+    "packages/build/package.json:4"
+   ],
+   "wrong": false
+  },
+  "check_exit_not_checked_vs_absent": {
+   "exit_not_checked": 4,
+   "exit_absent": 3,
+   "wrong": false
+  },
+  "java_flow_hop_grade": {
+   "flow": "partial",
+   "relation": "partial",
+   "wrong": false
+  },
+  "no_edge_leaf_module": {
+   "status": "ok",
+   "exit": 0,
+   "violations": [],
+   "wrong": false
+  },
+  "notebook_cython_diff": {
+   "status": "unsupported_language",
+   "exit": 4,
+   "wrong": false
+  },
+  "adr_readme_and_own_fixture": {
+   "exit_readme_only": 0,
+   "own_adr_like": [],
+   "wrong": false
+  },
+  "python_file_does_not_parse": {
+   "status": "incomplete",
+   "exit": 4,
+   "files": 0,
+   "wrong": false
+  },
+  "configured_folder_missing": {
+   "exit": 3,
+   "wrong": false
+  },
+  "api_on_java": {
+   "api_exit": 4,
+   "check_exit": 4,
+   "wrong": false
+  }
+ },
+ "wrong": 0,
+ "total": 11
+}

@@ -34,3 +34,20 @@ query txt           14/32  avg ~1482 tok/question
 query json          16/32  avg ~1784 tok/question
 analyze json(CLI)   14/32  avg ~3526 tok/question
 analyze txt         10/32  avg ~703 tok/question
+
+== review
+v1 (3 facts): query txt=1/3@1458t  query json=0/3@1727t  analyze json(CLI)=1/3@3884t  analyze txt=1/3@556t
+v2 (4 facts): query txt=2/4@1477t  query json=1/4@1839t  analyze json(CLI)=2/4@4406t  analyze txt=2/4@973t
+v3 (3 facts): query txt=3/3@1449t  query json=3/3@1879t  analyze json(CLI)=3/3@3146t  analyze txt=3/3@550t
+v4 (1 facts): query txt=0/1@1489t  query json=0/1@1815t  analyze json(CLI)=0/1@3422t  analyze txt=0/1@658t
+v5 (3 facts): query txt=2/3@1485t  query json=2/3@1742t  analyze json(CLI)=2/3@3696t  analyze txt=0/3@803t
+b1 (3 facts): query txt=0/3@1485t  query json=0/3@1638t  analyze json(CLI)=0/3@3695t  analyze txt=0/3@872t
+b2 (4 facts): query txt=1/4@1490t  query json=2/4@1681t  analyze json(CLI)=1/4@3303t  analyze txt=0/4@591t
+b3 (7 facts): query txt=4/7@1499t  query json=7/7@1805t  analyze json(CLI)=4/7@2996t  analyze txt=4/7@572t
+b4 (2 facts): query txt=1/2@1498t  query json=1/2@1865t  analyze json(CLI)=1/2@3505t  analyze txt=0/2@540t
+b5 (2 facts): query txt=0/2@1489t  query json=0/2@1853t  analyze json(CLI)=0/2@3203t  analyze txt=0/2@924t
+
+query txt           14/32  avg ~1482 tok/question
+query json          16/32  avg ~1784 tok/question
+analyze json(CLI)   14/32  avg ~3526 tok/question
+analyze txt         10/32  avg ~704 tok/question
