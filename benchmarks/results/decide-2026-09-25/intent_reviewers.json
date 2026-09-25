@@ -1,0 +1,265 @@
+{
+ "written_at": "2026-09-25: the questions of the two reviews of p2/decide (reviewer 2 wrote r01-r22 and n01-n22 before running the router; reviewer 1 listed a1-a8 in finding R1-8). The fixer labelled r1-a8 ('Is it a good idea to ...? Where is it read?') a decision. In-sample: the cue rules were changed against these questions.",
+ "questions": [
+  {
+   "id": "r2-r01",
+   "decide": true,
+   "q": "Would it be better to store orders in PostgreSQL instead of SQLite?"
+  },
+  {
+   "id": "r2-r02",
+   "decide": true,
+   "q": "Is SQLite still the right choice for us?"
+  },
+  {
+   "id": "r2-r03",
+   "decide": true,
+   "q": "Can this handle 10k orders per minute, or do we need a real database server?"
+  },
+  {
+   "id": "r2-r04",
+   "decide": true,
+   "q": "Is it a good idea to cache orders in Redis?"
+  },
+  {
+   "id": "r2-r05",
+   "decide": true,
+   "q": "Postgres or SQLite for production?"
+  },
+  {
+   "id": "r2-r06",
+   "decide": true,
+   "q": "What database would you recommend for this app?"
+  },
+  {
+   "id": "r2-r07",
+   "decide": true,
+   "q": "Do you think we should switch the mod loader to Fabric?"
+  },
+  {
+   "id": "r2-r08",
+   "decide": true,
+   "q": "What's the best way to scale order processing?"
+  },
+  {
+   "id": "r2-r09",
+   "decide": true,
+   "q": "Is it time to move off SQLite?"
+  },
+  {
+   "id": "r2-r10",
+   "decide": true,
+   "q": "Should the heat logic live in Kotlin or Java?"
+  },
+  {
+   "id": "r2-r11",
+   "decide": true,
+   "q": "We expect 100x traffic next year; what should our storage strategy be?"
+  },
+  {
+   "id": "r2-r12",
+   "decide": true,
+   "q": "Is PostgreSQL overkill for this project?"
+  },
+  {
+   "id": "r2-r13",
+   "decide": true,
+   "q": "Does it make sense to keep the repository pattern?"
+  },
+  {
+   "id": "r2-r14",
+   "decide": true,
+   "q": "Which ORM do you recommend?"
+  },
+  {
+   "id": "r2-r15",
+   "decide": true,
+   "q": "Veritabanı olarak PostgreSQL'e geçmek mantıklı mı?"
+  },
+  {
+   "id": "r2-r16",
+   "decide": true,
+   "q": "SQLite yeterli mi, yoksa PostgreSQL mi kullanmalıyız?"
+  },
+  {
+   "id": "r2-r17",
+   "decide": true,
+   "q": "Redis kullanmak iyi bir fikir mi?"
+  },
+  {
+   "id": "r2-r18",
+   "decide": true,
+   "q": "Trafik artarsa hangi veritabanını kullanalım?"
+  },
+  {
+   "id": "r2-r19",
+   "decide": true,
+   "q": "Sence Fabric'e mi geçelim, NeoForge'da mı kalalım?"
+  },
+  {
+   "id": "r2-r20",
+   "decide": true,
+   "q": "Mod yükleyicisini değiştirmeli miyiz?"
+  },
+  {
+   "id": "r2-r21",
+   "decide": true,
+   "q": "Hangi mesaj kuyruğunu önerirsin?"
+  },
+  {
+   "id": "r2-r22",
+   "decide": true,
+   "q": "Bu mimari on kat yüke dayanır mı?"
+  },
+  {
+   "id": "r2-n01",
+   "decide": false,
+   "q": "Which function decides whether an order gets a discount?"
+  },
+  {
+   "id": "r2-n02",
+   "decide": false,
+   "q": "How does the pricing code choose the discount rate?"
+  },
+  {
+   "id": "r2-n03",
+   "decide": false,
+   "q": "Which database does the app use?"
+  },
+  {
+   "id": "r2-n04",
+   "decide": false,
+   "q": "If the order count grows past 50, does validate_items reject it?"
+  },
+  {
+   "id": "r2-n05",
+   "decide": false,
+   "q": "What happens in get_repo when the number of orders grows?"
+  },
+  {
+   "id": "r2-n06",
+   "decide": false,
+   "q": "How do we decide whether an order is valid?"
+  },
+  {
+   "id": "r2-n07",
+   "decide": false,
+   "q": "Why did we decide on SQLite?"
+  },
+  {
+   "id": "r2-n08",
+   "decide": false,
+   "q": "How did we decide whether to use SQLite?"
+  },
+  {
+   "id": "r2-n09",
+   "decide": false,
+   "q": "What trade-offs did ADR-0001 record?"
+  },
+  {
+   "id": "r2-n10",
+   "decide": false,
+   "q": "What are the pros and cons listed in the ADR?"
+  },
+  {
+   "id": "r2-n11",
+   "decide": false,
+   "q": "How does store.py migrate the database from v4 to v5?"
+  },
+  {
+   "id": "r2-n12",
+   "decide": false,
+   "q": "Kullanıcı sayısı artarsa get_repo aynı nesneyi mi döndürür?"
+  },
+  {
+   "id": "r2-n13",
+   "decide": false,
+   "q": "Isı hesabı nasıl ölçekleniyor?"
+  },
+  {
+   "id": "r2-n14",
+   "decide": false,
+   "q": "HeatMath büyütme katsayısını nereden alıyor?"
+  },
+  {
+   "id": "r2-n15",
+   "decide": false,
+   "q": "Sunucu tarafında oyuncu sayısı artarsa ne oluyor?"
+  },
+  {
+   "id": "r2-n16",
+   "decide": false,
+   "q": "Hangi testi çalıştıralım?"
+  },
+  {
+   "id": "r2-n17",
+   "decide": false,
+   "q": "Hangi fonksiyonu çağıralım?"
+  },
+  {
+   "id": "r2-n18",
+   "decide": false,
+   "q": "ADR'de hangi artıları ve eksileri yazmışız?"
+  },
+  {
+   "id": "r2-n19",
+   "decide": false,
+   "q": "Kod hangi veritabanını seçiyor?"
+  },
+  {
+   "id": "r2-n20",
+   "decide": false,
+   "q": "Where does the code decide which database file to open?"
+  },
+  {
+   "id": "r2-n21",
+   "decide": false,
+   "q": "Which option does parse_args pick when both flags are given?"
+  },
+  {
+   "id": "r2-n22",
+   "decide": false,
+   "q": "How is the scaling factor computed in HeatMath?"
+  },
+  {
+   "id": "r1-a1",
+   "decide": false,
+   "q": "Kodu nasıl çalıştıralım?"
+  },
+  {
+   "id": "r1-a2",
+   "decide": false,
+   "q": "Testleri nasıl çalıştıralım?"
+  },
+  {
+   "id": "r1-a3",
+   "decide": false,
+   "q": "Bu fonksiyonu nerede çağıralım?"
+  },
+  {
+   "id": "r1-a4",
+   "decide": false,
+   "q": "Önce hangi dosyayı okuyalım?"
+  },
+  {
+   "id": "r1-a5",
+   "decide": false,
+   "q": "Which config value should I use for the database path?"
+  },
+  {
+   "id": "r1-a6",
+   "decide": false,
+   "q": "How do I migrate the schema from v4 to v5?"
+  },
+  {
+   "id": "r1-a7",
+   "decide": false,
+   "q": "What happens if the number of orders grows beyond 50 items?"
+  },
+  {
+   "id": "r1-a8",
+   "decide": true,
+   "q": "Is it a good idea to read ORDERS_DATABASE_URL at import time? Where is it read?"
+  }
+ ]
+}

@@ -17,6 +17,8 @@ Everything lives under ``<repo>/.verinoda/``:
                     when the user supplies one, index.scip (a SCIP index read by
                     scip_reader; freshness state in scip_fresh.json)
     plans/          question-plan files (JSON is never passed on the command line)
+    decisions/      decision records of what the human chose (verinoda.decisions; ``decisions.dir``
+                    in config.json moves them to a folder the project commits)
     runs/<id>/      raw experiment logs (never sent to a model wholesale)
     research/<slug> pinned checkouts of reference repositories
                     (research/http-cache: offline-first HTTP cache of the reference resolver)

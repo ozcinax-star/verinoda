@@ -216,6 +216,17 @@ def _r_claims(res: dict) -> None:
             n_unknowns = len(s.get("unknowns") or [])
             print(f"  {s['id']} [{s.get('status') or '?'}] {s.get('intent')}: {s.get('text') or ''}  "
                   f"({n_claims} claim(s){f', {n_unknowns} unknown(s)' if n_unknowns else ''})")
+    for s in subs:  # a choice: what the human decides with (no recommendation)
+        b = s.get("decision_brief") or {}
+        if b.get("forces") is None:
+            continue
+        print(f"\ndecision brief {b['brief_id']} ({s['id']}) [{b['verdict']}]: {b.get('understood_as')}")
+        for f in b["forces"]:
+            print(f"  [{f['status']}] {f['fact'][:200]}  ({', '.join(f['at'][:3])})")
+        for a in b.get("absences") or []:
+            print(f"  absent: {a['what']}")
+        for q in b.get("questions_for_human") or []:
+            print(f"  ask the user {q['id']}: {q['text']}")
     print()
     answering = {cid for s in subs for cid in s.get("answer_claim_ids") or []}
     shown_head, context_shown, context_more = None, 0, 0
@@ -352,6 +363,14 @@ def _r_update(r: dict) -> None:
         print(f"  stale: {s['id']} {s['text'][:90]}  <- {', '.join(c['file'] for c in s.get('changed') or [])}")
     for w in r.get("warnings") or []:
         print(f"  warning: {w}")
+    dec = r.get("decisions")
+    if dec and dec.get("skipped"):
+        print(f"  decisions: {dec['skipped']}")
+    elif dec:
+        print(f"  decisions: could not be checked ({dec['error']})" if dec.get("error") else
+              f"  decisions: {dec['violations']} violated, {dec['possible']} possible, {dec['reviews']} review, "
+              f"{dec['triggers']} trigger" + (" - `verinoda decide check` for the sites" if any(dec.values())
+                                              else ""))
     _r_derived(r)
     if r.get("error"):
         print(f"error: {r['error']}", file=sys.stderr)
@@ -549,8 +568,32 @@ def cmd_update(args) -> int:
     repo = Path(given).resolve() if given else find_repo_root()
     st = _store(repo, create=True)
     res = workflow.update(st, repo)
+    if not res.get("error"):
+        summary = _decision_summary(repo, noop=res.get("mode") == "noop")
+        if summary:
+            res["decisions"] = summary
     _emit(args, res, _r_update)
     return 1 if res.get("error") else 0
+
+
+def _decision_summary(repo: Path, *, noop: bool = False) -> dict | None:
+    """One line for `update`: what `decide check` would report now (None when there are no records). On a
+    no-op update (no file changed) the check is not run again: the line says so."""
+    try:
+        from verinoda import decisions as dm
+        from verinoda import guards, index
+        from verinoda.paths import graph_path
+
+        recs = dm.load_all(repo)
+        if not recs:
+            return None
+        if noop:
+            return {"skipped": "no file changed since the last update, so not checked again "
+                               "(`verinoda decide check` checks now)"}
+        res = guards.check(repo, graph=index.load(repo) if graph_path(repo).exists() else None, records=recs)
+        return {k: len(res[k]) for k in ("violations", "possible", "reviews", "triggers")}
+    except Exception as exc:  # noqa: BLE001 - the update itself succeeded; say why the check did not run
+        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
 
 
 def _port(value: str) -> int:
@@ -890,6 +933,247 @@ def cmd_analyze(args) -> int:
                            challenge=not args.no_challenge, observe=args.observe)
     _emit(args, res, _r_claims)
     return PLAN_EXIT.get(res.get("status"), 0)
+
+
+# -- decisions (docs/DESIGN.md D33) -------------------------------------------------
+
+def _r_decision(d: dict, indent: str = "") -> None:
+    flag = "" if d.get("enforced") else "  (not enforced)"
+    print(f"{indent}{d['id']} [{d['status']}] {d.get('title') or ''}{flag}  ({d.get('file')})")
+    if d.get("chosen"):
+        print(f"{indent}  chosen: {d['chosen']} (decided by the {d.get('decided_by')}, {d.get('date')})")
+    if d.get("source"):
+        print(f"{indent}  record of the document {d['source']}")
+    if d.get("supersedes") or d.get("superseded_by"):
+        print(f"{indent}  " + "; ".join(x for x in (f"supersedes {d['supersedes']}" if d.get("supersedes") else "",
+                                                     f"superseded by {d['superseded_by']}" if d.get("superseded_by")
+                                                     else "") if x))
+    for g in d.get("guards") or []:
+        src = f"  <- {g['from_sentence']['at']}" if g.get("from_sentence") else ""
+        print(f"{indent}  {g['id']} ({g.get('status')}): {g.get('spec')}{src}")
+    for v in d.get("governs") or []:
+        print(f"{indent}  governs {v['id']}: {v['symbol']}")
+    for r in d.get("revisit_when") or []:
+        print(f"{indent}  revisit {r['id']} when {r['kind']}={r['value']}")
+    for w in d.get("waivers") or []:
+        print(f"{indent}  waiver {w['guard']} at {w['at']}" + (f" until {w['until']}" if w.get("until") else "")
+              + f": {w['reason']}")
+    for p in d.get("problems") or []:
+        print(f"{indent}  problem: {p}")
+    if d.get("log"):
+        print(f"{indent}  note: {d['log']}")
+
+
+def _r_decide(res: dict) -> None:
+    if "decisions" in res:
+        print(f"decision records in {res['dir']}:" if res["decisions"] else f"no decision records in {res['dir']}")
+        for d in res["decisions"]:
+            _r_decision(d, "  ")
+        for doc in res.get("unrecorded_docs") or []:
+            print(f"  document without a record: {doc}  (`verinoda decide import {doc}` proposes guards)")
+        return
+    _r_decision(res)
+    if res.get("superseded"):
+        print(f"  {res['superseded']} is now superseded")
+    for s in res.get("not_turned_into_guards") or []:
+        print(f"  not a guard ({s['why']}): {s['at']} {s['text'][:120]}")
+    proposed = [g["id"] for g in res.get("guards") or [] if g.get("status") == "proposed"]
+    if proposed:
+        print(f"  next: read the proposed guard(s) against the document; only the user accepts them: "
+              f"`verinoda decide accept {res['id']} {' '.join(proposed)}`")
+
+
+def _r_check(r: dict) -> None:
+    base = r.get("base") or {}
+    print(f"decide check: {len(r['violations'])} violated, {len(r['possible'])} possible, {len(r['reviews'])} "
+          f"review, {len(r['triggers'])} trigger ({r['decisions']} decision record(s), {r['elapsed_s']} s)"
+          + (f"; base {base['ref']} {base['commit'][:10]}, {base['changed_files']} changed file(s)" if base else ""))
+    if r.get("index"):
+        print(f"  index: {r['index']}")
+    shown: set = set()
+    for key, label in (("violations", "VIOLATED"), ("possible", "POSSIBLE"), ("pre_existing", "VIOLATED")):
+        for f in r.get(key) or []:
+            head = (key, f["decision"], f["guard"])
+            if head not in shown:
+                shown.add(head)
+                pre = "pre-existing " if key == "pre_existing" else ""
+                print(f"{pre}{label} {f['decision']} {f['guard']} {f['kind']} {f.get('what') or ''}")
+            tags = ", ".join(x for x in (f.get("status"), f.get("since")) if x)
+            print(f"  {f['at']} {f.get('line') or ''}  [{tags}]")
+            print(f"     {f['why']}")
+    for f in r.get("reviews") or []:
+        print(f"REVIEW {f['decision']} {f['guard']} governs {f['at']}: {f['why']}")
+    for f in r.get("triggers") or []:
+        print(f"TRIGGER {f['decision']} {f['guard']} {f['why']}")
+    for f in r.get("waived") or []:
+        w = f["waiver"]
+        print(f"waived {f['decision']} {f['guard']} {f['at']} ({w['reason']}"
+              + (f", until {w['until']}" if w.get("until") else "") + ")")
+    for o in r.get("ok") or []:
+        scope = ", ".join(f"{k} {v}" for k, v in (o.get("scope") or {}).items())
+        print(f"ok {o['decision']} {o['guard']} {o['kind']} {o['what']}" + (f" ({scope})" if scope else ""))
+        for lim in o.get("limits") or []:  # all of them: an ok is only as broad as its scope and limits
+            print(f"     limit: {lim}")
+    for u in r.get("unknown") or []:
+        print(f"unknown {u['decision']} {u.get('guard') or ''}: {u['why']}")
+    for n in r.get("not_enforced") or []:
+        print(f"not enforced {n['decision']} {n.get('guard') or ''}: {n['why']}")
+    if not r["decisions"]:
+        print("  no decision records (`verinoda decide record` / `decide import`; they live in decisions.dir)")
+    if r.get("next_step"):
+        print(f"next: {r['next_step']}")
+
+
+def _r_brief(b: dict, indent: str = "") -> None:
+    tr = b.get("language") in ("tr", "mixed")
+    print(f"{indent}decision brief {b.get('brief_id') or '(not stored)'} [{b['verdict']}] "
+          f"{b.get('understood_as_tr') if tr else b.get('understood_as')}")
+    print(f"{indent}forces (from the code):")
+    for f in b.get("forces") or []:
+        at = ", ".join(e["locator"] for e in f["evidence"][:4]) + (" ..." if len(f["evidence"]) > 4 else "")
+        print(f"{indent}  {f['id']} [{f['status']}] {f['fact'][:220]}  ({at})")
+    if b.get("absences"):
+        print(f"{indent}absent (searched, not found):")
+        for a in b["absences"]:
+            print(f"{indent}  {a['id']} {a['what']}  [searched: {', '.join(a['searched'][:6])}"
+                  f"{', ...' if len(a['searched']) > 6 else ''}; {a['scope_note']}]")
+    for d in b.get("existing_decisions") or []:
+        print(f"{indent}decision on record: {d.get('doc')} ({d.get('status')})"
+              + (f" - reason: {d['reason']}" if d.get("reason") else ""))
+    for o in b.get("options") or []:
+        pres = {True: "present in the project", False: "not present", None: "presence unknown"}[
+            o["present_in_project"]]
+        where = ", ".join(e["locator"] for e in o.get("presence_evidence") or [])
+        touch = o.get("change_surface") or o.get("what_moving_away_touches") or []
+        print(f"{indent}option {o['name']} ({o['proposed_by']}): {pres}" + (f" ({where})" if where else "")
+              + (f"; a change touches {len(touch)} site(s): {', '.join(t['at'] for t in touch[:5])}" if touch else ""))
+        for c in o.get("constraints") or []:
+            print(f"{indent}    {c['fact']}")
+        for p in o.get("external") or []:
+            print(f"{indent}    external [{p['status']}] {p['url']}: {p.get('why')}")
+        for a in o.get("agent_arguments") or []:
+            print(f"{indent}    agent argument [weak_inference]: {a['text']}")
+    loose = b.get("not_tied_to_an_option") or {}
+    for p in loose.get("external") or []:
+        print(f"{indent}external, no option named [{p['status']}] {p['url']}: {p.get('why')}")
+    for a in loose.get("agent_arguments") or []:
+        print(f"{indent}agent argument, no option named [weak_inference]: {a['text']}")
+    print(f"{indent}questions only the user can answer (ask them; record each with `verinoda decide answer`):")
+    for q in b.get("questions_for_human") or []:
+        print(f"{indent}  {q['id']}: {q['text_tr'] if tr else q['text_en']}")
+        print(f"{indent}      because {q['asked_because']}; decides between {', '.join(q['discriminates'])}")
+        if q.get("partly_answered_by"):
+            print(f"{indent}      context from the code: {', '.join(q['partly_answered_by'])}")
+    for q in b.get("answered_by_code") or []:
+        print(f"{indent}  not asked ({q['kind']}): answered by {q.get('answered_by')}")
+    if b.get("next_step") and not indent:
+        print(f"next: {b['next_step']}")
+
+
+def _decide_check(args, repo: Path) -> int:
+    from verinoda import decisions as dm
+    from verinoda import guards
+    from verinoda.paths import db_path, graph_path
+
+    recs = dm.load_all(repo)
+    graph, note = None, None
+    if any(d.enforced and g.get("kind") == "no_edge" and g.get("status") == "accepted"
+           for d in recs for g in d.guards):
+        if not args.no_refresh and db_path(repo).is_file():
+            from verinoda import workflow
+            from verinoda.snapshot import current_state
+
+            st = _store(repo)
+            try:
+                snap = st.latest_snapshot()
+                if snap is None or snap["tree_hash"] != current_state(repo, store=st)["tree_hash"]:
+                    up = workflow.update(st, repo)
+                    note = f"refreshed first ({up.get('mode')}, {up.get('changed_count') or 0} changed file(s))" \
+                        if not up.get("error") else f"could not be refreshed: {up['error']}"
+            finally:
+                st.close()
+        if graph_path(repo).exists():
+            from verinoda import index
+
+            graph = index.load(repo)
+    try:
+        res = guards.check(repo, graph=graph, base=args.base, changed_only=args.changed, records=recs)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if note:
+        res["index"] = note
+    _emit(args, res, _r_check)
+    return res["exit"]
+
+
+def cmd_decide(args) -> int:
+    from verinoda import decisions as dm
+
+    repo = _repo(args)
+    if args.decide_cmd == "check":
+        try:
+            return _decide_check(args, repo)
+        except Exception as exc:  # noqa: BLE001 - exit 1 means VIOLATED: an error must never look like one
+            msg = str(exc) if isinstance(exc, dm.DecisionError) else f"{type(exc).__name__}: {exc}"
+            if getattr(args, "json", False):
+                print(json.dumps({"status": "error", "exit": 2, "error": msg[:600]}, ensure_ascii=False))
+            print(f"error: {msg}", file=sys.stderr)
+            return 2
+    if args.decide_cmd in ("brief", "answer"):
+        from verinoda import decision_brief as dbr
+
+        st = _store(repo)
+        try:
+            if args.decide_cmd == "answer":
+                res = dbr.answer(st, args.brief_id, args.q, args.answer)
+                _emit(args, res, lambda r: print(f"recorded the user's answer to {args.q} of {r['brief_id']}; "
+                                                  f"still open: {', '.join(q['id'] for q in r['open_questions']) or 'none'}"))
+                return 0
+            from verinoda import index
+            from verinoda.paths import graph_path
+
+            graph = index.load(repo) if graph_path(repo).exists() else None
+            res = dbr.brief(repo, args.question, store=st, graph=graph, options=args.option or [],
+                            quotes=[{"url": u, "text": t} for u, t in args.quote or []],
+                            agent_arguments=args.argument or [])
+        finally:
+            st.close()
+        _emit(args, res, _r_brief)
+        return 0
+    graph = None
+    if getattr(args, "governs", None) or args.decide_cmd == "import":
+        from verinoda import index
+        from verinoda.paths import graph_path
+
+        graph = index.load(repo) if graph_path(repo).exists() else None
+    st = _store(repo)
+    try:
+        said = getattr(args, "said", None)
+        if args.decide_cmd == "list":
+            res = dm.listing(st, repo)
+        elif args.decide_cmd == "record":
+            res = dm.record(st, repo, chosen=args.chosen, rationale=args.rationale, title=args.title,
+                            brief_id=args.brief_id, guards=args.guard or [], governs=args.governs or [],
+                            revisit_when=args.revisit_when or [], supersedes=args.supersedes, user_statement=said,
+                            graph=graph)
+        elif args.decide_cmd == "import":
+            res = dm.import_doc(st, repo, _rel_in_repo(repo, args.document, "document"), graph=graph,
+                                user_statement=said)
+        elif args.decide_cmd == "guard":
+            res = dm.add_guards(st, repo, args.id, args.spec, user_statement=said)
+        elif args.decide_cmd == "accept":
+            res = dm.accept(st, repo, args.id, args.guard_ids, user_statement=said)
+        else:  # waive
+            res = dm.waive(st, repo, args.id, args.guard_id, at=args.at, reason=args.reason, until=args.until,
+                           user_statement=said)
+    except dm.DecisionError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    finally:
+        st.close()
+    _emit(args, res, _r_decide)
+    return 0
 
 
 # -- claims -----------------------------------------------------------------------
@@ -1748,6 +2032,69 @@ def build_parser() -> argparse.ArgumentParser:
     c = add("audit", cmd_plan, "re-judge an analysis' sub-questions on the current claim statuses", parent=psub)
     c.add_argument("analysis_id")
     c.add_argument("--no-refresh", action="store_true", help="do not update the index first")
+
+    sp = sub.add_parser("decide", help="decisions stay human: records of what the user chose, guards that check "
+                                       "the code against them (docs/DESIGN.md D33)")
+    dsub = sp.add_subparsers(dest="decide_cmd", required=True)
+    said_help = "the user's own words for this decision, verbatim (kept in the decision log)"
+    c = add("record", cmd_decide, "record the human's choice as a decision record (status accepted, decided by "
+                                  "the human); only with the user's explicit choice", parent=dsub)
+    c.add_argument("brief_id", nargs="?", help="the decision brief it answers (dbr_...), if any")
+    c.add_argument("--chosen", required=True, help="the option the user chose")
+    c.add_argument("--rationale", required=True, help="why, in the user's words")
+    c.add_argument("--title")
+    c.add_argument("--guard", action="append", metavar="SPEC",
+                   help="a check of the code, e.g. 'only_in calls=sqlite3.connect allowed=orders/repository.py', "
+                        "'no_edge from=src/main/** to=src/client/**', 'dependency absent=psycopg'; repeatable")
+    c.add_argument("--governs", action="append", metavar="SYMBOL",
+                   help="path/file.py::Symbol whose changes need a review; repeatable")
+    c.add_argument("--revisit-when", action="append", metavar="SPEC",
+                   help="dependency_added=NAME or file_appears=GLOB: asks for a review; repeatable")
+    c.add_argument("--supersedes", metavar="ADR-N", help="the earlier decision this one replaces")
+    c.add_argument("--said", help=said_help)
+    c = add("import", cmd_decide, "a record for a hand-written ADR (the document is not changed); guards are "
+                                  "only proposed from its sentences", parent=dsub)
+    c.add_argument("document", help="the ADR file, e.g. docs/adr/0001-sqlite-persistence.md")
+    c.add_argument("--said", help=said_help)
+    c = add("guard", cmd_decide, "add guards (the human's own, accepted) to a decision record", parent=dsub)
+    c.add_argument("id", metavar="ADR-N")
+    c.add_argument("spec", nargs="+", metavar="SPEC", help="guard spec(s), quoted, as for record --guard")
+    c.add_argument("--said", help=said_help)
+    c = add("accept", cmd_decide, "activate proposed guards of a record (the user's call)", parent=dsub)
+    c.add_argument("id", metavar="ADR-N")
+    c.add_argument("guard_ids", nargs="+", metavar="GUARD", help="g1 g2 ...")
+    c.add_argument("--said", help=said_help)
+    c = add("waive", cmd_decide, "excuse one site from one guard (the user's call; it may expire)", parent=dsub)
+    c.add_argument("id", metavar="ADR-N")
+    c.add_argument("guard_id", metavar="GUARD")
+    c.add_argument("--at", required=True, metavar="PATH[:LINE]")
+    c.add_argument("--reason", required=True)
+    c.add_argument("--until", metavar="YYYY-MM-DD")
+    c.add_argument("--said", help=said_help)
+    add("list", cmd_decide, "decision records, their guards and waivers, and ADRs without a record", parent=dsub)
+    c = add("check", cmd_decide, "check the code against every accepted guard (exit 1 on VIOLATED: usable in CI)",
+            parent=dsub)
+    grp = c.add_mutually_exclusive_group()
+    grp.add_argument("--changed", action="store_true",
+                     help="label findings new/touched since HEAD or pre-existing; only new ones fail")
+    grp.add_argument("--base", metavar="REF", help="as --changed, against this git revision (e.g. origin/main)")
+    c.add_argument("--no-refresh", action="store_true", help="do not update a stale index first (no_edge guards)")
+    c = add("brief", cmd_decide, "what a decision needs, from the code: forces with evidence, what is absent, "
+                                 "decisions on record, options, and the questions only the user can answer (no "
+                                 "recommendation)", parent=dsub)
+    c.add_argument("question", help="the user's question, verbatim")
+    c.add_argument("--option", action="append", metavar="NAME", help="an option the user named; repeatable")
+    c.add_argument("--quote", action="append", nargs=2, metavar=("URL", "TEXT"),
+                   help="an external claim: the page (fetched as research.network allows) must contain TEXT "
+                        "verbatim; repeatable")
+    c.add_argument("--argument", action="append", metavar="TEXT",
+                   help="the agent's own argument, shown as weak_inference; 'OPTION: text' ties it to a named "
+                        "option, otherwise it is listed under no option; repeatable")
+    c = add("answer", cmd_decide, "record the user's answer to one question of a brief (answered_by: user)",
+            parent=dsub)
+    c.add_argument("brief_id")
+    c.add_argument("--q", required=True, metavar="qN", help="the question id")
+    c.add_argument("answer", help="the user's answer, in their words")
 
     sp = sub.add_parser("claim", help="inspect or add claims")
     csub = sp.add_subparsers(dest="claim_cmd", required=True)

@@ -1,0 +1,1190 @@
+{
+ "intent_heldout1.json": {
+  "tp": 5,
+  "fp": 0,
+  "fn": 0,
+  "tn": 5,
+  "precision": 1.0,
+  "recall": 1.0,
+  "rows": [
+   {
+    "id": "h01",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h02",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h03",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h04",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h05",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h06",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h07",
+    "gold": false,
+    "read": [
+     "dataflow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h08",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h09",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h10",
+    "gold": false,
+    "read": [
+     "why"
+    ],
+    "ok": true
+   }
+  ]
+ },
+ "intent_heldout2.json": {
+  "tp": 5,
+  "fp": 0,
+  "fn": 0,
+  "tn": 5,
+  "precision": 1.0,
+  "recall": 1.0,
+  "rows": [
+   {
+    "id": "k01",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k02",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k03",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k04",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k05",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k06",
+    "gold": false,
+    "read": [
+     "dataflow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k07",
+    "gold": false,
+    "read": [
+     "locate",
+     "define"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k08",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k09",
+    "gold": false,
+    "read": [
+     "impact"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k10",
+    "gold": false,
+    "read": [
+     "dataflow"
+    ],
+    "ok": true
+   }
+  ]
+ },
+ "intent_heldout3.json": {
+  "tp": 12,
+  "fp": 0,
+  "fn": 0,
+  "tn": 12,
+  "precision": 1.0,
+  "recall": 1.0,
+  "rows": [
+   {
+    "id": "h01",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h02",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h03",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h04",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h05",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h06",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h07",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h08",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h09",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h10",
+    "gold": true,
+    "read": [
+     "decide",
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h11",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h12",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h13",
+    "gold": false,
+    "read": [
+     "config"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h14",
+    "gold": false,
+    "read": [
+     "impact"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h15",
+    "gold": false,
+    "read": [
+     "config"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h16",
+    "gold": false,
+    "read": [
+     "locate",
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h17",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h18",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h19",
+    "gold": false,
+    "read": [
+     "why"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h20",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h21",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h22",
+    "gold": false,
+    "read": [
+     "tests"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h23",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h24",
+    "gold": false,
+    "read": [
+     "why"
+    ],
+    "ok": true
+   }
+  ]
+ },
+ "intent_heldout4.json": {
+  "tp": 5,
+  "fp": 1,
+  "fn": 5,
+  "tn": 9,
+  "precision": 0.833,
+  "recall": 0.5,
+  "rows": [
+   {
+    "id": "f01",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f02",
+    "gold": true,
+    "read": [
+     "locate"
+    ],
+    "ok": false
+   },
+   {
+    "id": "f03",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f04",
+    "gold": true,
+    "read": [
+     "locate"
+    ],
+    "ok": false
+   },
+   {
+    "id": "f05",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f06",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f07",
+    "gold": true,
+    "read": [
+     "behaviour"
+    ],
+    "ok": false
+   },
+   {
+    "id": "f08",
+    "gold": true,
+    "read": [
+     "impact"
+    ],
+    "ok": false
+   },
+   {
+    "id": "f09",
+    "gold": true,
+    "read": [
+     "behaviour",
+     "behaviour"
+    ],
+    "ok": false
+   },
+   {
+    "id": "f10",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f11",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f12",
+    "gold": false,
+    "read": [
+     "decide"
+    ],
+    "ok": false
+   },
+   {
+    "id": "f13",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f14",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f15",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f16",
+    "gold": false,
+    "read": [
+     "config",
+     "define"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f17",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f18",
+    "gold": false,
+    "read": [
+     "tests"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f19",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "f20",
+    "gold": false,
+    "read": [
+     "why"
+    ],
+    "ok": true
+   }
+  ]
+ },
+ "intent_reviewers.json": {
+  "tp": 23,
+  "fp": 0,
+  "fn": 0,
+  "tn": 29,
+  "precision": 1.0,
+  "recall": 1.0,
+  "rows": [
+   {
+    "id": "r2-r01",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r02",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r03",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r04",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r05",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r06",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r07",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r08",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r09",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r10",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r11",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r12",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r13",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r14",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r15",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r16",
+    "gold": true,
+    "read": [
+     "decide",
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r17",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r18",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r19",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r20",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r21",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-r22",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n01",
+    "gold": false,
+    "read": [
+     "config"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n02",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n03",
+    "gold": false,
+    "read": [
+     "dataflow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n04",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n05",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n06",
+    "gold": false,
+    "read": [
+     "config"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n07",
+    "gold": false,
+    "read": [
+     "why"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n08",
+    "gold": false,
+    "read": [
+     "config"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n09",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n10",
+    "gold": false,
+    "read": [
+     "define"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n11",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n12",
+    "gold": false,
+    "read": [
+     "behaviour"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n13",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n14",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n15",
+    "gold": false,
+    "read": [
+     "behaviour"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n16",
+    "gold": false,
+    "read": [
+     "tests"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n17",
+    "gold": false,
+    "read": [
+     "callers"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n18",
+    "gold": false,
+    "read": [
+     "dataflow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n19",
+    "gold": false,
+    "read": [
+     "dataflow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n20",
+    "gold": false,
+    "read": [
+     "config"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n21",
+    "gold": false,
+    "read": [
+     "config"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r2-n22",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r1-a1",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r1-a2",
+    "gold": false,
+    "read": [
+     "tests"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r1-a3",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r1-a4",
+    "gold": false,
+    "read": [
+     "behaviour"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r1-a5",
+    "gold": false,
+    "read": [
+     "config"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r1-a6",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r1-a7",
+    "gold": false,
+    "read": [
+     "behaviour"
+    ],
+    "ok": true
+   },
+   {
+    "id": "r1-a8",
+    "gold": true,
+    "read": [
+     "decide",
+     "locate"
+    ],
+    "ok": true
+   }
+  ]
+ },
+ "intent_written.json": {
+  "tp": 12,
+  "fp": 0,
+  "fn": 0,
+  "tn": 12,
+  "precision": 1.0,
+  "recall": 1.0,
+  "rows": [
+   {
+    "id": "d01",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d02",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d03",
+    "gold": true,
+    "read": [
+     "decide",
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d04",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d05",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d06",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d07",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d08",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d09",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d10",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d11",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d12",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n01",
+    "gold": false,
+    "read": [
+     "why"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n02",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n03",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n04",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n05",
+    "gold": false,
+    "read": [
+     "dataflow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n06",
+    "gold": false,
+    "read": [
+     "tests"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n07",
+    "gold": false,
+    "read": [
+     "impact"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n08",
+    "gold": false,
+    "read": [
+     "callers"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n09",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n10",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n11",
+    "gold": false,
+    "read": [
+     "config"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n12",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   }
+  ]
+ }
+}

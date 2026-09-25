@@ -1,0 +1,11 @@
+BAD k01 gold=True  got=['behaviour'] Would Redis be a better fit than SQLite for the order cache?
+BAD k02 gold=True  got=['behaviour'] Siparişleri kalıcı hale getirmek için ORM'e geçsek mi?
+BAD k03 gold=True  got=['behaviour'] Is SQLite enough for us if the shop gets a thousand orders a minute?
+ok  k04 gold=True  got=['decide'] Ember forge ısı hesabını Kotlin'e taşıyalım mı?
+ok  k05 gold=True  got=['decide'] Should orders.api own the repository, or should it be injected?
+ok  k06 gold=False got=['dataflow'] Which class stores the forge heat?
+ok  k07 gold=False got=['locate', 'define'] Where is ORDERS_MAX_ITEMS read and what is its default?
+ok  k08 gold=False got=['locate'] Ritüel başlatılınca hangi fonksiyonlar çalışıyor?
+ok  k09 gold=False got=['impact'] What would break if OrderRepository.get returned a tuple?
+ok  k10 gold=False got=['dataflow'] Which database driver is declared in pyproject.toml?
+heldout2_intent.json: tp=2 fp=0 fn=3 tn=5 precision=1.00 recall=0.40

@@ -1,6 +1,6 @@
 ---
 name: verinoda
-description: Evidence-first answers about this codebase with Verinoda - how a feature works, where something is implemented, how calls or data flow between components (handler -> service -> storage), why a design decision was made, what a change would affect, or whether an earlier conclusion still holds. Every answer is a set of claims with file:line evidence and an explicit status (verified, inference, unknown). Use it before explaining unfamiliar code, when the user disputes an earlier answer, and after writing Python code to check that the modules, names and keyword arguments it uses exist.
+description: Evidence-first answers about this codebase with Verinoda - how a feature works, where something is implemented, how calls or data flow between components (handler -> service -> storage), why a design decision was made, what a change would affect, whether an earlier conclusion still holds, or what the code says for a should-we or which-to-pick decision (the user decides; Verinoda never chooses). Every answer is a set of claims with file:line evidence and an explicit status (verified, inference, unknown). Use it before explaining unfamiliar code, when the user disputes an earlier answer, and after writing Python code to check that the modules, names and keyword arguments it uses exist.
 argument-hint: "[question about this codebase]"
 allowed-tools:
   - Bash(verinoda doctor *)
@@ -17,6 +17,9 @@ allowed-tools:
   - Bash(verinoda update *)
   - Bash(verinoda check *)
   - Bash(verinoda api *)
+  - Bash(verinoda decide check *)
+  - Bash(verinoda decide list *)
+  - Bash(verinoda decide brief *)
   - PowerShell(verinoda doctor *)
   - PowerShell(verinoda query *)
   - PowerShell(verinoda trace *)
@@ -31,6 +34,9 @@ allowed-tools:
   - PowerShell(verinoda update *)
   - PowerShell(verinoda check *)
   - PowerShell(verinoda api *)
+  - PowerShell(verinoda decide check *)
+  - PowerShell(verinoda decide list *)
+  - PowerShell(verinoda decide brief *)
 ---
 <!-- verinoda-managed v1 -->
 <!-- Managed by `verinoda install`. After a local install, edits are kept: install will not overwrite them and uninstall leaves the file. A copy with no local install record is refreshed by install. Delete the marker line above to take ownership. -->
@@ -51,6 +57,8 @@ read its structured output, and report exactly what the evidence supports.
 
 - "How does X work / where is X / what calls X / how does data get from A to B?"
 - "Why is it built this way?" (git history and design docs are searched)
+- "Should we switch to X / which one should we pick / how will this scale?" (the code's side of a
+  decision; the user decides)
 - "What breaks if I change X?" (impact view)
 - Verifying, re-checking or challenging an earlier conclusion, yours or the user's.
 - Comparing a mechanism with a reference repository or an official document.
@@ -133,7 +141,8 @@ For any question that is more than a name lookup, check your reading before anal
 5. `verinoda analyze --plan <file> --json` (MCP `analyze` with `plan_json`).
 6. Start the answer with "Understood as / Anladığım: ..." (`understood_as`), then one block per
    sub-question with its verdict (`met`, `met_with_inference`, `unmet`, `not_supported`,
-   `blocked_by_clarification`) and its claims and unknowns.
+   `blocked_by_clarification`, `human_decision_required`) and its claims and unknowns.
+   `human_decision_required` is a choice between options: never pick one yourself.
 
 ## References the user gives
 
@@ -143,6 +152,20 @@ before researching or answering. Report each reference as `<name> @ <pin> (basis
 each mismatch on its own line. Never substitute the default branch for a version the user named.
 Ask the user only the `questions_for_user`. State every unresolved part with its `next_step`;
 read a pinned reference with `verinoda research --resolution <id> --reference-id <rN> --json`.
+
+## Decisions are the user's
+
+For "should we / which X should we pick / how will this scale" (`human_decision_required`):
+1. `verinoda decide brief "<the question, verbatim>" --json` (MCP `decision_brief`): forces from the
+   code with evidence, absences (with what was searched), decisions on record, options and
+   `questions_for_human`. It never recommends. The routing rules miss some phrasings: run the brief
+   yourself whenever the user asks which option to take or what you recommend, or an unknown says the
+   question "may ask for a choice". Tie your own arguments to an option: `--argument "NAME: text"`.
+2. Show the forces and absences, ask the `questions_for_human` with `AskUserQuestion`, and record each
+   answer: `verinoda decide answer <brief-id> --q qN "<their words>"`.
+3. Never pick an option for the user; your own view may follow their answers, labelled as inference.
+   Record only their explicit choice: `verinoda decide record <brief-id> --chosen NAME --rationale
+   "<their words>" [--guard SPEC]`. Never edit, supersede, accept or waive a decision yourself.
 
 ## Commands (examples; always add --json when you read the result)
 
@@ -252,6 +275,9 @@ propose Python code, and after every edit:
 
 Run `verinoda update .` after you or the user change code. It re-indexes the changed files
 and marks claims whose evidence changed as `stale`; `verify` them again before relying on them.
+Before you finish a code change, run `verinoda decide check --changed --json` (MCP `decision_check`
+with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be
+superseded or the site waived; never edit, supersede or waive a decision record yourself.
 
 ## Answer format
 

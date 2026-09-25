@@ -70,6 +70,11 @@ EXPECTED_PARAMS = {
     "feedback_resolve": ({"feedback_id", "verdict", "reason", "evidence_ids", "correction"},
                          {"feedback_id", "verdict", "reason", "evidence_ids"}),
     "index_update": (set(), set()),
+    "decision_record": ({"action", "decision_id", "chosen", "rationale", "title", "brief_id", "guards", "governs",
+                         "revisit_when", "supersedes", "guard_ids", "at", "reason", "until", "document",
+                         "user_statement", "question_id"}, {"action"}),
+    "decision_check": ({"base", "changed_only", "refresh"}, set()),
+    "decision_brief": ({"question", "options", "quotes", "agent_arguments"}, {"question"}),
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
              "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members"}
@@ -230,6 +235,9 @@ def _all_calls(t: AtlasTools) -> dict:
         "feedback_process": lambda: t.feedback_process("fb_1"),
         "feedback_resolve": lambda: t.feedback_resolve("fb_1", "confirmed", "because", ["evd_1"]),
         "index_update": lambda: t.index_update(),
+        "decision_record": lambda: t.decision_record("list"),
+        "decision_check": lambda: t.decision_check(),
+        "decision_brief": lambda: t.decision_brief("should we move to PostgreSQL?"),
     }
 
 

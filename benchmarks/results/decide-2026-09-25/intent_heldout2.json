@@ -1,0 +1,13 @@
+{"written_at": "2026-09-25, after held-out 1 was measured (recall 0.40) and BEFORE the cue rules were changed for its failure classes; same author (not independent)",
+ "questions": [
+  {"id": "k01", "repo": "orders_app", "decide": true,  "q": "Would Redis be a better fit than SQLite for the order cache?"},
+  {"id": "k02", "repo": "orders_app", "decide": true,  "q": "Siparişleri kalıcı hale getirmek için ORM'e geçsek mi?"},
+  {"id": "k03", "repo": "orders_app", "decide": true,  "q": "Is SQLite enough for us if the shop gets a thousand orders a minute?"},
+  {"id": "k04", "repo": "forge_mod",  "decide": true,  "q": "Ember forge ısı hesabını Kotlin'e taşıyalım mı?"},
+  {"id": "k05", "repo": "orders_app", "decide": true,  "q": "Should orders.api own the repository, or should it be injected?"},
+  {"id": "k06", "repo": "forge_mod",  "decide": false, "q": "Which class stores the forge heat?"},
+  {"id": "k07", "repo": "orders_app", "decide": false, "q": "Where is ORDERS_MAX_ITEMS read and what is its default?"},
+  {"id": "k08", "repo": "glow_mod",   "decide": false, "q": "Ritüel başlatılınca hangi fonksiyonlar çalışıyor?"},
+  {"id": "k09", "repo": "orders_app", "decide": false, "q": "What would break if OrderRepository.get returned a tuple?"},
+  {"id": "k10", "repo": "orders_app", "decide": false, "q": "Which database driver is declared in pyproject.toml?"}
+ ]}

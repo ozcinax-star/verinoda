@@ -226,6 +226,34 @@ def test_migrates_a_v3_database_to_v4(tmp_path):
         s.close()
 
 
+def test_migrates_a_v4_database_to_v5_with_append_only_decisions(tmp_path):
+    p = tmp_path / "v4.db"
+    conn = sqlite3.connect(p)
+    for v in (1, 2, 3, 4):
+        conn.executescript(storemod._MIGRATIONS[v])
+    conn.execute("INSERT INTO meta(key, value) VALUES ('schema_version', '4')")
+    conn.commit()
+    conn.close()
+    s = Store(p)
+    try:
+        assert _version(s.conn) == SCHEMA_VERSION >= 5
+        assert {"decisions", "decision_briefs", "decision_answers"} <= _tables(s.conn)
+        s.insert("decisions", {"id": "ADR-0001", "number": 1, "event": "record", "status": "accepted",
+                               "decided_by": "human", "guards": [{"id": "g1"}], "created_at": now()})
+        assert s.one("SELECT guards FROM decisions")["guards"] == [{"id": "g1"}]
+        for sql in ("UPDATE decisions SET status = 'x'", "DELETE FROM decisions"):
+            with pytest.raises(sqlite3.DatabaseError, match="append-only|never deleted"):
+                s.conn.execute(sql)
+            s.conn.rollback()
+        s.insert("decision_briefs", {"id": "dbr_1", "question": "q", "result": {"a": 1}, "created_at": now()})
+        with pytest.raises(sqlite3.DatabaseError, match="CHECK"):
+            s.insert("decision_answers", {"brief_id": "dbr_1", "question_id": "q1", "answer": "a",
+                                          "answered_by": "agent", "created_at": now()})
+        s.conn.rollback()
+    finally:
+        s.close()
+
+
 def test_trust_engine_helpers(st):
     ids = _seed(st)
     assert st.file_facts("abc", "py1") is None

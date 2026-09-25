@@ -1,0 +1,1797 @@
+"""Guards: the mechanical checks of recorded decisions against the code (docs/DESIGN.md D33).
+
+One rule engine, used by ``verinoda decide check`` (and MCP ``decision_check``), by critique's
+exclusivity check and by feedback's exclusive corrections. Each finding has a level:
+
+* ``VIOLATED`` - statically verified: the cited line re-checks now and binds to what the guard forbids;
+* ``POSSIBLE`` - a heuristic hit (a textual match in a language without a binding check, an INFERRED
+  graph edge, a receiver whose type is not resolved, ``getattr(module, "name")``); never a violation;
+* ``REVIEW`` - code a decision governs changed since the decision was recorded (never a violation);
+* ``TRIGGER`` - a revisit condition of a decision holds now: the human should look at it again;
+* ``ok`` - the guard holds, always with its scope and limits (a narrow check must not look like a
+  broad guarantee); ``unknown`` - the guard could not be checked (why, and the next step).
+
+Guard kinds (spec grammar in :mod:`verinoda.decisions`):
+
+``only_in`` - a call may appear only in the allowed files. The scope is the product code by default:
+tests, configured reference trees, detected copies of the project and the decision folder are left
+out (``scope=all`` keeps them). ``calls=mod.func``:
+
+* Python: a syntax-tree walk that resolves names as Python does (module, function, lambda, class and
+  comprehension scopes, ``global`` / ``nonlocal``) through imports (``import m as a``, ``from m import f
+  as g``, relative imports), simple assignments (``g = m.f``) and one or more re-exports through the
+  project's own modules (``from pkg.util import g`` where ``pkg/util.py`` imports it). A binding under
+  if / for / while / try / except / match may not run, so the bindings that can reach a call are the last
+  unconditional one and every conditional one after it. VIOLATED needs every reaching binding to be the
+  target; when only some are (``try: import psycopg2`` / ``except ImportError: psycopg2 = None``, a
+  module-level ``for`` / ``with`` / ``except`` target, two drivers imported in two branches) the call is
+  POSSIBLE; so is a name that shadows the import with a value the engine does not know (a parameter of
+  this or an enclosing function, a loop or comprehension variable), the target used as a value
+  (``functools.partial(sqlite3.connect, ...)``, a class attribute), ``getattr(m, "f")`` and a star
+  import. A def, a class or a literal that replaces the import is not the target. Comments and strings
+  are never read as code.
+* Java / Kotlin: import-bound calls through the syntax tree. ``Cls.method(...)`` with ``Cls`` imported
+  (explicitly - an import alias too -, by a static import, with ``pkg.*`` or from the same package), or
+  ``r.method(...)`` where every declaration of ``r`` in the file is ``Cls r`` / ``r: Cls`` / ``val r =
+  Cls(...)``, is VIOLATED; any other receiver (a call chain, an undeclared name, a field of another class,
+  a name also bound without a written type: a lambda parameter, ``var``, a Kotlin loop variable) is
+  POSSIBLE.
+* Other languages: a regex over the code with comments and strings removed: POSSIBLE at most.
+
+``sink=db-connection`` checks the known connection calls (``sqlite3.connect``, ``psycopg.connect``,
+``create_engine``, ``MongoClient``, JDBC ``DriverManager.getConnection`` ...) the same way; the other
+sink kinds and ``pattern=REGEX`` are text matches: POSSIBLE at most.
+
+``no_edge`` - no graph edge from files matching ``from`` to files matching ``to``. An EXTRACTED edge
+whose cited line still names the target in code is VIOLATED; an INFERRED edge, or one whose line
+changed since the index was built, is POSSIBLE.
+
+``dependency`` - ``absent=NAME``: declared in a manifest is VIOLATED (the manifest line that names it is
+cited); ``present=NAME``: missing from every manifest read is VIOLATED. Manifests are the root ones
+plus the root Gradle/Maven build and the subprojects it includes; build files under test, sample,
+fixture or vendor folders are not read, and a build the root does not include only gives POSSIBLE.
+
+Nothing here imports, runs or evaluates code of the analysed repository: files are read as text and
+parsed (``ast``, tree-sitter). ``git`` gets validated refs only (``rev-parse --verify
+--end-of-options``) and ``--`` before paths.
+"""
+
+from __future__ import annotations
+
+import ast
+import fnmatch
+import io
+import re
+import time
+import tokenize
+from dataclasses import dataclass, field
+from pathlib import Path, PurePosixPath
+
+VIOLATED, POSSIBLE, REVIEW, TRIGGER = "VIOLATED", "POSSIBLE", "REVIEW", "TRIGGER"
+PY_SUFFIXES = (".py", ".pyi")
+JVM_SUFFIXES = (".java", ".kt", ".kts")
+CODE_SUFFIXES = (".py", ".pyi", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".go", ".rs", ".java", ".kt", ".kts",
+                 ".scala", ".rb", ".php", ".cs", ".c", ".h", ".cc", ".cpp", ".hpp", ".swift", ".lua", ".groovy",
+                 ".dart", ".sh", ".ps1")
+HASH_COMMENT = (".py", ".pyi", ".rb", ".sh", ".ps1")
+# known connection calls per sink kind (the call-based part of architecture_map.SINK_PATTERNS, plus JDBC)
+SINK_CALLS = {
+    "db-connection": ("sqlite3.connect", "psycopg2.connect", "psycopg.connect", "sqlalchemy.create_engine",
+                      "pymongo.MongoClient", "pymysql.connect", "mysql.connector.connect", "asyncpg.connect",
+                      "aiosqlite.connect", "java.sql.DriverManager.getConnection"),
+}
+PY_LIMITS = ["getattr with a computed name, exec / eval, sys.modules and calls through objects (a method of an "
+             "instance a call returned, self.attribute) are not followed; getattr(module, \"name\") with a "
+             "literal name, importlib / __import__ of the module, star imports and the function used as a value "
+             "(functools.partial, a callback, a class attribute) are reported as POSSIBLE",
+             "re-exports are followed through the project's own modules (4 levels), not through installed packages",
+             "files that do not parse are reported as unknown, not checked"]
+JVM_LIMITS = ["a receiver's type is read from its declarations anywhere in the same file (scopes are not resolved: "
+              "a name also bound without a written type - a lambda parameter, `var`, a Kotlin loop variable - is "
+              "POSSIBLE); calls through inherited methods, reflection, method references and fields of other "
+              "classes are POSSIBLE or not seen"]
+TEXT_LIMITS = ["languages other than Python, Java and Kotlin are matched as text with comments and strings "
+               "removed: POSSIBLE at most"]
+EDGE_LIMITS = ["edges are what the index extracted: reflection, string class loading, service loaders, DI "
+               "containers and build-time wiring are not seen"]
+DEP_LIMITS = ["transitive dependencies, vendored code and manifests other than those listed are not read"]
+
+
+@dataclass
+class Finding:
+    decision: str
+    guard: str
+    kind: str
+    level: str
+    at: str | None
+    why: str
+    line: str | None = None
+    status: str | None = None
+    since: str | None = None
+
+    def as_dict(self) -> dict:
+        d = {"decision": self.decision, "guard": self.guard, "kind": self.kind, "level": self.level, "at": self.at,
+             "why": self.why}
+        for k in ("line", "status", "since"):
+            if getattr(self, k):
+                d[k] = getattr(self, k)
+        return d
+
+
+@dataclass
+class Scan:
+    """What one guard looked at: counts per engine, limits, and anything it could not check."""
+    files: dict[str, int] = field(default_factory=dict)
+    limits: list[str] = field(default_factory=list)
+    unknown: list[str] = field(default_factory=list)
+    # (file, line) of a finding -> the other files its binding passes through (a re-export module, the
+    # target of a graph edge): --changed / --base count the finding as new when any of them changed
+    via: dict[tuple[str, int], set[str]] = field(default_factory=dict)
+
+    def count(self, engine: str) -> None:
+        self.files[engine] = self.files.get(engine, 0) + 1
+
+    def limit(self, *items: str) -> None:
+        for s in items:
+            if s not in self.limits:
+                self.limits.append(s)
+
+
+# -- comments and strings -------------------------------------------------------------------------
+
+def _blank(s: str) -> str:
+    return "".join("\n" if ch == "\n" else " " for ch in s)
+
+
+def code_text(text: str, suffix: str, *, keep_strings: bool = False) -> str:
+    """``text`` with comments and string literals blanked out (line and column positions kept).
+
+    ``keep_strings``: only comments are blanked, and in Python the strings that are a statement on their
+    own (docstrings); the other string literals stay (an SQL statement, a file mode, ``":memory:"``)."""
+    suffix = suffix.lower()
+    if suffix in PY_SUFFIXES:
+        masked = _py_code(text, keep_strings=keep_strings)
+        if masked is not None:
+            return masked
+    return _clike_code(text, hash_comments=suffix in HASH_COMMENT,
+                       slash_comments=suffix not in (".py", ".pyi", ".rb", ".sh", ".ps1"), keep_strings=keep_strings)
+
+
+def _statement_strings(toks: list) -> set[int]:
+    """Indexes of STRING tokens that form a whole statement (a docstring, a bare string)."""
+    out: set[int] = set()
+    skip = (tokenize.NL, tokenize.COMMENT, tokenize.INDENT, tokenize.DEDENT)
+    start, i = True, 0
+    while i < len(toks):
+        tok = toks[i]
+        if start and tok.type == tokenize.STRING:
+            j = i
+            while j + 1 < len(toks) and toks[j + 1].type in (tokenize.STRING, tokenize.NL):
+                j += 1
+            k = j + 1
+            while k < len(toks) and toks[k].type in skip:
+                k += 1
+            if k >= len(toks) or toks[k].type in (tokenize.NEWLINE, tokenize.ENDMARKER):
+                out.update(x for x in range(i, j + 1) if toks[x].type == tokenize.STRING)
+            start, i = False, j + 1
+            continue
+        start = tok.type in (tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT) or \
+            (start and tok.type in (tokenize.NL, tokenize.COMMENT))
+        i += 1
+    return out
+
+
+def code_texts(text: str, suffix: str) -> tuple[str, str]:
+    """``(code_text(text, suffix), code_text(text, suffix, keep_strings=True))`` from one tokenize pass."""
+    suffix = suffix.lower()
+    if suffix in PY_SUFFIXES:
+        masked = _py_masks(text, (False, True))
+        if masked is not None:
+            return masked[0], masked[1]
+    kw = {"hash_comments": suffix in HASH_COMMENT,
+          "slash_comments": suffix not in (".py", ".pyi", ".rb", ".sh", ".ps1")}
+    return _clike_code(text, **kw), _clike_code(text, keep_strings=True, **kw)
+
+
+def _py_code(text: str, *, keep_strings: bool = False) -> str | None:
+    masked = _py_masks(text, (keep_strings,))
+    return masked[0] if masked is not None else None
+
+
+def _py_masks(text: str, modes: tuple[bool, ...]) -> tuple[str, ...] | None:
+    """The text masked once per mode (``keep_strings`` False / True), from one tokenize pass."""
+    try:
+        toks = list(tokenize.generate_tokens(io.StringIO(text).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return None
+    # rows as tokenize counts them: split at a newline only (str.splitlines also splits at form feeds and
+    # other separators, which would shift every later row by one)
+    lines = re.split(r"(?<=\n)", text)
+    fmid = getattr(tokenize, "FSTRING_MIDDLE", None)
+    res = []
+    for keep_strings in modes:
+        out = [list(ln) for ln in lines]
+        blank_types = {tokenize.COMMENT} if keep_strings else {tokenize.COMMENT, tokenize.STRING}
+        if fmid is not None and not keep_strings:
+            blank_types.add(fmid)
+        prose = _statement_strings(toks) if keep_strings else set()
+        for n, tok in enumerate(toks):
+            if tok.type not in blank_types and n not in prose:
+                continue
+            (r1, c1), (r2, c2) = tok.start, tok.end
+            for r in range(r1, r2 + 1):
+                if r - 1 >= len(out):
+                    continue
+                row = out[r - 1]
+                a = c1 if r == r1 else 0
+                b = min(c2 if r == r2 else len(row), len(row))
+                row[a:b] = [ch if ch in "\r\n" else " " for ch in row[a:b]]
+        res.append("".join("".join(r) for r in out))
+    return tuple(res)
+
+
+def _clike_code(text: str, *, hash_comments: bool = False, slash_comments: bool = True,
+                keep_strings: bool = False) -> str:
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        two = text[i:i + 2]
+        if slash_comments and two == "//":
+            j = text.find("\n", i)
+            j = n if j == -1 else j
+            out.append(_blank(text[i:j]))
+            i = j
+        elif slash_comments and two == "/*":
+            j = text.find("*/", i + 2)
+            j = n if j == -1 else j + 2
+            out.append(_blank(text[i:j]))
+            i = j
+        elif hash_comments and ch == "#":
+            j = text.find("\n", i)
+            j = n if j == -1 else j
+            out.append(_blank(text[i:j]))
+            i = j
+        elif text.startswith('"""', i):
+            j = text.find('"""', i + 3)
+            j = n if j == -1 else j + 3
+            out.append(text[i:j] if keep_strings else _blank(text[i:j]))
+            i = j
+        elif ch in "\"'`":
+            j = i + 1
+            while j < n and text[j] != ch and not (text[j] == "\n" and ch != "`"):
+                j += 2 if text[j] == "\\" else 1
+            j = min(n, j + 1)
+            out.append(text[i:j] if keep_strings else _blank(text[i:j]))
+            i = j
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
+def pattern_hits(repo: Path, rx: re.Pattern, rels: list[str]) -> list[tuple[str, int, str]]:
+    """``(rel, line, text)`` of the lines where ``rx`` matches the code (comments and strings removed)."""
+    hits = []
+    for rel in rels:
+        text = _read(Path(repo) / rel)
+        if text is None or not rx.search(text):
+            continue
+        code = code_text(text, PurePosixPath(rel).suffix).split("\n")
+        raw = text.split("\n")
+        for i, ln in enumerate(code, 1):
+            if rx.search(ln):
+                hits.append((rel, i, raw[i - 1].rstrip("\r") if i - 1 < len(raw) else ""))
+    return hits
+
+
+def code_line_matches(repo: Path, rel: str, line: int, rx: re.Pattern) -> bool:
+    """Does ``rx`` match line ``line`` of ``rel`` outside its comments and strings?"""
+    text = _read(Path(repo) / rel)
+    if text is None:
+        return False
+    code = code_text(text, PurePosixPath(rel).suffix).split("\n")
+    return 0 < line <= len(code) and bool(rx.search(code[line - 1]))
+
+
+EXCLUSIVE_SUFFIXES = (".py", ".js", ".ts", ".go", ".rs", ".java", ".rb", ".php", ".cs")
+_DOTTED_RX = re.compile(r"^(?:\\b|\^)?([A-Za-z_]\w*(?:\\\.[A-Za-z_]\w*)+)(?:\\b|\\s\*|\\\(|\$)*$")
+
+
+def dotted_call(pattern: str) -> str | None:
+    """``sqlite3\\.connect\\(`` -> ``sqlite3.connect``: the call a simple exclusivity regex names, else None."""
+    m = _DOTTED_RX.match(str(pattern or "").strip())
+    return m.group(1).replace("\\.", ".") if m else None
+
+
+def exclusive_hits(repo: Path, spec: dict, *, include_allowed: bool = False) -> tuple[list[tuple[str, int, str]], str]:
+    """Counterexamples to an ``exclusive`` claim (``spec``: ``pattern`` and/or ``calls``, ``allowed_files``).
+
+    The drop-in replacement of the raw per-line regex scan (critique's exclusivity check, feedback's
+    exclusive corrections): the pattern must match the *code* of a line (a comment or a string does not
+    count), and when the pattern names a dotted call (``sqlite3\\.connect``) or the spec gives ``calls``,
+    the Python syntax-tree engine adds the calls made through import aliases (``import sqlite3 as sq``,
+    ``from sqlite3 import connect as open_db``). Returns ``([(rel, line, text)], method)``.
+    """
+    from verinoda.snapshot import list_files
+
+    repo = Path(repo)
+    allowed = set(spec.get("allowed_files") or [])
+    files = [r for r in list_files(repo) if r.endswith(EXCLUSIVE_SUFFIXES) and (include_allowed or r not in allowed)]
+    hits: dict[tuple[str, int], str] = {}
+    method = []
+    if spec.get("pattern"):
+        try:
+            rx = re.compile(spec["pattern"])
+        except re.error:
+            rx = None
+        if rx is not None:
+            for rel, i, text in pattern_hits(repo, rx, files):
+                hits[(rel, i)] = text
+            method.append("pattern in code (comments and strings removed)")
+    calls = list(spec.get("calls") or []) or ([dotted_call(spec.get("pattern"))] if dotted_call(spec.get("pattern"))
+                                              else [])
+    if calls:
+        ctx = _Ctx(repo, list_files(repo))
+        scan = Scan()
+        targets = {c: c for c in calls}
+        for rel in files:
+            if not rel.endswith(PY_SUFFIXES):
+                continue
+            text = _read(repo / rel)
+            if text is None or not any(c.rpartition(".")[2] in text for c in calls):
+                continue
+            for level, line, _why in _py_only_in(ctx.py, rel, targets, scan):
+                if level == VIOLATED:
+                    hits.setdefault((rel, line), _line(repo, rel, line))
+        method.append(f"Python calls to {', '.join(calls)} through imports and aliases")
+    return [(r, i, t) for (r, i), t in sorted(hits.items())], "; ".join(method)
+
+
+def _read(p: Path) -> str | None:
+    try:
+        if p.stat().st_size > 2_000_000:
+            return None
+        return p.read_bytes().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+# -- scope ---------------------------------------------------------------------------------------
+
+def glob_match(path: str, pattern: str) -> bool:
+    """A path under a directory (``src/main``), an exact file, or an fnmatch glob (``*`` crosses ``/``)."""
+    pattern = pattern.strip().rstrip("/") if not any(c in pattern for c in "*?[") else pattern.strip()
+    if not any(c in pattern for c in "*?["):
+        return path == pattern or path.startswith(pattern + "/")
+    if pattern.endswith("/**") and (path == pattern[:-3] or path.startswith(pattern[:-2])):
+        return True
+    return fnmatch.fnmatchcase(path, pattern)
+
+
+def _excluded_roots(repo: Path) -> list[str]:
+    roots: list[str] = []
+    try:
+        from verinoda.paths import load_config
+
+        for e in (load_config(repo).get("index") or {}).get("reference") or []:
+            p = e.get("path") if isinstance(e, dict) else e
+            if isinstance(p, str) and p.strip():
+                roots.append(p.strip().strip("/"))
+    except Exception:  # noqa: BLE001 - an unreadable config: no reference trees
+        pass
+    try:
+        from verinoda import copies
+
+        roots += [c["path"].strip("/") for c in copies.load(repo)]
+    except Exception:  # noqa: BLE001
+        pass
+    return [r for r in roots if r]
+
+
+def is_test_file(rel: str) -> bool:
+    """Test code: the architecture map's test-file rule, plus pytest's ``conftest.py`` (fixtures)."""
+    from verinoda.architecture_map import is_test_file as _arch_test
+
+    return _arch_test(rel) or PurePosixPath(rel).name == "conftest.py"
+
+
+def scope_files(repo: Path, guard: dict, all_files: list[str]) -> tuple[list[str], list[str]]:
+    """(files the guard checks, what the scope leaves out - for the limits)."""
+    from verinoda.decisions import decisions_dir
+
+    repo = Path(repo)
+    left_out: list[str] = []
+    try:
+        ddir = decisions_dir(repo).relative_to(repo.resolve()).as_posix()
+    except Exception:  # noqa: BLE001
+        ddir = ".verinoda/decisions"
+    roots = [] if guard.get("scope") == "all" else _excluded_roots(repo)
+    out = []
+    n_tests = n_ref = 0
+    for rel in all_files:
+        if not rel.endswith(CODE_SUFFIXES) or rel.startswith(ddir + "/") or rel.startswith(".verinoda/"):
+            continue
+        if any(glob_match(rel, a) for a in guard.get("allowed") or []):
+            continue
+        if any(glob_match(rel, x) for x in guard.get("exclude") or []):
+            continue
+        if guard.get("scope") != "all":
+            if is_test_file(rel):
+                n_tests += 1
+                continue
+            if any(rel == r or rel.startswith(r + "/") for r in roots):
+                n_ref += 1
+                continue
+        out.append(rel)
+    if n_tests:
+        left_out.append(f"{n_tests} test file(s) are out of scope (scope=all includes them)")
+    if n_ref:
+        left_out.append(f"{n_ref} file(s) in reference trees or detected copies are out of scope")
+    if guard.get("exclude"):
+        left_out.append(f"excluded: {', '.join(guard['exclude'])}")
+    return out, left_out
+
+
+# -- Python: calls bound through imports ---------------------------------------------------------
+
+def _module_of(rel: str) -> str | None:
+    if not rel.endswith(PY_SUFFIXES):
+        return None
+    parts = list(PurePosixPath(rel).with_suffix("").parts)
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts) or None
+
+
+# the kinds of binding whose value the engine does not know (a parameter may be the imported function passed in)
+_UNKNOWN_VALUE = {"param", "for", "with", "except", "comp", "walrus", "assign", "augassign", "del", "match"}
+_LITERALS = (ast.Constant, ast.JoinedStr, ast.List, ast.Tuple, ast.Dict, ast.Set)
+_TRY_TYPES = tuple(t for t in (getattr(ast, "Try", None), getattr(ast, "TryStar", None)) if t is not None)
+_MATCH = getattr(ast, "Match", None)
+
+
+@dataclass
+class _Bind:
+    """One binding of a name: ``import``/``from`` (``qual``), ``alias`` (``g = m.f``: ``value``), ``def``,
+    ``class``, ``literal`` or one whose value is not known (``_UNKNOWN_VALUE``)."""
+    name: str
+    kind: str
+    pos: tuple[int, int]
+    cond: bool                       # under if / for / while / try / except / match: it may not run
+    qual: str | None = None
+    value: ast.AST | None = None
+    scope: "_Scope | None" = None    # where the statement is written (an alias' value is evaluated there)
+
+    def text(self) -> str:
+        where = self.scope.name if self.scope is not None and self.scope.kind == "function" else ""
+        return {"param": f"a parameter of {where or 'the enclosing function'}",
+                "for": "a for-loop variable", "with": "bound by a with statement",
+                "except": "an exception name (except ... as)", "comp": "a comprehension variable",
+                "walrus": "assigned with :=", "assign": "assigned", "augassign": "reassigned (augmented assignment)",
+                "del": "deleted", "match": "a match-pattern capture", "def": "a def", "class": "a class",
+                "literal": "assigned a literal", "alias": "an alias", "import": f"imported as {self.qual}",
+                "from": f"imported as {self.qual}"}.get(self.kind, self.kind) + f" (line {self.pos[0]})"
+
+
+class _Scope:
+    __slots__ = ("kind", "name", "parent", "binds", "globals", "nonlocals", "stars")
+
+    def __init__(self, kind: str, name: str, parent: "_Scope | None"):
+        self.kind, self.name, self.parent = kind, name, parent
+        self.binds: dict[str, list[_Bind]] = {}
+        self.globals: set[str] = set()
+        self.nonlocals: set[str] = set()
+        self.stars: list[str] = []
+
+
+class _Scopes:
+    """Python name scopes of one file (module, function, lambda, class, comprehension), as Python resolves
+    names: every binding of a name in each scope, ``global`` / ``nonlocal``, and the scope each call and
+    each value reference runs in. Branches are kept: a binding under if/for/while/try/except/match is
+    conditional, so the bindings that can reach a use are the last unconditional one and every conditional
+    one after it."""
+
+    def __init__(self, tree: ast.AST, pkg: str):
+        self.pkg = pkg
+        self.module = _Scope("module", "<module>", None)
+        self.uses: list[tuple[ast.Call, _Scope]] = []
+        self.refs: list[tuple[ast.AST, _Scope, bool]] = []   # (value reference, scope, followed as an alias)
+        self.by_name: dict[str, list[_Bind]] = {}            # every binding of a name, any scope
+        self._stmts(tree.body, self.module, False)
+
+    # -- building ----------------------------------------------------------------------------------
+    def _bind(self, scope: _Scope, name: str, kind: str, node: ast.AST, cond: bool, *, qual: str | None = None,
+              value: ast.AST | None = None) -> None:
+        tgt = scope
+        if name in scope.globals:
+            tgt, cond = self.module, True           # set when that function runs
+        elif name in scope.nonlocals:
+            tgt = scope.parent
+            while tgt is not None and tgt.kind != "function":
+                tgt = tgt.parent
+            tgt, cond = (tgt or self.module), True
+        b = _Bind(name, kind, (getattr(node, "lineno", 0), getattr(node, "col_offset", 0)), cond, qual, value, scope)
+        tgt.binds.setdefault(name, []).append(b)
+        self.by_name.setdefault(name, []).append(b)
+
+    def _from_base(self, node: ast.ImportFrom) -> str:
+        base = node.module or ""
+        if node.level:
+            parts = self.pkg.split(".") if self.pkg else []
+            parts = parts[: len(parts) - (node.level - 1)] if node.level > 1 else parts
+            base = ".".join([*parts, *([base] if base else [])])
+        return base
+
+    def _declare(self, body: list, scope: _Scope) -> None:
+        """``global`` / ``nonlocal`` anywhere in a function body (not in nested scopes) apply to all of it."""
+        stack = list(body)
+        while stack:
+            st = stack.pop()
+            if isinstance(st, ast.Global):
+                scope.globals.update(st.names)
+            elif isinstance(st, ast.Nonlocal):
+                scope.nonlocals.update(st.names)
+            elif not isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                for child in ast.iter_child_nodes(st):
+                    if isinstance(child, (ast.stmt, ast.excepthandler)) or type(child).__name__ == "match_case":
+                        stack.append(child)
+
+    def _params(self, args: ast.arguments, scope: _Scope, node: ast.AST) -> None:
+        for a in [*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg]:
+            if a is not None:
+                self._bind(scope, a.arg, "param", node, False)
+
+    def _targets(self, t: ast.AST, scope: _Scope, kind: str, cond: bool) -> None:
+        if isinstance(t, ast.Name):
+            self._bind(scope, t.id, kind, t, cond)
+        elif isinstance(t, (ast.Tuple, ast.List)):
+            for e in t.elts:
+                self._targets(e, scope, kind, cond)
+        elif isinstance(t, ast.Starred):
+            self._targets(t.value, scope, kind, cond)
+        elif isinstance(t, ast.Attribute):
+            self._expr(t.value, scope, cond)
+        elif isinstance(t, ast.Subscript):
+            self._expr(t.value, scope, cond)
+            self._expr(t.slice, scope, cond)
+
+    def _pattern(self, p: ast.AST, scope: _Scope) -> None:
+        for n in ast.walk(p):
+            name = getattr(n, "name", None) if type(n).__name__ in ("MatchAs", "MatchStar") else \
+                getattr(n, "rest", None) if type(n).__name__ == "MatchMapping" else None
+            if name:
+                self._bind(scope, name, "match", n, True)
+            if type(n).__name__ == "MatchValue":
+                self._expr(n.value, scope, True)
+
+    def _stmts(self, body: list, scope: _Scope, cond: bool) -> None:
+        for st in body:
+            self._stmt(st, scope, cond)
+
+    def _stmt(self, st: ast.AST, scope: _Scope, cond: bool) -> None:
+        if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for d in [*st.decorator_list, *st.args.defaults, *[d for d in st.args.kw_defaults if d is not None]]:
+                self._expr(d, scope, cond)
+            self._bind(scope, st.name, "def", st, cond)
+            s = _Scope("function", st.name, scope)
+            self._declare(st.body, s)
+            self._params(st.args, s, st)
+            self._stmts(st.body, s, False)
+        elif isinstance(st, ast.ClassDef):
+            for d in [*st.decorator_list, *st.bases, *[k.value for k in st.keywords]]:
+                self._expr(d, scope, cond)
+            self._bind(scope, st.name, "class", st, cond)
+            self._stmts(st.body, _Scope("class", st.name, scope), False)
+        elif isinstance(st, ast.Import):
+            for a in st.names:
+                if a.asname:
+                    self._bind(scope, a.asname, "import", st, cond, qual=a.name)
+                else:
+                    root = a.name.split(".")[0]
+                    self._bind(scope, root, "import", st, cond, qual=root)
+        elif isinstance(st, ast.ImportFrom):
+            base = self._from_base(st)
+            for a in st.names:
+                if a.name == "*":
+                    scope.stars.append(base)
+                else:
+                    self._bind(scope, a.asname or a.name, "from", st, cond,
+                               qual=f"{base}.{a.name}" if base else a.name)
+        elif isinstance(st, (ast.Assign, ast.AnnAssign)):
+            value = st.value
+            targets = st.targets if isinstance(st, ast.Assign) else [st.target]
+            if value is None:  # a bare annotation binds nothing
+                return
+            chain = value
+            while isinstance(chain, ast.Attribute):
+                chain = chain.value
+            if isinstance(value, (ast.Name, ast.Attribute)) and isinstance(chain, ast.Name):
+                # `g = m.f`: calls through g are followed where g is a module or function name; a class
+                # attribute is reached through self/cls, which is not followed
+                self.refs.append((value, scope, scope.kind != "class" and all(isinstance(t, ast.Name)
+                                                                              for t in targets)))
+            else:
+                self._expr(value, scope, cond)
+            for t in targets:
+                if isinstance(t, ast.Name):
+                    kind = "alias" if isinstance(value, (ast.Name, ast.Attribute)) else \
+                        "literal" if isinstance(value, _LITERALS) else "assign"
+                    self._bind(scope, t.id, kind, t, cond, value=value if kind == "alias" else None)
+                else:
+                    self._targets(t, scope, "assign", cond)
+        elif isinstance(st, ast.AugAssign):
+            self._expr(st.value, scope, cond)
+            if isinstance(st.target, ast.Name):
+                self._bind(scope, st.target.id, "augassign", st.target, cond)
+            else:
+                self._targets(st.target, scope, "augassign", cond)
+        elif isinstance(st, (ast.For, ast.AsyncFor)):
+            self._expr(st.iter, scope, cond)
+            self._targets(st.target, scope, "for", True)
+            self._stmts(st.body, scope, True)
+            self._stmts(st.orelse, scope, True)
+        elif isinstance(st, (ast.While, ast.If)):
+            self._expr(st.test, scope, cond)
+            self._stmts(st.body, scope, True)
+            self._stmts(st.orelse, scope, True)
+        elif isinstance(st, (ast.With, ast.AsyncWith)):
+            for it in st.items:
+                self._expr(it.context_expr, scope, cond)
+                if it.optional_vars is not None:
+                    self._targets(it.optional_vars, scope, "with", cond)
+            self._stmts(st.body, scope, cond)
+        elif _TRY_TYPES and isinstance(st, _TRY_TYPES):
+            self._stmts(st.body, scope, True)
+            for h in st.handlers:
+                if h.type is not None:
+                    self._expr(h.type, scope, True)
+                if h.name:
+                    self._bind(scope, h.name, "except", h, True)
+                self._stmts(h.body, scope, True)
+            self._stmts(st.orelse, scope, True)
+            self._stmts(st.finalbody, scope, cond)
+        elif _MATCH is not None and isinstance(st, _MATCH):
+            self._expr(st.subject, scope, cond)
+            for c in st.cases:
+                self._pattern(c.pattern, scope)
+                if c.guard is not None:
+                    self._expr(c.guard, scope, True)
+                self._stmts(c.body, scope, True)
+        elif isinstance(st, ast.Delete):
+            for t in st.targets:
+                self._targets(t, scope, "del", cond)
+        elif isinstance(st, (ast.Global, ast.Nonlocal)):
+            return
+        else:
+            for child in ast.iter_child_nodes(st):
+                if isinstance(child, ast.stmt):
+                    self._stmt(child, scope, cond)
+                elif isinstance(child, ast.expr):
+                    self._expr(child, scope, cond)
+
+    def _expr(self, e: ast.AST | None, scope: _Scope, cond: bool) -> None:
+        if e is None:
+            return
+        if isinstance(e, ast.Call):
+            self.uses.append((e, scope))
+            base = e.func
+            while isinstance(base, ast.Attribute):
+                base = base.value
+            if not isinstance(base, ast.Name):
+                self._expr(base, scope, cond)
+            for a in e.args:
+                self._expr(a, scope, cond)
+            for k in e.keywords:
+                self._expr(k.value, scope, cond)
+            return
+        if isinstance(e, (ast.Attribute, ast.Name)) and isinstance(getattr(e, "ctx", None), ast.Load):
+            base = e
+            while isinstance(base, ast.Attribute):
+                base = base.value
+            if isinstance(base, ast.Name):
+                self.refs.append((e, scope, False))
+            else:
+                self._expr(base, scope, cond)
+            return
+        if isinstance(e, ast.Lambda):
+            for d in [*e.args.defaults, *[d for d in e.args.kw_defaults if d is not None]]:
+                self._expr(d, scope, cond)
+            s = _Scope("function", "<lambda>", scope)
+            self._params(e.args, s, e)
+            self._expr(e.body, s, False)
+            return
+        if isinstance(e, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+            s = _Scope("comp", "<comprehension>", scope)
+            for i, gen in enumerate(e.generators):
+                self._expr(gen.iter, scope if i == 0 else s, cond)
+                self._targets(gen.target, s, "comp", False)
+                for c in gen.ifs:
+                    self._expr(c, s, False)
+            if isinstance(e, ast.DictComp):
+                self._expr(e.key, s, False)
+                self._expr(e.value, s, False)
+            else:
+                self._expr(e.elt, s, False)
+            return
+        if isinstance(e, ast.NamedExpr):
+            self._expr(e.value, scope, cond)
+            tgt = scope
+            while tgt.kind == "comp" and tgt.parent is not None:
+                tgt = tgt.parent
+            self._bind(tgt, e.target.id, "walrus", e.target, cond or tgt is not scope)
+            return
+        for child in ast.iter_child_nodes(e):
+            self._expr(child, scope, cond)
+
+    # -- resolving -----------------------------------------------------------------------------------
+    def lookup(self, scope: _Scope, name: str) -> _Scope | None:
+        """The scope ``name`` resolves to from ``scope`` (a class body is seen only by its own statements)."""
+        s, first = scope, True
+        while s is not None:
+            if s.kind == "class" and not first:
+                s = s.parent
+                continue
+            if name in s.globals:
+                return self.module if name in self.module.binds else None
+            if name in s.nonlocals:
+                s, first = s.parent, False
+                continue
+            if name in s.binds:
+                return s
+            s, first = s.parent, False
+        return None
+
+    @staticmethod
+    def deferred(use: _Scope, bound: _Scope) -> bool:
+        """Does the use run later than the binding scope's own statements (inside a def or lambda)?"""
+        s = use
+        while s is not None and s is not bound:
+            if s.kind == "function":
+                return True
+            s = s.parent
+        return False
+
+    @staticmethod
+    def reaching(scope: _Scope, name: str, pos: tuple[int, int], deferred: bool) -> list[_Bind]:
+        binds = sorted(scope.binds.get(name) or [], key=lambda b: b.pos)
+        if scope.kind == "comp":
+            return binds
+        cand = binds if deferred else ([b for b in binds if b.pos < pos] or binds)
+        last = None
+        for b in cand:
+            if not b.cond:
+                last = b
+        return [b for b in cand if b is last or (b.cond and (last is None or b.pos > last.pos))]
+
+    def qualify(self, expr: ast.AST, scope: _Scope, depth: int = 0) -> list[tuple[str | None, _Bind]] | None:
+        """``[(qualified name or None, binding)]`` for each binding of ``expr``'s root name that can reach it;
+        ``[]`` when the name is bound nowhere in the file; None when ``expr`` is not a dotted name."""
+        attrs = []
+        e = expr
+        while isinstance(e, ast.Attribute):
+            attrs.append(e.attr)
+            e = e.value
+        if not isinstance(e, ast.Name):
+            return None
+        attrs.reverse()
+        s = self.lookup(scope, e.id)
+        if s is None:
+            return []
+        out: list[tuple[str | None, _Bind]] = []
+        for b in self.reaching(s, e.id, (getattr(expr, "lineno", 0), getattr(expr, "col_offset", 0)),
+                               self.deferred(scope, s)):
+            if b.kind in ("import", "from"):
+                out.append((".".join([b.qual, *attrs]), b))
+            elif b.kind == "alias" and depth < 3 and b.value is not None and b.scope is not None:
+                sub = self.qualify(b.value, b.scope, depth + 1) or []
+                out += [(".".join([q, *attrs]) if q else None, b) for q, _ in sub] or [(None, b)]
+            else:
+                out.append((None, b))
+        return out
+
+    def exports(self, name: str) -> list[tuple[str | None, _Bind]]:
+        """What a module-level name holds once the module has run (its final bindings)."""
+        out: list[tuple[str | None, _Bind]] = []
+        for b in self.reaching(self.module, name, (1 << 30, 0), True):
+            if b.kind in ("import", "from"):
+                out.append((b.qual, b))
+            elif b.kind == "alias" and b.value is not None and b.scope is not None:
+                sub = self.qualify(b.value, b.scope, 1) or []
+                out += [(q, b) for q, _ in sub] or [(None, b)]
+            else:
+                out.append((None, b))
+        return out
+
+
+class _PyIndex:
+    """Parsed Python files of one repository, parsed on demand, with their name scopes."""
+
+    def __init__(self, repo: Path, all_files: list[str]):
+        self.repo = Path(repo)
+        self.modules: dict[str, str] = {}
+        for rel in all_files:
+            if rel.endswith(PY_SUFFIXES):
+                m = _module_of(rel)
+                if m:
+                    self.modules.setdefault(m, rel)
+                    # a src layout: src/pkg/mod.py is imported as pkg.mod
+                    if m.startswith("src."):
+                        self.modules.setdefault(m[4:], rel)
+        self._trees: dict[str, tuple[ast.AST | None, str | None]] = {}
+        self._scopes: dict[str, _Scopes | None] = {}
+
+    def tree(self, rel: str) -> tuple[ast.AST | None, str | None]:
+        if rel not in self._trees:
+            text = _read(self.repo / rel)
+            tree = None
+            if text is not None:
+                try:
+                    tree = ast.parse(text)
+                except (SyntaxError, ValueError, RecursionError):
+                    tree = None
+            self._trees[rel] = (tree, text)
+        return self._trees[rel]
+
+    def scopes(self, rel: str) -> _Scopes | None:
+        if rel not in self._scopes:
+            tree, _ = self.tree(rel)
+            sc = None
+            if tree is not None:
+                pkg = _module_of(rel) or ""
+                if not rel.endswith("__init__.py"):
+                    pkg = pkg.rpartition(".")[0]
+                try:
+                    sc = _Scopes(tree, pkg)
+                except RecursionError:
+                    sc = None
+            self._scopes[rel] = sc
+        return self._scopes[rel]
+
+    def resolve(self, qual: str, depth: int = 0) -> list[tuple[str, tuple[str, ...]]]:
+        """Follow a name through the project's own modules: ``[(final name, files passed through)]``, one
+        per binding that can hold it (``pkg.util.open_db`` -> ``[("sqlite3.connect", ("pkg/util.py",))]``).
+        A module-level name that is not an import or alias (a def, a literal, a parameter-like binding)
+        stops the chain: its own qualified name is returned."""
+        if depth > 4 or "." not in qual:
+            return [(qual, ())]
+        parts = qual.split(".")
+        for i in range(len(parts) - 1, 0, -1):
+            mod, rest = ".".join(parts[:i]), parts[i:]
+            rel = self.modules.get(mod)
+            if rel is None:
+                continue
+            sc = self.scopes(rel)
+            if sc is None or rest[0] not in sc.module.binds:
+                return [(qual, ())]
+            out: list[tuple[str, tuple[str, ...]]] = []
+            for q, _b in sc.exports(rest[0]):
+                if q is None:
+                    out.append((qual, (rel,)))
+                    continue
+                for full, via in self.resolve(".".join([q, *rest[1:]]), depth + 1):
+                    out.append((full, (rel, *via)))
+            return list(dict.fromkeys(out)) or [(qual, ())]
+        return [(qual, ())]
+
+
+def _py_only_in(ix: _PyIndex, rel: str, targets: dict[str, str], scan: Scan,
+                names: set[str] | None = None) -> list[tuple[str, int, str]]:
+    """``(level, line, why)`` for calls in ``rel`` that bind to one of ``targets`` (qualified -> shown).
+
+    ``names``: the last parts a call's qualified name can have to reach a target (the target functions
+    and the names they are re-exported under); any other call is not followed through the project.
+    The files a finding's binding passes through (re-exports) are kept in ``scan.via``."""
+    tree, text = ix.tree(rel)
+    if text is None:
+        return []
+    if tree is None:
+        scan.unknown.append(f"{rel} does not parse as Python: not checked")
+        return []
+    scan.count("python")
+    sc = ix.scopes(rel)
+    if sc is None:
+        scan.unknown.append(f"{rel} is nested too deeply to resolve its names: not checked")
+        return []
+    out: list[tuple[str, int, str]] = []
+    funcs = {t.rpartition(".")[2] for t in targets}
+    mods = {t.rpartition(".")[0] for t in targets}
+    names = set(names or ()) | funcs
+
+    def targets_of(q: str) -> list[tuple[str, tuple[str, ...]]]:
+        return ix.resolve(q) if q.rpartition(".")[2] in names else [(q, ())]
+
+    def shadowed(root: str, attrs: list[str]) -> str | None:
+        """The target an import of ``root`` elsewhere in this file would give (the use is shadowed here)."""
+        for b in sc.by_name.get(root) or []:
+            if b.kind in ("import", "from") and b.qual:
+                for full, _via in targets_of(".".join([b.qual, *attrs])):
+                    if full in targets:
+                        return full
+        return None
+
+    def judge(node: ast.AST, scope: _Scope, *, value_use: bool) -> None:
+        expr = node.func if isinstance(node, ast.Call) else node
+        reach = sc.qualify(expr, scope)
+        if reach is None:
+            return
+        root = expr
+        attrs = []
+        while isinstance(root, ast.Attribute):
+            attrs.append(root.attr)
+            root = root.value
+        attrs.reverse()
+        if not reach:  # bound nowhere in the file: a builtin, or a name from a star import
+            if not value_use and isinstance(expr, ast.Name) and expr.id in funcs:
+                for base in sc.module.stars:
+                    for full, _ in ix.resolve(f"{base}.{expr.id}" if base else expr.id):
+                        if full in targets:
+                            out.append((POSSIBLE, node.lineno, f"`{expr.id}()` may come from `from {base} import *`"))
+            return
+        hits, others, via = [], [], set()
+        for q, b in reach:
+            found = False
+            if q is not None:
+                for full, chain in targets_of(q):
+                    if full in targets:
+                        hits.append((full, q, b))
+                        via.update(chain)
+                        found = True
+                    else:
+                        others.append((q, b, full))
+            if not found and q is None:
+                others.append((None, b, None))
+        written = ast.unparse(expr)
+        if not hits:
+            unknown = [b for q, b, _ in others if q is None and b.kind in _UNKNOWN_VALUE]
+            full = shadowed(root.id, attrs) if unknown and not value_use else None
+            if full is not None:
+                out.append((POSSIBLE, node.lineno, f"call to {targets[full]}?"
+                                                   f" `{root.id}` is {unknown[0].text()} here, so the imported "
+                                                   "one may not be what is called"))
+            return
+        full, q, b = hits[0]
+        shown = ", ".join(dict.fromkeys(targets[h[0]] for h in hits))
+        if via:
+            scan.via.setdefault((rel, node.lineno), set()).update(via)
+        if value_use:
+            out.append((POSSIBLE, node.lineno, f"{shown} is used as a value here (passed on or stored: "
+                                               "functools.partial, a callback, a class attribute); calls through "
+                                               "it are not followed"))
+            return
+        if others:
+            oq, ob, _ = others[0]
+            what = ob.text() if oq is None or ob.kind in ("import", "from") else f"{ob.text()} of {oq}"
+            out.append((POSSIBLE, node.lineno, f"call to {shown}, but `{root.id}` can also be {what}"))
+            return
+        n_binds = len({h[2].pos for h in hits})
+        parts = ([f"as `{written}`"] if written != full else []) + ([f"through {q}"] if q != full else []) + \
+            (["bound by an assignment"] if any(h[2].kind == "alias" for h in hits) else []) + \
+            ([f"imported in {n_binds} branches"] if n_binds > 1 else [])
+        out.append((VIOLATED, node.lineno, f"call to {shown}" + (f" ({', '.join(parts)})" if parts else "")))
+
+    for call, scope in sc.uses:
+        f = call.func
+        if isinstance(f, ast.Name) and f.id == "getattr" and len(call.args) >= 2 and \
+                isinstance(call.args[1], ast.Constant) and call.args[1].value in funcs:
+            for q, _b in sc.qualify(call.args[0], scope) or []:
+                for m, _ in (ix.resolve(q) if q else []):
+                    full = f"{m}.{call.args[1].value}"
+                    if m in mods and full in targets:
+                        out.append((POSSIBLE, call.lineno, f"getattr({m}, \"{call.args[1].value}\") reaches "
+                                                           f"{targets[full]} dynamically"))
+            continue
+        if isinstance(f, (ast.Name, ast.Attribute)):
+            judge(call, scope, value_use=False)
+    for ref, scope, followed in sc.refs:
+        last = ref.attr if isinstance(ref, ast.Attribute) else ref.id
+        if not followed and last in names:
+            judge(ref, scope, value_use=True)
+    return sorted(set(out), key=lambda h: (h[1], h[0] != VIOLATED, h[2]))
+
+
+def _dynamic_import_hint(rel: str, text: str, code: str, targets: dict[str, str]) -> list[tuple[str, int, str]]:
+    out = []
+    for t in targets:
+        mod, _, func = t.rpartition(".")
+        if not re.search(rf"(?:import_module|__import__)\(\s*['\"]{re.escape(mod)}['\"]", text):
+            continue
+        for i, ln in enumerate(code.split("\n"), 1):
+            if re.search(rf"\.{re.escape(func)}\s*\(", ln):
+                out.append((POSSIBLE, i, f"{mod} is imported dynamically in this file and `.{func}(` is called"))
+    return out
+
+
+# -- Java / Kotlin: calls bound through imports and declared types -------------------------------
+
+def _jvm_target(t: str) -> tuple[str, str, str]:
+    """``pkg.Cls.method`` -> (pkg, Cls, method); ``Cls.method`` -> ("", Cls, method)."""
+    qual, _, method = t.rpartition(".")
+    parts = qual.split(".")
+    cls_i = next((i for i in range(len(parts) - 1, -1, -1) if parts[i][:1].isupper()), None)
+    if cls_i is None:
+        return qual, "", method
+    return ".".join(parts[:cls_i]), ".".join(parts[cls_i:]), method
+
+
+def _jvm_calls(text: str, suffix: str) -> list[tuple[int, str, str | None, str]]:
+    """``(line, method, receiver text or None, receiver node type)`` of every call in a Java/Kotlin file."""
+    from verinoda import anchors
+
+    parser = anchors._ts_parser(suffix)
+    if parser is None:
+        return []
+    src = text.encode("utf-8", "surrogatepass")
+    tree = parser.parse(src)
+    out = []
+    stack = [tree.root_node]
+    while stack:
+        n = stack.pop()
+        stack.extend(n.children)
+        if n.type == "method_invocation":
+            name = n.child_by_field_name("name")
+            obj = n.child_by_field_name("object")
+            if name is not None:
+                out.append((name.start_point[0] + 1, name.text.decode("utf-8", "replace"),
+                            obj.text.decode("utf-8", "replace") if obj is not None else None,
+                            obj.type if obj is not None else ""))
+        elif n.type == "call_expression" and n.children:
+            head = n.children[0]
+            if head.type == "navigation_expression" and len(head.children) >= 2:
+                last = head.children[-1]
+                if last.type == "navigation_suffix":  # older grammars: (navigation_suffix . simple_identifier)
+                    last = last.children[-1] if last.children else last
+                recv = head.children[0]
+                out.append((last.start_point[0] + 1, last.text.decode("utf-8", "replace"),
+                            recv.text.decode("utf-8", "replace"), recv.type))
+            elif head.type in ("identifier", "simple_identifier"):
+                out.append((head.start_point[0] + 1, head.text.decode("utf-8", "replace"), None, ""))
+    return out
+
+
+def _jvm_imports(code: str) -> tuple[str | None, dict[str, str], list[str], dict[str, str]]:
+    """(package, explicit imports cls->pkg, wildcard packages, static imports method->pkg.Cls)."""
+    pkg_m = re.search(r"^\s*package\s+([\w.]+)", code, re.M)
+    explicit, wild, static = {}, [], {}
+    for m in re.finditer(r"^\s*import\s+(static\s+)?([\w.]+?)(\.\*)?(?:\s+as\s+(\w+))?\s*;?\s*$", code, re.M):
+        path = m.group(2)
+        if m.group(3):
+            wild.append(path)
+            continue
+        head, _, last = path.rpartition(".")
+        if m.group(1):
+            static[m.group(4) or last] = head
+        else:
+            explicit[m.group(4) or last] = path
+    return (pkg_m.group(1) if pkg_m else None), explicit, wild, static
+
+
+# a name bound without a written type: a lambda parameter (`x ->`, `(x, y) ->`, `{ x ->`), Java `for (var x :`,
+# a Kotlin loop variable (`for (x in`, `for ((k, x) in`), Kotlin destructuring (`val (a, x) =`)
+_UNTYPED_BINDERS = (r"(?<![\w$.]){n}\s*(?:,\s*[\w$]+\s*)*\)?\s*->",
+                    r"\bfor\s*\(\s*(?:final\s+)?var\s+{n}\s*:",
+                    r"\bfor\s*\(\s*\(?\s*(?:[\w$]+\s*,\s*)*{n}\s*(?:,\s*[\w$]+\s*)*\)?\s+in\b",
+                    r"\b(?:val|var)\s*\(\s*(?:[\w$]+\s*,\s*)*{n}\s*[,)]")
+
+
+def _declared_type(code_lines: list[str], name: str) -> tuple[set[str], list[int]]:
+    """(types ``name`` is declared with, lines where it is bound without a written type), anywhere in the
+    file (Java and Kotlin forms). Scopes are not resolved, so every declaration of the name counts: a
+    lambda parameter or loop variable of the same name elsewhere in the file keeps a call POSSIBLE."""
+    types: set[str] = set()
+    untyped: list[int] = []
+    n = re.escape(name)
+    typed_rx = rf"\b([A-Z][\w.]*)(?:<[^;(){{}}=]*>)?(?:\[\])?\s+{n}\s*[=;,):]"
+    for i, ln in enumerate(code_lines, 1):
+        if name not in ln:
+            continue
+        typed = False
+        for m in re.finditer(typed_rx, ln):
+            types.add(m.group(1))
+            typed = True
+        for m in re.finditer(rf"\b{n}\s*:\s*([A-Z][\w.]*)", ln):
+            types.add(m.group(1))
+            typed = True
+        for m in re.finditer(rf"\b(?:val|var)\s+{n}\s*=\s*([A-Z][\w.]*)\s*[(<]", ln):
+            types.add(m.group(1))
+        if re.search(rf"\b(?:val|var)\s+{n}\s*=", ln) and not re.search(rf"\b(?:val|var)\s+{n}\s*=\s*[A-Z]", ln):
+            untyped.append(i)
+        elif re.search(rf"\bvar\s+{n}\s*=", ln) and ln.lstrip().startswith("var "):
+            untyped.append(i)
+        elif not typed and any(re.search(rx.replace("{n}", n), ln) for rx in _UNTYPED_BINDERS):
+            untyped.append(i)
+    return types, untyped
+
+
+def _jvm_only_in(repo: Path, rel: str, targets: dict[str, str], scan: Scan) -> list[tuple[str, int, str]]:
+    text = _read(Path(repo) / rel)
+    if text is None:
+        return []
+    suffix = PurePosixPath(rel).suffix.lower()
+    methods = {_jvm_target(t)[2] for t in targets}
+    if not any(m in text for m in methods):  # cheap first: most files name none of the methods
+        scan.count("jvm")
+        return []
+    code = code_text(text, suffix)
+    if not any(re.search(rf"\b{re.escape(m)}\b", code) for m in methods):
+        scan.count("jvm")
+        return []
+    calls = _jvm_calls(text, suffix)
+    if not calls and not re.search(r"\S", code):
+        return []
+    scan.count("jvm")
+    pkg, explicit, wild, static = _jvm_imports(code)
+    lines = code.split("\n")
+    out = []
+    for t, shown in targets.items():
+        tpkg, cls, method = _jvm_target(t)
+        if not cls:
+            continue
+        simple = cls.rpartition(".")[2]
+
+        def bound(c: str) -> tuple[bool, str]:
+            """Is class name ``c`` (as written) the target class in this file?"""
+            if "." in c and c[:1].islower():  # fully qualified in the code
+                p, _, k = c.rpartition(".")
+                return (k == simple and (not tpkg or p == tpkg)), f"fully qualified {c}"
+            if c in explicit:  # imported, perhaps under another name (Kotlin `import a.B as C`)
+                p, _, k = explicit[c].rpartition(".")
+                return (k == simple and (not tpkg or p == tpkg)), \
+                    f"imported from {p}" + (f" as {c}" if c != k else "")
+            if c != simple:
+                return False, ""
+            if tpkg and (pkg == tpkg or tpkg in wild):
+                return True, "same package" if pkg == tpkg else f"imported with {tpkg}.*"
+            return False, "not imported in this file"
+
+        def real(written: str) -> str:
+            """The simple class name a written type denotes (through an import alias)."""
+            s = written.rpartition(".")[2]
+            return explicit[s].rpartition(".")[2] if s in explicit and "." not in written else s
+
+        decl: dict[str, tuple[set[str], list[int]]] = {}
+        for line, name, recv, rtype in calls:
+            if name != method:
+                continue
+            if recv is None:
+                if name in static and (static[name].rpartition(".")[2] == simple) and \
+                        (not tpkg or static[name].rpartition(".")[0] == tpkg):
+                    out.append((VIOLATED, line, f"call to {shown} (static import of {static[name]}.{name})"))
+                else:
+                    out.append((POSSIBLE, line, f"`{name}(...)` without a receiver: an inherited or local "
+                                                f"method of that name is not resolved"))
+                continue
+            if re.fullmatch(r"[A-Za-z_$][\w$]*", recv):
+                types, untyped = decl.setdefault(recv, _declared_type(lines, recv))
+                named = {real(x) for x in types}
+                if untyped and (simple in named or not types):
+                    out.append((POSSIBLE, line, f"`{recv}.{name}(...)`: `{recv}` is bound without a written type "
+                                                f"at line {untyped[0]} (a lambda parameter, `var` or a loop "
+                                                "variable): its type is not resolved"))
+                    continue
+                if untyped:  # declared with other classes here, but also bound without a type elsewhere
+                    out.append((POSSIBLE, line, f"`{recv}.{name}(...)`: the type of `{recv}` is not resolved "
+                                                f"(declared {', '.join(sorted(types))}, and without a written type "
+                                                f"at line {untyped[0]})"))
+                    continue
+                if types and named == {simple}:  # a variable, parameter or field declared with the class
+                    t_as = next(iter(types))
+                    ok, why = bound(t_as)
+                    if ok:
+                        out.append((VIOLATED, line, f"call to {shown} (`{recv}` is declared {t_as}, {why})"))
+                    else:
+                        out.append((POSSIBLE, line, f"`{recv}.{name}(...)`: `{recv}` is a {t_as}, but {why}"))
+                    continue
+                if simple in named:
+                    out.append((POSSIBLE, line, f"`{recv}.{name}(...)`: `{recv}` is declared with several types "
+                                                f"({', '.join(sorted(types))})"))
+                    continue
+                if types:
+                    continue  # declared with another class only: not the target
+                if not types and recv[:1].isupper():  # a class name: a static call
+                    ok, why = bound(recv)
+                    if ok:
+                        out.append((VIOLATED, line, f"call to {shown} ({recv}.{name}, {why})"))
+                    elif recv == simple:
+                        out.append((POSSIBLE, line, f"`{recv}.{name}(...)`: {why or 'another class of that name?'}"))
+                    continue
+                out.append((POSSIBLE, line, f"`{recv}.{name}(...)`: the type of `{recv}` is not resolved"))
+                continue
+            if re.fullmatch(r"[a-z_][\w]*(?:\.[a-z_][\w]*)+\.[A-Z][\w$]*", recv):  # a fully qualified class
+                ok, why = bound(recv)
+                if ok:
+                    out.append((VIOLATED, line, f"call to {shown} ({recv}.{name}, {why})"))
+                continue
+            out.append((POSSIBLE, line, f"`...{name}(...)` on `{recv[:40]}`: the receiver's type is not resolved"))
+    return out
+
+
+# -- text fallback ---------------------------------------------------------------------------------
+
+def _text_only_in(repo: Path, rel: str, targets: dict[str, str], scan: Scan) -> list[tuple[str, int, str]]:
+    text = _read(Path(repo) / rel)
+    if text is None:
+        return []
+    scan.count("text")
+    if not any(t.rpartition(".")[2] in text for t in targets):  # cheap first
+        return []
+    code = code_text(text, PurePosixPath(rel).suffix).split("\n")
+    out = []
+    for t, shown in targets.items():
+        head, _, func = t.rpartition(".")
+        last = head.rpartition(".")[2]
+        rx = re.compile(rf"(?<![\w$]){re.escape(last)}\s*(?:\.|::|->)\s*{re.escape(func)}\s*\(")
+        for i, ln in enumerate(code, 1):
+            if rx.search(ln):
+                out.append((POSSIBLE, i, f"`{last}.{func}(` in code (text match; no binding check for this "
+                                         "language)"))
+    return out
+
+
+# -- the guards ------------------------------------------------------------------------------------
+
+def _line(repo: Path, rel: str, line: int) -> str:
+    text = _read(Path(repo) / rel) or ""
+    ls = text.split("\n")
+    return ls[line - 1].strip()[:160] if 0 < line <= len(ls) else ""
+
+
+def _targets(g: dict) -> tuple[dict[str, str], str]:
+    if g.get("calls"):
+        return {c: c for c in g["calls"]}, "calls " + ", ".join(g["calls"])
+    if g.get("sink") in SINK_CALLS:
+        return {c: f"{c} ({g['sink']})" for c in SINK_CALLS[g["sink"]]}, f"sink {g['sink']}"
+    return {}, f"sink {g.get('sink')}" if g.get("sink") else f"pattern /{g.get('pattern')}/"
+
+
+class _Ctx:
+    def __init__(self, repo: Path, all_files: list[str], graph=None):
+        self.repo = Path(repo)
+        self.all_files = all_files
+        self.graph = graph
+        self._py: _PyIndex | None = None
+        self._deps: dict | None = None
+        self._code: dict[str, list[str]] = {}
+
+    def code_lines(self, rel: str) -> list[str]:
+        """The file's lines with comments and strings removed, masked once per check."""
+        if rel not in self._code:
+            text = _read(self.repo / rel)
+            self._code[rel] = [] if text is None else code_text(text, PurePosixPath(rel).suffix).split("\n")
+        return self._code[rel]
+
+    @property
+    def py(self) -> _PyIndex:
+        if self._py is None:
+            self._py = _PyIndex(self.repo, self.all_files)
+        return self._py
+
+    def deps(self) -> dict:
+        if self._deps is None:
+            self._deps = declared_dependencies(self.repo, self.all_files)
+        return self._deps
+
+
+def check_only_in(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
+    """``[(level, rel, line, why)]``, the scan, and a short description of what is guarded."""
+    scan = Scan()
+    files, left_out = scope_files(ctx.repo, g, ctx.all_files)
+    targets, what = _targets(g)
+    what += f" (allowed: {', '.join(g.get('allowed') or [])})"
+    out: list[tuple[str, str, int, str]] = []
+    if targets:
+        py_files = [f for f in files if f.endswith(PY_SUFFIXES)]
+        # A re-export - a module that binds the target (by import or assignment) - makes its own name a
+        # target too; a chain of them is followed a few rounds deep. A file can reach a target only by
+        # naming its module (import, getattr, importlib) or a module of the project that re-exports it:
+        # every other file is skipped without parsing. JVM classes (java.sql.DriverManager) are no
+        # Python targets.
+        py_targets = {t: s for t, s in targets.items() if not _jvm_target(t)[1]}
+        roots = {t.split(".")[0] for t in py_targets}
+        names = {t.rpartition(".")[2] for t in py_targets}
+        reexporters: set[str] = set()
+
+        def candidate(text: str | None) -> bool:
+            return text is not None and (any(r in text for r in roots) or any(m in text for m in reexporters))
+
+        all_py = [r for r in ctx.all_files if r.endswith(PY_SUFFIXES)]
+        texts = {r: _read(ctx.repo / r) for r in all_py}
+        for _round in range(4):
+            grew = False
+            for rel in all_py:
+                if not candidate(texts.get(rel)):
+                    continue
+                sc = ctx.py.scopes(rel)
+                if sc is None:
+                    continue
+                found = False
+                for name in list(sc.module.binds):  # what the module's names hold once it has run
+                    for q, _b in sc.exports(name):
+                        if q and q.rpartition(".")[2] in names and \
+                                any(full in py_targets for full, _ in ctx.py.resolve(q)):
+                            found = True
+                            if name not in names:
+                                names.add(name)
+                                grew = True
+                mod = (_module_of(rel) or "").rpartition(".")[2]
+                if found and mod and mod not in reexporters:
+                    reexporters.add(mod)
+                    grew = True
+            if not grew:
+                break
+        for rel in py_files:
+            text = texts.get(rel)
+            if not candidate(text):
+                scan.count("python")
+                continue
+            hits = _py_only_in(ctx.py, rel, py_targets, scan, names)
+            if "import_module" in text or "__import__" in text:
+                hits += _dynamic_import_hint(rel, text, code_text(text, ".py"), py_targets)
+            for level, line, why in hits:
+                out.append((level, rel, line, why))
+        for rel in files:
+            if rel.endswith(JVM_SUFFIXES):
+                for level, line, why in _jvm_only_in(ctx.repo, rel, targets, scan):
+                    out.append((level, rel, line, why))
+            elif not rel.endswith(PY_SUFFIXES):
+                for level, line, why in _text_only_in(ctx.repo, rel, targets, scan):
+                    out.append((level, rel, line, why))
+        scan.limit(*(PY_LIMITS if scan.files.get("python") else []), *(JVM_LIMITS if scan.files.get("jvm") else []),
+                   *(TEXT_LIMITS if scan.files.get("text") else []))
+    else:  # a sink kind without call targets, or a pattern: text matches over the code
+        from verinoda.architecture_map import SINK_PATTERNS
+
+        rxs = [rx for rx, kind in SINK_PATTERNS if kind == g.get("sink")] if g.get("sink") else \
+            [re.compile(g["pattern"])]
+        for rel in files:
+            text = _read(ctx.repo / rel)
+            if text is None:
+                continue
+            scan.count("text")
+            code = code_text(text, PurePosixPath(rel).suffix).split("\n") if not g.get("sink") else text.split("\n")
+            for i, ln in enumerate(code, 1):
+                if any(rx.search(ln) for rx in rxs):
+                    out.append((POSSIBLE, rel, i, f"{what} matches (text; a pattern is never a verified call)"))
+        scan.limit("a pattern or a text sink is a text match: POSSIBLE at most"
+                   + ("; comments and strings are removed first" if not g.get("sink") else ""))
+    scan.limit(*left_out)
+    return _strongest(out), scan, what
+
+
+def _strongest(hits: list[tuple[str, str, int, str]]) -> list[tuple[str, str, int, str]]:
+    """One finding per site: a VIOLATED one wins over POSSIBLE ones on the same line."""
+    best: dict[tuple[str, int], tuple[str, str, int, str]] = {}
+    for h in hits:
+        k = (h[1], h[2])
+        if k not in best or (h[0] == VIOLATED and best[k][0] != VIOLATED):
+            best[k] = h
+    return sorted(best.values(), key=lambda x: (x[1], x[2]))
+
+
+def _named_in_code(ctx: _Ctx, rel: str, line: int, name: str) -> bool:
+    code = ctx.code_lines(rel)
+    return 0 < line <= len(code) and bool(re.search(rf"(?<![\w$]){re.escape(name)}(?![\w$])", code[line - 1]))
+
+
+def check_no_edge(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
+    scan = Scan()
+    what = f"{g['from']} -> {g['to']} ({', '.join(g.get('relations') or [])})"
+    if ctx.graph is None:
+        scan.unknown.append("no index: run `verinoda scan` (no_edge reads the graph's edges)")
+        return [], scan, what
+    rels = set(g.get("relations") or [])
+    out = []
+    n = 0
+    for u, v, d in ctx.graph.edges(rels or None):
+        fu, fv = ctx.graph.file(u), ctx.graph.file(v)
+        if not fu or not fv or not glob_match(fu, g["from"]) or not glob_match(fv, g["to"]):
+            continue
+        n += 1
+        loc = str(d.get("source_location") or "")
+        src = d.get("source_file") or fu
+        line = int(loc[1:]) if loc.startswith("L") and loc[1:].isdigit() else None
+        # a file node is labelled with its file name (EmberForgeScreen.kt): the code names its stem
+        target = PurePosixPath(fv).stem if ctx.graph.is_file_node(v) else \
+            (ctx.graph.label(v).strip(".()").rpartition(".")[2] or PurePosixPath(fv).stem)
+        conf = d.get("confidence") or "?"
+        rel_name = d.get("relation")
+        scan.via.setdefault((src, line or 0), set()).add(fv)  # a changed target file makes the edge new
+        if line is None:
+            out.append((POSSIBLE, src, 0, f"{rel_name} edge to {fv} ({conf}) without a cited line"))
+        elif conf == "EXTRACTED" and _named_in_code(ctx, src, line, target):
+            out.append((VIOLATED, src, line, f"{rel_name} {target} in {fv} (EXTRACTED edge; the line names it)"))
+        elif conf == "EXTRACTED":
+            out.append((POSSIBLE, src, line, f"{rel_name} {target} in {fv}: EXTRACTED edge, but the line no "
+                                             "longer names it (the index may be older than the file)"))
+        else:
+            out.append((POSSIBLE, src, line, f"{rel_name} {target} in {fv} ({conf} edge: a resolver's guess)"))
+    scan.files["edges"] = n
+    scan.limit(*EDGE_LIMITS)
+    return _strongest(out), scan, what
+
+
+# -- dependencies (manifests, with Gradle and Maven) -------------------------------------------------
+
+GRADLE_FILES = ("build.gradle", "build.gradle.kts")
+# folders whose build files are not the project's own dependencies (samples, fixtures, vendored or generated
+# code); test folders are recognised by the test-file rule
+_NOT_PROJECT_BUILD = {"node_modules", "build", ".gradle", "target", "vendor", "third_party", "third-party", "examples",
+                      "example", "samples", "sample", "fixtures", "fixture", "__fixtures__", "testdata", "test-data",
+                      "demo", "demos", ".verinoda"}
+
+
+def _included_builds(root: Path, files: set[str]) -> set[str]:
+    """The root build files and the subproject build files the root build includes (settings.gradle(.kts)
+    ``include``; the root pom's ``<modules>``, recursively)."""
+    out = {f for f in (*GRADLE_FILES, "pom.xml") if f in files}
+    for settings in ("settings.gradle", "settings.gradle.kts"):
+        if settings not in files:
+            continue
+        for ln in (_read(Path(root) / settings) or "").split("\n"):
+            if not re.match(r"\s*include\b", ln):
+                continue
+            for proj in re.findall(r"['\"]:?([\w.\-:/]+)['\"]", ln):
+                d = proj.strip(":").replace(":", "/")
+                out |= {f"{d}/{g}" for g in GRADLE_FILES if f"{d}/{g}" in files}
+    todo = ["pom.xml"] if "pom.xml" in files else []
+    while todo:
+        pom = todo.pop()
+        base = pom.rpartition("/")[0]
+        for mod in re.findall(r"<module>\s*([^<]+?)\s*</module>", _read(Path(root) / pom) or ""):
+            sub = PurePosixPath(base, mod.strip().strip("/"), "pom.xml").as_posix()
+            if sub in files and sub not in out and ".." not in sub.split("/"):
+                out.add(sub)
+                todo.append(sub)
+    return out
+
+
+def _gradle_maven(root: Path, all_files: list[str] | None = None) -> tuple[list[dict], list[str]]:
+    """(declarations in Gradle and Maven build files, build files not read).
+
+    Build files come from the project's file list (git-ignored ones are not read). Those under test,
+    sample, fixture, vendor or build-output folders, reference trees and detected copies are not read;
+    a build file the root build does not include is read, and its items say so (``build: other``)."""
+    from verinoda.architecture_map import is_test_file
+    from verinoda.snapshot import list_files
+
+    root = Path(root)
+    files = all_files if all_files is not None else list_files(root)
+    builds = [f for f in files if PurePosixPath(f).name in (*GRADLE_FILES, "pom.xml")]
+    if not builds:
+        return [], []
+    included = _included_builds(root, set(files))
+    roots = _excluded_roots(root)
+    items: list[dict] = []
+    skipped: list[str] = []
+    for rel in sorted(builds):
+        parts = set(PurePosixPath(rel).parts[:-1])
+        if rel not in included and (parts & _NOT_PROJECT_BUILD or is_test_file(rel) or
+                                    any(rel.startswith(r + "/") for r in roots)):
+            skipped.append(rel)
+            continue
+        build = "project" if rel in included else "other"
+        text = _read(root / rel) or ""
+        if rel.endswith("pom.xml"):
+            managed = [(m.start(), m.end()) for m in re.finditer(r"<dependencyManagement>.*?</dependencyManagement>",
+                                                                  text, re.S)]
+            for m in re.finditer(r"<dependency>(.*?)</dependency>", text, re.S):
+                if any(a <= m.start() < b for a, b in managed):
+                    continue  # a version pin, not a dependency
+                block = m.group(1).split("<exclusions>")[0]
+                gm = re.search(r"<groupId>\s*([^<]+?)\s*</groupId>", block)
+                am = re.search(r"<artifactId>\s*([^<]+?)\s*</artifactId>", block)
+                if not gm or not am:
+                    continue
+                vm = re.search(r"<version>\s*([^<]+?)\s*</version>", block)
+                sm = re.search(r"<scope>\s*([^<]+?)\s*</scope>", block)
+                line = text.count("\n", 0, m.start(1) + am.start()) + 1  # the <artifactId> line names it
+                items.append({"name": f"{gm.group(1)}:{am.group(1)}".lower(), "short": am.group(1).lower(),
+                              "spec": vm.group(1) if vm else "*", "scope": sm.group(1) if sm else "compile",
+                              "at": f"{rel}:{line}", "path": rel, "line": line, "ecosystem": "maven", "build": build})
+            continue
+        for i, ln in enumerate(text.split("\n"), 1):
+            pm = re.match(r"\s*id\s*\(?\s*['\"]([\w.\-]+)['\"]\s*\)?(?:\s*version\s*\(?\s*['\"]([^'\"]+)['\"])?", ln)
+            if pm:  # a Gradle plugin (net.neoforged.moddev, fabric-loom, org.jetbrains.kotlin.jvm)
+                items.append({"name": pm.group(1).lower(), "short": pm.group(1).rpartition(".")[2].lower(),
+                              "spec": pm.group(2) or "*", "scope": "plugin", "at": f"{rel}:{i}", "path": rel,
+                              "line": i, "ecosystem": "gradle-plugin", "build": build})
+                continue
+            m = re.search(r"\b(\w*(?:[Ii]mplementation|[Aa]pi|[Cc]ompileOnly|[Rr]untimeOnly|[Aa]nnotationProcessor"
+                          r"|[Cc]ompile))\s*\(?\s*['\"]([\w.\-]+):([\w.\-]+)(?::([^'\"]+))?['\"]", ln)
+            if m:
+                items.append({"name": f"{m.group(2)}:{m.group(3)}".lower(), "short": m.group(3).lower(),
+                              "spec": m.group(4) or "*", "scope": m.group(1), "at": f"{rel}:{i}", "path": rel,
+                              "line": i, "ecosystem": "maven", "build": build})
+    return items, skipped
+
+
+def _optional_lines(root: Path, items: list[dict]) -> None:
+    """Cite each ``[project.optional-dependencies]`` item at the line of its own group (``research``
+    cites the first line that names the package)."""
+    opt = [it for it in items if it.get("path") == "pyproject.toml" and str(it.get("scope")).startswith("optional:")]
+    if not opt:
+        return
+    lines = (_read(Path(root) / "pyproject.toml") or "").split("\n")
+    sec = next((i for i, ln in enumerate(lines) if re.match(r"\s*\[project\.optional-dependencies\]", ln)), None)
+    if sec is None:
+        return
+    for it in opt:
+        grp = it["scope"].split(":", 1)[1]
+        start = next((i for i in range(sec + 1, len(lines)) if re.match(
+            rf"\s*['\"]?{re.escape(grp)}['\"]?\s*=\s*\[", lines[i]) or lines[i].lstrip().startswith("[")), None)
+        if start is None or lines[start].lstrip().startswith("["):
+            continue
+        for i in range(start, len(lines)):
+            seg = (lines[i].split("=", 1)[1] if i == start else lines[i]).split("#")[0]
+            names = re.findall(r"['\"]\s*([A-Za-z0-9][A-Za-z0-9._-]*)", seg)
+            if any(_dep_key(n) == _dep_key(it["name"]) for n in names):
+                it["line"], it["at"] = i + 1, f"pyproject.toml:{i + 1}"
+                break
+            if "]" in re.sub(r"(['\"]).*?\1", "", seg):  # the group's list ends (brackets in strings are extras)
+                break
+
+
+def declared_dependencies(root: Path, all_files: list[str] | None = None) -> dict:
+    """``research.dependencies`` (Python, npm, Go, Cargo manifests at the root) plus Gradle and Maven build
+    files (the root build and what it includes; others are marked ``build: other``)."""
+    from verinoda import research
+
+    root = Path(root)
+    try:
+        base = research.dependencies(root)
+    except Exception as exc:  # noqa: BLE001 - an unreadable manifest must not stop a check
+        base = {"items": [], "manifests": [], "error": f"{type(exc).__name__}: {exc}"[:200]}
+    items = [dict(it) for it in base.get("items") or []]
+    _optional_lines(root, items)
+    extra, skipped = _gradle_maven(root, all_files)
+    manifests = list(base.get("manifests") or []) + sorted({i["path"] for i in extra})
+    return {"items": items + extra, "manifests": manifests, "skipped": skipped,
+            **({"error": base["error"]} if base.get("error") else {})}
+
+
+def _dep_key(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", str(name or "")).lower()
+
+
+def find_dependency(deps: dict, name: str) -> list[dict]:
+    key = _dep_key(name)
+    out = []
+    for it in deps.get("items") or []:
+        names = {_dep_key(it.get("name")), _dep_key(it.get("short") or "")}
+        if key in names or (":" in name and _dep_key(name) == _dep_key(it.get("name"))):
+            out.append(it)
+    return out
+
+
+def check_dependency(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
+    scan = Scan()
+    deps = ctx.deps()
+    scan.files["manifests"] = len(deps.get("manifests") or [])
+    scan.limit(f"manifests read: {', '.join(deps.get('manifests') or []) or 'none found'}", *DEP_LIMITS)
+    if deps.get("skipped"):
+        sk = deps["skipped"]
+        scan.limit(f"{len(sk)} build file(s) under test, sample, fixture, vendor or output folders (or reference "
+                   f"trees) are not read: {', '.join(sk[:5])}{' ...' if len(sk) > 5 else ''}")
+    out = []
+    if g.get("absent"):
+        what = f"absent {g['absent']}"
+        sites: dict[tuple[str, int], list[dict]] = {}
+        for it in find_dependency(deps, g["absent"]):
+            sites.setdefault((it["path"], it["line"]), []).append(it)
+        for (path, line), its in sites.items():  # one finding per cited line
+            it = its[0]
+            scopes = ", ".join(dict.fromkeys(str(x.get("scope")) for x in its))
+            shown = _dep_key(_line(ctx.repo, path, line))
+            if it.get("build") == "other":
+                out.append((POSSIBLE, path, line, f"{it['name']} is declared ({scopes}) in {path}, a build file the "
+                                                  "root build does not include: whether it is part of this project "
+                                                  "is not resolved"))
+            elif _dep_key(it.get("short") or it["name"]) in shown or _dep_key(g["absent"]) in shown:
+                out.append((VIOLATED, path, line, f"{it['name']} {it.get('spec') or ''} is declared "
+                                                  f"({scopes})".replace("  ", " ")))
+            else:
+                out.append((POSSIBLE, path, line, f"{it['name']} is listed, but the cited line does not name it"))
+    else:
+        what = f"present {g['present']}"
+        if not find_dependency(deps, g["present"]):
+            manifests = deps.get("manifests") or []
+            if manifests:
+                out.append((VIOLATED, manifests[0], 0, f"{g['present']} is declared in none of the manifests read"))
+            else:
+                scan.unknown.append("no manifest was found, so no dependency can be shown present or absent")
+    return out, scan, what
+
+
+# -- governs and revisit ------------------------------------------------------------------------------
+
+def check_governs(repo: Path, v: dict) -> tuple[str, str]:
+    """(``ok`` | ``REVIEW``, why) for a governed symbol."""
+    from verinoda import anchors
+
+    facts, _ = anchors.facts_for_path(Path(repo) / v["file"], v["file"])
+    hits = anchors.symbols_named(facts, v["qual"]) if facts else []
+    if not facts:
+        return REVIEW, f"{v['file']} cannot be read as code now (deleted or unparsable)"
+    if len(hits) != 1:
+        return REVIEW, f"{v['qual']} is {'gone from' if not hits else 'ambiguous in'} {v['file']}"
+    q, sym = hits[0]
+    if v.get("fp") and sym.get("full") != v["fp"]:
+        return REVIEW, f"the code of {v['file']}::{q} changed since the decision was recorded " \
+                       f"(now lines {sym['start']}-{sym['end']})"
+    return "ok", f"{v['file']}::{q} unchanged since the decision (lines {sym['start']}-{sym['end']})"
+
+
+def revisit_holds(repo: Path, r: dict, *, all_files: list[str] | None = None, deps: dict | None = None
+                  ) -> list[str]:
+    """Where a revisit condition holds now (``path:line`` or paths); empty when it does not."""
+    from verinoda.snapshot import list_files
+
+    if r["kind"] == "dependency_added":
+        return [it["at"] for it in find_dependency(deps if deps is not None else declared_dependencies(repo),
+                                                  r["value"])]
+    files = all_files if all_files is not None else list_files(repo)
+    return [f for f in files if glob_match(f, r["value"]) or fnmatch.fnmatchcase(PurePosixPath(f).name, r["value"])]
+
+
+# -- changed files ---------------------------------------------------------------------------------
+
+def validate_ref(repo: Path, ref: str) -> str:
+    """The commit ``ref`` names (never an option: refused when it starts with '-', and passed after
+    ``--end-of-options``)."""
+    from verinoda.snapshot import git
+
+    ref = str(ref or "").strip()
+    if not ref or ref.startswith("-") or any(c in ref for c in "\0\n\r"):
+        raise ValueError(f"--base {ref!r} is not a git revision")
+    out = git(Path(repo), "rev-parse", "--verify", "--quiet", "--end-of-options", f"{ref}^{{commit}}")
+    sha = (out or "").strip()
+    if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", sha):
+        raise ValueError(f"--base {ref!r} does not name a commit in {repo}")
+    return sha
+
+
+def changed_since(repo: Path, sha: str) -> set[str]:
+    """Files changed since commit ``sha`` in the working tree, plus untracked ones, as paths relative to
+    ``repo`` (the project may be a subdirectory of its git repository: ``--relative``), read NUL-separated
+    (``-z``: a path with non-ASCII characters is not quoted)."""
+    from verinoda.snapshot import git
+
+    diff = git(Path(repo), "diff", "--name-only", "--relative", "--no-renames", "-z", sha, "--")
+    untracked = git(Path(repo), "ls-files", "-z", "--others", "--exclude-standard")
+    if diff is None or untracked is None:
+        raise ValueError(f"git could not list the files changed since {sha[:12]} in {repo}")
+    return {p for p in (diff + "\0" + untracked).split("\0") if p}
+
+
+# -- the check ------------------------------------------------------------------------------------
+
+def _guard_desc(g: dict) -> str:
+    return g.get("spec") or g.get("kind", "?")
+
+
+def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool = False,
+          records=None) -> dict:
+    """Run every accepted guard of every enforced decision on the working tree.
+
+    ``base`` (a git revision) or ``changed_only`` (= base HEAD) labels each finding ``new/touched since
+    <base>`` when its file, or a file its binding passes through (a re-export module, an edge's target),
+    changed since then, else ``pre-existing: ... unchanged since <base>`` (what was compared: the base tree
+    itself is not checked); then only new/touched violations make ``exit`` 1. Without them any violation
+    does.
+    """
+    from verinoda import decisions as dm
+    from verinoda.snapshot import list_files
+
+    t0 = time.monotonic()
+    repo = Path(repo).resolve()
+    recs = records if records is not None else dm.load_all(repo)
+    res: dict = {"violations": [], "possible": [], "reviews": [], "triggers": [], "waived": [], "ok": [],
+                 "unknown": [], "not_enforced": [], "pre_existing": [], "decisions": len(recs)}
+    base_sha = base_label = None
+    changed: set[str] | None = None
+    if base or changed_only:
+        base_label = base or "HEAD"
+        base_sha = validate_ref(repo, base_label)
+        changed = changed_since(repo, base_sha)
+        res["base"] = {"ref": base_label, "commit": base_sha, "changed_files": len(changed)}
+    ctx = _Ctx(repo, list_files(repo), graph)
+    today = dm._today()
+    for d in recs:
+        if not d.enforced:
+            res["not_enforced"].append({"decision": d.id, "status": d.status,
+                                        "why": "; ".join(d.problems) or f"status {d.status}"})
+            continue
+        for g in d.guards:
+            if g.get("status") != "accepted":
+                res["not_enforced"].append({"decision": d.id, "guard": g["id"], "status": g.get("status"),
+                                            "why": "proposed guard: inactive until the user accepts it"})
+                continue
+            fn = {"only_in": check_only_in, "no_edge": check_no_edge, "dependency": check_dependency}.get(
+                g.get("kind"))
+            try:
+                if fn is None:
+                    raise ValueError(f"guard kind {g.get('kind')!r} is not only_in, no_edge or dependency")
+                hits, scan, what = fn(ctx, g)
+            except Exception as exc:  # noqa: BLE001 - one broken guard must not hide the others
+                res["unknown"].append({"decision": d.id, "guard": g["id"], "kind": g["kind"],
+                                       "why": f"the check failed: {type(exc).__name__}: {exc}"[:300]})
+                continue
+            for u in scan.unknown:
+                res["unknown"].append({"decision": d.id, "guard": g["id"], "kind": g["kind"], "why": u})
+            counted = False
+            for level, rel, line, why in hits:
+                f = Finding(d.id, g["id"], g["kind"], level, f"{rel}:{line}" if line else rel, why,
+                            line=_line(repo, rel, line) if line else None,
+                            status="statically_verified" if level == VIOLATED else "weak_inference")
+                if changed is not None:
+                    via = scan.via.get((rel, line)) or set()
+                    touched = sorted(p for p in {rel, *via} if p in changed)
+                    if touched:
+                        f.since = f"new/touched since {base_label}" + \
+                            (f" (through {', '.join(touched)})" if rel not in touched else "")
+                    else:
+                        f.since = f"pre-existing: {rel}" + \
+                            (f" and the {len(via)} file(s) its binding passes through" if via else "") + \
+                            f" unchanged since {base_label}"
+                item = {**f.as_dict(), "what": what}
+                w = dm.waived(d, g["id"], rel, line or None, today)
+                if w is not None:
+                    res["waived"].append({**item, "waiver": w})
+                    continue
+                counted = True
+                if level == VIOLATED and f.since and f.since.startswith("pre-existing"):
+                    res["pre_existing"].append(item)
+                else:
+                    res["violations" if level == VIOLATED else "possible"].append(item)
+            if not counted and not scan.unknown:
+                res["ok"].append({"decision": d.id, "guard": g["id"], "kind": g["kind"], "what": what,
+                                  "scope": scan.files, "limits": scan.limits})
+            elif scan.limits:
+                for key in ("violations", "possible", "pre_existing"):
+                    for f in res[key]:
+                        if f["decision"] == d.id and f["guard"] == g["id"] and "limits" not in f:
+                            f["limits"] = scan.limits
+        for v in d.governs:
+            try:
+                level, why = check_governs(repo, v)
+            except Exception as exc:  # noqa: BLE001 - one broken entry must not hide the others
+                res["unknown"].append({"decision": d.id, "guard": v.get("id"), "kind": "governs",
+                                       "why": f"the check failed: {type(exc).__name__}: {exc}"[:300]})
+                continue
+            if level == REVIEW:
+                item = {"decision": d.id, "guard": v["id"], "kind": "governs", "level": REVIEW, "at": v["symbol"],
+                        "why": why}
+                if changed is not None:
+                    item["since"] = f"new/touched since {base_label}" if v["file"] in changed else "pre-existing"
+                res["reviews"].append(item)
+            else:
+                res["ok"].append({"decision": d.id, "guard": v["id"], "kind": "governs", "what": v["symbol"],
+                                  "scope": {"symbols": 1}, "limits": [why]})
+        for r in d.revisit_when:
+            try:
+                where = revisit_holds(repo, r, all_files=ctx.all_files, deps=ctx.deps() if r["kind"] ==
+                                      "dependency_added" else None)
+            except Exception as exc:  # noqa: BLE001
+                res["unknown"].append({"decision": d.id, "guard": r.get("id"), "kind": "revisit_when",
+                                       "why": f"the check failed: {type(exc).__name__}: {exc}"[:300]})
+                continue
+            if where and not r.get("baseline"):
+                res["triggers"].append({"decision": d.id, "guard": r["id"], "kind": "revisit_when", "level": TRIGGER,
+                                        "at": where[0], "why": f"{r['kind']}={r['value']} holds now ("
+                                        f"{', '.join(where[:3])}): the user should review {d.id}"})
+            else:
+                note = "held already when the decision was recorded" if where else "does not hold"
+                res["ok"].append({"decision": d.id, "guard": r["id"], "kind": "revisit_when",
+                                  "what": f"{r['kind']}={r['value']}", "scope": {}, "limits": [note]})
+    res["elapsed_s"] = round(time.monotonic() - t0, 3)
+    res["exit"] = 1 if res["violations"] else 0
+    res["status"] = ("violated" if res["violations"] else "possible" if res["possible"] else
+                     "review" if res["reviews"] or res["triggers"] else "ok")
+    if res["violations"]:
+        ids = sorted({v["decision"] for v in res["violations"]})
+        res["next_step"] = (f"change the code, or ask the user whether {', '.join(ids)} should be superseded or "
+                            "these sites waived (`verinoda decide waive`); never edit or supersede a decision "
+                            "on your own")
+    elif res["possible"] or res["reviews"] or res["triggers"]:
+        res["next_step"] = "read the POSSIBLE sites; ask the user about REVIEW / TRIGGER items"
+    return res

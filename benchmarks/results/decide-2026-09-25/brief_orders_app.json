@@ -1,0 +1,86 @@
+{
+ "Should we move orders from SQLite to PostgreSQL if traffic grows?": {
+  "verdict": "human_decision_required",
+  "has_recommendation_field": false,
+  "gold_forces_found": 8,
+  "gold_forces": {
+   "1 sqlite3.connect at orders/repository.py:10": true,
+   "2 ORDERS_DATABASE_URL default orders.db at orders/config.py:5": true,
+   "3 ADR-0001 accepted, same repository interface, at the ADR:5-7": true,
+   "4 all storage sinks in one file": true,
+   "5 module-level shared repository at orders/api.py:6-13": true,
+   "6 no deployment files (absence with globs)": true,
+   "7 no DB driver declared in pyproject.toml": true,
+   "8 tests pin :memory: at tests/test_service.py:8,15": true
+  },
+  "evidence_items": 19,
+  "evidence_rechecked": 19,
+  "evidence_precision": 1.0,
+  "questions": 5,
+  "question_kinds": [
+   "concurrency",
+   "volume",
+   "hosting",
+   "operations",
+   "adr_reason"
+  ],
+  "gold_questions_asked": 5,
+  "questions_answered_by_code": [],
+  "answered_by_code_not_asked": [],
+  "forces": 10,
+  "absences": 3,
+  "seconds": 0.152,
+  "options": [
+   [
+    "SQLite",
+    true
+   ],
+   [
+    "PostgreSQL",
+    false
+   ]
+  ]
+ },
+ "Sipariş sayısı artarsa SQLite'tan PostgreSQL'e geçmeli miyiz?": {
+  "verdict": "human_decision_required",
+  "has_recommendation_field": false,
+  "gold_forces_found": 8,
+  "gold_forces": {
+   "1 sqlite3.connect at orders/repository.py:10": true,
+   "2 ORDERS_DATABASE_URL default orders.db at orders/config.py:5": true,
+   "3 ADR-0001 accepted, same repository interface, at the ADR:5-7": true,
+   "4 all storage sinks in one file": true,
+   "5 module-level shared repository at orders/api.py:6-13": true,
+   "6 no deployment files (absence with globs)": true,
+   "7 no DB driver declared in pyproject.toml": true,
+   "8 tests pin :memory: at tests/test_service.py:8,15": true
+  },
+  "evidence_items": 19,
+  "evidence_rechecked": 19,
+  "evidence_precision": 1.0,
+  "questions": 5,
+  "question_kinds": [
+   "concurrency",
+   "volume",
+   "hosting",
+   "operations",
+   "adr_reason"
+  ],
+  "gold_questions_asked": 5,
+  "questions_answered_by_code": [],
+  "answered_by_code_not_asked": [],
+  "forces": 10,
+  "absences": 3,
+  "seconds": 0.101,
+  "options": [
+   [
+    "SQLite",
+    true
+   ],
+   [
+    "PostgreSQL",
+    false
+   ]
+  ]
+ }
+}

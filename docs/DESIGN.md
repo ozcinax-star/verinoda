@@ -53,6 +53,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D30 | Measurement harness | implemented | `verinoda benchmark staleness replay\|mutations` and `verinoda benchmark critique-eval`. The replay samples claims whose evidence is in modified files; incoming relations from unchanged files are not sampled. |
 | D31 | No laundering (truth rules) | implemented | Python for relation scopes, config bindings, order and location existence; other languages keep their grades. Word overlap alone never verifies; `contains:` verifies only the quoted text; written claims naming more than the typed check binds stay partial. In-sample fixtures; no held-out false-sentence set yet. |
 | D32 | Name-existence check | partial | Python only: `verinoda check` (files, `--diff`, `--stdin --as`) and `verinoda api`, MCP `code_check` / `api_members`, skill text. Not done: mod config keys and resource ids, JVM jars, JS/TS, `--against PKG==VER`, the environment fingerprint in snapshots. Measurements in BENCHMARKS.md (the fixture set was written by the rule author: in-sample). |
+| D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`; decision records (`verinoda/decisions.py`, schema v5 log, `decide record/import/guard/accept/waive/list`, MCP `decision_record`); guards and `decide check` (`verinoda/guards.py`, MCP `decision_check`, a one-line summary in `update`; critique's exclusivity check and feedback's exclusive corrections use the same engine). Guard mutations (54 cases on the three examples, written by the rule author, plus 22 forms from the two reviews added by the fixer: all in-sample): VIOLATED precision 1.00, recall 1.00 in reach, 13/13 out-of-reach forms named in limits or POSSIBLE; the old raw-regex scan on the same orders_app cases tp 7 fp 8 fn 6. `decide check` median 42 ms per example case, about 2 s (1.8-2.2 s) on the full Verinoda tree (3 guards; results in `benchmarks/results/decide-2026-09-25/`). The decision brief (`verinoda/decision_brief.py`, `decide brief/answer`, MCP `decision_brief`, answers through `decision_record(action='answer')`; `analyze` routes decide sub-questions to it): on orders_app, EN and TR question, 8/8 gold forces, 19/19 cited evidence re-checks, 5/5 gold question kinds - in-sample (the gold came with the design and the probes were written after it). Not built: `analyze` impact questions do not include violations; the UI shows no decision badge; claims for accepted guards (kinds `exclusive` / `layering`); an ADR's reasons are matched by a few phrasings only; `research.dependencies` itself still reads no Gradle/Maven (the guards and the brief read them). Intent routing: the only held-out set left (held-out 4, 20 questions by the fixer, hashed before the review fixes' cue rules were written): precision 0.83, recall 0.50 - the recall bar (0.85) is not met; every other set (written, held-out 1-3, the reviewers' 52) is in-sample now. A missed choice question can still be judged `met`; its words then get a note at most. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -983,6 +984,137 @@ is a separate, later step.
    version-bound variants, budget sweeps, and the staleness and critique
    harnesses. Numbers are published only from result files.
 4. **Adversarial acceptance audit:** fix what it finds, then push.
+
+## 6. Decisions the human makes (D33)
+
+**Finding.** A question about a future choice ("should we move orders from
+SQLite to PostgreSQL if traffic grows?", "hangi veritabanını seçmeliyiz?") was
+read as a flow or dataflow question and came back `met`, with path claims that
+do not answer it. Nothing enforced a recorded decision either: a new module
+calling `sqlite3.connect` passed `notes`, `challenge` and `verify`.
+
+**D33.** Verinoda never chooses. For a decision it collects evidence, asks,
+records what the human chose and checks the code against it.
+
+- *Intent.* `decide` is a plan intent. Strong cues ask for a choice or a
+  recommendation in so many words (EN: "should we use/switch/...", "would you
+  recommend", "the right choice", "a better fit", "overkill", "is it worth
+  / time to", "X or do we need", "what should our X be", "enough for us";
+  TR: seçmeli-, hangisini kullan/seç, "iyi bir fikir mi", "önerirsin",
+  "yeterli mi", "yüke dayanır mı", a first-person "büyütürüz"). The other
+  cues (a clause that opens with "should", "X or Y" between two known
+  technologies, "do we need a", "-meli miyiz", the optative "-alım/-elim",
+  "geçsek mi", pros and cons of) count only when no veto fires: a past
+  tense ("why did we decide", "yazmışız"), a question about what the code
+  does ("how does X migrate", "what happens", "nasıl/nerede", a present
+  "-iyor"), a usage verb ("hangi testi çalıştıralım"). A growth condition
+  ("if traffic grows", "sayısı artarsa") is never a decision on its own. A
+  decide cue outranks every other intent in a clause. A sub-question another
+  intent answers (a host agent's plan) whose words carry a strong cue gets the
+  brief and the same verdict, its claims kept as context; words that only may
+  ask for a choice ("pick", "fits best") get a note, never another verdict.
+  A `decide` sub-question's `done_when` kind is `decision_brief` and its
+  verdict is always `human_decision_required` (`question_plan.HUMAN_DECISION`),
+  never `met`, whatever claims exist. analyze runs no retrieval for it (the
+  options a decision names need not exist in the code, so "these words occur
+  nowhere" is not reported) and routes it to the decision handler.
+- *Records.* A decision is a Markdown file with a front matter
+  (`verinoda-decision: 1`, id, status, `decided-by: human`, supersedes,
+  governs, guards, revisit-when, waivers) in `decisions.dir` (default
+  `.verinoda/decisions/`, which git does not see; a committed folder for CI).
+  The file is what is checked; every event (record, import, guard, accept,
+  waive, supersede) also appends the whole state to the `decisions` table
+  (schema v5, append-only), so a hand edit is visible. `decide record` needs
+  the chosen option and the rationale in the human's words; MCP
+  `decision_record` refuses record/guard/accept/waive without the user's words
+  (`user_statement`). A hand-written ADR is never edited: `decide import` makes
+  a companion record whose guards are only *proposed* (from sentences with
+  only/must/never that name code the index knows) until the human accepts
+  them. A record that says `decided-by` anything but `human` is reported and
+  not enforced.
+- *Guards* (`verinoda/guards.py`, one rule engine). `only_in` (a call may
+  appear only in the allowed files; product code by default: tests,
+  reference trees, detected copies and the decision folder are out of
+  scope; `conftest.py` is test code): Python names are resolved by scope as
+  Python does (module, function, lambda, class and comprehension scopes,
+  `global`/`nonlocal`; a binding under if/for/while/try/except/match may not
+  run, so the last unconditional binding and every conditional one after it
+  can reach a use). A call is VIOLATED when every binding that can reach it
+  is the target through imports, aliases, simple assignments and re-exports
+  through the project's own modules; POSSIBLE when only some are
+  (`except ImportError: psycopg2 = None`), when a parameter, loop, with,
+  except or comprehension variable shadows the import, for the target used
+  as a value (`functools.partial`, a class attribute), `getattr(m, "f")`,
+  `importlib`/`__import__` and star imports; a def, class or literal that
+  replaces the import is not the target. Java/Kotlin calls are VIOLATED when
+  the class is import-bound (static call, or a receiver declared with the
+  class - or its import alias - anywhere in the file, and never bound without
+  a written type: a lambda parameter or `var` of the same name keeps it
+  POSSIBLE), otherwise POSSIBLE; other languages are a regex over the code
+  with comments and strings removed, POSSIBLE at most. `no_edge` reads graph edges: an
+  EXTRACTED edge whose cited line still names the target in code is
+  VIOLATED, an INFERRED one POSSIBLE. `dependency absent|present` reads the
+  root manifests plus the root Gradle/Maven build and the subprojects it
+  includes (from the project's file list: git-ignored files are not read);
+  build files under test, sample, fixture or vendor folders are skipped and
+  named in the limits, another build is POSSIBLE; a Maven item is cited at
+  its `<artifactId>` line, one finding per cited line. `governs` compares
+  the symbol's anchor fingerprint: REVIEW, never VIOLATED. `revisit-when` fires TRIGGER once its
+  condition starts to hold. Every `ok` states its scope and limits.
+  `decide check` exits 1 on VIOLATED and 2 on an error; with `--base REF` /
+  `--changed` only new/touched violations count: a finding is new when its
+  file or a file its binding passes through (a re-export module, an edge's
+  target) changed since the base, else it is listed as pre-existing - which
+  says those files are unchanged, not that the base tree was checked. The
+  changed files are read project-relative (`--relative`) and NUL-separated
+  (`-z`), so a project in a subdirectory of its repository and non-ASCII
+  paths count. A record whose front matter or an entry of it cannot be read
+  (a missing id or file, a BOM is fine) is listed as not enforced and never
+  rewritten by verinoda; the other records are still checked. A ref is
+  refused when it starts with `-` and is resolved with `rev-parse --verify
+  --end-of-options`; `--` precedes paths.
+- *Brief* (`verinoda/decision_brief.py`). No recommendation field and no
+  score. `forces` are facts from probes P1-P9, each with evidence that
+  re-checks (a line and the text that must be on it); a force without
+  evidence cannot exist - what was looked for and not found is an `absence`
+  with the globs or patterns searched and its scope ("no Dockerfile in the
+  repository", never "not containerised"). Only forces and absences that
+  serve the decision's kinds (datastore, dependency, boundary, scaling,
+  other; derived by rules) are kept. `options` (named in the question, by
+  `--option`, or used by the project) carry presence evidence, the code a
+  change touches, installed metadata (read from the project's venv, never
+  imported) and external claims only as quote-checked pins: the page is
+  fetched through `research` as `research.network` allows and the quote must
+  occur verbatim, else it is dropped (`unknown` without the network); even
+  then it says what the page says, not that it applies here. The agent's own
+  arguments are `weak_inference`. `questions_for_human` come from fixed
+  EN/TR templates per kind, at most 5, each with `asked_because` and
+  `discriminates`; no rule can show that a file answers what the human
+  expects, so a file that bears on a question (a Procfile, a compose file
+  with a database image, a retention setting) is attached as
+  `partly_answered_by` and the question is still asked. Probes read code
+  without comments and docstrings; a module-level instance is called shared
+  only when the code sets it once (`if _repo is None`), and then as
+  `strong_inference`; an ADR's reason is read only from the paragraph that
+  states the decision; an argument or quote that names no option is kept
+  under `not_tied_to_an_option`.
+  Answers are appended with `answered_by = user` and go into a record's
+  Context marked as the user's; they support a decision's rationale, never a
+  claim about the code.
+- *What stays human:* choosing between options; load, growth, SLO, budget,
+  hosting, team and compliance facts; whether a guard proposed from prose means
+  what the record meant; waivers; superseding a decision.
+- *Limits.* The cue tables are written by the rule authors. On two held-out sets
+  of 10 questions (written and hashed before the rules they measured) the
+  builder's frozen rules had precision 1.00 and recall 0.40 each. The review
+  found 15 look-alike code questions read as decisions and 11 missed decisions
+  on 44 questions; after the review fixes the one set still held out (20
+  questions, hashed before those rules were written) gave precision 0.83 and
+  recall 0.50: decisions are phrased in many ways the tables do not know
+  ("what would you pick", "fits best", "doğru zaman mı"), and a missed one is
+  still judged by the intent it was given (a note says it may ask for a
+  choice when its words suggest one). A host agent that writes the plan can set
+  the intent itself; the rules are the fallback.
 
 ## Sources
 

@@ -184,8 +184,9 @@ def _exclusive_correction(store: Store, repo: Path, claim: dict, correction: str
     The statement is statically verified only if the pattern occurs in every
     named file and nowhere else (same scan as critique's exclusivity check).
     """
+    from verinoda import guards
+
     spec = claim.get("spec") or {}
-    rx = re.compile(spec["pattern"])
     named = []
     for tok in re.findall(r"[\w./\\-]+\.[A-Za-z0-9]+", correction):
         rel = tok.replace("\\", "/")
@@ -194,7 +195,8 @@ def _exclusive_correction(store: Store, repo: Path, claim: dict, correction: str
             named.append(rel)
     if not named:
         return {"formalized": False, "why": "the correction names no existing file; exclusivity cannot be re-checked"}
-    hits, _ = _scan(repo, rx, None, suffixes=set(_EXCLUSIVE_SUFFIXES))
+    # the guard engine: code only (not comments or strings), plus calls through import aliases
+    hits, _ = guards.exclusive_hits(repo, {**spec, "allowed_files": named}, include_allowed=True)
     inside = [h for h in hits if h[0] in named]
     outside = [h for h in hits if h[0] not in named]
     missing = [f for f in named if not any(h[0] == f for h in inside)]
@@ -896,11 +898,14 @@ def process(store: Store, repo: Path, feedback_id: str, *, topic: str | None = N
         if claim is not None and pl.get("holds"):
             spec = claim.get("spec") or {}
             if claim["kind"] == "exclusive" and spec.get("pattern"):
+                from verinoda import guards
+
                 crx = re.compile(spec["pattern"])
                 allowed = set(spec.get("allowed_files") or [])
+                # the claim's pattern must match the code of the line, not a comment or a string in it
                 refuting = [h for h in pl["hits"] if h["path"] not in allowed
                             and PurePosixPath(h["path"]).suffix in _EXCLUSIVE_SUFFIXES
-                            and crx.search(evmod.read_lines(repo / h["path"], h["line_no"], h["line_no"]) or "")]
+                            and guards.code_line_matches(repo, h["path"], h["line_no"], crx)]
                 for h in refuting:
                     if h.get("evidence_id"):
                         cl.attach(cid, h["evidence_id"], "refutes",

@@ -1,0 +1,57 @@
+{
+ "about": "decide check (3 guards: only_in calls=sqlite3.connect, only_in sink=db-connection, dependency absent=psycopg; no index; records in memory) and a brief (not stored) on the full tree of this branch, 3 runs each, same session, other agents loading the machine. Written by scratch script time_check.py of the fixer. The code of 35d2987 and the review fixes ran on the same files. A first baseline run in the same session gave check 5.47, 2.25, 2.31 s (cold file cache first).",
+ "before_35d2987": {
+  "files": 2314,
+  "py": 631,
+  "check_s": [
+   2.16,
+   1.84,
+   1.99
+  ],
+  "brief_s": [
+   5.4,
+   5.5,
+   5.01
+  ],
+  "check_counts": {
+   "violations": 45,
+   "possible": 0,
+   "ok": 0,
+   "unknown": 0
+  },
+  "brief_forces": 44
+ },
+ "before_35d2987_first_run": {
+  "check_s": [
+   5.47,
+   2.25,
+   2.31
+  ],
+  "brief_s": [
+   5.71,
+   5.32,
+   6.07
+  ]
+ },
+ "review_fixes": {
+  "files": 2314,
+  "py": 631,
+  "check_s": [
+   2.12,
+   1.97,
+   2.02
+  ],
+  "brief_s": [
+   7.99,
+   7.89,
+   7.71
+  ],
+  "check_counts": {
+   "violations": 45,
+   "possible": 0,
+   "ok": 0,
+   "unknown": 0
+  },
+  "brief_forces": 42
+ }
+}

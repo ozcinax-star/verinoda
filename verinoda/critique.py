@@ -719,22 +719,14 @@ def challenge(store: Store, repo: Path, cid: str, *, graph=None, actor: str = "c
             else:
                 add("ambiguity", "pass", f"'{target}' is unique in the graph")
 
-    # exclusivity
-    if c["kind"] == "exclusive" and spec.get("pattern"):
-        rx = re.compile(spec["pattern"])
-        allowed = set(spec.get("allowed_files", []))
-        from verinoda.snapshot import list_files
+    # exclusivity: the guard engine (docs/DESIGN.md D33) - the pattern must match code, not a comment or
+    # a string, and a pattern naming a dotted call also catches the calls made through import aliases
+    if c["kind"] == "exclusive" and (spec.get("pattern") or spec.get("calls")):
+        from verinoda import guards
 
-        hits = []
-        for rel in list_files(repo):
-            if rel in allowed or Path(rel).suffix not in (".py", ".js", ".ts", ".go", ".rs", ".java", ".rb", ".php", ".cs"):
-                continue
-            try:
-                for i, line in enumerate((repo / rel).read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-                    if rx.search(line):
-                        hits.append((rel, i))
-            except OSError:
-                continue
+        allowed = set(spec.get("allowed_files", []))
+        found, method = guards.exclusive_hits(repo, spec)
+        hits = [(rel, i) for rel, i, _ in found]
         if hits:
             for rel, i in hits[:5]:
                 ev = evmod.source_evidence(repo, rel, i, commit=c["commit_sha"],
@@ -742,9 +734,10 @@ def challenge(store: Store, repo: Path, cid: str, *, graph=None, actor: str = "c
                 if ev:
                     refute.append((ev, "pattern found outside the allowed files", "exclusivity"))
             add("exclusivity", "fail", f"pattern also matches {len(hits)} line(s) outside {sorted(allowed)}: "
-                + ", ".join(f"{r}:{i}" for r, i in hits[:5]), strength="definitive")
+                + ", ".join(f"{r}:{i}" for r, i in hits[:5]) + f" ({method})", strength="definitive")
         else:
-            add("exclusivity", "pass", f"pattern only occurs in {sorted(allowed)}")
+            add("exclusivity", "pass", f"pattern only occurs in {sorted(allowed)} ({method}; getattr with a "
+                                       "computed name, importlib and exec are not followed)")
 
     # counter-hypothesis probes (spec and subjects only)
     pctx = ProbeContext(repo=repo, kind=c["kind"], spec=spec, subjects=[str(s) for s in c.get("subjects") or []],

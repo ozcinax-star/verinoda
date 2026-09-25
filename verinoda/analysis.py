@@ -34,8 +34,10 @@ otherwise one drafted by rules. Order of work (cheapest reliable tool first):
     counter-probe refutes a listed test is superseded by a corrected claim
  8. each sub-question is judged against its ``done_when``: ``met``,
     ``met_with_inference``, ``unmet``, ``not_supported`` or
-    ``blocked_by_clarification``; :func:`audit` recomputes the verdicts later
-    and marks a sub-question ``stale`` when a claim it relies on went stale
+    ``blocked_by_clarification``; a choice between options (intent ``decide``)
+    is always ``human_decision_required`` (docs/DESIGN.md D33); :func:`audit`
+    recomputes the verdicts later and marks a sub-question ``stale`` when a
+    claim it relies on went stale
 
 A :class:`Budget` bounds wall time (index refresh and experiments included),
 tool calls and returned context. Every claim, unknown, step and critique entry
@@ -79,10 +81,11 @@ SUBQUESTIONS = {
     "impact": "what does a change here affect?",
     "behaviour": "does the code behave as the question states?",
     "compare_reference": "how does it differ from the referenced version?",
+    "decide": "which option should be chosen (a human decision)?",
 }
 # plan intent -> the legacy name kept in the ``intents`` output field
 LEGACY_INTENT = {"locate": "location", "define": "location"}
-LEGACY_ORDER = ("why", "flow", "dataflow", "config", "tests", "impact", "location", "callers", "behaviour",
+LEGACY_ORDER = ("decide", "why", "flow", "dataflow", "config", "tests", "impact", "location", "callers", "behaviour",
                 "history", "compare_reference", "performance", "architecture", "usage")
 RELEVANCE_MIN = 0.25        # share of the grounded question words an item must carry
 JAVA_BOUND = re.compile(r"\((imported|same package|fully qualified|imported with \*)\)$")
@@ -503,6 +506,7 @@ class _Ctx:
     started: set = field(default_factory=set)
     observations: list = field(default_factory=list)   # runtime observe() results of this analysis
     replaced: dict = field(default_factory=dict)       # claim id -> the claim that superseded it here
+    brief: dict | None = None                          # the decision brief of this analysis (one per message)
 
     def view(self, name: str):
         if name not in self.views:
@@ -1755,6 +1759,48 @@ def _h_compare(ctx: _Ctx, sub: _Sub) -> None:
                                          + (f" at {spec}" if spec else "") + " and `verinoda compare`"})
 
 
+def _h_decide(ctx: _Ctx, sub: _Sub) -> None:
+    """A choice between options (docs/DESIGN.md D33). Verinoda does not choose: the verdict is
+    ``human_decision_required`` and what is returned is what the human decides with - the decision
+    brief of the whole message (one per analysis, stored under its id)."""
+    sub.flags["human_decision"] = True
+    first = ctx.brief is None
+    if first:
+        try:
+            from verinoda import decision_brief as dbr
+
+            ctx.brief = dbr.brief(ctx.repo, ctx.plan.get("user_message") or sub.sq.get("text") or "",
+                                  store=ctx.store, graph=ctx.g)
+            ctx.step("decision_brief", f"{ctx.brief['brief_id']}: {len(ctx.brief['forces'])} forces, "
+                                       f"{len(ctx.brief['absences'])} absences, "
+                                       f"{len(ctx.brief['questions_for_human'])} questions for the user")
+        except Exception as exc:  # noqa: BLE001 - no brief is an unknown, never a crash
+            ctx.brief = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+    b = ctx.brief
+    if b.get("error"):
+        _unknown(ctx, sub, {"question": sub.sq.get("text") or SUBQUESTIONS["decide"],
+                            "why": "this asks for a choice between options; Verinoda does not choose, the human "
+                                   f"decides; the decision brief failed ({b['error']})",
+                            "next_step": "`verinoda decide brief \"<the question>\"`, then ask the user"})
+        return
+    from verinoda import decision_brief as dbr
+
+    if first:
+        compact = dbr.compact(b, (ctx.plan or {}).get("language"))
+        ctx.budget.spend(0, _size(compact))
+        sub.extra["decision_brief"] = compact
+    else:
+        sub.extra["decision_brief"] = {"brief_id": b["brief_id"], "same_brief_as": "an earlier sub-question"}
+    if first:
+        _unknown(ctx, sub, {"question": sub.sq.get("text") or SUBQUESTIONS["decide"],
+                            "why": f"a choice between options: the human decides. Brief {b['brief_id']}: "
+                                   f"{len(b['forces'])} fact(s) from the code, {len(b['absences'])} absence(s), "
+                                   f"{len(b['questions_for_human'])} question(s) only the user can answer",
+                            "next_step": f"ask the user the brief's questions, record each answer (`verinoda decide "
+                                         f"answer {b['brief_id']} --q qN \"...\"`), and record a decision only with "
+                                         "the user's explicit choice (`verinoda decide record`)"})
+
+
 def _h_unsupported(ctx: _Ctx, sub: _Sub) -> None:
     sub.flags["not_supported"] = f"no dedicated handler for '{sub.sq['intent']}'"
     _unknown(ctx, sub, {"question": sub.sq.get("text") or sub.sq["intent"],
@@ -1767,7 +1813,7 @@ HANDLERS = {
     "locate": None, "define": None, "flow": _h_flow, "dataflow": _h_dataflow, "callers": _h_callers,
     "config": _h_config, "tests": _h_tests, "why": _h_why, "history": _h_why, "impact": _h_impact,
     "behaviour": _h_behaviour, "compare_reference": _h_compare, "performance": _h_unsupported,
-    "architecture": _h_unsupported, "usage": _h_unsupported,
+    "architecture": _h_unsupported, "usage": _h_unsupported, "decide": _h_decide,
 }
 SECONDARY_OK = {"flow", "dataflow", "config", "tests", "why", "impact", "callers"}
 
@@ -1838,6 +1884,12 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
                                          + (", or `verinoda resolve` the reference" if c["kind"] == "version"
                                             else "")})
         return _finish_sub(ctx, sub, out, "none")
+    if sq["intent"] == "decide":
+        # a choice: the options it names need not exist in the code (an option absent from the repository is
+        # expected), so no retrieval, no "words occur nowhere" or "no symbol named" unknown - the decision
+        # handler answers
+        _h_decide(ctx, sub)
+        return _finish_sub(ctx, sub, out, "decide")
     required_unlinked = [lk for lk in links if lk["status"] in ("unlinked", "not_found")
                          and mentions.get(lk["mention"], {}).get("required", True)]
     usable = [lk for lk in links if lk["status"] in ("linked", "weak", "ambiguous")]
@@ -1915,7 +1967,26 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
         HANDLERS[sq["intent"]](ctx, sub)
     if ctx.run_tests and sq["intent"] != "tests" and "_h_tests" not in handler_names and (rel or subject_nodes):
         _h_tests(ctx, sub)
+    _choice_guard(ctx, sub)
     return _finish_sub(ctx, sub, out, "+".join(h[3:] for h in handler_names) or "location")
+
+
+def _choice_guard(ctx: _Ctx, sub: _Sub) -> None:
+    """A sub-question another intent answered whose words still ask for a choice (a plan written by a host
+    agent, or a clause the cue rules gave another intent): the facts stay as context, and the choice is not
+    judged met (docs/DESIGN.md D33). Words that only may ask for one get a note, never another verdict."""
+    text = sub.sq.get("text") or ""
+    if qp.asks_for_choice(text):
+        _h_decide(ctx, sub)
+        return
+    word = qp.may_ask_for_choice(text)
+    if word:
+        sub.flags["may_ask_for_choice"] = word
+        _unknown(ctx, sub, {"question": text,
+                            "why": f"the question may ask for a choice ('{word}'): the claims say what the code "
+                                   "does; which option to take is the user's decision, not a fact Verinoda found",
+                            "next_step": "if it is a choice: `verinoda decide brief \"<the question>\"` collects what "
+                                         "the code says about it, then ask the user"})
 
 
 def _finish_sub(ctx: _Ctx, sub: _Sub, out: dict, handler: str) -> dict:
@@ -1937,6 +2008,8 @@ def _finish_sub(ctx: _Ctx, sub: _Sub, out: dict, handler: str) -> dict:
         out["proposition"] = sub.extra["proposition"]
     if sub.extra.get("references"):
         out["references"] = sub.extra["references"]
+    if sub.extra.get("decision_brief"):
+        out["decision_brief"] = sub.extra["decision_brief"]
     return out
 
 
@@ -2001,11 +2074,15 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
     the subject itself (``flags["off_subject"]``: context claims for other symbols);
     ``unmet``: none (stale, contradicted and unknown claims never count), or the sub-question names
     code that does not exist here (``flags["not_found"]``: claims about other names do not answer it);
-    ``not_supported`` / ``blocked_by_clarification`` come from the handler.
+    ``not_supported`` / ``blocked_by_clarification`` come from the handler. A ``decide`` sub-question is
+    ``human_decision_required`` whatever its claims say: a choice between options is never ``met`` by
+    evidence (docs/DESIGN.md D33), and an option the code does not have does not make it ``unmet``.
     """
     flags = flags or {}
     if flags.get("blocked"):
         return "blocked_by_clarification"
+    if sq.get("intent") == "decide" or flags.get("human_decision"):
+        return qp.HUMAN_DECISION
     if flags.get("not_found"):
         return "unmet"
     kind, min_status, kinds = _verdict_kinds(sq)

@@ -1,0 +1,1363 @@
+{
+ "rows": [
+  {
+   "case": "V01 direct call",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:4"
+   ],
+   "expected": [
+    "orders/reports.py:4"
+   ],
+   "possible": [],
+   "ms": 44.5,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:4"
+    ]
+   }
+  },
+  {
+   "case": "V02 from-import alias",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:4"
+   ],
+   "expected": [
+    "orders/reports.py:4"
+   ],
+   "possible": [],
+   "ms": 41.5,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "hits": []
+   }
+  },
+  {
+   "case": "V03 module alias",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:4"
+   ],
+   "expected": [
+    "orders/reports.py:4"
+   ],
+   "possible": [],
+   "ms": 39.4,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "hits": []
+   }
+  },
+  {
+   "case": "V04 from-import",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:4"
+   ],
+   "expected": [
+    "orders/reports.py:4"
+   ],
+   "possible": [],
+   "ms": 39.1,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "hits": []
+   }
+  },
+  {
+   "case": "V05 assigned alias",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:7"
+   ],
+   "expected": [
+    "orders/reports.py:7"
+   ],
+   "possible": [],
+   "ms": 40.7,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 1,
+    "hits": [
+     "orders/reports.py:3"
+    ]
+   }
+  },
+  {
+   "case": "V06 local import",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:3"
+   ],
+   "expected": [
+    "orders/reports.py:3"
+   ],
+   "possible": [],
+   "ms": 40.3,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:3"
+    ]
+   }
+  },
+  {
+   "case": "V07 re-export through a project module",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:4"
+   ],
+   "expected": [
+    "orders/reports.py:4"
+   ],
+   "possible": [],
+   "ms": 45.8,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "hits": []
+   }
+  },
+  {
+   "case": "V08 existing module edited",
+   "class": "violating",
+   "violated": [
+    "orders/service.py:23"
+   ],
+   "expected": [
+    "orders/service.py:23"
+   ],
+   "possible": [],
+   "ms": 39.2,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "hits": [
+     "orders/service.py:23"
+    ]
+   }
+  },
+  {
+   "case": "V09 multi-line call",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:4"
+   ],
+   "expected": [
+    "orders/reports.py:4"
+   ],
+   "possible": [],
+   "ms": 40.7,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:4"
+    ]
+   }
+  },
+  {
+   "case": "V10 relative re-export",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:4"
+   ],
+   "expected": [
+    "orders/reports.py:4"
+   ],
+   "possible": [],
+   "ms": 43.3,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "hits": []
+   }
+  },
+  {
+   "case": "V11 lambda",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:3"
+   ],
+   "expected": [
+    "orders/reports.py:3"
+   ],
+   "possible": [],
+   "ms": 51.2,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:3"
+    ]
+   }
+  },
+  {
+   "case": "V12 method in a class",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:5"
+   ],
+   "expected": [
+    "orders/reports.py:5"
+   ],
+   "possible": [],
+   "ms": 38.8,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:5"
+    ]
+   }
+  },
+  {
+   "case": "V13 inside an f-string",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:4"
+   ],
+   "expected": [
+    "orders/reports.py:4"
+   ],
+   "possible": [],
+   "ms": 44.5,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:4"
+    ]
+   }
+  },
+  {
+   "case": "V14 sink db-connection: psycopg",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:4"
+   ],
+   "expected": [
+    "orders/reports.py:4"
+   ],
+   "possible": [],
+   "ms": 38.5,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "V15 sink db-connection: alias of sqlite3",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:4"
+   ],
+   "expected": [
+    "orders/reports.py:4"
+   ],
+   "possible": [],
+   "ms": 45.2,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B01 comment only",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 37.9,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:1"
+    ]
+   }
+  },
+  {
+   "case": "B02 docstring only",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 44.0,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 2,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:2",
+     "orders/reports.py:4"
+    ]
+   }
+  },
+  {
+   "case": "B03 string literal",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 37.9,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:1"
+    ]
+   }
+  },
+  {
+   "case": "B04 test file (out of scope)",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 50.0,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "hits": [
+     "tests/test_reports.py:4"
+    ]
+   }
+  },
+  {
+   "case": "B05 own function named connect",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 40.5,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "B06 socket connect",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 43.5,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "B07 another package's connect",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 45.2,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "B08 parameter shadows the module",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 37.9,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:2"
+    ]
+   }
+  },
+  {
+   "case": "B09 the allowed file itself",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 40.7,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "B10 the repository API",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 42.8,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "B11 unrelated object named sq",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 36.2,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "B12 import without a call",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 38.5,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "B20 a def shadows the imported name",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 35.4,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "O01 getattr with a literal name",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "orders/reports.py:4"
+   ],
+   "ms": 45.4,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "O02 getattr with a computed name",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 41.9,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "O03 importlib",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "orders/reports.py:4"
+   ],
+   "ms": 42.2,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "O04 __import__",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "orders/reports.py:2"
+   ],
+   "ms": 41.8,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "O05 exec",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 36.6,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:2"
+    ]
+   }
+  },
+  {
+   "case": "O06 sys.modules",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 37.2,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "O07 star import",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "orders/reports.py:4"
+   ],
+   "ms": 36.3,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "V16 import + call in common code",
+   "class": "violating",
+   "violated": [
+    "src/main/java/com/example/glowmod/GlowMod.java:3"
+   ],
+   "expected": [
+    "src/main/java/com/example/glowmod/GlowMod.java:3"
+   ],
+   "possible": [
+    "src/main/java/com/example/glowmod/GlowMod.java:30"
+   ],
+   "ms": 38.4,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "V17 unused import in another common file",
+   "class": "violating",
+   "violated": [
+    "src/main/java/com/example/glowmod/item/ModItems.java:3"
+   ],
+   "expected": [
+    "src/main/java/com/example/glowmod/item/ModItems.java:3"
+   ],
+   "possible": [],
+   "ms": 33.5,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B13 comment naming client code",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 31.4,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B14 client code using common code",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 30.5,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B15 string naming client code",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 37.1,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "O08 reflection by class name",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 35.9,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true
+  },
+  {
+   "case": "V18 registration moved to ModEvents (declared type)",
+   "class": "violating",
+   "violated": [
+    "src/main/java/net/ashvale/emberforge/event/ModEvents.java:30"
+   ],
+   "expected": [
+    "src/main/java/net/ashvale/emberforge/event/ModEvents.java:30"
+   ],
+   "possible": [],
+   "ms": 57.0,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "V19 static field of the class",
+   "class": "violating",
+   "violated": [
+    "src/main/java/net/ashvale/emberforge/event/ModEvents.java:21"
+   ],
+   "expected": [
+    "src/main/java/net/ashvale/emberforge/event/ModEvents.java:21"
+   ],
+   "possible": [],
+   "ms": 49.7,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "V20 Kotlin parameter of the class",
+   "class": "violating",
+   "violated": [
+    "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:6"
+   ],
+   "expected": [
+    "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:6"
+   ],
+   "possible": [],
+   "ms": 55.7,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B16 comment in ModEvents",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 53.6,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B17 another class's playToServer",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 53.1,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B18 the allowed file itself",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 49.9,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "O09 chained receiver",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "src/main/java/net/ashvale/emberforge/event/ModEvents.java:18"
+   ],
+   "ms": 49.9,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true
+  },
+  {
+   "case": "V25 Java imports Kotlin client code",
+   "class": "violating",
+   "violated": [
+    "src/main/java/net/ashvale/emberforge/event/ModEvents.java:4"
+   ],
+   "expected": [
+    "src/main/java/net/ashvale/emberforge/event/ModEvents.java:4"
+   ],
+   "possible": [],
+   "ms": 35.2,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "V21 psycopg declared in pyproject",
+   "class": "violating",
+   "violated": [
+    "pyproject.toml:6"
+   ],
+   "expected": [
+    "pyproject.toml:6"
+   ],
+   "possible": [],
+   "ms": 43.4,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "V22 psycopg in requirements.txt",
+   "class": "violating",
+   "violated": [
+    "requirements.txt:1"
+   ],
+   "expected": [
+    "requirements.txt:1"
+   ],
+   "possible": [],
+   "ms": 36.6,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "V23 sqlite-jdbc in build.gradle",
+   "class": "violating",
+   "violated": [
+    "build.gradle:58"
+   ],
+   "expected": [
+    "build.gradle:58"
+   ],
+   "possible": [],
+   "ms": 45.9,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B19 psycopg only in a comment and the README",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 32.4,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "V24 JDBC DriverManager in Java",
+   "class": "violating",
+   "violated": [
+    "src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:27"
+   ],
+   "expected": [
+    "src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:27"
+   ],
+   "possible": [],
+   "ms": 61.4,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "V26 a local of the same name in another function",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:5"
+   ],
+   "expected": [
+    "orders/reports.py:5"
+   ],
+   "possible": [],
+   "ms": 53.4,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:5"
+    ]
+   }
+  },
+  {
+   "case": "V27 driver chosen at import time (sink)",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:10"
+   ],
+   "expected": [
+    "orders/reports.py:10"
+   ],
+   "possible": [],
+   "ms": 44.3,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "V28 a method named like the import",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:6"
+   ],
+   "expected": [
+    "orders/reports.py:6"
+   ],
+   "possible": [],
+   "ms": 42.9,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "hits": []
+   }
+  },
+  {
+   "case": "V29 two local imports under one name",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:3"
+   ],
+   "expected": [
+    "orders/reports.py:3"
+   ],
+   "possible": [],
+   "ms": 41.9,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 1,
+    "hits": []
+   }
+  },
+  {
+   "case": "V30 the alias rebound in another function",
+   "class": "violating",
+   "violated": [
+    "orders/reports.py:10"
+   ],
+   "expected": [
+    "orders/reports.py:10"
+   ],
+   "possible": [],
+   "ms": 44.0,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 1,
+    "fp": 0,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:10"
+    ]
+   }
+  },
+  {
+   "case": "V31 multi-line Maven dependency",
+   "class": "violating",
+   "violated": [
+    "pom.xml:5"
+   ],
+   "expected": [
+    "pom.xml:5"
+   ],
+   "possible": [],
+   "ms": 38.1,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "V32 Kotlin import alias",
+   "class": "violating",
+   "violated": [
+    "src/main/kotlin/net/ashvale/emberforge/net2/Reg.kt:6"
+   ],
+   "expected": [
+    "src/main/kotlin/net/ashvale/emberforge/net2/Reg.kt:6"
+   ],
+   "possible": [],
+   "ms": 56.6,
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B21 closure parameter shadows the import",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "orders/reports.py:6"
+   ],
+   "ms": 45.1,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "hits": []
+   }
+  },
+  {
+   "case": "B22 module-level comprehension variable",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "orders/reports.py:3"
+   ],
+   "ms": 44.8,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:3"
+    ]
+   }
+  },
+  {
+   "case": "B23 module-level for variable",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "orders/reports.py:4"
+   ],
+   "ms": 38.6,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:4"
+    ]
+   }
+  },
+  {
+   "case": "B24 with ... as the name",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "orders/reports.py:7"
+   ],
+   "ms": 41.1,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:7"
+    ]
+   }
+  },
+  {
+   "case": "B25 except ... as the name",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "orders/reports.py:6"
+   ],
+   "ms": 39.0,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:6"
+    ]
+   }
+  },
+  {
+   "case": "B26 Java lambda parameter of another type",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "src/main/java/net/ashvale/emberforge/net2/Helper.java:9"
+   ],
+   "ms": 57.5,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B27 Java var loop variable of another type",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "src/main/java/net/ashvale/emberforge/net2/Helper2.java:10"
+   ],
+   "ms": 53.8,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B28 Kotlin lambda parameter of another type",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "src/main/kotlin/net/ashvale/emberforge/net2/Helper3.kt:8"
+   ],
+   "ms": 52.6,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B29 a test fixture's build file",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 33.6,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "B30 root conftest.py",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 41.0,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "hits": [
+     "conftest.py:5"
+    ]
+   }
+  },
+  {
+   "case": "B31 a git-ignored pom.xml",
+   "class": "benign",
+   "violated": [],
+   "expected": [],
+   "possible": [],
+   "ms": 30.6,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0
+  },
+  {
+   "case": "O10 optional import with a None fallback",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "orders/reports.py:8"
+   ],
+   "ms": 46.0,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true
+  },
+  {
+   "case": "O11 functools.partial of the target",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "orders/reports.py:4"
+   ],
+   "ms": 41.0,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:4"
+    ]
+   }
+  },
+  {
+   "case": "O12 the target as a class attribute",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "orders/reports.py:5"
+   ],
+   "ms": 43.1,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true,
+   "regex": {
+    "tp": 0,
+    "fp": 1,
+    "fn": 0,
+    "hits": [
+     "orders/reports.py:5"
+    ]
+   }
+  },
+  {
+   "case": "O13 a build the root build does not include",
+   "class": "out_of_reach",
+   "violated": [],
+   "expected": [],
+   "possible": [
+    "tools/gen/build.gradle:2"
+   ],
+   "ms": 42.1,
+   "tp": 0,
+   "fp": 0,
+   "fn": 0,
+   "named_in_limits": true
+  }
+ ],
+ "summary": {
+  "cases": 76,
+  "violating": 32,
+  "benign": 31,
+  "out_of_reach": 13,
+  "violated_precision": 1.0,
+  "recall_sites_in_reach": 1.0,
+  "tp": 32,
+  "fp": 0,
+  "fn_sites": 0,
+  "cases_fully_found": 32,
+  "benign_with_violated": [],
+  "out_of_reach_named": 13,
+  "out_of_reach_with_violated": [],
+  "check_ms_max": 61.4,
+  "check_ms_median": 41.9,
+  "baseline_raw_regex_on_orders_calls_cases": {
+   "cases": 45,
+   "tp": 9,
+   "fp": 15,
+   "fn": 8,
+   "fp_in_benign_or_out_of_reach": 14
+  },
+  "engine_on_the_same_cases": {
+   "tp": 17,
+   "fp": 0,
+   "fn": 0
+  }
+ }
+}

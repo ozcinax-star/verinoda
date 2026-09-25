@@ -89,7 +89,8 @@
        "compare_reference",
        "performance",
        "architecture",
-       "usage"
+       "usage",
+       "decide"
       ]
      },
      "secondary_intents": {
@@ -110,7 +111,8 @@
         "compare_reference",
         "performance",
         "architecture",
-        "usage"
+        "usage",
+        "decide"
        ]
       },
       "description": "Other intents the same clause also asks for; their handlers run as support."
@@ -161,7 +163,8 @@
          "decision_found",
          "proposition_checked",
          "reference_pinned",
-         "comparison_done"
+         "comparison_done",
+         "decision_brief"
         ]
        },
        "subjects": {

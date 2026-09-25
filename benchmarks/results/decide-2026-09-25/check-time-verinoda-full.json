@@ -1,0 +1,27 @@
+{
+ "repo": "the full Verinoda tree at this branch (no index: no_edge not timed here)",
+ "files": 2309,
+ "py_files": 631,
+ "guards": [
+  "only_in calls=sqlite3.connect allowed=verinoda/store.py",
+  "only_in sink=db-connection allowed=verinoda/store.py",
+  "dependency absent=psycopg"
+ ],
+ "check_s": [
+  2.667,
+  1.614,
+  1.823
+ ],
+ "violations_per_guard": {
+  "g1": 21,
+  "g2": 22,
+  "g3": 2
+ },
+ "scope": {},
+ "brief_s": [
+  6.222,
+  5.645
+ ],
+ "brief_forces": 44,
+ "note": "run 1 of each is with a cold file cache; the violations are real sqlite3.connect calls outside store.py (tests are out of scope) and psycopg in an optional extra"
+}

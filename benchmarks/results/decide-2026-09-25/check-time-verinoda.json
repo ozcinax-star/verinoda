@@ -1,0 +1,35 @@
+{
+ "repo": "a prepared copy of Verinoda's own code (verinoda/ and pyproject.toml; the fast harness's verinoda_user_tr corpus)",
+ "files": 78,
+ "guards": [
+  "only_in calls=sqlite3.connect allowed=verinoda/store.py",
+  "only_in sink=db-connection allowed=verinoda/store.py",
+  "no_edge from=verinoda/** to=tests/**",
+  "dependency absent=psycopg"
+ ],
+ "graph_load_s": 0.064,
+ "check_s": [
+  0.638,
+  0.498,
+  0.476
+ ],
+ "violations": 26,
+ "possible": 0,
+ "violations_per_guard": {
+  "g1": 12,
+  "g2": 12,
+  "g3": 0,
+  "g4": 2
+ },
+ "ok": [
+  "g3"
+ ],
+ "brief_s": [
+  1.336,
+  1.256
+ ],
+ "brief_forces": 23,
+ "brief_absences": 2,
+ "brief_questions": 5,
+ "note": "the violations are real: several Verinoda modules call sqlite3.connect outside store.py, and psycopg is declared in an optional extra of pyproject.toml; the guards were made up for timing"
+}

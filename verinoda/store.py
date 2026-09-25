@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -370,12 +370,71 @@ BEGIN SELECT RAISE(ABORT, 'a claim''s text and created_at are immutable; superse
 CREATE INDEX IF NOT EXISTS idx_claim_deps_claim ON claim_deps(claim_id);
 """
 
-_MIGRATIONS: dict[int, str] = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4}
+# v5 (decisions, docs/DESIGN.md D33): what the human decided, as an append-only log. Every row is the
+# whole state of one decision after one event (record, import, guard, accept, waive, supersede); the
+# latest row per id is the current state. The Markdown record in `decisions.dir` is what is checked.
+_SCHEMA_V5 = """
+CREATE TABLE IF NOT EXISTS decisions (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT NOT NULL,
+    number INTEGER NOT NULL,
+    event TEXT NOT NULL,
+    status TEXT NOT NULL,
+    title TEXT,
+    brief_id TEXT,
+    chosen TEXT,
+    rationale TEXT,
+    decided_by TEXT NOT NULL,
+    user_statement TEXT,
+    doc_path TEXT,
+    doc_hash TEXT,
+    source_doc TEXT,
+    guards TEXT NOT NULL DEFAULT '[]',
+    waivers TEXT NOT NULL DEFAULT '[]',
+    governs TEXT NOT NULL DEFAULT '[]',
+    revisit_when TEXT NOT NULL DEFAULT '[]',
+    supersedes TEXT,
+    superseded_by TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_decisions_id ON decisions(id);
+CREATE TRIGGER IF NOT EXISTS no_delete_decisions BEFORE DELETE ON decisions
+BEGIN SELECT RAISE(ABORT, 'decisions are never deleted; record a new event'); END;
+CREATE TRIGGER IF NOT EXISTS no_update_decisions BEFORE UPDATE ON decisions
+BEGIN SELECT RAISE(ABORT, 'the decision log is append-only'); END;
+
+-- the evidence gathered for one decision (immutable) and the human's answers to its questions
+CREATE TABLE IF NOT EXISTS decision_briefs (
+    id TEXT PRIMARY KEY,
+    question TEXT NOT NULL,
+    result TEXT NOT NULL,
+    snapshot_id TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS no_delete_decision_briefs BEFORE DELETE ON decision_briefs
+BEGIN SELECT RAISE(ABORT, 'decision briefs are never deleted'); END;
+CREATE TRIGGER IF NOT EXISTS no_update_decision_briefs BEFORE UPDATE ON decision_briefs
+BEGIN SELECT RAISE(ABORT, 'a decision brief is immutable; make a new one'); END;
+CREATE TABLE IF NOT EXISTS decision_answers (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    brief_id TEXT NOT NULL REFERENCES decision_briefs(id),
+    question_id TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    answered_by TEXT NOT NULL CHECK (answered_by = 'user'),
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS no_delete_decision_answers BEFORE DELETE ON decision_answers
+BEGIN SELECT RAISE(ABORT, 'answers are never deleted; answer again'); END;
+CREATE TRIGGER IF NOT EXISTS no_update_decision_answers BEFORE UPDATE ON decision_answers
+BEGIN SELECT RAISE(ABORT, 'answers are append-only'); END;
+"""
+
+_MIGRATIONS: dict[int, str] = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4, 5: _SCHEMA_V5}
 
 _JSON_COLS = {
     "plan", "check_result", "facts", "header", "tests", "flags", "explicit", "detail",
     "spec", "subjects", "uncertainties", "meta", "payload", "resolution", "environment",
-    "notes", "budget", "usage", "result", "command",
+    "notes", "budget", "usage", "result", "command", "guards", "waivers", "governs", "revisit_when",
 }
 
 
