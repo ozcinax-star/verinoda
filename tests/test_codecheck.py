@@ -461,6 +461,11 @@ def test_api_lists_real_members(proj):
     assert miss["found"] is False and miss["exit"] == 3 and miss["nearest"][0]["name"] == "Repo"
     std = codecheck.api(proj, "json.loads", env="none")
     assert std["found"] and std["source"] == "stdlib" and "s" in std["signature"]
+    # a re-export is followed to the class; module names are case-sensitive even on Windows
+    _write(proj, "pkg/facade.py", "from pkg.core import Repo\n")
+    fac = codecheck.api(proj, "pkg.facade.Repo", env="none")
+    assert fac["found"] and fac["kind"] == "class" and "save" in {m["name"] for m in fac["members"]}
+    assert codecheck.api(proj, "pkg.Core.Repo", env="none")["found"] is False
 
 
 # -- scope: snippets, diffs, cache ----------------------------------------------------------------------------

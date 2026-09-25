@@ -629,29 +629,54 @@ class ModSpec:
 _EXT = (".pyd", ".so")
 
 
+_LISTINGS: dict[str, tuple[int, frozenset]] = {}
+
+
+def _entries(d: Path) -> frozenset:
+    """The names in a directory, exactly as spelled (imports are case-sensitive even where the file
+    system is not), cached by the directory's mtime."""
+    try:
+        mt = os.stat(d).st_mtime_ns
+    except OSError:
+        return frozenset()
+    key = os.path.normcase(str(d))
+    hit = _LISTINGS.get(key)
+    if hit is None or hit[0] != mt:
+        try:
+            names = frozenset(os.listdir(d))
+        except OSError:
+            names = frozenset()
+        if len(_LISTINGS) > 8192:
+            _LISTINGS.clear()
+        hit = _LISTINGS[key] = (mt, names)
+    return hit[1]
+
+
 def _in_dir(d: Path, name: str) -> list[ModSpec]:
     out: list[ModSpec] = []
+    entries = _entries(d)
+    if not entries:
+        return out
     pkg = d / name
-    if pkg.is_dir():
+    if name in entries and pkg.is_dir():
+        inner = _entries(pkg)
         for init in ("__init__.py", "__init__.pyi"):
-            if (pkg / init).is_file():
+            if init in inner:
                 stub = pkg / "__init__.pyi"
                 out.append(ModSpec(name, "package", pkg / init, [pkg],
-                                   stub if stub.is_file() and init == "__init__.py" else None))
+                                   stub if "__init__.pyi" in inner and init == "__init__.py" else None))
                 break
         else:
             out.append(ModSpec(name, "namespace", None, [pkg]))
     src, stub = d / f"{name}.py", d / f"{name}.pyi"
-    if src.is_file():
-        out.append(ModSpec(name, "source", src, [], stub if stub.is_file() else None))
-    elif stub.is_file():
+    has_stub = f"{name}.pyi" in entries
+    if f"{name}.py" in entries:
+        out.append(ModSpec(name, "source", src, [], stub if has_stub else None))
+    elif has_stub:
         out.append(ModSpec(name, "stub", stub))
-    try:
-        for e in os.listdir(d):
-            if e.startswith(name + ".") and e.endswith(_EXT) and e.split(".")[0] == name:
-                out.append(ModSpec(name, "compiled", d / e, [], stub if stub.is_file() else None))
-    except OSError:
-        pass
+    for e in entries:
+        if e.startswith(name + ".") and e.endswith(_EXT) and e.split(".")[0] == name:
+            out.append(ModSpec(name, "compiled", d / e, [], stub if has_stub else None))
     return out
 
 

@@ -2272,6 +2272,20 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
         if m is None:
             return {**head, "found": False, "why": f"{part} not found in {c.label} {ck.in_env_phrase(c)} ({c.where})",
                     "nearest": nearest(part, c.names, disp=ck.disp), "closed": c.closed, "exit": 3}
+        # a re-export (`from .client import Client` in a package __init__): follow it to the definition
+        hops = 0
+        while std_full is None and m is not None and m.kind in ("import", "module") and m.file and m.line \
+                and hops < 6:
+            nxt = _follow_import(ck, Path(m.file), m.line, part)
+            if nxt is None:
+                break
+            c, m = nxt
+            hops += 1
+            if c.source == "stdlib":
+                std_full = c.full   # from here on the interpreter answers (the name is looked up below)
+        if m is None:   # the name is a module
+            obj_kind = "module"
+            continue
         if std_full is not None:
             std_full = f"{std_full}.{part}"
             info = envinfo.oracle().ask("object", name=std_full)
@@ -2300,6 +2314,57 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
             "count": len(rows), "exit": 0}
 
 
+_TYPING_MODULES = ("typing", "typing_extensions", "__future__", "collections.abc", "abc", "types")
+
+
+def _follow_import(ck: Checker, path: Path, line: int, name: str) -> tuple[Container, Member | None] | None:
+    """(container, member) that the import binding ``name`` at ``path:line`` refers to; member None when
+    the name is a module itself."""
+    tree = cf.parse_file(path)[0]
+    if tree is None:
+        return None
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Import, ast.ImportFrom)) or node.lineno != line:
+            continue
+        for al in node.names:
+            if (al.asname or al.name.split(".")[0]) != name and (al.asname or al.name) != name:
+                continue
+            if isinstance(node, ast.Import):
+                dotted_name = al.name if al.asname else al.name.split(".")[0]
+                specs = ck.universe(path.parent).find(dotted_name)
+                spec = next((sp for sp in specs if sp.file), None)
+                return (ck.module_container(dotted_name, spec.file), None) if spec else None
+            if node.level:
+                base = path.parent
+                for _ in range(node.level - 1):
+                    base = base.parent
+                specs = _find_in(base, (node.module or "").split(".")) if node.module else \
+                    [cenv.ModSpec(base.name, "package", base / "__init__.py", [base])]
+                mod = "." * node.level + (node.module or "")
+            else:
+                mod = node.module or ""
+                specs = ck.universe(path.parent).find(mod)
+            spec = next((sp for sp in specs if sp.file), None)
+            if spec is None:
+                return None
+            c = ck.module_container(mod, spec.file)
+            m = c.names.get(al.name)
+            if m is None and al.name in {n for n, x in c.names.items() if x.kind == "module"}:
+                sub = [sp for sp in cenv._in_dir(spec.file.parent, al.name) if sp.file] \
+                    if spec.file.name.startswith("__init__.") else []
+                return (ck.module_container(f"{mod}.{al.name}", sub[0].file), None) if sub else None
+            return (c, m) if m is not None else None
+    return None
+
+
+def _import_origin(path: Path, line: int) -> str | None:
+    tree = cf.parse_file(path)[0]
+    for node in ast.walk(tree) if tree is not None else ():
+        if isinstance(node, ast.ImportFrom) and node.lineno == line:
+            return "." * (node.level or 0) + (node.module or "")
+    return None
+
+
 def _api_rows(ck: Checker, c: Container, std_full: str | None, kind: str, private: bool) -> list[dict]:
     rows: list[dict] = []
     if std_full is not None:
@@ -2314,9 +2379,20 @@ def _api_rows(ck: Checker, c: Container, std_full: str | None, kind: str, privat
                         (private or not n.startswith("_")):
                     rows.append({"name": n, "kind": "attribute", "at": f"{ck.disp(m.file)}:{m.line}"})
         return rows
+    all_names = None
+    if kind == "module" and c.files:
+        mf = cf.module_facts(c.files[0])
+        all_names = set(mf.all_names) if mf.all_names is not None and not mf.all_dynamic else None
     for n, m in sorted(c.names.items()):
         if (n.startswith("_") and not private and n != "__init__") or (_dunder(n) and n != "__init__"):
             continue
+        if kind == "module" and not private:
+            if all_names is not None and n not in all_names:
+                continue
+            # a module's own API: not the modules it imports or its typing helpers
+            if all_names is None and ((m.kind == "module" and m.line) or (m.kind == "import" and m.file and m.line and
+                                      (_import_origin(Path(m.file), m.line) or "") in _TYPING_MODULES)):
+                continue
         row = {"name": n, "kind": m.kind}
         if m.signature:
             row["signature"] = m.signature
