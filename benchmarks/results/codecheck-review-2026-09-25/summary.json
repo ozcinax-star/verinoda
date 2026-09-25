@@ -1,0 +1,183 @@
+{
+ "what": "verinoda check after the review fixes (docs/DESIGN.md D32, branch p1/code-check)",
+ "machine": "Windows 11, Python 3.12.0, jedi 0.20.0; the machine was shared with other runs (timings noisy)",
+ "fixture": {
+  "in_sample": true,
+  "same_verdicts_and_nearest_as_before_review": true,
+  "precision_absent": "74/74",
+  "recall_absent_closed": "74/74",
+  "decided_absent": "74/79",
+  "near_name_top3": "24/26",
+  "confusion_oracle_x_check": {
+   "exists": {
+    "exists": 62,
+    "unknown": 1,
+    "guarded": 2
+   },
+   "absent": {
+    "absent": 74,
+    "unknown": 5
+   }
+  },
+  "env_regression_violations": [],
+  "timing": {
+   "warm_s_per_100_sites": 0.339,
+   "cli_cold_diff_s": [
+    1.29,
+    1.15,
+    1.25,
+    1.21,
+    1.34
+   ],
+   "cli_cold_diff_median_s": 1.25,
+   "cli_cold_whole_dir_s": [
+    3.57,
+    3.59,
+    3.65
+   ],
+   "disk_cache_s": 0.429
+  }
+ },
+ "review_probe_sets_real_code": [
+  {
+   "set": "reviewer proj (r*.py real, f*.py invented)",
+   "env": "none",
+   "files": 87,
+   "sites": 352,
+   "absent_before": 44,
+   "absent_after": 19,
+   "false_absent_before": 25,
+   "false_absent_after": 0,
+   "invented_decided_absent_before_and_after": "19/26"
+  },
+  {
+   "set": "reviewer sweep_std (every site real)",
+   "env": "none",
+   "files": 253,
+   "sites": 11367,
+   "absent_before": 5,
+   "absent_after": 0
+  },
+  {
+   "set": "reviewer sweep_tp (every site real)",
+   "env": "Verinoda's .venv",
+   "files": 106,
+   "sites": 6922,
+   "absent_before": 4,
+   "absent_after": 0
+  },
+  {
+   "set": "reviewer sweep_cx (every site real)",
+   "env": "Verinoda's .venv",
+   "files": 14,
+   "sites": 1377,
+   "absent_before": 24,
+   "absent_after": 0
+  }
+ ],
+ "unseen_packages": {
+  "set": "click, pluggy, h11, starlette copied from Verinoda's venv (chosen by a reviewer)",
+  "env": "Verinoda's .venv",
+  "before": {
+   "absent": 7,
+   "false_absent": 5
+  },
+  "after": {
+   "sites": 8525,
+   "absent": 2,
+   "not_installed": 0,
+   "unknown": 813,
+   "guarded": 4,
+   "exists": 7706,
+   "files": 71
+  },
+  "absent_after": [
+   [
+    "starlette/middleware/sessions.py:8:8",
+    "itsdangerous"
+   ],
+   [
+    "starlette/middleware/sessions.py:9:6",
+    "itsdangerous.exc"
+   ]
+  ],
+  "seconds": 28.5
+ },
+ "clean_sets": [
+  {
+   "set": "Verinoda's own package (this branch)",
+   "env": "Verinoda's .venv (--env)",
+   "summary": {
+    "sites": 47596,
+    "absent": 0,
+    "not_installed": 1,
+    "unknown": 13922,
+    "guarded": 58,
+    "exists": 33615,
+    "files": 161
+   },
+   "elapsed_s": 377.8,
+   "absent": [],
+   "not_installed": [
+    "verinoda/benchmark/llm.py:86:12 anthropic"
+   ]
+  },
+  {
+   "set": "Graphify (upstream-graphify)",
+   "env": "Verinoda's .venv (--env)",
+   "summary": {
+    "sites": 51943,
+    "absent": 0,
+    "not_installed": 2,
+    "unknown": 19150,
+    "guarded": 58,
+    "exists": 32733,
+    "files": 388
+   },
+   "elapsed_s": 777.0,
+   "absent": [],
+   "not_installed": [
+    "tests/test_manifest_tomli_required.py:64:12 tomli",
+    "tests/test_watch.py:4111:10 watchdog"
+   ]
+  },
+  {
+   "set": "Graphify (upstream-graphify)",
+   "env": "none (standard library only)",
+   "summary": {
+    "sites": 51841,
+    "absent": 0,
+    "not_installed": 278,
+    "unknown": 22828,
+    "guarded": 121,
+    "exists": 28614,
+    "files": 388
+   },
+   "elapsed_s": 667.3,
+   "absent": [],
+   "not_installed": [
+    "graphify/_minhash.py:17:8 numpy",
+    "graphify/affected.py:9:8 networkx",
+    "graphify/affected.py:297:10 networkx.readwrite",
+    "graphify/analyze.py:4:8 networkx",
+    "graphify/benchmark.py:4:8 networkx"
+   ]
+  },
+  {
+   "set": "json, email, http, pathlib copied as a project",
+   "env": "none (standard library only)",
+   "summary": {
+    "sites": 5210,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 1370,
+    "guarded": 0,
+    "exists": 3840,
+    "files": 40
+   },
+   "elapsed_s": 80.0,
+   "absent": [],
+   "not_installed": []
+  }
+ ]
+}

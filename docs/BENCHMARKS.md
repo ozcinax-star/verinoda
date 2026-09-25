@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -242,6 +242,288 @@ the 2,305-file repository, while the test suite ran: names found nowhere 290-560
 the `test` package (611 modules) reads the package under the 2 s limit and answers in 2.0-2.1 s,
 "not checked" when the limit runs out first (before: "absent" after 1.7-7.4 s, over the limit).
 In-sample: the rules were written after seeing these sentences.
+
+## Update 2026-09-25: name check, third review round
+
+A second reviewer reported nine findings (one high, six medium, two low). Each was reproduced on the
+branch and fixed (docs/DESIGN.md D32):
+
+- **High: removed names reported as existing.** `collections.Mapping`, `from collections import
+  Iterable` and 11 more collections ABCs removed in Python 3.10 were `exists` (exit 0). jedi followed
+  the typeshed stub's own `from collections.abc import ...` to `typing.py`. For a closed
+  standard-library module the interpreter's names are now complete: of 1,732 names that stubs import
+  for their annotations and the running module lacks, 0 are `exists` (13 before) and 0 are `absent`.
+- **MCP `env` started a program from the checked repository** (a `pyvenv.cfg` home inside the project,
+  or an interpreter path). It is now refused, and nothing is started. The note for a `.venv` that was
+  not used names the program `--env` would start. Before, the note said "pass --env .venv to trust it".
+- **False `absent` for attributes that a descriptor or property sets on the instance by computed name**
+  (the lazy_property recipe; 3 probes). They are `unknown` now. Standard `property`,
+  `functools.cached_property` and a wrapper that only calls the method keep the instance closed.
+- **False `absent` for `sys.path += [...]`, `sys.path[:0] = ...`, `import sys as _s` and `from sys import
+  path`** in a `conftest.py` or in the checked file (4 forms). They are `unknown` now.
+- **Stale cache after a `conftest.py` or pytest's `pythonpath` changed** (4 cases). Each is now a miss
+  with the fresh answer, also in a long-lived process.
+- **`--diff` silently checked nothing** under `diff.mnemonicPrefix` or `diff.dstPrefix`, or with
+  `--repo` in a subdirectory. It now checks these files.
+- **`api` said "not found" (exit 3) for names it did not decide.** Examples:
+  `concurrent.futures.ProcessPoolExecutor`, `os.environ.copy`. These are now `found: null`,
+  `decided: unknown`, exit 0.
+
+Also fixed while checking: a local bound to a literal (`d = {}`) or an instance without a `__dict__`
+(`collections.deque`) is closed. Constructor keywords are judged against the class object, so
+`threading.Thread(deamon=True)` is `absent`. A standard-library name that the module's own source binds
+only on another platform is `unknown` (`subprocess.select` on Windows was `absent`). A class whose
+base is a call (`class P(namedtuple(...))`) crashed the check; it is `unknown` now. One failing site no
+longer stops the check; it is listed under `incomplete`. The one open low finding is not fixed:
+verdicts that change between runs. jedi raises inside its own inference for some names, depending on
+set order. The site is then `unknown` instead of `exists`, never `absent`, and the reason now says so.
+
+Result files are in `benchmarks/results/codecheck-review3-2026-09-25/`. Windows 11, Python 3.12.0,
+jedi 0.20.0.
+
+| set | environment | sites | absent (false) |
+|---|---|---|---|
+| reviewer probes of real idioms, plus 26 invented names | none | 352 | 23 (0) |
+| reviewer sweeps: stdlib, third-party, compiled stubs | none / Verinoda's `.venv` | 19,666 | 0 |
+| second reviewer's probes (removed names, descriptors, conftest, locals), plus 44 invented | none / `.venv` | 703 | 29 (0) |
+| fixer's descriptor and decorator probes (5 real, 3 invented) | none | 28 | 3 (0) |
+| first round's smaller probe projects | none / a project `.venv` | 104 | 0 |
+| click, pluggy, h11, starlette (chosen by a reviewer) | Verinoda's `.venv` | 8,525 | 2 (0) |
+
+- The 2 absents in the four packages are right: `itsdangerous` is not installed. Their `unknown` count
+  went from 813 to 737.
+- Invented names decided `absent` on the second reviewer's probes: 11/31 missed before, 10/31 now;
+  on the local-instance probes 6/7 missed before, 3/7 now.
+
+**Fixture** (144 probes, runtime oracle, in-sample): every probe gets the same verdict and the same
+nearest names as in the second round.
+
+| measure | result | bar |
+|---|---|---|
+| precision of `absent` | 74/74 | |
+| recall on closed containers | 74/74 | ≥ 0.9 |
+| invented names decided | 74/79 | |
+| intended name in the nearest three | 24/26 | |
+| warm check | 0.31 s per 100 sites | |
+| `check --diff`, 30 changed lines, fresh process | median 1.07 s (1.05-1.11 s, 5 runs) | 1.5 s |
+
+The two versions also took turns on the same 30 changed lines, 7 runs each, on an idle machine. The
+median was 1.17 s for the code this round started from and 1.19 s for this code. Reading all 145 files
+from the disk cache took 0.59 s (0.37 s in the second round): each answer now also depends on the
+`conftest.py` files above its file.
+
+**Clean sets** (every site real; the times are noisy because other runs shared the machine):
+
+| body | environment | sites | absent | not_installed | guarded | unknown | time |
+|---|---|---|---|---|---|---|---|
+| Verinoda's own package | Verinoda's `.venv` | 48,071 | 0 | 1 | 58 | 13,398 (28%) | 321 s |
+| Graphify (a copy) | Verinoda's `.venv` | 51,943 | 0 | 2 | 58 | 19,106 (37%) | 657 s |
+| the same | none | 51,841 | 0 | 276 | 121 | 22,743 (44%) | 588 s |
+| upstream-graphify itself | Verinoda's `.venv` | 51,941 | 0 | 2 | 57 | 19,063 (37%) | 665 s |
+| stdlib `json`, `email`, `http`, `pathlib` as a project | none | 5,210 | 0 | 0 | 0 | 1,289 (25%) | 42 s |
+
+## Update 2026-09-25: name check, second review round
+
+The first round's fixes were made from a shortened copy of the review findings. This round took the
+full list (28 findings from two reviews) and reproduced each one on the branch. 23 were already fully
+fixed. Four were still open, in full or in part, and are fixed now (docs/DESIGN.md D32: Guards,
+Constructors, Cache):
+
+- **The cache kept a stale answer after a re-export in the middle changed.** Example:
+  `pkg/__init__` -> `pkg/api` -> `pkg/old`. It kept a stale `absent`, and in the other direction a
+  stale `exists`. Now every file jedi loaded for an answer is a dependency. A long-lived process (the
+  MCP server) also gave a stale `absent` for a base class reached through a re-export. It now starts
+  other files' jedi scripts afresh on each call.
+- **A standard-library base with no constructor of its own answered for the class.** Example:
+  `class Plugin(abc.ABC, Base)`. `Plugin(name=)` was absent against `ABC()`; now `Base.__init__`
+  answers.
+- **Guards that guard nothing.** A broad `except Exception: raise`, a bare `except: raise`, and
+  `IS_PROD = True` ... `if IS_PROD:` made invented names `guarded` (exit 0). Now they are `absent`.
+  Fallback handlers, specific handlers and flags set by an import test still guard.
+- **"Not found in this project" for a module the project has.** `lib/helpers.py`, not on the assumed
+  search path, is now `unknown`.
+
+The fifth finding (low severity) is half fixed. The reason given for a module-level receiver is now
+correct. The other half is deferred: the project-wide attribute-store rule still hides `json.timeout`
+when some `self.app.timeout = 3` exists. Narrowing it needs the receiver's type, and a wrong narrowing
+would give a false absent. Also new: a file that does not parse is listed under `incomplete`.
+
+Result files are in `benchmarks/results/codecheck-review2-2026-09-25/`. Windows 11, Python 3.12.0,
+jedi 0.20.0. Other runs shared the machine, so the times are noisy.
+
+| set | environment | sites | absent (false) before | after |
+|---|---|---|---|---|
+| reviewer probes of real idioms, plus 26 invented names | none | 352 | 19 (0) | 23 (0) |
+| reviewer sweeps: stdlib, third-party, compiled stubs | none / Verinoda's `.venv` | 19,666 | 0 | 0 |
+| click, pluggy, h11, starlette (chosen by a reviewer) | Verinoda's `.venv` | 8,525 | 2 (0) | 2 (0) |
+
+- Invented names decided `absent` went from 19/26 to 23/26. The 3 left are `unknown`:
+  - a module-level receiver;
+  - a name the project stores elsewhere (the deferred finding);
+  - a C method without a signature.
+- The 2 absents in the four packages are right: `itsdangerous` is not installed.
+
+**Fixture** (144 probes, runtime oracle, in-sample): every probe gets the same verdict and the same
+nearest names as before this round.
+
+| measure | result | bar |
+|---|---|---|
+| precision of `absent` | 74/74 | |
+| recall on closed containers | 74/74 | ≥ 0.9 |
+| invented names decided | 74/79 | |
+| intended name in the nearest three | 24/26 | |
+| warm check | 0.32 s per 100 sites | |
+| `check --diff`, 30 changed lines, fresh process | median 1.33 s (1.30-1.52 s, 5 runs) | 1.5 s |
+
+In a second `--diff` run the two versions took turns under the same load, 7 runs each: the median was
+1.23 s for the code this round started from and 1.23 s for this code.
+
+**Clean sets** (every site real):
+
+| body | environment | sites | absent | not_installed | guarded | unknown | time |
+|---|---|---|---|---|---|---|---|
+| Verinoda's own package | Verinoda's `.venv` | 47,741 | 0 | 1 | 58 | 13,954 (29%) | 369 s |
+| Graphify | Verinoda's `.venv` | 51,943 | 0 | 2 | 58 | 19,150 (37%) | 748 s |
+| the same | none | 51,841 | 0 | 278 | 121 | 22,828 (44%) | 652 s |
+| stdlib `json`, `email`, `http`, `pathlib` as a project | none | 5,210 | 0 | 0 | 0 | 1,359 (26%) | 125 s |
+
+A few `unknown`/`exists` answers in the `email` package change from run to run (12-14 of 5,210
+sites). This is not new: two runs of the code this round started from differ on 12 such sites. Checked
+alone, `_header_value_parser.py` gives the same answers under three hash seeds, so jedi's inference
+seems to depend on the files read before it. None of these sites is ever `absent`.
+
+## Update 2026-09-25: name check after review
+
+Two reviews of `verinoda check` found code execution and false absents. Each finding was reproduced
+first; the fixes are in docs/DESIGN.md D32 (Safety, Still `unknown`, Not closed at all). Result files:
+`benchmarks/results/codecheck-review-2026-09-25/`. Windows 11, Python 3.12.0, jedi 0.20.0; other runs
+shared the machine, so times are noisy.
+
+**Safety (the reviewers' repros, re-run on the fixed code).** Planted code writes a marker file when it
+runs. Before: a `whoami.exe` copied to `.venv/Scripts/python.exe` was started (jedi's `safe=True` is
+true for any file on Windows); a `.pth` import line in the project's `.venv` ran twice per check; a
+package `__init__` ran when jedi read a compiled submodule, in site-packages, in an editable project,
+and inside Verinoda's own process with no `.venv`; `--diff=--output=FILE` emptied FILE (CLI and MCP).
+After: no marker in any of the five cases, the fake interpreter is never started, and the `--diff`
+value is refused. `tests/test_codecheck.py` has these cases (all new tests fail on commit 0bc9616).
+
+**False absents on real code.** Before = the reviewers' result files (commit 0bc9616), after = this
+code on copies of the same files.
+
+| set (written by) | environment | files | sites | false absents before | after |
+|---|---|---|---|---|---|
+| probes of real Python idioms (reviewer 2) | none | 87 | 352 | 25 | 0 |
+| a sweep over standard-library objects (reviewer 2) | none | 253 | 11,367 | 5 | 0 |
+| a sweep over third-party objects (reviewer 2) | Verinoda's `.venv` | 106 | 6,922 | 4 | 0 |
+| compiled modules with stubs: numpy, pydantic_core (reviewer 2) | Verinoda's `.venv` | 14 | 1,377 | 24 | 0 |
+| click, pluggy, h11, starlette, not used before (reviewer 1) | Verinoda's `.venv` | 71 | 8,525 | 5 | 0 |
+
+The 87-file set also has 26 invented names: 19 absent before and after (the other 7 are `guarded` or
+`unknown`, as designed). In the last set 2 absents remain and are right: `itsdangerous` is not
+installed. These sets are in-sample for this round: rules were changed while looking at them.
+
+**The first measurement again.** The fixture set (144 probes, runtime oracle) gives the same verdict
+and the same nearest names on every probe: precision of `absent` 74/74, recall on closed containers
+74/74, 74/79 invented names decided, intended name in the nearest three 24/26, 0 of 65 real sites
+absent. Warm 0.34 s per 100 sites; `check --diff` of 30 changed lines in a fresh process, median
+1.25 s (1.15-1.34 s, 5 runs; bar 1.5 s); the whole probe directory 3.6 s; again from the disk cache
+0.43 s. Clean sets, every site real:
+
+| body | environment checked | files | sites | absent | not_installed | guarded | unknown | time |
+|---|---|---|---|---|---|---|---|---|
+| Verinoda's own package (this branch) | Verinoda's `.venv` (`--env`) | 161 | 47,596 | 0 | 1 | 58 | 13,922 (29%) | 378 s |
+| Graphify | Verinoda's `.venv` | 388 | 51,943 | 0 | 2 | 58 | 19,150 (37%) | 777 s |
+| the same | none (standard library only) | 388 | 51,841 | 0 | 278 | 121 | 22,828 (44%) | 667 s |
+| `json`, `email`, `http`, `pathlib` copied as a project | none | 40 | 5,210 | 0 | 0 | 0 | 1,370 (26%) | 80 s |
+
+The times are 9-45% above the first measurement's on Graphify and the standard-library copy with the
+same number of jedi calls, and 10% below on Verinoda's package: the machine was busy, so no speed
+change is claimed either way. The retrieval benchmark (`fastbench`, the seven public sets and
+`verinoda_user_tr`) gives the same facts as the current main code on all 258 question×approach rows
+(the check changes no index or query code; the private set was not run).
+
+**Not measured.** Linux and macOS (the new tests run in CI there); a `.venv` whose base interpreter is
+managed by uv, pyenv or conda on a real machine (the rule is unit-tested only through Verinoda's own
+interpreter); how often the new `unknown` reasons (stores through parameters, compiled-module stubs)
+hide a real invented name outside the fixture set.
+
+## Update 2026-09-25: name-existence check (`verinoda check`, D32)
+
+`verinoda check` (docs/DESIGN.md D32) was measured on a generated fixture set with a runtime oracle
+and on clean code where every site is real. Windows 11, Python 3.12.0, jedi 0.20.0. The harness
+(probe generator, oracle, scorer, clean-set runner) and the full outputs are outside the repository
+(the builder's scratch directory); the numbers below are copied into
+`benchmarks/results/codecheck-2026-09-25/` (`summary.json`, and `fixture_rows.json` with every probe).
+
+**Fixture set (in-sample: written by the rule author, and the rules were changed while looking at
+it).** A copy of `examples/orders_app` with a project `.venv` (`python -m venv --without-pip`;
+packaging 26.3 and idna 3.20 copied from Verinoda's own venv; a local-only package `fancylib`
+2.1.0), and 144 probe modules with one site each: 79 invented names (near-name renames,
+synonyms, extra keyword arguments, a name imported from the wrong module, missing modules and
+submodules, wrong dict keys; three of them are packages installed next to Verinoda but not in the
+project's `.venv`) and 65 real counterparts (two of them guarded imports). Ground truth: each probe
+module is imported and called with the project's own interpreter in a separate copy
+(`ImportError`, `AttributeError` on the name, `TypeError` about the keyword, `KeyError` on the key =
+absent; anything else = exists). The oracle and the labels agree on every probe.
+
+| metric | design bar | measured |
+|---|---|---|
+| precision of `absent` | ≥ 0.99 | 74/74 |
+| recall of `absent` on invented names in closed containers | ≥ 0.9 | 74/74 |
+| invented names decided `absent` (the rest `unknown` with a reason) | ≥ 0.6 | 74/79 = 0.94 |
+| intended name in the nearest three, near-name renames | ≥ 0.8 | 24/26 = 0.92 |
+| intended name in the nearest three, every mutation with an intended name | - | 48/62 = 0.77 |
+| wrong-module mutations with the defining module under `elsewhere` | - | 3/3 |
+| real sites called `absent` | 0 | 0 of 65 (62 exist, 1 unknown, 2 guarded) |
+| sites judged against Verinoda's own venv while the project has a `.venv` | 0 | 0 |
+| warm, per 100 sites (second in-process run, disk cache off; 364 sites in 145 files) | ≤ 1 s | 0.33 s |
+| `check --diff`, 30 changed lines, fresh process including environment start-up (5 runs) | ≤ 1.5 s | median 1.22 s (1.14-1.33) |
+| whole probe directory, fresh process (3 runs) | - | 3.5-3.6 s |
+| whole probe directory again with the disk cache | - | 0.57 s (145/145 files from the cache) |
+
+The 5 invented names left `unknown` are the designed open cases: `sqlite3.connect_async`
+(Python 3.12's `sqlite3` defines a module `__getattr__`), a local module with `__getattr__`,
+`json.dumps(sorted=True)` (`**kw`), and two parameter receivers (one annotated). The near-name
+misses: `re.matchall` (intended `findall`: no shared part, too many edits) and `p.read_txt` on a
+parameter (unknown, so no nearest names). By kind of mutation: near 25/26, synonym 19/22, kwarg 15/16, wrong module 3/3, missing module 9/9, dict key 3/3 decided absent.
+
+**Clean sets (working code; every site is real, so every `absent` would be false).**
+
+| body | environment checked | files | sites | absent | not_installed | guarded | unknown |
+|---|---|---|---|---|---|---|---|
+| Verinoda's own package (this branch) | Verinoda's `.venv` (`--env`) | 161 | 46,732 | 0 | 1 | 57 | 13,234 (28%) |
+| Graphify (`upstream-graphify`: `graphify/`, `tests/`, `scripts/`, `tools/`) | Verinoda's `.venv` (not its own: lock mismatches are listed) | 388 | 51,943 | 0 | 2 | 58 | 19,197 (37%) |
+| the same | none (standard library only) | 388 | 51,841 | 0 | 279 | 121 | 22,823 (44%) |
+| `json`, `email`, `http`, `pathlib` of the standard library, copied as a project | none (standard library only) | 40 | 5,210 | 0 | 0 | 0 | 1,360 (26%) |
+
+Graphify is only partly unseen: Verinoda's vendored `project_index` derives from it. Every guarded
+site of the Verinoda run whose unguarded verdict was `absent` (8: `yaml`, `botocore`,
+`mcp.server.fastmcp.FastMCP` and `mcp.types.AnyUrl` in mcp 2.2.0) was imported in that venv: all are
+absent at runtime too, and the code handles it. `not_installed` there is `anthropic`, a declared
+extra that is not installed.
+
+Found and fixed by these runs before the numbers above: 5 false absents on Verinoda's package (a
+from-import judged without looking at the module's own names; a `PYTHONPATH` entry taken for the
+standard library - these two are covered by the clean runs only); `robot.py` shadowing the `robot`
+package (the file's own directory was on the search path inside a package); `import jedi`
+"existing" in any environment (jedi's own process has it imported); `os.fork` absent on Windows in
+Unix-only code (`http/server.py`); `os.path` read as module `os`. By reading, not by a run:
+constructor keywords of an `Enum` (`Color(value=1)` goes through the metaclass). The last five have
+unit tests in `tests/test_codecheck.py`.
+
+Why `unknown` is 28-45% of the sites: parameters (`self`, `node`, pytest fixtures), subscripts and
+binary operations as receivers (`tmp_path / "x"`), locals assigned from calls, `**kwargs` callees.
+That is by design: those receivers can hold subclasses or other types, and an agent must read them.
+
+**Other results.** The retrieval sets (`fastbench`, seven public sets and `verinoda_user_tr`) give
+the same facts as the current main code on all 282 set×question×approach rows (`check` changes no
+index or query code; the private set was not run). A whole-package run takes 7 minutes for about
+46,700 sites (jedi is 70% of it; one process, cache off) and grows to about 1 GB of memory.
+
+**Not measured.** Linux and macOS (the unit tests run in CI there); a project environment on
+Python 3.10 or 3.13; large dynamic libraries in user code (numpy, pandas, Django, SQLAlchemy,
+pydantic); agents following the new skill section (no model run); the design's mod and JVM parts
+(config keys, resource ids, jar index - not built).
 
 ## Update 2026-09-25: analyze keeps what query found, grounded verdicts, Turkish, update time
 
