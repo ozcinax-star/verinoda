@@ -475,3 +475,70 @@ def test_the_full_path_runs_when_the_graph_or_a_file_the_record_fingerprints_cha
     _restore(saved, repo)
     full, _ = _update_once(repo, monkeypatch, edit, fast=False)
     assert fast == full
+
+
+@pytest.fixture
+def clean(tmp_path):
+    """orders_app as it is: nothing in graph.json needs a rewrite after a build."""
+    repo = tmp_path / "orders_app"
+    shutil.copytree(EXAMPLE, repo, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc",
+                                                                 ".pytest_cache", "*.db"))
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "init")
+    workflow.init(repo)
+    return repo
+
+
+def test_a_graph_json_the_pipeline_wrote_itself_is_left_to_the_vendored_comparison(
+        clean, tmp_path, monkeypatch):
+    # The vendored fast path keeps such a graph by itself and leaves GRAPH_REPORT.md and the
+    # dated backup as they are; Verinoda's kept path (which rewrites them) is not for this case.
+    repo = clean
+    st = open_store(repo)
+    workflow.scan(st, repo)
+    st.close()
+    ix, gp = index_dir(repo), graph_path(repo)
+    svc = repo / "orders" / "service.py"
+    code, extra = svc.read_bytes(), b"\n\ndef audit_order(order):\n    return order\n"
+
+    # a function added, then removed: each time the graph changes and the full path runs (the
+    # code before this fix left a record after the second that the next update matched)
+    for step in (lambda: svc.write_bytes(code + extra), lambda: svc.write_bytes(code)):
+        before = gp.stat().st_mtime_ns
+        stats = _update_once(repo, monkeypatch, step, fast=True)[1]
+        assert gp.stat().st_mtime_ns != before
+        assert not stats.get("pruned_files") and not stats["portable_ids"]["changed"]
+        assert not (ix / index.REBUILD_RECORD).exists()  # nothing was rewritten: no record
+    saved = tmp_path / "saved"
+    shutil.copytree(repo, saved)
+    before, report = gp.stat().st_mtime_ns, (ix / "GRAPH_REPORT.md").read_bytes()
+
+    def comment():  # no node or edge changes; the corpus's word count does
+        svc.write_bytes(code + b"\n# a comment of a few more words\n")
+
+    fast, fast_stats = _update_once(repo, monkeypatch, comment, fast=True)
+    assert gp.stat().st_mtime_ns == before  # the vendored fast path kept the graph
+    assert "graph_kept" not in fast_stats and fast["GRAPH_REPORT.md"] == report
+    _restore(saved, repo)
+    full, _ = _update_once(repo, monkeypatch, comment, fast=False)
+    assert fast == full
+
+
+def test_a_record_of_a_graph_json_nothing_rewrote_is_not_used(dangling, tmp_path, monkeypatch):
+    repo = dangling
+    svc, saved = _recorded(repo, tmp_path, monkeypatch)
+    rp = index_dir(repo) / index.REBUILD_RECORD
+    rec = json.loads(rp.read_text(encoding="utf-8"))
+    assert rec["rewrote"] is True
+    rp.write_text(json.dumps({**rec, "rewrote": False}), encoding="utf-8")
+    shutil.copy(rp, saved / rp.relative_to(repo))
+
+    def comment():
+        svc.write_bytes(svc.read_bytes().replace(b"# edit ", b"# an edit, longer: "))
+
+    fast, fast_stats = _update_once(repo, monkeypatch, comment, fast=True)
+    assert "graph_kept" not in fast_stats  # the vendored comparison decided: graph.json differs
+    _restore(saved, repo)
+    full, _ = _update_once(repo, monkeypatch, comment, fast=False)
+    assert fast == full

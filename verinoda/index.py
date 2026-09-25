@@ -66,8 +66,8 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     sidecar is refreshed (per-file facts are reused for files whose content did not change).
 
     A build with ``prune_missing`` (``scan``/``update``; not ``force``, not ``changed``) leaves
-    graph.json as it is when the pipeline produced the same graph as the last build and
-    nothing that build left has changed (:class:`_keep_unchanged_graph`; ``graph_kept``).
+    graph.json as it is when the last build rewrote it, the pipeline produced that build's graph
+    again and nothing that build left has changed (:class:`_keep_unchanged_graph`; ``graph_kept``).
     """
     from verinoda.project_index.watch import _rebuild_code
     from verinoda.python_facts import python_facts_cache
@@ -450,7 +450,11 @@ class _keep_unchanged_graph:
     two never compare equal, and every update re-clusters and rewrites a graph that has not
     changed (about a quarter of an update of Verinoda's own repository).
 
-    A build that took the full path and wrote its outputs leaves a record
+    Only such a rewrite needs this. When graph.json is the pipeline's own output (nothing to make
+    portable, nothing pruned) the vendored comparison works as it is and decides alone, leaving
+    the report and backups untouched when it keeps the graph; no record is written then.
+
+    A build that took the full path, wrote its outputs and then rewrote graph.json leaves a record
     (``rebuild_record.json``): a hash of the graph the pipeline built (every node and edge with
     its attributes, in order, and each node's neighbours), the commit, the communities it wrote
     and fingerprints of graph.json, the labels and their signatures as they were left. The record
@@ -513,8 +517,8 @@ class _keep_unchanged_graph:
             except Exception:  # noqa: BLE001 - no key: the full path runs and nothing is recorded
                 self.key = None
                 return raw
-            if not (isinstance(rec, dict) and self._unchanged(rec)):
-                return raw
+            if not (isinstance(rec, dict) and rec.get("rewrote") and self._unchanged(rec)):
+                return raw  # graph.json as the pipeline wrote it: its own comparison decides
             try:
                 written = _as_written(raw, self.repo)
             except Exception:  # noqa: BLE001
@@ -579,7 +583,7 @@ class _keep_unchanged_graph:
     def _as_the_full_path(self, G, rec: dict) -> None:
         """What the vendored full path would still write when the graph and communities are the
         last build's: its report (from the same functions and inputs), the dated backup of a
-        labelled graph when it writes, and ``.graphify_root``."""
+        labelled graph, and ``.graphify_root``."""
         from verinoda.project_index import analyze, report, watch
         from verinoda.project_index import cluster as cl
         from verinoda.project_index.export import backup_if_protected
@@ -604,14 +608,13 @@ class _keep_unchanged_graph:
             suggested_questions=analyze.suggest_questions(G, communities, labels),
             built_at_commit=self.commit,
             learning=report.load_learning_for_report(out / "graph.json"))
+        # graph.json is Verinoda's rewrite, never the candidate the full path compares with it:
+        # the full path always writes, after its backup
+        backup_if_protected(out)
         report_path = out / "GRAPH_REPORT.md"
         old = report_path.read_text(encoding="utf-8") if report_path.exists() else None
-        same_report = (old is not None
-                       and watch._report_for_compare(old) == watch._report_for_compare(text))
-        if rec.get("rewrote") or not same_report:  # the full path writes (after its backup)
-            backup_if_protected(out)
-            if old != text:
-                report_path.write_text(text, encoding="utf-8")
+        if old != text:
+            report_path.write_text(text, encoding="utf-8")
         root_file = out / ".graphify_root"
         if _sha256_bytes(root_file) != hashlib.sha256(str(self.repo).encode("utf-8")).hexdigest():
             root_file.write_text(str(self.repo), encoding="utf-8")
@@ -641,8 +644,8 @@ class _keep_unchanged_graph:
         from verinoda.project_index.cluster import community_member_sigs
         from verinoda.project_index.cluster import remap_communities_to_previous as remap
 
-        if (self.key is None or self.clustered is None or self.written is None
-                or self.before == self.after):  # the full path did not run, or wrote nothing
+        if (not rewrote or self.key is None or self.clustered is None or self.written is None
+                or self.before == self.after):  # nothing rewritten, or the full path wrote nothing
             return None
         communities, labels = self.written
         if not isinstance(labels, dict) or set(labels) != set(communities):
