@@ -86,7 +86,8 @@ def test_judge_never_meets_a_decision_whatever_its_claims():
 def test_a_choice_under_another_intent_is_never_met(orders):
     """R2-5: a plan (a host agent's, or a clause the rules read otherwise) that gives a choice another intent
     keeps its facts as context, but the verdict is the human's; words that only may ask for a choice get a
-    note, never another verdict."""
+    note, and the verdict is at most met_with_inference (review round 3: "what would you pick" is a decide
+    cue now)."""
     repo, st = orders
     plan = qp.draft("What database would you recommend for this app?", None)
     for sq in plan["sub_questions"]:
@@ -95,9 +96,9 @@ def test_a_choice_under_another_intent_is_never_met(orders):
     res = analysis.analyze(st, repo, plan["user_message"], plan=plan, challenge=False)
     assert [s["status"] for s in res["subquestions"]] == [qp.HUMAN_DECISION]
     assert res["subquestions"][0]["intent"] == "dataflow" and res["subquestions"][0].get("decision_brief")
-    maybe = analysis.analyze(st, repo, "What would you pick for caching orders: Redis or a dict?", challenge=False)
-    assert all(s["status"] != qp.HUMAN_DECISION for s in maybe["subquestions"])
-    assert any("may ask for a choice ('pick')" in u["why"] for u in maybe["unknowns"])
+    maybe = analysis.analyze(st, repo, "Which cache suits order lookups best, Redis or a dict?", challenge=False)
+    assert all(s["status"] not in (qp.HUMAN_DECISION, "met") for s in maybe["subquestions"])
+    assert any("may ask for a choice ('best')" in u["why"] for u in maybe["unknowns"])
 
 
 def test_a_compound_question_keeps_its_code_part_answerable(orders):

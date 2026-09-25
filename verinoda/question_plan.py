@@ -322,6 +322,9 @@ _TECH = (r"(?:sqlite\w*|postgres\w*|mysql|mariadb|mongo\w*|redis|memcached|duckd
 _CODE_NOUN_EN = (r"(?:functions?|methods?|class(?:es)?|files?|modules?|commands?|subcommands?|tests?|lines?|"
                  r"variables?|endpoints?|fields?|arguments?|args?|parameters?|values?|settings?|flags?|paths?|"
                  r"ports?|keys?|options?|scripts?|branch(?:es)?|names?|imports?|hooks?|tools?|env)")
+# configuration the code states: "which Python version / database URL should I use" asks what the project
+# uses ("which Django version should we move to" still asks for a choice)
+_CONFIG_NOUN_EN = r"(?:versions?|urls?|uris?|dsns?|director(?:y|ies)|folders?|encodings?|interpreters?|locales?)"
 _CHOICE_VERB_EN = (r"(?:use|switch|move|migrate|adopt|choose|pick|select|go with|replace|keep|stay|drop|introduce|"
                    r"add|split|merge|rewrite|port|upgrade|downgrade|prefer|standardi[sz]e|extract|separate|"
                    r"consolidate)")
@@ -338,7 +341,9 @@ DECIDE_STRONG_EN = [
     r"|\bdoes it make sense to\b|\bmakes? (?:more )?sense to\b|\bwhich (?:one )?is better\b",
     # "which X should we pick" (not "which function / value should I ...": the head noun is not code)
     r"\b(?:which|what) (?:[\w'-]+ ){0,2}(?!" + _CODE_NOUN_EN + r"\b)[\w'-]+ (?:should|shall) (?:we|i) "
-    r"(?:use|choose|pick|select|adopt|go with|prefer|switch to|move to|migrate to|standardi[sz]e on)\b",
+    r"(?:choose|pick|select|adopt|go with|prefer|switch to|move to|migrate to|standardi[sz]e on)\b",
+    r"\b(?:which|what) (?:[\w'-]+ ){0,2}(?!(?:" + _CODE_NOUN_EN + "|" + _CONFIG_NOUN_EN + r")\b)[\w'-]+ "
+    r"(?:should|shall) (?:we|i) use\b",
     r"\b(?:should|must|shall|let's|lets|help (?:me|us)(?: to)?|(?:we|i) (?:need|have|want|ought) to|how (?:should|"
     r"shall) (?:we|i)) (?:choose|pick|select|decide) (?:between|among|whether|if|on|which)\b",
     r"\bwhat should (?:our|my|the) [\w' -]{1,40}? be\b",
@@ -346,6 +351,10 @@ DECIDE_STRONG_EN = [
     r"\bbest (?:way|approach|option|strategy) (?:to|for) (?:scale|scaling|store|storing|persist|deploy|host|structure|"
     r"organi[sz]e|split|migrate|cache|caching|queue)\b",
     r"\b(?:enough|sufficient) for (?:us|our|this|the (?:project|app|shop|team|load)|production|now)\b",
+    # added after review round 3 (its 20 held-out choice questions are in-sample now)
+    r"\bwould you (?:pick|choose|use|go with|prefer)\b|\bget away with\b|\bright (?:time|moment) (?:to|for)\b"
+    r"|\bworth (?:the (?:effort|cost|trouble|risk|switch|move|migration)|it)\b|\bfits? (?:best|better)\b"
+    r"|\bbest fit\b|\b(?:keep|stay with) (?:[\w'-]+ ){0,4}?or (?:replace|switch|move|migrate|drop|rewrite)\b",
 ]
 DECIDE_EN = [
     # a clause that opens with "should": "should the key binding stay in ...", "should pricing be deployed ..."
@@ -380,6 +389,8 @@ DECIDE_STRONG_TR = [
     r"\btercih et(?:meli|elim|memiz|mek)\w*",
     # growing the system, in the first person or with a modal: "nasıl büyütürüz", "ölçeklendirmeliyiz"
     r"\b(?:buyut|olcekle|olceklendir)\w*(?:uz|iz|elim|alim|meli\w*|mali\w*)\b",
+    # added after review round 3: "... başlasak iyi olur mu", "taşınmanın tam zamanı mı"
+    r"\biyi olur mu\b|\b(?:tam|dogru|uygun) zamani m[iu]\b",
 ]
 DECIDE_TR = [
     r"\b\w{2,}m[ae]li\s+m[iu](?:y[iu]z|y[iu]m|s[iu]n|s[iu]n[iu]z)?\b|\b\w{2,}m[ae]l[iu]y[iu]z\b",
@@ -417,7 +428,8 @@ _TR_RX = {k: [(re.compile(p), s) for p, s in v] for k, v in TR_CUES.items()}
 EN_INTERROGATIVES = frozenset("what where which how why who whom whose when does do is are can should could would "
                               "will did was were".split())
 TR_INTERROGATIVES = frozenset("ne neyi neler nedir nerede nereye nereden neresi hangi hangisi hangileri nasil neden "
-                              "nicin niye kim kimi kime kimin mi mu midir mudur".split())
+                              "nicin niye kim kimi kime kimin mi mu midir mudur miyim miyiz misin misiniz muyum "
+                              "muyuz musun musunuz miydi muydu".split())
 EN_ANAPHORS = frozenset("it its this that these those they them their".split())
 TR_ANAPHORS = frozenset("bunu onu sunu bunlar onlar bunlari onlari sunlari bunun onun sunun buna ona suna bu su o "
                         "bunda onda".split())
