@@ -34,8 +34,10 @@ otherwise one drafted by rules. Order of work (cheapest reliable tool first):
     counter-probe refutes a listed test is superseded by a corrected claim
  8. each sub-question is judged against its ``done_when``: ``met``,
     ``met_with_inference``, ``unmet``, ``not_supported`` or
-    ``blocked_by_clarification``; :func:`audit` recomputes the verdicts later
-    and marks a sub-question ``stale`` when a claim it relies on went stale
+    ``blocked_by_clarification``; a choice between options (intent ``decide``)
+    is always ``human_decision_required`` (docs/DESIGN.md D33); :func:`audit`
+    recomputes the verdicts later and marks a sub-question ``stale`` when a
+    claim it relies on went stale
 
 A :class:`Budget` bounds wall time (index refresh and experiments included),
 tool calls and returned context. Every claim, unknown, step and critique entry
@@ -79,10 +81,11 @@ SUBQUESTIONS = {
     "impact": "what does a change here affect?",
     "behaviour": "does the code behave as the question states?",
     "compare_reference": "how does it differ from the referenced version?",
+    "decide": "which option should be chosen (a human decision)?",
 }
 # plan intent -> the legacy name kept in the ``intents`` output field
 LEGACY_INTENT = {"locate": "location", "define": "location"}
-LEGACY_ORDER = ("why", "flow", "dataflow", "config", "tests", "impact", "location", "callers", "behaviour",
+LEGACY_ORDER = ("decide", "why", "flow", "dataflow", "config", "tests", "impact", "location", "callers", "behaviour",
                 "history", "compare_reference", "performance", "architecture", "usage")
 RELEVANCE_MIN = 0.25        # share of the grounded question words an item must carry
 JAVA_BOUND = re.compile(r"\((imported|same package|fully qualified|imported with \*)\)$")
@@ -1751,6 +1754,19 @@ def _h_compare(ctx: _Ctx, sub: _Sub) -> None:
                                          + (f" at {spec}" if spec else "") + " and `verinoda compare`"})
 
 
+def _h_decide(ctx: _Ctx, sub: _Sub) -> None:
+    """A choice between options (docs/DESIGN.md D33). Verinoda does not choose: the verdict is
+    ``human_decision_required`` and what is returned is what the human decides with."""
+    sub.flags["human_decision"] = True
+    _unknown(ctx, sub, {"question": sub.sq.get("text") or SUBQUESTIONS["decide"],
+                        "why": "this asks for a choice between options; Verinoda does not choose, the human "
+                               "decides (load, growth, hosting, budget and team facts are not in the code)",
+                        "next_step": "collect what the code says for the decision - storage and configuration "
+                                     "sites (`verinoda map --view dataflow`, `--view config`), existing decision "
+                                     "records (`--view history`) and what a change would touch (`--view impact`) - "
+                                     "then ask the user"})
+
+
 def _h_unsupported(ctx: _Ctx, sub: _Sub) -> None:
     sub.flags["not_supported"] = f"no dedicated handler for '{sub.sq['intent']}'"
     _unknown(ctx, sub, {"question": sub.sq.get("text") or sub.sq["intent"],
@@ -1763,7 +1779,7 @@ HANDLERS = {
     "locate": None, "define": None, "flow": _h_flow, "dataflow": _h_dataflow, "callers": _h_callers,
     "config": _h_config, "tests": _h_tests, "why": _h_why, "history": _h_why, "impact": _h_impact,
     "behaviour": _h_behaviour, "compare_reference": _h_compare, "performance": _h_unsupported,
-    "architecture": _h_unsupported, "usage": _h_unsupported,
+    "architecture": _h_unsupported, "usage": _h_unsupported, "decide": _h_decide,
 }
 SECONDARY_OK = {"flow", "dataflow", "config", "tests", "why", "impact", "callers"}
 
@@ -1840,7 +1856,12 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
                                    "analysed",
                             "next_step": "read that version with `verinoda research <repository> --ref <version>` "
                                          "(or `verinoda resolve` the reference first)"})
-    required_unlinked = [lk for lk in links if lk["status"] == "unlinked"
+    if sq["intent"] == "decide":
+        # a choice: the options it names need not exist in the code (an option absent from the repository is
+        # expected), so no retrieval, no "words occur nowhere" unknown - the decision handler answers
+        _h_decide(ctx, sub)
+        return _finish_sub(ctx, sub, out, "decide")
+    required_unlinked =[lk for lk in links if lk["status"] == "unlinked"
                          and mentions.get(lk["mention"], {}).get("required", True)]
     usable = [lk for lk in links if lk["status"] in ("linked", "weak", "ambiguous")]
     for u in ctx.check.get("unknowns") or []:
@@ -1991,11 +2012,14 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
     only at a weaker level, or only about code ranked near the subject rather than
     the subject itself (``flags["off_subject"]``: context claims for other symbols);
     ``unmet``: none (stale, contradicted and unknown claims never count); ``not_supported`` / ``blocked_by_clarification`` come
-    from the handler.
+    from the handler. A ``decide`` sub-question is ``human_decision_required`` whatever its claims say:
+    a choice between options is never ``met`` by evidence (docs/DESIGN.md D33).
     """
     flags = flags or {}
     if flags.get("blocked"):
         return "blocked_by_clarification"
+    if sq.get("intent") == "decide":
+        return qp.HUMAN_DECISION
     kind, min_status, kinds = _verdict_kinds(sq)
     live = [c for c in claims if c.get("kind") in kinds and c.get("status") in _RANK and c["status"] != "unknown"]
     off = set(flags.get("off_subject") or [])

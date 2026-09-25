@@ -51,6 +51,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D28 | Runtime observation | implemented | CLI `observe` and `analyze --observe`, MCP `runtime_observe`. Deviations: overhead is 1.39× CPU (median) on 533 Graphify tests, against the research's 1.23×, because boundary calls are recorded and the trace is written inside the timed window. The `setprofile` fallback costs about 4.5× and was only forced on CPython 3.12. Child processes are not traced. The container path has not been run against a real docker/podman. The observed-edge retrieval channel is not built. |
 | D29 | Precise resolution | implemented | `verinoda[precise]` (jedi), `resolve-call`, `scan --precise`, `scan --scip FILE`, MCP `resolve_call`, per-analysis budget. Stricter than the research: a method called on a parameter or local receiver is `dynamic`, never definitive. SCIP is used for non-Python files only. |
 | D30 | Measurement harness | implemented | `verinoda benchmark staleness replay\|mutations` and `verinoda benchmark critique-eval`. The replay samples claims whose evidence is in modified files; incoming relations from unchanged files are not sampled. |
+| D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`. Not built yet: decision records, guards and `decide check`, the decision brief (section 6). Intent routing: 24 written questions 24/24 (in-sample); two held-out sets of 10, each measured once with frozen rules: precision 1.00 and recall 0.40 on both (the first set's misses were then fixed, so it is in-sample now). |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -609,6 +610,36 @@ catches the benchmark's wrong finding in 6 ms.
    version-bound variants, budget sweeps, and the staleness and critique
    harnesses. Numbers are published only from result files.
 4. **Adversarial acceptance audit:** fix what it finds, then push.
+
+## 6. Decisions the human makes (D33)
+
+**Finding.** A question about a future choice ("should we move orders from
+SQLite to PostgreSQL if traffic grows?", "hangi veritabanını seçmeliyiz?") was
+read as a flow or dataflow question and came back `met`, with path claims that
+do not answer it. Nothing enforced a recorded decision either: a new module
+calling `sqlite3.connect` passed `notes`, `challenge` and `verify`.
+
+**D33.** Verinoda never chooses. For a decision it collects evidence, asks,
+records what the human chose and checks the code against it.
+
+- *Intent.* `decide` is a plan intent (EN: "should we/I", "which X should we
+  pick", migrate, scale, load growth, "is it worth"; TR: seçmeli-, seçelim,
+  hangisini kullan/seç, büyüt-, ölçekle-, "-meli miyiz", "-malıyız", the
+  optative "-alım/-elim" in a question, "sayısı artarsa"). It outranks every
+  other intent in a clause. Its `done_when` kind is `decision_brief` and its
+  verdict is always `human_decision_required` (`question_plan.HUMAN_DECISION`),
+  never `met`, whatever claims exist. analyze runs no retrieval for it (the
+  options a decision names need not exist in the code, so "these words occur
+  nowhere" is not reported) and routes it to the decision handler.
+- *What stays human:* choosing between options; load, growth, SLO, budget,
+  hosting, team and compliance facts; whether a guard proposed from prose means
+  what the record meant; waivers; superseding a decision.
+- *Limits.* The cue tables are written by the rule author. On two held-out sets
+  of 10 questions (written and hashed before the rules they measured) the
+  frozen rules had precision 1.00 and recall 0.40 each: decisions are phrased in
+  many ways the tables do not know ("would Redis be a better fit", "geçsek mi",
+  "is SQLite enough for us"). A host agent that writes the plan can set the
+  intent itself; the rules are the fallback.
 
 ## Sources
 

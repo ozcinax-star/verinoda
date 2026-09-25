@@ -104,7 +104,8 @@ For any question that is more than a name lookup, check your reading before anal
 5. `verinoda analyze --plan <file> --json` (MCP `analyze` with `plan_json`).
 6. Start the answer with "Understood as / Anladığım: ..." (`understood_as`), then one block per
    sub-question with its verdict (`met`, `met_with_inference`, `unmet`, `not_supported`,
-   `blocked_by_clarification`) and its claims and unknowns.
+   `blocked_by_clarification`, `human_decision_required`) and its claims and unknowns.
+   `human_decision_required` is a choice between options: never pick one yourself.
 
 ## References the user gives
 

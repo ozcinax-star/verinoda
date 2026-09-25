@@ -67,9 +67,12 @@ CHECK_SCHEMA_ID = "verinoda.plan_check/1"
 DRAFT_RULES = "question_plan.draft/1"
 
 INTENTS = ("locate", "define", "flow", "callers", "dataflow", "config", "tests", "why", "history", "impact",
-           "behaviour", "compare_reference", "performance", "architecture", "usage")
+           "behaviour", "compare_reference", "performance", "architecture", "usage", "decide")
 DONE_KINDS = ("location_verified", "path_found", "set_enumerated", "claim_exists", "decision_found",
-              "proposition_checked", "reference_pinned", "comparison_done")
+              "proposition_checked", "reference_pinned", "comparison_done", "decision_brief")
+# A sub-question Verinoda must not settle (docs/DESIGN.md D33): a choice between options is the human's.
+# Its verdict is always this, never met.
+HUMAN_DECISION = "human_decision_required"
 LIMITS = {"sub_questions": 6, "mentions": 20, "references": 10, "candidates": 5}
 THRESHOLDS = {"link": 0.70, "weak": 0.40, "margin": 0.15, "fuzzy": 90, "did_you_mean": 85,
               "max_clarifications": 3}
@@ -97,6 +100,8 @@ DEFAULT_DONE: dict[str, tuple[str, str, str]] = {
     "performance": ("claim_exists", "strong_inference", "code that determines the cost, with file:line"),
     "architecture": ("claim_exists", "strong_inference", "the modules and their dependencies"),
     "usage": ("claim_exists", "strong_inference", "an entry point or example showing the use"),
+    "decide": ("decision_brief", "strong_inference", "the forces from the code, what is absent, existing decisions "
+               "and the questions only the human can answer; the choice stays with the human"),
 }
 INTENT_DONE_OK: dict[str, frozenset[str]] = {
     "locate": frozenset({"location_verified", "claim_exists"}),
@@ -114,12 +119,13 @@ INTENT_DONE_OK: dict[str, frozenset[str]] = {
     "performance": frozenset({"claim_exists"}),
     "architecture": frozenset({"claim_exists"}),
     "usage": frozenset({"claim_exists", "location_verified"}),
+    "decide": frozenset({"decision_brief"}),
 }
 INTENT_NAMES_TR = {
     "locate": "konum", "define": "tanım", "flow": "akış", "callers": "çağıranlar", "dataflow": "veri yolu",
     "config": "yapılandırma", "tests": "testler", "why": "gerekçe", "history": "geçmiş", "impact": "etki",
     "behaviour": "davranış", "compare_reference": "karşılaştırma", "performance": "performans",
-    "architecture": "mimari", "usage": "kullanım",
+    "architecture": "mimari", "usage": "kullanım", "decide": "karar",
 }
 
 # -- schema ---------------------------------------------------------------------------------------
@@ -247,6 +253,32 @@ EN_CUES: dict[str, list[str]] = {
     "define": [r"\bwhat (is|are)\b", r"\bmeans?\b", r"\bmeaning\b", r"\bwhat does .+ do\b", r"\bpurpose of\b"],
     "usage": [r"\bhow (do|can|should) (i|we|you) (use|call|run|configure)\b", r"\bexamples?\b", r"\busage\b"],
     "architecture": [r"\barchitecture\b", r"\boverview\b", r"\bstructure\b", r"\blayers?\b"],
+    # A choice the human makes (docs/DESIGN.md D33): "should we ...", "which X should we pick", migrating,
+    # scaling, load growth. "which function should I call" is a usage question, not a decision.
+    "decide": [
+        # a clause that opens with "should": "should we ...", "should the key binding stay in ..."
+        r"(?:^|[,;:(]\s*|\b(?:or|and|so|then|now|also)\s+)(?:should|shall) [\w.`'-]+\b"
+        r"(?! (?:call|invoke|run|import|pass|look|see|read|check|expect)\b)",
+        r"\bis it time to\b|\bdo we (?:really |still )?need (?:a|an|another|more|to (?:add|introduce|switch|move|"
+        r"migrate|split|replace))\b|\bor (?:just )?(?:keep|stay with|leave)\b",
+        r"\bshould (?:we|i) (?:(?:still|rather|instead|now|also) )?(?:use|switch|move|migrate|adopt|choose|pick|"
+        r"select|go with|replace|keep|stay|drop|introduce|add|split|merge|rewrite|port|upgrade|downgrade|prefer|"
+        r"standardi[sz]e|extract|separate|consolidate)\b",
+        r"\b(?:which|what) (?!(?:functions?|methods?|class(?:es)?|files?|modules?|commands?|tests?|lines?|"
+        r"variables?|endpoints?|fields?|arguments?|parameters?|values?)\b)(?:[\w-]+ ){0,2}(?:should|shall) "
+        r"(?:we|i) (?:use|choose|pick|select|adopt|go with|prefer|switch to|move to|migrate to|standardi[sz]e on)\b",
+        # we/I choose or decide; "where does the code decide whether ..." is a question about code
+        r"\b(?:we|i|to|should|must|can|could|help (?:me|us)) (?:choose|pick|select|decide) "
+        r"(?:between|among|whether|if|on|which)\b",
+        r"\bmigrat(?:e|ing) (?:[\w-]+ ){0,4}?(?:from|to|off|away)\b",
+        r"\bhow (?:will|would|can|could|should|do we|does it|would it|will it) (?:[\w'-]+ ){0,8}?scale\b(?! with\b)",
+        r"\bscalab\w*|\bscale (?:up|out|horizontally|vertically|beyond)\b|"
+        r"\b(?:will|would|does|can) (?:it|this|that|the \w+) scale\b(?! with\b)",
+        r"\b(?:if|when|as|once) (?:the |our )?(?:traffic|load|users?|orders?|data|volume|requests?|writers?|"
+        r"customers?|players?|number of [\w-]+) (?:[\w-]+ ){0,2}?(?:grows?|grew|increases?|doubles?|spikes?)\b",
+        r"\bis it worth\b|\bwould it be better\b|\bis it better to\b|\bdoes it make sense to\b|\ba good idea\b|"
+        r"\bpros and cons\b|\btrade-?offs?\b|\bwhich (?:one )?is better\b",
+    ],
 }
 # Weak cues count only when no other cue fires in the clause.
 EN_WEAK: dict[str, list[str]] = {}
@@ -290,10 +322,24 @@ TR_CUES: dict[str, list[tuple[str, bool]]] = {
                (r"\bne demek\w*", False), (r"\banlami\w*", False)],
     "usage": [(r"\bnasil kullan\w*", False), (r"\bornek\w*", False), (r"\bkullanim\w*", False)],
     "architecture": [(r"\bmimari\w*", False), (r"\bgenel bakis\w*", False), (r"\bkatman\w*", False)],
+    # seçmeli-, seçelim, hangisini kullan/seç, büyüt-, ölçekle-, -meli miyiz / -malıyız, the optative
+    # "-(y)alım/-(y)elim" in a question ("mı toplayalım yoksa ..."), load growth ("sayısı artarsa")
+    "decide": [(r"\bsecmeli\w*|\bsecelim\b|\bsecmemiz (?:gerek|lazim)\w*", False),
+               (r"\bhangisini (?:kullan|sec|tercih)\w*|\bhangisi daha iyi\b", False),
+               (r"\bbuyut\w*|\bolcekle\w*|\bolceklen\w*", False),
+               (r"\b\w{2,}m[ae]li\s+m[iu](?:y[iu]z|y[iu]m|s[iu]n|s[iu]n[iu]z)?\b|\b\w{2,}m[ae]l[iu]y[iu]z\b", False),
+               (r"\b(?!(?:bakalim|gorelim|gelelim|diyelim|anlayalim)\b)\w{2,}(?:y?alim|y?elim)\b"
+                r"(?=[^.!]*(?:\?|\bm[iu]\b|\byoksa\b))|\b(?:hangi|m[iu])\b[^.!?]*"
+                r"\b(?!(?:bakalim|gorelim|gelelim|diyelim|anlayalim)\b)\w{2,}(?:y?alim|y?elim)\b", False),
+               (r"\b(?:siparis|trafik|yuk|kullanici|istek|veri|oyuncu|musteri)\w* (?:\w+ ){0,2}?"
+                r"(?:artarsa|artinca|buyurse|buyuyunce|katlanirsa)\b", False),
+               (r"\bdeger mi\b|\bdaha iyi olur\w*|\bmantikli\w*|\bartilari\w*|\bavantajlari\w*|"
+                r"\btercih et(?:meli|elim)\w*", False)],
 }
-# Primary-intent precedence when a clause carries several cues.
-PRIORITY = ("callers", "performance", "why", "history", "impact", "tests", "compare_reference", "config", "usage",
-            "flow", "behaviour", "locate", "dataflow", "define", "architecture")
+# Primary-intent precedence when a clause carries several cues. A choice (decide) outranks everything:
+# "should we move X from A to B" is a decision, not a flow question.
+PRIORITY = ("decide", "callers", "performance", "why", "history", "impact", "tests", "compare_reference", "config",
+            "usage", "flow", "behaviour", "locate", "dataflow", "define", "architecture")
 _EN_RX = {k: [re.compile(p) for p in v] for k, v in EN_CUES.items()}
 _EN_WEAK_RX = {k: [re.compile(p) for p in v] for k, v in EN_WEAK.items()}
 _TR_WEAK_RX = {k: [re.compile(p) for p in v] for k, v in TR_WEAK.items()}
