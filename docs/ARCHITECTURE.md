@@ -10,7 +10,7 @@ The design decisions (D1-D30) and their implementation status are in
 [DESIGN.md](DESIGN.md). Measured results are in [BENCHMARKS.md](BENCHMARKS.md).
 
 ```
-             verinoda CLI (cli.py)              MCP server (mcp/server.py, 23 tools)
+             verinoda CLI (cli.py)              MCP server (mcp/server.py, 24 tools)
                          \                        /
                           \   same core functions /
   workflow.py (init / scan / update / verify)    analysis.py (budgeted loop per question plan)
@@ -25,7 +25,7 @@ The design decisions (D1-D30) and their implementation status are in
   snapshot.py (stat-cached hashes, git state)        v
                                    claims.py <- entail.py, evidence.py, anchors.py
                                    critique.py (probes, definitive vs heuristic refutation)
-                                   store.py (SQLite atlas.db, schema v4, append-only)
+                                   store.py (SQLite atlas.db, schema v5, append-only)
   research.py / feedback.py / memory.py / experiments.py
 ```
 
@@ -62,7 +62,7 @@ The design decisions (D1-D30) and their implementation status are in
 
 | Module | Role |
 |---|---|
-| `store.py` | SQLite `atlas.db`, schema v4 (migrations v1-v4 applied in order; a newer database is refused). Tables: snapshots and files, claims, evidence, claim-evidence links (with evidence group `grp`), append-only claim history, feedback, experiments, research, memory, analyses, question plans, claim dependencies, evidence locations, runtime runs and calls, reference resolutions. Derived caches: `file_facts`, `resolutions`, `file_stat`. Triggers reject deletes on every audited table, updates of history, links, plan bodies, evidence locations and reference resolutions, and (v4) any change to a claim's `text` or `created_at`. |
+| `store.py` | SQLite `atlas.db`, schema v5 (migrations v1-v5 applied in order; a newer database is refused). Tables: snapshots and files, claims, evidence, claim-evidence links (with evidence group `grp`), append-only claim history, feedback, experiments, research, memory, analyses, question plans, claim dependencies, evidence locations, runtime runs and calls, reference resolutions, and (v5) the decision log, decision briefs and the user's answers to them. Derived caches: `file_facts`, `resolutions`, `file_stat`. Triggers reject deletes on every audited table, updates of history, links, plan bodies, evidence locations, reference resolutions, the decision log, briefs and answers, and (v4) any change to a claim's `text` or `created_at`. |
 | `evidence.py` | Evidence construction and re-checking. Source ranks run from 1 (project source) to 7 (secondary). `static_resolution` has rank 2. `graph_edge`, `user_feedback`, `search_result`, `model_summary` and `secondary` never verify. `user_feedback`, `search_result` and `model_summary` are not even support for an inference. Cited lines carry an anchor, so `check_source()` tells `same` / `moved` / `changed` / `gone` / `ambiguous` apart. Markdown lines are `design_doc`. |
 | `anchors.py` | Symbol facts cached by file sha256 (D23): per-definition signature, body (docstring removed, nested definitions Merkle-hashed) and doc hashes; per-file import bindings, module statements and Markdown sections. Python uses its own AST serializer (not `ast.dump`); other languages hash tree-sitter leaf sequences. Evidence anchors (D25) and `relocate()`: a `changed` anchor is a candidate location only, never verification. An unsupported file has no facts, and callers fall back to file level. |
 | `entail.py` | Mechanical entailment grades `full` / `partial` / `none` per claim kind (D26). Relation: an AST call at the cited line inside the claimed caller whose callee is the target or an import alias of it; a method on an unresolved receiver is `partial`; a definitive static resolution or an observed runtime call is `full`. Location: the definition spans exactly the cited lines. Config: an env read of that literal. Flow: every hop and the sink. Tests/impact: `partial` at most. Decision/history: `partial` at most, and only with attribution. `general`: term coverage, a labelled heuristic. |
@@ -86,9 +86,10 @@ The design decisions (D1-D30) and their implementation status are in
 | `cli.py` | Thin adapters over the core; `--json` everywhere. `query` prints the plain-text context by default. Exit codes: 0 done, 1 error, 2 usage error / invalid plan / blocked upstream command, 3 "needs more" (clarification, partial resolution, refused experiment, incomplete observation, no precise answer). Output is UTF-8 whatever the console code page. |
 | `ui/` | `verinoda ui`: `data.py` builds notes (code excerpt, sections of links, data-file links, claims), local and file-level global graphs, search and the file tree from `graph.json`, `search.db` and `atlas.db` (read-only; reloads when the graph changes); `server.py` serves them and `static/` (one page, no third-party code; `graph3d.js` is the 3D graph: a Barnes-Hut octree layout drawn with perspective on a 2D canvas, a camera with eased flights, follow and region framing; `app.js` adds the panel, the tour, the command bar and the keys) on 127.0.0.1 with a Host check and a strict Content-Security-Policy; `export.py` writes the same page with its data inline (graph, tree, file notes without code, machine paths removed) as one HTML file that answers its own API calls (`--export`). The one write is a note of your own (`POST /api/usernote`: the page's per-run token, JSON, same origin; `--read-only` turns it off). Note links carry the line they are written on (none for a file edited since the index). `impact()` walks the use links (calls, imports, references, inheritance) backwards from a note, `path()` forwards (else backwards) to another note; the exported page does both on its file graph. `answer()` runs `retrieval.retrieve` with the snapshot's index handle (never written) for the page's *Answer the question*. `changes()` lists files edited or deleted since the index (`search_index.stale_files`) and added since the last snapshot (atlas.db read only). `version()` is the index's key (graph.json and search.db stats): the page polls `/api/version` and redraws when it changes; `server.Watcher` (`--watch`) runs `workflow.update` when the listed files' sizes and times change and then stop changing. |
 | `usernotes.py` | Notes of your own: Markdown files in `.verinoda/notes/` (config `notes.dir`) with a header (subject, file, lines, anchor, written). Anchored by `anchors` facts (the region's fingerprint) or a hash of the lines; `check()` gives fresh / changed / gone, `keep()` re-anchors after a re-read. Used by `ui/` and `verinoda notes`. |
+| `decisions.py` | Decision records (D33): what the human chose, as Markdown with a front matter (`verinoda-decision: 1`, id, status, `decided-by: human`, supersedes, governs, guards, revisit-when, waivers) in `decisions.dir` (default `.verinoda/decisions/`; a committed folder for CI). `record` (accepted; supersede marks the old record), `import` (a record for a hand-written ADR, which is never edited; guards only *proposed* from its must/only sentences), `guard`, `accept`, `waive` (per site, may expire), `listing`. Every event appends the whole state to the `decisions` table; a file edited by hand since is reported, and the file is what is checked. Paths and globs must stay inside the repository. |
 | `copies.py` | Folders that copy the project's own code (twin files defining the same names, unused from outside, twins in code that is used). `update()` runs after every scan and update (`workflow._derive`) and writes `copies.json`; `search_index` and `ui/` rank them like configured reference trees; `setup` reports them. |
 | `portable_ids.py` | After each index build (`index.build`), takes the scan root out of graph ids the upstream pipeline minted from absolute paths (the target of a missing import, `.dmf` element ids), so graph.json names no path of the machine; rewrites graph.json in the pipeline's own format (`index.build` does it in the one rewrite that also drops the nodes of missing files). |
-| `mcp/` | MCP server over the same functions: 23 tools, responses capped (12,000 characters by default). The long-lived process keeps the graph until graph.json or `receiver_calls.json` changes (an update can keep graph.json and still change the receiver and Java call edges `load()` adds; spans are re-derived only for edited files), the lexicon and a warm jedi project. |
+| `mcp/` | MCP server over the same functions: 24 tools, responses capped (12,000 characters by default). The long-lived process keeps the graph until graph.json or `receiver_calls.json` changes (an update can keep graph.json and still change the receiver and Java call edges `load()` adds; spans are re-derived only for edited files), the lexicon and a warm jedi project. |
 | `agents/` | Claude Code and Codex skill + MCP installers with ownership markers and an install manifest; idempotent install, exact uninstall. The skills carry the understand-first protocol and the references protocol. |
 | `benchmark/` | Harnesses. `runner.py` / `approaches.py` / `metrics.py` / `report.py` / `sanitize.py` / `llm.py` run raw search vs Graphify (vendored renderer and upstream CLI) vs Verinoda on question sets with gold facts. `staleness.py` has the history replay and mutation suite against a from-scratch oracle (D30). `critique_eval.py` measures critique precision and recall on a labelled claim set (D30). They are exposed as `verinoda benchmark run / staleness replay / staleness mutations / critique-eval`. |
 | `setup.py` | `verinoda setup`: one idempotent step per project - `init`, `scan` on the first run or `update` afterwards, then `agents.installer.install` for the agents whose CLI is on PATH (or the ones named), and a checklist of what is left to do by hand. Refuses the home directory unless `--allow-home`. |
@@ -99,7 +100,7 @@ The design decisions (D1-D30) and their implementation status are in
 
 ```
 <repo>/.verinoda/
-  atlas.db                  SQLite, schema v4: claims, evidence, history, plans, runtime runs, ...
+  atlas.db                  SQLite, schema v5: claims, evidence, history, plans, runtime runs, decisions, ...
                             (audited rows are never deleted; file_facts / resolutions / file_stat
                             are derived caches)
   config.json               budgets, experiment allowlist, research.network, understanding thresholds
@@ -115,6 +116,8 @@ The design decisions (D1-D30) and their implementation status are in
     index.scip              only when the user supplies one (`scan --scip FILE`)
     scip_fresh.json         per-document freshness of that SCIP index
   plans/                    question-plan files (JSON is never passed on the command line)
+  decisions/                decision records ADR-NNNN-*.md (config decisions.dir moves them, e.g. to a
+                            committed docs/decisions for `decide check` in CI)
   runs/<experiment-id>/     stdout.txt / stderr.txt; artifacts/calltrace.jsonl for observe runs
   research/<slug>/          mirror.git (bare), <sha12>/ worktrees, tree-<hash12>/ copies,
                             meta.git (blobless mirror for reference pinning)

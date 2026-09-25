@@ -886,6 +886,93 @@ def cmd_analyze(args) -> int:
     return PLAN_EXIT.get(res.get("status"), 0)
 
 
+# -- decisions (docs/DESIGN.md D33) -------------------------------------------------
+
+def _r_decision(d: dict, indent: str = "") -> None:
+    flag = "" if d.get("enforced") else "  (not enforced)"
+    print(f"{indent}{d['id']} [{d['status']}] {d.get('title') or ''}{flag}  ({d.get('file')})")
+    if d.get("chosen"):
+        print(f"{indent}  chosen: {d['chosen']} (decided by the {d.get('decided_by')}, {d.get('date')})")
+    if d.get("source"):
+        print(f"{indent}  record of the document {d['source']}")
+    if d.get("supersedes") or d.get("superseded_by"):
+        print(f"{indent}  " + "; ".join(x for x in (f"supersedes {d['supersedes']}" if d.get("supersedes") else "",
+                                                     f"superseded by {d['superseded_by']}" if d.get("superseded_by")
+                                                     else "") if x))
+    for g in d.get("guards") or []:
+        src = f"  <- {g['from_sentence']['at']}" if g.get("from_sentence") else ""
+        print(f"{indent}  {g['id']} ({g.get('status')}): {g.get('spec')}{src}")
+    for v in d.get("governs") or []:
+        print(f"{indent}  governs {v['id']}: {v['symbol']}")
+    for r in d.get("revisit_when") or []:
+        print(f"{indent}  revisit {r['id']} when {r['kind']}={r['value']}")
+    for w in d.get("waivers") or []:
+        print(f"{indent}  waiver {w['guard']} at {w['at']}" + (f" until {w['until']}" if w.get("until") else "")
+              + f": {w['reason']}")
+    for p in d.get("problems") or []:
+        print(f"{indent}  problem: {p}")
+    if d.get("log"):
+        print(f"{indent}  note: {d['log']}")
+
+
+def _r_decide(res: dict) -> None:
+    if "decisions" in res:
+        print(f"decision records in {res['dir']}:" if res["decisions"] else f"no decision records in {res['dir']}")
+        for d in res["decisions"]:
+            _r_decision(d, "  ")
+        for doc in res.get("unrecorded_docs") or []:
+            print(f"  document without a record: {doc}  (`verinoda decide import {doc}` proposes guards)")
+        return
+    _r_decision(res)
+    if res.get("superseded"):
+        print(f"  {res['superseded']} is now superseded")
+    for s in res.get("not_turned_into_guards") or []:
+        print(f"  not a guard ({s['why']}): {s['at']} {s['text'][:120]}")
+    proposed = [g["id"] for g in res.get("guards") or [] if g.get("status") == "proposed"]
+    if proposed:
+        print(f"  next: read the proposed guard(s) against the document; only the user accepts them: "
+              f"`verinoda decide accept {res['id']} {' '.join(proposed)}`")
+
+
+def cmd_decide(args) -> int:
+    from verinoda import decisions as dm
+
+    repo = _repo(args)
+    graph = None
+    if getattr(args, "governs", None) or args.decide_cmd == "import":
+        from verinoda import index
+        from verinoda.paths import graph_path
+
+        graph = index.load(repo) if graph_path(repo).exists() else None
+    st = _store(repo)
+    try:
+        said = getattr(args, "said", None)
+        if args.decide_cmd == "list":
+            res = dm.listing(st, repo)
+        elif args.decide_cmd == "record":
+            res = dm.record(st, repo, chosen=args.chosen, rationale=args.rationale, title=args.title,
+                            brief_id=args.brief_id, guards=args.guard or [], governs=args.governs or [],
+                            revisit_when=args.revisit_when or [], supersedes=args.supersedes, user_statement=said,
+                            graph=graph)
+        elif args.decide_cmd == "import":
+            res = dm.import_doc(st, repo, _rel_in_repo(repo, args.document, "document"), graph=graph,
+                                user_statement=said)
+        elif args.decide_cmd == "guard":
+            res = dm.add_guards(st, repo, args.id, args.spec, user_statement=said)
+        elif args.decide_cmd == "accept":
+            res = dm.accept(st, repo, args.id, args.guard_ids, user_statement=said)
+        else:  # waive
+            res = dm.waive(st, repo, args.id, args.guard_id, at=args.at, reason=args.reason, until=args.until,
+                           user_statement=said)
+    except dm.DecisionError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    finally:
+        st.close()
+    _emit(args, res, _r_decide)
+    return 0
+
+
 # -- claims -----------------------------------------------------------------------
 
 def cmd_claim(args) -> int:
@@ -1614,6 +1701,46 @@ def build_parser() -> argparse.ArgumentParser:
     c = add("audit", cmd_plan, "re-judge an analysis' sub-questions on the current claim statuses", parent=psub)
     c.add_argument("analysis_id")
     c.add_argument("--no-refresh", action="store_true", help="do not update the index first")
+
+    sp = sub.add_parser("decide", help="decisions stay human: records of what the user chose, guards that check "
+                                       "the code against them (docs/DESIGN.md D33)")
+    dsub = sp.add_subparsers(dest="decide_cmd", required=True)
+    said_help = "the user's own words for this decision, verbatim (kept in the decision log)"
+    c = add("record", cmd_decide, "record the human's choice as a decision record (status accepted, decided by "
+                                  "the human); only with the user's explicit choice", parent=dsub)
+    c.add_argument("brief_id", nargs="?", help="the decision brief it answers (dbr_...), if any")
+    c.add_argument("--chosen", required=True, help="the option the user chose")
+    c.add_argument("--rationale", required=True, help="why, in the user's words")
+    c.add_argument("--title")
+    c.add_argument("--guard", action="append", metavar="SPEC",
+                   help="a check of the code, e.g. 'only_in calls=sqlite3.connect allowed=orders/repository.py', "
+                        "'no_edge from=src/main/** to=src/client/**', 'dependency absent=psycopg'; repeatable")
+    c.add_argument("--governs", action="append", metavar="SYMBOL",
+                   help="path/file.py::Symbol whose changes need a review; repeatable")
+    c.add_argument("--revisit-when", action="append", metavar="SPEC",
+                   help="dependency_added=NAME or file_appears=GLOB: asks for a review; repeatable")
+    c.add_argument("--supersedes", metavar="ADR-N", help="the earlier decision this one replaces")
+    c.add_argument("--said", help=said_help)
+    c = add("import", cmd_decide, "a record for a hand-written ADR (the document is not changed); guards are "
+                                  "only proposed from its sentences", parent=dsub)
+    c.add_argument("document", help="the ADR file, e.g. docs/adr/0001-sqlite-persistence.md")
+    c.add_argument("--said", help=said_help)
+    c = add("guard", cmd_decide, "add guards (the human's own, accepted) to a decision record", parent=dsub)
+    c.add_argument("id", metavar="ADR-N")
+    c.add_argument("spec", nargs="+", metavar="SPEC", help="guard spec(s), quoted, as for record --guard")
+    c.add_argument("--said", help=said_help)
+    c = add("accept", cmd_decide, "activate proposed guards of a record (the user's call)", parent=dsub)
+    c.add_argument("id", metavar="ADR-N")
+    c.add_argument("guard_ids", nargs="+", metavar="GUARD", help="g1 g2 ...")
+    c.add_argument("--said", help=said_help)
+    c = add("waive", cmd_decide, "excuse one site from one guard (the user's call; it may expire)", parent=dsub)
+    c.add_argument("id", metavar="ADR-N")
+    c.add_argument("guard_id", metavar="GUARD")
+    c.add_argument("--at", required=True, metavar="PATH[:LINE]")
+    c.add_argument("--reason", required=True)
+    c.add_argument("--until", metavar="YYYY-MM-DD")
+    c.add_argument("--said", help=said_help)
+    add("list", cmd_decide, "decision records, their guards and waivers, and ADRs without a record", parent=dsub)
 
     sp = sub.add_parser("claim", help="inspect or add claims")
     csub = sp.add_subparsers(dest="claim_cmd", required=True)

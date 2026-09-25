@@ -93,6 +93,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "feedback_process",
     "feedback_resolve",
     "index_update",
+    "decision_record",
 )
 
 MAX_RESPONSE_CHARS = int(os.environ.get("VERINODA_MCP_MAX_CHARS", "12000"))
@@ -106,6 +107,8 @@ VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
 RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
 NETWORK_MODES = ("off", "cache", "on")
 QUERY_FORMATS = ("text", "json")
+DECISION_ACTIONS = ("list", "record", "import", "guard", "accept", "waive")
+DECISION_NEEDS_USER = ("record", "guard", "accept", "waive")  # what changes what is enforced: the user's words
 # analyze: what the agent reads first and what is cut last (the interpretation and the per-sub-question verdicts)
 ANALYZE_KEEP = ("understood_as", "subquestions", "plan_check")
 ANALYZE_FIRST_CUT = ("steps", "critique", "passages")  # passages: `query` gives them in full; claims come first
@@ -1121,6 +1124,55 @@ class AtlasTools:
                                         correction=_opt_text(correction))
         return self._run("feedback_resolve", go)
 
+    # -- decisions (docs/DESIGN.md D33) ---------------------------------------------
+    def decision_record(self, action: str, decision_id: str | None = None, chosen: str | None = None,
+                        rationale: str | None = None, title: str | None = None, brief_id: str | None = None,
+                        guards: list[str] | None = None, governs: list[str] | None = None,
+                        revisit_when: list[str] | None = None, supersedes: str | None = None,
+                        guard_ids: list[str] | None = None, at: str | None = None, reason: str | None = None,
+                        until: str | None = None, document: str | None = None,
+                        user_statement: str | None = None) -> dict:
+        def go():
+            from verinoda import decisions as dm
+
+            act = _choice(action, DECISION_ACTIONS, "action")
+            said = _opt_text(user_statement)
+            if act in DECISION_NEEDS_USER and not said:
+                raise ToolFailure("user_statement_required",
+                                  f"'{act}' changes what is enforced, so it needs the user's own words",
+                                  "ask the user; pass their answer verbatim as user_statement. Never record, accept "
+                                  "or waive on your own judgement")
+            try:
+                with self._store() as st:
+                    if act == "list":
+                        return dm.listing(st, self.repo)
+                    if act == "record":
+                        g = self._graph() if governs and graph_path(self.repo).exists() else None
+                        return dm.record(st, self.repo, chosen=_text(chosen, "chosen"),
+                                         rationale=_text(rationale, "rationale"), title=_opt_text(title),
+                                         brief_id=_opt_text(brief_id), guards=_str_list(guards, "guards"),
+                                         governs=_str_list(governs, "governs"),
+                                         revisit_when=_str_list(revisit_when, "revisit_when"),
+                                         supersedes=_opt_text(supersedes), user_statement=said, graph=g)
+                    if act == "import":
+                        g = self._graph() if graph_path(self.repo).exists() else None
+                        return dm.import_doc(st, self.repo, _text(document, "document"), graph=g, user_statement=said)
+                    did = _text(decision_id, "decision_id")
+                    if act == "guard":
+                        return dm.add_guards(st, self.repo, did, _str_list(guards, "guards"), user_statement=said)
+                    if act == "accept":
+                        return dm.accept(st, self.repo, did, _str_list(guard_ids, "guard_ids"), user_statement=said)
+                    ids = _str_list(guard_ids, "guard_ids")
+                    if len(ids) != 1:
+                        raise ToolFailure("invalid_argument", "waive takes exactly one guard id in guard_ids",
+                                          "pass guard_ids=['g1'] and at='path[:line]'")
+                    return dm.waive(st, self.repo, did, ids[0], at=_text(at, "at"), reason=_text(reason, "reason"),
+                                    until=_opt_text(until), user_statement=said)
+            except dm.DecisionError as exc:
+                raise ToolFailure("invalid_argument", str(exc)[:600],
+                                  "decision_record(action='list') shows the records, their guards and ids") from None
+        return self._run("decision_record", go)
+
     # -- index ----------------------------------------------------------------------
     def index_update(self) -> dict:
         def go():
@@ -1180,6 +1232,8 @@ Tools:
 - reference_resolve / reference_research / reference_compare: pinned external references.
 - feedback_submit / feedback_process / feedback_resolve: record critique as a hypothesis, verify, resolve.
 - index_update: re-index after editing files (marks affected claims stale).
+- decision_record: what the user decided (records, guards, waivers). A choice between options is the user's:
+  never record, accept or waive without their words (user_statement).
 
 Rules: graph edges (EXTRACTED/INFERRED) are extractions, never verification. Claim status is one of
 observed, experiment_verified, statically_verified, primary_source_verified, strong_inference,
@@ -1319,6 +1373,16 @@ DESCRIPTIONS: dict[str, str] = {
         "Re-index files changed since the last snapshot, record a new snapshot and mark claims whose files "
         "changed as stale. Full scan when there is no previous snapshot (requires .verinoda/ to exist). "
         "Returns mode (noop | incremental | full), changed files and the claims marked stale."),
+    "decision_record": (
+        "Decision records (Markdown with a front matter in decisions.dir, default .verinoda/decisions; logged "
+        "append-only). action: list | record (chosen + rationale, optional brief_id, guards, governs, "
+        "revisit_when, supersedes) | import (a record for a hand-written ADR, document=path; guards only "
+        "proposed) | guard (add guards to decision_id) | accept (guard_ids of decision_id) | waive (one guard "
+        "id in guard_ids, at='path[:line]', reason, until). Guard specs: 'only_in calls=sqlite3.connect "
+        "allowed=orders/repository.py', 'no_edge from=src/main/** to=src/client/**', 'dependency "
+        "absent=psycopg'; revisit_when: 'dependency_added=NAME' or 'file_appears=GLOB'. record, guard, accept "
+        "and waive need user_statement: the user's own words, verbatim - Verinoda never decides and neither "
+        "may the agent."),
 }
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
@@ -1635,6 +1699,36 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None):
     @register("index_update")
     def index_update() -> dict[str, Any]:
         return emit(t.index_update())
+
+    StrList = list[str] | None
+
+    @register("decision_record")
+    def decision_record(
+        action: Annotated[Literal["list", "record", "import", "guard", "accept", "waive"],
+                          Field(description="What to do (see the tool description).")],
+        decision_id: Annotated[OptStr, Field(description="ADR-0001 (guard, accept, waive).")] = None,
+        chosen: Annotated[OptStr, Field(description="record: the option the user chose.")] = None,
+        rationale: Annotated[OptStr, Field(description="record: why, in the user's words.")] = None,
+        title: Annotated[OptStr, Field(description="record: a short title.")] = None,
+        brief_id: Annotated[OptStr, Field(description="record: the decision brief it answers (dbr_...).")] = None,
+        guards: Annotated[StrList, Field(description="record/guard: guard specs.")] = None,
+        governs: Annotated[StrList, Field(description="record: 'path/file.py::Symbol' whose changes need a "
+                                                      "review.")] = None,
+        revisit_when: Annotated[StrList, Field(description="record: 'dependency_added=NAME' / "
+                                                           "'file_appears=GLOB'.")] = None,
+        supersedes: Annotated[OptStr, Field(description="record: the decision this one replaces.")] = None,
+        guard_ids: Annotated[StrList, Field(description="accept: guard ids; waive: exactly one.")] = None,
+        at: Annotated[OptStr, Field(description="waive: 'path' or 'path:line' of the excused site.")] = None,
+        reason: Annotated[OptStr, Field(description="waive: why the user excuses it.")] = None,
+        until: Annotated[OptStr, Field(description="waive: expiry date YYYY-MM-DD.")] = None,
+        document: Annotated[OptStr, Field(description="import: the hand-written ADR's path.")] = None,
+        user_statement: Annotated[OptStr, Field(description="The user's own words for this decision, verbatim "
+                                                            "(required for record, guard, accept, waive).")] = None,
+    ) -> dict[str, Any]:
+        return emit(t.decision_record(action, decision_id=decision_id, chosen=chosen, rationale=rationale, title=title,
+                                      brief_id=brief_id, guards=guards, governs=governs, revisit_when=revisit_when,
+                                      supersedes=supersedes, guard_ids=guard_ids, at=at, reason=reason, until=until,
+                                      document=document, user_statement=user_statement))
 
     return srv
 
