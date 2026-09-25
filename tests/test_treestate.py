@@ -259,11 +259,15 @@ def test_paths_that_a_file_system_may_fold_to_the_git_directory_are_reserved():
         assert not treestate.reserved_part(part), part
     assert not treestate.safe_path(".GIT/config") and not treestate.safe_path("a/../b")
     assert treestate.safe_path("src/.github/x.yml")
+    # Windows reads a backslash in a git name as a separator: ".\.git\config" is written as .git/config
+    for rel in (".\\.git\\config", "sub\\.verinoda\\x.txt", "a/b\\GIT~1\\c", ".git\\x"):
+        assert not treestate.safe_path(rel), rel
+    assert treestate.safe_path("docs\\.github\\x.yml")
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows file names")
 def test_names_windows_cannot_hold_are_named():
-    for rel in ("docs/what?.md", "a:b", "x/NUL", "com1.txt", "trailing./x", "q\"x"):
+    for rel in ("docs/what?.md", "a:b", "x/NUL", "com1.txt", "trailing./x", "q\"x", "venvtrick\\.venv\\y.txt"):
         assert treestate.unwritable_here(rel), rel
     assert treestate.unwritable_here("docs/normal.md") is None
 
