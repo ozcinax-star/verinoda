@@ -347,6 +347,22 @@ def test_cached_paths_are_re_anchored_as_the_upstream_function_does(built):
     assert cache._absolutize_source_files_in is real
 
 
+def test_the_files_of_the_graph_are_read_from_the_json_as_load_sees_them(built, tmp_path):
+    def by_load(gp=None):
+        g = index.load(repo, gp)
+        return {d["source_file"] for _, d in g.G.nodes(data=True) if d.get("source_file")}
+
+    repo, _ = built
+    assert index.graph_source_files(repo) == by_load()
+    # a repeated id: load() keeps the last value given for it
+    gp = tmp_path / "graph.json"
+    nodes = [{"id": "a", "source_file": "x.py"}, {"id": "a", "source_file": "y.py"},
+             {"id": "b", "source_file": "z.py"}, {"id": "b"},
+             {"id": "c", "source_file": "w.py"}, {"id": "c", "source_file": ""}]
+    gp.write_text(json.dumps({"nodes": nodes, "links": []}), encoding="utf-8")
+    assert index.graph_source_files(repo, gp) == by_load(gp) == {"y.py", "z.py"}
+
+
 def test_path_identity_memo_keeps_the_graph_byte_identical(tmp_path):
     from verinoda.project_index import watch
 

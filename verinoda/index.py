@@ -56,11 +56,14 @@ _CACHE_MAX = 4096              # per-file caches are cleared when they grow past
 
 
 def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
-          quiet: bool = True) -> dict:
+          quiet: bool = True, prune_missing: bool = False) -> dict:
     """Run the Graphify-derived AST pipeline; return graph stats.
 
-    After a successful rebuild the receiver-call sidecar is refreshed (per-file
-    facts are reused for files whose content did not change).
+    After a successful rebuild graph.json is read once and written at most once: its ids
+    are made portable (:mod:`verinoda.portable_ids`) and, with ``prune_missing``, the nodes
+    of files that do not exist are dropped as :func:`prune_missing_files` would drop them
+    (listed in ``pruned_files``). The counts come from that data. Then the receiver-call
+    sidecar is refreshed (per-file facts are reused for files whose content did not change).
     """
     from verinoda.project_index.watch import _rebuild_code
     from verinoda.python_facts import python_facts_cache
@@ -77,19 +80,21 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     gp = graph_path(repo)
     if not ok and not gp.exists():
         raise RuntimeError("index build failed:\n" + buf.getvalue()[-2000:])
-    portable = None
+    portable = pruned = data = None
     if ok:  # before the sidecar: it is keyed by the graph file as it ends up
-        from verinoda.portable_ids import make_graph_portable
-
         try:
-            portable = make_graph_portable(gp, repo)
+            portable, pruned, data = _post_process(gp, repo, prune=prune_missing)
         except (OSError, ValueError) as exc:  # the ids stay as the pipeline wrote them
             portable = {"error": f"{type(exc).__name__}: {exc}"[:300]}
-    data = json.loads(gp.read_text(encoding="utf-8"))
+    if data is None:
+        data = json.loads(gp.read_text(encoding="utf-8"))
     out = {"ok": bool(ok), "graph_path": str(gp), "nodes": len(data.get("nodes", [])),
            "edges": len(data.get("links", data.get("edges", []))), "log": buf.getvalue()[-2000:]}
+    del data  # the sidecar refresh loads the graph again
     if portable is not None:
         out["portable_ids"] = portable
+    if pruned is not None:
+        out["pruned_files"] = pruned
     if ok:
         try:
             out["receiver_calls"] = refresh_receiver_sidecar(repo)
@@ -1261,6 +1266,64 @@ def _local_source(repo: Path, sf) -> Path | None:
     return p
 
 
+def _missing_in_nodes(repo: Path, nodes) -> list[str]:
+    seen: dict[str, bool] = {}
+    for n in nodes:
+        sf = n.get("source_file")
+        if not isinstance(sf, str) or sf in seen:
+            continue
+        p = _local_source(repo, sf)
+        seen[sf] = p is not None and not p.exists()
+    return sorted(sf for sf, gone in seen.items() if gone)
+
+
+def _drop_files(data: dict, gone: set[str]) -> None:
+    """Remove, in place, the nodes of the files ``gone`` and the edges and hyperedges on them."""
+    drop = {n["id"] for n in data.get("nodes", []) if n.get("source_file") in gone}
+    data["nodes"] = [n for n in data.get("nodes", []) if n["id"] not in drop]
+    for key in ("links", "edges"):
+        if key in data:
+            data[key] = [e for e in data[key]
+                         if e.get("source") not in drop and e.get("target") not in drop
+                         and e.get("_src") not in drop and e.get("_tgt") not in drop
+                         and e.get("source_file") not in gone]
+    if isinstance(data.get("hyperedges"), list):
+        data["hyperedges"] = [h for h in data["hyperedges"]
+                              if not (isinstance(h, dict) and h.get("source_file") in gone)]
+
+
+def _write_pruned(gp: Path, data: dict) -> None:
+    fd, tmp = tempfile.mkstemp(prefix="graph.", suffix=".tmp", dir=str(gp.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, gp)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def _post_process(gp: Path, repo: Path, *, prune: bool) -> tuple[dict, list[str] | None, dict]:
+    """graph.json after a build, read once and written at most once: the ids made portable
+    (:func:`verinoda.portable_ids.make_graph_portable`) and, with ``prune``, the nodes of
+    missing files dropped (:func:`prune_missing_files`). The file ends byte for byte as those
+    two steps one after the other leave it: in the format of the last one that wrote.
+    Returns ``({"changed": ids rewritten}, files pruned or None, the graph data)``."""
+    from verinoda.portable_ids import strip_root_from_ids, write_graph
+
+    repo = Path(repo).resolve()
+    data = json.loads(gp.read_text(encoding="utf-8"))
+    edges = data.get("links") if isinstance(data.get("links"), list) else data.get("edges") or []
+    n = strip_root_from_ids(data.get("nodes") or [], edges, repo, data.get("hyperedges"))
+    gone = _missing_in_nodes(repo, data.get("nodes", [])) if prune else []
+    if gone:
+        _drop_files(data, set(gone))
+        _write_pruned(gp, data)
+    elif n:
+        write_graph(gp, data)
+    return {"changed": n}, (gone if prune else None), data
+
+
 def missing_source_files(repo: Path, gp: Path | None = None) -> list[str]:
     """``source_file`` values of graph nodes whose file no longer exists in ``repo``."""
     repo = Path(repo).resolve()
@@ -1269,14 +1332,7 @@ def missing_source_files(repo: Path, gp: Path | None = None) -> list[str]:
         data = json.loads(gp.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
-    seen: dict[str, bool] = {}
-    for n in data.get("nodes", []):
-        sf = n.get("source_file")
-        if not isinstance(sf, str) or sf in seen:
-            continue
-        p = _local_source(repo, sf)
-        seen[sf] = p is not None and not p.exists()
-    return sorted(sf for sf, gone in seen.items() if gone)
+    return _missing_in_nodes(repo, data.get("nodes", []))
 
 
 def prune_missing_files(repo: Path, gp: Path | None = None) -> list[str]:
@@ -1292,26 +1348,29 @@ def prune_missing_files(repo: Path, gp: Path | None = None) -> list[str]:
     if not gone:
         return []
     data = json.loads(gp.read_text(encoding="utf-8"))
-    drop = {n["id"] for n in data.get("nodes", []) if n.get("source_file") in gone}
-    data["nodes"] = [n for n in data.get("nodes", []) if n["id"] not in drop]
-    for key in ("links", "edges"):
-        if key in data:
-            data[key] = [e for e in data[key]
-                         if e.get("source") not in drop and e.get("target") not in drop
-                         and e.get("_src") not in drop and e.get("_tgt") not in drop
-                         and e.get("source_file") not in gone]
-    if isinstance(data.get("hyperedges"), list):
-        data["hyperedges"] = [h for h in data["hyperedges"]
-                              if not (isinstance(h, dict) and h.get("source_file") in gone)]
-    fd, tmp = tempfile.mkstemp(prefix="graph.", suffix=".tmp", dir=str(gp.parent))
-    with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, gp)
+    _drop_files(data, gone)
+    _write_pruned(gp, data)
     try:
         refresh_receiver_sidecar(repo)
     except (OSError, ValueError):
         pass
     return sorted(gone)
+
+
+def graph_source_files(repo: Path, gp: Path | None = None) -> set[str]:
+    """The files graph.json has nodes from, read from the JSON alone: the ``source_file``
+    values :func:`load` would give its nodes (a repeated id keeps the last value it was
+    given), with no graph built and no receiver pass."""
+    gp = Path(gp) if gp else graph_path(Path(repo).resolve())
+    data = json.loads(gp.read_text(encoding="utf-8"))
+    last: dict = {}
+    for n in data.get("nodes", []):
+        nid = n["id"]
+        if "source_file" in n:
+            last[nid] = n["source_file"]
+        else:
+            last.setdefault(nid, None)
+    return {sf for sf in last.values() if sf}
 
 
 def graphify_query_text(repo: Path, question: str, budget: int = 2000) -> str:

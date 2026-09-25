@@ -93,19 +93,26 @@ def strip_root_from_ids(nodes: list, edges: list, root: Path, hyperedges: list |
 
 def make_graph_portable(graph_file: Path, root: Path) -> dict:
     """Rewrite ``graph_file`` (graph.json) in place when some ids carry ``root``; ``{"changed": n}``.
-    Written the way the upstream pipeline writes it (indent 2, key order kept), so its own
-    "the graph did not change" comparison on the next update still works."""
+    ``index.build`` does the same in the one rewrite that also drops the nodes of missing files
+    (``index._post_process``)."""
     p = Path(graph_file)
     data = json.loads(p.read_text(encoding="utf-8"))
     edges = data.get("links") if isinstance(data.get("links"), list) else data.get("edges") or []
     n = strip_root_from_ids(data.get("nodes") or [], edges, Path(root).resolve(), data.get("hyperedges"))
     if n:
-        fd, tmp = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp", dir=str(p.parent))
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-                fh.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-            os.replace(tmp, p)
-        except BaseException:
-            Path(tmp).unlink(missing_ok=True)
-            raise
+        write_graph(p, data)
     return {"changed": n}
+
+
+def write_graph(graph_file: Path, data: dict) -> None:
+    """Write graph.json the way the upstream pipeline writes it (indent 2, key order kept), so its
+    own "the graph did not change" comparison on the next update still works."""
+    p = Path(graph_file)
+    fd, tmp = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp", dir=str(p.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        os.replace(tmp, p)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
