@@ -1799,10 +1799,20 @@
      {
       "concern": "public_api",
       "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:29"
+     },
+     {
+      "concern": "public_api",
+      "at": "src/gametest/java/com/example/glowmod/test/WispTests.java:16",
+      "note": "amended before the first run: the game test's call site was left out"
      }
     ],
     "may_find": [],
     "must_not_flag": [
+     {
+      "concern": "public_api",
+      "at": "reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:25",
+      "note": "amended before the first run: a different class named Wisp (reference copy)"
+     },
      {
       "concern": "security"
      },
