@@ -141,9 +141,13 @@ resolve (before, each was "no symbol/file named ..."); `Foo.save`, `OrderReposit
 
 Fast harness, the seven public sets plus `verinoda_user_tr`, on the same prepared indexes
 (query-time change): facts per question and approach, and negatives, identical to `er_new`
-(`d3165b8`); only the wall time differs, and that run shared the machine with the adversarial
-run. Critique evaluation at the fixed code: every row identical to the committed
-`critique_eval.json` (timings not comparable, same reason).
+(`d3165b8`), in two runs. The machine was shared with other jobs, so wall times are compared
+only between interleaved runs of `772953c` and the fix (best of 3): `orders_app` 6.4 / 7.1 s,
+`glow_mod` 7.5 / 8.1 s, `heldout_repoatlas` 14.8 / 14.8 s, within the spread of repeated runs.
+Critique evaluation at the fix: every row identical to the committed `critique_eval.json`;
+interleaved with `772953c` (3 runs each) the per-claim time is p50 2.6-6.5 ms / p95 51-53 ms
+after against p50 2.4-9.4 ms / p95 51-100 ms before on the loaded machine (the committed file's
+2.4 / 21.8 ms was measured on a quieter one).
 
 `name_site` on a 2,305-file repository (CPython's standard library, 79,532 nodes) with a current
 `search.db`: a name found nowhere is answered in 340-440 ms (before: the 2 s scan ran out and the
