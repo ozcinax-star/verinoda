@@ -36,14 +36,17 @@ was fixed before the rules ran on any session, and three fixes followed from the
 | run | definitive precision | loop recall (stop at or before the gold attempt) | controls stopped | top strategy correct | first strategy names the cause |
 |---|---|---|---|---|---|
 | 1, first | 10/10 | 7/8 | 0/4 | 7/8 | 6/7 |
-| 5, final | 11/11 | 8/8 | 0/4 | 8/8 | 7/8 |
+| 5, after three fixes | 11/11 | 8/8 | 0/4 | 8/8 | 7/8 |
+| 6, committed code (after review changes) | 11/11 | 8/8 | 0/4 | 8/8 | 7/8 |
 
 The misses of run 1: a JVM class-loader identity hash (`'knot' @1a2b3c4d`) in the message made a
 recurring Java failure look new (now normalised); the differential ranked the agent's own edit above
 the cause that was already there when the symptom was recorded (hunks present at attempt 0 now come
 first, matched line by line). Run 4 then showed a rerun series of five passes on a tree that had failed
 reported as "stable"; a series on a tree that disagreed no longer clears flakiness, and the pass rate
-counts every recorded run of the tree. The 7/8: L7's differential can only prepare a copy of the base
+counts every recorded run of the tree. Run 6 is the committed code after later review changes
+(narrowing suspects, order-dependence, `test_edited` needing replaced or removed test lines); it
+scored the same. The 7/8: L7's differential can only prepare a copy of the base
 (Gradle is not runnable here). The heuristic rules have no gold; they fired 15 times in the looping
 sessions and never on the controls.
 

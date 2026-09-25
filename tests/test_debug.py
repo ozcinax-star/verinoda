@@ -160,6 +160,34 @@ def test_bisect_finds_the_first_failing_commit(tmp_path):
         debug.bisect(st, repo, good="--output=x")
 
 
+def test_bisect_can_lay_the_current_test_over_old_commits(tmp_path):
+    repo = _repo(tmp_path)
+    good = _git(repo, "rev-parse", "HEAD").strip()
+    _sub(repo, "orders/pricing.py", "if subtotal > DISCOUNT_THRESHOLD:", "if subtotal >= DISCOUNT_THRESHOLD:")
+    _git(repo, "commit", "-qam", "inclusive threshold")
+    bad_commit = _git(repo, "rev-parse", "HEAD").strip()
+    _sub(repo, "README.md", "# ", "# Orders: ")
+    _git(repo, "commit", "-qam", "readme")
+    # the regression test exists only in the working tree: without the overlay, old commits lack it
+    t = repo / "tests" / "test_threshold.py"
+    t.write_text("from orders.pricing import apply_discount\n\n\ndef test_threshold():\n"
+                 "    assert apply_discount(100.0) == 100.0\n", encoding="utf-8")
+    st = open_store(repo)
+    debug.start(st, repo, "threshold", PT + ["tests/test_threshold.py"])
+    b = debug.bisect(st, repo, good=good, overlay=["tests/test_threshold.py"])
+    assert b["status"] == "found" and b["first_bad_commit"]["commit"] == bad_commit
+    assert "tests/test_threshold.py laid over it" in b["limits"][0]
+    rows = st.all("SELECT copy_source FROM debug_attempts WHERE kind = 'bisect'")
+    assert rows and all(r["copy_source"]["overlay"] == ["tests/test_threshold.py"] for r in rows)
+
+
+def test_the_minimal_repro_drops_positional_test_paths():
+    assert debug._without_selectors(["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_x.py",
+                                     "-k", "abc", "tests/"]) == ["python", "-m", "pytest", "-q", "-p",
+                                                                 "no:cacheprovider", "-k", "abc"]
+    assert debug._without_selectors(["pytest", "tests/test_x.py", "-x"]) == ["pytest", "-x"]
+
+
 def test_trace_enables_off_path(tmp_path):
     repo = _repo(tmp_path)
     _sub(repo, "orders/pricing.py", 'i["price"] * i["qty"]', 'i["price"] + i["qty"]')

@@ -10,7 +10,7 @@ model reads, docs/DESIGN.md D20).
 Exit codes: 0 done; 1 error; 2 usage error, invalid plan, unresolved trace
 endpoint or blocked upstream command; 3 "needs more": a plan that needs
 clarification, a partial reference resolution, a refused experiment, an
-incomplete observation, no precise answer.
+incomplete observation, no precise answer, a debug attempt that says stop.
 """
 
 from __future__ import annotations

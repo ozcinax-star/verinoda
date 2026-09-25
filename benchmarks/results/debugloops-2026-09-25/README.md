@@ -37,6 +37,11 @@ failing commit and its first hunk).
   no longer clears flakiness (C2). Precision 11/11, recall 8/8, 0/4 controls stopped, top strategy 8/8,
   cause named 7/8 (L7: Gradle cannot run here, so the differential only prepared a copy). `debug try`
   overhead in this run, the 27 attempts Verinoda ran: median 0.08 s, max 0.11 s.
+- `run6-final-code.json`: the committed code after review changes that followed run 5 (narrowing
+  suspects, order-dependence, `test_edited` needing replaced or removed test lines, the human question's
+  code side, the minimal-repro command). Same scores as run 5. It ran while the full product test suite
+  was running on the same machine: `debug try` overhead median 0.16 s, p90 0.55 s, max 0.77 s; see
+  `overhead.json` for a measurement without that contention.
 
 ## Overhead (`overhead.json`)
 
