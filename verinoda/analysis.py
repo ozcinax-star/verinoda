@@ -1801,6 +1801,54 @@ def _h_decide(ctx: _Ctx, sub: _Sub) -> None:
                                          "the user's explicit choice (`verinoda decide record`)"})
 
 
+# a question about what the code does inside a clause a decision cue took ("how does place_order save orders,
+# is SQLite enough for us?", "siparişleri nasıl kaydettiği bizim için yeterli mi?"): a wh-word about the third
+# person in the present (not "how do we scale", "nasıl büyütürüz") next to a code intent's cue
+_CODE_QUESTION_EN = re.compile(r"\bhow (?:does|do) (?!(?:we|i|you)\b)|\bwhere (?:does|do) (?!(?:we|i|you)\b)"
+                               r"|\bwhat happens\b|\bwhat (?:does|do) (?!(?:we|i|you)\b)")
+_CODE_QUESTION_TR = re.compile(r"\b(?:nasil|nerede|nereden|nereye|ne zaman|ne oluyor)\b")
+_TR_PRESENT_OR_PARTICIPLE = re.compile(r"\b\w+(?:iyor|uyor)\w*|\b\w+[dt][iu]g[iu]\w*")
+_CODE_INTENTS = {"flow", "dataflow", "callers", "locate", "define", "config", "tests", "impact"}
+
+
+def _decide_notes(ctx: _Ctx, sub: _Sub, links: list[dict], mentions: dict) -> None:
+    """What a decision sub-question asks that its brief does not answer (docs/DESIGN.md D33).
+
+    A name written as code (dotted, snake_case, ``name()``) that is no known option and does not exist
+    here keeps its "no symbol named" unknown: the user said to keep or replace code that is not there.
+    A question about what the code does in the same clause is named, not silently dropped."""
+    from verinoda import decision_brief as dbr
+
+    missing = []
+    for lk in links:
+        t = str(lk.get("text") or "")
+        if lk["status"] != "not_found" or not mentions.get(lk["mention"], {}).get("required", True):
+            continue
+        if qp.code_shape(t) != "name" or not re.search(r"[._(]|::", t) or dbr.options_from_question(t):
+            continue
+        missing.append(lk["mention"])
+    if missing:
+        sub.flags["names_not_found"] = missing
+        for u in ctx.check.get("unknowns") or []:
+            if u.get("about") in missing:
+                _unknown(ctx, sub, {k: v for k, v in u.items() if k != "about"})
+    text = sub.sq.get("text") or ""
+    src = tn.nfc(text)
+    m = None
+    if {c["intent"] for c in qp.clause_cues(text, ctx.lex)} & _CODE_INTENTS:
+        m = _CODE_QUESTION_EN.search(src.lower())
+        folded = tn.fold_tr(src)
+        if m is None and qp._uses_turkish_cues(text) and _TR_PRESENT_OR_PARTICIPLE.search(folded):
+            m = _CODE_QUESTION_TR.search(folded)
+    if m is not None:
+        word = (src[m.start():m.end()] if len(tn.fold_tr(src)) == len(src) else m.group(0)).strip()
+        sub.flags["code_question_in_choice"] = word
+        _unknown(ctx, sub, {"question": text,
+                            "why": f"this part also asks what the code does ('{word}'); it was read as a "
+                                   "choice, so that is not answered here (a brief has no claims about it)",
+                            "next_step": "ask that part as a question of its own (`verinoda analyze \"...\"`)"})
+
+
 def _h_unsupported(ctx: _Ctx, sub: _Sub) -> None:
     sub.flags["not_supported"] = f"no dedicated handler for '{sub.sq['intent']}'"
     _unknown(ctx, sub, {"question": sub.sq.get("text") or sub.sq["intent"],
@@ -1886,9 +1934,10 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
         return _finish_sub(ctx, sub, out, "none")
     if sq["intent"] == "decide":
         # a choice: the options it names need not exist in the code (an option absent from the repository is
-        # expected), so no retrieval, no "words occur nowhere" or "no symbol named" unknown - the decision
-        # handler answers
+        # expected), so no retrieval, no "words occur nowhere" or "no symbol named" unknown for them - the
+        # decision handler answers; what the brief does not answer is said (_decide_notes)
         _h_decide(ctx, sub)
+        _decide_notes(ctx, sub, links, mentions)
         return _finish_sub(ctx, sub, out, "decide")
     required_unlinked = [lk for lk in links if lk["status"] in ("unlinked", "not_found")
                          and mentions.get(lk["mention"], {}).get("required", True)]
@@ -1967,6 +2016,8 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
         HANDLERS[sq["intent"]](ctx, sub)
     if ctx.run_tests and sq["intent"] != "tests" and "_h_tests" not in handler_names and (rel or subject_nodes):
         _h_tests(ctx, sub)
+    if not sub.flags.get("not_found"):
+        _exclusive_guard(ctx, sub, links)
     _choice_guard(ctx, sub)
     return _finish_sub(ctx, sub, out, "+".join(h[3:] for h in handler_names) or "location")
 
@@ -1987,6 +2038,164 @@ def _choice_guard(ctx: _Ctx, sub: _Sub) -> None:
                                    "does; which option to take is the user's decision, not a fact Verinoda found",
                             "next_step": "if it is a choice: `verinoda decide brief \"<the question>\"` collects what "
                                          "the code says about it, then ask the user"})
+
+
+# "Is X only called in Y?": an exclusivity asked as a yes/no question (the call and use verbs it is about)
+_ONLY_EN = re.compile(r"\b(?:only|solely|exclusively)\b|\bnowhere else\b|\banywhere else\b"
+                      r"|\b(?:any|no) other (?:files?|modules?|places?|code)\b")
+_ONLY_USE_EN = re.compile(r"\b(?:call(?:s|ed|ing)?|us(?:e|es|ed|ing)|invok\w*|import(?:s|ed|ing)?|referenc\w*|"
+                          r"open(?:s|ed|ing)?)\b")
+_YES_NO_EN = re.compile(r"^\W*(?:is|are|does|do|can|could|will|would|has|have)\b")
+_ONLY_TR = re.compile(r"\b(?:sadece|yalnizca|yalniz)\b|\bbaska (?:bir )?(?:yer|dosya|modul)\w*"
+                      r"|\bhicbir (?:yer|dosya|modul)\w*")
+_ONLY_USE_TR = re.compile(r"\b(?:cagr\w*|cagir\w*|kullan\w*|import\w*|acil\w*)")
+_WH_TR = re.compile(r"\b(?:ne|neyi|neler|nerede|nereye|nereden|hangi\w*|nasil|kim\w*)\b")
+
+
+def asks_exclusive(text: str) -> str | None:
+    """The word that makes ``text`` a yes/no question about *where only* a call is made, else None."""
+    low = tn.nfc(text or "").lower()
+    m = _ONLY_EN.search(low)
+    if m and _ONLY_USE_EN.search(low) and _YES_NO_EN.search(low):
+        return m.group(0)
+    if qp._uses_turkish_cues(text or ""):
+        folded = tn.fold_tr(tn.nfc(text))
+        m = _ONLY_TR.search(folded)
+        if m and _ONLY_USE_TR.search(folded) and qp._TR_PARTICLE.search(folded) and not _WH_TR.search(folded):
+            return m.group(0)
+    return None
+
+
+def _exclusive_target(ctx: _Ctx, sub: _Sub, links: list[dict]) -> tuple[str | None, list[str], str, str | None]:
+    """``(call target, allowed files, why not, graph node)`` for an exclusivity question: an imported module's
+    call as written (``sqlite3.connect``, checked by the only_in engine; node None) or a module-level function
+    or class of the project (its node: the index's call edges into it)."""
+    from verinoda import guards
+    from verinoda.snapshot import list_files
+
+    ms = {m["id"]: m for m in ctx.plan.get("mentions") or []}
+    by_m = {lk["mention"]: lk for lk in links}
+    mine = [ms[i] for i in sub.sq.get("mentions") or [] if i in ms]
+    names = [m for m in mine if qp.code_shape(m.get("text") or "") == "name"]
+    files = [m for m in mine if qp.code_shape(m.get("text") or "") == "file"]
+    if len(names) != 1:
+        return None, [], "the question does not name exactly one call written as code", None
+    if not files:
+        return None, [], "the question names no file the call would be limited to", None
+    all_files = list_files(ctx.repo)
+    allowed: list[str] = []
+    for m in files:
+        t = str(m.get("text") or "").strip("`").replace("\\", "/").removeprefix("./")
+        hits = [r for r in all_files if r == t or r.endswith("/" + t)]
+        if not hits:
+            return None, [], f"no file {t} in this repository", None
+        allowed += [h for h in hits if h not in allowed]
+    text = str(names[0].get("text") or "").strip("`").removesuffix("()")
+    lk = by_m.get(names[0]["id"]) or {}
+    node = (lk.get("best") or {}).get("node") if lk.get("status") == "linked" else None
+    if node is not None and node in ctx.g.G:
+        bare, f = qp._bare(ctx.g.label(node)), ctx.g.file(node) or ""
+        if not guards._module_of(f) or "." in bare or ctx.g.label(node).startswith("."):
+            return None, [], (f"`{text}` is not a module-level Python function or class: calls through an "
+                              "instance are not resolved"), None
+        return bare, allowed, "", node
+    root = text.split(".")[0]
+    project = {r.rsplit("/", 1)[-1].split(".")[0] for r in all_files} | \
+        {p for r in all_files for p in r.split("/")[:-1]}
+    if "." not in text or root in project or \
+            any(qp._bare(ctx.g.label(n)) == root and ctx.g.file(n) for n in ctx.g.G):  # a symbol of the project
+        return None, [], f"`{text}` is not a call of an imported module the engine can resolve", None
+    return text, allowed, "", None
+
+
+def _exclusive_guard(ctx: _Ctx, sub: _Sub, links: list[dict]) -> None:
+    """A yes/no question whether a call is made *only* in some files: the claims that say where it is made
+    do not answer it. The only_in engine of ``verinoda decide check`` (guards.py) does: a call outside the
+    files is the answer (no), a search that finds none is an inference within the engine's limits; when
+    the call or the files cannot be resolved the sub-question is ``not_supported`` (docs/DESIGN.md D31)."""
+    text = sub.sq.get("text") or ""
+    word = asks_exclusive(text)
+    if not word:
+        return
+    target, allowed, why_not, node = _exclusive_target(ctx, sub, links)
+    if target is None:
+        sub.flags["exclusive"] = {"unchecked": why_not}
+        _unknown(ctx, sub, {"question": text,
+                            "why": f"the question asks whether it happens {word} there; the claims say where it "
+                                   f"happens, not that it happens nowhere else, and it was not checked ({why_not})",
+                            "next_step": "name the call as written (module.function) and the file(s), or record "
+                                         "the rule and run `verinoda decide check` (only_in guard)"})
+        return
+    from verinoda import guards
+    from verinoda.snapshot import list_files
+
+    where = ", ".join(allowed)
+    # (level, file, line, why, graph edge) of every call site found
+    if node is None:  # an imported module's call: the only_in engine resolves imports and aliases
+        gctx = guards._Ctx(ctx.repo, list_files(ctx.repo), ctx.g)
+        try:
+            found, scan, _what = guards.check_only_in(gctx, {"calls": [target], "allowed": [], "scope": "all"})
+        except Exception as exc:  # noqa: BLE001 - an engine failure is an unknown, never a verdict
+            sub.flags["exclusive"] = {"unchecked": f"{type(exc).__name__}: {exc}"[:200]}
+            _unknown(ctx, sub, {"question": text, "why": f"the exclusivity check failed ({type(exc).__name__})",
+                                "next_step": "`verinoda decide check` with an only_in guard"})
+            return
+        hits = [(lv, rel, ln, why, None) for lv, rel, ln, why in found]
+        limits = ["found by the only_in engine of `verinoda decide check` in the project's files (git-ignored files "
+                  "are not read); it is an inference, not a proof that no other call exists"] + scan.limits
+        limits += [f"not checked: {u}" for u in scan.unknown]
+        pattern = rf"\b{re.escape(target)}\s*\("
+    else:  # a function or class of the project: every call edge the index extracted into it
+        hits = []
+        for u, d in ctx.g.in_edges(node, {"calls"}):
+            at = retrieval._at(d) or ""
+            rel, _, ln = at.rpartition(":")
+            if rel and ln.isdigit():
+                hits.append((guards.VIOLATED if d.get("confidence") == "EXTRACTED" else guards.POSSIBLE,
+                             rel, int(ln), f"call edge ({d.get('confidence') or '?'})", (u, d)))
+        limits = ["every call edge the index extracted into it was read; calls through another name (an import "
+                  "alias, a variable) and dynamic, reflective or external callers may be missing, so this is an "
+                  "inference, not a proof that no other call exists"]
+        pattern = rf"(?<!def )(?<![\w.]){re.escape(target)}\s*\("
+    ctx.step("exclusive", f"{target}: {len(hits)} call site(s), allowed {where}")
+    inside = [h for h in hits if h[1] in allowed]
+    outside = [h for h in hits if h[1] not in allowed]
+    answer: list[str] = []
+    for level, rel, ln, why, edge in outside[:5]:
+        if edge is not None:  # a caller from the index: the claim the callers handler makes
+            c = _edge_claim(ctx.rec, ctx.g, edge[0], node, edge[1], ctx.commit)
+        else:
+            line = guards._line(ctx.repo, rel, ln)
+            verb = ("is also called" if inside else "is called") if level == guards.VIOLATED else "may be called"
+            c = ctx.rec.claim(f"`{target}` {verb} outside {where}; {rel}:{ln} contains: {line[:140]}",
+                              kind="general",
+                              status="statically_verified" if level == guards.VIOLATED else "strong_inference",
+                              evidence=[(_src_ev(ctx.repo, rel, ln, ln, ctx.commit, check="only_in", level=level),
+                                         "supports")],
+                              subjects=[rel, target], spec={"only_in": {"calls": [target], "allowed": allowed}},
+                              uncertainties=[] if level == guards.VIOLATED else [why])
+        if c is not None:
+            answer.append(c["id"])
+    if len(outside) > 5:
+        _unknown(ctx, sub, {"question": text, "why": f"{len(outside) - 5} more call site(s) outside {where} were "
+                                                     "not turned into claims",
+                            "next_step": f"`verinoda decide check` with only_in calls={target} allowed={where}"})
+    if not outside and inside:
+        evs = [(_src_ev(ctx.repo, rel, ln, ln, ctx.commit, check="only_in"), "supports")
+               for _l, rel, ln, _w, _e in inside if re.search(pattern, guards._line(ctx.repo, rel, ln))][:3] or \
+            [(_src_ev(ctx.repo, inside[0][1], inside[0][2], inside[0][2], ctx.commit, check="only_in"), "supports")]
+        c = ctx.rec.claim(f"`{target}` is called only in {where} (no call outside it found)", kind="exclusive",
+                          status="strong_inference", evidence=evs, subjects=allowed,
+                          spec={"pattern": pattern, "allowed_files": allowed,
+                                **({"calls": [target]} if node is None else {})},
+                          uncertainties=limits)
+        if c is not None:
+            answer.append(c["id"])
+    if not hits:
+        _unknown(ctx, sub, {"question": text, "why": f"no call to `{target}` was found, in {where} or elsewhere "
+                                                     f"({limits[0]})",
+                            "next_step": "check the name as written in the code"})
+    sub.flags["exclusive"] = {"target": target, "allowed": allowed, "answer": answer}
 
 
 def _finish_sub(ctx: _Ctx, sub: _Sub, out: dict, handler: str) -> dict:
@@ -2052,6 +2261,10 @@ def answer_claims(sq: dict, claims: list[dict], flags: dict | None = None) -> li
     off = set((flags or {}).get("off_subject") or [])
     ans = [c for c in claims if c.get("kind") in kinds and c["id"] not in off
            and c.get("status") in _RANK and c["status"] not in ("unknown", "stale", "contradicted")]
+    exclusive = ((flags or {}).get("exclusive") or {}).get("answer")
+    if exclusive:  # "is X only called in Y?": what the only_in engine found answers, the rest is context
+        ans = [c for c in claims if c["id"] in set(exclusive)
+               and c.get("status") in _RANK and c["status"] not in ("unknown", "stale", "contradicted")]
     def in_tests(c: dict) -> bool:  # the product's own code first (a caller in the API before one in a test)
         subs = c.get("subjects") or []
         if isinstance(subs, str):
@@ -2074,7 +2287,9 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
     the subject itself (``flags["off_subject"]``: context claims for other symbols);
     ``unmet``: none (stale, contradicted and unknown claims never count), or the sub-question names
     code that does not exist here (``flags["not_found"]``: claims about other names do not answer it);
-    ``not_supported`` / ``blocked_by_clarification`` come from the handler. A ``decide`` sub-question is
+    ``not_supported`` / ``blocked_by_clarification`` come from the handler. A yes/no "is X only called in
+    Y?" (``flags["exclusive"]``) is judged on what the exclusivity check found (a call outside Y answers it;
+    none found is an inference), ``not_supported`` when it could not be checked. A ``decide`` sub-question is
     ``human_decision_required`` whatever its claims say: a choice between options is never ``met`` by
     evidence (docs/DESIGN.md D33), and an option the code does not have does not make it ``unmet``.
     """
@@ -2085,6 +2300,16 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
         return qp.HUMAN_DECISION
     if flags.get("not_found"):
         return "unmet"
+    exclusive = flags.get("exclusive") or {}
+    if exclusive:  # "is X only called in Y?" is answered by the only_in engine's findings, or not at all
+        if exclusive.get("unchecked"):
+            return "not_supported"
+        ids = set(exclusive.get("answer") or [])
+        live = [c for c in claims if c["id"] in ids and c.get("status") in _RANK
+                and c["status"] not in ("unknown", "stale", "contradicted")]
+        if not live:
+            return "unmet"
+        return "met" if min(live, key=lambda c: _RANK[c["status"]])["status"] in VERIFIED else "met_with_inference"
     kind, min_status, kinds = _verdict_kinds(sq)
     live = [c for c in claims if c.get("kind") in kinds and c.get("status") in _RANK and c["status"] != "unknown"]
     off = set(flags.get("off_subject") or [])
@@ -2381,6 +2606,9 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
         flags = s.pop("_flags", {})
         if flags.get("off_subject"):  # critique may have superseded some: the new claim is context too
             flags["off_subject"] = list(dict.fromkeys(replaced.get(c, c) for c in flags["off_subject"]))
+        if (flags.get("exclusive") or {}).get("answer"):
+            flags["exclusive"]["answer"] = list(dict.fromkeys(replaced.get(c, c)
+                                                              for c in flags["exclusive"]["answer"]))
         context = {replaced.get(c, c) for c in s.pop("_context", [])}
         rows = _claim_rows(store, s["claim_ids"])
         s["status"] = judge(by_id[s["id"]], rows, flags)

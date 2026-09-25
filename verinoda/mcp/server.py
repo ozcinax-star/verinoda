@@ -1621,11 +1621,12 @@ DESCRIPTIONS: dict[str, str] = {
         "append-only). action: list | record (chosen + rationale, optional brief_id, guards, governs, "
         "revisit_when, supersedes) | import (a record for a hand-written ADR, document=path; guards only "
         "proposed) | guard (add guards to decision_id) | accept (guard_ids of decision_id) | waive (one guard "
-        "id in guard_ids, at='path[:line]', reason, until). Guard specs: 'only_in calls=sqlite3.connect "
+        "id in guard_ids, at='path[:line]', reason, until) | answer (the user's answer to question_id of a "
+        "decision brief, brief_id). Guard specs: 'only_in calls=sqlite3.connect "
         "allowed=orders/repository.py', 'no_edge from=src/main/** to=src/client/**', 'dependency "
-        "absent=psycopg'; revisit_when: 'dependency_added=NAME' or 'file_appears=GLOB'. record, guard, accept "
-        "and waive need user_statement: the user's own words, verbatim - Verinoda never decides and neither "
-        "may the agent."),
+        "absent=psycopg'; revisit_when: 'dependency_added=NAME' or 'file_appears=GLOB'. record, guard, accept, "
+        "waive and answer need user_statement: the user's own words, verbatim - Verinoda never decides and "
+        "neither may the agent."),
     "decision_brief": (
         "What a human needs to decide a should/which/scale question, collected from the code - never a "
         "recommendation. forces: facts with evidence that re-checks now (storage sinks and how concentrated they "
@@ -1663,7 +1664,8 @@ DESCRIPTIONS: dict[str, str] = {
         "Returns outcome, the tree (hash, files changed vs base and since the previous attempt, with symbols), the "
         "failure signature (exception at file::symbol per failing test), progress (improved | same | regressed | "
         "unknown), loop findings (definitive: tree_reverted, signature_recurred, no_progress, test_edited, "
-        "off_path; heuristic: error_moved, masking, hypothesis_repeated; each cites the attempts it rests on), "
+        "failing_tests_skipped, off_path; heuristic: file_reverted, error_moved, masking, hypothesis_repeated, "
+        "possibly_flaky; each cites the attempts it rests on), "
         "flaky, stop, strategies and questions_for_human. stop=true: stop editing and follow strategies[0]. "
         "Never reports 'fixed': a pass is 'the repro passed at tree T in run R' plus what was not run."),
     "debug_status": (

@@ -1700,7 +1700,7 @@ def _r_debug_strategy(r: dict) -> None:
             print(f"      - {ln.strip()[:110]}")
         for ln in (h.get("added") or [])[:2]:
             print(f"      + {ln.strip()[:110]}")
-    for run in r.get("runs") or []:
+    for run in r["runs"] if isinstance(r.get("runs"), list) else []:  # bisect's runs; rerun's is a count
         print(f"  {'recorded' if run.get('recorded') else 'ran'} {run['commit'][:12]}: {run['outcome']} "
               f"(attempt {run['attempt']})")
     for test, d in ((r.get("trace_diff") or {}).get("tests") or {}).items():
@@ -2664,8 +2664,13 @@ def main(argv: list[str] | None = None) -> int:
     if not getattr(args, "fn", None):
         parser.print_help()
         return 0
+    from verinoda.store import SchemaTooNew
+
     try:
         return int(args.fn(args) or 0)
+    except SchemaTooNew as exc:  # a database a newer Verinoda wrote: say so, no traceback
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

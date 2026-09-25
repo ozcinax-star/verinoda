@@ -448,8 +448,33 @@ def asks_for_choice(text: str) -> bool:
     low = tn.nfc(text or "").lower()
     if any(rx.search(low) for rx in _DECIDE_STRONG_EN_RX):
         return True
-    return _uses_turkish_cues(text or "") and \
-        any(rx.search(tn.fold_tr(tn.nfc(text))) for rx in _DECIDE_STRONG_TR_RX)
+    if not _uses_turkish_cues(text or ""):
+        return False
+    hits = [m for rx in _DECIDE_STRONG_TR_RX for m in [rx.search(tn.fold_tr(tn.nfc(text)))] if m]
+    return bool(hits) and not (all(m.group(0).startswith("yeterli") for m in hits) and _enough_about_code(text))
+
+
+_TECH_RX = re.compile(r"\b" + _TECH + r"\b")
+
+
+def _enough_about_code(text: str) -> bool:
+    """"<code> ... için yeterli mi" judges a name written as code ("validate_items boş siparişi reddetmek için
+    yeterli mi?"), as English "is validate_items enough to ..." does: no choice between options, unless the
+    clause names a technology or asks for us / under load ("bizim için", "yüke")."""
+    folded = tn.fold_tr(tn.nfc(text or ""))
+    if _TECH_RX.search(folded) or re.search(r"\bbizim icin\b|\b(?:yuk|trafik|buyume|olcek)\w*", folded):
+        return False
+    toks = [t.strip(".") for t in re.findall(r"`[^`]+`|[\w.]+(?:\(\))?", tn.nfc(text or ""))]
+    return any(code_shape(t) for t in toks if re.search(r"[._(`]|[a-z][A-Z]", t))
+
+
+def _enough_only(text: str) -> bool:
+    """Is "yeterli mi" the only decision cue of the clause?"""
+    if any(rx.search(tn.nfc(text).lower()) for rx in _EN_RX["decide"]):
+        return False
+    folded = tn.fold_tr(tn.nfc(text))
+    hits = [m for rx, _shadow in _TR_RX["decide"] for m in [rx.search(folded)] if m]
+    return bool(hits) and all(m.group(0).startswith("yeterli") for m in hits)
 
 
 # words that may ask for a choice without a decide cue ("what would you pick", "fits best", "smarter"):
@@ -505,7 +530,7 @@ def clause_cues(text: str, lexicon=None) -> list[dict]:
             found["flow"] = {"intent": "flow", "cue": "ablative+dative", "lang": "tr"}
     # a decide cue that is not a strong one does not survive a veto (past tense, a question about what the
     # code does, a usage verb): the clause keeps its other intents
-    if "decide" in found and not asks_for_choice(text) and _decide_vetoed(text):
+    if "decide" in found and not asks_for_choice(text) and (_decide_vetoed(text) or _enough_only(text)):
         del found["decide"]
     # "who calls X" / "X kimler tarafından çağrılıyor": the call verb is the callers cue, not a flow one
     if "callers" in found and "flow" in found and \
@@ -574,11 +599,26 @@ _SPLITS = [
                r"niye|kim|kimi|kime)\b)"),
     re.compile(r",\s*(?:ayrica|bir de|peki|sonra|ardindan|daha sonra|ek olarak|bunun yaninda)\s+"),
     re.compile(r"\s+peki\s+|\s+bir de\s+|\s+hem de\s+"),
-    re.compile(r",\s+(?=\w+(?:ysa|yse|sa|se)\b)"),
+    re.compile(r",\s+(?=(?!yoksa\b)\w+(?:ysa|yse|sa|se)\b)"),  # "..., yoksa X mi?" is one choice
     re.compile(r",\s+(?=(?:ne|neyi|nerede|nereye|nereden|hangi|nasil|neden|kim)\b)"),
 ]
 _CONDITIONAL = re.compile(r"^\s*\w+(?:ysa|yse|sa|se)\b|^\s*if (?:so|yes|it does|they do)\b")
 _TR_VE = re.compile(r"\s+ve\s+")
+_TR_COMMA = re.compile(r",\s+")
+# the question particle with its person endings ("mi", "miyiz", "misiniz", "mudur"), folded
+_TR_PARTICLE = re.compile(r"\bm[iu](?:y[iu]m|y[iu]z|s[iu]n|s[iu]n[iu]z|d[iu]r|yd[iu]|ym[iu]s)?\b")
+# a clause that goes on after the comma (a condition, "-ken", "-ince") or offers an alternative ("yoksa")
+_TR_COMMA_KEEP_LEFT = re.compile(r"(?:ysa|yse|sa|se|ken|ince|inca|unce|unca)\s*$")
+_TR_COMMA_KEEP_RIGHT = re.compile(r"^\s*(?:yoksa|veya|ya da|ya)\b")
+
+
+def _own_question(text: str, folded: str) -> set[str] | None:
+    """The intents of a Turkish piece that asks its own question (a question word or particle, or a decision
+    cue, and at least one intent cue), else None."""
+    intents = {c["intent"] for c in clause_cues(text)}
+    if intents and (_has_question_word(folded) or _TR_PARTICLE.search(folded) or "decide" in intents):
+        return intents
+    return None
 
 
 def _carry_dropped_subjects(sqs: list[dict], mentions: list[dict]) -> None:
@@ -625,6 +665,22 @@ def segment(message: str) -> list[dict]:
         hi = min(b for b in bounds if b >= m.end())
         if _has_question_word(folded[lo:m.start()]) and _has_question_word(folded[m.end():hi]):
             cuts.add((m.start(), m.end()))
+    # A Turkish comma splits the same way when each side asks its own question ("SQLite yeterli mi,
+    # place_order siparişi nasıl kaydediyor?", "PostgreSQL'e geçmeli miyiz, validate_items nereden
+    # çağrılıyor?"), unless the left side is a condition, the right one an alternative ("..., yoksa") or both
+    # sides are the options of one choice ("Fabric'e mi geçelim, NeoForge'da mı kalalım?").
+    if _uses_turkish_cues(message):
+        for m in _TR_COMMA.finditer(folded):
+            if any(a == m.start() for a, _ in cuts):
+                continue
+            lo = max(b for b in bounds if b <= m.start())
+            hi = min(b for b in bounds if b >= m.end())
+            left, right = folded[lo:m.start()], folded[m.end():hi]
+            if _TR_COMMA_KEEP_LEFT.search(left) or _TR_COMMA_KEEP_RIGHT.search(right):
+                continue
+            a_side, b_side = _own_question(message[lo:m.start()], left), _own_question(message[m.end():hi], right)
+            if a_side and b_side and not ("decide" in a_side and "decide" in b_side):
+                cuts.add((m.start(), m.end()))
     pieces: list[list[int]] = []
     pos = 0
     for a, b in sorted(cuts):

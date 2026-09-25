@@ -317,9 +317,16 @@ def test_a_big_changed_file_is_diffed_fast_and_once_per_session(tmp_path, monkey
     lines[500] = lines[500].replace("1.0.", "2.0.")
     lines[9000] = lines[9000].replace("1.0.", "2.0.")
     new = ("\n".join(lines) + "\n").encode()
+    # what makes it fast is difflib's junk heuristic for a file this big (a wall-clock bound alone failed
+    # on a loaded machine: 2.47 s against 2.0); the bound below only catches the old seconds-long diff
+    seen = []
+    real_sm = treestate.difflib.SequenceMatcher
+    monkeypatch.setattr(treestate.difflib, "SequenceMatcher",
+                        lambda *a, **k: seen.append(k.get("autojunk", True)) or real_sm(*a, **k))
     t = time.perf_counter()
     d = treestate.diff_file("package-lock.json", old, new)
-    assert time.perf_counter() - t < 2.0 and len(d["hunks"]) == 2
+    assert seen == [True] and len(d["hunks"]) == 2 and time.perf_counter() - t < 10.0
+    monkeypatch.setattr(treestate.difflib, "SequenceMatcher", real_sm)
     repo = _repo(tmp_path)
     (repo / "package-lock.json").write_bytes(old)
     _git(repo, "add", "-A")

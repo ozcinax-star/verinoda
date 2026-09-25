@@ -24,6 +24,16 @@ from typing import Any, Iterator
 
 SCHEMA_VERSION = 6
 
+
+class SchemaTooNew(RuntimeError):
+    """atlas.db was written by a newer Verinoda (its schema version is above :data:`SCHEMA_VERSION`)."""
+
+    def __init__(self, found: int):
+        self.found = found
+        super().__init__(f"atlas.db schema v{found} is newer than this Verinoda (v{SCHEMA_VERSION}); upgrade "
+                         "verinoda (a migration is one-way: see docs/UPGRADING.md)")
+
+
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
@@ -553,9 +563,8 @@ class Store:
         row = self.conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
         current = int(row[0]) if row else 0
         if current > SCHEMA_VERSION:
-            raise RuntimeError(
-                f"atlas.db schema v{current} is newer than this Verinoda (v{SCHEMA_VERSION}); upgrade verinoda"
-            )
+            self.conn.close()
+            raise SchemaTooNew(current)
         for v in range(current + 1, SCHEMA_VERSION + 1):
             self.conn.executescript(_MIGRATIONS[v])
             self.conn.execute(
