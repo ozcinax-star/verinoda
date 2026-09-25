@@ -214,6 +214,36 @@ def test_adding_a_new_test_file_is_not_test_edited():
     assert _rules(lr.evaluate(h, probe)) == []  # only lines added to a test: a probe, not an edit
 
 
+def test_putting_a_test_back_to_its_starting_content_is_not_a_test_edit():
+    # web/backend evaluation: attempt 1 edited the assertion (stop), attempt 2 restored the test (`git checkout`)
+    # and fixed the code - it was stopped as test_edited although the test is the one the session started with
+    edit = _change("tests/test_x.py", ("test_a",), test=True, removed=["    assert f() == 1"],
+                   added=["    assert f() == 2"])
+    back = _change("tests/test_x.py", ("test_a",), test=True, removed=["    assert f() == 2"],
+                   added=["    assert f() == 1"])
+    h = [_att(0, kind="baseline", exact="A"),
+         _att(1, outcome="pass", files={"m.py": "c1", "tests/test_x.py": "edited"}, vs_prev=[edit])]
+    res = lr.evaluate(h, _att(2, outcome="pass", files={"m.py": "c2"}, vs_prev=[_change("m.py"), back]))
+    assert _rules(res) == [] and not res["stop"] and res["assertion_lines"] == []
+    only_back = lr.evaluate(h, _att(2, files={"m.py": "c1"}, exact="A", vs_prev=[back]))
+    assert "test_edited" not in _rules(only_back)
+    # back to attempt 0's content when the session started with the test changed (uncommitted): not an edit
+    h0 = [_att(0, kind="baseline", exact="A", files={"tests/test_x.py": "users"}),
+          _att(1, outcome="pass", files={"tests/test_x.py": "edited"}, vs_prev=[edit])]
+    res0 = lr.evaluate(h0, _att(2, outcome="pass", files={"tests/test_x.py": "users", "m.py": "c2"},
+                                vs_prev=[_change("m.py"), back]))
+    assert _rules(res0) == []
+    # ... but back to the base commit is: the test the session started with was discarded
+    to_base = lr.evaluate(h0, _att(2, outcome="pass", files={"m.py": "c2"}, vs_prev=[_change("m.py"), back]))
+    assert _rules(to_base) == ["test_edited"] and to_base["stop"]
+    # another content than attempt 0's is an edit, and a file whose content was not recorded counts as before
+    other = lr.evaluate(h, _att(2, outcome="pass", files={"m.py": "c2", "tests/test_x.py": "third"},
+                                vs_prev=[_change("m.py"), back]))
+    assert _rules(other) == ["test_edited"]
+    unrecorded = {k: v for k, v in _att(2, outcome="pass", vs_prev=[back]).items() if k != "tree_files"}
+    assert _rules(lr.evaluate(h, unrecorded)) == ["test_edited"]
+
+
 def test_a_passing_attempt_that_edited_the_test_still_stops():
     h = [_att(0, kind="baseline", exact="A")]
     cur = _att(1, outcome="pass", vs_prev=[_change("tests/test_x.py", ("test_a",), test=True,

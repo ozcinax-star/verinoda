@@ -1269,7 +1269,11 @@ records what the human chose and checks the code against it.
     is the same after parsing) is not flagged. "An assertion or expected value" = a removed/changed
     line matching assertion forms (`assert`, `self.assert*`, `expect(`, `assertThat`, `assert_eq!`,
     `t.Errorf`, `pytest.raises`, `expected =`/`want :=`, ...). It stops even a passing attempt (a test
-    edited until it passes is the case to ask about).
+    edited until it passes is the case to ask about). A file the attempt put back to the content it had
+    at attempt 0 is not edited: `git checkout` of a test an earlier attempt changed undoes a test edit
+    (senior evaluation: the real fix after such a checkout was stopped). Back to the base commit counts
+    only where attempt 0 had the base content too; a test the session started with, uncommitted, is the
+    test, and putting it back to the commit discards it (still `test_edited`).
   - `failing_tests_skipped`: a test that failed at the baseline (or at the previous attempt, if it
     existed at the baseline) is skipped, xfailed, deselected or not collected in this run (the
     plugin's per-test outcomes; unknown without them). It stops even a passing attempt, and such a
