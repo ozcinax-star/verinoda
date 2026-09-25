@@ -8,8 +8,9 @@ Everything lives under ``<repo>/.verinoda/``:
                     search.db (passage index), receiver_calls.json (receiver-call
                     edges), lexicon.json (repo-learned vocabulary), python_facts.json
                     (what each .py file imports and calls, kept between builds),
-                    rebuild_record.json (what the last full rebuild built, so an
-                    update that builds the same graph keeps graph.json), empty_json.json
+                    rebuild_record.json (what the last full rebuild built when Verinoda
+                    rewrote graph.json after it, so an update that builds the same graph
+                    keeps graph.json), empty_json.json
                     (data-shaped .json files the extractor skips, by path and bytes) and,
                     when the user supplies one, index.scip (a SCIP index read by
                     scip_reader; freshness state in scip_fresh.json)

@@ -104,15 +104,19 @@ absolute once per path string for a build, not once per item (about 150,000 path
 update of Verinoda's own repository). (2) After the build graph.json is read once and written
 once: ids made portable and the nodes of missing files pruned in one rewrite (before: five
 reads and two rewrites of the 34 MB file, and the receiver sidecar computed twice), and whether
-an edit concerns the graph is read from the JSON without building the graph. (3) When the
-pipeline builds exactly the graph of the last full rebuild, the upstream "topology unchanged"
-path now runs: graph.json is kept, clustering and two rewrites are skipped, and GRAPH_REPORT.md
-and the dated backup are written with the upstream functions as the full path writes them
-(`.verinoda/index/rebuild_record.json`). That is the case for an edit that leaves every node and
-edge as it was (a comment or a sentence changed in place, lines appended at the end of a file);
-not when lines move or symbols change, and not on the first update after a file was added or
-removed or after a scan (the upstream merge carries the previous graph's community numbers into
-the next graph, so it comes out different once more). (4) The 112 data-shaped JSON files the
+an edit concerns the graph is read from the JSON without building the graph. (3) On a
+repository whose graph.json Verinoda rewrites after every build (ids that carry the root, nodes
+of files the code names but the repository does not have; Verinoda's own repository is one), the
+upstream "topology unchanged" path never fired. There, when the pipeline builds exactly the
+graph of the last full rebuild, it now runs: graph.json is kept, clustering and two rewrites are
+skipped, and GRAPH_REPORT.md and the dated backup are written with the upstream functions as the
+full path writes them on such a repository (`.verinoda/index/rebuild_record.json`). Where
+graph.json is the pipeline's own output, the upstream comparison already worked and still
+decides alone. On a repository of the first kind, that is the case for an edit that leaves every
+node and edge as it was (a comment or a sentence changed in place, lines appended at the end of a
+file); not when lines move or symbols change, and not on the first update after a file was added
+or removed or after a scan (the upstream merge carries the previous graph's community numbers
+into the next graph, so it comes out different once more). (4) The 112 data-shaped JSON files the
 upstream extractor skips are remembered by path and bytes, and fewer than 64 files left to
 extract are extracted in the process instead of by a process pool.
 
@@ -146,6 +150,23 @@ the graph's mtime and the build time aside), lexicon.json (`built_at` aside), ma
 `seen` times aside) and the snapshot's counts, then `verinoda query` for three questions.
 Identical in every step. No benchmark set was rerun: what the answers are built from did not
 change.
+
+A review then found two differences from main, both fixed. On a repository with nothing to
+rewrite, (3) took over the upstream fast path and rewrote GRAPH_REPORT.md and the dated backup
+where main leaves them as they are (orders_app with a data JSON set to `{}`: the report's word
+count, and the day's backup replaced). And the MCP server kept its loaded graph as long as
+graph.json's stat did not change, so after an update that kept graph.json but changed the
+receiver sidecar (`repo.get(order_id)` -> `repo.save(...)` on the same line) the running server
+still answered with the old call edge. Main does the same on a repository where the upstream
+fast path keeps graph.json; the server's key now includes the sidecar. After the fixes the
+review's A/B runs (main against this code, the command itself at one path, 9 sequences with 230
+steps on orders_app with and without files that name missing ones, outside a git repository, and
+with TypeScript path aliases: comments, string literals, docstrings, a receiver call, renames,
+moved lines, a file that does not parse, data and config JSON edits, deleted and restored files,
+ignore files, a hand-edited label, a removed sidecar and report, a date rollover, backups off,
+`scan`, `scan --force`) gave identical outputs in every step, and `verinoda query`, `map` and
+`notes` the same text. The timings above were taken on Verinoda's own repository, where
+graph.json is rewritten after every build; the fixes do not change what an update does there.
 
 Found on the way, not changed (the outputs had to stay the same): an id made portable whose
 plain form is taken gets `_unresolved` appended without checking that name too, and the upstream
