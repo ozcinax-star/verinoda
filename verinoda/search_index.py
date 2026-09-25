@@ -2180,35 +2180,9 @@ def _reference_roots(root, q: "QueryTerms", q_text: str = "") -> tuple[str, ...]
     project (``verinoda.copies``) that the question does not name (they count less)."""
     if root is None:
         return ()
-    try:
-        from verinoda.paths import load_config
+    from verinoda import copies
 
-        entries = list((load_config(Path(root)).get("index") or {}).get("reference") or [])
-    except Exception:  # noqa: BLE001 - an unreadable config only means no reference trees
-        return ()
-    try:
-        from verinoda import copies
-
-        detected = [c["path"] for c in copies.load(Path(root))]
-    except Exception:  # noqa: BLE001 - no detection result: the configured trees only
-        detected = []
-    entries += detected
-    words = {textnorm.fold_tr(w) for w in q.words}
-    text = textnorm.fold_tr(q_text)
-    roots = []
-    for e in entries:
-        path = e.get("path") if isinstance(e, dict) else e
-        if not isinstance(path, str) or not path.strip("/"):
-            continue
-        aliases = [textnorm.fold_tr(s) for s in (e.get("aliases") or [])] if isinstance(e, dict) else []
-        segments = [textnorm.fold_tr(seg) for seg in path.strip("/").split("/") if len(seg) >= 3]
-        # an alias counts as a word or a word's stem ("orijinalde" names "orijinal"); a folder name
-        # only as the whole word (so "super" does not name "mymod-original")
-        named = any(a in words or (len(a) >= 5 and any(w.startswith(a) for w in words)) for a in aliases) \
-            or any(s in words or re.search(r"(?<![\w-])" + re.escape(s) + r"(?![\w-])", text) for s in segments)
-        if not named:
-            roots.append(path.strip("/") + "/")
-    return tuple(roots)
+    return copies.roots_not_named(Path(root), {textnorm.fold_tr(w) for w in q.words}, q_text)
 
 
 def stale_files(h: Handle, root: Path, files: list[str]) -> list[str]:

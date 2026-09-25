@@ -447,7 +447,7 @@ def test_refused_index_refresh_is_an_unknown_and_qualifies_every_claim(tmp_path,
         p = repo / "orders" / "pricing.py"
         p.write_text(p.read_text(encoding="utf-8") + "\n# edited\n", encoding="utf-8")
 
-        def refused(store, repo_):
+        def refused(store, repo_, **kw):
             return {"snapshot": prev, "error": "the indexer did not rewrite the graph",
                     "hint": "verinoda scan --force", "stale": [], "changed_count": 1, "mode": "index_refused"}
 
@@ -721,14 +721,14 @@ def test_update_errors_are_unknowns_not_crashes(tmp_path, monkeypatch):
         p = repo / "orders" / "pricing.py"
         p.write_bytes(p.read_bytes() + b"\n# edited\n")
 
-        def boom(store, repo_):
+        def boom(store, repo_, **kw):
             raise RuntimeError("index lock held")
 
         monkeypatch.setattr(workflow, "update", boom)
         res = analysis.analyze(st, repo, "Where is compute_total defined?")
         assert res["unknowns"][0]["why"] == "index could not be refreshed: RuntimeError: index lock held"
         assert res["claims"]
-        monkeypatch.setattr(workflow, "update", lambda store, repo_: {"snapshot": None, "error": "no snapshot"})
+        monkeypatch.setattr(workflow, "update", lambda store, repo_, **kw: {"snapshot": None, "error": "no snapshot"})
         res = analysis.analyze(st, repo, "Where is compute_total defined?")
         assert res["unknowns"][0]["why"] == "index could not be refreshed: no snapshot" and res["snapshot"]
     finally:

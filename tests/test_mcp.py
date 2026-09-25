@@ -522,7 +522,7 @@ def test_the_kept_graph_follows_the_receiver_call_sidecar_when_graph_json_stays(
 
 
 def test_project_query_answers_are_kept_until_an_input_changes(fresh_repo, monkeypatch):
-    from verinoda import index, retrieval
+    from verinoda import freshness, index, retrieval
 
     t = AtlasTools(fresh_repo)
     t.racy_ns = 0  # the fixture wrote every file a moment ago; see the racy-file test for the default
@@ -545,16 +545,19 @@ def test_project_query_answers_are_kept_until_an_input_changes(fresh_repo, monke
     _edit(fresh_repo / "orders" / "repository.py", "self.conn.commit()", "self.conn.commit()  # durable")
     edited = t.project_query(QUESTION, max_items=5)
     assert len(calls) == 4 and edited != first and "durable" in edited["text"]
-    core = real(index.load(fresh_repo), QUESTION, retrieval.Budget(max_items=5, max_chars=6000))
+    g = index.load(fresh_repo)
+    core = real(g, QUESTION, retrieval.Budget(max_items=5, max_chars=6000))
+    retrieval.attach_freshness(core, g, freshness.check(fresh_repo))
     assert edited["text"] == retrieval.render_text(core, 6000)
     assert "orders/repository.py" in core["budget"]["stale_files"]  # stated as changed since indexing
-    assert "changed since indexing" in edited["text"]
+    assert core["stale_files"] == ["orders/repository.py"]  # the whole project's changed files
+    assert "1 file(s) changed since the index" in edited["text"]
 
     # re-indexing rewrites graph.json and the search index: nothing is served from before
     assert t.index_update()["mode"] == "incremental"
     _clock_past_writes(fresh_repo)
     reindexed = t.project_query(QUESTION, max_items=5)
-    assert len(calls) == 5 and "changed since indexing" not in reindexed["text"]
+    assert len(calls) == 5 and "changed since the index" not in reindexed["text"]
     hits = t.cache_stats["query_memo_hits"]
     assert t.project_query(QUESTION, max_items=5) == reindexed and t.cache_stats["query_memo_hits"] == hits + 1
 

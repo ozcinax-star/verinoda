@@ -198,15 +198,28 @@ def test_trace_says_which_file_lacks_a_file_scoped_name(g):
     ("create_order_handler", "config.DISCOUNT_THRESHOLD", "target",
      "`DISCOUNT_THRESHOLD` occurs at orders/config.py:7"),
     ("OrderRepository.__init__", "OrderRepository.conn", "target", "`conn` occurs at orders/repository.py:10"),
-    ("service.compute_total", "apply_discount", "source", "`compute_total` occurs at orders/service.py:4"),
-    ("api.place_order", "validate_items", "source", "`place_order` occurs at orders/api.py:4"),
 ])
-def test_trace_keeps_members_constants_and_imported_names_that_exist(g, source, target, side, where):
-    # review round 2: trace said "no symbol named ..." for a module constant, an instance attribute and
-    # a name a module imports; it now checks existence as analyze does (the owner's own lines first)
+def test_trace_says_where_a_constant_or_attribute_is_and_uses_no_similar_name(g, source, target, side, where):
+    # review round 2: trace said "no symbol named ... in this repository" for a module constant and an
+    # instance attribute, which exist; review 2026-09-26: resolving them by similarity answered about another
+    # name. Now: where it occurs, not a symbol of the index, unresolved with the nearest symbols as hints
     res = retrieval.trace(g, source, target, mode="any")
-    assert "not_found" not in res, res.get("not_found")
-    assert res["status"] != "unresolved" and where in res["fuzzy"][side]
+    assert "not_found" not in res and "fuzzy" not in res, (res.get("not_found"), res.get("fuzzy"))
+    assert res["status"] == "unresolved" and res["paths"] == []
+    note = res["not_a_symbol"][side]
+    assert where in note and note.startswith("no symbol in the index is named") and "no similar name" in note
+    assert res["hints"][side]
+
+
+@pytest.mark.parametrize("source, target, name, defined", [
+    ("service.compute_total", "apply_discount", "service.compute_total", "orders/pricing.py"),
+    ("api.place_order", "validate_items", "api.place_order", "orders/service.py"),
+])
+def test_trace_follows_the_import_a_module_name_is_bound_by(g, source, target, name, defined):
+    # `api.place_order` is the function orders/api.py imports from orders/service.py: the same object
+    res = retrieval.trace(g, source, target, mode="any")
+    assert "not_found" not in res and "fuzzy" not in res and "not_a_symbol" not in res
+    assert res["status"] != "unresolved" and res["resolved"]["source"]["at"].startswith(defined)
 
 
 def test_trace_does_not_find_what_a_class_does_not_define(g):

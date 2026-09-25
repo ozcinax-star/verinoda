@@ -450,6 +450,43 @@ def _link_lines(handle, h, ranked: set[str]) -> list[str]:
     return [_clip(x, 500) for x in out]
 
 
+def attach_freshness(result: dict, g: Graph, fresh: dict) -> dict:
+    """Project-wide staleness on a :func:`retrieve` result (:func:`verinoda.freshness.check`):
+    ``stale_count`` / ``stale_files``, and ``not_in_index``: code names of the question the index
+    does not have but a changed file spells (the answer's items are not about them)."""
+    from verinoda import freshness, naming
+
+    result.update(freshness.summary(fresh))
+    if fresh.get("count"):
+        missing = naming.unindexed_names(g, result.get("question") or "", fresh.get("files") or [])
+        if missing:
+            result["not_in_index"] = missing
+    return result
+
+
+def stale_lines(result: dict) -> list[str]:
+    """The staleness lines of a query answer (text): names the index does not have yet, then the files
+    changed since the index (project-wide when :func:`attach_freshness` ran, else the answer's own)."""
+    out = []
+    missing = result.get("not_in_index") or []
+    if missing:
+        out.append(_clip("not in the index yet (spelled in a file changed since it was built; run "
+                         "`verinoda update`; the passages below are not about it): "
+                         + "; ".join(f"`{m['name']}` at {m['at']}" for m in missing[:3]), 400))
+    rd: _RenderData | None = getattr(result, "render", None)
+    if result.get("stale_count"):
+        files = result.get("stale_files") or []
+        more = result["stale_count"] - len(files[:10])
+        out.append(_clip(f"{result['stale_count']} file(s) changed since the index (run `verinoda update`; what it "
+                         "says about them is the previous version): " + ", ".join(files[:10])
+                         + (f", ... (+{more})" if more > 0 else ""), 600))
+    else:
+        stale = (result.get("budget") or {}).get("stale_files") or (rd.stale if rd else [])
+        if stale:
+            out.append(_clip("changed since indexing (run `verinoda update`): " + ", ".join(stale), 300))
+    return out
+
+
 def render_text(result: dict, budget_chars: int = 6000) -> str:
     """Plain text for a model, skeleton first, packed to ``budget_chars``.
 
@@ -474,9 +511,8 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
     if expansions:
         head += "\nexpanded: " + "; ".join(expansions[:6])
     add(_clip(head, 600))
-    stale = (result.get("budget") or {}).get("stale_files") or (rd.stale if rd else [])
-    if stale:
-        add(_clip("changed since indexing (run `verinoda update`): " + ", ".join(stale), 300))
+    for line in stale_lines(result):
+        add(line)
     if rd is None:
         return _render_items(result, out, add, budget_chars)
     g = rd.g
@@ -692,61 +728,8 @@ def _code_written(text: str) -> bool:
     return bool(qp.code_shape(text)) or any(c in (text or "") for c in ("::", "#", "/", "\\"))
 
 
-def _endpoint_notes(g: Graph, text: str, nid: str | None) -> tuple[str | None, str | None, str | None]:
-    """``(not_found, fuzzy, node)`` for one endpoint and the node ``g.resolve`` gave it.
-
-    A node the text names exactly stands (or replaces a merely similar one). An endpoint written as
-    code that names nothing exactly is not replaced by a similar name when the repository spells it
-    nowhere ("no symbol named `x` in this repository; nearest: ..."); when the repository spells it
-    somewhere (an external name, a key), or the endpoint is plain words, the similar node is kept and
-    ``fuzzy`` says so."""
-    from verinoda import question_plan as qp
-
-    if nid and _names_exactly(g, text, nid):
-        return None, None, nid
-    if not _code_written(text):
-        if not nid:
-            return None, None, None
-        return None, (f"'{text}' has no exact match; resolved by similarity to {g.label(nid)} "
-                      f"({g.file(nid)}:{g.line(nid)})"), nid
-    exact = _exact_nodes(g, text)
-    if exact:
-        # a class before its constructor or its file; a top-level symbol before a member of that name
-        def rank(n: str) -> tuple:
-            return (g.is_file_node(n), any(True for _ in g.in_edges(n, {"method"})), g.label(n).endswith(")"))
-
-        best = [n for n in exact if rank(n) == min(map(rank, exact))]
-        if len(best) == 1:
-            return None, None, best[0]
-        others = ", ".join(f"{g.label(n)} ({g.file(n)}:{g.line(n)})" for n in best[1:4])
-        return None, (f"'{text}' names {len(best)} symbols; using {g.label(best[0])} "
-                      f"({g.file(best[0])}:{g.line(best[0])}), not {others}"), best[0]
-    if not nid:
-        return None, None, None
-    # the same existence check as analyze (a member of a known class or module is looked for in it);
-    # an owner the graph does not define needs the whole name spelled (`Foo.save` is not `save`)
-    path, name = qp.split_code_name(text)
-    site = qp.name_site(g, text)
-    if site not in (None, qp.UNCHECKED) and "." in name and not path and not qp.owner_known(g, text):
-        site = qp.name_site(g, text, strict=True)
-    if site is None:
-        ix = qp._index(g)
-        near = [{"label": g.label(n), "site": qp._site(g, n)} for n, _ in qp._member_near(g, ix, text)]
-        near += [{"label": g.label(n), "site": qp._site(g, n)} for n, _ in qp._near_misses(ix, text)
-                 if qp._site(g, n) not in {x["site"] for x in near}]
-        return qp.not_found_line(g, text, near), None, None
-    if site == qp.UNCHECKED:
-        where = "its existence was not checked"
-    elif qp.spells_whole(g, site, text):
-        where = f"the name occurs at {site}"
-    else:
-        where = f"`{name.rpartition('.')[2]}` occurs at {site}, not the whole name"
-    at = f" ({g.file(nid)}:{g.line(nid)})" if g.file(nid) else ""  # a package or directory node has no line
-    return None, f"no symbol is named `{text}` ({where}); resolved by similarity to {g.label(nid)}{at}", nid
-
-
 def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int = 8,
-          mode: str = "flow") -> dict:
+          mode: str = "flow", stale=()) -> dict:
     """Directed paths between two symbols/files, each hop with its edge location.
 
     ``mode="flow"`` follows only ``calls`` edges (plus class construction ->
@@ -755,39 +738,48 @@ def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int
     "how does execution get from A to B"; every hop says its ``kind``
     (``call``, ``construction``, ``containment``, ``reference``, ``import``,
     ``inheritance``) and a path with a non-call hop is reported as
-    ``structural``, not as reachability. An endpoint that does not resolve
-    comes back with ``hints`` (likely symbols) and a ``next_step``. An
-    endpoint written as code (``orders\\api.py``, ``path::Class.method``,
-    ``Class#method``, ``name()``, a dotted module or class name) resolves to
-    the node it names exactly; one that names nothing and that the repository
-    spells nowhere is not replaced by a similar one (``not_found``: "no symbol
-    named `x` in this repository; nearest: ..."); an endpoint resolved by
-    similarity is kept and reported in ``fuzzy``.
+    ``structural``, not as reachability.
+
+    Endpoints resolve through :func:`verinoda.naming.resolve`: the node a name
+    names exactly (a detected copy or reference tree giving way to the
+    project's own code; ``resolution_notes`` says when only a copy defines it).
+    A name that names several symbols is ``ambiguous`` (``ambiguous`` and
+    ``hints`` list them; none is picked). A name written as code that names no
+    node is never replaced by a similar one: spelled in a file changed since the
+    index (``stale``) it is ``not_indexed``, spelled nowhere ``not_found`` ("no
+    symbol named `x` in this repository; nearest: ..."), spelled somewhere else
+    (a constant, an attribute) ``not_a_symbol``. Plain words may resolve by
+    similarity, reported in ``fuzzy``. An endpoint that does not resolve comes
+    back with ``hints`` and a ``next_step``.
     """
-    s, s_cands = g.resolve(source)
-    t, t_cands = g.resolve(target)
-    not_found: dict[str, str] = {}
-    fuzzy: dict[str, str] = {}
-    ends = {}
-    for side, text, nid in (("source", source, s), ("target", target, t)):
-        nf, fz, ends[side] = _endpoint_notes(g, text, nid)
-        if nf:
-            not_found[side] = nf
-        if fz:
-            fuzzy[side] = fz
-    s, t = ends["source"], ends["target"]
+    from verinoda import naming
+
+    res = {"source": naming.resolve(g, source, stale=stale), "target": naming.resolve(g, target, stale=stale)}
+    notes: dict[str, dict[str, str]] = defaultdict(dict)
+    key = {naming.NOT_FOUND: "not_found", naming.NOT_INDEXED: "not_indexed", naming.SIMILAR: "fuzzy",
+           naming.AMBIGUOUS: "ambiguous", naming.NOT_A_SYMBOL: "not_a_symbol", naming.EXACT: "resolution_notes"}
+    for side, r in res.items():
+        if r.note and r.status in key:
+            notes[key[r.status]][side] = r.note
+    s, t = res["source"].node, res["target"].node
     out = {"source": source, "target": target,
            "resolved": {"source": s and {"id": s, "at": f"{g.file(s)}:{g.line(s)}"},
                         "target": t and {"id": t, "at": f"{g.file(t)}:{g.line(t)}"}},
-           "candidates": {"source": [c for _, c in s_cands], "target": [c for _, c in t_cands]},
-           "paths": [], "direction": "directed", "mode": mode,
-           **({"not_found": not_found} if not_found else {}), **({"fuzzy": fuzzy} if fuzzy else {})}
+           "candidates": {side: list(r.candidates) for side, r in res.items()},
+           "paths": [], "direction": "directed", "mode": mode, **dict(notes)}
     if not s or not t:
-        out["status"] = "unresolved"
-        out["hints"] = {k: _hints(g, text) for k, text, nid in (("source", source, s), ("target", target, t))
-                        if not nid}
+        tied = [side for side, r in res.items() if r.status == naming.AMBIGUOUS]
+        unres = [side for side, r in res.items() if not r.node and r.status != naming.AMBIGUOUS]
+        out["status"] = "unresolved" if unres else "ambiguous"
+        out["hints"] = {side: (r.status in (naming.AMBIGUOUS, naming.NOT_FOUND, naming.NOT_A_SYMBOL) and r.rows(g, 5)
+                               or _hints(g, r.text)) for side, r in res.items() if not r.node}
         out["next_step"] = ("pass one of the hints (a node id, 'path/file.py::symbol' or 'Class.method'), "
                             "or run `verinoda query` with the name to find it")
+        if tied and not unres:
+            out["next_step"] = ("the name names several symbols: pass the one you mean as 'path/file.py::symbol' "
+                                "or its node id (see hints)")
+        if any(r.status == naming.NOT_INDEXED for r in res.values()):
+            out["next_step"] = "run `verinoda update` so the index describes the changed file(s), then trace again"
         return out
     if s == t:
         out["status"] = "ambiguous: both endpoints resolved to the same node"

@@ -56,6 +56,7 @@ import importlib
 import itertools
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -130,6 +131,7 @@ PLAN_HINT = "call question_plan_draft, or see `verinoda plan schema` for the pla
 # A file modified this close to (or after) the start of a call may have changed while it was read, or
 # within the file system's timestamp granularity: what was derived from it is not kept (git's racy-clean rule).
 RACY_NS = 2_000_000_000
+MCP_BUILD_WAIT = 30.0          # index_update waits this long for another build of the project
 _RACY = ("racy",)                # recorded instead of a stat: never equal to one, so it is re-derived
 
 
@@ -424,6 +426,18 @@ def _deps_stats(deps: tuple):
         yield st
 
 
+def _spawn(argv: list[str], **kw) -> subprocess.Popen:
+    """Start a child process (a seam for tests: the background ``verinoda update``)."""
+    return subprocess.Popen(argv, **kw)
+
+
+def _build_running(repo: Path) -> bool:
+    """Is an index build of ``repo`` running in another process (:mod:`verinoda.buildlock`)?"""
+    from verinoda import buildlock
+
+    return buildlock.is_locked(repo)
+
+
 def _file_stat(p: Path) -> tuple[int, int, int] | None:
     try:
         st = p.stat()
@@ -446,6 +460,7 @@ class AtlasTools:
         self._span_noted = 0                              # entries of g._spans already noted
         self._lex_cache: tuple[Any, Any] | None = None
         self._query_memo: OrderedDict[tuple, tuple[tuple, dict]] = OrderedDict()
+        self._background: subprocess.Popen | None = None  # a `verinoda update` started after a slow analyze
         self.racy_ns = RACY_NS
         self._call_started_ns = time.time_ns()
         self.cache_stats = {"graph_loads": 0, "span_files_invalidated": 0, "lexicon_loads": 0,
@@ -523,12 +538,16 @@ class AtlasTools:
         """The loaded graph, kept until graph.json or the receiver-call sidecar changes (an update
         can keep graph.json and still change the receiver and Java call edges ``load`` adds from
         the sidecar); spans of edited files are re-derived."""
-        from verinoda import index
+        from verinoda import buildlock, index
 
         gp = graph_path(self.repo)
         key = (str(gp), *(_file_stat(gp) or (None,)), _file_stat(receiver_calls_path(self.repo)))
         if key[1] is None:
             raise FileNotFoundError(f"no graph at {gp}; run `verinoda scan {self.repo}` first")
+        if self._graph_cache is not None and self._graph_cache[0] != key and buildlock.is_locked(self.repo):
+            # another process is rewriting the index: keep answering from the graph already loaded
+            self._sync_spans()
+            return self._graph_cache[1]
         if self._graph_cache is None or self._graph_cache[0] != key:
             self._graph_cache = (key, index.load(self.repo))
             self._span_stat, self._span_noted = {}, 0
@@ -587,6 +606,56 @@ class AtlasTools:
             self.cache_stats["lexicon_loads"] += 1
         return self._lex_cache[1]
 
+    def _stale_graph(self, st):
+        """The kept (or loaded) graph for an analysis that will not refresh the index first: None when a
+        refresh is expected (analyze then loads the new graph itself)."""
+        from verinoda import analysis
+        from verinoda.snapshot import current_state
+
+        snap = st.latest_snapshot()
+        if snap is None or not graph_path(self.repo).exists():
+            return None
+        try:
+            state = current_state(self.repo, store=st)
+            est, changed, rebuild = analysis._refresh_estimate(self.repo, st, snap, state, g=self._graph())
+        except Exception:  # noqa: BLE001 - let analyze decide
+            return None
+        slow = analysis.slow_refresh(self.repo, snap, est, changed, rebuild)
+        return self._graph() if slow or _build_running(self.repo) else None
+
+    def _update_in_background(self) -> str:
+        """Start ``verinoda update`` for this project in a separate process (one at a time; the build
+        lock keeps it from colliding with any other build). A process, not a thread: index builds
+        redirect stdout, which here is the protocol channel."""
+        from verinoda.paths import index_dir
+
+        bg = self._background
+        if bg is not None and bg.poll() is None:
+            return f"running (pid {bg.pid})"
+        if _build_running(self.repo):
+            return "another index build is running"
+        log = index_dir(self.repo) / "background_update.log"
+        try:
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with open(log, "ab") as out:
+                self._background = _spawn(
+                    [sys.executable, "-m", "verinoda", "update", "--repo", str(self.repo)],
+                    # not the project folder as cwd: a project with a verinoda/ folder would shadow the package
+                    stdin=subprocess.DEVNULL, stdout=out, stderr=out, cwd=str(log.parent),
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as exc:
+            return f"could not start ({type(exc).__name__}): run index_update"
+        return f"started (pid {self._background.pid}); the next question sees the new index"
+
+    def _freshness(self) -> dict:
+        """Files changed since the index (:func:`verinoda.freshness.check`); never fails a tool."""
+        from verinoda import freshness
+
+        try:
+            return freshness.check(self.repo)
+        except Exception as exc:  # noqa: BLE001 - a failed check is said, never taken for "fresh"
+            return {"checked": False, "why": f"{type(exc).__name__}: {exc}"[:200], "count": 0, "files": []}
+
     def _graph_for_analysis(self, st):
         """The kept graph when it describes the current working tree, else None.
 
@@ -637,13 +706,15 @@ class AtlasTools:
             n = _clamp(max_items, 1, 25, "max_items")
             fmt = _choice(format, QUERY_FORMATS, "format")
             g = self._graph()
-            key = (q, n, fmt)
+            fresh = self._freshness()
+            key = (q, n, fmt, tuple(fresh.get("files") or ()))
             hit = self._query_memo.get(key)
             if hit is not None and hit[0] == self._query_deps(g, tuple(f for f, _ in hit[0][-1])):
                 self._query_memo.move_to_end(key)
                 self.cache_stats["query_memo_hits"] += 1
                 return hit[1]
             res = retrieval.retrieve(g, q, retrieval.Budget(max_items=n, max_chars=QUERY_MAX_CHARS))
+            retrieval.attach_freshness(res, g, fresh)
             if fmt == "json":
                 out = _jsonable(res)
             else:
@@ -663,22 +734,36 @@ class AtlasTools:
 
     def node_inspect(self, name: str) -> dict:
         def go():
+            from verinoda import freshness, naming
+
             g = self._graph()
             q = _text(name, "name")
-            nid, cands = g.resolve(q)
-            if nid is None:
-                raise ToolFailure("not_found", f"no graph node matches {q!r}",
-                                  "call project_query to find candidates, then pass a node id, "
-                                  "a label, 'path/file.py::symbol' or 'Class.method'")
-            how = _resolution(g, q, nid)
+            fresh = self._freshness()
+            r = naming.resolve(g, q, stale=fresh.get("files") or ())
+            if r.status == naming.AMBIGUOUS:
+                raise ToolFailure("ambiguous", r.note or f"{q!r} names several symbols",
+                                  "pass one of the candidates' ids, or 'path/file.py::symbol'",
+                                  candidates=r.rows(g), **freshness.summary(fresh))
+            if r.node is None:
+                hint = ("call index_update, then node_inspect again" if r.status == naming.NOT_INDEXED else
+                        "call project_query to find candidates, then pass a node id, "
+                        "a label, 'path/file.py::symbol' or 'Class.method'")
+                raise ToolFailure(r.status if r.status in (naming.NOT_INDEXED, naming.NOT_A_SYMBOL) else "not_found",
+                                  r.note or f"no graph node matches {q!r}", hint,
+                                  **({"candidates": r.rows(g)} if r.candidates else {}), **freshness.summary(fresh))
+            nid = r.node
+            how = _resolution(g, q, nid) if r.exact else None
+            if r.exact and how is None:
+                how = "exact name"
             label = g.label(nid)
             node = {"id": nid, "label": label, "kind": _node_kind(g, nid), "file": g.file(nid),
                     "line": g.line(nid), "file_type": g.G.nodes[nid].get("file_type"),
                     "resolution": how or "scored label match (heuristic) - check candidates"}
-            out: dict = {"query": q, "node": node}
+            out: dict = {"query": q, "node": node, **freshness.summary(fresh)}
+            if r.note:
+                out["resolution_note"] = r.note
             if how is None:
-                out["candidates"] = [{"id": c, "label": g.label(c), "at": _node_at(g, c), "score": round(float(s), 3)}
-                                     for s, c in cands[:5]]
+                out["candidates"] = r.rows(g, 5)
             same = sorted(n for n in g.G.nodes if n != nid and g.label(n).strip(".()") == label.strip(".()"))
             if same:
                 out["same_label"] = [{"id": n, "at": _node_at(g, n)} for n in same[:5]]
@@ -724,14 +809,18 @@ class AtlasTools:
             if mode not in ("flow", "any"):
                 raise ToolFailure("invalid_argument", f"mode must be 'flow' or 'any', got {mode!r}",
                                   "use mode='flow' for call paths, mode='any' for structural relations")
+            from verinoda import freshness
+
             # the core result is returned whole: hints (unresolved endpoints), reachability and note (mode='any')
-            res = retrieval.trace(self._graph(), s, t, mode=mode)
+            fresh = self._freshness()
+            res = retrieval.trace(self._graph(), s, t, mode=mode, stale=fresh.get("files") or ())
+            res.update(freshness.summary(fresh))
             st = res.get("status")
             if st == "unresolved":
                 res.setdefault("next_step", "an endpoint did not resolve: see 'hints'/'candidates', or call "
                                             "node_inspect / project_query and pass 'path/file.py::symbol'")
             elif st and st.startswith("ambiguous"):
-                res.setdefault("next_step", "both names resolved to one node: disambiguate with "
+                res.setdefault("next_step", "a name resolved to several nodes (or both to one): disambiguate with "
                                             "'path/file.py::symbol'")
             elif st == "no directed path":
                 res.setdefault("next_step", ("retry with mode='any' for structural relations; " if mode == "flow"
@@ -746,24 +835,32 @@ class AtlasTools:
         def go():
             from verinoda import architecture_map as am
 
+            from verinoda import freshness
+
             if view not in VIEWS:
                 raise ToolFailure("invalid_argument", f"unknown view {view!r}",
                                   "choose one of: " + ", ".join(VIEWS), valid=list(VIEWS))
             g = self._graph()
+            fresh = self._freshness()
             tg = [str(t).strip() for t in ([targets] if isinstance(targets, str) else targets or []) if str(t).strip()]
             if view == "impact":
                 source = "argument"
                 if not tg:
                     tg = am.changed_files_from_git(self.repo)
                     source = "git working-tree changes (HEAD + untracked)"
-                res = am.impact(g, tg)
+                res = am.impact(g, tg, stale=fresh.get("files") or ())
                 res["targets_source"] = source
                 if not tg:
                     res["note"] = "no targets given and git reports no changed files: nothing to analyse"
+                elif res.get("unresolved") and source == "argument":
+                    res["next_step"] = ("a target did not name one symbol exactly (see resolution): pass it as "
+                                        "'path/file.py::Name' or a node id; nothing was assumed for it")
+                res.update(freshness.summary(fresh))
                 return res
             res = am.VIEWS[view](g)
             if tg:
                 res["note"] = f"targets are only used by the impact view; ignored for {view}"
+            res.update(freshness.summary(fresh))
             return res
         return self._run("map_view", go, need="graph")
 
@@ -846,7 +943,12 @@ class AtlasTools:
             with self._store() as st:
                 g = self._graph_for_analysis(st)
                 res = analysis.analyze(st, self.repo, q, plan=plan, budget=b, run_tests=bool(run_tests),
-                                       challenge=True, graph=g, observe=bool(observe))
+                                       challenge=True, graph=g if g is not None else self._stale_graph(st),
+                                       observe=bool(observe))
+            ref = res.get("index_refresh") or {}
+            if ref.get("skipped") and not ref.get("busy") and ref.get("stale_count"):
+                # too slow to run inside the answer: refresh in the background for the next question
+                ref["background_update"] = self._update_in_background()
             if res.get("status") == "invalid_plan":
                 problems = res.get("errors") or []
                 raise ToolFailure("invalid_plan", f"the plan failed validation ({len(problems)} problem(s)); "
@@ -1280,7 +1382,7 @@ class AtlasTools:
                     if graph is None and refresh:
                         from verinoda import workflow
 
-                        up = workflow.update(st, self.repo)
+                        up = workflow.update(st, self.repo, wait=0, purpose="decision_check refresh (MCP)")
                         note = (f"refreshed first ({up.get('mode')}, {up.get('changed_count') or 0} changed "
                                 "file(s))") if not up.get("error") else f"could not be refreshed: {up['error']}"
                 if graph is None and graph_path(self.repo).exists():
@@ -1301,7 +1403,7 @@ class AtlasTools:
             from verinoda import workflow
 
             with self._store() as st:
-                return workflow.update(st, self.repo)
+                return workflow.update(st, self.repo, wait=MCP_BUILD_WAIT, purpose="index_update (MCP)")
         return self._run("index_update", go)
 
     # -- experiments and the debug ledger ----------------------------------------------

@@ -118,12 +118,22 @@ def _auto_index(repo: Path) -> bool:
     workflow.init(repo)
     st = _store(repo)
     try:
-        res = workflow.scan(st, repo)
+        res = workflow.scan(st, repo, on_wait=_waiting_note)
     finally:
         st.close()
     snap = res.get("snapshot") or {}
     print(f"indexed {snap.get('file_count', '?')} files in {time.monotonic() - t0:.0f} s", file=sys.stderr, flush=True)
     return graph_path(repo).exists()
+
+
+def _waiting_note(holder: dict | None) -> None:
+    """``on_wait`` of scan/update: one line while another build of the project finishes."""
+    from verinoda import buildlock
+
+    h = holder or {}
+    who = ", ".join(x for x in (str(h.get("purpose") or ""), f"pid {h['pid']}" if h.get("pid") else "") if x)
+    print(f"waiting for another index build of this project{f' ({who})' if who else ''} to finish "
+          f"(at most {buildlock.CLI_WAIT_SECONDS / 60:.0f} min)...", file=sys.stderr, flush=True)
 
 
 def _need_graph(repo: Path) -> None:
@@ -194,6 +204,15 @@ def _r_claims(res: dict) -> None:
     if res.get("understood_as"):
         print(f"understood as: {res['understood_as']}")
     print(f"intents: {', '.join(res.get('intents') or [])}")
+    ref = res.get("index_refresh") or {}
+    if ref.get("ran"):
+        print(f"index: refreshed first ({ref.get('changed_count')} changed file(s), {ref.get('seconds')} s, "
+              "not charged to the budget)")
+    elif ref.get("skipped"):
+        files = ref.get("stale_files") or []
+        print(f"index: NOT refreshed ({ref['skipped']}); answered from the previous index; "
+              f"{ref.get('stale_count', 0)} file(s) changed since it: " + ", ".join(files[:5])
+              + (" ..." if ref.get("stale_count", 0) > 5 else ""))
     status = res.get("status")
     pc = res.get("plan_check") or {}
     if res.get("plan_id"):
@@ -269,12 +288,23 @@ def _r_claims(res: dict) -> None:
               f"({u['token_count_method']}){'; budget: ' + u['exhausted'] if u['exhausted'] else ''}")
 
 
+def _stale_note(res: dict) -> None:
+    """The "N file(s) changed since the index" line of a read command (nothing when the index is current)."""
+    if res.get("stale_count"):
+        files = res.get("stale_files") or []
+        more = res["stale_count"] - len(files[:10])
+        print(f" note: {res['stale_count']} file(s) changed since the index (run `verinoda update`): "
+              + ", ".join(files[:10]) + (f", ... (+{more})" if more > 0 else ""))
+    elif res.get("index_freshness"):
+        print(f" note: index freshness {res['index_freshness']}")
+
+
 def _r_trace(res: dict) -> None:
     print(f"{res['source']} -> {res['target']}  [{res['status']}, mode={res['mode']}]")
-    for side, line in (res.get("not_found") or {}).items():
-        print(f" {side}: {line}")
-    for side, line in (res.get("fuzzy") or {}).items():
-        print(f" {side}: {line}")
+    _stale_note(res)
+    for key in ("not_found", "not_indexed", "not_a_symbol", "ambiguous", "fuzzy", "resolution_notes"):
+        for side, line in (res.get(key) or {}).items():
+            print(f" {side}: {line}")
     for i, p in enumerate(res["paths"], 1):
         print(f" path {i}:")
         for h in p:
@@ -288,9 +318,11 @@ def _r_trace(res: dict) -> None:
     if res.get("undirected_hint"):
         print(" undirected connection only: " + " - ".join(res["undirected_hint"]))
     for side, hints in (res.get("hints") or {}).items():
-        print(f" {side} {res.get(side)!r} did not resolve" + ("; did you mean:" if hints else " (no candidates)"))
+        tied = side in (res.get("ambiguous") or {})
+        print(f" {side} {res.get(side)!r} " + ("names several symbols (none was picked):" if tied else
+                                              "did not resolve" + ("; did you mean:" if hints else " (no candidates)")))
         for h in hints:
-            print(f"   {h['label']}  {h['at']}  (id {h['id']})")
+            print(f"   {h['label']}  {h['at']}  (id {h['id']})" + (f" [{h['in']}]" if h.get("in") else ""))
     if res.get("next_step"):
         print(f" next: {res['next_step']}")
     elif res["status"] == "no directed path" and res.get("mode") == "flow":
@@ -499,7 +531,7 @@ def _scan_scip(repo: Path, src: Path, idx) -> dict:
 
 
 def cmd_scan(args) -> int:
-    from verinoda import workflow
+    from verinoda import buildlock, workflow
 
     if not (args.repo or args.path):  # never the working directory by accident: scanning is heavy
         raise SystemExit("verinoda scan: give the project folder (PATH or --repo), for example `verinoda scan .`")
@@ -510,7 +542,7 @@ def cmd_scan(args) -> int:
     st = _store(repo)
     prev = st.latest_snapshot()
     before = st.snapshot_files(prev["id"]) if prev else {}
-    res = workflow.scan(st, repo, force=args.force)
+    res = workflow.scan(st, repo, force=args.force, wait=buildlock.CLI_WAIT_SECONDS, on_wait=_waiting_note)
     if args.precise:
         snap = res.get("snapshot") or {}
         if snap.get("id") and not res.get("error"):
@@ -562,12 +594,12 @@ def cmd_scan(args) -> int:
 
 
 def cmd_update(args) -> int:
-    from verinoda import workflow
+    from verinoda import buildlock, workflow
 
     given = args.repo or args.path
     repo = Path(given).resolve() if given else find_repo_root()
     st = _store(repo, create=True)
-    res = workflow.update(st, repo)
+    res = workflow.update(st, repo, wait=buildlock.CLI_WAIT_SECONDS, on_wait=_waiting_note)
     if not res.get("error"):
         summary = _decision_summary(repo, noop=res.get("mode") == "noop")
         if summary:
@@ -721,41 +753,60 @@ def cmd_notes(args) -> int:
 
 def cmd_map(args) -> int:
     from verinoda import architecture_map as am
-    from verinoda import index
+    from verinoda import freshness, index
 
     repo = Path(getattr(args, "repo", None) or args.path).resolve()
     _need_graph(repo)
     g = index.load(repo)
+    fresh = freshness.check(repo)
+    # a target the user named that does not name one symbol exactly is an error, never a guess
+    failed = False
     if args.view == "impact":
         targets = args.target or am.changed_files_from_git(repo, args.base)
-        res = {"impact": am.impact(g, targets)}
+        res = {"impact": am.impact(g, targets, stale=fresh["files"])}
+        failed = bool(args.target and res["impact"]["unresolved"])
     elif args.view:
         res = {args.view: am.VIEWS[args.view](g)}
     else:
         res = am.build_map(g)
+    for v in res.values():
+        v.update(freshness.summary(fresh))
     if args.json:
         _write(_dump(res))
-        return 0
+        return 2 if failed else 0
     for name, v in res.items():
         print(f"== {name} ==  ({v['coverage']['method']})")
         for lim in v["coverage"].get("limits", []):
             print(f"   limit: {lim}")
-        body = {k: val for k, val in v.items() if k not in ("view", "coverage")}
+        _stale_note(v)
+        for r in v.get("resolution") or []:
+            if r["status"] == "exact":
+                print(f"   target {r['text']!r}: {r.get('note')}")
+                continue
+            print(f"   target {r['text']!r} not used ({r['status']})" + (f": {r['note']}" if r.get("note") else ""))
+            for c in r.get("candidates") or []:
+                print(f"     candidate: {c['label']}  {c['at']}  (id {c['id']})" + (f" [{c['in']}]" if c.get("in") else ""))
+        body = {k: val for k, val in v.items() if k not in ("view", "coverage", "resolution", "stale_count",
+                                                             "stale_files", "index_freshness")}
         text = _dump(body)
         lines = text.splitlines()
         _write("\n".join(lines[: args.max_lines]))
         if len(lines) > args.max_lines:
             print(f"   ... {len(lines) - args.max_lines} more lines (use --json or --view)")
-    return 0
+    if failed:
+        print("error: a --target did not name one symbol exactly (see above); pass it as path/file.py::Name or a "
+              "node id", file=sys.stderr)
+    return 2 if failed else 0
 
 
 def cmd_query(args) -> int:
-    from verinoda import index, retrieval
+    from verinoda import freshness, index, retrieval
 
     repo = _repo(args)
     _need_graph(repo)
     g = index.load(repo)
     res = retrieval.retrieve(g, args.question, retrieval.Budget(max_items=args.max_items, max_chars=args.max_chars))
+    retrieval.attach_freshness(res, g, freshness.check(repo))  # never silently answer from an older tree
     if args.json:
         _write(_dump(res))
     else:  # the skeleton-first plain text a model reads (docs/DESIGN.md D20)
@@ -764,11 +815,13 @@ def cmd_query(args) -> int:
 
 
 def cmd_trace(args) -> int:
-    from verinoda import index, retrieval
+    from verinoda import freshness, index, retrieval
 
     repo = _repo(args)
     _need_graph(repo)
-    res = retrieval.trace(index.load(repo), args.source, args.target, mode=args.mode)
+    fresh = freshness.check(repo)
+    res = retrieval.trace(index.load(repo), args.source, args.target, mode=args.mode, stale=fresh["files"])
+    res.update(freshness.summary(fresh))
     _emit(args, res, _r_trace)
     return 0 if res["status"] == "found" else 2
 
@@ -933,7 +986,7 @@ def cmd_analyze(args) -> int:
     b = analysis.Budget(seconds=args.budget_seconds, tool_calls=args.budget_calls,
                         context_tokens=args.budget_tokens)
     res = analysis.analyze(_store(repo), repo, question, plan=plan, budget=b, run_tests=args.run_tests,
-                           challenge=not args.no_challenge, observe=args.observe)
+                           challenge=not args.no_challenge, observe=args.observe, refresh=args.refresh)
     _emit(args, res, _r_claims)
     return PLAN_EXIT.get(res.get("status"), 0)
 
@@ -1096,7 +1149,7 @@ def _decide_check(args, repo: Path) -> int:
             try:
                 snap = st.latest_snapshot()
                 if snap is None or snap["tree_hash"] != current_state(repo, store=st)["tree_hash"]:
-                    up = workflow.update(st, repo)
+                    up = workflow.update(st, repo, wait=0, purpose="decide check refresh")
                     note = f"refreshed first ({up.get('mode')}, {up.get('changed_count') or 0} changed file(s))" \
                         if not up.get("error") else f"could not be refreshed: {up['error']}"
             finally:
@@ -2284,6 +2337,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--budget-seconds", type=float, default=60)
     sp.add_argument("--budget-calls", type=int, default=40)
     sp.add_argument("--budget-tokens", type=int, default=6000)
+    sp.add_argument("--refresh", choices=("auto", "inline", "skip"), default="auto",
+                    help="index refresh first when files changed: auto (unless it would be slow: then the answer "
+                         "uses the previous index and names the changed files), inline (always), skip (never); "
+                         "its time is not charged to --budget-seconds")
 
     sp = sub.add_parser("plan", help="question plans: draft, check, schema, audit (exit 0 ready, 2 invalid, "
                                      "3 needs clarification)")

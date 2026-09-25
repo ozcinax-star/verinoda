@@ -398,20 +398,35 @@ def changed_files_from_git(root: Path, base: str | None = None) -> list[str]:
     return sorted({l.strip() for l in (out + "\n" + untracked).splitlines() if l.strip()})
 
 
-def impact(g: Graph, targets: list[str], depth: int = 4) -> dict:
-    """Reverse reachability: who depends (calls/imports/uses/inherits) on the targets."""
+def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
+    """Reverse reachability: who depends (calls/imports/uses/inherits) on the targets.
+
+    A target is a file of the graph (all its nodes) or a name resolved exactly
+    (:func:`verinoda.naming.resolve`; a detected copy gives way to the project's own code). A target
+    that names several symbols, that names nothing, or that only a file changed since the index
+    (``stale``) spells is ``unresolved``, with its candidates in ``resolution``: impact is never
+    computed for a merely similar name."""
+    from verinoda import naming
+
     seeds: set[str] = set()
     unresolved = []
+    resolution = []
     for t in targets:
         hit = [n for n in g.G.nodes if g.file(n) == t]
         if hit:
             seeds.update(hit)
             continue
-        nid, _ = g.resolve(t)
-        if nid:
-            seeds.add(nid)
+        r = naming.resolve(g, t, stale=stale)
+        if r.exact:
+            f = g.file(r.node)
+            seeds.add(r.node)
+            if f and g.is_file_node(r.node):  # `orders/api` names the file: every node of it, as above
+                seeds.update(n for n in g.G.nodes if g.file(n) == f)
+            if r.note:
+                resolution.append(r.as_dict(g))
         else:
             unresolved.append(t)
+            resolution.append(r.as_dict(g))
     rel = {"calls", "imports", "imports_from", "uses", "inherits", "method", "references"}
     dist = {s: 0 for s in seeds}
     q = deque(seeds)
@@ -441,6 +456,7 @@ def impact(g: Graph, targets: list[str], depth: int = 4) -> dict:
         },
         "targets": targets,
         "unresolved": unresolved,
+        **({"resolution": resolution} if resolution else {}),
         "affected_symbols": sorted(
             ({"symbol": g.label(n), "at": _loc(g, n), "distance": dd} for n, dd in dist.items() if dd > 0),
             key=lambda x: (x["distance"], x["at"]))[:80],

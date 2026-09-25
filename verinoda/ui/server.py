@@ -91,7 +91,7 @@ class Watcher(threading.Thread):
 
         st = open_store(self.repo)
         try:
-            workflow.update(st, self.repo)
+            return workflow.update(st, self.repo, wait=0, purpose="ui --watch")
         finally:
             st.close()
 
@@ -119,7 +119,12 @@ class Watcher(threading.Thread):
                 continue
             self.running = True
             try:
-                self.run_update()
+                res = self.run_update()
+                if isinstance(res, dict) and res.get("mode") == "busy":
+                    # another build is running: nothing was done; the change is picked up next time
+                    self.error = res.get("error")
+                    last = None
+                    continue
                 self.updates += 1
                 self.error = None
             except Exception as exc:  # noqa: BLE001 - reported on the page; the next change tries again
