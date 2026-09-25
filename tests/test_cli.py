@@ -314,11 +314,13 @@ def test_experiment_run_allowlisted_and_refused(repo):
     # process isolation states its limits (the tests can still write outside the copy)
     assert res["limits"] and "limit: the network is not isolated" in r.stdout
 
-    from verinoda.experiments import container_runtime
-
-    if container_runtime() is None:
-        refused = ok_json("experiment", "run", "--json", "--hypothesis", "h", "--", "python", "-c", "print(1)",
-                          cwd=repo, rc=3)
+    # a command outside the allowlist: refused without a container runtime, run in a container with one (what
+    # the subprocess finds decides: `docker info` can answer differently from one moment to the next on CI)
+    r = ra("experiment", "run", "--json", "--hypothesis", "h", "--", "python", "-c", "print(1)", cwd=repo)
+    refused = json.loads(r.stdout)
+    if r.returncode != 3:
+        assert r.returncode == 0 and refused.get("isolation") == "container", (r.returncode, r.stdout[-800:])
+    else:
         assert refused["status"] == "refused" and "container" in refused["reason"]
         assert refused["next_step"] and any("allowlist" in lim for lim in refused["limits"])
         # a path outside the repository copy: the refusal names the reason

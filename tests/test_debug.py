@@ -122,7 +122,8 @@ def test_closing_needs_a_passing_attempt_on_the_current_tree(tmp_path):
         debug.attempt(st, repo, closed["session"], hypothesis="more")
 
 
-def test_agent_reported_runs_are_labelled_and_never_verify(tmp_path):
+def test_agent_reported_runs_are_labelled_and_never_verify(tmp_path, monkeypatch):
+    monkeypatch.setattr(experiments, "container_runtime", lambda: None)  # a runner Verinoda can't run stays one
     repo = _repo(tmp_path)
     st = open_store(repo)
     log = ("WispTests > wispTicks() FAILED\n    java.lang.IllegalStateException: boom\n"
@@ -654,7 +655,8 @@ def test_the_differential_ranks_by_the_current_failure_when_it_changed(tmp_path)
 
 # -- CLI ----------------------------------------------------------------------------------------------
 
-def test_cli_debug_commands(tmp_path, capsys):
+def test_cli_debug_commands(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(experiments, "container_runtime", lambda: None)  # gradlew is refused without a container
     repo = _repo(tmp_path)
     _sub(repo, "orders/pricing.py", 'i["qty"]', 'i["quantity"]')
     r = str(repo)
@@ -698,7 +700,8 @@ def test_skills_carry_the_debug_protocol_and_do_not_preapprove_runs(agent):
             assert f"verinoda debug {cmd}" not in head, cmd
 
 
-def test_mcp_debug_tools(tmp_path):
+def test_mcp_debug_tools(tmp_path, monkeypatch):
+    monkeypatch.setattr(experiments, "container_runtime", lambda: None)  # the refusal needs no container runtime
     from verinoda.mcp.server import AtlasTools
 
     repo = _repo(tmp_path)
