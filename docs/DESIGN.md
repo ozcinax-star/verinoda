@@ -804,6 +804,21 @@ deterministic.
   An analysis stores a claim with its own uncertainties; the question's
   reading (a weak link, an open clarification) is added when the claim is
   shown, so a claim reused by a later question does not carry it.
+- **An exclusivity question is answered by an exclusivity check** (review
+  2026-09-25: "Is sqlite3.connect only called in repository.py?" was `met`
+  with path claims while orders/reports.py also called it). A yes/no
+  question with only/solely/"anywhere else" (TR sadece, yalnızca, "başka bir
+  yerde") and a call or use verb, naming one call written as code and the
+  file(s), is checked (`analysis._exclusive_guard`): an imported module's
+  call (`sqlite3.connect`) by the only_in engine of D33 (scope all, tests
+  included), a module-level function or class of the project by every call
+  edge the index has into it. A call outside the files answers it (a
+  `contains:` claim at the site, verified when the engine binds the call; a
+  caller from the index is the callers handler's claim); none found is one
+  `exclusive` claim at `strong_inference` with the engine's limits, which
+  critique re-checks. A method, a call the engine cannot resolve or a
+  question without the files is `not_supported` with an unknown that says
+  the claims show where it happens, not that it happens nowhere else.
 
 Limits: Python only for relation scopes, config bindings and order (other
 languages keep their partial grades). Calls through other names, dynamic
@@ -1025,7 +1040,24 @@ records what the human chose and checks the code against it.
   verdict is always `human_decision_required` (`question_plan.HUMAN_DECISION`),
   never `met`, whatever claims exist. analyze runs no retrieval for it (the
   options a decision names need not exist in the code, so "these words occur
-  nowhere" is not reported) and routes it to the decision handler.
+  nowhere" is not reported) and routes it to the decision handler. Two things
+  it does not answer are said (review 2026-09-25): a name written as code
+  (dotted, snake_case, `name()`) that is no known option and does not exist
+  here keeps its "no symbol named" unknown, and a question about what the
+  code does in the same clause (how does, nasıl, nerede) gets an unknown that
+  it was not answered. The brief lists the options the project uses apart
+  from the ones the user named ("options: Redis; the project uses: SQLite").
+  "yeterli mi" that judges a name written as code and names no technology,
+  "us" or load ("validate_items boş siparişi reddetmek için yeterli mi?") is
+  read as English "is validate_items enough to ..." is: its claims and a
+  note, not a decision. A Turkish comma splits two clauses when each side
+  asks its own question (an intent cue and a question word or particle, or a
+  decision cue: "SQLite yeterli mi, place_order siparişi nasıl
+  kaydediyor?"), unless the left side is a condition, the right one an
+  alternative ("..., yoksa PostgreSQL mi?") or both sides are the options of
+  one choice ("Fabric'e mi geçelim, NeoForge'da mı kalalım?"). On the 491
+  questions of the benchmark results and tests, only the review's cases and
+  "..., yoksa ..." choices (now one clause) are read differently.
 - *Records.* A decision is a Markdown file with a front matter
   (`verinoda-decision: 1`, id, status, `decided-by: human`, supersedes,
   governs, guards, revisit-when, waivers) in `decisions.dir` (default
@@ -1296,7 +1328,7 @@ records what the human chose and checks the code against it.
   the design asked to add `experiment run` / `debug` to Claude's `allowed-tools`; only the read-only
   `debug status` / `debug diff` are pre-approved, because the others run the project's tests and
   experiment runs already keep the user's permission prompt (tests/test_agents.py).
-- **Schema v6** (v5 is reserved for the decisions branch): `debug_sessions` (symptom, command, base
+- **Schema v6** (v5 holds the decisions tables, D33): `debug_sessions` (symptom, command, base
   immutable; a closed session stays closed) and `debug_attempts` (append-only).
 
 ### 7.3 Measurements (docs/BENCHMARKS.md, Update 2026-09-25: debug ledger)

@@ -23,7 +23,9 @@ FILE = "python_facts.json"
 
 
 def _stamp(res) -> str:
-    """What the kept facts were made with: the upstream module doing the walks and the Python grammar."""
+    """What the kept facts were made with: the upstream module doing the walks, the Python grammar and this
+    module's own walk (a changed ``_local_facts`` makes every kept entry stale)."""
+    import inspect
     from importlib import metadata
 
     try:
@@ -34,7 +36,12 @@ def _stamp(res) -> str:
         code = hashlib.blake2b(Path(res.__file__).read_bytes(), digest_size=8).hexdigest()
     except OSError:
         code = "?"
-    return f"{VERSION}:{grammar}:{code}"
+    try:
+        own = hashlib.blake2b("".join(inspect.getsource(f) for f in (_local_facts, parse_current, _kept_ok))
+                              .encode("utf-8"), digest_size=8).hexdigest()
+    except (OSError, TypeError):
+        own = "?"
+    return f"{VERSION}:{grammar}:{code}:{own}"
 
 
 def parse_current(res, path: Path, data: bytes, parse=None):
@@ -103,11 +110,14 @@ def _local_facts(res, path: Path, data: bytes) -> dict | None:
 class python_facts_cache:
     """Context manager: during a build, the Python symbol facts pass reads unchanged files from the cache."""
 
-    def __init__(self, index_dir: Path):
+    def __init__(self, index_dir: Path, *, fresh: bool = False):
         self.path = Path(index_dir) / FILE
+        self.fresh = fresh  # `scan --force`: nothing kept is read, every file is walked and written again
         self.hits = self.misses = 0
 
     def _load(self) -> dict:
+        if self.fresh:
+            return {}
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError, RecursionError):

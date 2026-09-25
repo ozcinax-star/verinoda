@@ -71,7 +71,8 @@ def _stamp(res, fn_digest: str) -> str:
         except metadata.PackageNotFoundError:
             vers.append("?")
     parse = _source_digest(res._parse_python_tree, res._parse_python_tree_cached)
-    return f"{VERSION}:{':'.join(vers)}:{parse}:{fn_digest}"
+    own = _source_digest(_prune, _build)  # this module's pruning: a change makes every kept tree stale
+    return f"{VERSION}:{':'.join(vers)}:{parse}:{fn_digest}:{own}"
 
 
 # -- pruning (a file not in the cache) ---------------------------------------------------------------
@@ -268,13 +269,16 @@ def _frames() -> int:
 class python_cross_cache:
     """Context manager: during a build, the cross-file import pass walks a kept pruned tree per unchanged file."""
 
-    def __init__(self, index_dir: Path, pinned: str | None = None):
+    def __init__(self, index_dir: Path, pinned: str | None = None, *, fresh: bool = False):
         self.path = Path(index_dir) / FILE
         self.pinned = PINNED if pinned is None else pinned
+        self.fresh = fresh  # `scan --force`: nothing kept is read, every file is parsed and written again
         self.hits = self.misses = self.deep = 0
         self.active = False
 
     def _load(self) -> dict:
+        if self.fresh:
+            return {}
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError, RecursionError):

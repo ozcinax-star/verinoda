@@ -102,11 +102,18 @@ def run(repo: Path) -> dict:
             checks.append(_check("graph", False, f"unreadable graph: {exc}"))
     else:
         checks.append(_check("graph", False, f"no index at {gp}; run `verinoda scan {repo}`", "warn"))
-    if db_path(repo).exists():
-        from verinoda.snapshot import current_state
-        from verinoda.store import SCHEMA_VERSION, Store
+    from verinoda.store import SCHEMA_VERSION, SchemaTooNew, Store
 
-        st = Store(db_path(repo))
+    st = None
+    if db_path(repo).exists():
+        try:
+            st = Store(db_path(repo))
+        except SchemaTooNew as exc:  # written by a newer Verinoda: a failed check, not a crash
+            proj["schema_version"], proj["schema_version_supported"] = exc.found, SCHEMA_VERSION
+            checks.append(_check("database", False, str(exc)))
+    if st is not None:
+        from verinoda.snapshot import current_state
+
         snap = st.latest_snapshot()
         counts = {r["status"]: r["n"] for r in st.all("SELECT status, COUNT(*) AS n FROM claims GROUP BY status")}
         proj["claims"] = counts
@@ -120,7 +127,7 @@ def run(repo: Path) -> dict:
             checks.append(_check("snapshot", fresh, f"{snap['id']} ({snap['created_at']})"
                                  + ("" if fresh else " - working tree changed; run `verinoda update`"), "warn"))
         st.close()
-    else:
+    elif not db_path(repo).exists():
         checks.append(_check("database", False, f"no {atlas_dir(repo)}/atlas.db; run `verinoda init`", "warn"))
 
     # derived indexes, optional resolvers, reference network (round 3)

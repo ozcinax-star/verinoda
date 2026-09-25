@@ -2687,8 +2687,13 @@ def main(argv: list[str] | None = None) -> int:
     if not getattr(args, "fn", None):
         parser.print_help()
         return 0
+    from verinoda.store import SchemaTooNew
+
     try:
         return int(args.fn(args) or 0)
+    except SchemaTooNew as exc:  # a database a newer Verinoda wrote: say so, no traceback
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

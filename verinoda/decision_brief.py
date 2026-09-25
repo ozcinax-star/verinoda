@@ -1169,12 +1169,16 @@ def brief(repo: Path, question: str, *, store=None, graph=None, options: list[st
     lang = tn.detect_language(question)
     kinds_tr = {"datastore": "veri deposu", "dependency": "bağımlılık", "boundary": "sınır", "scaling": "ölçekleme",
                 "other": "diğer"}
-    opt_txt = ", ".join(o["name"] for o in options_out) or "not named"
+    # an option the project uses is not one the user named: said apart, so it never reads as the user's
+    named_txt = ", ".join(o["name"] for o in options_out if o["proposed_by"] != "project")
+    used = ", ".join(o["name"] for o in options_out if o["proposed_by"] == "project")
+    opt_txt = (named_txt or "none named") + (f"; the project uses: {used}" if used else "")
+    opt_txt_tr = (named_txt or "adı verilmedi") + (f"; projede kullanılan: {used}" if used else "")
     res = {
         "brief_id": new_id("dbr") if record else None, "question": question,
         "understood_as": f"a choice ({', '.join(kinds)}); options: {opt_txt}. Verinoda collects what the code "
                          "says and asks; the human decides.",
-        "understood_as_tr": f"bir seçim ({', '.join(kinds_tr[k] for k in kinds)}); seçenekler: {opt_txt}. "
+        "understood_as_tr": f"bir seçim ({', '.join(kinds_tr[k] for k in kinds)}); seçenekler: {opt_txt_tr}. "
                             "Verinoda kodun söylediklerini toplar ve sorar; kararı insan verir.",
         "language": lang, "decision_kind": kinds[0], "decision_kinds": kinds, "derived_by": "decision_brief.rules/1",
         "verdict": HUMAN, "forces": forces, "absences": pb.absences, "existing_decisions": decs,

@@ -68,7 +68,8 @@ read its structured output, and report exactly what the evidence supports.
 - Comparing a mechanism with a reference repository or an official document.
 - Writing or editing Python code: check that the names it uses exist (see below).
 
-For pure code-writing tasks, use only the name check below.
+For pure code-writing tasks skip the question workflow; the name check, the debug ledger (bug fixes) and
+`decide check --changed` below still apply.
 
 ## Setup (once per session)
 
@@ -167,8 +168,8 @@ user asks which option to take or what you recommend (the routing misses some ph
 2. Show the forces and absences, ask the `questions_for_human` with `AskUserQuestion`, and record each answer:
    `verinoda decide answer <brief-id> --q qN "<their words>"`.
 3. Never pick an option; your view may follow their answers, labelled as inference. Record only their explicit
-   choice: `verinoda decide record <brief-id> --chosen NAME --rationale "<their words>" [--guard SPEC]`. Never
-   edit, supersede, accept or waive a decision yourself.
+   choice: `verinoda decide record <brief-id> --chosen NAME --rationale "<their words>" --said "<their words,
+   verbatim>" [--guard SPEC]`. Never edit, supersede, accept or waive a decision yourself.
 
 ## Commands (examples; always add --json when you read the result)
 

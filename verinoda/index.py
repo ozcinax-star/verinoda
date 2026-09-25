@@ -56,8 +56,11 @@ _CACHE_MAX = 4096              # per-file caches are cleared when they grow past
 
 
 def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
-          quiet: bool = True, prune_missing: bool = False) -> dict:
+          quiet: bool = True, prune_missing: bool = False, fresh_caches: bool = False) -> dict:
     """Run the Graphify-derived AST pipeline; return graph stats.
+
+    ``fresh_caches`` (``scan --force``): the per-file Python caches (python_facts.json, python_cross.json)
+    are not read; every file is walked again and the caches are written anew.
 
     After a successful rebuild graph.json is read once and written at most once: its ids
     are made portable (:mod:`verinoda.portable_ids`) and, with ``prune_missing``, the nodes
@@ -82,7 +85,7 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     empties = _known_empty_json(repo, replay=not force)
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
-    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(), _absolutize_once(),             python_facts_cache(index_dir(repo)), python_cross_cache(index_dir(repo)), empties, keep:
+    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(), _absolutize_once(),             python_facts_cache(index_dir(repo), fresh=fresh_caches), python_cross_cache(index_dir(repo), fresh=fresh_caches), empties, keep:
         ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
     if keep.failed:  # the full path would have failed making its report: so does this build
         ok = False

@@ -149,8 +149,9 @@ def scan(store: Store, repo: Path, *, force: bool = False) -> dict:
     t0 = time.monotonic()
     had_graph = graph_path(repo).exists()
     missing_before = index.missing_source_files(repo) if had_graph else []
+    asked = force  # `scan --force`: derived data, the per-file caches included, is rebuilt from the files
     force = force or not had_graph or bool(missing_before)
-    stats = index.build(repo, force=force, prune_missing=True)
+    stats = index.build(repo, force=force, prune_missing=True, fresh_caches=asked)
     t_index = time.monotonic() - t0
     if not stats.get("ok", True):
         return {**_index_refused(store, repo, stats, force=force), "index_seconds": round(t_index, 3)}
