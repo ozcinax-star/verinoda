@@ -14,7 +14,7 @@
 | Part | State |
 |---|---|
 | Graphify port (`verinoda/project_index`, `tests_upstream/`) | done. Upstream suite at port time: 5436 passed / 50 failed, and every failure also fails on unmodified upstream on the same Windows machine; not re-run since (`docs/UPSTREAM.md`) |
-| Core: claims, evidence, critique, experiments, research/compare, feedback, memory, installers, MCP server (23 tools) | implemented |
+| Core: claims, evidence, critique, experiments, research/compare, feedback, memory, installers, MCP server (25 tools) | implemented |
 | Round 3: search engine, question plans with Turkish support, reference resolver, trust engine (anchors, entailment, facet-level staleness), runtime observation, precise call resolution | implemented and wired into the CLI, MCP and `analyze`; gaps per decision in `docs/DESIGN.md` ("Implementation status") |
 | Product test suite | 1,330 passed, 1 skipped, 2 deselected (slow packaging and installer checks; the fourteen browser tests run when Chrome, Edge or Chromium is found), Windows 11 / Python 3.12, 2026-09-25 |
 | Agent integration | Claude Code (`/verinoda`) and Codex (`$verinoda`) verified in real headless sessions with the earlier skill text (`docs/AGENT-VERIFICATION.md`); the round-3 skill text (understand-first and references protocols) has no such record yet |
@@ -22,6 +22,8 @@
 | Game mods and data files (2026-09-24) | data packs, JSON/yml configs and other data files indexed; resource-id links between code and data; reference trees; Java calls the extractor drops; translation pairs from locale files. New example set `glow_mod` (a small fictional Fabric mod, 50 facts): Verinoda text retrieval 48/50, JSON 44, analyze 43, against raw reading 33 and Graphify 13; at `32a5bd4` it was 34 / 25 / 18. Held out only for its first measurement (46 / 32 / 25). A second set written afterwards and measured once, `forge_mod` (NeoForge, Java and Kotlin, 68 facts): text 63, JSON 45, analyze 38 (at `32a5bd4`: 43 / 28 / 26), raw reading 36, Graphify 12; after two more review rounds that looked at four of its questions (so in-sample), final official run: 66 / 50 / 42. The five earlier sets against the pre-mod baseline `dogfood-2026-09-23`: `graphify_core` analyze 30 -> 29, `graphify_core_tr` JSON 16 -> 15 and text 25 -> 26, `heldout_repoatlas` JSON 20 -> 21, the rest unchanged (`docs/BENCHMARKS.md`, `benchmarks/results/mods-2026-09-24/final/`) |
 | Notes and graph view (`verinoda ui`, 2026-09-24) | a note per symbol, file, section and data file with its code and links, the line each link is written on and editor links; a 3D graph with a panel that says what is in view, follow, a walk through a file's links, regions, a tour and a watch list; a command bar (`Ctrl+K`, English or Turkish); a preview on hover; notes of your own anchored to the code (up to date / code changed / code gone, `verinoda notes`); impact and path; what changed since the index; the answer to a question; local graph per note, global graph at file level, search, file tree; the open page follows the index (`--watch` also runs `update`); a one-file export; a local server that writes only your notes, no external assets. Checked in Chrome on the forge_mod example and on Verinoda's own repository (1,115 files in the global graph); fourteen browser tests drive it in headless Chrome or Edge (skipped without one); measured on Python's standard library as a project (2,305 files, 79,526 notes: *Notes and graph view*) |
 | Answer quality (2026-09-25) | `analyze` carries the passages `query` gives (on the seven public sets 204 -> 267 gold facts, query 265); "met" only on claims about the question (met with none of the gold facts in the claims 2 -> 0); an analysis lists the claims that answer first (the handler's findings, the product's code before tests) and the rest as context; 82 more Turkish stems and multi-part questions; `query`/`queries` and `cluster`/`clustered` one token; `update` of Verinoda's own repository 44 -> 34.5 s (the command, wall clock; an earlier "35 -> 28 s" came from a timing script that left part of the work out); the first question in a git project indexes it; benchmarks can score a final answer written by any command (`--answer-cmd`; no model run yet). A new in-sample set of Turkish user questions about Verinoda scores 11/30: see *Known limitations* (`docs/BENCHMARKS.md`, Update 2026-09-25) |
+| Truth rules (`docs/DESIGN.md` D31, 2026-09-25) | Four ways a false sentence reached a verified or "likely" status are closed. Word overlap with the cited lines never verifies (only a verbatim `contains:` quote, which verifies just the quoted text, or a kind's typed check does); a written claim that says more than its check binds (another callee, a condition, a negation, another file) stays unverified. Written claims bind every role (caller and callee in the text's direction, a config text's subject to the name the read is bound to). `claim add` runs the definitive checks at once and prints their scope (no call in the caller's whole body, a setting bound to another name, a reversed order with `--kind order`, a definition the file does not have). A name written as code that the repository does not have is `not_found` with `did_you_mean` in `analyze`, `plan check` and `trace`, never replaced by a similar name. On a copy of the example app the design pass's 9 false sentences went from 2 verified + 2 "likely" after critique to none (3 contradicted when created); three rounds of adversarial review (about 150 probe sentences) found and closed further ways around the rules. The benchmark sets lose no gold fact. In-sample fixtures; no held-out set of false sentences yet |
+| Name check (`verinoda check`, `verinoda api`, D32, 2026-09-25) | Python only. Do the modules, imported names, attributes, keyword arguments and constant dict keys code uses exist in the project's own environment (`.venv`/`venv`/`env` or `--env`)? `absent` only when the container's names are all known (closed world), otherwise `unknown` with the reason; nearest real names and where else the name is defined. Nothing from the checked project is imported or run. Measured after three review rounds: in-sample fixture of 144 generated sites (79 invented, 65 real, runtime oracle) 74 of 74 absent verdicts right and 74 of 79 invented names caught; 0 false absents on Verinoda's own package, Graphify's code, standard-library packages and the reviewers' probe sets (about 20,800 sites) and on click/pluggy/h11/starlette (8,525 sites); `check --diff` of 30 changed lines about 1.2 s in a fresh process. 26-44% of sites stay `unknown` by design. Not done: mod config keys and resource ids, JVM jars, JS/TS |
 | Cross-platform | tested on Windows 11; CI (Linux, Windows, macOS x Python 3.10/3.12/3.13) runs on every push since 2026-09-25 - its first run found and fixed macOS isolation, macOS path forms in the export and the Python 3.10 call tracer |
 
 **Known limitations** (see also `docs/DESIGN.md` for per-decision gaps):
@@ -226,7 +228,7 @@ give the copy a `.venv` with pytest installed.
 | `trace <a> <b> [--mode flow\|any]` | Directed paths, each hop with relation, confidence and call-site location; hints when an endpoint does not resolve |
 | `plan draft\|check\|schema\|audit` | Question plans: draft from the message (TR/EN rules), check and ground a plan file, print the schema, re-judge an analysis' sub-questions later |
 | `analyze ["<q>"] [--plan FILE] [--run-tests] [--observe]` | Budgeted loop per sub-question → claims + evidence + critique + unknowns, each sub-question judged against its `done_when` |
-| `claim show\|list\|add` | Inspect claims, or record one with source evidence (`--kind location\|relation\|config --symbol X` for a mechanical grade) |
+| `claim show\|list\|add` | Inspect claims, or record one with source evidence (`--kind location\|relation\|config\|order --symbol X` for a mechanical grade; definitive misses are contradicted when the claim is created) |
 | `verify <id> [--run]` | Re-check evidence against the current tree (anchored relocation; optionally re-run its test) |
 | `challenge <id>` | Critique and counter-hypothesis probes; lowers status/confidence when support is weak |
 | `resolve "<text>" [--reference URL[@ref]] [--network off\|cache\|on] [--local-intent]` | Pin every reference in a message to the exact version meant; reports mismatches and questions for the user |
@@ -236,16 +238,19 @@ give the copy a `.venv` with pytest installed.
 | `experiment run --hypothesis … -- <cmd>` | Isolated targeted experiment; logs on disk, summary + evidence recorded; refused when policy does not allow it |
 | `observe [TEST_ID …] [--for SYMBOL …] [--terms W …] [--mode …]` | Run tests under the call tracer in an isolated copy; reach per test, boundary calls, limits |
 | `resolve-call PATH:LINE TARGET [--target PATH:LINE]` | Precise resolution of one call site (needs the `precise` extra; exit 3 = no precise answer) |
+| `check [PATH ...] [--diff [REV]] [--stdin --as PATH] [--env auto\|PATH\|none] [--all]` | Do the names code uses exist? Imports, from-imports, attributes, keyword arguments and constant dict keys, checked in the project's own environment; `--diff` only the changed lines (the default without PATHs; any git diff prefix setting, also from a subdirectory), `--stdin --as` code not written yet. Each site: `exists` / `absent` (with nearest names and where else it is defined) / `unknown` (why) / `not_installed` / `guarded`. Needs the `precise` extra; exit 3 = something absent |
+| `api NAME [--env ...] [--private]` | The real members of a module, class or function in the project's environment, with signatures, file:line and the installed version; exit 3 = not found (missing from a module or class whose names are all known, or no such module); a name it cannot decide is `found: null` with exit 0 |
 | `memory list\|learn\|history` | Versioned learnings, invalidated with their source claim |
 | `install/uninstall --agent claude\|codex --scope project\|user` | Skill (+ MCP) for Claude Code (`/verinoda`) and Codex (`$verinoda`) |
-| `mcp serve` | MCP server (stdio) over the same core, 23 tools |
+| `mcp serve` | MCP server (stdio) over the same core, 25 tools |
 | `index -- <args>` | The Graphify-derived CLI (advanced, unsupported); installer, hook and `~/.graphify` commands are blocked |
 | `benchmark run\|sanitize` | Raw search vs Graphify baseline vs Verinoda on question sets with gold facts |
 | `benchmark staleness replay\|mutations`, `benchmark critique-eval` | Staleness harness (history replay, mutation suite) and critique precision/recall |
 
 Exit codes: 0 done, 1 error, 2 usage error / invalid plan / blocked command,
 3 "needs more" (clarification, partial resolution, refused experiment,
-incomplete observation, no precise answer). Every command except `memory`,
+incomplete observation, no precise answer, an absent name in `check`, a name
+`api` did not find). Every command except `memory`,
 `mcp serve` and `index` accepts `--json` (`plan schema` always prints JSON).
 
 ## Notes and graph view
@@ -453,6 +458,17 @@ Two protocols come first:
    "Understood as / Anladığım: …", followed by one block per sub-question
    with its verdict, claims and unknowns.
 
+3. **Check the names code uses (Python).** After every edit, and before
+   proposing code, the agent runs `verinoda check --diff --json` (MCP
+   `code_check`; code not written yet: `--stdin --as <path>`). It never keeps
+   an `absent` site: it fixes it from `nearest` / `elsewhere` or from
+   `verinoda api <module.or.Class>` (MCP `api_members`). `unknown` is
+   unverified, not fine. The report names the environment it checked.
+4. **Confirm your own sentences.** A sentence the agent writes about the code
+   is recorded with a typed kind (`claim add --kind relation|config|order|location
+   --symbol X`) or a verbatim quote; plain prose is at most `weak_inference`,
+   and a `not_found` name is reported, not replaced.
+
 Then the evidence discipline: report claims with their status, never upgrade
 a status by wording, `challenge` what you rely on, report `unknown` with its
 next step, and treat user critique as a hypothesis (`feedback add --process`).
@@ -465,6 +481,26 @@ next step, and treat user critique as a hypothesis (`feedback add --process`).
   caller; a definition spanning exactly the cited lines). Every stored status
   change passes through this check, so unrelated evidence cannot verify a
   claim on any path (API, verify, feedback, experiments, runtime runs, MCP).
+- **Word overlap never verifies.** Every word of "apply_discount returns the
+  subtotal above the threshold" is in the lines that return `subtotal * 0.9`
+  there. Term coverage makes evidence relevant (`partial`), never a
+  verification; only a verbatim quote (`path:12 contains: <text>`, which
+  verifies the quoted text and nothing around it) or a kind's typed check
+  (call site, definition span, environment read, call order) verifies. A
+  written claim that states more than its check binds (another callee, a
+  condition or bound, a negation, the arguments of a call, another file than
+  the cited one) stays unverified.
+- **Every role is bound.** A written relation must name the caller and the
+  callee in the right direction ("OrderRepository.save calls place_order" is
+  checked against `save`'s body); a written config claim ("the discount
+  threshold is read from ORDERS_MAX_ITEMS") must be about the name the read is
+  bound to. `claim add` answers a definitive miss at once, with its scope:
+  "no direct call to save in create_order_handler (orders/api.py:16-21); calls
+  through other names are not followed".
+- **A name written as code is never replaced by a similar one.** `analyze`,
+  `plan check` and `trace` report `not_found` with `did_you_mean` ("no symbol
+  named `place_orders` in this repository; nearest: place_order
+  (orders/service.py:19)"); the sub-question is `unmet`.
 - A graph edge (`EXTRACTED`/`INFERRED`) is never enough on its own. Search
   results, model summaries and user feedback are not even support for an
   inference. A claim with no evidence is `unknown`.
@@ -488,6 +524,41 @@ next step, and treat user critique as a hypothesis (`feedback add --process`).
 - Heuristics state their method and limits (`coverage.limits`,
   `uncertainties`, `derived_by`). Budget exhaustion or irrelevant retrieval
   yields `unknown` with the next verification step.
+
+## Name check (Python)
+
+`verinoda check` answers one question for code an agent (or you) just wrote: do
+the modules, functions, methods, keyword arguments and dict keys it uses exist,
+in this project's environment?
+
+    $ verinoda check orders/ai/export.py
+    orders/ai/export.py:7:28  ABSENT  import orders.service.place_orders
+        not found in module orders.service in this project (orders/service.py)
+        nearest: place_order (orders/service.py:19)
+    orders/ai/export.py:15:43  ABSENT  kwarg compute_total(currency=)
+        keyword currency= not found in the signature compute_total(items: list[dict]) (orders/pricing.py:6)
+    orders/ai/export.py:19:10  unknown  attribute repo.save_order
+        `repo` is a parameter: its runtime type is not known
+
+- **Which environment:** `--env PATH`, else the project's `.venv`, `venv` or
+  `env` when its base interpreter is a known Python installation outside the
+  project (otherwise the note names the program `--env .venv` would start),
+  else Verinoda's own interpreter for the standard library only: third-party
+  names are then `not_installed`, never `absent`. The MCP tools never start a
+  program from the project.
+- **When it says absent:** only when the container's names are all known (a
+  module without `__getattr__` or dynamic writes, a class without descriptors
+  or code that sets attributes from outside, an instance made right there, one
+  known signature without `**kwargs`, the dict literals a function returns),
+  and jedi also found nothing. The wording is "not found in <container> as
+  installed in <env> (<file>)", never "does not exist".
+- **Unknown is not fine:** parameters, annotations, inferred return values,
+  `**kwargs`, module `__getattr__`, names assigned elsewhere, `sys.path`
+  changes in `conftest.py`, and standard-library names of another platform or
+  Python version (`collections.Mapping`) stay `unknown` with the reason.
+- `verinoda api packaging.specifiers.SpecifierSet` lists the real members
+  before a call is written. Existence and signature shape only: a real name
+  used wrongly is not detected.
 
 ## Documentation
 

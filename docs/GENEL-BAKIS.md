@@ -620,7 +620,7 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
   netleştirme sorularını sor → planla analiz. (3) Cevap "Understood as /
   Anladığım: …" ile başlar; ardından her alt soru için kararı, iddiaları ve
   bilinmeyenleri gelir.
-- **MCP:** 23 araç, aynı çekirdek fonksiyonları çağırır. Yanıtlar
+- **MCP:** 25 araç, aynı çekirdek fonksiyonları çağırır. Yanıtlar
   varsayılan 12.000 karakterle sınırlıdır. Uzun yaşayan sunucu grafiği,
   sözlüğü ve jedi projesini bellekte tutar.
 - Kurulum tekrar çalıştırılabilir, başka araçların ayarlarını ezmez ve yaptığı
@@ -652,7 +652,9 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
 | Kullanıcı eleştirisi protokolü | — | 9 adım, 4 sonuç, önce referans çözümü, geçmiş korunur | Çalışıyor |
 | Sürümlü hafıza | — | iddiaya bağlanırsa eskiyince geçersiz | Çalışıyor (yalnızca elle) |
 | Ajan kurulumu | 20'den fazla platform | Claude Code + Codex, manifest, güvenli kaldırma | Çalışıyor |
-| MCP araçları | grafik araçları | 23 araç: plan, referans, iddia, kanıt, gözlem, doğrulama, eleştiri | Çalışıyor |
+| MCP araçları | grafik araçları | 25 araç: plan, referans, iddia, kanıt, gözlem, doğrulama, eleştiri, isim denetimi | Çalışıyor |
+| Kod yazarken isim denetimi | yok | `verinoda check` / `verinoda api`: modül, içe aktarılan ad, öznitelik, anahtar kelime argümanı ve sözlük anahtarı projenin kendi ortamında var mı; kapalı-dünya kuralıyla `absent`, gerisi nedenli `unknown`; denetlenen projeden hiçbir şey içe aktarılmaz ya da çalıştırılmaz | Çalışıyor (yalnız Python) |
+| Yanlış cümlenin doğrulanması | kelime örtüşmesi doğruluyordu | Kelime örtüşmesi doğrulamaz; yazılı iddianın her rolü (çağıran/çağrılan yönü, ayarın bağlandığı ad) denetlenir; kesin ıska oluşturulurken kapsamıyla çürütülür; kod gibi yazılmış ama depoda olmayan ad benzeriyle değiştirilmez (`not_found`, `did_you_mean`) | Çalışıyor (D31) |
 | Karşılaştırmalı benchmark | kendi yayınladığı doğruluk, maliyet ve token rakamları (Verinoda'ya aktarılmaz) | ham arama vs Graphify vs Verinoda; eskime ve karşıt kontrol ölçüm düzenekleri | Çalışıyor (model döngüde değil) |
 | LLM ile belge/görsel çıkarımı | var | analizde kullanılmıyor; `verinoda index -- extract` geçişiyle, desteklenmeden erişilebilir | daraltıldı |
 | Claude Code ve Codex dışındaki ~20 ajan platformu | var | engellendi: `verinoda index -- install` vb. gerçek bir Graphify kurulumunu bozmasın diye reddedilir | daraltıldı |
