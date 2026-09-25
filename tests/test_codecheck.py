@@ -360,6 +360,98 @@ def test_nearest_ranks_near_names_and_synonyms():
     assert codecheck.nearest("zzz", names) == []
 
 
+def test_elsewhere_parses_only_the_files_that_contain_the_absent_name(tmp_path, monkeypatch):
+    # check --diff was 10x slower when a name was absent: the "elsewhere" hint parsed every project file
+    _write(tmp_path, "pkg/__init__.py", "")
+    _write(tmp_path, "pkg/util.py", "def real():\n    return 1\n")
+    _write(tmp_path, "pkg/other.py", "def helper():\n    return 2\n\n\nclass K:\n    def helper(self):\n"
+                                     "        return 3\n")
+    _write(tmp_path, "pkg/wide.py", "\uff48\uff45\uff4c\uff50\uff45\uff52 = 4\n")   # fullwidth: Python reads `helper`
+    _write(tmp_path, "pkg/says.py", "# helper is mentioned here, not defined\nX = 'helper'\n")
+    for i in range(12):
+        _write(tmp_path, f"pkg/filler{i}.py", f"def f{i}():\n    return {i}\n")
+    _write(tmp_path, "pkg/user.py", "from pkg import util\n\nutil.real()\nutil.helper()\n")
+    parsed: list[str] = []
+    real = codecheck.cf.module_facts
+
+    def counting(path):
+        parsed.append(Path(path).name)
+        return real(path)
+
+    monkeypatch.setattr(codecheck.cf, "module_facts", counting)
+    res = codecheck.check(tmp_path, ["pkg/user.py"], env="none", use_cache=False)
+    s = next(x for x in res["sites"] if x["name"] == "helper")
+    assert s["verdict"] == "absent"
+    assert [(e["qualname"], e["at"], e["kind"]) for e in s["elsewhere"]] == [
+        ("other.helper", "pkg/other.py:1", "function"), ("K.helper", "pkg/other.py:6", "method"),
+        ("wide.helper", "pkg/wide.py:1", "variable")]
+    assert not [n for n in parsed if n.startswith("filler")], parsed
+
+
+TRICKY_DEFS = '''\
+import os as helper_mod
+global_seen = 1
+cafe\u0301_decomposed = 2
+\u0928\u092e\u0938\u094d\u0924\u0947 = 3
+(walrus_a := 4)
+first, *rest_b = [1, 2]
+for loop_c in ():
+    pass
+with open(os.devnull) as with_d:
+    pass
+try:
+    import tried_e
+except ImportError:
+    tried_e = None
+if helper_mod:
+    def cond_f():
+        global glob_g
+        glob_g = 1
+
+        class InFunc:
+            def meth_h(self):
+                pass
+match global_seen:
+    case [mt_i, *mt_rest]:
+        pass
+    case {"k": 1, **mt_map}:
+        pass
+    case str() as mt_as:
+        pass
+
+
+class Outer:
+    x_attr = 1
+
+    class Inner:
+        async def meth_j(self):
+            pass
+
+    def meth_k(self):
+        pass
+'''
+
+
+def test_the_lazy_definition_index_answers_like_parsing_every_file(tmp_path):
+    here = Path(codecheck.__file__).parent
+    real_files = sorted(here.glob("*.py"))[:20]
+    _write(tmp_path, "tricky.py", TRICKY_DEFS)
+    _write(tmp_path, "broken.py", "def broken_l(:\n")
+    files = [tmp_path / "tricky.py", tmp_path / "broken.py", *real_files]
+    full: dict[str, list] = {}
+    for p in files:
+        for n, row in codecheck._file_defs(p):
+            full.setdefault(n, []).append(row)
+    # module-level bindings in every form (NFKC-normalized names too), globals, and the methods of every class
+    assert {"global_seen", "caf\u00e9_decomposed", "\u0928\u092e\u0938\u094d\u0924\u0947", "walrus_a", "first",
+            "rest_b", "loop_c", "with_d", "cond_f", "glob_g", "meth_h", "mt_i", "mt_rest", "mt_map", "mt_as",
+            "Outer", "meth_j", "meth_k"} <= set(full)
+    idx = codecheck._DefsIndex(files)
+    for name, rows in full.items():
+        assert idx.get(name) == rows, name
+    assert idx.get("broken_l") == [] and idx.get("no_such_name_anywhere") == []
+
+
 # -- environment ----------------------------------------------------------------------------------------
 
 def _make_venv(root: Path) -> Path:

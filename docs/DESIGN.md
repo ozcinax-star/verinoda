@@ -956,7 +956,12 @@ is a separate, later step.
   `__init__` and metaclass), not against what may later be added to an
   instance (`threading.Thread(deamon=True)` is absent).
 - Output: nearest real names (edit distance with transpositions, shared word
-  parts, a few synonyms) and where the name is defined elsewhere. Wording:
+  parts, a few synonyms) and where the name is defined elsewhere (the
+  project's, or the installed package's, functions, classes, variables and
+  methods; found through a word index of the files' text built once per call
+  on the first absent name, so only files that contain the name are parsed -
+  the same answers as parsing every file, which made a diff with an absent
+  name about 10x slower than a clean one). Wording:
   "not found in <container> as installed in <env> (<file>)", never "does not
   exist". Exit 3 when something is absent or an installed version differs
   from the lock; `exit_because` says which. `incomplete` lists what was not

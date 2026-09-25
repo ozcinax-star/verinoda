@@ -300,7 +300,7 @@ class Checker:
         self._universes: dict[str, cenv.ImportUniverse] = {}
         self._builtin_modules: set[str] | None = None
         self._declared: dict | None = None
-        self._defs_index: dict | None = None
+        self._defs_index: _DefsIndex | None = None
         self._pkg_index: dict = {}
         self._search_roots: list[Path] | None = None
         self._stores: dict[str, str] | None = None
@@ -2027,7 +2027,7 @@ class Checker:
             return []
         own = {str(f) for f in c.files}
         out = []
-        for path, line, kind, qual in idx.get(name, []):
+        for path, line, kind, qual in idx.get(name):
             if str(path) in own:
                 continue
             out.append({"at": f"{self.disp(path)}:{line}", "kind": kind, "qualname": qual})
@@ -2179,12 +2179,12 @@ class Checker:
                 return computed[n]
         return None
 
-    def _project_defs(self) -> dict:
-        if self._defs_index is None:
-            self._defs_index = _defs_index(iter_py_files(self.repo, [self.repo]))
+    def _project_defs(self) -> _DefsIndex:
+        if self._defs_index is None:   # once per call, and only when a project name is absent
+            self._defs_index = _DefsIndex(iter_py_files(self.repo, [self.repo]))
         return self._defs_index
 
-    def _package_defs(self, f: Path) -> dict:
+    def _package_defs(self, f: Path) -> _DefsIndex:
         top = f.parent
         for site in self.env.site_dirs + self.env.stdlib_dirs:
             try:
@@ -2196,7 +2196,7 @@ class Checker:
         key = str(top)
         if key not in self._pkg_index:
             files = [top] if top.is_file() else [p for p in sorted(top.rglob("*.py"))[:400]] if top.is_dir() else []
-            self._pkg_index[key] = _defs_index(files)
+            self._pkg_index[key] = _DefsIndex(files)
         return self._pkg_index[key]
 
     # -- declared dependencies -----------------------------------------------------------------------------
@@ -2870,21 +2870,68 @@ def nearest(name: str, members: dict[str, Member], *, want_call: bool | None = N
     return out
 
 
-def _defs_index(files) -> dict:
-    idx: dict[str, list] = {}
-    for p in files:
-        mf = cf.module_facts(p)
-        if mf.tree is None:
-            continue
-        mod = p.stem
-        for n, m in mf.names.items():
-            if m.kind in ("function", "class", "variable"):
-                idx.setdefault(n, []).append((p, m.line, m.kind, f"{mod}.{n}"))
-        for cls in mf.classes.values():
-            for st in cls.body:
-                if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    idx.setdefault(st.name, []).append((p, st.lineno, "method", f"{cls.name}.{st.name}"))
-    return idx
+def _file_defs(p: Path) -> list[tuple[str, tuple]]:
+    """What one file defines, as (name, (path, line, kind, qualname)) in the order the "elsewhere" hint
+    lists them: module-level functions, classes and variables, then the methods of every class."""
+    mf = cf.module_facts(p)
+    if mf.tree is None:
+        return []
+    mod = p.stem
+    out: list[tuple[str, tuple]] = [(n, (p, m.line, m.kind, f"{mod}.{n}")) for n, m in mf.names.items()
+                                    if m.kind in ("function", "class", "variable")]
+    for cls in mf.classes.values():
+        for st in cls.body:
+            if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                out.append((st.name, (p, st.lineno, "method", f"{cls.name}.{st.name}")))
+    return out
+
+
+# a run of characters that may belong to one identifier: ASCII letters, digits and "_", and any character outside
+# ASCII that is not whitespace (outside strings and comments, Python allows those only inside identifiers)
+_WORD_RX = re.compile(r"[^\x00-\x2f\x3a-\x40\x5b-\x5e\x60\x7b-\x7f\s]+")
+
+
+def _text_words(text: str) -> set[str]:
+    """Every identifier the text can define, as Python reads it (NFKC-normalized, PEP 3131), plus other
+    words: a superset, so a file without a name among its words does not define it."""
+    words = set(_WORD_RX.findall(text))
+    if not text.isascii():
+        import unicodedata
+
+        words |= {unicodedata.normalize("NFKC", w) for w in words if not w.isascii()}
+    return words
+
+
+class _DefsIndex:
+    """Where a set of files defines a name (the "elsewhere" hint of an absent name): the same answers as
+    parsing every file, but lazy - the first lookup reads the files' text once and indexes their words, and
+    a lookup parses only the files that contain the name (parsed files stay cached by their stat)."""
+
+    def __init__(self, files):
+        self.files = list(files)
+        self._words: dict[str, list[int]] | None = None
+        self._hits: dict[str, list[tuple]] = {}
+
+    def _index(self) -> dict[str, list[int]]:
+        if self._words is None:
+            words: dict[str, list[int]] = {}
+            for i, p in enumerate(self.files):
+                try:
+                    text = cf.read_text(p)   # the text parse_file reads (a snippet stands for its file)
+                except OSError:
+                    continue   # unreadable: it does not parse either
+                for w in _text_words(text):
+                    words.setdefault(w, []).append(i)
+            self._words = words
+        return self._words
+
+    def get(self, name: str) -> list[tuple]:
+        """(path, line, kind, qualname) of each definition of ``name``, in file order."""
+        hit = self._hits.get(name)
+        if hit is None:
+            hit = [row for i in self._index().get(name, ()) for n, row in _file_defs(self.files[i]) if n == name]
+            self._hits[name] = hit
+        return hit
 
 
 def py_files(repo: Path, roots: list[Path], limit: int | None = None) -> tuple[list[Path], bool]:
