@@ -12,7 +12,9 @@ pytest's crash location (``reprcrash``: path, line, message) and the traceback
 entries inside the repository copy (path relative to the copy, line, the
 function's qualified name). A failed collection records pytest's text report,
 which Verinoda parses. At the end it records each test's outcome and the
-session's exit status.
+session's exit status. Under pytest-xdist only the controller writes the file
+(outcomes and collection errors; the workers' tracebacks are not in it, and
+Verinoda falls back to pytest's text output for them).
 
 Output: ``$VERINODA_ARTIFACTS/failsig.jsonl`` (JSON lines; schema
 ``verinoda.failsig/1``). Paths use ``/``; frames outside the copy (standard
@@ -207,6 +209,9 @@ def _write() -> None:
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
     _state["exitstatus"] = int(exitstatus)
+    if hasattr(session.config, "workerinput"):  # a pytest-xdist worker: only the controller writes the file
+        _state["written"] = True
+        return
     try:
         _write()
     except (OSError, ValueError, TypeError):
@@ -214,7 +219,7 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 def pytest_unconfigure(config):
-    if not _state["written"]:
+    if not _state["written"] and not hasattr(config, "workerinput"):
         try:
             _write()
         except (OSError, ValueError, TypeError):

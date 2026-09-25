@@ -1939,6 +1939,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--observed-output", metavar="FILE", help="a run you made yourself: its output (agent-reported)")
     c.add_argument("--exit-code", type=int, help="with --observed-output: the exit code of that run")
     c.set_defaults(command=None)  # everything after `--` (split off in main)
+    c.epilog = "the repro command follows --, e.g. verinoda debug start \"totals are wrong\" -- python -m pytest -q tests/test_pricing.py"
     c = add("try", cmd_debug, "record one attempt after an edit: runs the repro (or records your own run)",
             parent=dsub)
     c.add_argument("--hypothesis", required=True, help="what you believe and why (checked for repeats)")
@@ -1952,6 +1953,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--observed-output", metavar="FILE", help="a run you made yourself: its output (agent-reported)")
     c.add_argument("--exit-code", type=int, help="with --observed-output: the exit code of that run")
     c.set_defaults(command=None)  # `-- <command>` (default: the session's repro; split off in main)
+    c.epilog = "a command after -- replaces the session's repro for this attempt only"
     c = add("status", cmd_debug, "the session's ledger: attempts, failures, loop findings, next steps", parent=dsub)
     c.add_argument("id", nargs="?", help="session id (default: the latest open session)")
     c = add("diff", cmd_debug, "the working tree against the session base, a commit or an attempt's tree",
