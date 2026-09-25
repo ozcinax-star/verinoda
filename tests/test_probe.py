@@ -176,6 +176,19 @@ def test_the_corpus_is_deterministic_and_puts_boundaries_first():
     assert pin.corpus_sha256(other[0]) != pin.corpus_sha256(one[0])
 
 
+def test_an_input_from_two_sources_keeps_its_boundary_provenance():
+    # 60 is a call-site literal (added first) and a mined boundary: the boundary tag must survive the dedup, so
+    # that a change there is value_changed_at_mined_boundary (review finding: it was plain value_changed)
+    params = [{"name": "score", "kind": "pos", "ann": None, "default": None}]
+    b = pin.Bounds()
+    b.add_number(60, "pkg/core.py:44")
+    cases, meta, _ = probe.build_corpus(params, [{"k": "int"}], b, [{"score": pin.encode(60)}], [], 60, 0)
+    j = cases.index({"a": [60], "k": []})
+    assert meta[j]["src"] == "call site" and probe._mined(meta[j]["tags"])
+    assert any(t.startswith("boundary 60 from pkg/core.py:44") for t in meta[j]["tags"])
+    assert len(cases) == 60 and cases.count({"a": [60], "k": []}) == 1
+
+
 def test_without_hypothesis_a_fixed_pseudo_random_list_fills_the_budget(monkeypatch):
     monkeypatch.setitem(sys.modules, "hypothesis", None)
     got, how = pin.generated([{"k": "int"}, {"k": "str"}], 20, 3)
@@ -319,6 +332,98 @@ def test_the_gate_follows_calls_parameters_and_import_time_statements(tmp_path):
     assert probe_gate.check(repo, files, [("orders/pricing.py", "apply_discount")])["verdict"] == "passed"
 
 
+SQLISH = {"orders/sqlconst.py": 'INSERT_ORDER = "INSERT INTO orders (customer, total) VALUES (?, ?)"\n',
+          "orders/sqlish.py": '''import logging
+
+from orders.sqlconst import INSERT_ORDER
+
+LOG = logging.getLogger(__name__)
+DELETE_ALL = "DELETE FROM orders"
+
+
+class Txn:
+    def __init__(self) -> None:
+        self.done = False
+
+    def commit(self) -> None:
+        self.done = True
+
+    def close(self) -> bool:
+        self.commit()
+        return self.done
+
+
+def build_query(table: str) -> str:
+    return "INSERT INTO " + table + " VALUES (?)"
+
+
+def finish(n: int) -> bool:
+    t = Txn()
+    t.commit()
+    return t.done
+
+
+def note(table: str) -> str:
+    LOG.info("DELETE FROM %s skipped", table)
+    if not table:
+        raise ValueError("cannot UPDATE x SET nothing")
+    return table.replace("INSERT INTO", "")
+
+
+def wipe(cur) -> None:
+    cur.execute(DELETE_ALL)
+
+
+def wipe_local(cur) -> None:
+    sql = "DELETE FROM " + "orders"
+    cur.execute(sql)
+
+
+def insert_imported(cur) -> None:
+    cur.execute(INSERT_ORDER, ("a", 1.0))
+
+
+def through_helper(db) -> None:
+    db.run_write(
+        "UPDATE orders SET total = 0"
+    )
+
+
+def flush(session) -> None:
+    session.commit()
+'''}
+
+
+@pytest.mark.parametrize("fn", ["build_query", "finish", "note", "Txn.close"])
+def test_the_gate_lets_sql_text_and_project_commit_methods_run(tmp_path, fn):
+    # review finding: a returned SQL string and a project object's .commit() were refused as sql-write/orm-write
+    repo = _plain_repo(tmp_path, SQLISH)
+    res = probe_gate.check(repo, _files(repo), [("orders/sqlish.py", fn)])
+    assert res["verdict"] == "passed", res["reasons"]
+
+
+@pytest.mark.parametrize("fn,line,why", [("wipe", 39, "`DELETE_ALL` (set at orders/sqlish.py:6)"),
+                                         ("wipe_local", 44, "`sql` (set at orders/sqlish.py:43)"),
+                                         ("insert_imported", 48, "(set at orders/sqlconst.py:1)"),
+                                         ("through_helper", 53, "reaches `run_write()`")])
+def test_the_gate_refuses_sql_writes_that_reach_a_call(tmp_path, fn, line, why):
+    repo = _plain_repo(tmp_path, SQLISH)
+    res = probe_gate.check(repo, _files(repo), [("orders/sqlish.py", fn)])
+    r = next(r for r in res["reasons"] if r["kind"] == "sql-write")
+    assert r["at"] == f"orders/sqlish.py:{line}" and why in r["why"] and not r.get("heuristic"), r
+
+
+def test_an_untyped_commit_is_refused_as_a_heuristic_may_reach(tmp_path):
+    repo = _plain_repo(tmp_path, SQLISH)
+    res = probe_gate.check(repo, _files(repo), [("orders/sqlish.py", "flush")])
+    assert [(r["kind"], r.get("heuristic")) for r in res["reasons"]] == [("orm-write", True)]
+    st = open_store(repo)
+    out = probe.probe(st, repo, "orders/sqlish.py::flush", no_base=True)
+    st.close()
+    assert out["status"] == "refused" and "may reach orm-write at orders/sqlish.py:58" in out["headline"]
+    assert "a text pattern the gate cannot confirm: `session.commit()`" in out["headline"]
+
+
 # -- the plugin's audit classification -----------------------------------------------------------------
 
 def test_the_plugin_classifies_side_effect_events():
@@ -332,8 +437,11 @@ def test_the_plugin_classifies_side_effect_events():
         assert plug._classify("sqlite3.connect", (":memory:",)) is None
         assert plug._classify("sqlite3.connect", ("app.db",)) == "db-connection"
         assert plug._classify("os.putenv", ("A", "b")) == "global-state"
-        assert plug._classify("object.__setattr__", (int, "x", 1)) == "class-state"
-        assert plug._classify("object.__setattr__", (int, "__doc__", 1)) is None
+        assert plug._classify("_winapi.CreateProcess", (None, "cmd", None, None, 0)) == "process"
+        assert plug._classify("_posixsubprocess.fork_exec", (["x"],)) == "process"
+        # CPython raises no audit event for a class attribute write: the static gate checks those, the hook
+        # does not claim to (fixer-probe: the old `object.__setattr__` branch never fired)
+        assert plug._classify("object.__setattr__", (int, "x", 1)) is None
         assert plug._classify("import", ("json",)) is None
     finally:
         plug._S.phase = "idle"
@@ -373,6 +481,229 @@ def test_difference_classes():
                           False) == "argument_mutation_changed"
     assert probe.classify({"hang": True}, r("1"), False) == "timeout_removed"
     assert probe.classify(r("1"), {"hang": True}, False) == "new_timeout"
+
+
+def test_float_drift_is_only_float_digits_and_equal_results_are_marked():
+    r = lambda text, t: {"r": text, "t": t}  # noqa: E731
+    # review finding: Decimal and str digits were read as float drift
+    assert probe.classify(r("Decimal('12345678901.23')", "decimal.Decimal"),
+                          r("Decimal('12345678901.24')", "decimal.Decimal"), False) == "value_changed"
+    assert probe.classify(r("'0.30000000000000004'", "builtins.str"), r("'0.3'", "builtins.str"),
+                          False) == "value_changed"
+    assert probe.classify(r("[Decimal('1.0000000000001')]", "builtins.list"), r("[Decimal('1.0000000000002')]",
+                                                                                "builtins.list"), False) == \
+        "value_changed"
+    assert probe.classify(r("[0.30000000000000004, 'a']", "builtins.list"), r("[0.3, 'a']", "builtins.list"),
+                          False) == "numeric_drift"
+    assert probe.classify(r("[0.1, 'x']", "builtins.list"), r("[0.1, 'y']", "builtins.list"), False) == \
+        "value_changed"
+    # dicts that are == equal with their keys in another order: still a change, marked as == equal
+    assert probe.equal_under_eq(r("{'a': 1, 'b': 2}", "builtins.dict"), r("{'b': 2, 'a': 1}", "builtins.dict"))
+    assert probe.equal_under_eq(r("-0.0", "builtins.float"), r("0.0", "builtins.float"))
+    assert not probe.equal_under_eq(r("{'a': 1}", "builtins.dict"), r("{'a': 2}", "builtins.dict"))
+    assert not probe.equal_under_eq(r("<X object at 0x?>", "m.X"), r("<Y object at 0x?>", "m.X"))
+    assert any("PYTHONHASHSEED" in n for n in probe.NOT_CHECKED)
+
+
+def test_integers_past_the_str_digit_limit_stay_different():
+    before = sys.get_int_max_str_digits() if hasattr(sys, "get_int_max_str_digits") else None
+    a, b = plug._result(10 ** 5000), plug._result(10 ** 5000 + 1)
+    assert a != b and a["t"] == "builtins.int" and "raised" not in a["r"]
+    assert probe.classify(a, b, False) == "value_changed"
+    assert plug._args_digest([[10 ** 5000]], {}) != plug._args_digest([[10 ** 5000 + 1]], {})
+    if before is not None:
+        assert sys.get_int_max_str_digits() == before  # lifted only while rendering
+
+
+def test_emitted_tests_parse_and_pin_the_base_of_generators(tmp_path):
+    cases = [{"a": [0], "k": []}, {"a": ["line\nbreak"], "k": []}, {"a": [3], "k": []}]
+    rows_b = {0: {"x": [{"t": "builtins.generator (materialized)", "r": "[]"}]},
+              1: {"x": [{"t": "builtins.str", "r": "'line\\nbreak'"}]},
+              2: {"x": [{"e": "evmod.f.<locals>.Local", "m": ""}]}}
+    rows_h = {0: {"x": [{"t": "builtins.generator (materialized)", "r": "[0]"}]},
+              1: {"x": [{"e": "builtins.ValueError", "m": "no line breaks:\nbreak\r\n    import os"}]},
+              2: {"x": [{"t": "builtins.int", "r": "3"}]}}
+    res = {"differences": [{"class": "value_changed", "examples": [{"input": 0}]},
+                           {"class": "new_exception", "examples": [{"input": 1}]},
+                           {"class": "exception_removed", "examples": [{"input": 2}]}]}
+    spec = {"module": "evmod", "call": {"kind": "function"}}
+    text = probe.emit_tests(res, cases, rows_b, rows_h, spec, "evens", "abc", "prb_x")
+    ast.parse(text)  # review finding: a multi-line message broke out of the comment
+    assert "assert list(evens(0)) == []" in text and "from evmod.f" not in text
+    assert "pytest.raises(Exception)" in text
+    assert all(line.lstrip().startswith("#") for line in text.splitlines() if "import os" in line)
+    # the pinned test passes on base code
+    (tmp_path / "evmod.py").write_text("def evens(n):\n    for i in range(0, n, 2):\n        yield i\n",
+                                       encoding="utf-8")
+    only_gen = probe.emit_tests({"differences": res["differences"][:1]}, cases, rows_b, rows_h, spec, "evens",
+                                "abc", "prb_x")
+    (tmp_path / "test_pinned.py").write_text(only_gen, encoding="utf-8")
+    proc = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "test_pinned.py"],
+                          cwd=tmp_path, capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 0, proc.stdout[-800:]
+
+
+PLUGIN_ISOLATION = r'''
+import json, multiprocessing, os, sys, threading, time
+sys.path.insert(0, sys.argv[1])
+import probe_plugin as plug
+
+out = {}
+plug._S.main_thread = threading.get_ident()
+plug._S.known_threads = frozenset(t.ident for t in threading.enumerate())
+sys.addaudithook(plug._hook)
+plug._guard_fork_exec()
+plug._S.block = True
+plug._S.phase, plug._S.active, plug._S.events = "call", True, []
+try:  # a child process through multiprocessing (Windows: _winapi.CreateProcess; POSIX: fork_exec)
+    multiprocessing.get_context("spawn").Process(target=os.getpid).start()
+    out["spawn"] = "started"
+except plug._Blocked:
+    out["spawn"] = "blocked"
+finally:
+    plug._S.active, plug._S.phase = False, "idle"
+res = {}
+
+
+def later():
+    time.sleep(0.2)
+    try:
+        open(sys.argv[2], "a").write("x")
+        res["t"] = "written"
+    except plug._Blocked:
+        res["t"] = "blocked"
+
+
+plug._S.last_input = 3
+plug._S.phase, plug._S.active = "call", True
+th = threading.Thread(target=later)
+th.start()
+plug._S.active, plug._S.phase = False, "idle"  # the call returned; the thread goes on
+th.join(10)
+out["thread"] = res.get("t")
+out["stray"] = [(e["kind"], e["event"], e["after_input"], e.get("thread")) for e in plug._S.stray]
+out["exists"] = os.path.exists(sys.argv[2])
+with open(sys.argv[3], "w") as fh:  # the probe's own thread outside a call is not restricted
+    fh.write("ok")
+print(json.dumps(out))
+'''
+
+
+def test_the_audit_hook_blocks_child_processes_and_threads_that_outlive_their_call(tmp_path):
+    # review findings: multiprocessing escaped through _winapi.CreateProcess; a thread writing after its call
+    # returned ran with the hook inactive. Run in a child interpreter: an audit hook cannot be removed.
+    script = tmp_path / "iso.py"
+    script.write_text(PLUGIN_ISOLATION, encoding="utf-8")
+    victim, mine = tmp_path / "victim.txt", tmp_path / "mine.txt"
+    proc = subprocess.run([sys.executable, str(script), str(ROOT / "verinoda" / "runtime"), str(victim), str(mine)],
+                          capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    out = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert out["spawn"] == "blocked", out
+    assert out["thread"] == "blocked" and not out["exists"] and not victim.exists()
+    assert out["stray"] == [["file-write", "open", 3, True]]
+    assert mine.read_text(encoding="utf-8") == "ok"
+
+
+def _fake_runs(monkeypatch, tmp_path, outputs: list[tuple[str, str, int]]) -> list:
+    """experiments.run replaced: each run leaves ``probe.jsonl`` / ``probe_hang.txt`` text and an exit code."""
+    calls = []
+
+    def fake_run(store, repo_, argv, **kw):
+        jsonl, hang, code = outputs[min(len(calls), len(outputs) - 1)]
+        d = tmp_path / f"art{len(calls)}"
+        d.mkdir()
+        calls.append(kw.get("env_extra"))
+        (d / "probe.jsonl").write_text(jsonl, encoding="utf-8")
+        (d / "probe_hang.txt").write_text(hang, encoding="utf-8")
+        return {"id": f"exp_fake{len(calls)}", "outcome": "pass" if code == 0 else "fail", "exit_code": code,
+                "artifacts": {"probe.jsonl": str(d / "probe.jsonl"), "probe_hang.txt": str(d / "probe_hang.txt")},
+                "tree": {"hash": "t"}, "guarantees": {}, "isolation": "process", "logs": {"stderr": "x"}}
+
+    monkeypatch.setattr(probe.experiments, "run", fake_run)
+    return calls
+
+
+def _lines(*recs: dict) -> str:
+    return "".join(json.dumps(r) + "\n" for r in recs)
+
+
+HEADER = {"k": "header", "schema": "verinoda.probe/1", "python": "3.12", "start": 0, "side": "", "block": True,
+          "cases": 3}
+
+
+def test_a_hang_an_exit_and_a_plugin_error_are_told_apart(monkeypatch, tmp_path):
+    spec = {"cases": [{"a": [1], "k": []}, {"a": [2], "k": []}, {"a": [3], "k": []}]}
+    row0 = {"k": "row", "i": 0, "x": [{"t": "builtins.int", "r": "1"}] * 2, "ms": [0, 0]}
+    row2 = {"k": "row", "i": 2, "x": [{"t": "builtins.int", "r": "3"}] * 2, "ms": [0, 0]}
+    done = _lines(HEADER, {"k": "ready"}, row2, {"k": "footer", "complete": True, "rows": 1})
+    # input 1 ended the process without faulthandler's stack (os._exit): an exit, not a hang
+    _fake_runs(monkeypatch, tmp_path / "a", [(_lines(HEADER, {"k": "ready"}, row0), "", 0), (done, "", 0)])
+    (tmp_path / "a").mkdir()
+    res = probe._run_side(None, tmp_path, spec, side="head", probe_id="p", symbol="s", ref=None, commit=None,
+                          timeout=10)
+    assert res["exits"] == [1] and res["hangs"] == [] and res["rows"][1]["x"] == [{"exit": 0}]
+    # with the stack in probe_hang.txt it is a hang
+    _fake_runs(monkeypatch, tmp_path / "b", [(_lines(HEADER, {"k": "ready"}, row0), "Thread 0x1 ...\n", 1),
+                                             (done, "", 0)])
+    (tmp_path / "b").mkdir()
+    res = probe._run_side(None, tmp_path, spec, side="head", probe_id="p", symbol="s", ref=None, commit=None,
+                          timeout=10)
+    assert res["hangs"] == [1] and res["exits"] == []
+    # the plugin failing after the header is no hang and no input: the side has no results
+    _fake_runs(monkeypatch, tmp_path / "c", [(_lines(HEADER, {"k": "plugin_error", "e": "builtins.AttributeError",
+                                                              "m": "no addaudithook"}), "", 0)])
+    (tmp_path / "c").mkdir()
+    res = probe._run_side(None, tmp_path, spec, side="head", probe_id="p", symbol="s", ref=None, commit=None,
+                          timeout=10)
+    assert res["plugin_error"] and res["rows"] == {} and res["hangs"] == [] and len(res["experiments"]) == 1
+    # a process that ends while importing the target is not input 0
+    _fake_runs(monkeypatch, tmp_path / "d", [(_lines(HEADER), "", 3)])
+    (tmp_path / "d").mkdir()
+    res = probe._run_side(None, tmp_path, spec, side="head", probe_id="p", symbol="s", ref=None, commit=None,
+                          timeout=10)
+    assert "while importing the target" in res["error"] and res["rows"] == {}
+    assert probe.classify({"t": "builtins.int", "r": "2"}, {"exit": 0}, False) == "process_exit_changed"
+    assert probe.classify({"exit": 0}, {"exit": 0}, False) is None
+    assert probe._brief_text(probe._brief({"exit": 3})) == "ended the process (exit code 3)"
+
+
+@needs_git
+def test_a_plugin_error_on_both_sides_is_inconclusive(monkeypatch, tmp_path):
+    repo = _repo(tmp_path)
+    _sub(repo, "orders/pricing.py", "if subtotal > DISCOUNT_THRESHOLD:", "if subtotal >= DISCOUNT_THRESHOLD:")
+    art = tmp_path / "art"
+    art.mkdir()
+    calls = _fake_runs(monkeypatch, art, [(_lines(HEADER, {"k": "plugin_error", "e": "builtins.AttributeError",
+                                                           "m": "module 'sys' has no attribute 'addaudithook'"}),
+                                           "", 0)])
+    st = open_store(repo)
+    res = probe.probe(st, repo, "orders/pricing.py::apply_discount", inputs=30)
+    st.close()
+    # review finding: this was read as 4 hanging inputs per side and reported no_difference_found
+    assert res["status"] == "inconclusive" and "probe plugin failed" in res["headline"], res["headline"]
+    assert len(calls) == 2 and not res.get("claim_id")
+
+
+def test_changed_is_no_pass_unless_every_changed_function_was_compared(monkeypatch, tmp_path):
+    changed = [{"symbol": "a.py::f", "change": "body", "line": 1}, {"symbol": "a.py::g", "change": "body", "line": 5}]
+    monkeypatch.setattr(probe.treestate, "resolve_commit", lambda repo, ref: "c" * 40)
+    monkeypatch.setattr(probe, "changed_functions", lambda repo, sha: changed)
+    monkeypatch.setattr(probe, "list_files", lambda repo: [])
+    outcome = {}
+    monkeypatch.setattr(probe, "probe", lambda store, repo, sym, **kw: {"symbol": sym, "status": outcome[sym],
+                                                                         "headline": "h"})
+    for f, g, want in (("refused", "no_difference_found", "incomplete"),
+                       ("inconclusive", "unsupported", "incomplete"),
+                       ("no_difference_found", "nothing_found", "done"),
+                       ("numeric_drift_only", "no_difference_found", "differences_found"),
+                       ("differences_found", "refused", "differences_found")):
+        outcome.update({"a.py::f": f, "a.py::g": g})
+        res = probe.probe_changed(None, tmp_path, base="HEAD")
+        assert res["status"] == want, (f, g, res)
+        assert ("Not compared" in res["headline"]) == (f in ("refused", "inconclusive") or g in ("refused",
+                                                                                                 "unsupported"))
+    assert "incomplete" not in cli.PROBE_QUIET and "numeric_drift_only" not in cli.PROBE_QUIET
 
 
 def test_scaling_is_flagged_only_when_every_round_grows_three_times_faster():
@@ -634,3 +965,93 @@ def test_mcp_change_probe(tmp_path):
     assert t.change_probe(symbol="x.py::f", changed=True)["error"] == "invalid_argument"
     listing = t.change_probe(changed=True, inputs=40)
     assert listing["probes"][0]["symbol"] == "orders/pricing.py::apply_discount"
+
+
+# -- review findings (p3 fixer): end to end ----------------------------------------------------------------
+
+@pytest.mark.experiment
+@needs_git
+def test_threads_and_child_processes_the_gate_cannot_see_are_blocked(tmp_path):
+    thread_file, child_file = tmp_path / "from_thread.txt", tmp_path / "from_child.txt"
+    bg = ("def kick(x: int) -> int:\n"
+          "    th = __import__('threading')\n"
+          "    def later():\n"
+          "        __import__('time').sleep(0.3)\n"
+          "        w = getattr(__import__('builtins'), 'op' + 'en')\n"
+          f"        w({str(thread_file)!r}, chr(97)).write('x')\n"
+          "    th.Thread(target=later).start()\n"
+          "    return x\n")
+    mpx = ("def _child(p):\n"
+           "    open(p, 'a').write('x')\n\n\n"
+           "def fork_it(x: int) -> int:\n"
+           "    mp = __import__('importlib').import_module('multiprocessing')\n"
+           f"    p = mp.Process(target=_child, args=({str(child_file)!r},))\n"
+           "    p.start()\n"
+           "    p.join(20)\n"
+           "    return x\n")
+    repo = _repo(tmp_path, {"orders/bg.py": bg, "orders/mpx.py": mpx})
+    st = open_store(repo)
+    res = probe.probe(st, repo, "orders/bg.py::kick", inputs=10)
+    # review finding: the thread wrote after its call had returned, and the probe said no_difference_found
+    assert res["status"] == "refused" and "outside any call of kick" in res["headline"], res["headline"]
+    assert res["blocked"]["example"]["after_the_call"] and not res.get("claim_id")
+    res = probe.probe(st, repo, "orders/mpx.py::fork_it", inputs=10, examples=["(1,)"], timeout=120)
+    assert res["status"] == "refused" and "at run time" in res["headline"] and "process" in res["headline"], \
+        res["headline"]
+    st.close()
+    assert not thread_file.exists() and not child_file.exists()
+
+
+@pytest.mark.experiment
+@needs_git
+def test_a_module_whose_name_another_module_took_is_not_called(tmp_path):
+    # tools/ has no __init__.py: tools/json.py is imported as `json`, which the plugin had imported already
+    repo = _repo(tmp_path, {"tools/json.py": "def dumps(x: int) -> str:\n    return str(x)\n"})
+    _sub(repo, "tools/json.py", "return str(x)", "return str(x + 1)")
+    st = open_store(repo)
+    res = probe.probe(st, repo, "tools/json.py::dumps", inputs=20)
+    st.close()
+    assert res["status"] == "inconclusive" and "`json` resolves to" in res["headline"], res["headline"]
+    assert "not tools/json.py" in res["headline"] and not res.get("claim_id")
+
+
+@pytest.mark.experiment
+@needs_git
+def test_a_call_that_ends_the_process_is_an_exit_not_a_timeout(tmp_path):
+    repo = _repo(tmp_path, {"orders/q.py": "def quit_on_7(n: int) -> int:\n    return n\n"})
+    _sub(repo, "orders/q.py", "    return n\n", "    if n == 7:\n        __import__('os')._exit(0)\n    return n\n")
+    st = open_store(repo)
+    res = probe.probe(st, repo, "orders/q.py::quit_on_7", inputs=20, examples=["(7,)"], per_call_timeout=5)
+    st.close()
+    assert res["status"] == "differences_found" and "timeout" not in res["headline"], res["headline"]
+    d = res["differences"][0]
+    assert d["class"] == "process_exit_changed" and d["reproduced"] and not res.get("timeouts")
+    assert d["examples"][0]["call"] == "quit_on_7(7)" and d["examples"][0]["head"] == {"process_exit": 0}
+    assert any("process ended" in lim for lim in res["limits"])
+
+
+@pytest.mark.experiment
+@needs_git
+def test_changed_exits_3_when_the_only_changed_function_was_refused(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    _sub(repo, "orders/service.py", "    total = compute_total(items)\n    return repo.save(customer, total)",
+         "    oid = None\n    for item in items:\n        oid = repo.save(customer, compute_total([item]))\n"
+         "    return oid")
+    rc = cli.main(["probe", "--changed", "--repo", str(repo), "--json", "--inputs", "20"])
+    out = json.loads(capsys.readouterr().out)
+    assert [p["status"] for p in out["probes"]] == ["refused"]
+    assert rc == 3 and out["status"] == "incomplete" and "no pass" in out["headline"], out["headline"]
+
+
+@pytest.mark.experiment
+@needs_git
+def test_float_drift_alone_is_a_low_priority_status_of_its_own(tmp_path, capsys):
+    repo = _repo(tmp_path, {"orders/fsum.py": "def fsum3(a: float, b: float, c: float) -> float:\n"
+                                              "    return a + b + c\n"})
+    _sub(repo, "orders/fsum.py", "return a + b + c", "return c + b + a")
+    rc = cli.main(["probe", "orders/fsum.py::fsum3", "--repo", str(repo), "--json"])
+    res = json.loads(capsys.readouterr().out)
+    # review finding: this read "differences_found ... These are behaviour changes" like a regression
+    assert rc == 3 and res["status"] == "numeric_drift_only", res["headline"]
+    assert "only float drift" in res["headline"] and "behaviour changes" not in res["headline"]
+    assert [d["class"] for d in res["differences"]] == ["numeric_drift"] and res["differences"][0]["low_priority"]

@@ -1484,7 +1484,8 @@ Tools:
   value without asking the user (questions_for_human). Never say "fixed": say the repro passed at tree T in run R.
 - change_probe: after editing a Python function, call it on generated inputs at the base and in the working tree
   (isolated runs). A difference is a behaviour change, not a bug: compare it with what the user asked for, ask when
-  unclear. Say "no difference found in N inputs", never "verified". A refusal (side effects) is not a pass.
+  unclear. Say "no difference found in N inputs", never "verified". A refusal (side effects), `inconclusive` or
+  `incomplete` is not a pass; `numeric_drift_only` is float rounding: mention it.
 
 Rules: graph edges (EXTRACTED/INFERRED) are extractions, never verification. Claim status is one of
 observed, experiment_verified, statically_verified, primary_source_verified, strong_inference,
@@ -1717,8 +1718,10 @@ DESCRIPTIONS: dict[str, str] = {
         "mined from both versions (comparisons, len checks, slices, imported constants), standard edges (empty, "
         "None, +-1, unicode, special floats, large sizes) and hypothesis; each input runs at the base commit and in "
         "the working tree through the isolated runner (throw-away copies, allowlisted pytest plugin). Returns "
-        "status (differences_found | no_difference_found | property_violated | undeclared_exceptions | "
-        "nothing_found | refused | unsupported | inconclusive), difference classes with minimal examples "
+        "status (differences_found | numeric_drift_only (float rounding only, low priority) | no_difference_found | "
+        "property_violated | undeclared_exceptions | nothing_found | refused | unsupported | inconclusive; with "
+        "changed=true: differences_found | done | incomplete (not every function compared: no pass) | "
+        "nothing_changed), difference classes with minimal examples "
         "(reproduced in a second run pair, recorded as run-scoped claims), property violations, undeclared "
         "exceptions, nondeterminism, with scaling=true rough growth, the side-effect gate's reasons, the inputs "
         "used and what was not checked. A static gate refuses functions that write files, use the network, start "

@@ -19,7 +19,9 @@ B1 case (D03) had been run once during development before `fixtures.py` was writ
 | `ablation-no-mining.json` | the 22 change fixtures without boundary mining (one seed) |
 | `run4-780328a.json` | an interim run of commit 780328a (hypothesis still mixed in constants of the modules imported in the harness process) |
 | `run5-final.json` | the final code, commit c0dbd1f |
+| `run6-fixer.json` | after the review fixes (fixer round: threads and child processes blocked at run time, a module name taken by another module, process exits, plugin errors, float drift only on floats and as its own status `numeric_drift_only`, the gate's SQL rule on the syntax tree, `--changed` no pass when a function was not compared) |
 | `mutants.py`, `mutants_survivors.json`, `mutant_labels.json`, `mutants_run1.json`, `mutants_run3-final.json` | 45 automated single-point mutants (comparison flips, and/or swap, `not` removal, `+`/`-`, `*`/`/`, integer constants +-1, float constants +1%) of 12 functions of the fixture project; 27 survive the tests; hand labels; the probe's results (first run, and the final code) |
+| `mutants_run4-fixer.json` | the same 27 surviving mutants after the review fixes |
 
 Reproduce (from the repository root, with the project's venv): `python
 benchmarks/results/probe-2026-09-25/run_fixtures.py WORKDIR OUT.json` and `python mutants.py generate WORKDIR
@@ -35,6 +37,7 @@ WORKDIR receives the git copies (a scratch directory).
 | run3-no-hypothesis | 22/22 | 20/20 | 5/60 (E04) | 9/9 / 0/4 | 2/2 | 36/36 | 1.7 / 3.0 / 10.5 |
 | run4-780328a | 22/22 | 20/20 | 5/60 (E04) | 9/9 / 0/4 | 2/2 | 37/37 | 2.6 / 4.0 / 10.8 |
 | run5-final | 22/22 | 20/20 | 5/60 (E04) | 9/9 / 0/4 | 2/2 | 37/37 | 2.1 / 4.2 / 11.1 |
+| run6-fixer | 22/22 | 20/20 | 5/60 (E04, now `numeric_drift_only`) | 9/9 / 0/4 | 2/2 | 37/37 | 2.0 / 3.8 / 11.2 |
 | ablation-no-mining (22 change fixtures) | 19/22 (D01, D04, D11 missed) | 17/20 | - | - | - | 22/22 | 3.3 / 3.7 / 13.1 |
 
 - E04's gold is wrong: `sum()` of floats is compensated on Python 3.12 (`sum([0.1] * 10) == 1.0`, a loop gives
@@ -44,4 +47,5 @@ WORKDIR receives the git copies (a scratch directory).
 - D05 and D15 are caught by the fixture project's own tests (an empty-order test, a currency assertion).
 - Automated mutants: 45 generated, 27 survive the tests, labelled 25 `change` and 2 `change_message_only`, none
   equivalent; the probe finds a difference in 25/25 and none in the 2 message-only ones (types are compared, not
-  messages), in the first run and with the final code.
+  messages), in the first run, with the final code and after the review fixes (`mutants_run4-fixer.json`,
+  median 3.1 s per probe).

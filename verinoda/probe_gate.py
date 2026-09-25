@@ -12,9 +12,15 @@ run when the target is imported). It refuses the probe when any of them:
   ``requests``, ``urllib.request``, ``http.client`` ...), starts processes or
   threads (``subprocess``, ``os.system``, ``multiprocessing``,
   ``threading.Thread`` ...) or connects to a database (``sqlite3.connect`` ...);
-* matches a sink line of :data:`verinoda.architecture_map.SINK_PATTERNS` (an
-  ``INSERT INTO`` in an ``execute`` string, ``.commit()``, ``json.dump``); read
-  queries are allowed;
+* passes an SQL write statement (``INSERT INTO`` ..., a literal or a name
+  assigned one) to a call that does not only build or log text
+  (``cur.execute("INSERT ...")``; a statement that is only returned or assigned
+  runs nothing); read queries are allowed;
+* matches another sink line of :data:`verinoda.architecture_map.SINK_PATTERNS`
+  (``.commit()``, ``.save()``, ``json.dump``): a text pattern, marked
+  ``heuristic``; ``.commit()`` / ``.save()`` on ``self``, a parameter annotated
+  with a project class or a local built by a project constructor is read as that
+  class's method instead;
 * changes state the probe cannot isolate between calls: a ``global`` name it
   assigns, a module-level container it mutates (``CACHE[k] = v``,
   ``_seen.append(x)``), an attribute of an imported module or a class
@@ -89,12 +95,24 @@ PATH_METHODS = {"write_text", "write_bytes", "unlink", "rmdir", "touch", "symlin
 MUTATORS = {"append", "extend", "insert", "update", "add", "pop", "popitem", "clear", "setdefault", "remove",
             "discard", "sort", "reverse", "appendleft", "extendleft", "rotate", "__setitem__", "__delitem__"}
 OPEN_CALLS = {"open", "io.open", "codecs.open", "builtins.open"}
-TEXT_SINKS = [(rx, kind) for rx, kind in SINK_PATTERNS if kind != "sql-read"]
+# text patterns checked line by line; SQL writes are checked on the syntax tree (Gate._sql_writes), reads allowed
+LINE_SINKS = [(rx, kind) for rx, kind in SINK_PATTERNS if kind not in ("sql-read", "sql-write")]
+SQL_WRITE_RX = next(rx for rx, kind in SINK_PATTERNS if kind == "sql-write")
+# calls that only build, inspect or log text: an SQL statement passed to them runs nothing
+TEXT_ONLY_CALLS = frozenset({
+    "format", "format_map", "join", "replace", "strip", "lstrip", "rstrip", "lower", "upper", "casefold", "title",
+    "capitalize", "startswith", "endswith", "split", "rsplit", "splitlines", "partition", "rpartition", "encode",
+    "decode", "count", "find", "rfind", "index", "rindex", "ljust", "rjust", "center", "zfill", "translate",
+    "removeprefix", "removesuffix", "len", "str", "repr", "bool", "isinstance", "print", "debug", "info", "warning",
+    "warn", "error", "exception", "critical", "log", "match", "search", "fullmatch", "sub", "subn", "compile",
+    "findall", "finditer", "escape", "dedent", "indent"})
 LIMITS = [
     "the gate reads code, it does not run it: calls through objects it cannot type (self.conn.execute), getattr "
     "with a computed name, exec/eval and code inside installed packages are not followed; the probe's audit hook "
     "blocks file writes, network, processes and environment changes at run time",
     "state a function keeps in its own instance (self.x = ...) is not a refusal: each call gets a fresh instance",
+    "text patterns (`.commit()`, `.save()`, `json.dump(` ...) are heuristic: a reason marked heuristic may be a "
+    "method of an object that touches nothing",
 ]
 
 
@@ -139,6 +157,29 @@ def _main_guard(node: ast.AST) -> bool:
     return isinstance(node, ast.If) and "__name__" in ast.unparse(node.test) and "__main__" in ast.unparse(node.test)
 
 
+def _scope_walk(root: ast.AST):
+    """``ast.walk`` of ``root`` without the bodies of nested functions, classes and lambdas."""
+    yield root
+    stack = list(ast.iter_child_nodes(root))
+    while stack:
+        n = stack.pop()
+        yield n
+        if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            stack.extend(ast.iter_child_nodes(n))
+
+
+def _sql_literal_line(expr: ast.AST) -> int | None:
+    """The line of a string literal in ``expr`` that holds an SQL write statement, else None."""
+    for n in ast.walk(expr):
+        if isinstance(n, ast.Constant) and isinstance(n.value, str) and SQL_WRITE_RX.search(n.value):
+            return n.lineno
+    return None
+
+
+def _call_name(f: ast.AST) -> str:
+    return f.id if isinstance(f, ast.Name) else (f.attr if isinstance(f, ast.Attribute) else "")
+
+
 class Gate:
     """One gate run over a repository (a :class:`guards._PyIndex` of its Python files)."""
 
@@ -151,6 +192,7 @@ class Gate:
         self.unresolved: list[str] = []
         self.checked: list[str] = []
         self._uses: dict[str, dict[int, object]] = {}
+        self._sqlc: dict[str, dict[str, int]] = {}
 
     # -- helpers ---------------------------------------------------------------------------
     def _uses_map(self, rel: str) -> dict[int, object]:
@@ -186,12 +228,17 @@ class Gate:
         lines = (text or "").splitlines()
         return lines[line - 1].strip()[:160] if 0 < line <= len(lines) else ""
 
-    def _add(self, kind: str, rel: str, line: int, why: str, via: list[str], phase: str) -> None:
+    def _add(self, kind: str, rel: str, line: int, why: str, via: list[str], phase: str,
+             heuristic: bool = False) -> None:
         at = f"{rel}:{line}"
-        if any(r["at"] == at and r["kind"] == kind for r in self.reasons):
-            return
-        self.reasons.append({"kind": kind, "at": at, "line": self._line(rel, line), "why": why,
-                             "via": list(via), "phase": phase})
+        rec = {"kind": kind, "at": at, "line": self._line(rel, line), "why": why, "via": list(via), "phase": phase,
+               **({"heuristic": True} if heuristic else {})}
+        for k, r in enumerate(self.reasons):
+            if r["at"] == at and r["kind"] == kind:
+                if r.get("heuristic") and not heuristic:  # a resolved call outranks a text pattern on its line
+                    self.reasons[k] = rec
+                return
+        self.reasons.append(rec)
 
     # -- walking -------------------------------------------------------------------------------
     def run(self, roots: list[tuple[str, str]]) -> dict:
@@ -248,6 +295,7 @@ class Gate:
             if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom)) \
                     or _main_guard(st):
                 continue
+            self._sql_writes(rel, st, [f"import of {rel}"], "import")
             self._text(rel, st.lineno, st.end_lineno or st.lineno, [f"import of {rel}"], "import")
         # project modules imported at module level
         for st in tree.body:
@@ -285,23 +333,167 @@ class Gate:
         for nxt in self._visit(rel, qual, node, via, "import"):
             self.run_extra(nxt[0], nxt[1], [*via, nxt[1]])
 
-    def _text(self, rel: str, a: int, b: int, via: list[str], phase: str) -> None:
+    def _text(self, rel: str, a: int, b: int, via: list[str], phase: str,
+              typed: dict[int, int] | None = None) -> None:
+        """Sink text patterns on lines ``a``..``b`` (strings kept, comments and docstrings blanked). SQL write
+        statements are checked on the syntax tree instead (:meth:`_sql_writes`); ``typed`` counts, per line, the
+        ``.commit()`` / ``.save()`` calls on an object of a project class that defines that method (the gate reads
+        that method instead)."""
         _, text = self.ix.tree(rel)
         if text is None:
             return
         code = guards.code_text(text, ".py", keep_strings=True).splitlines()
         for ln in range(a, min(b, len(code)) + 1):
             line = code[ln - 1]
-            for rx, kind in TEXT_SINKS:
-                if rx.search(line):
-                    self._add(kind, rel, ln, f"the line matches the {kind} sink pattern", via, phase)
+            for rx, kind in LINE_SINKS:
+                if kind == "orm-write":
+                    if len(rx.findall(line)) > (typed or {}).get(ln, 0):
+                        self._add(kind, rel, ln, "the line matches the orm-write text pattern (`.commit()`, "
+                                                 "`.save()` ...) on an object the gate cannot type", via, phase,
+                                  heuristic=True)
+                elif rx.search(line):
+                    self._add(kind, rel, ln, f"the line matches the {kind} sink pattern", via, phase,
+                              heuristic=True)
+
+    # -- SQL write statements ------------------------------------------------------------------------
+    def _sql_consts(self, rel: str) -> dict[str, int]:
+        """Module-level and class-level names of ``rel`` assigned an SQL write statement: name -> line."""
+        if rel in self._sqlc:
+            return self._sqlc[rel]
+        out: dict[str, int] = {}
+        self._sqlc[rel] = out
+        tree, _ = self.ix.tree(rel)
+        body = list(getattr(tree, "body", [])) if tree is not None else []
+        for st in list(body):
+            if isinstance(st, ast.ClassDef):
+                body += st.body
+        for st in body:
+            if isinstance(st, (ast.Assign, ast.AnnAssign)) and st.value is not None:
+                ln = _sql_literal_line(st.value)
+                if ln:
+                    for t in (st.targets if isinstance(st, ast.Assign) else [st.target]):
+                        if isinstance(t, ast.Name):
+                            out[t.id] = ln
+        return out
+
+    def _sql_source(self, rel: str, expr: ast.AST, local: dict[str, tuple[str, int]]
+                    ) -> tuple[str, int, str | None] | None:
+        """``(file, line, name)`` of an SQL write statement that ``expr`` contains (``name`` None) or names through a
+        variable or constant (``name``), else None."""
+        ln = _sql_literal_line(expr)
+        if ln:
+            return rel, ln, None
+        consts = self._sql_consts(rel)
+        for n in ast.walk(expr):
+            if isinstance(n, ast.Name):
+                if n.id in local:
+                    return (*local[n.id], n.id)
+                if n.id in consts:
+                    return rel, consts[n.id], n.id
+                full = self._module_qual(rel, n.id)
+                loc = self._locate(full) if full else None
+                if loc is not None and "." not in loc[1] and loc[1] in self._sql_consts(loc[0]):
+                    return loc[0], self._sql_consts(loc[0])[loc[1]], n.id
+            elif isinstance(n, ast.Attribute) and n.attr in consts and isinstance(n.value, ast.Name) and \
+                    n.value.id in ("self", "cls"):
+                return rel, consts[n.attr], ast.unparse(n)
+        return None
+
+    def _sql_writes(self, rel: str, root: ast.AST, via: list[str], phase: str) -> None:
+        """An SQL write statement (``INSERT INTO`` ...) is a sink where it reaches a call's arguments -
+        ``cur.execute("INSERT ...")``, ``db.run(SQL)`` with ``SQL`` assigned one - and not a call that only builds
+        or logs text (``.format``, ``.join``, ``log.info``, an exception). A statement that is only returned,
+        assigned or compared runs nothing."""
+        # a function with its nested functions (as the call walk); a module-level statement without the bodies of
+        # the functions it defines (they do not run at import)
+        nodes = list(ast.walk(root) if isinstance(root, (ast.FunctionDef, ast.AsyncFunctionDef)) else
+                     _scope_walk(root))
+        local: dict[str, tuple[str, int]] = {}
+        for n in nodes:
+            if isinstance(n, (ast.Assign, ast.AnnAssign, ast.AugAssign)) and n.value is not None:
+                src = self._sql_source(rel, n.value, local)
+                if src:
+                    for t in (n.targets if isinstance(n, ast.Assign) else [n.target]):
+                        if isinstance(t, ast.Name):
+                            local[t.id] = (src[0], src[1])
+        for n in nodes:
+            if not isinstance(n, ast.Call):
+                continue
+            name = _call_name(n.func)
+            if name in TEXT_ONLY_CALLS or name.endswith(("Error", "Exception", "Warning")):
+                continue
+            for arg in [*n.args, *(k.value for k in n.keywords)]:
+                src = self._sql_source(rel, arg, local)
+                if not src:
+                    continue
+                if src[2] is None:  # the statement is written in the call: its line
+                    self._add("sql-write", rel, src[1], f"an SQL write statement reaches `{name or 'a call'}()`",
+                              via, phase)
+                else:  # passed by name: the call's line, and where the statement is
+                    self._add("sql-write", rel, n.lineno, f"`{name or 'a call'}()` gets the SQL write statement "
+                                                          f"`{src[2]}` (set at {src[0]}:{src[1]})", via, phase)
+                break
+
+    # -- objects of project classes ----------------------------------------------------------------------
+    def _local_class(self, rel: str, fn: ast.AST, name: str) -> tuple[str, str] | None:
+        """``(file, class)`` when every assignment of the local ``name`` in ``fn`` is a constructor call of one
+        project class (``t = Txn()``), else None."""
+        found: set[tuple[str, str]] = set()
+        for n in _scope_walk(fn):
+            targets = n.targets if isinstance(n, ast.Assign) else ([n.target] if isinstance(
+                n, (ast.AnnAssign, ast.AugAssign, ast.For, ast.AsyncFor)) else [])
+            for t in targets:
+                if not any(isinstance(x, ast.Name) and x.id == name for x in ast.walk(t)):
+                    continue
+                value = getattr(n, "value", None)
+                if not isinstance(n, ast.Assign) or not isinstance(t, ast.Name) or not isinstance(value, ast.Call):
+                    return None
+                written = value.func
+                attrs = []
+                while isinstance(written, ast.Attribute):
+                    attrs.append(written.attr)
+                    written = written.value
+                if not isinstance(written, ast.Name):
+                    return None
+                base = self._module_qual(rel, written.id)
+                loc = self._locate(".".join([base, *reversed(attrs)])) if base else None
+                tree, _ = self.ix.tree(loc[0]) if loc else (None, None)
+                if loc is None or not isinstance(_find_def(tree, loc[1]) if tree is not None else None,
+                                                 ast.ClassDef):
+                    return None
+                found.add(loc)
+        return found.pop() if len(found) == 1 else None
+
+    def _typed_method(self, rel: str, ctx: tuple[ast.AST, str | None], call: ast.Call) -> tuple[str, str] | None:
+        """``(file, Class.method)`` for ``obj.method()`` when ``obj`` is ``self``/``cls``, a parameter annotated
+        with a project class or a local built by a project class's constructor, and that class defines
+        ``method``; else None."""
+        f = call.func
+        if not (isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name)):
+            return None
+        target = self._param_method(rel, ctx, f.value.id, f.attr)
+        if target is None:
+            loc = self._local_class(rel, ctx[0], f.value.id)
+            target = (loc[0], f"{loc[1]}.{f.attr}") if loc else None
+        if target is None:
+            return None
+        tree, _ = self.ix.tree(target[0])
+        return target if tree is not None and _find_def(tree, target[1]) is not None else None
 
     def _visit(self, rel: str, qual: str, node: ast.AST, via: list[str], phase: str) -> list[tuple[str, str]]:
         """Check one definition; return the project definitions it calls."""
-        self._text(rel, node.lineno, node.end_lineno or node.lineno, via, phase)
+        cls = qual.rpartition(".")[0] if "." in qual else None
+        typed: dict[int, int] = {}
+        for call in ast.walk(node):
+            if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and \
+                    call.func.attr in ("commit", "save") and not call.args and not call.keywords and \
+                    self._typed_method(rel, (node, cls), call) is not None:
+                ln = call.end_lineno or call.lineno
+                typed[ln] = typed.get(ln, 0) + 1
+        self._sql_writes(rel, node, via, phase)
+        self._text(rel, node.lineno, node.end_lineno or node.lineno, via, phase, typed)
         self._state_writes(rel, node, via, phase)
         uses = self._uses_map(rel)
-        cls = qual.rpartition(".")[0] if "." in qual else None
         out: list[tuple[str, str]] = []
         for call in ast.walk(node):
             if isinstance(call, ast.Call):
@@ -362,6 +554,12 @@ class Gate:
                 out.append((rel, base + ".".join([e.id, *reversed(attrs)]) if isinstance(e, ast.Name) else b.name))
             elif b.kind == "param" and isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and ctx:
                 target = self._param_method(rel, ctx, f.value.id, f.attr)
+                if target is not None:
+                    out.append(target)
+                else:
+                    self.unresolved.append(f"{rel}:{call.lineno} {written}")
+            elif b.kind == "assign" and isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and ctx:
+                target = self._typed_method(rel, ctx, call)  # `t = Txn(); t.commit()` -> Txn.commit
                 if target is not None:
                     out.append(target)
                 else:

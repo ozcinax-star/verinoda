@@ -55,7 +55,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D32 | Name-existence check | partial | Python only: `verinoda check` (files, `--diff`, `--stdin --as`) and `verinoda api`, MCP `code_check` / `api_members`, skill text. Not done: mod config keys and resource ids, JVM jars, JS/TS, `--against PKG==VER`, the environment fingerprint in snapshots. Measurements in BENCHMARKS.md (the fixture set was written by the rule author: in-sample). |
 | D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`; decision records (`verinoda/decisions.py`, schema v5 log, `decide record/import/guard/accept/waive/list`, MCP `decision_record`); guards and `decide check` (`verinoda/guards.py`, MCP `decision_check`, a one-line summary in `update`; critique's exclusivity check and feedback's exclusive corrections use the same engine). Guard mutations (54 cases on the three examples, written by the rule author, plus 22 forms from the two reviews added by the fixer: all in-sample): VIOLATED precision 1.00, recall 1.00 in reach, 13/13 out-of-reach forms named in limits or POSSIBLE; the old raw-regex scan on the same orders_app cases tp 7 fp 8 fn 6. `decide check` median 42 ms per example case, about 2 s (1.8-2.2 s) on the full Verinoda tree (3 guards; results in `benchmarks/results/decide-2026-09-25/`). The decision brief (`verinoda/decision_brief.py`, `decide brief/answer`, MCP `decision_brief`, answers through `decision_record(action='answer')`; `analyze` routes decide sub-questions to it): on orders_app, EN and TR question, 8/8 gold forces, 19/19 cited evidence re-checks, 5/5 gold question kinds - in-sample (the gold came with the design and the probes were written after it). Not built: `analyze` impact questions do not include violations; the UI shows no decision badge; claims for accepted guards (kinds `exclusive` / `layering`); an ADR's reasons are matched by a few phrasings only; `research.dependencies` itself still reads no Gradle/Maven (the guards and the brief read them). Intent routing: the last held-out set (held-out 4, 20 questions by the fixer, hashed before the review fixes' cue rules were written): precision 0.83, recall 0.50 - the recall bar (0.85) is not met; every other set (written, held-out 1-3, the reviewers' 52) is in-sample. Review round 3 (40 new questions, written before running the router: recall 0.55) added cues that make its set in-sample (20/20) and held-out 4 no longer clean (0.86 / 0.60, its new hit a phrasing section 6 had named): no clean held-out set is left. A missed choice question whose words may ask for a choice is at most `met_with_inference`; one without such words can still be judged `met`. |
 | D34 | Debug ledger (loop detection, strategies) | partial | Built 2026-09-25 (section 7): `verinoda debug start/try/status/diff/close`, strategies `differential/bisect/rerun/observe`, MCP `debug_start` / `debug_attempt` / `debug_status` / `debug_strategy` / `experiment_run`, schema v6. debugloops_v1 (12 sessions written by the builder, gold fixed before the rules ran; in-sample after three fixes): definitive precision 11/11, loop recall 8/8, 0/4 controls stopped, top strategy 8/8. A review found 27 problems (25 distinct: false stops, false "passed", unverified bisect ends, git-safety gaps); all fixed with regression tests (section 7.5), the benchmark scores unchanged after the fixes. Not built: a real agent session with and without the protocol. `debug try` overhead is copy-bound on big trees (median 2.4-5.0 s on 2,341 files, depending on machine load). |
-| D36 | Behaviour probe of changed functions | partial | Built 2026-09-25 (section 9): `verinoda probe FILE::NAME` / `--changed`, MCP `change_probe` (the design named it `behaviour_probe`): inputs from the syntax tree only (annotations, call-site literals and recipes, boundaries mined from comparisons, `len` checks, slices and imported constants of both versions and their callees, standard edges, then hypothesis or a fixed pseudo-random list), one corpus run at the base commit copy and in the working tree through `experiments.run` with a pytest plugin (no new allowlist entry), difference classes with minimal examples reproduced in a second pair of runs and recorded as run-scoped `experiment_verified` claims, properties, undeclared exceptions, nondeterminism, `--scaling`; a static side-effect gate (closure + module-level statements) and an audit hook in the run. No schema change (the design's `probes` table: runs are experiments, results are files under `runs/<probe id>/`). Hand fixtures (49, gold first, in-sample): 22/22 detected (20/20 of those the tests miss), 0 differences on 11 behaviour-preserving edits x 5 seeds (a 12th, labelled equivalent, really changes floats on Python 3.12: reported as drift), gate 9/9 refusals and 0/4 wrong ones, median 2.1 s per probe; automated mutants 25/25 killed. Not built: `review --probe` (D35), the second minimisation round, the static concurrency signal; methods need a literal-argument constructor call. |
+| D36 | Behaviour probe of changed functions | partial | Built 2026-09-25 (section 9): `verinoda probe FILE::NAME` / `--changed`, MCP `change_probe` (the design named it `behaviour_probe`): inputs from the syntax tree only (annotations, call-site literals and recipes, boundaries mined from comparisons, `len` checks, slices and imported constants of both versions and their callees, standard edges, then hypothesis or a fixed pseudo-random list), one corpus run at the base commit copy and in the working tree through `experiments.run` with a pytest plugin (no new allowlist entry), difference classes with minimal examples reproduced in a second pair of runs and recorded as run-scoped `experiment_verified` claims, properties, undeclared exceptions, nondeterminism, `--scaling`; a static side-effect gate (closure + module-level statements) and an audit hook in the run. No schema change (the design's `probes` table: runs are experiments, results are files under `runs/<probe id>/`). Hand fixtures (49, gold first, in-sample): 22/22 detected (20/20 of those the tests miss), 0 differences on 11 behaviour-preserving edits x 5 seeds (a 12th, labelled equivalent, really changes floats on Python 3.12: reported as `numeric_drift_only`), gate 9/9 refusals and 0/4 wrong ones, median 2.0 s per probe; automated mutants 25/25 killed; unchanged after a review round whose 16 findings were fixed or documented (threads and `multiprocessing` children blocked at run time, a taken module name, process exits, plugin errors, float drift, SQL strings in the gate, `--changed` no pass when a function was not compared). Not built: `review --probe` (D35), the second minimisation round, the static concurrency signal; methods need a literal-argument constructor call. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -1482,18 +1482,34 @@ still not built.
   every project module they live in or import. It refuses file writes, network, processes and threads,
   database connections, `architecture_map.SINK_PATTERNS` lines (reads allowed), and writes to state the probe
   cannot isolate between calls (a `global` it assigns, a module-level container it mutates, an imported
-  module's or a class's attribute, the environment, `sys.path`, the random seed, handlers). Every reason names
-  the line and the call chain: `refused: place_order reaches sql-write at orders/repository.py:17 (place_order ->
-  OrderRepository.save)`. Reading the environment at import is not a side effect. `--allow-side-effects` is
-  the user's decision; the reasons stay in the result.
+  module's or a class's attribute, the environment, `sys.path`, the random seed, handlers). An SQL write
+  statement counts where it reaches a call's arguments (written there, or through a local, module or imported
+  name assigned one), not where it is only returned or assigned, nor in calls that only build or log text
+  (`.format`, `.join`, `log.info`, an exception); `.commit()` / `.save()` on `self`, a parameter annotated with a
+  project class or a local built by a project constructor is followed into that class's method *(fixer: both
+  were false refusals of pure functions)*. The other text patterns are marked `heuristic`, and a refusal that
+  rests only on them says "may reach ... (a text pattern the gate cannot confirm: `session.commit()`)". Every
+  reason names the line and the call chain: `refused: place_order reaches sql-write at orders/repository.py:17
+  (place_order -> OrderRepository.save)`. Reading the environment at import is not a side effect.
+  `--allow-side-effects` is the user's decision; the reasons stay in the result.
 - **Audit hook** *(deviation: the design attached the call tracer to list observed boundary calls)*: the
-  plugin installs `sys.addaudithook` and, while the target module is imported and while each call runs,
-  blocks file writes, network, process starts, environment and working-directory changes, class-attribute
-  writes and database connections other than `:memory:` by raising a `BaseException` subclass inside the
-  operation (a function that swallows it is still recorded as blocked). At import, writes inside the run's
-  throw-away directory (library caches under the run's HOME) are allowed. Any blocked call makes the probe
-  `refused` ("at run time"), with the event, and no difference is reported. With `--allow-side-effects` the
-  events are only recorded.
+  plugin installs `sys.addaudithook` and, while the target module is imported and while each call runs - and
+  for the whole process in every thread the project starts, so a thread that outlives its call stays
+  restricted - blocks file writes, network, process starts (`subprocess`, the `os` process functions, and
+  `multiprocessing` children through `_winapi.CreateProcess` or `_posixsubprocess.fork_exec`, which the plugin
+  makes raise an event), environment and working-directory changes and database connections other than
+  `:memory:` by raising a `BaseException` subclass inside the operation (a function that swallows it is still
+  recorded as blocked). At import, writes inside the run's throw-away directory (library caches under the run's
+  HOME) are allowed. Any blocked call, or a blocked event in a project thread between or after the calls, makes
+  the probe `refused` ("at run time"), with the event, and no difference is reported; threads still running
+  after the calls are waited for (at most 5 s), then the run ends with them and a limit says so. With
+  `--allow-side-effects` the events are only recorded. Not seen at run time *(fixer: the first version claimed
+  class-attribute writes; CPython raises no audit event for them)*: class-attribute writes (the static gate
+  checks those) and what C extensions or `ctypes` do without an audited Python call.
+- **The module called is the file named** *(fixer)*: after the import the plugin compares the module's
+  `__file__` with the target file in the copy; a module whose import name another module took first (a
+  namespace directory holding `json.py`, `copy.py` ...) is `inconclusive` ("`json` resolves to
+  .../Lib/json/__init__.py, not tools/json.py") and nothing is called.
 - **Inputs** (`probe_inputs.py`, syntax trees only; the project is never imported in Verinoda's process):
   annotations (scalars, `Decimal`, Optional/Union, containers and their `typing` spellings, `Literal`, enum
   members read from the class body, project classes through recipes), refined by call-site literals (followed
@@ -1519,13 +1535,21 @@ still not built.
   default copy. The plugin and a generated `verinoda_probe_spec.py` are delivered like the call tracer; no
   project test is collected, and project `conftest.py` files are not loaded. Each input is called twice on
   freshly decoded arguments. A call past the per-call timeout (default 2 s) ends the process through
-  `faulthandler`; the next run resumes after it (at most 3 times). A run that reaches its own timeout is not a
-  hang: the inputs after it are "not run".
+  `faulthandler`; the next run resumes after it (at most 3 times). A process that ends during a call without
+  faulthandler's stack in `probe_hang.txt` (`os._exit`, a crash) is an exit with the run's exit code, not a hang
+  *(fixer)*; a process that ends before the target was imported, or a failure of the plugin itself, gives no
+  input at all and makes the probe `inconclusive` *(fixer: both used to become invented "hanging" inputs)*. A run
+  that reaches its own timeout is not a hang: the inputs after it are "not run".
 - **Oracles**: difference classes `new_exception`, `exception_type_changed`, `value_changed_at_mined_boundary`,
-  `value_changed`, `type_changed`, `exception_removed`, `argument_mutation_changed` (a digest of the mutable
-  arguments after the call) and `numeric_drift` (floats within 1e-9 relative; integers never drift), compared on
-  the result's type and `repr` with memory addresses masked, and on exception types (messages are not compared,
-  and `not_checked` says so). Inputs whose two calls disagree are `nondeterministic`, never a difference.
+  `value_changed`, `type_changed`, `exception_removed`, `process_exit_changed` (the call ended the process on
+  one side only, or with another exit code), `argument_mutation_changed` (a digest of the mutable arguments after
+  the call) and `numeric_drift` (floats within 1e-9 relative; integers, strings, `Decimal`, `Fraction` and quoted
+  text inside containers never drift *(fixer)*), compared on the result's type and `repr` with memory addresses
+  masked (integers past the 4300-digit `str` limit are rendered with the limit lifted for the rendering only),
+  and on exception types (messages are not compared, and `not_checked` says so). A `value_changed` example
+  whose two results are `==` equal (dict key order, `-0.0`/`0.0`) is marked `equal_under_eq`: still a change,
+  the order is observable. An input that is both a call-site literal and a mined boundary keeps its boundary
+  tag. Inputs whose two calls disagree are `nondeterministic`, never a difference.
   Undeclared exceptions: raised on inputs of the annotated domain and not declared by a `raise` in the closure,
   a `pytest.raises` around a call in the tests or the docstring (subclasses of a declared project exception
   count as declared); reported always, and the status without a base. Properties (`--property 'result <=
@@ -1554,16 +1578,24 @@ still not built.
   behaviour, with a comment that whether the change is intended is the user's decision; nothing is written to
   the repository.
 - **Honesty**: a difference is a behaviour change, never judged a bug. Statuses: `differences_found`,
-  `property_violated`, `no_difference_found` ("in N inputs, a search, not a proof"), `nothing_found` (no base),
+  `numeric_drift_only` (only float drift: low priority, its own status and headline *(fixer: it read
+  "differences_found ... behaviour changes")*; the drift is still an `experiment_verified` claim, a true
+  observation), `property_violated`, `no_difference_found` ("in N inputs, a search, not a proof"),
+  `nothing_found` (no base),
   `undeclared_exceptions` (no base), `refused`, `unsupported`, `inconclusive` (import error in the copy,
   failed runs, differences that did not reproduce, timeouts only, low input diversity, mostly nondeterministic).
   None of the last three ever reads as a pass. Every result lists `not_checked` (side effects and state beyond
-  the arguments, inputs outside the generated domain, exception messages, concurrency, performance unless
+  the arguments, inputs outside the generated domain, exception messages, concurrency, iteration order that
+  depends on string hashing - every run pins `PYTHONHASHSEED=0`, the same on both sides, which keeps
+  `list(set(...))` from being a false difference but also hides that its order is not stable - performance unless
   `--scaling`), the run's `guarantees` and limits. The CLI exits 3 unless the status is `no_difference_found` /
-  `nothing_found`.
+  `nothing_found` (`--changed`: `done` / `nothing_changed`).
 - **`--changed`**: the functions (top-level and methods of top-level classes) whose signature or body facet
   (`anchors`) differs from the base, or that are new; test files are left out; at most 10 probes. A function
-  whose behaviour changed only through a changed callee or constant is probed when named (fixture D19).
+  whose behaviour changed only through a changed callee or constant is probed when named (fixture D19). The
+  listing's status is `differences_found` when any probe found something, `done` only when every changed
+  function was compared and nothing was found, else `incomplete` (a refused, unsupported or inconclusive probe,
+  or one over the limit: no pass, exit 3) *(fixer: it was `done`, exit 0, with every function refused)*.
 - **Skills**: after editing Python functions, `verinoda probe --changed --json` (MCP `change_probe`) with
   `--property` for what the user asked; compare each difference with the request and ask when unclear; say "no
   difference found in N inputs", never "verified"; `--allow-side-effects` only after the user agreed.
@@ -1598,6 +1630,11 @@ had been run once during development before.
   median 2.1 s, p90 4.2 s, max 11.1 s (final code); the design's bar is 20 s. The slowest are the scaling run
   (10.6 s; 23 s before the fix that stops re-measuring a size already over budget) and `place_order` with side
   effects allowed (a 10,000-item order is 10,000 SQLite inserts per call). Refusals take about 0.1-0.2 s.
+- **After the review fixes** (run 6, same fixtures and mutants): the same scores - detection 22/22, 0
+  differences on the 11 genuinely equivalent edits, E04 now `numeric_drift_only`, gate 9/9 and 0/4, unsupported
+  2/2, reproduced 37/37, kill rate 25/25; median 2.0 s, p90 3.8 s, max 11.2 s. The fixed shapes (threads,
+  child processes, a taken module name, process exits, plugin errors, `Decimal`/`str` drift, SQL strings and
+  project `.commit()` in the gate) are covered by regression tests, not by these fixtures.
 - Against the design's bars: B1-B4 and B8 detected 5/5 with minimal examples (`apply_discount(100.0)`: base
   100.0, working tree 90.0; `apply_discount(1e+308)`: OverflowError; `validate_items(<50 items>)`:
   ValidationError; `compute_total(<11 items>)`; `customer_key('a-b_c.d')` and the Turkish strings); kill rate

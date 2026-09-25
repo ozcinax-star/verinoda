@@ -18,25 +18,38 @@ agent's properties that did not hold. Two calls of one input that disagree
 mark the input nondeterministic in Verinoda.
 
 Side effects: an audit hook (``sys.addaudithook``) is active while the target
-module is imported and while each call runs. With ``spec["block"]`` it stops
-file writes, network use, new processes, environment/working-directory changes,
-class-attribute writes and database connections other than ``:memory:`` by
-raising a ``BaseException`` subclass inside the operation; the call is recorded
-as ``blocked`` with the event (also when the function swallowed the
-exception). At import time writes inside the run's throw-away directory are
-allowed (library caches under the run's HOME). Without ``block`` the events are
-only recorded.
+module is imported and while each call runs, and for the whole process in every
+thread the project starts (a thread that outlives its call stays restricted).
+With ``spec["block"]`` it stops file writes, network use, new processes
+(``subprocess``, ``os`` process functions, ``multiprocessing`` through
+``_winapi.CreateProcess`` or ``_posixsubprocess.fork_exec``),
+environment/working-directory changes and database connections other than
+``:memory:`` by raising a ``BaseException`` subclass inside the operation; the
+call is recorded as ``blocked`` with the event (also when the function
+swallowed the exception). An event in a project thread outside any call is
+recorded in a ``threads`` line (with the input it followed). At import time
+writes inside the run's throw-away directory are allowed (library caches under
+the run's HOME). Without ``block`` the events are only recorded. Not seen: class
+attribute writes (CPython raises no audit event for them; the static gate checks
+them) and what C extensions or ``ctypes`` do without an audited Python call.
+
+The target module must be the file Verinoda named: when its import name resolves
+to another file (a module of the same name imported before, like ``json``), the
+plugin writes ``import_error`` with ``mismatch`` and calls nothing.
 
 A call that runs longer than ``spec["per_call_timeout"]`` seconds ends the
 process through ``faulthandler`` (the stack goes to ``probe_hang.txt``);
-Verinoda reads the last recorded input and resumes after it in a new run.
+Verinoda reads the last recorded input and resumes after it in a new run. A
+process that ends during a call without that stack (``os._exit``, a crash) is
+told apart by the empty ``probe_hang.txt``.
 
 Optional ``spec["scaling"]``: one argument built at growing sizes, timed as
 the median of several calls per size, in several rounds (rough growth only).
 
 Output: ``$VERINODA_ARTIFACTS/$VERINODA_PROBE_OUT`` (default ``probe.jsonl``),
 JSON lines with schema ``verinoda.probe/1``: ``header``, ``import_error``,
-``row`` (one per input), ``scaling``, ``footer``.
+``import_events``, ``ready`` (the target imported), ``row`` (one per input),
+``scaling``, ``threads``, ``footer``.
 """
 
 from __future__ import annotations
@@ -54,6 +67,7 @@ import math
 import os
 import re
 import sys
+import threading
 import time
 
 import pytest
@@ -76,8 +90,10 @@ _NET_EVENTS = {"socket.connect", "socket.bind", "socket.sendto", "socket.sendmsg
                "urllib.Request", "http.client.connect", "http.client.send", "ftplib.connect", "smtplib.connect",
                "poplib.connect", "imaplib.open", "nntplib.connect", "telnetlib.Telnet.open", "webbrowser.open"}
 _PROC_EVENTS = {"subprocess.Popen", "os.system", "os.exec", "os.posix_spawn", "os.spawn", "os.fork", "os.forkpty",
-                "os.startfile", "os.kill", "os.killpg", "pty.spawn", "os.popen"}
+                "os.startfile", "os.kill", "os.killpg", "pty.spawn", "os.popen", "_winapi.CreateProcess",
+                "_posixsubprocess.fork_exec"}
 _STATE_EVENTS = {"os.putenv", "os.unsetenv", "os.chdir", "os.fchdir"}
+THREAD_WAIT_MAX = 5.0  # seconds to wait, in all, for threads the project started before the run ends
 
 
 class _Blocked(BaseException):
@@ -91,6 +107,14 @@ class _S:
     events: list = []
     allowed_root = ""
     run_root = ""  # the run's throw-away directory as written (masked in reprs and messages)
+    main_thread = None  # the thread that runs the probe; None until the hook is installed
+    known_threads: frozenset = frozenset()  # threads that existed before the target was imported
+    stray: list = []  # side effects in project threads outside any call
+    last_input = -1
+
+
+class _Mismatch(Exception):
+    """The target's import name resolves to another file than the one Verinoda named."""
 
 
 def _detail(args) -> str:
@@ -146,24 +170,52 @@ def _classify(event: str, args) -> str | None:
         return "global-state"
     if event.startswith("syslog."):
         return "global-state"
-    if event == "object.__setattr__" and _S.phase == "call" and args and isinstance(args[0], type):
-        name = args[1] if len(args) > 1 else ""
-        if isinstance(name, str) and not (name.startswith("__") and name.endswith("__")) \
-                and not name.startswith("_abc_"):
-            return "class-state"
     return None
 
 
+def _project_thread() -> bool:
+    """Is the current thread one the project started (after the hook was installed)?"""
+    if _S.main_thread is None:
+        return False
+    ident = threading.get_ident()
+    return ident != _S.main_thread and ident not in _S.known_threads
+
+
 def _hook(event: str, args) -> None:
-    if not _S.active:
+    if not _S.active and not _project_thread():
         return
     kind = _classify(event, args)
     if kind is None:
         return
-    if len(_S.events) < EVENTS_MAX:
-        _S.events.append({"kind": kind, "event": event, "detail": _detail(args)[:200]})
+    rec = {"kind": kind, "event": event, "detail": _detail(args)[:200]}
+    if _S.main_thread is not None and threading.get_ident() != _S.main_thread:
+        rec["thread"] = True
+    if _S.active:
+        if len(_S.events) < EVENTS_MAX:
+            _S.events.append(rec)
+    elif len(_S.stray) < EVENTS_MAX:
+        _S.stray.append({**rec, "after_input": _S.last_input})
     if _S.block:
         raise _Blocked(f"{kind}: {event} {_detail(args)[:120]}")
+
+
+def _guard_fork_exec() -> None:
+    """``multiprocessing`` on POSIX starts its spawn/forkserver children through ``_posixsubprocess.fork_exec``,
+    which raises no audit event of its own: raise one, so that the hook sees the process start."""
+    try:
+        import _posixsubprocess
+    except ImportError:
+        return
+    real = getattr(_posixsubprocess, "fork_exec", None)
+    if real is None or getattr(real, "_verinoda", False):
+        return
+
+    def fork_exec(*args, **kwargs):
+        sys.audit("_posixsubprocess.fork_exec", args[0] if args else None)
+        return real(*args, **kwargs)
+
+    fork_exec._verinoda = True
+    _posixsubprocess.fork_exec = fork_exec
 
 
 # -- values --------------------------------------------------------------------------------
@@ -263,9 +315,27 @@ def _repr(v, depth: int = 0) -> str:
     return repr(v)
 
 
+def _render(v) -> str:
+    """``_repr``, retried without the int-to-str digit limit (Python 3.11+) when that limit made it fail: two
+    different integers of more than 4300 digits must not both read ``<repr raised ValueError>``. The limit is
+    lifted only while rendering, never while the project's code runs."""
+    try:
+        return _repr(v)
+    except ValueError:
+        get = getattr(sys, "get_int_max_str_digits", None)
+        if get is None:
+            raise
+        old = get()
+        sys.set_int_max_str_digits(0)
+        try:
+            return _repr(v)
+        finally:
+            sys.set_int_max_str_digits(old)
+
+
 def _result(v) -> dict:
     try:
-        text = _repr(v)
+        text = _render(v)
     except BaseException as exc:  # noqa: BLE001 - a user repr may raise anything
         text = f"<repr raised {type(exc).__name__}>"
     text = _norm(text)
@@ -300,7 +370,7 @@ def _args_digest(args: list, kwargs: dict) -> str | None:
     if not any(isinstance(a, _MUTABLE) for a in (*args, *kwargs.values())):
         return None
     try:
-        text = _norm(_repr((list(args), sorted(kwargs.items()))))
+        text = _norm(_render((list(args), sorted(kwargs.items()))))
     except BaseException:  # noqa: BLE001
         return None
     return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()[:16]
@@ -308,8 +378,20 @@ def _args_digest(args: list, kwargs: dict) -> str | None:
 
 # -- the target ----------------------------------------------------------------------------
 
+def _same_file(a: str, b: str) -> bool:
+    try:
+        return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+    except (OSError, ValueError):
+        return False
+
+
 def _target(spec: dict):
     mod = importlib.import_module(spec["module"])
+    want = spec.get("file")
+    got = getattr(mod, "__file__", None)
+    if want and not (got and _same_file(got, os.path.abspath(want))):
+        raise _Mismatch(f"`{spec['module']}` resolves to {got or 'a namespace package'}, not {want} (a module of "
+                        "the same name was imported first)")
     parts = spec["qual"].split(".")
     kind = spec.get("call", {}).get("kind", "function")
     if kind == "method":
@@ -526,6 +608,7 @@ def _main() -> None:
         fh.flush()
 
     _S.block = bool(spec.get("block", True))
+    _S.stray = []
     _S.run_root = os.path.dirname(os.path.abspath(os.getcwd()))
     _S.allowed_root = os.path.normcase(_S.run_root) + os.sep
     write({"k": "header", "schema": SCHEMA, "python": sys.version.split()[0], "start": start,
@@ -534,7 +617,10 @@ def _main() -> None:
         p = os.path.abspath(rel)
         if p not in sys.path:
             sys.path.insert(0, p)
+    _S.main_thread = threading.get_ident()
+    _S.known_threads = frozenset(t.ident for t in threading.enumerate())
     sys.addaudithook(_hook)
+    _guard_fork_exec()
     _S.events = []
     _S.phase = "import"
     _S.active = True
@@ -543,6 +629,8 @@ def _main() -> None:
         err = None
     except _Blocked as b:
         target, method, err = None, None, {"blocked": str(b)[:MSG_MAX], "ev": list(_S.events)}
+    except _Mismatch as m:
+        target, method, err = None, None, {"e": "module_mismatch", "m": _norm(str(m))[:MSG_MAX], "mismatch": True}
     except BaseException as exc:  # noqa: BLE001 - an import error is the answer, not a crash
         target, method, err = None, None, _exc(exc)
     finally:
@@ -558,6 +646,7 @@ def _main() -> None:
         return
     if import_events:
         write({"k": "import_events", "ev": import_events})
+    write({"k": "ready"})
     props = _properties(spec)
     names = _param_names(spec)
     repeat = max(1, int(spec.get("repeat", 2)))
@@ -565,6 +654,7 @@ def _main() -> None:
     rows = 0
     for i in range(start, len(spec["cases"])):
         case = spec["cases"][i]
+        _S.last_input = i
         outs, times = [], []
         for _r in range(repeat):
             o, ms = _one_call(target, method, spec, case, props if _r == 0 else [], names, timeout, hang_file)
@@ -574,8 +664,33 @@ def _main() -> None:
         rows += 1
     if spec.get("scaling"):
         _scaling(target, method, spec, write, hang_file)
+    alive = _wait_threads(min(THREAD_WAIT_MAX, max(1.0, timeout)))
+    if _S.stray or alive:
+        write({"k": "threads", "ev": list(_S.stray), "alive": alive})
     write({"k": "footer", "complete": True, "rows": rows})
     fh.close()
+    if alive:  # a project thread still running would keep the process alive past pytest's exit
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.flush()
+            except (OSError, ValueError, AttributeError):
+                pass
+        os._exit(0)
+
+
+def _wait_threads(limit_s: float) -> int:
+    """Wait (at most ``limit_s`` in all) for the threads the project started; the number still running."""
+    end = time.monotonic() + limit_s
+    left = 0
+    for th in threading.enumerate():
+        if th.ident == _S.main_thread or th.ident in _S.known_threads:
+            continue
+        try:
+            th.join(max(0.0, end - time.monotonic()))
+        except (RuntimeError, AssertionError):  # a dummy thread (started outside the threading module)
+            pass
+        left += th.is_alive()
+    return left
 
 
 @pytest.hookimpl(trylast=True)

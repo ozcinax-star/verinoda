@@ -77,9 +77,12 @@ CONFIRM_MAX = 40
 SCALING_SIZES = (100, 1000, 10000)
 SCALING_FLAG = 3.0
 DRIFT_REL = 1e-9
+MATERIALIZE_MAX = 10001  # the plugin materializes at most this many items of a generator result
+PASS_STATUSES = ("no_difference_found", "nothing_found")  # a search that found nothing (never a proof)
+FINDING_STATUSES = ("differences_found", "property_violated", "numeric_drift_only", "undeclared_exceptions")
 CLASS_ORDER = ("new_exception", "exception_type_changed", "value_changed_at_mined_boundary", "value_changed",
-               "type_changed", "exception_removed", "argument_mutation_changed", "new_timeout", "timeout_removed",
-               "numeric_drift")
+               "type_changed", "exception_removed", "process_exit_changed", "argument_mutation_changed",
+               "new_timeout", "timeout_removed", "numeric_drift")
 CLASS_TEXT = {
     "new_exception": "raises where the base returned a value",
     "exception_type_changed": "raises another exception type than the base",
@@ -87,10 +90,12 @@ CLASS_TEXT = {
     "value_changed": "returns another value",
     "type_changed": "returns another type",
     "exception_removed": "returns a value where the base raised",
+    "process_exit_changed": "ends the process (os._exit or a crash) where the base did not, or the other way round, "
+                            "or with another exit code",
     "argument_mutation_changed": "leaves its arguments in another state after the call",
     "new_timeout": "runs past the per-call timeout where the base returned",
     "timeout_removed": "returns where the base ran past the per-call timeout",
-    "numeric_drift": "returns a float that differs from the base's by at most 1e-9 (relative)",
+    "numeric_drift": "returns floats that differ from the base's by at most 1e-9 (relative)",
 }
 NOT_CHECKED = [
     "side effects and state: only return values, raised exception types and the arguments' state after the call "
@@ -98,7 +103,13 @@ NOT_CHECKED = [
     "inputs outside the generated domain (see inputs.sources)",
     "exception messages (types are compared, messages are not)",
     "concurrency and thread safety",
+    "iteration order that depends on string hashing (sets, and lists or dicts built from them): every run pins "
+    "PYTHONHASHSEED=0, so such an order looks stable and the same on both sides",
 ]
+# results compared exactly: their digits are never float drift
+EXACT_TYPES = frozenset({"builtins.str", "builtins.bytes", "builtins.bytearray", "builtins.int", "builtins.bool",
+                         "decimal.Decimal", "fractions.Fraction"})
+_QUOTED = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
 NOT_CHECKED_PERF = "performance (run again with scaling)"
 _NUM = re.compile(r"(?<![\w.])-?(?:\d+\.\d*(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+|\d+|inf|nan)(?![\w.])")
 _LANG = {".kt": "Kotlin", ".kts": "Kotlin", ".java": "Java", ".js": "JavaScript", ".ts": "TypeScript",
@@ -533,13 +544,11 @@ def build_corpus(params: list[dict], tds: list[dict], bounds: pin.Bounds, site_t
     tuples, one parameter at a time over its edges, pairs of mined boundaries), then generated ones."""
     cases: list[dict] = []
     meta: list[dict] = []
-    seen: set[str] = set()
+    seen: dict[str, int] = {}
     req = [i for i, p in enumerate(params) if p["default"] is None]
     doms = [pin.in_domain(td) for td in tds]
 
     def add(values: dict[int, object], tags: list[str], src: str, dom: bool) -> None:
-        if len(cases) >= n:
-            return
         a, k = [], []
         last_pos = max([i for i in values if params[i]["kind"] != "kwonly"], default=-1)
         for i, p in enumerate(params):
@@ -564,9 +573,15 @@ def build_corpus(params: list[dict], tds: list[dict], bounds: pin.Bounds, site_t
                 a.append(pin.encode(d))
         case = {"a": a, "k": k}
         key = pin.canon(case)
-        if key in seen:
+        if key in seen:  # the same input from another source: keep what that source says about it too (a
+            # call-site literal that is also a mined boundary stays a boundary)
+            m = meta[seen[key]]
+            m["tags"] = sorted(set(m["tags"]) | {t for t in tags if t})
+            m["dom"] = m["dom"] or dom
             return
-        seen.add(key)
+        if len(cases) >= n:
+            return
+        seen[key] = len(cases)
         cases.append(case)
         meta.append({"tags": sorted(set(t for t in tags if t)), "src": src, "dom": dom})
 
@@ -633,7 +648,7 @@ def _spec_module(spec: dict) -> bytes:
 
 def parse_output(data: bytes) -> dict:
     out: dict = {"header": None, "rows": {}, "import_error": None, "scaling": None, "complete": False,
-                 "plugin_error": None, "import_events": []}
+                 "plugin_error": None, "import_events": [], "ready": False, "threads": None}
     for raw in data.decode("utf-8", "replace").splitlines():
         try:
             rec = json.loads(raw)
@@ -650,6 +665,10 @@ def parse_output(data: bytes) -> dict:
             out["import_error"] = rec
         elif k == "import_events":
             out["import_events"] = rec.get("ev") or []
+        elif k == "ready":
+            out["ready"] = True
+        elif k == "threads":
+            out["threads"] = rec
         elif k == "scaling":
             out["scaling"] = rec
         elif k == "plugin_error":
@@ -661,12 +680,14 @@ def parse_output(data: bytes) -> dict:
 
 def _run_side(store: Store, repo: Path, spec: dict, *, side: str, probe_id: str, symbol: str, ref: str | None,
               commit: str | None, timeout: float) -> dict:
-    """Run the corpus on one side (resuming after a call that hung); rows keyed by input index."""
+    """Run the corpus on one side (resuming after a call that hung or ended the process); rows keyed by input
+    index. A call that hung leaves faulthandler's stack in ``probe_hang.txt``; a process that ended without it
+    (``os._exit``, a crash) is recorded as an exit with the run's exit code, never as a hang."""
     n = len(spec["cases"])
     plugins = {f"{PLUGIN_MODULE}.py": plugin_source(), f"{SPEC_MODULE}.py": _spec_module(spec)}
-    res: dict = {"side": side, "experiments": [], "rows": {}, "hangs": [], "import_error": None, "scaling": None,
-                 "tree": None, "guarantees": None, "isolation": None, "limits": [], "error": None,
-                 "import_events": []}
+    res: dict = {"side": side, "experiments": [], "rows": {}, "hangs": [], "exits": [], "import_error": None,
+                 "scaling": None, "tree": None, "guarantees": None, "isolation": None, "limits": [], "error": None,
+                 "import_events": [], "plugin_error": None, "threads": None}
     start = 0
     for _attempt in range(MAX_RESUMES + 1):
         env = {"VERINODA_PROBE_START": str(start), "VERINODA_PROBE_SIDE": side, "VERINODA_PROBE_OUT": OUT_FILE}
@@ -700,9 +721,17 @@ def _run_side(store: Store, repo: Path, spec: dict, *, side: str, probe_id: str,
             why = exp.get("inconclusive_reason") or f"the run ended {exp['outcome']} without probe output"
             res["error"] = f"{why} (logs: {exp['logs']['stderr']})"
             return res
-        if out["plugin_error"]:
-            res["error"] = f"the probe plugin failed: {out['plugin_error'].get('e')}: {out['plugin_error'].get('m')}"
         res["rows"].update(out["rows"])
+        if out["plugin_error"]:  # the plugin itself failed: the side's results end here, nothing is inferred
+            pe = out["plugin_error"]
+            res["plugin_error"] = pe
+            res["error"] = f"the probe plugin failed: {pe.get('e')}: {pe.get('m')}"
+            return res
+        if out["threads"]:
+            th = res["threads"] or {"ev": [], "alive": 0}
+            th["ev"] = (th["ev"] + list(out["threads"].get("ev") or []))[:5]
+            th["alive"] = max(th["alive"], int(out["threads"].get("alive") or 0))
+            res["threads"] = th
         if out["scaling"]:
             res["scaling"] = out["scaling"]
         if out["complete"]:
@@ -712,17 +741,29 @@ def _run_side(store: Store, repo: Path, spec: dict, *, side: str, probe_id: str,
             res["error"] = (f"the run reached its {timeout:g} s timeout after input {last}; the remaining "
                             f"{n - last - 1} input(s) were not run (raise timeout)")
             return res
-        hung = last + 1
-        if hung >= n:  # every input ran; the scaling part did not finish
-            res["scaling"] = res["scaling"] or {"problem": {"error": "the scaling run did not finish (a call ran "
-                                                                     "past the timeout)"}}
+        if not out["ready"]:
+            res["error"] = (f"the run ended while importing the target (exit code {exp.get('exit_code')}), before "
+                            f"any input ran (logs: {exp['logs']['stderr']})")
             return res
-        res["hangs"].append(hung)
-        res["rows"][hung] = {"i": hung, "x": [{"hang": True}], "ms": []}
-        start = hung + 1
+        hang_path = (exp.get("artifacts") or {}).get("probe_hang.txt")
+        hung_here = bool(hang_path and Path(hang_path).is_file() and Path(hang_path).read_bytes().strip())
+        stop = last + 1
+        if stop >= n:  # every input ran; the scaling part did not finish
+            why = "a call ran past the timeout" if hung_here else \
+                f"the process ended with exit code {exp.get('exit_code')}"
+            res["scaling"] = res["scaling"] or {"problem": {"error": f"the scaling run did not finish ({why})"}}
+            return res
+        if hung_here:
+            res["hangs"].append(stop)
+            res["rows"][stop] = {"i": stop, "x": [{"hang": True}], "ms": []}
+        else:
+            res["exits"].append(stop)
+            res["rows"][stop] = {"i": stop, "x": [{"exit": exp.get("exit_code")}], "ms": []}
+        start = stop + 1
         if start >= n:
             return res
-    res["error"] = f"{len(res['hangs'])} inputs ran past the per-call timeout; the rest were not run"
+    res["error"] = (f"{len(res['hangs']) + len(res['exits'])} inputs ran past the per-call timeout or ended the "
+                    "process; the rest were not run")
     return res
 
 
@@ -731,6 +772,8 @@ def _run_side(store: Store, repo: Path, spec: dict, *, side: str, probe_id: str,
 def _out_key(o: dict) -> tuple:
     if o.get("hang"):
         return ("hang",)
+    if "exit" in o:
+        return ("exit", o["exit"])
     if "b" in o:
         return ("blocked",)
     if "e" in o:
@@ -744,6 +787,11 @@ def _stable(row: dict) -> bool:
 
 
 def _drift(a: str, b: str) -> bool:
+    """Do two reprs differ only in float digits (within DRIFT_REL)? Quoted text (strings, and ``Decimal('...')``
+    inside containers) must be identical: its digits are exact."""
+    if _QUOTED.findall(a) != _QUOTED.findall(b):
+        return False
+    a, b = _QUOTED.sub("''", a), _QUOTED.sub("''", b)
     if _NUM.sub("#", a) != _NUM.sub("#", b):
         return False
     na, nb = _NUM.findall(a), _NUM.findall(b)
@@ -772,6 +820,9 @@ def classify(b: dict, h: dict, mined: bool) -> str | None:
     bh, hh = bool(b.get("hang")), bool(h.get("hang"))
     if bh or hh:
         return None if bh == hh else ("new_timeout" if hh else "timeout_removed")
+    bx, hx = "exit" in b, "exit" in h
+    if bx or hx:
+        return None if bx and hx and b["exit"] == h["exit"] else "process_exit_changed"
     be, he = "e" in b, "e" in h
     if be and he:
         return None if b["e"] == h["e"] else "exception_type_changed"
@@ -783,9 +834,20 @@ def classify(b: dict, h: dict, mined: bool) -> str | None:
         return "type_changed"
     if b.get("r") == h.get("r") and b.get("h") == h.get("h"):
         return None if b.get("ap") == h.get("ap") else "argument_mutation_changed"
-    if b.get("h") is None and h.get("h") is None and _drift(b.get("r") or "", h.get("r") or ""):
+    if b.get("h") is None and h.get("h") is None and b.get("t") not in EXACT_TYPES and \
+            _drift(b.get("r") or "", h.get("r") or ""):
         return "numeric_drift"
     return "value_changed_at_mined_boundary" if mined else "value_changed"
+
+
+def equal_under_eq(b: dict | None, h: dict | None) -> bool:
+    """Are two different reprs of literal values ``==`` equal (dict key order, ``-0.0`` and ``0.0`` ...)?"""
+    if not b or not h or b.get("h") or h.get("h") or "r" not in b or "r" not in h or b["r"] == h["r"]:
+        return False
+    try:
+        return bool(ast.literal_eval(b["r"]) == ast.literal_eval(h["r"]))
+    except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+        return False
 
 
 def describe(o: dict | None) -> str:
@@ -793,6 +855,8 @@ def describe(o: dict | None) -> str:
         return "not run"
     if o.get("hang"):
         return "ran past the per-call timeout"
+    if "exit" in o:
+        return f"ended the process (exit code {o['exit']})"
     if "b" in o:
         return f"was blocked ({o['b']})"
     if "e" in o:
@@ -807,6 +871,8 @@ def _brief(o: dict | None) -> dict:
         return {"not_run": True}
     if o.get("hang"):
         return {"timeout": True}
+    if "exit" in o:
+        return {"process_exit": o["exit"]}
     if "b" in o:
         return {"blocked": o["b"]}
     if "e" in o:
@@ -1086,10 +1152,12 @@ def _probe(store: Store, repo: Path, symbol: str, *, base, no_base, inputs, seed
     if gate_res["verdict"] == "refused":
         gate_res["overridden_by_user"] = bool(allow_side_effects)
         if not allow_side_effects:
-            first = gate_res["reasons"][0]
+            first = next((r for r in gate_res["reasons"] if not r.get("heuristic")), gate_res["reasons"][0])
             chain = " -> ".join(first["via"])
-            return _result(pid, sym, "refused", f"refused: {qual} reaches {first['kind']} at {first['at']} "
-                                                f"({chain}); nothing was run", gate=gate_res, **common,
+            how = (f"reaches {first['kind']} at {first['at']} ({chain})" if not first.get("heuristic") else
+                   f"may reach {first['kind']} at {first['at']} ({chain}; a text pattern the gate cannot confirm: "
+                   f"`{first['line'][:80]}`)")
+            return _result(pid, sym, "refused", f"refused: {qual} {how}; nothing was run", gate=gate_res, **common,
                            next_step="probe a pure function it calls, or - only if the user agrees to run these "
                                      "side effects in a throw-away copy - allow_side_effects")
     # boundaries: both versions of the function and the project functions it calls
@@ -1120,7 +1188,7 @@ def _probe(store: Store, repo: Path, symbol: str, *, base, no_base, inputs, seed
     mod, root = pin.module_name(rel, lambda r: (repo / r).is_file())
     sys_path = [root] + (["."] if root != "." else []) + (["src"] if (repo / "src").is_dir() and root != "src"
                                                           else [])
-    spec = {"module": mod, "qual": qual, "call": call,
+    spec = {"module": mod, "file": rel, "qual": qual, "call": call,
             "params": [p["name"] for p in params if p["kind"] != "kwonly"], "sys_path": sys_path, "cases": cases,
             "repeat": 2, "per_call_timeout": per_call, "block": not allow_side_effects, "properties": props}
     scaling_note = None
@@ -1188,8 +1256,15 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
         if side_run is None:
             continue
         err = side_run.get("import_error")
+        name = "working tree" if side_run["side"] == "head" else f"base {(base_sha or '')[:12]}"
         if err:
-            name = "working tree" if side_run["side"] == "head" else f"base {base_sha[:12]}"
+            if err.get("mismatch"):
+                return _finish(store, repo, _result(
+                    pid, sym, "inconclusive", f"inconclusive: in the {name} copy {err.get('m', '')[:220]}; the "
+                                              f"function in {rel} was not called", limits=limits,
+                    next_step="probe a function whose module name is not taken by another module (the standard "
+                              "library, an installed package), or import it through its package", **res_common),
+                    out_dir, t0)
             if err.get("blocked"):
                 return _finish(store, repo, _result(
                     pid, sym, "refused", f"refused at run time: importing {spec['module']} in the {name} tried a "
@@ -1200,10 +1275,27 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
                                           f"copy ({err.get('e', '?')}: {err.get('m', '')[:160]})", limits=limits,
                 next_step="check that the module imports in a fresh copy (python -m pytest must find it); a "
                           "missing dependency or a conftest-only setup is not probed", **res_common), out_dir, t0)
-        if side_run.get("error") and not side_run.get("rows"):
+        if side_run.get("plugin_error") or (side_run.get("error") and not side_run.get("rows")):
             return _finish(store, repo, _result(
-                pid, sym, "inconclusive", f"inconclusive: the {side_run['side']} run did not produce results "
+                pid, sym, "inconclusive", f"inconclusive: the {name} run did not produce results "
                                           f"({side_run['error']})", limits=limits, **res_common), out_dir, t0)
+    for side_run in (head_run, base_run):
+        th = (side_run or {}).get("threads")
+        if th and th.get("ev") and spec.get("block"):
+            name = "working tree" if side_run["side"] == "head" else f"base {(base_sha or '')[:12]}"
+            ev = th["ev"][0]
+            after = ev.get("after_input")
+            call = _call_text(label, cases[after]) if isinstance(after, int) and 0 <= after < len(cases) else None
+            return _finish(store, repo, _result(
+                pid, sym, "refused", f"refused at run time: in the {name} run a thread the project started attempted a "
+                                     f"side effect outside any call of {qual} ({ev['kind']}: {ev['event']}"
+                                     + (f", after the calls of input #{after}" if call else ", after the import")
+                                     + "); it was blocked, and no difference is reported", limits=limits,
+                blocked={"count": len(th["ev"]), "example": {"call": call, "event": f"{ev['kind']}: {ev['event']} "
+                                                                                   f"{ev.get('detail', '')}"[:300],
+                                                             "events": th["ev"], "after_the_call": True}},
+                next_step="probe a function that does not start threads, or - only if the user agrees - "
+                          "allow_side_effects", **res_common), out_dir, t0)
     rows_h = head_run["rows"]
     rows_b = base_run["rows"] if base_run else {}
     classes: dict[str, list[int]] = {}
@@ -1343,11 +1435,19 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
         status = "property_violated"
         headline = (f"{qual}: {len(violations)} of {len(props)} stated properties do not hold in the working tree "
                     f"(in {counted} inputs, run {runs['head'][0]})")
-    elif changed or differences:
+    elif changed:
         status = "differences_found"
-        headline = (f"{qual}: {len(differences)} kind(s) of behaviour difference between the base "
-                    f"{base_sha[:12]} and the working tree in {counted} inputs (probe {pid}). These are behaviour "
-                    "changes, not verdicts: compare each with what the user asked for")
+        headline = (f"{qual}: {len(changed)} kind(s) of behaviour difference between the base "
+                    f"{base_sha[:12]} and the working tree in {counted} inputs (probe {pid})"
+                    + (" and float drift" if len(changed) < len(differences) else "")
+                    + ". These are behaviour changes, not verdicts: compare each with what the user asked for")
+    elif differences:  # float drift only: a difference in the last digits, low priority
+        drift = differences[0]
+        status = "numeric_drift_only"
+        headline = (f"{qual}: only float drift between the base {base_sha[:12]} and the working tree: "
+                    f"{drift['count']} of {counted} inputs return floats that differ in the last digits (at most "
+                    f"{DRIFT_REL:g} relative; probe {pid}); no other behaviour difference. Low priority: mention "
+                    "it, and check whether exact float results matter to the callers")
     elif to_out:
         status = "inconclusive"
         headline = (f"{qual}: {sum(t['count'] for t in to_out)} input(s) ran past the {spec['per_call_timeout']:g} s "
@@ -1379,6 +1479,21 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
     if head_run.get("hangs") or (base_run or {}).get("hangs"):
         limits.append(f"inputs that ran past the per-call timeout: working tree {len(head_run.get('hangs') or [])}"
                       + (f", base {len(base_run.get('hangs') or [])}" if base_run else ""))
+    if head_run.get("exits") or (base_run or {}).get("exits"):
+        limits.append(f"inputs during which the process ended (os._exit or a crash; the run resumed after them): "
+                      f"working tree {len(head_run.get('exits') or [])}"
+                      + (f", base {len(base_run.get('exits') or [])}" if base_run else ""))
+    for side_run in (base_run, head_run):
+        th = (side_run or {}).get("threads")
+        if not th:
+            continue
+        side = "working-tree" if side_run["side"] == "head" else "base"
+        if th.get("ev"):  # only when side effects were allowed: recorded, not blocked
+            limits.append(f"{side} run: side effects in threads the project started, outside any call: "
+                          f"{th['ev'][:2]}")
+        if th.get("alive"):
+            limits.append(f"{side} run: {th['alive']} thread(s) the project started were still running after the "
+                          "calls; the run was ended with them, and what they would have done later is not known")
     for side_run in (base_run, head_run):
         if side_run is not None and side_run.get("error"):
             limits.append(f"{'working-tree' if side_run['side'] == 'head' else 'base'} run: {side_run['error']}")
@@ -1429,6 +1544,8 @@ def _example(label, cases, meta, rows_b, rows_h, j) -> dict:
     out = {"input": j, "call": _call_text(label, cases[j]), "head": _brief(oh)}
     if rows_b:
         out["base"] = _brief(ob)
+        if equal_under_eq(ob, oh):  # e.g. the same dict with its keys in another order: still a change (order is
+            out["equal_under_eq"] = True  # observable), but the caller may not care
     if meta[j]["tags"]:
         out["why_this_input"] = meta[j]["tags"][:2]
     return out
@@ -1453,6 +1570,9 @@ def _next_step(res: dict) -> str:
                 "unclear, showing the example; emit_test prints tests that pin the base behaviour")
     if s == "property_violated":
         return "the stated property fails on the examples: fix the code or correct the property with the user"
+    if s == "numeric_drift_only":
+        return ("tell the user the results differ only in float rounding (the example shows by how much); it matters "
+                "when callers compare floats exactly or the change was meant to keep results bit-identical")
     if s == "no_difference_found":
         return "say 'no difference found in N inputs', not 'verified'; add --property for what the user asked for"
     if s == "undeclared_exceptions":
@@ -1519,22 +1639,39 @@ def _record_claims(store, repo, res, rel, qual, head_node, cases, rows_b, rows_h
             res["claim_status"] = c["status"]
 
 
+def _one_line(text: str) -> str:
+    """Text safe inside a ``#`` comment: no line breaks or other characters that are not printable."""
+    return "".join(c if c.isprintable() else " " for c in text)
+
+
+def _importable_exc(exc: str) -> bool:
+    """Can an emitted test name this exception type (not a class defined inside a function)?"""
+    return all(part.isidentifier() for part in exc.split("."))
+
+
 def _expect_line(call: str, o: dict) -> list[str]:
     if "e" in o:
         exc = o["e"]
+        if not _importable_exc(exc):
+            return [f"    # the base raises {_one_line(exc)}, a class the test cannot import",
+                    "    with pytest.raises(Exception):", f"        {call}"]
         name = exc.rpartition(".")[2]
         return [f"    with pytest.raises({name}):", f"        {call}"]
     r = o.get("r") or ""
+    if str(o.get("t") or "").endswith(" (materialized)"):  # a generator: the plugin compared what it yields
+        call = f"list({call})" if not o.get("h") else f"list(itertools.islice({call}, {MATERIALIZE_MAX}))"
     if o.get("h"):
         return [f"    # the base result is long ({o.get('n')} characters); its sha256 is {o['h']}",
                 f"    assert hashlib.sha256(repr({call}).encode()).hexdigest() == {o['h']!r}"]
     if r == "nan":
         return [f"    assert math.isnan({call})"]
-    try:
-        ast.literal_eval(r)
-        return [f"    assert {call} == {r}"]
-    except (ValueError, SyntaxError, TypeError, RecursionError):
-        return [f"    assert repr({call}) == {r!r}"]
+    if r.isprintable():
+        try:
+            ast.literal_eval(r)
+            return [f"    assert {call} == {r}"]
+        except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+            pass
+    return [f"    assert repr({call}) == {r!r}"]
 
 
 def emit_tests(res: dict, cases, rows_b, rows_h, spec: dict, qual: str, base_sha: str | None, pid: str) -> str:
@@ -1550,7 +1687,7 @@ def emit_tests(res: dict, cases, rows_b, rows_h, spec: dict, qual: str, base_sha
             continue
         j = d["examples"][0]["input"]
         ob = (rows_b.get(j) or {}).get("x", [None])[0]
-        if ob is None or ob.get("hang"):
+        if ob is None or ob.get("hang") or "exit" in ob or "b" in ob:  # nothing a test can pin
             continue
         case = cases[j]
         for enc in case.get("a", []) + [v for _, v in case.get("k", [])]:
@@ -1562,19 +1699,20 @@ def emit_tests(res: dict, cases, rows_b, rows_h, spec: dict, qual: str, base_sha
         else:
             target = qual
         call = f"{target}({pin.call_source(case, full=True)})"
-        if "e" in ob and "." in ob["e"] and not ob["e"].startswith("builtins."):
+        if "e" in ob and "." in ob["e"] and not ob["e"].startswith("builtins.") and _importable_exc(ob["e"]):
             m, _, name = ob["e"].rpartition(".")
             imports.setdefault(m, set()).add(name)
         n += 1
+        now_text = _one_line(describe((rows_h.get(j) or {}).get("x", [{}])[0])[:100])
         body += ["", "", f"def test_{qual.replace('.', '_').lower()}_probe_{n}():",
-                 f"    # {d['class']}: the working tree {describe((rows_h.get(j) or {}).get('x', [{}])[0])[:100]}"]
+                 f"    # {d['class']}: the working tree {now_text}"]
         body += _expect_line(call, ob)
     head_lines = [f"# verinoda probe {pid}: behaviour that differs between the base {(base_sha or '')[:12]} and the "
                   "working tree.",
                   "# Each test pins the BASE behaviour on one input. Whether the change is intended is the user's "
                   "decision:", "# flip the expectation when it was meant. Verinoda did not write this file."]
     code = "\n".join(body)
-    std = [m for m in ("hashlib", "math") if f"{m}." in code]
+    std = [m for m in ("hashlib", "itertools", "math") if f"{m}." in code]
     head_lines += [f"import {m}" for m in std] + ([""] if std else [])
     head_lines += (["import pytest", ""] if "pytest.raises" in code else [])
     head_lines += [f"from {m} import {', '.join(sorted(names))}" for m, names in sorted(imports.items())]
@@ -1635,8 +1773,20 @@ def probe_changed(store: Store, repo: Path, *, base: str | None = "HEAD", limit:
         counts[p["status"]] = counts.get(p["status"], 0) + 1
     head = (f"{len(changed)} changed Python function(s) against {sha[:12]}; probed {len(probes)}: "
             + (", ".join(f"{v} {k}" for k, v in sorted(counts.items())) or "none"))
-    return {"status": "differences_found" if any(p["status"] in ("differences_found", "property_violated")
-                                                 for p in probes) else ("nothing_changed" if not changed else "done"),
+    # a function that was refused, unsupported, inconclusive or not probed is no pass
+    open_ = [p for p in probes if p["status"] not in PASS_STATUSES + FINDING_STATUSES]
+    if open_ or skipped:
+        head += (f". Not compared: {len(open_) + len(skipped)} of {len(changed)} changed function(s) (see each "
+                 "status); that part is no pass")
+    if any(p["status"] in FINDING_STATUSES for p in probes):
+        status = "differences_found"
+    elif not changed:
+        status = "nothing_changed"
+    elif open_ or skipped:
+        status = "incomplete"
+    else:
+        status = "done"
+    return {"status": status,
             "headline": head, "base": sha, "changed": changed, "probes": probes, "skipped": skipped,
             "limits": ["only functions whose own signature or body changed are listed; a function whose behaviour "
                        "changed through a changed callee or constant is probed only when named"]}
@@ -1674,6 +1824,8 @@ def render(res: dict) -> str:
         for ex in d.get("examples") or []:
             b = ex.get("base")
             lines.append(f"    {ex['call']}: base {_brief_text(b)}; working tree {_brief_text(ex['head'])}"
+                         + (" (the two results are == equal: dict key order, -0.0/0.0, 1/1.0 or the like)"
+                            if ex.get("equal_under_eq") else "")
                          + (f"  [{ex['why_this_input'][0]}]" if ex.get("why_this_input") else ""))
     for u in res.get("unstable") or []:
         lines.append(f"  unstable {u['class']} ({u['count']}): {u['why']}")
@@ -1705,7 +1857,9 @@ def render(res: dict) -> str:
         lines.append(f"  gate: {r['kind']} at {r['at']} via {' -> '.join(r['via'])}: {r['why']}"
                      + (" (run anyway: the user allowed side effects)" if gate.get("overridden_by_user") else ""))
     if res.get("blocked"):
-        lines.append(f"  blocked at run time: {res['blocked']['example']['call']}: {res['blocked']['example']['event']}")
+        bex = res["blocked"]["example"]
+        lines.append("  blocked at run time: " + (f"{bex['call']}: " if bex.get("call") else "") + str(bex["event"])
+                     + (" (in a thread, after the call had returned)" if bex.get("after_the_call") else ""))
     i = res.get("inputs")
     if i:
         lines.append(f"  inputs: {i['count']} ({i['deterministic']} from annotations, call sites, boundaries and "
@@ -1748,6 +1902,8 @@ def _brief_text(b: dict | None) -> str:
         return "not run"
     if b.get("timeout"):
         return "timed out"
+    if "process_exit" in b:
+        return f"ended the process (exit code {b['process_exit']})"
     if b.get("blocked"):
         return f"blocked ({b['blocked']})"
     if "raises" in b:

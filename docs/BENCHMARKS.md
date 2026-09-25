@@ -47,6 +47,7 @@ repository), 4 it must let run (a file read, a print, pure functions), 2 unsuppo
 | 3, hypothesis blocked (fixed pseudo-random list) | 22/22 | 20/20 | 5/60, all E04 | 9/9 / 0/4 | 2/2 | 36/36 | 1.7 / 3.0 / 10.5 s |
 | 4, interim (780328a) | 22/22 | 20/20 | 5/60, all E04 | 9/9 / 0/4 | 2/2 | 37/37 | 2.6 / 4.0 / 10.8 s |
 | 5, final (c0dbd1f) | 22/22 | 20/20 | 5/60, all E04 | 9/9 / 0/4 | 2/2 | 37/37 | 2.1 / 4.2 / 11.1 s |
+| 6, after the review fixes | 22/22 | 20/20 | 5/60, all E04 (`numeric_drift_only`) | 9/9 / 0/4 | 2/2 | 37/37 | 2.0 / 3.8 / 11.2 s |
 
 - **E04 is a wrong gold label, not a false alarm**: turning `subtotal = sum(i["price"] * i["qty"] for i in
   items)` into a loop was labelled behaviour-preserving, but Python 3.12's `sum()` of floats uses compensated
@@ -62,6 +63,21 @@ repository), 4 it must let run (a file read, a print, pure functions), 2 unsuppo
   own timeout is not a hang, the run's directory masked in reprs, equal sets equal in any order, hypothesis kept
   from writing `.hypothesis/` in the working directory and from mixing in constants of imported modules) did
   not change a score either.
+- **Review round** (two reviewers, 16 findings; run 6): threads that outlive their call and `multiprocessing`
+  children are now blocked at run time (both escaped the audit hook: the reviewer's thread and child wrote files
+  outside the copy and the probe said `no_difference_found`); a module whose import name another module took
+  (`tools/json.py` imported as `json`) is `inconclusive` instead of calling the standard library's `json`; a
+  plugin failure and a process that ends by itself (`os._exit`) are no longer read as hanging inputs; float drift
+  applies to floats only (a `Decimal` or `str` change is `value_changed`) and alone is the status
+  `numeric_drift_only`; the gate lets a returned SQL string and a project object's `.commit()` run; `--changed`
+  is `incomplete` (exit 3) when a changed function was not compared. None of this changed a score above: the
+  49 fixtures and 27 mutants do not contain those shapes. On the second reviewer's 21 adversarial fixtures
+  (written by the reviewer, kept in the review's scratch, not in the repository): the two false refusals now run
+  (`no_difference_found`), float reassociation is `numeric_drift_only`, the off-by-one at a call-site literal
+  that is also a mined boundary (`grade(60)`) is now `value_changed_at_mined_boundary`, and the other 17 are
+  unchanged (5/5 regressions found, 3 refusals, 2 nondeterministic functions reported, `list(set(...))` still
+  "no difference" - the runs pin `PYTHONHASHSEED`, now listed in `not_checked`). One of the two former false
+  refusals loops `range(n)` and hits the hang budget on huge `n`: 16 of 300 inputs ran, 28.5 s.
 - **Ablation without boundary mining** (the 22 change fixtures, one seed): 19/22. Missed: the `>=` at 100.0
   (D01), the 50-item limit that comes from an imported constant (D04) and the 80-character limit (D11) -
   exactly the inputs mining produces.
@@ -69,7 +85,7 @@ repository), 4 it must let run (a file read, a print, pure functions), 2 unsuppo
   (comparison flips, and/or, `not` removal, `+`/`-`, `*`/`/`, integer constants +-1, float constants +1%); 27
   survive the tests. Hand labels: 25 change behaviour, 2 change only an exception's message (the probe compares
   exception types: "no difference" on both, as documented in `not_checked`), 0 equivalent. Kill rate 25/25,
-  first run and final code; median 3.3 s per probe. The functions are the hand fixtures' ones, so this is not
+  first run, final code and after the review fixes; median 3.3 s per probe (3.1 s after the fixes). The functions are the hand fixtures' ones, so this is not
   independent evidence.
 - Design bars (docs/DESIGN.md D36): B1-B4 and B8 5/5 with minimal examples (`apply_discount(100.0)`: base 100.0,
   working tree 90.0; `apply_discount(1e+308)`: new `OverflowError`; `validate_items(<50 items>)`: new
