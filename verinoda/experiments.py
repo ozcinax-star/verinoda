@@ -99,6 +99,8 @@ RELEVANT_RE = re.compile(r"(FAILED|ERROR|Error|Traceback|assert|panic|exception)
 MAX_LOG_BYTES = 5 * 1024 * 1024
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024  # per collected artifact file
 COMMIT_COPY_BATCH = 2000  # blobs read per `git cat-file --batch` when copying a commit
+COPY_THREADS = 8          # threads copying a working tree of COPY_PARALLEL_MIN files or more
+COPY_PARALLEL_MIN = 200
 PLUGIN_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\.py$")
 ENV_EXTRA_RE = re.compile(r"^VERINODA_[A-Z0-9_]+$")
 ARGS_CONFINED = "allowlisted commands may only name paths inside the repository copy"
@@ -283,17 +285,33 @@ def _scrubbed_env(home: Path) -> dict[str, str]:
 
 
 def _copy_repo(repo: Path, dst: Path, ids: dict[str, str] | None = None) -> int:
-    """Copy the working tree's file set; ``ids`` receives each copied file's content id."""
-    n = 0
-    for rel in list_files(repo):
-        src = repo / rel
-        out = dst / rel
-        out.parent.mkdir(parents=True, exist_ok=True)
+    """Copy the working tree's file set; ``ids`` receives each copied file's content id.
+
+    Bigger trees are copied by a few threads: per-file open/close (and on Windows
+    the virus scanner) dominates, not bytes, so the files overlap.
+    """
+    rels = list_files(repo)
+    for d in sorted({(dst / r).parent for r in rels}):
+        d.mkdir(parents=True, exist_ok=True)
+
+    def one(rel: str) -> tuple[str, str | None]:
         try:
-            cid = treestate.copy_file(src, out)
-            n += 1
+            return rel, treestate.copy_file(repo / rel, dst / rel)
         except OSError:
+            return rel, None
+
+    if len(rels) >= COPY_PARALLEL_MIN:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=COPY_THREADS) as pool:
+            done = list(pool.map(one, rels))
+    else:
+        done = [one(r) for r in rels]
+    n = 0
+    for rel, cid in done:
+        if cid is None:
             continue
+        n += 1
         if ids is not None:
             ids[rel] = cid
     return n

@@ -181,7 +181,12 @@ def test_flaky_sessions_are_flagged_and_rerun_reports_a_pass_rate(tmp_path, monk
                       exit_code=0)
     assert f.get("flaky") and f["strategies"][0]["id"] == "rerun" and not f["stop"]
     r = debug.rerun(st, repo, times=3)
-    assert r["runs"] == 3 and r["passed"] == 0 and r["conclusion"].startswith("stable")
+    # the series agrees with itself, not with the earlier runs of the same tree: still flaky
+    assert r["runs"] == 3 and r["passed"] == 0 and r["tree_runs"] == 5 and r["tree_passed"] == 1
+    assert r["conclusion"] == "flaky: this tree passed 1 of 5 recorded runs (0 of 3 in this series)" and r["flaky"]
+    _sub(repo, "orders/pricing.py", 'i["quantity"]', 'i["qty"]')  # another tree: a stable series clears it
+    cleared = debug.rerun(st, repo, times=3)
+    assert cleared["conclusion"].startswith("stable") and not cleared["flaky"]
 
 
 def test_refs_that_look_like_options_are_refused(tmp_path):

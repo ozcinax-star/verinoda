@@ -284,6 +284,8 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
             ref: str | None = None, overlay: list[str] | None = None) -> dict:
     """Record one attempt (``verinoda debug try``). See the module docstring."""
     t_start = time.perf_counter()
+    steps: dict[str, float] = {}
+    t_run = t_start
     repo = Path(repo).resolve()
     sess = _session(store, session_id)
     if sess["status"] != "open":
@@ -355,6 +357,7 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
             plugins[f"{CALLTRACE_MODULE}.py"] = rt.plugin_source()
             env_extra.update(_trace_env(t))
         run_argv = _inject(argv, mods) if experiments._is_pytest(argv) else argv
+        t_run = time.perf_counter()
         exp = experiments.run(store, repo, run_argv, hypothesis=f"[{sess['id']} attempt {n}] {hypothesis}",
                               expect=expect, timeout=t, plugins=plugins if experiments._is_pytest(argv) else None,
                               env_extra=env_extra or None, file_ids=ids, ref=ref, overlay=overlay)
@@ -378,10 +381,14 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
             else:
                 trace_info = {"complete": False, "error": "the tracer wrote no trace (not a pytest run, or it "
                                                           "failed to load)"}
+    steps["run_s"] = round(time.perf_counter() - t_run, 3) if exp else 0.0
+    t_step = time.perf_counter()
     ch = _tree_record(repo, base, ids, source)
     patch_path = _write_patch(repo, aid, ch)
     reader = _reader(repo, base, ids, ch["tree_files"], source.get("commit"),
                      base_map=treestate.base_ids(repo, base) if source.get("kind") == "worktree" else None)
+    steps["tree_s"] = round(time.perf_counter() - t_step, 3)
+    t_step = time.perf_counter()
     sig = failsig.extract(stdout, stderr, outcome=outcome, files=ids.keys(), reader=reader, plugin_data=plugin_data,
                           roots=[str(repo)])
     sig_exact, sig_coarse = failsig.keys(sig)
@@ -397,6 +404,8 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
            "signature": sig, "sig_exact": sig_exact, "sig_coarse": sig_coarse, "hypothesis": hypothesis,
            "hypothesis_terms": looprules.terms(hypothesis), "expect": expect, "vs_prev": vs_prev,
            "trace": trace_info, "command": argv}
+    steps["signature_s"] = round(time.perf_counter() - t_step, 3)
+    t_step = time.perf_counter()
     hist = [_as_rule_input(a) for a in loop_prior]
     if is_loop:
         ev = looprules.evaluate(hist, cur, max_no_progress=int(settings.get("max_no_progress", 3)))
@@ -416,7 +425,10 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
            "findings": ev["findings"] + ([{"rule": "flaky", "strength": "flaky", **ev["flaky"]}] if ev["flaky"] else []),
            "stop": int(bool(ev["stop"])), "stop_reason": ev["stop_reason"], "strategies": strategies,
            "created_at": now()}
+    steps["rules_s"] = round(time.perf_counter() - t_step, 3)
+    t_step = time.perf_counter()
     store.insert("debug_attempts", row)
+    steps["store_s"] = round(time.perf_counter() - t_step, 3)
     out = _attempt_view(row, ch.get("drift") or [], questions)
     out["session"] = sess["id"]
     if ev.get("no_progress_streak") is not None:
@@ -425,6 +437,8 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
         out["result"] = _passed_text(row)
         out["not_run"] = _not_run(argv, row["run_by"])
     out["overhead_s"] = round(time.perf_counter() - t_start - (exp["duration_s"] if exp else 0.0), 3)
+    out["cost"] = {"command_s": exp["duration_s"] if exp else None, "overhead_s": out["overhead_s"],
+                   "steps": steps}
     return out
 
 
@@ -836,14 +850,25 @@ def rerun(store: Store, repo: Path, session_id: str | None = None, *, times: int
     passed = sum(1 for r in res if r["outcome"] == "pass")
     sigs = {r["signature"]["sig_exact"] for r in res if r["outcome"] == "fail"}
     trees = {r["tree"]["hash"] for r in res}
+    tree = res[-1]["tree"]["hash"]
+    same = [a for a in _attempts(store, sess["id"]) if a.get("tree_hash") == tree and a["kind"] in LOOP_KINDS
+            and a["command"] == list(sess["command"]) and a["outcome"] in ("pass", "fail")]
+    all_pass = sum(1 for a in same if a["outcome"] == "pass")
+    all_sigs = {a.get("sig_exact") for a in same if a["outcome"] == "fail"}
     out = {"session": sess["id"], "strategy": "rerun", "runs": k, "passed": passed, "pass_rate": round(passed / k, 2),
            "distinct_failures": len(sigs), "attempts": [r["attempt"] for r in res],
+           "tree": tree, "tree_runs": len(same), "tree_passed": all_pass,
            "flaky": res[-1].get("flaky") is not None,
            "limits": ["a rerun series shows flakiness on this machine only; it cannot prove a test is stable"]}
     if len(trees) > 1:
         out["note"] = "the tree changed during the reruns; the series mixes trees"
-    out["conclusion"] = ("stable: every run gave the same result" if passed in (0, k) and len(sigs) <= 1 else
-                         f"flaky: {passed} of {k} runs passed on the same tree")
+    series_same = passed in (0, k) and len(sigs) <= 1
+    history_same = all_pass in (0, len(same)) and len(all_sigs) <= 1
+    if series_same and history_same:
+        out["conclusion"] = f"stable: all {len(same)} recorded run(s) of this tree gave the same result"
+    else:
+        out["conclusion"] = (f"flaky: this tree passed {all_pass} of {len(same)} recorded runs "
+                             f"({passed} of {k} in this series)")
     return out
 
 

@@ -32,8 +32,9 @@ Every finding names the attempts (and runs) it rests on. Two strengths:
 
 ``flaky``: the same tree and command gave different outcomes (or different
 known signatures). It suspends every rule - and ``stop`` - until a rerun
-series (3 or more runs of one tree) comes out identical. An unknown signature
-never counts as "the same" as anything.
+series (3 or more runs) of a tree whose recorded runs all agree; a series on
+the tree that disagreed never clears it. An unknown signature never counts as
+"the same" as anything.
 
 Separately, ``stop`` is also set after ``debug.max_no_progress`` fix attempts
 in a row (default 3) without measured progress; that is a budget, reported as
@@ -165,9 +166,11 @@ def progress(prev: dict | None, cur: dict) -> str:
 
 def flaky_state(attempts: list[dict]) -> dict | None:
     """``{"tree", "attempts", "text"}`` when one tree gave different results; None when there is no such
-    evidence or a later rerun series of one tree came out identical."""
+    evidence, or when a rerun series (3 or more) after it ran a tree whose recorded runs all agree - a series
+    on a tree that already disagreed can never clear it."""
     by_tree: dict[str, list[dict]] = {}
     last_flaky = None
+    flaky_trees: set[str] = set()
     for a in attempts:
         if not a.get("tree_hash"):
             continue
@@ -176,6 +179,7 @@ def flaky_state(attempts: list[dict]) -> dict | None:
             differs = (a.get("outcome") != b.get("outcome")) or \
                 (_known(a) and _known(b) and a["sig_exact"] != b["sig_exact"])
             if differs and {a.get("outcome"), b.get("outcome")} <= {"pass", "fail"}:
+                flaky_trees.add(a["tree_hash"])
                 last_flaky = {"tree": a["tree_hash"], "attempts": [b["n"], a["n"]],
                               "text": f"attempts {b['n']} and {a['n']} ran the same tree and got "
                                       f"{b.get('outcome')} ({_summ(b)}) vs {a.get('outcome')} ({_summ(a)})",
@@ -184,13 +188,11 @@ def flaky_state(attempts: list[dict]) -> dict | None:
         group.append(a)
     if last_flaky is None:
         return None
-    # cleared by a later rerun series of one tree with identical results
-    runs = [a for a in attempts if a["n"] > last_flaky["at"] and a.get("kind") == "rerun"]
-    by_tree_after: dict[str, list[dict]] = {}
-    for a in runs:
-        by_tree_after.setdefault(a.get("tree_hash"), []).append(a)
-    for group in by_tree_after.values():
-        if len(group) >= STABLE_RERUNS and len({(a.get("outcome"), a.get("sig_exact")) for a in group}) == 1:
+    for tree, group in by_tree.items():
+        if tree in flaky_trees:
+            continue
+        reruns = [a for a in group if a.get("kind") == "rerun" and a["n"] > last_flaky["at"]]
+        if len(reruns) >= STABLE_RERUNS:
             return None
     return last_flaky
 
