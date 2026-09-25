@@ -424,9 +424,10 @@ def test_skipped_data_json_is_remembered_and_small_batches_stay_in_this_process(
         return real_parallel(*a, **kw)
 
     monkeypatch.setattr(extract, "_extract_parallel", counted)
+    monkeypatch.setattr(index, "IN_PROCESS_OK", True)  # as on Windows
     graphs, pools = {}, {}
-    for name, below in (("in_process", index.IN_PROCESS_BELOW), ("pool", 0)):
-        monkeypatch.setattr(index, "IN_PROCESS_BELOW", below)
+    for name, limit in (("in_process", index.IN_PROCESS_BYTES), ("pool", 0)):
+        monkeypatch.setattr(index, "IN_PROCESS_BYTES", limit)
         pool_calls.clear()
         repo = _json_project(tmp_path / name / "proj")
         first = index.build(repo, force=True)
@@ -455,3 +456,123 @@ def test_remembered_empty_json_is_dropped_when_the_extractor_changes(tmp_path, m
     index.build(repo, force=True)
     monkeypatch.setattr(index._known_empty_json, "_stamp", staticmethod(lambda X, jc: "another extractor"))
     assert index.build(repo)["empty_json"] == {"replayed": 0, "recorded": 3}
+
+
+CONFIG_JSON = b'{\n  "dependencies": {"left-pad": "1.0.0", "right-pad": "2.0.0"}\n}\n'
+DATA_JSON = b'{\n  "runs": [1, 2, 3],\n  "name": "bench"\n}\n'
+
+
+def _cfg_nodes(repo: Path) -> list[str]:
+    g = json.loads(graph_path(repo).read_text(encoding="utf-8"))
+    return sorted(n["id"] for n in g["nodes"] if n.get("source_file") == "data/cfg.json")
+
+
+def _remembered(repo: Path) -> dict:
+    data = json.loads((index_dir(repo) / index.EMPTY_JSON_FILE).read_text(encoding="utf-8"))
+    return {Path(p).name: v for p, v in data["files"].items()}
+
+
+def test_a_json_file_rewritten_while_it_is_extracted_is_not_remembered(tmp_path, monkeypatch):
+    from verinoda.project_index import extract
+
+    monkeypatch.setattr(index, "IN_PROCESS_OK", True)  # the injected write runs in this process
+    repo = _json_project(tmp_path / "proj")
+    cfg = repo / "data" / "cfg.json"
+    cfg.write_bytes(DATA_JSON)
+    index.build(repo, force=True)
+    assert "cfg.json" in _remembered(repo) and _cfg_nodes(repo) == []
+
+    real = extract._extract_sequential
+
+    def racing(work, *a, **kw):  # someone writes data JSON back once the build has read the config
+        if any(Path(p).name == "cfg.json" for _, p in work):
+            cfg.write_bytes(DATA_JSON)
+        return real(work, *a, **kw)
+
+    cfg.write_bytes(CONFIG_JSON)
+    with monkeypatch.context() as m:
+        m.setattr(extract, "_extract_sequential", racing)
+        stats = index.build(repo)
+    assert stats["ok"] and _cfg_nodes(repo) == []  # the build saw the data JSON
+    assert "cfg.json" not in _remembered(repo)  # read as config, extracted as data: not kept
+    cfg.write_bytes(CONFIG_JSON)
+    index.build(repo)
+    assert "data_cfg_dependencies_left_pad" in _cfg_nodes(repo)
+
+
+def test_a_forced_build_replays_no_remembered_json(tmp_path):
+    import hashlib
+
+    repo = _json_project(tmp_path / "proj")
+    index.build(repo, force=True)
+    # a wrong entry under the current extractor: the config bytes remembered as skipped
+    p = index_dir(repo) / index.EMPTY_JSON_FILE
+    data = json.loads(p.read_text(encoding="utf-8"))
+    cfg = repo / "data" / "cfg.json"
+    skipped = {"nodes": [], "edges": [], "skipped": "data json (not a config/manifest)"}
+    data["files"][str(cfg)] = {"h": hashlib.blake2b(CONFIG_JSON, digest_size=16).hexdigest(),
+                               "r": skipped}
+    p.write_text(json.dumps(data), encoding="utf-8")
+    cfg.write_bytes(CONFIG_JSON)
+    assert index.build(repo)["empty_json"]["replayed"] == 4 and _cfg_nodes(repo) == []  # trusted
+    stats = index.build(repo, force=True)
+    assert stats["empty_json"] == {"replayed": 0, "recorded": 3}
+    assert "data_cfg_dependencies_left_pad" in _cfg_nodes(repo)
+    assert "cfg.json" not in _remembered(repo)
+
+
+def test_json_past_the_extractor_limit_is_not_read_whole(tmp_path, monkeypatch):
+    import builtins
+    import hashlib
+
+    small = tmp_path / "small.json"
+    small.write_bytes(DATA_JSON)
+    assert index._json_digest(small) == hashlib.blake2b(DATA_JSON, digest_size=16).hexdigest()
+    assert index._json_digest(tmp_path / "missing.json") is None
+    big = tmp_path / "big.json"
+    big.write_bytes(b'{"rows": [' + b"1, " * (index.JSON_READ_LIMIT // 3) + b"0]}")
+    reads = []
+    real_open = builtins.open
+
+    class Counted:
+        def __init__(self, f):
+            self.f = f
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return self.f.__exit__(*a)
+
+        def read(self, n=-1):
+            reads.append(n)
+            return self.f.read(n)
+
+    monkeypatch.setattr(builtins, "open", lambda *a, **kw: Counted(real_open(*a, **kw)))
+    assert index._json_digest(big) is None  # extract_json gives an error for it: nothing to keep
+    monkeypatch.undo()
+    assert reads == [index.JSON_READ_LIMIT + 1]
+
+
+def test_what_is_left_is_extracted_here_only_when_it_is_small(tmp_path, monkeypatch):
+    files = []
+    for i in range(3):
+        p = tmp_path / f"m{i}.ts"
+        p.write_bytes(b"x" * 1000)
+        files.append((i, p))
+    monkeypatch.setattr(index, "IN_PROCESS_OK", True)
+    monkeypatch.setattr(index, "IN_PROCESS_BYTES", 3000)
+    assert index._small_batch(files)
+    assert index._small_batch(files + [(3, tmp_path / "gone.ts")])
+    big = tmp_path / "big.json"
+    big.write_bytes(b"[" + b"0," * 2000 + b"0]")
+    assert not index._small_batch(files + [(4, big)])
+    assert index._small_batch(files + [(4, big)], {str(big)})  # turned down unparsed: no work
+    monkeypatch.setattr(index, "IN_PROCESS_BYTES", 2999)  # the bytes decide, not only the count
+    assert not index._small_batch(files)
+    monkeypatch.setattr(index, "IN_PROCESS_BYTES", 3000)
+    monkeypatch.setattr(index, "IN_PROCESS_BELOW", 3)
+    assert not index._small_batch(files)
+    monkeypatch.setattr(index, "IN_PROCESS_BELOW", 64)
+    monkeypatch.setattr(index, "IN_PROCESS_OK", False)  # not measured there: the pool as before
+    assert not index._small_batch(files)

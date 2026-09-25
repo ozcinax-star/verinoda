@@ -78,7 +78,7 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     index_dir(repo).mkdir(parents=True, exist_ok=True)
     buf = io.StringIO()
     keep = _keep_unchanged_graph(repo, active=prune_missing and changed is None and not force)
-    empties = _known_empty_json(repo)
+    empties = _known_empty_json(repo, replay=not force)
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
     with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(), _absolutize_once(),             python_facts_cache(index_dir(repo)), empties, keep:
@@ -217,8 +217,46 @@ class _absolutize_once:
 
 
 EMPTY_JSON_FILE = "empty_json.json"
-EMPTY_JSON_VERSION = 1
-IN_PROCESS_BELOW = 64  # uncached files left: fewer are extracted in this process, not by a pool
+EMPTY_JSON_VERSION = 2  # 2: kept only when the bytes after extraction are the bytes before
+JSON_READ_LIMIT = 1_048_576    # extract_json reads no more; a larger file is an error, never kept
+# What is left to extract after the replay goes to the upstream process pool unless it is small:
+# fewer files than this and at most this many bytes of source are extracted in this process.
+# Measured on Windows (6 cores, busy): a pool costs 0.6-0.8 s before it extracts anything, and
+# JavaScript/TypeScript in this process about 2 ms per KB (Python 1.5).
+IN_PROCESS_BELOW = 64
+IN_PROCESS_BYTES = 256 * 1024
+IN_PROCESS_OK = os.name == "nt"  # only measured where a pool spawns each worker from nothing
+
+
+def _json_digest(path) -> str | None:
+    """blake2b of a file's bytes as extract_json reads them; None when the file cannot be read or
+    is larger than extract_json reads (its result is then an error, which is never kept)."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read(JSON_READ_LIMIT + 1)
+    except OSError:
+        return None
+    if len(data) > JSON_READ_LIMIT:
+        return None
+    return hashlib.blake2b(data, digest_size=16).hexdigest()
+
+
+def _small_batch(work, unread=frozenset()) -> bool:
+    """Is ``work`` (``(index, path)`` pairs) cheaper to extract here than to start a pool for?
+    Files in ``unread`` (JSON the extractor turns down unparsed: too large) count no bytes."""
+    if not IN_PROCESS_OK or len(work) >= IN_PROCESS_BELOW:
+        return False
+    size = 0
+    for _, path in work:
+        if str(path) in unread:
+            continue
+        try:
+            size += os.stat(path).st_size
+        except OSError:
+            continue
+        if size > IN_PROCESS_BYTES:
+            return False
+    return True
 
 
 class _known_empty_json:
@@ -235,14 +273,18 @@ class _known_empty_json:
     the JSON extractor would read, whose bytes (blake2b) and path gave such a skipped result
     under the same extractor code (``empty_json.json``, dropped when that code or the grammar
     changes), is filled with a copy of that result without parsing; everything else goes to the
-    real functions, and their skipped JSON results are remembered. When fewer than
-    :data:`IN_PROCESS_BELOW` files are left, the parallel wrapper hands them back and the caller
-    extracts them in this process: the upstream contract of ``_extract_parallel`` returning
-    False, as it does for a one-worker pool.
+    real functions, and their skipped JSON results are remembered, under the bytes read before
+    extraction and only when the file holds the same bytes afterwards (a file rewritten while
+    it was extracted is left out). A ``force`` build replays nothing. When what is left is small
+    (:func:`_small_batch`: fewer than :data:`IN_PROCESS_BELOW` files, at most
+    :data:`IN_PROCESS_BYTES` bytes, on Windows), the parallel wrapper hands it back and the caller
+    extracts it in this process: the upstream contract of ``_extract_parallel`` returning False,
+    as it does for a one-worker pool. A larger batch goes to the pool, as it would without this.
     """
 
-    def __init__(self, repo: Path):
+    def __init__(self, repo: Path, *, replay: bool = True):
         self.path = index_dir(Path(repo).resolve()) / EMPTY_JSON_FILE
+        self.replay = replay
         self.X = None
         self.replayed = self.recorded = 0
 
@@ -278,19 +320,19 @@ class _known_empty_json:
             known = data.get("files", {}) if ok and data.get("stamp") == stamp else {}
         except (OSError, ValueError):
             known = {}
-        self.known, self.kept, self.digests = known, {}, {}
+        self.known, self.kept, self.digests, self.unread = known, {}, {}, set()
 
         def prefill(work, per_file) -> None:
             for i, path in work:
                 if per_file[i] is not None or X._get_extractor(Path(path)) is not extract_json:
                     continue
                 key = str(path)
-                try:
-                    digest = hashlib.blake2b(Path(path).read_bytes(), digest_size=16).hexdigest()
-                except OSError:
+                digest = _json_digest(path)
+                if digest is None:  # too large or unreadable: an error, no parse
+                    self.unread.add(key)
                     continue
-                self.digests[key] = digest  # the bytes the extractor is about to read
-                hit = self.known.get(key)
+                self.digests[key] = digest  # the bytes as extraction starts
+                hit = self.known.get(key) if self.replay else None
                 if isinstance(hit, dict) and hit.get("h") == digest and isinstance(hit.get("r"), dict):
                     per_file[i] = json.loads(json.dumps(hit["r"]))
                     self.kept[key] = hit
@@ -302,6 +344,8 @@ class _known_empty_json:
                 if (key not in self.digests or not isinstance(r, dict) or not r.get("skipped")
                         or r.get("nodes") or r.get("edges") or "error" in r):
                     continue
+                if _json_digest(path) != self.digests[key]:
+                    continue  # rewritten while it was extracted: which bytes gave r is not known
                 try:
                     copy = json.loads(json.dumps(r))
                 except (TypeError, ValueError):
@@ -313,7 +357,9 @@ class _known_empty_json:
         def parallel(uncached_work, per_file, root, max_workers, total_files, cache_location=None):
             prefill(uncached_work, per_file)
             rest = [(i, p) for i, p in uncached_work if per_file[i] is None]
-            if len(rest) < IN_PROCESS_BELOW:
+            if not rest:
+                return True  # every file replayed
+            if _small_batch(rest, self.unread):
                 return False  # the caller extracts what is left in this process
             done = self.real_par(rest, per_file, root, max_workers, total_files, cache_location)
             record(rest, per_file)
