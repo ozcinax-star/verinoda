@@ -1,0 +1,3202 @@
+{
+ "note": "held-out split after the second review round (20 findings of the second reviewer fixed; no longer clean for these rules)",
+ "split": "heldout",
+ "fixtures_sha256": "333776c3b61a3388472da6e5c015bf2d53422fb557ed28212b7cb46ed95cce5c",
+ "summary": {
+  "fixtures": 11,
+  "ran": 11,
+  "skipped": [],
+  "per_concern": {
+   "persistence": {
+    "tp": 5,
+    "fp": 4,
+    "must": 3,
+    "found": 3,
+    "precision": 0.556,
+    "recall": 1.0
+   },
+   "config": {
+    "tp": 4,
+    "fp": 0,
+    "must": 2,
+    "found": 2,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "entry_points": {
+    "tp": 6,
+    "fp": 1,
+    "must": 5,
+    "found": 5,
+    "precision": 0.857,
+    "recall": 1.0
+   },
+   "security": {
+    "tp": 6,
+    "fp": 0,
+    "must": 6,
+    "found": 6,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "performance": {
+    "tp": 1,
+    "fp": 0,
+    "must": 2,
+    "found": 2,
+    "precision": 1.0,
+    "recall": 1.0
+   }
+  },
+  "overall": {
+   "precision": 0.815,
+   "recall": 1.0,
+   "tp": 22,
+   "fp": 5,
+   "must": 18,
+   "found": 18
+  },
+  "must_say_unknown": {
+   "reported": 2,
+   "total": 2
+  },
+  "changes_exact": {
+   "fixtures": 10,
+   "of": 11
+  },
+  "tests": {
+   "static_reach": [
+    0,
+    0
+   ],
+   "no_test_reaches": [
+    0,
+    0
+   ]
+  },
+  "affected": [
+   3,
+   3
+  ],
+  "read_first_gold_inside": [
+   18,
+   18
+  ],
+  "silent_truncation": 0,
+  "seconds_with_graph_load": {
+   "orders_app": {
+    "median": 0.271,
+    "max": 0.356,
+    "n": 4
+   },
+   "forge_mod": {
+    "median": 0.3,
+    "max": 0.443,
+    "n": 3
+   },
+   "glow_mod": {
+    "median": 0.363,
+    "max": 0.464,
+    "n": 2
+   },
+   "vcopy": {
+    "median": 6.683,
+    "max": 7.229,
+    "n": 2
+   }
+  },
+  "blast_radius": [
+   {
+    "id": "HO1",
+    "review": 3,
+    "impact_view": 11,
+    "capped": false
+   },
+   {
+    "id": "HO2",
+    "review": 2,
+    "impact_view": 11,
+    "capped": false
+   },
+   {
+    "id": "HO4",
+    "review": 2,
+    "impact_view": 11,
+    "capped": false
+   },
+   {
+    "id": "HF2",
+    "review": 0,
+    "impact_view": 15,
+    "capped": false
+   },
+   {
+    "id": "HF3",
+    "review": 0,
+    "impact_view": 14,
+    "capped": false
+   },
+   {
+    "id": "HG1",
+    "review": 1,
+    "impact_view": 15,
+    "capped": false
+   },
+   {
+    "id": "HG2",
+    "review": 0,
+    "impact_view": 15,
+    "capped": false
+   },
+   {
+    "id": "HV1",
+    "review": 61,
+    "impact_view": 80,
+    "capped": true
+   },
+   {
+    "id": "HV2",
+    "review": 0,
+    "impact_view": 80,
+    "capped": true
+   }
+  ]
+ },
+ "rows": [
+  {
+   "id": "HO1",
+   "project": "orders_app",
+   "title": "apply_discount reads a new environment variable directly",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "config": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 2,
+     "total": 2,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 3,
+     "total": 3,
+     "chars": 763
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.296,
+   "seconds_with_graph_load": 0.266,
+   "dependents_total": 3,
+   "impact_view_symbols": 11,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 2,
+    "findings": 3,
+    "strong_or_verified": 3,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (8f77c1ee82): 2 change(s) (1 body, 1 module_statement). Findings - persistence: 1, config: 1, entry_points: 1. No finding from the rules for: security, performance, public_api.",
+    "changes": [
+     {
+      "file": "orders/pricing.py",
+      "symbol": "orders/pricing.py::apply_discount",
+      "kind": "body",
+      "lines": "13-17",
+      "base_lines": "11-15"
+     },
+     {
+      "file": "orders/pricing.py",
+      "symbol": "orders/pricing.py::os",
+      "kind": "module_statement",
+      "lines": "3"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "value-carried-to-sink",
+       "finding": "a value computed from apply_discount() is passed to save() in place_order at line 22; save() writes it (total) in a sql-write at orders/repository.py:17 (value path apply_discount -> compute_total -> place_order)",
+       "status": "strong_inference",
+       "at": "orders/service.py:22",
+       "evidence_at": [
+        "orders/repository.py:17"
+       ],
+       "chain": [
+        {
+         "from": "place_order",
+         "to": "compute_total",
+         "relation": "calls",
+         "at": "orders/service.py:21",
+         "confidence": "EXTRACTED",
+         "carries": "passes it on"
+        },
+        {
+         "from": "compute_total",
+         "to": "apply_discount",
+         "relation": "calls",
+         "at": "orders/pricing.py:10",
+         "confidence": "EXTRACTED",
+         "carries": "returns it"
+        }
+       ],
+       "basis": "Python def-use within each function on the path, the last one into the sink's statement (straight-line; branches not told apart); the call to save() resolved by: Python: repo is OrderRepository (annotation or constructor) (INFERRED)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/pricing.py::apply_discount"
+      }
+     ],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [
+      {
+       "concern": "config",
+       "rule": "env-read-on-changed-line",
+       "finding": "a changed line reads environment variable ORDERS_DISCOUNT_MIN",
+       "status": "strong_inference",
+       "at": "orders/pricing.py:15",
+       "evidence_at": [],
+       "basis": "environment-read pattern on the line (the read itself differs from the base version's changed lines)",
+       "derived_by": "architecture_map.ENV_PATTERNS",
+       "for": "orders/pricing.py::apply_discount",
+       "key": "ORDERS_DISCOUNT_MIN"
+      }
+     ],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "create_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed apply_discount in 3 call(s): create_order_handler -> place_order -> compute_total -> apply_discount",
+       "status": "strong_inference",
+       "at": "orders/api.py:16",
+       "evidence_at": [
+        "orders/api.py:18"
+       ],
+       "chain": [
+        {
+         "from": "create_order_handler",
+         "to": "place_order",
+         "relation": "calls",
+         "at": "orders/api.py:18",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "place_order",
+         "to": "compute_total",
+         "relation": "calls",
+         "at": "orders/service.py:21",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "compute_total",
+         "to": "apply_discount",
+         "relation": "calls",
+         "at": "orders/pricing.py:10",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/pricing.py::apply_discount",
+       "entry_kind": "entry",
+       "distance": 3
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_pricing.py::test_discount_applies_above_threshold",
+       "distance": 1,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ]
+      },
+      {
+       "test": "tests/test_pricing.py::test_no_discount_below_threshold",
+       "distance": 1,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ]
+      },
+      {
+       "test": "tests/test_pricing.py::test_compute_total",
+       "distance": 2,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_empty_order_rejected",
+       "distance": 3,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 3,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and the tests of the changed test files that call a changed symbol",
+     "no_test_reaches": [],
+     "reach_unknown": []
+    },
+    "dependents_total": 3,
+    "read_first": [
+     {
+      "at": "orders/pricing.py:7-17",
+      "why": "changed (body)",
+      "chars": 366
+     },
+     {
+      "at": "orders/pricing.py:3",
+      "why": "changed (module_statement)",
+      "chars": 10
+     },
+     {
+      "at": "orders/service.py:21-23",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 72
+     },
+     {
+      "at": "orders/repository.py:16-18",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 127
+     },
+     {
+      "at": "orders/api.py:15-19",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 188
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 763,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "HO2",
+   "project": "orders_app",
+   "title": "OrderRepository.save formats its INSERT with %",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 1,
+     "total": 1,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 3,
+     "total": 3,
+     "chars": 667
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.197,
+   "seconds_with_graph_load": 0.276,
+   "dependents_total": 2,
+   "impact_view_symbols": 11,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 3,
+    "strong_or_verified": 3,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (8f77c1ee82): 1 change(s) (1 body). Findings - persistence: 1, security: 1, entry_points: 1. No finding from the rules for: performance, public_api, config.",
+    "changes": [
+     {
+      "file": "orders/repository.py",
+      "symbol": "orders/repository.py::OrderRepository.save",
+      "kind": "body",
+      "lines": "15-20"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "sink-on-changed-line",
+       "finding": "a changed line holds a sql-write: \"INSERT INTO orders (customer, total) VALUES ('%s', %s)\" % (customer, total)",
+       "status": "strong_inference",
+       "at": "orders/repository.py:17",
+       "evidence_at": [],
+       "basis": "pattern over the code of the line (comments removed)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/repository.py::OrderRepository.save"
+      }
+     ],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "op-on-changed-line",
+       "finding": "a changed line adds sql-built-from-strings: SQL text built with %, passed to a database call at line 16; an entry point's parameter reaches it: create_order_handler(payload) -> place_order(customer) -> save(customer, total)",
+       "status": "statically_verified",
+       "at": "orders/repository.py:17",
+       "evidence_at": [
+        "orders/api.py:16"
+       ],
+       "basis": "Python syntax tree of the tree under review (calls bound through imports and aliases); parameter flow: def-use per hop, an inference",
+       "derived_by": "review.SQL_TEXT",
+       "for": "orders/repository.py::OrderRepository.save",
+       "param_flow": {
+        "params": [
+         "customer",
+         "total"
+        ],
+        "from_entry": "create_order_handler(payload) -> place_order(customer) -> save(customer, total)",
+        "entry": "orders/api.py:16"
+       }
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "create_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed save in 2 call(s): create_order_handler -> place_order -> save",
+       "status": "strong_inference",
+       "at": "orders/api.py:16",
+       "evidence_at": [
+        "orders/api.py:18"
+       ],
+       "chain": [
+        {
+         "from": "create_order_handler",
+         "to": "place_order",
+         "relation": "calls",
+         "at": "orders/api.py:18",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "place_order",
+         "to": "save",
+         "relation": "calls",
+         "at": "orders/service.py:22",
+         "confidence": "INFERRED",
+         "derived_by": "verinoda.receiver"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/repository.py::OrderRepository.save",
+       "entry_kind": "entry",
+       "distance": 2
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_service.py::test_empty_order_rejected",
+       "distance": 2,
+       "reaches": [
+        "orders/repository.py::OrderRepository.save"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 2,
+       "reaches": [
+        "orders/repository.py::OrderRepository.save"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and the tests of the changed test files that call a changed symbol",
+     "no_test_reaches": [],
+     "reach_unknown": []
+    },
+    "dependents_total": 2,
+    "read_first": [
+     {
+      "at": "orders/repository.py:15-20",
+      "why": "changed (body)",
+      "chars": 244
+     },
+     {
+      "at": "orders/service.py:19-25",
+      "why": "call site of save",
+      "chars": 235
+     },
+     {
+      "at": "orders/api.py:15-19",
+      "why": "security: op-on-changed-line",
+      "chars": 188
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 667,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "HO3",
+   "project": "orders_app",
+   "title": "get_order_handler loses its not-found check",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 2,
+     "total": 2,
+     "chars": 238
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.148,
+   "seconds_with_graph_load": 0.356,
+   "dependents_total": 0,
+   "impact_view_symbols": 0,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 1
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (8f77c1ee82): 1 change(s) (1 body). Findings - security: 1, entry_points: 1. No finding from the rules for: persistence, performance, public_api, config. 1 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "orders/api.py",
+      "symbol": "orders/api.py::get_order_handler",
+      "kind": "body",
+      "lines": "24-26",
+      "base_lines": "24-28"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "guard-removed",
+       "finding": "the exit guard `if order is None: <exit>` of get_order_handler (base line 26) is gone: no condition the new version adds holds the condition or its negation; the new version has no exit guard",
+       "status": "statically_verified",
+       "at": "orders/api.py:26",
+       "evidence_at": [
+        "orders/api.py:24"
+       ],
+       "basis": "the base version's syntax tree has the guard; the new version's has no condition of its own holding it, its negation gating the guarded work, a split of it or a helper returning it",
+       "derived_by": "review.guard_diff",
+       "for": "orders/api.py::get_order_handler",
+       "side": "base"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "changed-entry",
+       "finding": "get_order_handler is itself an entry point (entry): entry-like name; public callable in entry module with no in-project callers",
+       "status": "strong_inference",
+       "at": "orders/api.py:24",
+       "evidence_at": [],
+       "basis": "entry heuristics",
+       "derived_by": "architecture_map.entry_reasons + review.REGISTRATIONS",
+       "for": "orders/api.py::get_order_handler",
+       "entry_kind": "entry"
+      }
+     ]
+    },
+    "unknown": [
+     {
+      "kind": "no_callers",
+      "at": "orders/api.py:24",
+      "what": "who calls get_order_handler",
+      "why": "no call edge in the graph and no registration found: a framework callback, reflection, dynamic dispatch, or unused",
+      "next_step": "search for `get_order_handler` (or run `verinoda observe --for get_order_handler` for Python)"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and the tests of the changed test files that call a changed symbol",
+     "no_test_reaches": [],
+     "reach_unknown": [
+      {
+       "symbol": "orders/api.py::get_order_handler",
+       "why": "it has no static caller (a callback, a registration, dispatch or a new definition nothing calls yet): tests that reach it that way are not seen"
+      }
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "orders/api.py:23-26",
+      "why": "changed (body)",
+      "chars": 127
+     },
+     {
+      "at": "orders/api.py:25-27 (base)",
+      "why": "security: guard-removed",
+      "chars": 111
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 238,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "HO4",
+   "project": "orders_app",
+   "title": "compute_total looks every price up in the database, one query per item",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 3,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "performance": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "config": {
+      "tp": 1,
+      "fp": 0,
+      "must": 0,
+      "found": 0,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": false,
+     "missing": [],
+     "extra": [
+      [
+       "orders/pricing.py::DATABASE_URL,DISCOUNT_THRESHOLD",
+       "module_statement"
+      ],
+      [
+       "orders/pricing.py::sqlite3",
+       "module_statement"
+      ]
+     ]
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 3,
+     "total": 3,
+     "chars": 1073
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.167,
+   "seconds_with_graph_load": 0.242,
+   "dependents_total": 2,
+   "impact_view_symbols": 11,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 4,
+    "findings": 6,
+    "strong_or_verified": 6,
+    "unknown": 1
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (8f77c1ee82): 4 change(s) (1 added, 1 body, 2 module_statement). Findings - persistence: 3, performance: 1, config: 1, entry_points: 1. No finding from the rules for: security, public_api. 1 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "orders/pricing.py",
+      "symbol": "orders/pricing.py::load_price",
+      "kind": "added",
+      "lines": "8-11"
+     },
+     {
+      "file": "orders/pricing.py",
+      "symbol": "orders/pricing.py::compute_total",
+      "kind": "body",
+      "lines": "14-18",
+      "base_lines": "6-8"
+     },
+     {
+      "file": "orders/pricing.py",
+      "symbol": "orders/pricing.py::sqlite3",
+      "kind": "module_statement",
+      "lines": "3",
+      "base_names": "DISCOUNT_THRESHOLD"
+     },
+     {
+      "file": "orders/pricing.py",
+      "symbol": "orders/pricing.py::DATABASE_URL,DISCOUNT_THRESHOLD",
+      "kind": "module_statement",
+      "lines": "5"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "sink-on-changed-line",
+       "finding": "a changed line holds a sql-read: row = conn.execute(\"SELECT price FROM prices WHERE sku = ?\", (sku,)).fetchone()",
+       "status": "strong_inference",
+       "at": "orders/pricing.py:10",
+       "evidence_at": [],
+       "basis": "pattern over the code of the line (comments removed)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/pricing.py::load_price"
+      },
+      {
+       "concern": "persistence",
+       "rule": "sink-on-changed-line",
+       "finding": "a changed line holds a db-connection: conn = sqlite3.connect(DATABASE_URL)",
+       "status": "strong_inference",
+       "at": "orders/pricing.py:9",
+       "evidence_at": [],
+       "basis": "pattern over the code of the line (comments removed)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/pricing.py::load_price"
+      },
+      {
+       "concern": "persistence",
+       "rule": "value-carried-to-sink",
+       "finding": "a value computed from compute_total() is passed to save() in place_order at line 22; save() writes it (total) in a sql-write at orders/repository.py:17 (value path compute_total -> place_order)",
+       "status": "strong_inference",
+       "at": "orders/service.py:22",
+       "evidence_at": [
+        "orders/repository.py:17"
+       ],
+       "chain": [
+        {
+         "from": "place_order",
+         "to": "compute_total",
+         "relation": "calls",
+         "at": "orders/service.py:21",
+         "confidence": "EXTRACTED",
+         "carries": "passes it on"
+        }
+       ],
+       "basis": "Python def-use within each function on the path, the last one into the sink's statement (straight-line; branches not told apart); the call to save() resolved by: Python: repo is OrderRepository (annotation or constructor) (INFERRED)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/pricing.py::compute_total"
+      }
+     ],
+     "security": [],
+     "performance": [
+      {
+       "concern": "performance",
+       "rule": "io-in-loop",
+       "finding": "load_price() runs once per iteration of the loop at line 16 and reaches a db-connection at orders/pricing.py:9 (N+1); the function is on a hot path (called from create_order_handler, request/command handler (entry-like name; public callable in entry module with no in-project callers))",
+       "status": "strong_inference",
+       "at": "orders/pricing.py:16",
+       "evidence_at": [
+        "orders/pricing.py:17",
+        "orders/pricing.py:9",
+        "orders/api.py:16"
+       ],
+       "basis": "syntax tree loop; call resolved by: Python: name bound in the file or by an import (EXTRACTED)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/pricing.py::compute_total"
+      }
+     ],
+     "public_api": [],
+     "config": [
+      {
+       "concern": "config",
+       "rule": "config-name-on-changed-line",
+       "finding": "a changed line reads DATABASE_URL, bound to environment variable ORDERS_DATABASE_URL (orders/config.py:5)",
+       "status": "strong_inference",
+       "at": "orders/pricing.py:9",
+       "evidence_at": [
+        "orders/config.py:5"
+       ],
+       "basis": "the name's binding followed through the file's imports (syntax tree); the binding line read by the environment pattern; the expression around the name differs from the base version's",
+       "derived_by": "architecture_map.ENV_PATTERNS",
+       "for": "orders/pricing.py::load_price",
+       "key": "ORDERS_DATABASE_URL"
+      }
+     ],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "create_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed compute_total in 2 call(s): create_order_handler -> place_order -> compute_total",
+       "status": "strong_inference",
+       "at": "orders/api.py:16",
+       "evidence_at": [
+        "orders/api.py:18"
+       ],
+       "chain": [
+        {
+         "from": "create_order_handler",
+         "to": "place_order",
+         "relation": "calls",
+         "at": "orders/api.py:18",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "place_order",
+         "to": "compute_total",
+         "relation": "calls",
+         "at": "orders/service.py:21",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/pricing.py::compute_total",
+       "entry_kind": "entry",
+       "distance": 2
+      }
+     ]
+    },
+    "unknown": [
+     {
+      "kind": "loop_bound",
+      "at": "orders/pricing.py:16",
+      "what": "how many times the loop over `items` at orders/pricing.py:16 runs",
+      "why": "no cap on len(items) was found in compute_total or in the checks it calls before the loop",
+      "next_step": "look for a limit on items in the callers, or measure with the largest expected input"
+     }
+    ],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_pricing.py::test_compute_total",
+       "distance": 1,
+       "reaches": [
+        "orders/pricing.py::load_price",
+        "orders/pricing.py::compute_total"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_empty_order_rejected",
+       "distance": 2,
+       "reaches": [
+        "orders/pricing.py::load_price",
+        "orders/pricing.py::compute_total"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 2,
+       "reaches": [
+        "orders/pricing.py::load_price",
+        "orders/pricing.py::compute_total"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and the tests of the changed test files that call a changed symbol",
+     "no_test_reaches": [],
+     "reach_unknown": []
+    },
+    "dependents_total": 2,
+    "read_first": [
+     {
+      "at": "orders/pricing.py:8-11",
+      "why": "changed (added)",
+      "chars": 194
+     },
+     {
+      "at": "orders/pricing.py:14-18",
+      "why": "changed (body)",
+      "chars": 174
+     },
+     {
+      "at": "orders/pricing.py:3",
+      "why": "changed (module_statement)",
+      "chars": 15
+     },
+     {
+      "at": "orders/pricing.py:5",
+      "why": "changed (module_statement)",
+      "chars": 59
+     },
+     {
+      "at": "orders/service.py:18-24",
+      "why": "call site of compute_total",
+      "chars": 181
+     },
+     {
+      "at": "orders/repository.py:16-18",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 127
+     },
+     {
+      "at": "orders/config.py:4-6",
+      "why": "config: config-name-on-changed-line",
+      "chars": 135
+     },
+     {
+      "at": "orders/api.py:15-19",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 188
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 1073,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "HF1",
+   "project": "forge_mod",
+   "title": "handleStoke loses its open-menu check",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "at": null,
+      "reported": true
+     }
+    ],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 2,
+     "total": 2,
+     "chars": 867
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.178,
+   "seconds_with_graph_load": 0.3,
+   "dependents_total": 0,
+   "impact_view_symbols": 0,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 2
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (817acd3938): 1 change(s) (1 body). Findings - security: 1, entry_points: 1. No finding from the rules for: persistence, performance, public_api, config. 2 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java",
+      "symbol": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java::EmberNetwork.handleStoke",
+      "kind": "body",
+      "lines": "28-38",
+      "base_lines": "28-41"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "guard-removed",
+       "finding": "the exit guard `if !(player.containerMenu instanceof EmberForgeMenu menu) || !menu.getPos().equals(payload.pos()): <exit>` of handleStoke (base line 32) is gone: no condition the new version adds holds the condition or its negation; the new version's exit guards are `!(context.player() instanceof ServerPlayer player)` (line 29), `player.distanceToSqr(payload.pos().getCenter()) > MAX_DISTAN` (line 32)",
+       "status": "statically_verified",
+       "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:32",
+       "evidence_at": [
+        "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28"
+       ],
+       "basis": "the base version's syntax tree has the guard; the new version's has no condition of its own holding it, its negation gating the guarded work, a split of it or a helper returning it",
+       "derived_by": "review.guard_diff",
+       "for": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java::EmberNetwork.handleStoke",
+       "side": "base"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "changed-entry",
+       "finding": "handleStoke is itself an entry point (client->server packet): client->server packet handler registered at src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24 (text, inference)",
+       "status": "strong_inference",
+       "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28",
+       "evidence_at": [
+        "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24"
+       ],
+       "basis": "entry heuristics",
+       "derived_by": "architecture_map.entry_reasons + review.REGISTRATIONS",
+       "for": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java::EmberNetwork.handleStoke",
+       "entry_kind": "client->server packet"
+      }
+     ]
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     },
+     {
+      "kind": "method_reference",
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24",
+      "what": "the callers of EmberNetwork.handleStoke",
+      "why": "it has no call edge in the graph; it is registered by method reference at src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24 (client->server packet handler): found by text search",
+      "next_step": "read the registration; runtime calls of framework callbacks are not traced"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and the tests of the changed test files that call a changed symbol",
+     "no_test_reaches": [],
+     "reach_unknown": [
+      {
+       "symbol": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java::EmberNetwork.handleStoke",
+       "why": "it has no static caller (a callback, a registration, dispatch or a new definition nothing calls yet): tests that reach it that way are not seen"
+      }
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:27-38",
+      "why": "changed (body)",
+      "chars": 542
+     },
+     {
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:31-33 (base)",
+      "why": "security: guard-removed",
+      "chars": 140
+     },
+     {
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:23-25",
+      "why": "entry_points: changed-entry",
+      "chars": 185
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 867,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "HF2",
+   "project": "forge_mod",
+   "title": "animateTick spawns 20 particles per call",
+   "score": {
+    "per_concern": {
+     "performance": {
+      "tp": 0,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 374
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.243,
+   "seconds_with_graph_load": 0.443,
+   "dependents_total": 0,
+   "impact_view_symbols": 15,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 1,
+    "strong_or_verified": 0,
+    "unknown": 2
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (817acd3938): 1 change(s) (1 body). Findings - performance: 1. No finding from the rules for: persistence, security, public_api, config, entry_points. 2 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java",
+      "symbol": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java::EmberForgeBlock.animateTick",
+      "kind": "body",
+      "lines": "109-116",
+      "base_lines": "109-114"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [
+      {
+       "concern": "performance",
+       "rule": "loop-added-hot-path",
+       "finding": "a loop (`for (int i = 0; i < 20; i++)`) was added at line 112 in animateTick, which runs on a hot path (animateTick() is a method the game calls every tick or frame (by name, in a file that imports the game)); no IO or query was found in it",
+       "status": "weak_inference",
+       "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:112",
+       "evidence_at": [],
+       "basis": "syntax tree loop on a changed line; hot path: method name table (inference)",
+       "derived_by": "review.hot_path",
+       "for": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java::EmberForgeBlock.animateTick"
+      }
+     ],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     },
+     {
+      "kind": "no_callers",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:109",
+      "what": "who calls EmberForgeBlock.animateTick",
+      "why": "no call edge in the graph and no registration found: a framework callback, reflection, dynamic dispatch, or unused",
+      "next_step": "search for `animateTick` (or run `verinoda observe --for animateTick` for Python)"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and the tests of the changed test files that call a changed symbol",
+     "no_test_reaches": [],
+     "reach_unknown": [
+      {
+       "symbol": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java::EmberForgeBlock.animateTick",
+       "why": "it has no static caller (a callback, a registration, dispatch or a new definition nothing calls yet): tests that reach it that way are not seen"
+      }
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:109-116",
+      "why": "changed (body)",
+      "chars": 374
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 374,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "HF3",
+   "project": "forge_mod",
+   "title": "the stoke_heat config key is renamed",
+   "score": {
+    "per_concern": {
+     "config": {
+      "tp": 2,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 1457
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.165,
+   "seconds_with_graph_load": 0.234,
+   "dependents_total": 0,
+   "impact_view_symbols": 14,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 2
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (817acd3938): 1 change(s) (1 body). Findings - config: 2. No finding from the rules for: persistence, security, performance, public_api, entry_points. 2 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java",
+      "symbol": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java::EmberConfig",
+      "kind": "body",
+      "lines": "9-41"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [
+      {
+       "concern": "config",
+       "rule": "config-key-on-changed-line",
+       "finding": "config key `stoke_amount` on a changed line",
+       "status": "strong_inference",
+       "at": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:26",
+       "evidence_at": [],
+       "basis": "quoted key in a config call or present in a config file of the repository",
+       "derived_by": "review.CONFIG_CALL/QUOTED_KEY",
+       "for": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java::EmberConfig",
+       "key": "stoke_amount"
+      },
+      {
+       "concern": "config",
+       "rule": "config-key-on-changed-line",
+       "finding": "config key `stoke_heat` is no longer read on the changed line (base line 26); the key is in config/emberforge-common.toml:17",
+       "status": "strong_inference",
+       "at": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:26",
+       "evidence_at": [
+        "config/emberforge-common.toml:17"
+       ],
+       "basis": "quoted key in a config call or present in a config file of the repository",
+       "derived_by": "review.CONFIG_CALL/QUOTED_KEY",
+       "for": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java::EmberConfig",
+       "key": "stoke_heat"
+      }
+     ],
+     "entry_points": []
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     },
+     {
+      "kind": "no_callers",
+      "at": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9",
+      "what": "who calls EmberConfig",
+      "why": "no call edge in the graph and no registration found: a framework callback, reflection, dynamic dispatch, or unused",
+      "next_step": "search for `EmberConfig` (or run `verinoda observe --for EmberConfig` for Python)"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and the tests of the changed test files that call a changed symbol",
+     "no_test_reaches": [],
+     "reach_unknown": [
+      {
+       "symbol": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java::EmberConfig",
+       "why": "it has no static caller (a callback, a registration, dispatch or a new definition nothing calls yet): tests that reach it that way are not seen"
+      }
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9-41",
+      "why": "changed (body)",
+      "chars": 1385
+     },
+     {
+      "at": "config/emberforge-common.toml:16-18",
+      "why": "config: config-key-on-changed-line",
+      "chars": 72
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 1457,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "HG1",
+   "project": "glow_mod",
+   "title": "/glow no longer requires permission level 2",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "at": null,
+      "reported": true
+     }
+    ],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 950
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.342,
+   "seconds_with_graph_load": 0.262,
+   "dependents_total": 1,
+   "impact_view_symbols": 15,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 1,
+    "strong_or_verified": 1,
+    "unknown": 1
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (b58d5017f0): 1 change(s) (1 body). Findings - security: 1. No finding from the rules for: persistence, performance, public_api, config, entry_points. 1 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/com/example/glowmod/command/GlowCommands.java",
+      "symbol": "src/main/java/com/example/glowmod/command/GlowCommands.java::GlowCommands.register",
+      "kind": "body",
+      "lines": "18-24",
+      "base_lines": "18-25"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "permission-removed",
+       "finding": "a permission check was removed (base line 21): `.requires(source -> source.hasPermissionLevel(2))`",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:21",
+       "evidence_at": [],
+       "basis": "permission call on a removed line (text rule; the working tree no longer has that call on a changed line)",
+       "derived_by": "review.PERMISSION_CALL",
+       "for": "src/main/java/com/example/glowmod/command/GlowCommands.java::GlowCommands.register",
+       "side": "base"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and the tests of the changed test files that call a changed symbol",
+     "no_test_reaches": [
+      "src/main/java/com/example/glowmod/command/GlowCommands.java::GlowCommands.register"
+     ],
+     "reach_unknown": []
+    },
+    "dependents_total": 1,
+    "read_first": [
+     {
+      "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:18-24",
+      "why": "changed (body)",
+      "chars": 489
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/GlowMod.java:21-27",
+      "why": "call site of register",
+      "chars": 229
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:20-22 (base)",
+      "why": "security: permission-removed",
+      "chars": 232
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 950,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "HG2",
+   "project": "glow_mod",
+   "title": "natural wisps no longer check day time and chance",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 0,
+      "found": 0,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 800
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.445,
+   "seconds_with_graph_load": 0.464,
+   "dependents_total": 0,
+   "impact_view_symbols": 15,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 2
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (b58d5017f0): 1 change(s) (1 body). Findings - security: 1, entry_points: 1. No finding from the rules for: persistence, performance, public_api, config. 2 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/com/example/glowmod/world/WispSpawner.java",
+      "symbol": "src/main/java/com/example/glowmod/world/WispSpawner.java::WispSpawner.onChunkLoad",
+      "kind": "body",
+      "lines": "22-30",
+      "base_lines": "22-33"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "guard-removed",
+       "finding": "the exit guard `if world.isDay() || world.random.nextDouble() >= GlowConfig.get().naturalChance(): <exit>` of onChunkLoad (base line 23) is gone: no condition the new version adds holds the condition or its negation; the new version has no exit guard",
+       "status": "statically_verified",
+       "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:23",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/world/WispSpawner.java:22"
+       ],
+       "basis": "the base version's syntax tree has the guard; the new version's has no condition of its own holding it, its negation gating the guarded work, a split of it or a helper returning it",
+       "derived_by": "review.guard_diff",
+       "for": "src/main/java/com/example/glowmod/world/WispSpawner.java::WispSpawner.onChunkLoad",
+       "side": "base"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "changed-entry",
+       "finding": "onChunkLoad is itself an entry point (world event): chunk load event registered at src/main/java/com/example/glowmod/world/WispSpawner.java:19 (text, inference)",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:22",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/world/WispSpawner.java:19"
+       ],
+       "basis": "entry heuristics",
+       "derived_by": "architecture_map.entry_reasons + review.REGISTRATIONS",
+       "for": "src/main/java/com/example/glowmod/world/WispSpawner.java::WispSpawner.onChunkLoad",
+       "entry_kind": "world event"
+      }
+     ]
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     },
+     {
+      "kind": "method_reference",
+      "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:19",
+      "what": "the callers of WispSpawner.onChunkLoad",
+      "why": "it has no call edge in the graph; it is registered by method reference at src/main/java/com/example/glowmod/world/WispSpawner.java:19 (chunk load event): found by text search",
+      "next_step": "read the registration; runtime calls of framework callbacks are not traced"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and the tests of the changed test files that call a changed symbol",
+     "no_test_reaches": [],
+     "reach_unknown": [
+      {
+       "symbol": "src/main/java/com/example/glowmod/world/WispSpawner.java::WispSpawner.onChunkLoad",
+       "why": "it has no static caller (a callback, a registration, dispatch or a new definition nothing calls yet): tests that reach it that way are not seen"
+      }
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:18-30",
+      "why": "changed (body)",
+      "chars": 611
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:22-24 (base)",
+      "why": "security: guard-removed",
+      "chars": 189
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 800,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "HV1",
+   "project": "vcopy",
+   "title": "snapshot.git runs git through the shell",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 0,
+      "fp": 4,
+      "must": 0,
+      "found": 0,
+      "fp_items": [
+       {
+        "at": "verinoda/cli.py:1465",
+        "rule": "value-carried-to-sink",
+        "status": "strong_inference",
+        "finding": "a value computed from git() is passed to _bench_out() in cmd_benchmark at line 1465; _bench_out() writes it (res) in a file-write at verinoda/cli.py:1410 (value",
+        "must_not": true
+       },
+       {
+        "at": "verinoda/cli.py:1474",
+        "rule": "value-carried-to-sink",
+        "status": "strong_inference",
+        "finding": "a value computed from git() is passed to _bench_out() in cmd_benchmark at line 1474; _bench_out() writes it (res) in a file-write at verinoda/cli.py:1410 (value",
+        "must_not": true
+       },
+       {
+        "at": "verinoda/runtime/trace.py:573",
+        "rule": "value-carried-to-sink",
+        "status": "strong_inference",
+        "finding": "a value computed from git() is passed to ingest() in observe at line 573; ingest() writes it (commit) in a sql-write at verinoda/runtime/trace.py:349 (value pat",
+        "must_not": true
+       },
+       {
+        "at": "verinoda/runtime/trace.py:592",
+        "rule": "value-carried-to-sink",
+        "status": "strong_inference",
+        "finding": "a value computed from git() is passed to ingest() in observe at line 592; ingest() writes it (commit) in a sql-write at verinoda/runtime/trace.py:349 (value pat",
+        "must_not": true
+       }
+      ],
+      "missed": []
+     },
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 0,
+      "fp": 1,
+      "must": 0,
+      "found": 0,
+      "fp_items": [
+       {
+        "at": "verinoda/benchmark/__main__.py:32",
+        "rule": "entry-reaches-change",
+        "status": "strong_inference",
+        "finding": "main (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed git in 3 call(s): main -> run_benchmark -> environ",
+        "must_not": false
+       }
+      ],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 5997
+    },
+    "silent_truncation": false
+   },
+   "seconds": 1.799,
+   "seconds_with_graph_load": 7.229,
+   "dependents_total": 61,
+   "impact_view_symbols": 80,
+   "impact_view_capped": true,
+   "counts": {
+    "changes": 1,
+    "findings": 15,
+    "strong_or_verified": 6,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (184b0dbb25): 1 change(s) (1 body). Findings - persistence: 4, security: 1, entry_points: 10. No finding from the rules for: performance, public_api, config.",
+    "changes": [
+     {
+      "file": "verinoda/snapshot.py",
+      "symbol": "verinoda/snapshot.py::git",
+      "kind": "body",
+      "lines": "44-61"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "value-carried-to-sink",
+       "finding": "a value computed from git() is passed to _bench_out() in cmd_benchmark at line 1465; _bench_out() writes it (res) in a file-write at verinoda/cli.py:1410 (value path git -> environment -> run_benchmark -> cmd_benchmark)",
+       "status": "strong_inference",
+       "at": "verinoda/cli.py:1465",
+       "evidence_at": [
+        "verinoda/cli.py:1410"
+       ],
+       "chain": [
+        {
+         "from": "cmd_benchmark",
+         "to": "run_benchmark",
+         "relation": "calls",
+         "at": "verinoda/cli.py:1481",
+         "confidence": "EXTRACTED",
+         "carries": "passes it on"
+        },
+        {
+         "from": "run_benchmark",
+         "to": "environment",
+         "relation": "calls",
+         "at": "verinoda/benchmark/runner.py:452",
+         "confidence": "EXTRACTED",
+         "carries": "returns it"
+        },
+        {
+         "from": "environment",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/benchmark/runner.py:106",
+         "confidence": "EXTRACTED",
+         "carries": "returns it"
+        }
+       ],
+       "basis": "Python def-use within each function on the path, the last one into the sink's statement (straight-line; branches not told apart); the call to _bench_out() resolved by: Python: name bound in the file or by an import (EXTRACTED)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "verinoda/snapshot.py::git"
+      },
+      {
+       "concern": "persistence",
+       "rule": "value-carried-to-sink",
+       "finding": "a value computed from git() is passed to _bench_out() in cmd_benchmark at line 1474; _bench_out() writes it (res) in a file-write at verinoda/cli.py:1410 (value path git -> environment -> run_benchmark -> cmd_benchmark)",
+       "status": "strong_inference",
+       "at": "verinoda/cli.py:1474",
+       "evidence_at": [
+        "verinoda/cli.py:1410"
+       ],
+       "chain": [
+        {
+         "from": "cmd_benchmark",
+         "to": "run_benchmark",
+         "relation": "calls",
+         "at": "verinoda/cli.py:1481",
+         "confidence": "EXTRACTED",
+         "carries": "passes it on"
+        },
+        {
+         "from": "run_benchmark",
+         "to": "environment",
+         "relation": "calls",
+         "at": "verinoda/benchmark/runner.py:452",
+         "confidence": "EXTRACTED",
+         "carries": "returns it"
+        },
+        {
+         "from": "environment",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/benchmark/runner.py:106",
+         "confidence": "EXTRACTED",
+         "carries": "returns it"
+        }
+       ],
+       "basis": "Python def-use within each function on the path, the last one into the sink's statement (straight-line; branches not told apart); the call to _bench_out() resolved by: Python: name bound in the file or by an import (EXTRACTED)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "verinoda/snapshot.py::git"
+      },
+      {
+       "concern": "persistence",
+       "rule": "value-carried-to-sink",
+       "finding": "a value computed from git() is passed to ingest() in observe at line 573; ingest() writes it (commit) in a sql-write at verinoda/runtime/trace.py:349 (value path git -> observe)",
+       "status": "strong_inference",
+       "at": "verinoda/runtime/trace.py:573",
+       "evidence_at": [
+        "verinoda/runtime/trace.py:349"
+       ],
+       "chain": [
+        {
+         "from": "observe",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/runtime/trace.py:547",
+         "confidence": "EXTRACTED",
+         "carries": "passes it on"
+        }
+       ],
+       "basis": "Python def-use within each function on the path, the last one into the sink's statement (straight-line; branches not told apart); the call to ingest() resolved by: Python: name bound in the file or by an import (EXTRACTED)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "verinoda/snapshot.py::git"
+      },
+      {
+       "concern": "persistence",
+       "rule": "value-carried-to-sink",
+       "finding": "a value computed from git() is passed to ingest() in observe at line 592; ingest() writes it (commit) in a sql-write at verinoda/runtime/trace.py:349 (value path git -> observe)",
+       "status": "strong_inference",
+       "at": "verinoda/runtime/trace.py:592",
+       "evidence_at": [
+        "verinoda/runtime/trace.py:349"
+       ],
+       "chain": [
+        {
+         "from": "observe",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/runtime/trace.py:547",
+         "confidence": "EXTRACTED",
+         "carries": "passes it on"
+        }
+       ],
+       "basis": "Python def-use within each function on the path, the last one into the sink's statement (straight-line; branches not told apart); the call to ingest() resolved by: Python: name bound in the file or by an import (EXTRACTED)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "verinoda/snapshot.py::git"
+      }
+     ],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "op-on-changed-line",
+       "finding": "a changed line adds process-exec: run(..., shell=True); it uses the parameter(s) repo, timeout",
+       "status": "statically_verified",
+       "at": "verinoda/snapshot.py:52",
+       "evidence_at": [
+        "verinoda/snapshot.py:51"
+       ],
+       "basis": "Python syntax tree of the tree under review (calls bound through imports and aliases); parameter flow: def-use per hop, an inference",
+       "derived_by": "review: shell=True keyword",
+       "for": "verinoda/snapshot.py::git",
+       "param_flow": {
+        "params": [
+         "repo",
+         "timeout"
+        ],
+        "from_entry": null
+       }
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "main (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed git in 3 call(s): main -> run_benchmark -> environment -> git",
+       "status": "strong_inference",
+       "at": "verinoda/benchmark/__main__.py:32",
+       "evidence_at": [
+        "verinoda/benchmark/__main__.py:84"
+       ],
+       "chain": [
+        {
+         "from": "main",
+         "to": "run_benchmark",
+         "relation": "calls",
+         "at": "verinoda/benchmark/__main__.py:84",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "run_benchmark",
+         "to": "environment",
+         "relation": "calls",
+         "at": "verinoda/benchmark/runner.py:452",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "environment",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/benchmark/runner.py:106",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/snapshot.py::git",
+       "entry_kind": "entry",
+       "distance": 3
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "main (entry: entry-like name) reaches the changed git in 2 call(s): main -> environment -> git",
+       "status": "weak_inference",
+       "at": "verinoda/benchmark/critique_eval.py:306",
+       "evidence_at": [
+        "verinoda/benchmark/critique_eval.py:318"
+       ],
+       "chain": [
+        {
+         "from": "main",
+         "to": "environment",
+         "relation": "calls",
+         "at": "verinoda/benchmark/critique_eval.py:318",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "environment",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/benchmark/runner.py:106",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/snapshot.py::git",
+       "entry_kind": "entry",
+       "distance": 2
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "main (entry: entry-like name) reaches the changed git in 3 call(s): main -> _environment -> environment -> git",
+       "status": "weak_inference",
+       "at": "verinoda/benchmark/staleness.py:645",
+       "evidence_at": [
+        "verinoda/benchmark/staleness.py:678"
+       ],
+       "chain": [
+        {
+         "from": "main",
+         "to": "_environment",
+         "relation": "calls",
+         "at": "verinoda/benchmark/staleness.py:678",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "_environment",
+         "to": "environment",
+         "relation": "calls",
+         "at": "verinoda/benchmark/staleness.py:642",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "environment",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/benchmark/runner.py:106",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/snapshot.py::git",
+       "entry_kind": "entry",
+       "distance": 3
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "cmd_observe (entry: public callable in entry module with no in-project callers) reaches the changed git in 2 call(s): cmd_observe -> observe -> git",
+       "status": "weak_inference",
+       "at": "verinoda/cli.py:1218",
+       "evidence_at": [
+        "verinoda/cli.py:1241"
+       ],
+       "chain": [
+        {
+         "from": "cmd_observe",
+         "to": "observe",
+         "relation": "calls",
+         "at": "verinoda/cli.py:1241",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "observe",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/runtime/trace.py:547",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/snapshot.py::git",
+       "entry_kind": "entry",
+       "distance": 2
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "cmd_benchmark (entry: public callable in entry module with no in-project callers) reaches the changed git in 3 call(s): cmd_benchmark -> run_benchmark -> environment -> git",
+       "status": "weak_inference",
+       "at": "verinoda/cli.py:1444",
+       "evidence_at": [
+        "verinoda/cli.py:1481"
+       ],
+       "chain": [
+        {
+         "from": "cmd_benchmark",
+         "to": "run_benchmark",
+         "relation": "calls",
+         "at": "verinoda/cli.py:1481",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "run_benchmark",
+         "to": "environment",
+         "relation": "calls",
+         "at": "verinoda/benchmark/runner.py:452",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "environment",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/benchmark/runner.py:106",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/snapshot.py::git",
+       "entry_kind": "entry",
+       "distance": 3
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "cmd_setup (entry: public callable in entry module with no in-project callers) reaches the changed git in 3 call(s): cmd_setup -> setup_project -> list_files -> git",
+       "status": "weak_inference",
+       "at": "verinoda/cli.py:375",
+       "evidence_at": [
+        "verinoda/cli.py:379"
+       ],
+       "chain": [
+        {
+         "from": "cmd_setup",
+         "to": "setup_project",
+         "relation": "calls",
+         "at": "verinoda/cli.py:379",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "setup_project",
+         "to": "list_files",
+         "relation": "calls",
+         "at": "verinoda/setup.py:267",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "list_files",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/snapshot.py:111",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/snapshot.py::git",
+       "entry_kind": "entry",
+       "distance": 3
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "cmd_scan (entry: public callable in entry module with no in-project callers) reaches the changed git in 3 call(s): cmd_scan -> current_state -> git_info -> git",
+       "status": "weak_inference",
+       "at": "verinoda/cli.py:457",
+       "evidence_at": [
+        "verinoda/cli.py:477"
+       ],
+       "chain": [
+        {
+         "from": "cmd_scan",
+         "to": "current_state",
+         "relation": "calls",
+         "at": "verinoda/cli.py:477",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "current_state",
+         "to": "git_info",
+         "relation": "calls",
+         "at": "verinoda/snapshot.py:261",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "git_info",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/snapshot.py:81",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/snapshot.py::git",
+       "entry_kind": "entry",
+       "distance": 3
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "cmd_map (entry: public callable in entry module with no in-project callers) reaches the changed git in 2 call(s): cmd_map -> changed_files_from_git -> git",
+       "status": "weak_inference",
+       "at": "verinoda/cli.py:651",
+       "evidence_at": [
+        "verinoda/cli.py:659"
+       ],
+       "chain": [
+        {
+         "from": "cmd_map",
+         "to": "changed_files_from_git",
+         "relation": "calls",
+         "at": "verinoda/cli.py:659",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "changed_files_from_git",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/architecture_map.py:396",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/snapshot.py::git",
+       "entry_kind": "entry",
+       "distance": 2
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "cmd_challenge (entry: public callable in entry module with no in-project callers) reaches the changed git in 3 call(s): cmd_challenge -> challenge -> _existence -> git",
+       "status": "weak_inference",
+       "at": "verinoda/cli.py:951",
+       "evidence_at": [
+        "verinoda/cli.py:958"
+       ],
+       "chain": [
+        {
+         "from": "cmd_challenge",
+         "to": "challenge",
+         "relation": "calls",
+         "at": "verinoda/cli.py:958",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "challenge",
+         "to": "_existence",
+         "relation": "calls",
+         "at": "verinoda/critique.py:440",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "_existence",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/critique.py:352",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/snapshot.py::git",
+       "entry_kind": "entry",
+       "distance": 3
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "run (entry: public callable in entry module with no in-project callers) reaches the changed git in 3 call(s): run -> signature -> list_files -> git",
+       "status": "weak_inference",
+       "at": "verinoda/ui/server.py:98",
+       "evidence_at": [
+        "verinoda/ui/server.py:101"
+       ],
+       "chain": [
+        {
+         "from": "run",
+         "to": "signature",
+         "relation": "calls",
+         "at": "verinoda/ui/server.py:101",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "signature",
+         "to": "list_files",
+         "relation": "calls",
+         "at": "verinoda/ui/server.py:80",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "list_files",
+         "to": "git",
+         "relation": "calls",
+         "at": "verinoda/snapshot.py:111",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/snapshot.py::git",
+       "entry_kind": "entry",
+       "distance": 3
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_experiments.py::test_no_child_inherits_stdin",
+       "distance": 1,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_architecture_map.py::test_history_without_git",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_data_index.py::test_list_files_keeps_tracked_build_folders_and_drops_untracked_build_output",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_callbacks_from_c_decorators_threads_and_doubles",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_deadline_writes_a_partial_trace_before_the_hard_kill",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_edge_budget_breach_marks_the_trace_incomplete",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_more_than_fifty_ids_are_truncated_and_reported",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_off_mode_records_outcomes_only",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_refused_test_ids_return_an_error_not_a_crash",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_selected_run_scopes_absence_to_tests_that_ran",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_cache.py::test_git_info_dirty_detached_and_unborn",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_cache.py::test_git_info_uses_one_status_call_and_matches_the_old_answer",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_stale.py::test_list_files_without_git_skips_tool_dirs",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_stale.py::test_snapshot_records_commit_files_and_is_reused_for_an_unchanged_tree",
+       "distance": 2,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_benchmark.py::test_a_final_answer_from_any_command_is_scored_for_facts_and_wrong_statements",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_benchmark.py::test_harness_results_are_written_sanitised",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_benchmark.py::test_heldout_set_is_reviewed_and_verifies_against_its_snapshot",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_benchmark.py::test_orders_gold_facts_verify_against_the_source",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_benchmark.py::test_prepare_workdir_from_a_pinned_commit_ignores_the_working_tree",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_benchmark.py::test_raw_context_is_deterministic_numbered_and_capped",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_benchmark.py::test_run_benchmark_end_to_end_on_example_copy",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_benchmark.py::test_run_benchmark_refuses_unverifiable_gold",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_benchmark.py::test_sweep_only_runs_just_the_budget_points",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_ambiguous_inferred_target_is_warned_with_alternatives",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_benchmark_negative_relations_are_definitively_refuted",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_call_through_an_import_alias_is_not_contradicted",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_challenge_unknown_claim_raises_keyerror",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_challenge_uses_current_files_instead_of_hashing",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_claim_watching_tests_is_stale_in_critique_when_a_test_file_is_added",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_confidence_and_status_never_increase_in_critique",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_config_claim_on_a_line_that_reads_another_variable_is_refuted",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_critique_twice_equals_critique_once",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_deleted_claim_file_is_stale_in_critique",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_empty_cited_text_fails_source_recheck",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_exclusive_claim_holds_then_is_contradicted_by_another_file",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_flow_claims_check_ambiguity_on_every_inferred_hop",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_heuristic_call_site_doubt_lowers_one_step_and_never_contradicts",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_inferred_edge_only_claim_is_capped_and_loses_confidence",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_location_claim_with_a_wrong_start_is_refuted",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_location_span_off_by_n_is_definitively_refuted",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_missing_commit_and_run_are_existence_failures",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_plain_text_number_and_polarity_conflicts_are_heuristic",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_relation_claim_whose_line_does_not_name_target_is_contradicted",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_relation_claim_with_matching_call_site_passes",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_repeated_counterexample_is_linked_once",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_staleness_check_marks_changed_claims_stale",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_staleness_hashes_only_the_claims_own_files",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_superseded_decision_record_is_qualified",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_symbol_level_staleness_ignores_edits_elsewhere_in_the_file",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_tests_early_exit_probe_qualifies_only_the_doubtful_test",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_verify_does_not_undo_the_critique_penalty",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_feedback.py::test_valid_critique_with_correction_supersedes",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_lexicon.py::test_build_learns_turkish_words_to_identifier_parts_with_sites",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_lexicon.py::test_filters_tests_stoplist_and_self_pairs",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_lexicon.py::test_lexicon_file_is_lf_utf8_json",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_lexicon.py::test_non_python_code_uses_graph_symbols",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_lexicon.py::test_rebuild_is_incremental",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_lexicon.py::test_seed_dictionary_is_grounded_and_longest_key_wins",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_lexicon.py::test_show_reports_pairs_seed_and_sites",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_lexicon.py::test_text_hits_point_at_units",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_lexicon.py::test_vocabulary_df_and_idf",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_mcp.py::test_claim_verify_and_challenge_use_core",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_setup.py::test_a_bad_reference_refuses_before_anything_is_written",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_setup.py::test_setup_auto_installs_only_the_agents_found",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_setup.py::test_setup_indexes_and_is_safe_to_rerun",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_setup.py::test_setup_records_reference_trees",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_setup.py::test_setup_refuses_home_and_unknown_agents",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_setup.py::test_setup_warns_when_no_agent_is_found",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_cache.py::test_a_changed_stat_is_rehashed",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_cache.py::test_a_locked_database_only_costs_rehashing",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_cache.py::test_no_database_means_no_cache_and_nothing_is_created",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_cache.py::test_racy_clean_same_size_same_mtime_edit_is_still_detected",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_cache.py::test_snapshots_reuse_the_cache_through_the_store",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_cache.py::test_unchanged_old_files_are_not_rehashed",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_stale.py::test_cited_file_outside_the_snapshot_is_rechecked",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_stale.py::test_revert_then_verify_restores_up_to_ceiling_and_rebinds",
+       "distance": 3,
+       "reaches": [
+        "verinoda/snapshot.py::git"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and the tests of the changed test files that call a changed symbol",
+     "no_test_reaches": [],
+     "reach_unknown": []
+    },
+    "dependents_total": 61,
+    "read_first": [
+     {
+      "at": "verinoda/snapshot.py:44-68",
+      "why": "changed (body)",
+      "chars": 1060
+     },
+     {
+      "at": "verinoda/analysis.py:1533-1539",
+      "why": "call site of git",
+      "chars": 342
+     },
+     {
+      "at": "verinoda/architecture_map.py:345-351",
+      "why": "call site of git",
+      "chars": 228
+     },
+     {
+      "at": "verinoda/architecture_map.py:393-399",
+      "why": "call site of git",
+      "chars": 368
+     },
+     {
+      "at": "verinoda/benchmark/runner.py:103-109",
+      "why": "call site of git",
+      "chars": 486
+     },
+     {
+      "at": "verinoda/question_plan.py:1074-1080",
+      "why": "call site of git",
+      "chars": 195
+     },
+     {
+      "at": "verinoda/runtime/trace.py:544-550",
+      "why": "call site of git",
+      "chars": 548
+     },
+     {
+      "at": "verinoda/snapshot.py:108-114",
+      "why": "call site of git",
+      "chars": 410
+     },
+     {
+      "at": "verinoda/snapshot.py:78-84",
+      "why": "call site of git",
+      "chars": 321
+     },
+     {
+      "at": "verinoda/critique.py:349-355",
+      "why": "call site of git",
+      "chars": 343
+     },
+     {
+      "at": "verinoda/cli.py:1464-1466",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 134
+     },
+     {
+      "at": "verinoda/cli.py:1409-1411",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 156
+     },
+     {
+      "at": "verinoda/cli.py:1473-1475",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 124
+     },
+     {
+      "at": "verinoda/runtime/trace.py:572-574",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 321
+     },
+     {
+      "at": "verinoda/runtime/trace.py:348-350",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 191
+     },
+     {
+      "at": "verinoda/runtime/trace.py:591-593",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 210
+     },
+     {
+      "at": "verinoda/benchmark/__main__.py:31-33",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 93
+     },
+     {
+      "at": "verinoda/benchmark/__main__.py:83-85",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 307
+     },
+     {
+      "at": "verinoda/benchmark/critique_eval.py:305-307",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 93
+     },
+     {
+      "at": "verinoda/benchmark/critique_eval.py:317-319",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 67
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 5997,
+     "truncated": true,
+     "more": [
+      {
+       "at": "verinoda/benchmark/staleness.py:644-646",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 93
+      },
+      {
+       "at": "verinoda/benchmark/staleness.py:677-679",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 92
+      },
+      {
+       "at": "verinoda/cli.py:1217-1219",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 62
+      },
+      {
+       "at": "verinoda/cli.py:1240-1242",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 173
+      },
+      {
+       "at": "verinoda/cli.py:1443-1445",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 70
+      },
+      {
+       "at": "verinoda/cli.py:1480-1482",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 189
+      },
+      {
+       "at": "verinoda/cli.py:374-376",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 73
+      },
+      {
+       "at": "verinoda/cli.py:378-380",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 195
+      },
+      {
+       "at": "verinoda/cli.py:456-458",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 62
+      },
+      {
+       "at": "verinoda/cli.py:476-478",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 132
+      },
+      {
+       "at": "verinoda/cli.py:650-652",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 75
+      },
+      {
+       "at": "verinoda/cli.py:658-660",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 154
+      },
+      {
+       "at": "verinoda/cli.py:950-952",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 74
+      },
+      {
+       "at": "verinoda/cli.py:957-959",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 166
+      },
+      {
+       "at": "verinoda/ui/server.py:97-102",
+       "why": "entry_points: entry-reaches-change",
+       "chars": 203
+      }
+     ],
+     "more_total": 15
+    }
+   }
+  },
+  {
+   "id": "HV2",
+   "project": "vcopy",
+   "title": "comment-only edit in retrieval.py",
+   "score": {
+    "per_concern": {},
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 0,
+     "total": 0,
+     "chars": 0
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.509,
+   "seconds_with_graph_load": 6.137,
+   "dependents_total": 0,
+   "impact_view_symbols": 80,
+   "impact_view_capped": true,
+   "counts": {
+    "changes": 0,
+    "findings": 0,
+    "strong_or_verified": 0,
+    "unknown": 0
+   },
+   "exit": 0,
+   "result": {
+    "summary": "Review of the working tree against HEAD (184b0dbb25): no changed definition (comments, whitespace and docstrings are not changes).",
+    "changes": [],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and the tests of the changed test files that call a changed symbol",
+     "no_test_reaches": [],
+     "reach_unknown": []
+    },
+    "dependents_total": 0,
+    "read_first": [],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 0,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  }
+ ]
+}

@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,40 @@ Sections: [Update 2026-09-25: change review, first review round](#update-2026-09
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-26: change review, second review round (D35)
+
+A second reviewer reported 20 findings on commit 42d9b41 (7 high, 8 medium, 5 low; 11 regressions of the first
+round's relaxations and cost cuts): checks that now run after the write they protected were "the same check"
+(split, extracted, moved to an unrelated function, a pre-existing negated `if` read as a restructuring), a
+constant `subprocess.run` / `pickle.loads` argument turned into a parameter was "held ... too" (weak), calls
+through an assigned alias or a renamed re-export were not found, callers added after the last `update` were
+silently missed, every cross-package edge of a monorepo or a Gradle multi-module mod was dropped, and
+`--staged --observe` traced the working tree. Each was reproduced on 42d9b41 and fixed with a regression test
+(17 new tests and 2 extended ones in `tests/test_review.py`, all 19 failing on 42d9b41); docs/DESIGN.md section
+8.6 has the list. The held-out run after the fixes found one duplicate the fixes had introduced (HV1: the changed
+`subprocess.run(...)` call and the `shell=True` added to it were two findings); fixed, and both splits run again:
+
+| split | precision (>= strong_inference) | recall | must-say-unknown | changed symbols exact | gold dependents | gold lines in `read_first` |
+|---|---|---|---|---|---|---|
+| dev after the round (in-sample) | 67/73 = 0.92 | 62/62 | 9/9 | 36/36 | 19/19 | 62/62 |
+| held-out after the round (no longer clean) | 22/27 = 0.81 | 18/18 | 2/2 | 10/11 | 3/3 | 18/18 |
+
+The same numbers as after the first round: the fixtures hold none of the reviewer's cases, so they show that the
+fixes did not cost precision or recall there, not that they help. Result files:
+`benchmarks/results/review-2026-09-25/dev-review-round2.json` and `heldout-review-round2.json` (base copies indexed
+in this session; fixtures and gold unchanged). The reviewer's scripted repros (C01-C27) were re-run on the fixed
+branch; their outputs are in the fixer's scratch, not in the result files.
+
+**Time.** The run above shared the machine with other agents' test suites; with the graph loaded it measured
+0.27-0.62 s median on the examples and 7.8 s (dev) / 6.7 s (held-out) median on the 380-file copy, most of it
+graph loading under load (the result files hold this run; two earlier runs of the same code gave 0.23-0.27 s
+and 4.8-5.2 s on dev). The fair comparison is an interleaved A/B on the same base copies (three rounds of old
+and new code, each fixture reviewed three times after a warm-up, graph loaded each time): V01-V03 1.19 / 1.25 /
+1.21 s at 42d9b41 and 1.33 / 1.41 / 1.32 s after the round (+9 to +13 %), orders_app O03 0.159 -> 0.160 s, forge_mod
+F02 0.154 -> 0.169 s, glow_mod G05 0.165 -> 0.182 s. The added cost is mostly the check of files newer than the
+snapshot (the copy's files were written by the clone, shortly before the snapshot, so every one of them is hashed
+again; in a checkout whose files are older than an hour before the last `update` only newer files are read).
 
 ## Update 2026-09-25: change review, first review round (D35)
 

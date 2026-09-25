@@ -74,3 +74,26 @@ no test). The gold was not changed. Time with the graph loaded (median / max; ot
 running on the machine): orders_app 0.19 / 0.33 s, forge_mod 0.24 / 0.41 s, glow_mod 0.24 / 0.27 s, the
 380-file copy 1.71 / 1.87 s on dev (V03 5.0 s before this round's caches) and 3.7 / 6.0 s on held-out (HV1, 61
 dependents); with the graph in memory 0.63 s median on the copy.
+
+## Second review round (`dev-review-round2.json`, `heldout-review-round2.json`)
+
+A second reviewer reported 20 findings (7 high, 8 medium, 5 low) from scripted repros on small projects and the
+example copies, run against 42d9b41 (and against 8e2cc3b / ed1c891 to tell regressions of the first round apart).
+Each was reproduced on 42d9b41 and fixed with a regression test in `tests/test_review.py` (section "review round
+2": 17 new tests and 2 extended ones, all failing on 42d9b41); docs/DESIGN.md section 8.6 lists them. The first
+held-out run after the fixes showed one duplicate the fixes introduced (HV1: a changed `subprocess.run(...)` call
+and the `shell=True` added to it reported twice); after that fix both splits were run again on base copies
+indexed in the same session (fixtures and gold unchanged; the held-out split is not clean for these rules):
+
+| split | precision (>= strong_inference) | recall | must-say-unknown | changed symbols exact | static test reach | `no_test_reaches` gold | gold dependents | gold lines in `read_first` |
+|---|---|---|---|---|---|---|---|---|
+| dev (in-sample) | 67/73 = 0.92 | 62/62 | 9/9 | 36/36 | 22/22 | 1/4 | 19/19 | 62/62 |
+| held-out | 22/27 = 0.81 | 18/18 | 2/2 | 10/11 | - | - | 3/3 | 18/18 |
+
+Unchanged from the first round: the fixtures hold none of the reviewer's cases. Time: this run shared the
+machine with other agents' test suites (dev: orders_app 0.39 s, forge_mod 0.62 s, glow_mod 0.40 s median; the copy
+7.8 s median on dev and 6.7 s on held-out, mostly graph loading under load; two earlier runs of the same code gave
+0.23-0.27 s and 4.8-5.2 s on dev). An interleaved A/B on the same base copies (graph loaded each
+time, three rounds, the median of three reviews after a warm-up) gives V01-V03 1.19-1.25 s at 42d9b41 and
+1.32-1.41 s after the round (+9 to +13 %); the examples' fixtures O03, F02, G05 0.159 / 0.154 / 0.165 s and 0.160 /
+0.169 / 0.182 s.

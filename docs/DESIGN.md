@@ -55,7 +55,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D32 | Name-existence check | partial | Python only: `verinoda check` (files, `--diff`, `--stdin --as`) and `verinoda api`, MCP `code_check` / `api_members`, skill text. Not done: mod config keys and resource ids, JVM jars, JS/TS, `--against PKG==VER`, the environment fingerprint in snapshots. Measurements in BENCHMARKS.md (the fixture set was written by the rule author: in-sample). |
 | D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`; decision records (`verinoda/decisions.py`, schema v5 log, `decide record/import/guard/accept/waive/list`, MCP `decision_record`); guards and `decide check` (`verinoda/guards.py`, MCP `decision_check`, a one-line summary in `update`; critique's exclusivity check and feedback's exclusive corrections use the same engine). Guard mutations (54 cases on the three examples, written by the rule author, plus 22 forms from the two reviews added by the fixer: all in-sample): VIOLATED precision 1.00, recall 1.00 in reach, 13/13 out-of-reach forms named in limits or POSSIBLE; the old raw-regex scan on the same orders_app cases tp 7 fp 8 fn 6. `decide check` median 42 ms per example case, about 2 s (1.8-2.2 s) on the full Verinoda tree (3 guards; results in `benchmarks/results/decide-2026-09-25/`). The decision brief (`verinoda/decision_brief.py`, `decide brief/answer`, MCP `decision_brief`, answers through `decision_record(action='answer')`; `analyze` routes decide sub-questions to it): on orders_app, EN and TR question, 8/8 gold forces, 19/19 cited evidence re-checks, 5/5 gold question kinds - in-sample (the gold came with the design and the probes were written after it). Not built: `analyze` impact questions do not include violations; the UI shows no decision badge; claims for accepted guards (kinds `exclusive` / `layering`); an ADR's reasons are matched by a few phrasings only; `research.dependencies` itself still reads no Gradle/Maven (the guards and the brief read them). Intent routing: the last held-out set (held-out 4, 20 questions by the fixer, hashed before the review fixes' cue rules were written): precision 0.83, recall 0.50 - the recall bar (0.85) is not met; every other set (written, held-out 1-3, the reviewers' 52) is in-sample. Review round 3 (40 new questions, written before running the router: recall 0.55) added cues that make its set in-sample (20/20) and held-out 4 no longer clean (0.86 / 0.60, its new hit a phrasing section 6 had named): no clean held-out set is left. A missed choice question whose words may ask for a choice is at most `met_with_inference`; one without such words can still be judged `met`. |
 | D34 | Debug ledger (loop detection, strategies) | partial | Built 2026-09-25 (section 7): `verinoda debug start/try/status/diff/close`, strategies `differential/bisect/rerun/observe`, MCP `debug_start` / `debug_attempt` / `debug_status` / `debug_strategy` / `experiment_run`, schema v6. debugloops_v1 (12 sessions written by the builder, gold fixed before the rules ran; in-sample after three fixes): definitive precision 11/11, loop recall 8/8, 0/4 controls stopped, top strategy 8/8. A review found 27 problems (25 distinct: false stops, false "passed", unverified bisect ends, git-safety gaps); all fixed with regression tests (section 7.5), the benchmark scores unchanged after the fixes. Not built: a real agent session with and without the protocol. `debug try` overhead is copy-bound on big trees (median 2.4-5.0 s on 2,341 files, depending on machine load). |
-| D35 | Change review (`verinoda review`) | partial | Built 2026-09-25 (section 8): `verinoda review` (working tree vs HEAD, `--base`, `--staged`, a planned change with `--target` + `--change`), MCP `change_review` (34 tools), rule tables in `review_rules.py`, the review stored in `analyses`, a review step in both skills. review fixtures (36 dev + 11 held-out, gold hashed before any rule; one documented gold amendment before the first run): dev, in-sample, precision 0.92 and recall 1.00 at strong_inference or above; held-out, its only run with the rules frozen: precision 0.79 (bar 0.8 not met), recall 18/18, must-say-unknown 2/2; 0.81 after seven later fixes (one from that run, six from reviewing Verinoda's own branch; no longer clean). Time with the graph loaded: 0.19-0.21 s median on the examples, 1.8 s median (5.4 s max) on the 380-file copy. First review round (section 8.5): the 41 findings of two reviewers fixed with regression tests (the time finding partly): `--staged` reads the staged tree everywhere and runs it or refuses, SQL must be SQL-shaped, guard refactors are told apart from removals, removed methods and module-attribute call sites are found, a value changed on one line and saved later is found, `no_test_reaches` only for symbols with a static caller (`reach_unknown` otherwise); after it dev 67/73 = 0.92 and 62/62, held-out 22/27 = 0.81 and 18/18 (no longer clean), 1.7 s median on the copy. Not built: findings as claims and critique on them, the entail predicate for a carried value, line-level coverage of changed lines, nested-loop and unbounded-append rules, value and parameter flow outside Python. |
+| D35 | Change review (`verinoda review`) | partial | Built 2026-09-25 (section 8): `verinoda review` (working tree vs HEAD, `--base`, `--staged`, a planned change with `--target` + `--change`), MCP `change_review` (34 tools), rule tables in `review_rules.py`, the review stored in `analyses`, a review step in both skills. review fixtures (36 dev + 11 held-out, gold hashed before any rule; one documented gold amendment before the first run): dev, in-sample, precision 0.92 and recall 1.00 at strong_inference or above; held-out, its only run with the rules frozen: precision 0.79 (bar 0.8 not met), recall 18/18, must-say-unknown 2/2; 0.81 after seven later fixes (one from that run, six from reviewing Verinoda's own branch; no longer clean). Time with the graph loaded: 0.19-0.21 s median on the examples, 1.8 s median (5.4 s max) on the 380-file copy. First review round (section 8.5): the 41 findings of two reviewers fixed with regression tests (the time finding partly): `--staged` reads the staged tree everywhere and runs it or refuses, SQL must be SQL-shaped, guard refactors are told apart from removals, removed methods and module-attribute call sites are found, a value changed on one line and saved later is found, `no_test_reaches` only for symbols with a static caller (`reach_unknown` otherwise); after it dev 67/73 = 0.92 and 62/62, held-out 22/27 = 0.81 and 18/18 (no longer clean), 1.7 s median on the copy. Second review round (section 8.6): 20 findings of a second reviewer fixed with regression tests - a check that now runs after the work it protected is `guard-after-work` / `check-call-after-work`, security calls are compared call by call, assigned aliases and renamed re-exports reach the guards engine, callers newer than the snapshot are searched and named (`graph_stale`), edges between a monorepo's packages are kept; dev and held-out numbers unchanged, +9 to +13 % time on the copy. Not built: findings as claims and critique on them, the entail predicate for a carried value, line-level coverage of changed lines, nested-loop and unbounded-append rules, value and parameter flow outside Python. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -1697,6 +1697,87 @@ flow into later statements, removed check calls, moved positional parameters and
 definitions are Python only; `map_view.go` (reviewer 2's R35) stays `reach_unknown`, since the graph has no edge
 into the MCP tool that encloses it; a 40-definition diff on the copy takes 8.7 s (the design's 6 s bar was set
 for fixture-sized changes; 13.4 s in the reviewer's run).
+
+### 8.6 Second review round (2026-09-26)
+
+A second reviewer ran scripted repros against commit 42d9b41 (and against 8e2cc3b and ed1c891 to tell
+regressions of the first round's fixes apart) and reported 20 findings (7 high, 8 medium, 5 low; 11 of them
+regressions of 8.5's relaxations or cost cuts). Each was reproduced on 42d9b41 and fixed with a regression test
+in `tests/test_review.py` (section "review round 2"; 17 new tests and 2 extended ones, all 19 failing on 42d9b41).
+What changed in the decisions of 8.2 and 8.5:
+
+- **A check counts as the same check only while it still runs before the work.** A guard kept, split, extracted
+  into a helper or moved into a callee that now runs after a sink statement or a call reaching one (within 2
+  hops) that the base guard preceded is `guard-after-work` (statically_verified when the statement holds the
+  sink itself, strong_inference through a callee); a call to a check (a callee that raises on bad input or is
+  named like a check) moved below such work is `check-call-after-work` (strong_inference). Statements are
+  compared as text (Python calls by their source), and a text the base version already ran before the guard as
+  often is not counted. Before, a split guard whose second half followed the DELETE, or a guard calling an
+  extracted helper after the commit, was "the same check" (weak_inference, exit 0).
+- **guard-moved** needs a call between the two definitions (the guarded one calls the destination, or the
+  destination calls it - then the check must precede that call); the same check text added to an unrelated
+  function is no move, and the removal stays `guard-removed`.
+- **guard-restructured** needs a condition the base version did not have (the base's conditions, the removed
+  guard's own aside, are consumed first) whose branch holds a statement that followed the guard in the base
+  version. An unchanged `if is_admin(user): audit(...)` after the write no longer turns a deleted
+  `if not is_admin(user): raise` into a weak finding.
+- **Security operations on changed lines** are compared as calls, not as operation kinds: "holds ... too"
+  (weak_inference) only for the same call text with parameters renamed by position; the same kind of call with
+  other arguments "changes" it - statically_verified when its arguments read a name they did not read (a
+  constant command became a parameter), else strong_inference (a keyword with a constant added). Text rows of
+  other languages compare the whole code line.
+- **The guards engine is not skipped** for calls through a name that binds a security target under a name of its
+  own: an assignment (`run_cmd = subprocess.run`) or a project module's renamed re-export (`from app.compat import
+  run_command`, followed up to 4 modules deep); those names are passed to the engine, which found neither before
+  (the re-export was missed in every version).
+- **Files newer than the snapshot**: code files the last snapshot does not have with their current content are
+  searched by the Python call-site, removed-name and reader rules, and those naming a changed definition are a
+  `graph_stale` unknown (their edges are missing from the dependents). 8.5's cut to the graph's importing files
+  had silently dropped a caller committed after the last `update`. **Deviation** (cost): a file the snapshot has
+  and that was last written more than an hour before the snapshot was recorded is taken to be unchanged, not read
+  and hashed again; a tool that backdates modification times, or a scan that took longer than that, would hide a
+  newer caller there.
+- **Projects of one repository**: an INFERRED edge into another project root is kept when the caller imports
+  from that project (Python: its top-level package under the callee's project root; Java / Kotlin: an import of
+  the class or the same package; JS / TS: a relative import into it or its package.json name). Module names under
+  a project root count for the namesake rule too (`libs/core/core/repo.py` is `core.repo`). Before, every
+  cross-package edge of a monorepo or of a multi-loader Gradle mod (`common/`, `fabric/`) was dropped.
+- **`--staged --observe`** refuses when a staged file has unstaged changes (or a staged deletion is still on
+  disk), as `--run-tests` did; it traced the working tree and called it "equal to the index".
+- **IO in loops**: every call of the loop that reaches IO is compared with the base loop; a new one is reported
+  (strong_inference, the calls that were there named), not the first one found.
+- **Removed Python methods**: base classes are resolved through the file's imports; project bases (and theirs)
+  without the method keep callers at strong_inference, a base outside the project or unresolved caps them at
+  weak_inference; `.m(` calls that no rule bound are an `unresolved_callers` unknown also when other callers
+  were bound.
+- **Removed sinks** are compared over the definition's own spans only: the file's line diff had paired a
+  removed `commit()` with the same line in a new method below it. A removed sink line whose code is now in a
+  helper the definition newly calls (`self._flush()`) is a move at weak_inference (found when re-running the
+  reviewer's repros: without the diff filter it had become a strong "removed").
+- **Call sites**: `Cls(...)` is a call site of `Cls.__init__` (arity checked, statically_verified through an
+  import); a name imported through a package's re-export (`pkg/__init__.py: from .rules import validate`) binds
+  to the changed function for call sites, removed names and readers.
+- **JS / TS removals** of a top-level function: strong_inference only for an import of it from its module and
+  calls through that import (or a namespace import); the word elsewhere - a template string, an import path, an
+  object key, a field - is weak_inference (at most 5).
+- Lows: package.json scripts other than lifecycle ones (`start`, `install`, `prepare` ...) are weak_inference
+  entry-point changes; readers of `.env` keys include `process.env.KEY` / `import.meta.env.KEY`; `--concerns` with
+  an unknown name is a usage error (exit 2); a config record's default lists the readers of the changed component's
+  accessor (`.maxDistance()`) in the files that see the class; an import statement edited in place is one
+  `module_statement` change with `base_names`, whose dropped names are still checked as removed.
+
+The held-out run after these fixes showed one duplicate they had introduced (HV1: a changed `subprocess.run(...)`
+and the `shell=True` added to it were two findings); a weaker finding on the same call is now folded into the
+stronger one. Measurements (docs/BENCHMARKS.md, "change review, second review round"; fixtures and gold unchanged,
+base copies indexed in the same session): dev (in-sample) 67/73 = 0.92, recall 62/62, must-say-unknown 9/9,
+changed symbols 36/36, gold dependents 19/19, gold lines in `read_first` 62/62; held-out (not clean) 22/27 = 0.81,
+18/18, 2/2, 10/11, 3/3, 18/18 - the first round's numbers: the fixtures hold none of the reviewer's cases. Time,
+interleaved A/B on the same base copies with the graph loaded: +9 to +13 % on the copy's dev fixtures (1.19-1.25 s
+-> 1.32-1.41 s), within noise to +10 % on the examples; most of it is the check of files newer than the snapshot.
+
+Not done in this round: the reviewer's labelled change set (R01-R47 of round 1) was not re-run as a whole; JS / TS
+and JVM removals still bind by text (imports and calls, not a resolver); a guard moved into a callee counts as
+before the work when the call to that callee is.
 
 ## Sources
 
