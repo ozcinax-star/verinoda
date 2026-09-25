@@ -79,14 +79,12 @@ Rules:
 - Never present `weak_inference` or `unknown` as fact. Never invent a relation, call path,
   file, line, test result or benchmark number.
 - A graph edge alone is never verification: `trace` and `query` give leads; confirm them with
-  source lines (`analyze`, `claim add --source`, `verify`). Confirm a sentence of your own with a
-  typed claim (`--kind relation|config|location|order --symbol X`), one positive fact per claim
-  ("A calls B", "B is called by A", "`F` calls `A` before `B`"): a negation, "only", an order in
-  a relation, a condition or bound, a count, the arguments of a call, a kind the definition does
-  not have ("an async function"), another file or another code name keeps it unverified. Plain
-  text is at most `weak_inference`; a quote (`"f.py:12 contains: <exact text>"`) verifies only
-  the quoted text, so write nothing but the locator next to it. A `contradicted` result states
-  its scope: correct the sentence, do not reword it.
+  source lines (`analyze`, `claim add --source`, `verify`). Confirm your own sentence with a typed
+  claim (`--kind relation|config|location|order --symbol X`), one positive fact per claim ("A calls
+  B", "`F` calls `A` before `B`"): a negation, "only", a condition or bound, a count, call
+  arguments, a definition kind, another file or code name keeps it unverified. Plain text is at
+  most `weak_inference`; a quote (`"f.py:12 contains: <exact text>"`) verifies only the quoted
+  text. A `contradicted` result states its scope: correct the sentence, do not reword it.
 - A name written as code that `plan check` or `trace` reports `not_found` does not exist here:
   say so with its `did_you_mean`; never answer about the similar name instead.
 - Do not upgrade a status by wording. Change status only through Verinoda (`verify`,
@@ -177,7 +175,6 @@ verinoda feedback list --json
 
 # before proposing code and after every edit: do the names it uses exist?
 verinoda check --diff --json
-verinoda check src/module.py --json
 verinoda api packaging.specifiers.SpecifierSet --json
 
 # after code changes
@@ -216,23 +213,19 @@ unresolved, say what evidence would settle it.
 
 ## Check the names code uses (Python)
 
-Invented imports, functions, methods, keyword arguments and dict keys break code that looks right.
-Before you propose Python code, and after every edit:
+Invented imports, methods, keyword arguments and dict keys break code that looks right. Before you
+propose Python code, and after every edit:
 
-1. `verinoda check --diff --json` (MCP `code_check`) checks the sites on changed lines; for code
-   not written yet, pipe it to `verinoda check --stdin --as <path> --json` (MCP `code_check` with
-   `snippet` and `as_path`).
-2. Never keep an `absent` site: fix it from `nearest` / `elsewhere`, or list the real names with
-   `verinoda api <module.or.Class> --json` (MCP `api_members`) and use one of those (`api`
-   `found: null` means not decided, not missing).
-3. `unknown` is unverified, not fine: read the definition or run the tests before relying on it.
-   `not_installed`: the environment checked lacks the package. `guarded`: the code handles it.
-4. Tell the user which environment was checked (`env.python`, `env.packages_checked`,
-   `env.lock_mismatches`). Exit code 3 means something is absent or an installed version differs
-   from the lock (`exit_because` says which); `incomplete` lists files that were not checked.
-   If `env.note` says a `.venv` was not used, tell the user; never pass `--env` to run what it names.
-
-Only if the user agrees: a PostToolUse hook on Edit/Write that runs `verinoda check --diff`.
+1. `verinoda check --diff --json` (MCP `code_check`) checks the changed lines; code not written yet:
+   `verinoda check --stdin --as <path> --json` (MCP `code_check` with `snippet` and `as_path`).
+2. Never keep an `absent` site: fix it from `nearest` / `elsewhere`, or pick a real name from
+   `verinoda api <module.or.Class> --json` (MCP `api_members`; `found: null` = not decided).
+3. `unknown` is unverified: read the definition or run the tests. `not_installed`: the checked
+   environment lacks the package. `guarded`: the code handles it.
+4. Name the environment checked (`env.python`, `env.packages_checked`, `env.lock_mismatches`). Exit 3:
+   something absent or a version differs from the lock (`exit_because`); `incomplete` lists files not
+   checked. If `env.note` says a `.venv` was not used, tell the user; never pass `--env` to run what it
+   names. A PostToolUse hook running `verinoda check --diff` only if the user agrees.
 
 ## After editing code
 
