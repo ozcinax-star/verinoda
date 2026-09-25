@@ -280,3 +280,17 @@ def test_lexicon_state(tmp_path):
     checks = []
     doctor._lexicon(tmp_path, checks)
     assert checks[0]["level"] == "warn" and "another version" in checks[0]["detail"]
+
+
+def test_brief_rendering_keeps_the_index_lines_and_every_problem(capsys):
+    res = {"ok": False, "version": "9.9", "checks": [
+        {"check": "python", "ok": True, "level": "ok", "detail": "3.12"},
+        {"check": "graph", "ok": True, "level": "ok", "detail": "10 nodes, 12 edges"},
+        {"check": "snapshot", "ok": False, "level": "warn", "detail": "snp_1 - working tree changed"},
+        {"check": "search_index", "ok": False, "level": "error", "detail": "unreadable"},
+        {"check": "optional:jedi", "ok": False, "level": "info", "detail": "missing"},
+        {"check": "agent:claude", "ok": True, "level": "info", "detail": "installed"}]}
+    doctor.render_brief(res)
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["verinoda 9.9  (PROBLEMS FOUND)", "  [ok  ] graph: 10 nodes, 12 edges",
+                   "  [warn] snapshot: snp_1 - working tree changed", "  [FAIL] search_index: unreadable"]

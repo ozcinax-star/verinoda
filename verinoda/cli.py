@@ -47,8 +47,17 @@ OBSERVE_LIST_CAP = 10
 
 # -- output helpers -------------------------------------------------------------
 
-def _dump(obj) -> str:
-    return json.dumps(obj, indent=2, ensure_ascii=False, default=str)
+def _dump(obj, pretty: bool | None = None) -> str:
+    """``--json`` output: indented on a terminal, compact otherwise (an agent or a pipe reads it; indentation
+    was a quarter of the bytes)."""
+    if pretty is None:
+        try:
+            pretty = sys.stdout.isatty()
+        except (AttributeError, ValueError):
+            pretty = False
+    if pretty:
+        return json.dumps(obj, indent=2, ensure_ascii=False, default=str)
+    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
 def _write(text: str) -> None:
@@ -307,10 +316,10 @@ def _r_derived(r: dict) -> None:
 # -- commands -------------------------------------------------------------------
 
 def cmd_doctor(args) -> int:
-    from verinoda.doctor import render, run
+    from verinoda.doctor import render, render_brief, run
 
     res = run(_repo(args))
-    _emit(args, res, render)
+    _emit(args, res, render_brief if args.brief else render)
     return 0 if res["ok"] else 1
 
 
@@ -647,7 +656,7 @@ def cmd_map(args) -> int:
         for lim in v["coverage"].get("limits", []):
             print(f"   limit: {lim}")
         body = {k: val for k, val in v.items() if k not in ("view", "coverage")}
-        text = _dump(body)
+        text = _dump(body, pretty=True)  # a view read line by line, cut at --max-lines
         lines = text.splitlines()
         _write("\n".join(lines[: args.max_lines]))
         if len(lines) > args.max_lines:
@@ -746,6 +755,8 @@ def _r_plan_check(r: dict) -> None:
     for lk in r.get("links") or []:
         where = f" {lk['label']} at {lk['at']} ({lk.get('tier')}, {lk.get('score')})" if lk.get("at") else ""
         extra = f"; rejected candidates: {', '.join(lk['rejected'])}" if lk.get("rejected") else ""
+        if lk.get("did_you_mean"):
+            extra += f"; did you mean: {', '.join(map(str, lk['did_you_mean'][:5]))}"
         print(f"  {lk['mention']} {lk['text']!r}: {lk['status']}{where}{extra}")
     for ref in r.get("references") or []:
         ver = f" @ {ref['version_used']}" if ref.get("version_used") else ""
@@ -2115,7 +2126,9 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--json", action="store_true", help="print structured JSON")
         return sp
 
-    add("doctor", cmd_doctor, "check installation, index, agent skills and MCP configuration")
+    sp = add("doctor", cmd_doctor, "check installation, index, agent skills and MCP configuration")
+    sp.add_argument("--brief", action="store_true",
+                    help="the graph and snapshot lines and every failed or warning check, nothing else")
     sp = add("setup", cmd_setup, "one step for a project: init + scan/update + skills for the agents found "
                                  "on PATH (safe to re-run)", repo=False)
     sp.add_argument("path", nargs="?", default=".")

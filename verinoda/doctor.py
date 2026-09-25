@@ -454,6 +454,18 @@ def _references(repo: Path, checks: list[dict]) -> dict:
             "blocked_hosts": blocked, "packaging": packaging_ok}
 
 
+def render_brief(res: dict) -> None:
+    """``doctor --brief``: what a session needs before its first question - the graph and snapshot lines
+    and every check that failed or warns; nothing that is fine or only informative."""
+    print(f"verinoda {res['version']}  ({'OK' if res['ok'] else 'PROBLEMS FOUND'})")
+    sym = {"warn": "warn", "error": "FAIL"}
+    for c in res["checks"]:
+        if c["check"] in ("graph", "snapshot", "database"):
+            print(f"  [{'ok  ' if c['ok'] else sym.get(c['level'], c['level'])}] {c['check']}: {c['detail']}")
+        elif not c["ok"] and c["level"] in sym:
+            print(f"  [{sym[c['level']]}] {c['check']}: {c['detail']}")
+
+
 def render(res: dict) -> None:
     print(f"verinoda {res['version']}  ({'OK' if res['ok'] else 'PROBLEMS FOUND'})")
     sym = {"ok": "ok  ", "warn": "warn", "error": "FAIL", "info": "info"}

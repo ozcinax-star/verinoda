@@ -472,6 +472,11 @@ apart from `atlas.db` because it is disposable.
   locator, a verified context claim whose lines a printed passage shows left out and counted.
   Over the MCP cap the critique log and the plan's links are cut before the passages, and the
   passages (from the end) before any claim. `--json` keeps the full record.
+- The skills read the CLI's text, not its JSON (2026-09-26): JSON cost 2-5x the tokens for the
+  same content (analyze 3,824 vs 717 tokens, decide brief 13,206 vs 2,985, doctor 2,711 vs 795),
+  and the text carries every field the protocol reads. `--json` stays for programs and prints
+  compact JSON off a terminal (indentation was a quarter of the bytes); `doctor --brief` prints
+  the graph and snapshot lines and every problem, nothing else.
 
 **D21. Build-time work is not repeated at query time.**
 

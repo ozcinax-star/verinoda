@@ -187,7 +187,7 @@ def test_skills_understand_the_question_and_resolve_references_first(agent):
     assert order == sorted(order)
     refs = body.split("## References the user gives", 1)[1].split("\n## ", 1)[0]
     for needle in ("links", "package names", "versions", "commits", "PR/issue", "papers", "docs",
-                   'verinoda resolve "<message>" --json', "reference_resolve", "<name> @ <pin> (basis: <basis>)",
+                   'verinoda resolve "<message>"', "reference_resolve", "<name> @ <pin> (basis: <basis>)",
                    "mismatch", "Never substitute the default branch", "questions_for_user", "next_step",
                    "verinoda research --resolution <id> --reference-id <rN>"):
         assert needle in refs, needle
@@ -211,12 +211,15 @@ def test_skill_examples_parse_with_the_real_cli(agent):
         argv = shlex.split(ln)[1:]
         build_parser().parse_args(argv)  # SystemExit (argparse error) fails the test
         seen.add(" ".join(argv[:2]) if argv[0] in ("feedback", "experiment", "claim") else argv[0])
-        if argv[0] not in ("scan", "update"):
-            assert "--json" in argv, ln
+        # text by default (2026-09-26): the CLI's text is written for the model; JSON cost 2-5x the tokens
+        # (analyze 3,824 vs 717, decide brief 13,206 vs 2,985) and the skill reads no field the text leaves out
+        assert "--json" not in argv, ln
     for cmd in ("analyze", "trace", "verify", "research", "challenge", "query", "map", "update",
                 "feedback add", "feedback process", "experiment run", "compare", "claim show",
                 "plan", "resolve", "observe", "resolve-call"):
         assert cmd in seen, cmd
+    assert "Add `--json` only for a field the text" in " ".join(text.split())
+    assert "doctor --brief" in text and "doctor --json" not in text
     # the plan flow is shown end to end: draft, check, then analyze with the plan file
     assert any(ln.startswith("verinoda plan draft ") for ln in lines)
     assert any(ln.startswith("verinoda plan check ") for ln in lines)

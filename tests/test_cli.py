@@ -996,6 +996,9 @@ def test_names_written_as_code_are_never_replaced_by_similar_ones(repo):
     link = res["plan_check"]["links"][0]
     assert link["status"] == "not_found" and link["did_you_mean"] == ["place_order (orders/service.py:19)"]
     assert not any("place_order()" in c["text"] for c in res["claims"])  # nothing about the similar name
+    # the default text says so too (the skill reads the text): not_found with its did_you_mean
+    r = ra("analyze", "Where is place_orders defined?", "--repo", str(repo), cwd=repo)
+    assert "plan check: place_orders: not_found (did you mean place_order (orders/service.py:19))" in r.stdout
     r = ra("trace", "create_order_handler", "place_orders", "--repo", str(repo), cwd=repo)
     assert r.returncode == 2 and "[unresolved" in r.stdout
     assert "target: no symbol named `place_orders` in this repository; nearest: place_order " \
@@ -1304,3 +1307,14 @@ def test_no_index_is_made_outside_a_project_or_when_turned_off(tmp_path, capsys,
     repo = _git_copy(tmp_path / "app")
     with pytest.raises(SystemExit, match="has no index yet"):
         cli.main(["query", "anything", "--repo", str(repo)])
+
+
+def test_json_is_compact_off_a_terminal_and_indented_on_one(monkeypatch):
+    from verinoda import cli
+
+    obj = {"a": [1, 2], "b": "ç"}
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False, raising=False)
+    assert cli._dump(obj) == '{"a":[1,2],"b":"ç"}'  # captured, as an agent or a pipe reads it
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
+    assert cli._dump(obj) == '{\n  "a": [\n    1,\n    2\n  ],\n  "b": "ç"\n}'
+    assert cli._dump(obj, pretty=False) == '{"a":[1,2],"b":"ç"}'
