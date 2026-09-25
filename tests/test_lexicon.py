@@ -226,6 +226,13 @@ def test_seed_keys_match_softened_final_consonants():
     assert not lexicon.seed_key_matches("istek", "istegx")
 
 
+def test_seed_translates_tells_whether_a_name_part_is_a_key_for_an_english_word():
+    """Used to keep a lexicon pair such as start -> baslat for a word the code names things with."""
+    assert lexicon.seed_translates("baslat", "start") and lexicon.seed_translates("Baslatici", "start")
+    assert lexicon.seed_translates("komut", "commands")  # the English word is compared by its stem
+    assert not lexicon.seed_translates("baslat", "update") and not lexicon.seed_translates("issue", "start")
+
+
 def test_seed_covers_command_and_home_directory_words():
     """Found by running Verinoda on its own repo: "init ve scan komutları ev dizininde ... reddediyor mu?"."""
     from verinoda import textnorm as tn

@@ -19,6 +19,7 @@ import pytest  # noqa: E402
 import verinoda  # noqa: E402
 
 from verinoda import index, retrieval, search_index, workflow  # noqa: E402
+from verinoda import lexicon as real_lexicon  # noqa: E402
 from verinoda.store import open_store  # noqa: E402
 
 CORE = '''"""Core module of the mini app."""
@@ -274,14 +275,18 @@ def test_caller_expansions_and_the_lexicon_are_weighted_below_the_question(mini,
     assert _query(mini, "denemeler nerede?", repo=mini.root).weights  # never breaks retrieval
 
 
-def test_a_code_word_in_a_turkish_question_keeps_only_translation_pairs_of_the_lexicon(mini, monkeypatch):
-    tok = {w: search_index.tokens(w)[0] for w in ("attempt", "environ", "command", "retries")}
+def test_a_code_word_in_a_turkish_question_keeps_only_lexicon_pairs_that_carry_it(mini, monkeypatch):
+    tok = {w: search_index.tokens(w)[0] for w in ("attempt", "environ", "command", "retries", "testrunner",
+                                                  "calistir", "rerun")}
 
     class FakeLexicon:
         def associations(self, word):
             if word == "runner":  # the code names a class with it (Runner)
-                return [{"part": "attempt", "score": 1.0}, {"part": "environ", "score": 0.9},
-                        {"part": "command", "score": 0.8, "via": "translation"}]
+                return [{"part": "attempt", "score": 1.0}, {"part": "testrunner", "score": 0.95},
+                        {"part": "environ", "score": 0.9}, {"part": "command", "score": 0.8, "via": "translation"}]
+            if word == "run":  # and a method (Runner.run)
+                return [{"part": "environ", "score": 1.0}, {"part": "calistir", "score": 0.9},
+                        {"part": "rerun", "score": 0.8}]
             return [{"part": "retries", "score": 0.9}] if word.startswith("deneme") else []
 
         def seed(self, words):
@@ -289,30 +294,46 @@ def test_a_code_word_in_a_turkish_question_keeps_only_translation_pairs_of_the_l
 
     fake = types.ModuleType("verinoda.lexicon")
     fake.load = lambda repo: FakeLexicon()
+    fake.seed_translates = real_lexicon.seed_translates
     monkeypatch.setitem(sys.modules, "verinoda.lexicon", fake)
     monkeypatch.setattr(verinoda, "lexicon", fake, raising=False)
-    got = {(e["from"], e["to"], e["via"]) for e in _query(mini, "runner denemeleri nasıl çalıştırıyor?",
-                                                          repo=mini.root).expansions}
-    # the names it merely occurs with are its neighbours, not its meaning; the repository's own
-    # translation pair stays, and a word the code does not use keeps its associations
-    assert ("runner", tok["command"], "lexicon") in got
+
+    def pairs(q):
+        return {(e["from"], e["to"]) for e in _query(mini, q, repo=mini.root).expansions if e["via"] == "lexicon"}
+
+    got = pairs("runner denemeleri nasıl çalıştırıyor?")
+    # the names it merely occurs with are its neighbours, not its meaning; the repository's own translation
+    # pair and a name built on the word stay, and a word the code does not use keeps its associations
+    assert {("runner", tok["command"]), ("runner", tok["testrunner"])} <= got
     assert not [x for x in got if x[0] == "runner" and x[1] in (tok["attempt"], tok["environ"])]
-    assert ("denemeleri", tok["retries"], "lexicon") in got
+    assert ("denemeleri", tok["retries"]) in got
+    # a name the seed dictionary translates to the word stays (calistir -> run); a three-letter word is
+    # not looked for inside other names (rerun)
+    assert {x[1] for x in pairs("run nerede çağrılıyor?") if x[0] == "run"} == {tok["calistir"]}
 
 
-def test_an_unconfirmed_turkish_stem_expands_only_to_its_own_inflections(tmp_path):
+def test_an_unconfirmed_turkish_stem_expands_the_more_narrowly_the_shorter_it_is(tmp_path):
     root = tmp_path / "trstem"
     _write(root, "a/money.py", "def para_birimi(para):\n    return para\n")
     _write(root, "a/text.py", "def split_paragraph(paragraph):\n    return paragraph\n")
-    _write(root, "a/pages.py", "def sayfa_goster(sayfa):\n    return sayfa\n")
+    _write(root, "a/pages.py", 'def sayfa_goster(sayfa):\n    """Say which page is shown."""\n    return sayfa\n')
+    _write(root, "a/wisp.py", "class WispSpawner:\n    def spawn(self, chunk):\n        return chunk\n")
+    _write(root, "a/project.py", "def find_project_root(path):\n    return path\n")
+    _write(root, "a/users.py", "def sil(user_id):\n    return user_id\n\n\ndef silent_mode():\n    return True\n")
     g = _scan(root)
 
     def stems(q):
         return {e["to"] for e in _query(g, q).expansions if str(e["via"]).startswith("turkish stem")}
 
+    # four letters: the stem inflected, for a name its first part, in snake_case or camelCase
     got = stems("Paraları kim hesaplıyor?")
     assert {"para", "para_birimi"} <= got and "paragraph" not in got  # paragraph is another word
-    assert not stems("Kaç satır sayıyor?")  # a three-letter stem (say) is not sayfa (page)
+    assert "wispspawner" in stems("Wispler nerede doğuyor?")
+    # five letters or more: a Turkish spelling of an English word (proje -> project)
+    assert "project" in stems("Projenin kökünü kim buluyor?")
+    # three letters: only the stem itself, when the code names something with it (sil, not silent)
+    assert stems("Kullanıcı nasıl siliniyor?") == {"sil"}
+    assert not stems("Kaç satır sayıyor?")  # say is only a word of a docstring here, and not sayfa (page)
 
 
 def test_a_term_reached_by_several_routes_keeps_the_highest_weight(mini):
