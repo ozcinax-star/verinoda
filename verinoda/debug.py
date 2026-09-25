@@ -973,12 +973,66 @@ def rerun(store: Store, repo: Path, session_id: str | None = None, *, times: int
 
 
 def observe(store: Store, repo: Path, session_id: str | None = None, *, hypothesis: str | None = None) -> dict:
-    """The repro once more on the current tree under the call tracer (a probe attempt)."""
+    """The repro once more on the current tree under the call tracer (a probe attempt).
+
+    Besides the attempt record: ``edits_reached`` - for each Python function changed vs the base,
+    the failing tests that reached it (an empty list in a complete trace means not reached in this
+    run) - and ``chain``: the calls observed from the first failing test to its crash symbol.
+    """
     sess = _session(store, session_id)
     if not experiments._is_pytest(list(sess["command"])):
         raise DebugError("the call tracer needs a pytest repro command")
-    return attempt(store, repo, sess["id"], hypothesis=hypothesis or "instrumented run: are the edits reached?",
-                   expect="fail", kind="probe", trace=True)
+    res = attempt(store, repo, sess["id"], hypothesis=hypothesis or "instrumented run: are the edits reached?",
+                  expect="fail", kind="probe", trace=True)
+    row = _attempts_by_n(store, sess["id"]).get(res["attempt"]) or {}
+    tr = row.get("trace") or {}
+    if not tr.get("run_id"):
+        return res
+    reached_by: dict[str, list[str]] = {}
+    for c in (row.get("touched") or {}).get("vs_base") or []:
+        for s in c.get("symbols") or []:
+            if c["path"].endswith(".py") and (c.get("kinds") or {}).get(s) == "def":
+                key = f"{c['path']}::{s}"
+                reached_by[key] = [t_ for t_ in tr.get("failing") or [] if key in ((tr.get("reached") or {}).get(t_)
+                                                                                   or [])]
+    res["edits_reached"] = {"complete_trace": bool(tr.get("complete")), "by_failing_tests": reached_by,
+                            "note": "run-scoped: an empty list in a complete trace means the failing tests did not "
+                                    "reach that function in this run"}
+    fails = (row.get("signature") or {}).get("failures") or []
+    if fails and fails[0].get("test") and fails[0].get("path") and fails[0].get("symbol"):
+        res["chain"] = _call_chain(store, tr["run_id"], fails[0]["test"], fails[0]["path"], fails[0]["symbol"])
+    return res
+
+
+def _call_chain(store: Store, run_id: str, test: str, path: str, symbol: str) -> list[str]:
+    """Shortest chain of observed calls (in ``test``'s call phase) from the test function to ``path::symbol``."""
+    rows = store.all("SELECT caller_path, caller_qual, callee_path, callee_qual, tests FROM runtime_calls "
+                     "WHERE run_id = ? AND callee_path != '<ext>'", (run_id,))
+    ctx = f"{test}|call"
+    adj: dict[str, set[str]] = {}
+    for r in rows:
+        if ctx not in (r.get("tests") or []):
+            continue
+        a = f"{r['caller_path']}::{failsig.clean_qual(r['caller_qual'])}"
+        b = f"{r['callee_path']}::{failsig.clean_qual(r['callee_qual'])}"
+        adj.setdefault(a, set()).add(b)
+    parts = test.split("::")
+    start = f"{parts[0]}::{'.'.join(p.split('[')[0] for p in parts[1:])}"
+    goal = f"{path}::{symbol}"
+    prev: dict[str, str | None] = {start: None}
+    queue = [start]
+    while queue:
+        cur = queue.pop(0)
+        if cur == goal:
+            chain = [cur]
+            while prev[chain[-1]] is not None:
+                chain.append(prev[chain[-1]])  # type: ignore[arg-type]
+            return list(reversed(chain))
+        for nxt in sorted(adj.get(cur, ())):
+            if nxt not in prev:
+                prev[nxt] = cur
+                queue.append(nxt)
+    return []
 
 
 # -- status, diff, close --------------------------------------------------------------------------------

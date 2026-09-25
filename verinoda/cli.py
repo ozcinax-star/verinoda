@@ -1303,6 +1303,15 @@ def _r_debug_attempt(r: dict) -> None:
     for c in tree.get("vs_prev") or []:
         print(f"  changed since the previous attempt: {c['path']}" + (f" ({', '.join(c['symbols'])})" if c.get("symbols")
                                                                        else ""))
+    er = r.get("edits_reached") or {}
+    for sym, tests in (er.get("by_failing_tests") or {}).items():
+        if tests:
+            print(f"  edit reached: {sym} by {', '.join(tests[:3])}")
+        else:
+            print(f"  edit NOT reached: {sym}" + (" (complete trace; this run only)" if er.get("complete_trace")
+                                                  else " (the trace is incomplete: unknown)"))
+    if r.get("chain"):
+        print("  call chain to the crash: " + " -> ".join(r["chain"]))
     for f in r.get("loop") or []:
         print(f"  loop [{f['strength']}{', suspended' if f.get('suspended') else ''}] {f['rule']}: {f['text']}")
     for i, s in enumerate(r.get("strategies") or [], 1):

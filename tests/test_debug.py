@@ -88,6 +88,12 @@ def test_a_looping_session_is_stopped_and_the_differential_finds_the_cause(tmp_p
     changed_by_test = {"tests/test_pricing.py", "orders/pricing.py"}
     assert {k for k in before if before[k] != after.get(k)} <= changed_by_test  # only the test's own edits
     assert "fixed" not in json.dumps(status).lower()
+    obs = debug.observe(st, repo)  # instrumented run: are the edits reached, and how does the test get there
+    assert obs["trace"]["complete"] and obs["edits_reached"]["complete_trace"]
+    assert obs["edits_reached"]["by_failing_tests"]["orders/pricing.py::compute_total"] == [
+        "tests/test_service.py::test_place_and_fetch_roundtrip"]
+    assert obs["chain"] == ["tests/test_service.py::test_place_and_fetch_roundtrip", "orders/service.py::place_order",
+                            "orders/pricing.py::compute_total"]
 
 
 def test_closing_needs_a_passing_attempt_on_the_current_tree(tmp_path):

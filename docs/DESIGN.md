@@ -716,9 +716,10 @@ catches the benchmark's wrong finding in 6 ms.
 
 ### 6.4 Not done / limits
 
-- The differential trace (edge sets of a passing vs a failing run); the call chain into the crash
-  symbol from a trace. `narrowing` and `order_dependent` were added after the benchmark and are covered
-  by tests only.
+- The differential trace (edge sets of a passing vs a failing run). `narrowing`, `order_dependent`
+  and the `observe` report (which failing tests reached each edited function; the observed call chain
+  from the first failing test to its crash symbol) were added after the benchmark and are covered by
+  tests only.
 - A real agent session with and without the protocol; the container isolation path; Gradle/Maven
   runs (agent-reported runs only).
 - A copy per run makes big trees slow; reusing a per-session copy synced by content id would remove
