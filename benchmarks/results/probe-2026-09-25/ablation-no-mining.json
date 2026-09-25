@@ -1,0 +1,961 @@
+{
+ "gold_sha256": "4a2265ec1e0c891b5c29d5fc022a46cd08bdbe2aa25101a8158db32748ed6db3",
+ "python": "3.12.0",
+ "platform": "win32",
+ "hypothesis": "on when installed",
+ "boundary_mining": "off (ablation)",
+ "summary": {
+  "detection": "19/22",
+  "missed": [
+   "D01",
+   "D04",
+   "D11"
+  ],
+  "false_alarms_equivalent": "0 of 0 runs (0 fixtures)",
+  "false_alarm_ids": [],
+  "equivalent_not_clean": {},
+  "false_alarms_scaling_off": 0,
+  "refusals_correct": "0/0",
+  "refusal_misses": [],
+  "refusals_incorrect": "0/0",
+  "unsupported_correct": "0/0",
+  "caught_by_existing_tests": [
+   "D05",
+   "D15"
+  ],
+  "detection_on_test_surviving": "17/20",
+  "reproduced": "22/22",
+  "time_per_probe_s": {
+   "median": 3.25,
+   "p90": 3.7,
+   "max": 13.11,
+   "n": 23
+  }
+ },
+ "fixtures": [
+  {
+   "id": "D01",
+   "kind": "boundary off-by-one",
+   "gold": "change",
+   "target": "orders/pricing.py::apply_discount",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": false
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base f43b7a5ac832 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.375,
+     "wall_s": 2.375,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "D02",
+   "kind": "rounding changed to truncation",
+   "gold": "change",
+   "target": "orders/pricing.py::apply_discount",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "apply_discount: 3 kind(s) of behaviour difference between the base cc5f7c095a52 and the working tree in 300 inputs (probe prb_07b09df84480). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "new_exception",
+      "value_changed",
+      "numeric_drift"
+     ],
+     "examples": {
+      "new_exception": "apply_discount(1e+308)",
+      "value_changed": "apply_discount(100.05)",
+      "numeric_drift": "apply_discount(6595441327597971.0)"
+     },
+     "reproduced": [
+      true,
+      true,
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.OverflowError"
+     ],
+     "duration_s": 3.312,
+     "wall_s": 3.312,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified",
+      "experiment_verified",
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D03",
+   "kind": "B1: off-by-one + truncation",
+   "gold": "change",
+   "target": "orders/pricing.py::apply_discount",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "apply_discount: 3 kind(s) of behaviour difference between the base f4cceb9edb2c and the working tree in 300 inputs (probe prb_076ca3b1f93c). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "new_exception",
+      "value_changed",
+      "numeric_drift"
+     ],
+     "examples": {
+      "new_exception": "apply_discount(1e+308)",
+      "value_changed": "apply_discount(100.05)",
+      "numeric_drift": "apply_discount(6595441327597971.0)"
+     },
+     "reproduced": [
+      true,
+      true,
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.OverflowError"
+     ],
+     "duration_s": 3.297,
+     "wall_s": 3.297,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified",
+      "experiment_verified",
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D04",
+   "kind": "B2: len boundary through an imported constant",
+   "gold": "change",
+   "target": "orders/service.py::validate_items",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": false
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "validate_items: no behaviour difference found between the base 54ff7b881205 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.484,
+     "wall_s": 2.484,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "D05",
+   "kind": "removed guard (empty order)",
+   "gold": "change",
+   "target": "orders/service.py::validate_items",
+   "tests_pass_on_working_tree": false,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "validate_items: 1 kind(s) of behaviour difference between the base 0ce85c39f89f and the working tree in 300 inputs (probe prb_d73da5d946f0). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "exception_removed"
+     ],
+     "examples": {
+      "exception_removed": "validate_items([])"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.641,
+     "wall_s": 3.657,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D06",
+   "kind": "B3: slice bound drops items",
+   "gold": "change",
+   "target": "orders/pricing.py::compute_total",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "compute_total: 1 kind(s) of behaviour difference between the base ff80e2cb5731 and the working tree in 300 inputs (probe prb_b483ed14a943). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "compute_total([{'price': -1.845559424900551e-270, 'qty': 84}, {'price': -3.1201386986044332e+16, 'qty': -372709217}, {'price': 6.517662958091309e+16, 'qty': -6327740}, {'price': 6.575829185801544e+16, 'qty': 342...)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.703,
+     "wall_s": 3.718,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D07",
+   "kind": "B4: unicode mishandling in a regex",
+   "gold": "change",
+   "target": "orders/textutil.py::customer_key",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "customer_key: 1 kind(s) of behaviour difference between the base 50bac833a77b and the working tree in 300 inputs (probe prb_6963f39012dc). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "customer_key('a-b_c.d')"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.11,
+     "wall_s": 3.125,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D08",
+   "kind": "unicode: casefold -> lower",
+   "gold": "change",
+   "target": "orders/textutil.py::normalize_city",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "normalize_city: 1 kind(s) of behaviour difference between the base 3cfda9015683 and the working tree in 300 inputs (probe prb_a52a6427dd4c). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "normalize_city('\u00df')"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.266,
+     "wall_s": 3.266,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D09",
+   "kind": "removed guard (division by zero)",
+   "gold": "change",
+   "target": "orders/mathutil.py::safe_div",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "safe_div: 1 kind(s) of behaviour difference between the base 045278e01f99 and the working tree in 300 inputs (probe prb_a947de8709c8). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "new_exception"
+     ],
+     "examples": {
+      "new_exception": "safe_div(1.0, 0.0)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.ZeroDivisionError"
+     ],
+     "duration_s": 3.516,
+     "wall_s": 3.516,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D10",
+   "kind": "swapped condition (and -> or)",
+   "gold": "change",
+   "target": "orders/rules.py::is_eligible",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "is_eligible: 1 kind(s) of behaviour difference between the base 0bc87070bc7e and the working tree in 300 inputs (probe prb_3d050d73c228). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "is_eligible(0, True)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.359,
+     "wall_s": 3.375,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D11",
+   "kind": "len off-by-one (<= -> <)",
+   "gold": "change",
+   "target": "orders/textutil.py::title_ok",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": false
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "title_ok: no behaviour difference found between the base 432d0647652b and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.766,
+     "wall_s": 1.766,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "D12",
+   "kind": "changed default (digits 2 -> 1)",
+   "gold": "change",
+   "target": "orders/mathutil.py::percent",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "percent: 1 kind(s) of behaviour difference between the base 831af8591eb6 and the working tree in 300 inputs (probe prb_62e8283fbec4). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "percent(1.0, 0.3)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.ZeroDivisionError"
+     ],
+     "duration_s": 3.047,
+     "wall_s": 3.063,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D13",
+   "kind": "range bound off-by-one",
+   "gold": "change",
+   "target": "orders/rules.py::chunk",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "chunk: 1 kind(s) of behaviour difference between the base 9ae93a5512d7 and the working tree in 300 inputs (probe prb_eda34a056d3e). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "chunk([0], 1)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.625,
+     "wall_s": 3.625,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D14",
+   "kind": "swapped min/max",
+   "gold": "change",
+   "target": "orders/mathutil.py::clamp",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "clamp: 1 kind(s) of behaviour difference between the base d268994b685b and the working tree in 300 inputs (probe prb_14f185e762d1). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "clamp(1, 1, 0)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.078,
+     "wall_s": 3.078,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D15",
+   "kind": "changed default (currency)",
+   "gold": "change",
+   "target": "orders/rules.py::format_price",
+   "tests_pass_on_working_tree": false,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "format_price: 1 kind(s) of behaviour difference between the base 966f1ab57c78 and the working tree in 300 inputs (probe prb_318485f2f363). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "format_price(0.0)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.031,
+     "wall_s": 3.031,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D16",
+   "kind": "B8: quadratic loop",
+   "gold": "scaling",
+   "target": "orders/pricing.py::compute_total",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "flagged": true,
+    "false_alarms_without_scaling": 0
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "compute_total: 1 kind(s) of behaviour difference between the base fc3676ff65c4 and the working tree in 300 inputs (probe prb_a06d15177d7f). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "growth_changed"
+     ],
+     "examples": {
+      "growth_changed": null
+     },
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": "the working tree grows about 183.03x per 10x more input against 6.95x at the base, in all 3 rounds (rough timing)",
+     "undeclared": [],
+     "duration_s": 9.484,
+     "wall_s": 9.484,
+     "seed": 0,
+     "options": {
+      "scaling": true
+     },
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "compute_total: no behaviour difference found between the base fc3676ff65c4 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 4.516,
+     "wall_s": 4.516,
+     "seed": 0,
+     "options": {
+      "scaling": false
+     },
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "D17",
+   "kind": "B6: save per item (side effects allowed)",
+   "gold": "change",
+   "target": "orders/service.py::place_order",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "place_order: 1 kind(s) of behaviour difference between the base a27f3934b1b3 and the working tree in 300 inputs (probe prb_2c239aa9f1ab). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "place_order(OrderRepository(':memory:'), '', [{'price': 1.0199450354179016e+16, 'qty': 747}, {'price': -7.676043748639357e+110, 'qty': 0}])"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "refused",
+      "reasons": [
+       {
+        "kind": "sql-write",
+        "at": "orders/repository.py:17"
+       },
+       {
+        "kind": "orm-write",
+        "at": "orders/repository.py:19"
+       },
+       {
+        "kind": "db-connection",
+        "at": "orders/repository.py:10"
+       },
+       {
+        "kind": "sql-write",
+        "at": "orders/repository.py:12"
+       }
+      ]
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 13.11,
+     "wall_s": 13.11,
+     "seed": 0,
+     "options": {
+      "allow_side_effects": true
+     },
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D18",
+   "kind": "whitespace handling",
+   "gold": "change",
+   "target": "orders/textutil.py::display_name",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "display_name: 1 kind(s) of behaviour difference between the base 973c3606dd5e and the working tree in 300 inputs (probe prb_5aacb27094d9). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "display_name('tab\\tsep')"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.938,
+     "wall_s": 2.938,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D19",
+   "kind": "changed module constant",
+   "gold": "change",
+   "target": "orders/pricing.py::apply_discount",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "apply_discount: 1 kind(s) of behaviour difference between the base dfd96f4eb034 and the working tree in 300 inputs (probe prb_326744213ecd). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "apply_discount(100.05)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.046,
+     "wall_s": 3.046,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D20",
+   "kind": "boundary off-by-one (< -> <=)",
+   "gold": "change",
+   "target": "orders/mathutil.py::bucket",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "bucket: 1 kind(s) of behaviour difference between the base f9e9a5b8938f and the working tree in 300 inputs (probe prb_c348c1093e26). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "bucket(10)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.094,
+     "wall_s": 3.094,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D21",
+   "kind": "partition -> split (missing separator)",
+   "gold": "change",
+   "target": "orders/textutil.py::mask_email",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "mask_email: 1 kind(s) of behaviour difference between the base 2a4927aec9cf and the working tree in 300 inputs (probe prb_2d8c507b5f36). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "new_exception"
+     ],
+     "examples": {
+      "new_exception": "mask_email('')"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.IndexError"
+     ],
+     "duration_s": 2.891,
+     "wall_s": 2.906,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D22",
+   "kind": "removed guard (empty list)",
+   "gold": "change",
+   "target": "orders/mathutil.py::average",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "average: 1 kind(s) of behaviour difference between the base b3a03aba7fc6 and the working tree in 300 inputs (probe prb_0a8f6e78208c). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "new_exception"
+     ],
+     "examples": {
+      "new_exception": "average([])"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "hypothesis 6.168.0 (seed 0, generate phase, no example database)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.ZeroDivisionError"
+     ],
+     "duration_s": 3.25,
+     "wall_s": 3.25,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  }
+ ]
+}

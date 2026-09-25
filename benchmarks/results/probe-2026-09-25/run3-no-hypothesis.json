@@ -1,0 +1,3018 @@
+{
+ "gold_sha256": "4a2265ec1e0c891b5c29d5fc022a46cd08bdbe2aa25101a8158db32748ed6db3",
+ "python": "3.12.0",
+ "platform": "win32",
+ "hypothesis": "off",
+ "summary": {
+  "detection": "22/22",
+  "missed": [],
+  "false_alarms_equivalent": "5 of 60 runs (12 fixtures)",
+  "false_alarm_ids": [
+   "E04"
+  ],
+  "equivalent_not_clean": {
+   "E04": [
+    "differences_found",
+    "differences_found",
+    "differences_found",
+    "differences_found",
+    "differences_found"
+   ]
+  },
+  "false_alarms_scaling_off": 0,
+  "refusals_correct": "9/9",
+  "refusal_misses": [],
+  "refusals_incorrect": "0/4",
+  "unsupported_correct": "2/2",
+  "caught_by_existing_tests": [
+   "D05",
+   "D15"
+  ],
+  "detection_on_test_surviving": "20/20",
+  "reproduced": "36/36",
+  "time_per_probe_s": {
+   "median": 1.7,
+   "p90": 2.98,
+   "max": 10.52,
+   "n": 87
+  }
+ },
+ "fixtures": [
+  {
+   "id": "D01",
+   "kind": "boundary off-by-one",
+   "gold": "change",
+   "target": "orders/pricing.py::apply_discount",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "apply_discount: 1 kind(s) of behaviour difference between the base d908be578008 and the working tree in 300 inputs (probe prb_b8d656d7140b). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed_at_mined_boundary"
+     ],
+     "examples": {
+      "value_changed_at_mined_boundary": "apply_discount(100.0)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.859,
+     "wall_s": 2.859,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D02",
+   "kind": "rounding changed to truncation",
+   "gold": "change",
+   "target": "orders/pricing.py::apply_discount",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "apply_discount: 3 kind(s) of behaviour difference between the base 0ca276c6a878 and the working tree in 300 inputs (probe prb_9b42c1141a53). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "new_exception",
+      "value_changed_at_mined_boundary",
+      "value_changed"
+     ],
+     "examples": {
+      "new_exception": "apply_discount(1e+308)",
+      "value_changed_at_mined_boundary": "apply_discount(100.05)",
+      "value_changed": "apply_discount(108.14)"
+     },
+     "reproduced": [
+      true,
+      true,
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.OverflowError"
+     ],
+     "duration_s": 2.969,
+     "wall_s": 2.984,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified",
+      "experiment_verified",
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D03",
+   "kind": "B1: off-by-one + truncation",
+   "gold": "change",
+   "target": "orders/pricing.py::apply_discount",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "apply_discount: 3 kind(s) of behaviour difference between the base 6cb5278f71f2 and the working tree in 300 inputs (probe prb_3bfce42a4573). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "new_exception",
+      "value_changed_at_mined_boundary",
+      "value_changed"
+     ],
+     "examples": {
+      "new_exception": "apply_discount(1e+308)",
+      "value_changed_at_mined_boundary": "apply_discount(100.0)",
+      "value_changed": "apply_discount(108.14)"
+     },
+     "reproduced": [
+      true,
+      true,
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.OverflowError"
+     ],
+     "duration_s": 2.906,
+     "wall_s": 2.906,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified",
+      "experiment_verified",
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D04",
+   "kind": "B2: len boundary through an imported constant",
+   "gold": "change",
+   "target": "orders/service.py::validate_items",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "validate_items: 1 kind(s) of behaviour difference between the base 3d682b3595c4 and the working tree in 300 inputs (probe prb_3b0155bb54f5). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "new_exception"
+     ],
+     "examples": {
+      "new_exception": "validate_items(<50 items like {'price': 1.0, 'qty': 1}>)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.046,
+     "wall_s": 3.046,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D05",
+   "kind": "removed guard (empty order)",
+   "gold": "change",
+   "target": "orders/service.py::validate_items",
+   "tests_pass_on_working_tree": false,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "validate_items: 1 kind(s) of behaviour difference between the base 737aa951bd42 and the working tree in 300 inputs (probe prb_54098f13a023). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "exception_removed"
+     ],
+     "examples": {
+      "exception_removed": "validate_items([])"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.11,
+     "wall_s": 3.125,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D06",
+   "kind": "B3: slice bound drops items",
+   "gold": "change",
+   "target": "orders/pricing.py::compute_total",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "compute_total: 3 kind(s) of behaviour difference between the base 0cb29afb1a79 and the working tree in 300 inputs (probe prb_d867933a1ef5). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed_at_mined_boundary",
+      "value_changed",
+      "numeric_drift"
+     ],
+     "examples": {
+      "value_changed_at_mined_boundary": "compute_total(<11 items like {'price': 1.0, 'qty': 1}>)",
+      "value_changed": "compute_total([{'price': 485.93, 'qty': -137833605613}, {'price': -810338.4730462881, 'qty': -774254477061}, {'price': -292417.34096151846, 'qty': 7}, {'price': 0.9739860767117854, 'qty': -28633966558}, {'price'...)",
+      "numeric_drift": "compute_total([{'price': -930670.5597829861, 'qty': -707}, {'price': 392.18, 'qty': 530412752335}, {'price': -8.232850100085514, 'qty': 5}, {'price': 449367.03258133703, 'qty': -4}, {'price': -0.6239403511569186...)"
+     },
+     "reproduced": [
+      true,
+      true,
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.031,
+     "wall_s": 3.031,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified",
+      "experiment_verified",
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D07",
+   "kind": "B4: unicode mishandling in a regex",
+   "gold": "change",
+   "target": "orders/textutil.py::customer_key",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "customer_key: 1 kind(s) of behaviour difference between the base 9ad1ec71c167 and the working tree in 300 inputs (probe prb_186df9da037f). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "customer_key('a-b_c.d')"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.86,
+     "wall_s": 2.86,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D08",
+   "kind": "unicode: casefold -> lower",
+   "gold": "change",
+   "target": "orders/textutil.py::normalize_city",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "normalize_city: 1 kind(s) of behaviour difference between the base 042b637dfef3 and the working tree in 300 inputs (probe prb_cd550e0b9b00). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "normalize_city('\u00df')"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.938,
+     "wall_s": 2.953,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D09",
+   "kind": "removed guard (division by zero)",
+   "gold": "change",
+   "target": "orders/mathutil.py::safe_div",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "safe_div: 1 kind(s) of behaviour difference between the base e7cb09435308 and the working tree in 300 inputs (probe prb_b0400bcb9e49). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "new_exception"
+     ],
+     "examples": {
+      "new_exception": "safe_div(0.0, 0.0)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.ZeroDivisionError"
+     ],
+     "duration_s": 2.984,
+     "wall_s": 3.0,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D10",
+   "kind": "swapped condition (and -> or)",
+   "gold": "change",
+   "target": "orders/rules.py::is_eligible",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "is_eligible: 2 kind(s) of behaviour difference between the base 96f1c20dddc0 and the working tree in 300 inputs (probe prb_d1ea89f1b607). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed_at_mined_boundary",
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed_at_mined_boundary": "is_eligible(17, True)",
+      "value_changed": "is_eligible(0, True)"
+     },
+     "reproduced": [
+      true,
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.938,
+     "wall_s": 2.953,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified",
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D11",
+   "kind": "len off-by-one (<= -> <)",
+   "gold": "change",
+   "target": "orders/textutil.py::title_ok",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "title_ok: 1 kind(s) of behaviour difference between the base 3bdacc219653 and the working tree in 300 inputs (probe prb_87474b2443c7). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed_at_mined_boundary"
+     ],
+     "examples": {
+      "value_changed_at_mined_boundary": "title_ok('a' * 80)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.922,
+     "wall_s": 2.922,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D12",
+   "kind": "changed default (digits 2 -> 1)",
+   "gold": "change",
+   "target": "orders/mathutil.py::percent",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "percent: 1 kind(s) of behaviour difference between the base 1d8dcce01cbc and the working tree in 300 inputs (probe prb_ac208f602ad1). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "percent(1.0, 0.045)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.ZeroDivisionError"
+     ],
+     "duration_s": 2.844,
+     "wall_s": 2.844,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D13",
+   "kind": "range bound off-by-one",
+   "gold": "change",
+   "target": "orders/rules.py::chunk",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "chunk: 2 kind(s) of behaviour difference between the base c9cd4cad8bee and the working tree in 300 inputs (probe prb_f42e3d9c1c77). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed_at_mined_boundary",
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed_at_mined_boundary": "chunk([0], 1)",
+      "value_changed": "chunk([1], 1)"
+     },
+     "reproduced": [
+      true,
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.156,
+     "wall_s": 3.156,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified",
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D14",
+   "kind": "swapped min/max",
+   "gold": "change",
+   "target": "orders/mathutil.py::clamp",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "clamp: 1 kind(s) of behaviour difference between the base 63cf9e100231 and the working tree in 300 inputs (probe prb_2e2f8d9e27f2). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "clamp(1, 1, 0)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.266,
+     "wall_s": 3.266,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D15",
+   "kind": "changed default (currency)",
+   "gold": "change",
+   "target": "orders/rules.py::format_price",
+   "tests_pass_on_working_tree": false,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "format_price: 1 kind(s) of behaviour difference between the base 04005ae905a1 and the working tree in 300 inputs (probe prb_e1f0e9649e5f). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "format_price(0.0)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.188,
+     "wall_s": 3.203,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D16",
+   "kind": "B8: quadratic loop",
+   "gold": "scaling",
+   "target": "orders/pricing.py::compute_total",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "flagged": true,
+    "false_alarms_without_scaling": 0
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "compute_total: 1 kind(s) of behaviour difference between the base 3e920bc4b544 and the working tree in 300 inputs (probe prb_bf737d840c98). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "growth_changed"
+     ],
+     "examples": {
+      "growth_changed": null
+     },
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": "the working tree grows about 100.19x per 10x more input against 9.37x at the base, in all 3 rounds (rough timing)",
+     "undeclared": [],
+     "duration_s": 10.516,
+     "wall_s": 10.516,
+     "seed": 0,
+     "options": {
+      "scaling": true
+     },
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "compute_total: no behaviour difference found between the base 3e920bc4b544 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 3.422,
+     "wall_s": 3.437,
+     "seed": 0,
+     "options": {
+      "scaling": false
+     },
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "D17",
+   "kind": "B6: save per item (side effects allowed)",
+   "gold": "change",
+   "target": "orders/service.py::place_order",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "place_order: 2 kind(s) of behaviour difference between the base 05a3dc08a220 and the working tree in 300 inputs (probe prb_193cfd1ebbcd). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed_at_mined_boundary",
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed_at_mined_boundary": "place_order(OrderRepository(':memory:'), 'abc', <49 items like {'price': 1.0, 'qty': 1}>)",
+      "value_changed": "place_order(OrderRepository(':memory:'), '', [{'price': -318256.6748311224, 'qty': 1}, {'price': 660.0, 'qty': 254}])"
+     },
+     "reproduced": [
+      true,
+      true
+     ],
+     "gate": {
+      "verdict": "refused",
+      "reasons": [
+       {
+        "kind": "sql-write",
+        "at": "orders/repository.py:17"
+       },
+       {
+        "kind": "orm-write",
+        "at": "orders/repository.py:19"
+       },
+       {
+        "kind": "db-connection",
+        "at": "orders/repository.py:10"
+       },
+       {
+        "kind": "sql-write",
+        "at": "orders/repository.py:12"
+       }
+      ]
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 9.25,
+     "wall_s": 9.25,
+     "seed": 0,
+     "options": {
+      "allow_side_effects": true
+     },
+     "claims": [
+      "experiment_verified",
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D18",
+   "kind": "whitespace handling",
+   "gold": "change",
+   "target": "orders/textutil.py::display_name",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "display_name: 1 kind(s) of behaviour difference between the base 59003473e61a and the working tree in 300 inputs (probe prb_407cdc414482). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed": "display_name('tab\\tsep')"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.75,
+     "wall_s": 2.75,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D19",
+   "kind": "changed module constant",
+   "gold": "change",
+   "target": "orders/pricing.py::apply_discount",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "apply_discount: 2 kind(s) of behaviour difference between the base 26101f8dc760 and the working tree in 300 inputs (probe prb_77acf7a86c81). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed_at_mined_boundary",
+      "value_changed"
+     ],
+     "examples": {
+      "value_changed_at_mined_boundary": "apply_discount(149.0)",
+      "value_changed": "apply_discount(100.005)"
+     },
+     "reproduced": [
+      true,
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.672,
+     "wall_s": 2.688,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified",
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D20",
+   "kind": "boundary off-by-one (< -> <=)",
+   "gold": "change",
+   "target": "orders/mathutil.py::bucket",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "bucket: 1 kind(s) of behaviour difference between the base fa5f7a45f684 and the working tree in 300 inputs (probe prb_498ec3d88c56). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "value_changed_at_mined_boundary"
+     ],
+     "examples": {
+      "value_changed_at_mined_boundary": "bucket(10)"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.656,
+     "wall_s": 2.672,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D21",
+   "kind": "partition -> split (missing separator)",
+   "gold": "change",
+   "target": "orders/textutil.py::mask_email",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "mask_email: 1 kind(s) of behaviour difference between the base 2749a7a42d6e and the working tree in 300 inputs (probe prb_538912aaa2af). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "new_exception"
+     ],
+     "examples": {
+      "new_exception": "mask_email('')"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.IndexError"
+     ],
+     "duration_s": 2.781,
+     "wall_s": 2.781,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D22",
+   "kind": "removed guard (empty list)",
+   "gold": "change",
+   "target": "orders/mathutil.py::average",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "detected": true
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "average: 1 kind(s) of behaviour difference between the base 1307015e7a3a and the working tree in 300 inputs (probe prb_74b528bcc548). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "new_exception"
+     ],
+     "examples": {
+      "new_exception": "average([])"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.ZeroDivisionError"
+     ],
+     "duration_s": 2.891,
+     "wall_s": 2.891,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "E01",
+   "kind": "ternary rewrite",
+   "gold": "equivalent",
+   "target": "orders/pricing.py::apply_discount",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "false_alarms": 0,
+    "seeds": 5,
+    "not_clean": []
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base 08c17d270900 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.562,
+     "wall_s": 1.562,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base 08c17d270900 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.531,
+     "wall_s": 1.547,
+     "seed": 1,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base 08c17d270900 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.703,
+     "wall_s": 1.718,
+     "seed": 2,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base 08c17d270900 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.61,
+     "wall_s": 1.61,
+     "seed": 3,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base 08c17d270900 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.672,
+     "wall_s": 1.672,
+     "seed": 4,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "E02",
+   "kind": "commuted multiplication",
+   "gold": "equivalent",
+   "target": "orders/pricing.py::apply_discount",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "false_alarms": 0,
+    "seeds": 5,
+    "not_clean": []
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base e9b739bfd765 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.437,
+     "wall_s": 1.437,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base e9b739bfd765 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.453,
+     "wall_s": 1.453,
+     "seed": 1,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base e9b739bfd765 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.407,
+     "wall_s": 1.407,
+     "seed": 2,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base e9b739bfd765 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.421,
+     "wall_s": 1.421,
+     "seed": 3,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base e9b739bfd765 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.532,
+     "wall_s": 1.532,
+     "seed": 4,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "E03",
+   "kind": "variable rename",
+   "gold": "equivalent",
+   "target": "orders/pricing.py::compute_total",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "false_alarms": 0,
+    "seeds": 5,
+    "not_clean": []
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "compute_total: no behaviour difference found between the base fd86b52a9d0d and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.734,
+     "wall_s": 1.734,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "compute_total: no behaviour difference found between the base fd86b52a9d0d and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.594,
+     "wall_s": 1.594,
+     "seed": 1,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "compute_total: no behaviour difference found between the base fd86b52a9d0d and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.656,
+     "wall_s": 1.656,
+     "seed": 2,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "compute_total: no behaviour difference found between the base fd86b52a9d0d and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.671,
+     "wall_s": 1.687,
+     "seed": 3,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "compute_total: no behaviour difference found between the base fd86b52a9d0d and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.781,
+     "wall_s": 1.797,
+     "seed": 4,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "E04",
+   "kind": "generator -> loop",
+   "gold": "equivalent",
+   "target": "orders/pricing.py::compute_total",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "false_alarms": 5,
+    "seeds": 5,
+    "not_clean": [
+     "differences_found",
+     "differences_found",
+     "differences_found",
+     "differences_found",
+     "differences_found"
+    ]
+   },
+   "runs": [
+    {
+     "status": "differences_found",
+     "headline": "compute_total: 1 kind(s) of behaviour difference between the base e99cf284394a and the working tree in 300 inputs (probe prb_61b25006b675). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "numeric_drift"
+     ],
+     "examples": {
+      "numeric_drift": "compute_total([{'price': -410230.3856200767, 'qty': -807520868022}, {'price': -8.880982677650957, 'qty': -6}, {'price': -0.5131638566737386, 'qty': -562}])"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.953,
+     "wall_s": 2.969,
+     "seed": 0,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    },
+    {
+     "status": "differences_found",
+     "headline": "compute_total: 1 kind(s) of behaviour difference between the base e99cf284394a and the working tree in 300 inputs (probe prb_e46f375268d9). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "numeric_drift"
+     ],
+     "examples": {
+      "numeric_drift": "compute_total([{'price': -934794.5859800489, 'qty': 151}, {'price': 384206.8525558959, 'qty': -404}, {'price': 0.10839709437468592, 'qty': -623303802718}])"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.968,
+     "wall_s": 2.968,
+     "seed": 1,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    },
+    {
+     "status": "differences_found",
+     "headline": "compute_total: 1 kind(s) of behaviour difference between the base e99cf284394a and the working tree in 300 inputs (probe prb_47b9a0c39eb8). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "numeric_drift"
+     ],
+     "examples": {
+      "numeric_drift": "compute_total([{'price': 7.728899076823524, 'qty': -581}, {'price': 5.978083491056365, 'qty': -6}, {'price': -9.570854042086198, 'qty': 2}])"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.985,
+     "wall_s": 2.985,
+     "seed": 2,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    },
+    {
+     "status": "differences_found",
+     "headline": "compute_total: 1 kind(s) of behaviour difference between the base e99cf284394a and the working tree in 300 inputs (probe prb_d15c04ec79c6). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "numeric_drift"
+     ],
+     "examples": {
+      "numeric_drift": "compute_total([{'price': 8.82952781211064, 'qty': -271}, {'price': 353.52, 'qty': -389487671498}, {'price': -0.24185856810659057, 'qty': 656}])"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.89,
+     "wall_s": 2.906,
+     "seed": 3,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    },
+    {
+     "status": "differences_found",
+     "headline": "compute_total: 1 kind(s) of behaviour difference between the base e99cf284394a and the working tree in 300 inputs (probe prb_eb6612556658). These are behaviour changes, not verdicts: compare each with what the user asked for",
+     "classes": [
+      "numeric_drift"
+     ],
+     "examples": {
+      "numeric_drift": "compute_total([{'price': 91.93, 'qty': 5}, {'price': 427.99, 'qty': 724927324642}, {'price': 0.22184568715556963, 'qty': 8}])"
+     },
+     "reproduced": [
+      true
+     ],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 2.891,
+     "wall_s": 2.906,
+     "seed": 4,
+     "options": {},
+     "claims": [
+      "experiment_verified"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "E05",
+   "kind": "len() refactor",
+   "gold": "equivalent",
+   "target": "orders/service.py::validate_items",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "false_alarms": 0,
+    "seeds": 5,
+    "not_clean": []
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "validate_items: no behaviour difference found between the base 0d426df54497 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.594,
+     "wall_s": 1.594,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "validate_items: no behaviour difference found between the base 0d426df54497 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.563,
+     "wall_s": 1.563,
+     "seed": 1,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "validate_items: no behaviour difference found between the base 0d426df54497 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.672,
+     "wall_s": 1.672,
+     "seed": 2,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "validate_items: no behaviour difference found between the base 0d426df54497 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.594,
+     "wall_s": 1.61,
+     "seed": 3,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "validate_items: no behaviour difference found between the base 0d426df54497 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.593,
+     "wall_s": 1.593,
+     "seed": 4,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "E06",
+   "kind": "precompiled regex",
+   "gold": "equivalent",
+   "target": "orders/textutil.py::customer_key",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "false_alarms": 0,
+    "seeds": 5,
+    "not_clean": []
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "customer_key: no behaviour difference found between the base bfc43555d965 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.485,
+     "wall_s": 1.485,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "customer_key: no behaviour difference found between the base bfc43555d965 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.562,
+     "wall_s": 1.578,
+     "seed": 1,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "customer_key: no behaviour difference found between the base bfc43555d965 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.5,
+     "wall_s": 1.5,
+     "seed": 2,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "customer_key: no behaviour difference found between the base bfc43555d965 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.703,
+     "wall_s": 1.703,
+     "seed": 3,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "customer_key: no behaviour difference found between the base bfc43555d965 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.625,
+     "wall_s": 1.641,
+     "seed": 4,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "E07",
+   "kind": "and-operands swapped (bool domain)",
+   "gold": "equivalent",
+   "target": "orders/rules.py::is_eligible",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "false_alarms": 0,
+    "seeds": 5,
+    "not_clean": []
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "is_eligible: no behaviour difference found between the base 6252c6d00eed and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.734,
+     "wall_s": 1.734,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "is_eligible: no behaviour difference found between the base 6252c6d00eed and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.579,
+     "wall_s": 1.594,
+     "seed": 1,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "is_eligible: no behaviour difference found between the base 6252c6d00eed and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.563,
+     "wall_s": 1.563,
+     "seed": 2,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "is_eligible: no behaviour difference found between the base 6252c6d00eed and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.562,
+     "wall_s": 1.578,
+     "seed": 3,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "is_eligible: no behaviour difference found between the base 6252c6d00eed and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.75,
+     "wall_s": 1.75,
+     "seed": 4,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "E08",
+   "kind": "zero test as truthiness",
+   "gold": "equivalent",
+   "target": "orders/mathutil.py::safe_div",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "false_alarms": 0,
+    "seeds": 5,
+    "not_clean": []
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "safe_div: no behaviour difference found between the base 7a647a969c8a and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.625,
+     "wall_s": 1.625,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "safe_div: no behaviour difference found between the base 7a647a969c8a and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.562,
+     "wall_s": 1.578,
+     "seed": 1,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "safe_div: no behaviour difference found between the base 7a647a969c8a and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.672,
+     "wall_s": 1.672,
+     "seed": 2,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "safe_div: no behaviour difference found between the base 7a647a969c8a and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.437,
+     "wall_s": 1.453,
+     "seed": 3,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "safe_div: no behaviour difference found between the base 7a647a969c8a and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.5,
+     "wall_s": 1.5,
+     "seed": 4,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "E09",
+   "kind": "comment + docstring only, unrelated file edited",
+   "gold": "equivalent",
+   "target": "orders/pricing.py::apply_discount",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "false_alarms": 0,
+    "seeds": 5,
+    "not_clean": []
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base 16a6420090b3 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.656,
+     "wall_s": 1.656,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base 16a6420090b3 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.516,
+     "wall_s": 1.531,
+     "seed": 1,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base 16a6420090b3 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.454,
+     "wall_s": 1.469,
+     "seed": 2,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base 16a6420090b3 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.438,
+     "wall_s": 1.453,
+     "seed": 3,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base 16a6420090b3 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.469,
+     "wall_s": 1.469,
+     "seed": 4,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "E10",
+   "kind": "strip/casefold order",
+   "gold": "equivalent",
+   "target": "orders/textutil.py::normalize_city",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "false_alarms": 0,
+    "seeds": 5,
+    "not_clean": []
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "normalize_city: no behaviour difference found between the base 215a440cd80b and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.516,
+     "wall_s": 1.516,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "normalize_city: no behaviour difference found between the base 215a440cd80b and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.531,
+     "wall_s": 1.531,
+     "seed": 1,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "normalize_city: no behaviour difference found between the base 215a440cd80b and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.734,
+     "wall_s": 1.734,
+     "seed": 2,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "normalize_city: no behaviour difference found between the base 215a440cd80b and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.703,
+     "wall_s": 1.719,
+     "seed": 3,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "normalize_city: no behaviour difference found between the base 215a440cd80b and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.781,
+     "wall_s": 1.797,
+     "seed": 4,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "E11",
+   "kind": "guard as early return",
+   "gold": "equivalent",
+   "target": "orders/mathutil.py::average",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "false_alarms": 0,
+    "seeds": 5,
+    "not_clean": []
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "average: no behaviour difference found between the base 152fd7a6fa6e and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.891,
+     "wall_s": 1.891,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "average: no behaviour difference found between the base 152fd7a6fa6e and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.969,
+     "wall_s": 1.969,
+     "seed": 1,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "average: no behaviour difference found between the base 152fd7a6fa6e and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.718,
+     "wall_s": 1.734,
+     "seed": 2,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "average: no behaviour difference found between the base 152fd7a6fa6e and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.672,
+     "wall_s": 1.687,
+     "seed": 3,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "average: no behaviour difference found between the base 152fd7a6fa6e and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.625,
+     "wall_s": 1.641,
+     "seed": 4,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "E12",
+   "kind": "no edit at all",
+   "gold": "equivalent",
+   "target": "orders/mathutil.py::bucket",
+   "tests_pass_on_working_tree": true,
+   "score": {
+    "false_alarms": 0,
+    "seeds": 5,
+    "not_clean": []
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "bucket: no behaviour difference found between the base 40190ce0b226 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.89,
+     "wall_s": 1.89,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "bucket: no behaviour difference found between the base 40190ce0b226 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.985,
+     "wall_s": 1.985,
+     "seed": 1,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "bucket: no behaviour difference found between the base 40190ce0b226 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.593,
+     "wall_s": 1.609,
+     "seed": 2,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "bucket: no behaviour difference found between the base 40190ce0b226 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.687,
+     "wall_s": 1.703,
+     "seed": 3,
+     "options": {},
+     "claims": []
+    },
+    {
+     "status": "no_difference_found",
+     "headline": "bucket: no behaviour difference found between the base 40190ce0b226 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.672,
+     "wall_s": 1.672,
+     "seed": 4,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "R01",
+   "kind": "B6: place_order writes through the repository",
+   "gold": "refuse",
+   "target": "orders/service.py::place_order",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "refused": true,
+    "sink_named": true,
+    "at_named": true
+   },
+   "runs": [
+    {
+     "status": "refused",
+     "headline": "refused: place_order reaches sql-write at orders/repository.py:17 (place_order -> OrderRepository.save); nothing was run",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "refused",
+      "reasons": [
+       {
+        "kind": "sql-write",
+        "at": "orders/repository.py:17"
+       },
+       {
+        "kind": "orm-write",
+        "at": "orders/repository.py:19"
+       },
+       {
+        "kind": "db-connection",
+        "at": "orders/repository.py:10"
+       },
+       {
+        "kind": "sql-write",
+        "at": "orders/repository.py:12"
+       }
+      ]
+     },
+     "inputs": null,
+     "generator": null,
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 0.109,
+     "wall_s": 0.109,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "R02",
+   "kind": "global + database",
+   "gold": "refuse",
+   "target": "orders/api.py::get_repo",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "refused": true,
+    "sink_named": true,
+    "at_named": true
+   },
+   "runs": [
+    {
+     "status": "refused",
+     "headline": "refused: get_repo reaches global-state at orders/api.py:12 (get_repo); nothing was run",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "refused",
+      "reasons": [
+       {
+        "kind": "global-state",
+        "at": "orders/api.py:12"
+       },
+       {
+        "kind": "db-connection",
+        "at": "orders/repository.py:10"
+       },
+       {
+        "kind": "sql-write",
+        "at": "orders/repository.py:12"
+       }
+      ]
+     },
+     "inputs": null,
+     "generator": null,
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 0.11,
+     "wall_s": 0.125,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "R03",
+   "kind": "file write",
+   "gold": "refuse",
+   "target": "orders/sideeffects.py::save_report",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "refused": true,
+    "sink_named": true,
+    "at_named": true
+   },
+   "runs": [
+    {
+     "status": "refused",
+     "headline": "refused: save_report reaches file-write at orders/sideeffects.py:11 (save_report); nothing was run",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "refused",
+      "reasons": [
+       {
+        "kind": "file-write",
+        "at": "orders/sideeffects.py:11"
+       }
+      ]
+     },
+     "inputs": null,
+     "generator": null,
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 0.125,
+     "wall_s": 0.125,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "R04",
+   "kind": "network",
+   "gold": "refuse",
+   "target": "orders/sideeffects.py::fetch_status",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "refused": true,
+    "sink_named": true,
+    "at_named": true
+   },
+   "runs": [
+    {
+     "status": "refused",
+     "headline": "refused: fetch_status reaches network at orders/sideeffects.py:16 (fetch_status); nothing was run",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "refused",
+      "reasons": [
+       {
+        "kind": "network",
+        "at": "orders/sideeffects.py:16"
+       }
+      ]
+     },
+     "inputs": null,
+     "generator": null,
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 0.125,
+     "wall_s": 0.125,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "R05",
+   "kind": "process",
+   "gold": "refuse",
+   "target": "orders/sideeffects.py::run_tool",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "refused": true,
+    "sink_named": true,
+    "at_named": true
+   },
+   "runs": [
+    {
+     "status": "refused",
+     "headline": "refused: run_tool reaches process at orders/sideeffects.py:21 (run_tool); nothing was run",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "refused",
+      "reasons": [
+       {
+        "kind": "process",
+        "at": "orders/sideeffects.py:21"
+       }
+      ]
+     },
+     "inputs": null,
+     "generator": null,
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 0.109,
+     "wall_s": 0.109,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "R06",
+   "kind": "global counter",
+   "gold": "refuse",
+   "target": "orders/sideeffects.py::bump",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "refused": true,
+    "sink_named": true,
+    "at_named": true
+   },
+   "runs": [
+    {
+     "status": "refused",
+     "headline": "refused: bump reaches global-state at orders/sideeffects.py:26 (bump); nothing was run",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "refused",
+      "reasons": [
+       {
+        "kind": "global-state",
+        "at": "orders/sideeffects.py:26"
+       }
+      ]
+     },
+     "inputs": null,
+     "generator": null,
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 0.11,
+     "wall_s": 0.125,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "R07",
+   "kind": "module-level cache",
+   "gold": "refuse",
+   "target": "orders/sideeffects.py::remember",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "refused": true,
+    "sink_named": true,
+    "at_named": true
+   },
+   "runs": [
+    {
+     "status": "refused",
+     "headline": "refused: remember reaches global-state at orders/sideeffects.py:31 (remember); nothing was run",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "refused",
+      "reasons": [
+       {
+        "kind": "global-state",
+        "at": "orders/sideeffects.py:31"
+       }
+      ]
+     },
+     "inputs": null,
+     "generator": null,
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 0.109,
+     "wall_s": 0.109,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "R08",
+   "kind": "handler through the repository",
+   "gold": "refuse",
+   "target": "orders/api.py::create_order_handler",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "refused": true,
+    "sink_named": true,
+    "at_named": true
+   },
+   "runs": [
+    {
+     "status": "refused",
+     "headline": "refused: create_order_handler reaches global-state at orders/api.py:12 (create_order_handler -> get_repo); nothing was run",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "refused",
+      "reasons": [
+       {
+        "kind": "global-state",
+        "at": "orders/api.py:12"
+       },
+       {
+        "kind": "sql-write",
+        "at": "orders/repository.py:17"
+       },
+       {
+        "kind": "orm-write",
+        "at": "orders/repository.py:19"
+       },
+       {
+        "kind": "db-connection",
+        "at": "orders/repository.py:10"
+       },
+       {
+        "kind": "sql-write",
+        "at": "orders/repository.py:12"
+       }
+      ]
+     },
+     "inputs": null,
+     "generator": null,
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 0.125,
+     "wall_s": 0.125,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "R09",
+   "kind": "method whose recipe connects to a database",
+   "gold": "refuse",
+   "target": "orders/repository.py::OrderRepository.get",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "refused": true,
+    "sink_named": true,
+    "at_named": true
+   },
+   "runs": [
+    {
+     "status": "refused",
+     "headline": "refused: OrderRepository.get reaches db-connection at orders/repository.py:10 (OrderRepository); nothing was run",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "refused",
+      "reasons": [
+       {
+        "kind": "db-connection",
+        "at": "orders/repository.py:10"
+       },
+       {
+        "kind": "sql-write",
+        "at": "orders/repository.py:12"
+       }
+      ]
+     },
+     "inputs": null,
+     "generator": null,
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 0.109,
+     "wall_s": 0.109,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "P01",
+   "kind": "reads a file",
+   "gold": "run",
+   "target": "orders/sideeffects.py::read_setting",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "incorrectly_refused": false
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "read_setting: no behaviour difference found between the base b7882846d922 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.FileNotFoundError",
+      "builtins.OSError",
+      "builtins.ValueError",
+      "builtins.PermissionError"
+     ],
+     "duration_s": 1.891,
+     "wall_s": 1.906,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "P02",
+   "kind": "prints",
+   "gold": "run",
+   "target": "orders/sideeffects.py::log_line",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "incorrectly_refused": false
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "log_line: no behaviour difference found between the base c44a8275cbf9 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [
+      "builtins.UnicodeEncodeError"
+     ],
+     "duration_s": 1.781,
+     "wall_s": 1.797,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "P03",
+   "kind": "pure, unchanged",
+   "gold": "run",
+   "target": "orders/pricing.py::apply_discount",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "incorrectly_refused": false
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "apply_discount: no behaviour difference found between the base ca854abcc67b and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.766,
+     "wall_s": 1.766,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "P04",
+   "kind": "reads a dict argument",
+   "gold": "run",
+   "target": "orders/sideeffects.py::describe_order",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "incorrectly_refused": false
+   },
+   "runs": [
+    {
+     "status": "no_difference_found",
+     "headline": "describe_order: no behaviour difference found between the base 3ec1c97cc241 and the working tree in 300 inputs (a search, not a proof; the inputs are listed under inputs.sources)",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": "passed",
+      "reasons": []
+     },
+     "inputs": 300,
+     "generator": "fixed pseudo-random list (hypothesis is not installed)",
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 1.75,
+     "wall_s": 1.75,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "U01",
+   "kind": "B7: Kotlin",
+   "gold": "unsupported",
+   "target": "mod/HeatMath.kt::HeatMath.heatAfter",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "unsupported": true
+   },
+   "runs": [
+    {
+     "status": "unsupported",
+     "headline": "Kotlin: the probe runs Python functions only; use review and the project's own tests for this change",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": null,
+      "reasons": []
+     },
+     "inputs": null,
+     "generator": null,
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 0.046,
+     "wall_s": 0.046,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  },
+  {
+   "id": "U02",
+   "kind": "coroutine function",
+   "gold": "unsupported",
+   "target": "orders/sideeffects.py::fetch_later",
+   "tests_pass_on_working_tree": null,
+   "score": {
+    "unsupported": true
+   },
+   "runs": [
+    {
+     "status": "unsupported",
+     "headline": "fetch_later is a coroutine function (async def): not probed",
+     "classes": [],
+     "examples": {},
+     "reproduced": [],
+     "gate": {
+      "verdict": null,
+      "reasons": []
+     },
+     "inputs": null,
+     "generator": null,
+     "scaling": null,
+     "undeclared": [],
+     "duration_s": 0.11,
+     "wall_s": 0.11,
+     "seed": 0,
+     "options": {},
+     "claims": []
+    }
+   ]
+  }
+ ]
+}
