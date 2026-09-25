@@ -1096,7 +1096,6 @@ def cmd_feedback(args) -> int:
 
 def cmd_experiment(args) -> int:
     from verinoda import experiments
-    from verinoda.paths import load_config
 
     repo = _repo(args)
     argv = args.command
@@ -1104,17 +1103,14 @@ def cmd_experiment(args) -> int:
         argv = argv[1:]
     if not argv:
         raise SystemExit("error: give the command after --")
+    if args.overlay and not args.ref:
+        raise SystemExit("error: --overlay needs --ref (it puts working-tree files over a commit copy)")
     try:
         res = experiments.run(_store(repo, create=True), repo, argv, hypothesis=args.hypothesis, expect=args.expect,
-                              timeout=args.timeout, claim_id=args.claim, isolation=args.isolation)
+                              timeout=args.timeout, claim_id=args.claim, isolation=args.isolation,
+                              ref=args.ref, overlay=args.overlay)
     except experiments.ExperimentRefused as exc:
-        allow = load_config(repo)["experiments"]["process_isolation_allowlist"]
-        out = {"status": "refused", "reason": str(exc),
-               "limits": ["without docker/podman only allowlisted test runners run, and only with process "
-                          "isolation (no network or filesystem confinement)",
-                          f"allowlist (config experiments.process_isolation_allowlist): {', '.join(allow)}"],
-               "next_step": "run the tests through an allowlisted runner with paths inside the repository, or "
-                            "install docker/podman for container isolation"}
+        out = experiments.refusal(repo, exc)
 
         def render_refused(r):
             print(f"refused: {r['reason']}")
@@ -1136,6 +1132,12 @@ def cmd_experiment(args) -> int:
             print(f"  inconclusive: {r['inconclusive_reason']}")
         if r.get("next_step"):
             print(f"  next: {r['next_step']}")
+        src = r.get("source") or {}
+        where = (f"commit {src['commit'][:12]}" + (f" + working-tree {', '.join(src['overlay'])}"
+                                                  if src.get("overlay") else "")
+                 if src.get("kind") == "commit" else "the working tree")
+        print(f"  ran on {where}: tree {(r.get('tree') or {}).get('hash', '?')[:12]} "
+              f"({(r.get('tree') or {}).get('files', '?')} files)")
         print(f"  evidence {r['evidence_id']}; full logs: {r['logs']['stdout']}")
         print("  isolation guarantees: " + ", ".join(k for k, v in r["guarantees"].items() if v)
               + "; NOT: " + ", ".join(k for k, v in r["guarantees"].items() if not v))
@@ -1717,6 +1719,10 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--timeout", type=float)
     c.add_argument("--claim")
     c.add_argument("--isolation", choices=["auto", "process", "container"], default="auto")
+    c.add_argument("--ref", help="run on a copy of this commit instead of the working tree (git archive-like; "
+                                 "the working tree and .git are not touched)")
+    c.add_argument("--overlay", action="append", metavar="PATH",
+                   help="with --ref: copy this working-tree file over the commit copy (repeatable; recorded)")
     c.add_argument("command", nargs=argparse.REMAINDER)
 
     sp = add("observe", cmd_observe, "run tests under the call tracer (isolated copy) and summarise what they "

@@ -38,6 +38,15 @@ the refusal names the offending argument. Commands are never passed through a
 shell, and no child inherits Verinoda's stdin (an MCP server's stdin is its
 protocol pipe; a child waiting on it hangs).
 
+Source of the copy: the working tree (default), or - with ``ref`` - the
+regular files of one commit, read with ``git cat-file`` like ``git archive``
+would give them but without running smudge filters (``overlay`` can put
+working-tree files such as the current tests on top; the run says so). Either
+way the copy is made in a temp directory and the user's tree, index and
+``.git`` are only read. Every run records the *tree identity* of what it ran
+on (:mod:`verinoda.treestate`): a tree hash over the CRLF-normalised content
+of each copied file, computed while copying.
+
 Plugins and artifacts: internal callers (the runtime tracer,
 :mod:`verinoda.runtime.trace`) may add Python modules that are written
 *next to* the copy and put on ``PYTHONPATH`` (``plugins``), ``VERINODA_*``
@@ -68,6 +77,7 @@ import time
 from pathlib import Path, PurePosixPath
 
 from verinoda import evidence as evmod
+from verinoda import treestate
 from verinoda.paths import load_config, runs_dir
 from verinoda.snapshot import list_files
 from verinoda.store import Store, new_id, now
@@ -88,6 +98,7 @@ KILL_DRAIN_TIMEOUT = 15  # seconds to collect output after killing a timed-out t
 RELEVANT_RE = re.compile(r"(FAILED|ERROR|Error|Traceback|assert|panic|exception)", re.I)
 MAX_LOG_BYTES = 5 * 1024 * 1024
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024  # per collected artifact file
+COMMIT_COPY_BATCH = 2000  # blobs read per `git cat-file --batch` when copying a commit
 PLUGIN_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\.py$")
 ENV_EXTRA_RE = re.compile(r"^VERINODA_[A-Z0-9_]+$")
 ARGS_CONFINED = "allowlisted commands may only name paths inside the repository copy"
@@ -109,6 +120,17 @@ _TYPED_VALUE_RE = re.compile(r"^[\w.-]{2,}:(.*)$", re.S)  # xml:path, no:plugin 
 
 class ExperimentRefused(RuntimeError):
     pass
+
+
+def refusal(repo: Path, exc: BaseException) -> dict:
+    """The structured answer for a refused experiment (the CLI and the MCP tools give the same)."""
+    allow = load_config(repo)["experiments"]["process_isolation_allowlist"]
+    return {"status": "refused", "reason": str(exc),
+            "limits": ["without docker/podman only allowlisted test runners run, and only with process "
+                       "isolation (no network or filesystem confinement)",
+                       f"allowlist (config experiments.process_isolation_allowlist): {', '.join(allow)}"],
+            "next_step": "run the tests through an allowlisted runner with paths inside the repository, or "
+                         "install docker/podman for container isolation"}
 
 
 def python_for(repo: Path) -> str:
@@ -260,18 +282,66 @@ def _scrubbed_env(home: Path) -> dict[str, str]:
     return env
 
 
-def _copy_repo(repo: Path, dst: Path) -> int:
+def _copy_repo(repo: Path, dst: Path, ids: dict[str, str] | None = None) -> int:
+    """Copy the working tree's file set; ``ids`` receives each copied file's content id."""
     n = 0
     for rel in list_files(repo):
         src = repo / rel
         out = dst / rel
         out.parent.mkdir(parents=True, exist_ok=True)
         try:
-            shutil.copy2(src, out)
+            cid = treestate.copy_file(src, out)
             n += 1
         except OSError:
             continue
+        if ids is not None:
+            ids[rel] = cid
     return n
+
+
+def _copy_commit(repo: Path, commit: str, dst: Path, ids: dict[str, str] | None = None) -> int:
+    """Write the regular files of ``commit`` (raw blobs: no filters, no line-ending conversion) into ``dst``.
+
+    The user's work tree, index and ``.git`` are only read. Symlinks and
+    submodules are not written (see :func:`verinoda.treestate.commit_entries`).
+    """
+    ents = treestate.commit_entries(repo, commit)
+    n = 0
+    for i in range(0, len(ents), COMMIT_COPY_BATCH):
+        batch = ents[i:i + COMMIT_COPY_BATCH]
+        data = treestate.read_blobs(repo, [oid for _, oid, _ in batch])
+        for mode, oid, rel in batch:
+            blob = data.get(oid)
+            if blob is None or path_escape(rel):
+                continue
+            out = dst / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(blob)
+            if mode == "100755" and os.name != "nt":  # pragma: no cover - POSIX
+                os.chmod(out, 0o755)
+            n += 1
+            if ids is not None:
+                ids[rel] = treestate.content_id(blob)
+    return n
+
+
+def _overlay(repo: Path, dst: Path, paths: list[str], ids: dict[str, str] | None) -> list[str]:
+    """Copy working-tree files over a commit copy (labelled in the run's ``source``)."""
+    done = []
+    for rel in paths:
+        rel = rel.replace("\\", "/").strip()
+        if not rel or path_escape(rel) or set(PurePosixPath(rel).parts) & {".git", ".verinoda"}:
+            raise ValueError(f"overlay path {rel!r} must be a repository-relative file path")
+        src = repo / rel
+        if not src.is_file():
+            raise ValueError(f"overlay path {rel!r} is not a file in the working tree")
+        out = dst / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        cid = treestate.copy_file(src, out)
+        if ids is not None:
+            ids[rel] = cid
+        done.append(rel)
+    return done
 
 
 def _posix_limits(cpu_s: int, mem_mb: int):  # pragma: no cover - POSIX only
@@ -377,7 +447,8 @@ def run(
     store: Store, repo: Path, argv: list[str] | str, *, hypothesis: str, expect: str = "pass",
     timeout: float | None = None, claim_id: str | None = None, isolation: str = "auto",
     commit: str | None = None, plugins: dict[str, bytes] | None = None,
-    env_extra: dict[str, str] | None = None,
+    env_extra: dict[str, str] | None = None, ref: str | None = None, overlay: list[str] | None = None,
+    file_ids: dict[str, str] | None = None,
 ) -> dict:
     """Run one experiment and record it (and its evidence) in the store.
 
@@ -386,6 +457,15 @@ def run(
     them with ``-p <module>``). ``env_extra`` adds ``VERINODA_*`` variables
     only. Files the child writes to ``$VERINODA_ARTIFACTS`` are returned in
     ``result["artifacts"]`` ({name: path under runs/<id>/artifacts}).
+
+    Source of the copy: the working tree by default; with ``ref`` the regular
+    files of that commit (``git archive``-like, read with ``git cat-file``; the
+    user's tree, index and ``.git`` are untouched), optionally with
+    working-tree files ``overlay`` copied on top (labelled in ``source``). The
+    same policy and isolation apply either way. ``result["tree"]`` is the
+    identity of what ran (:mod:`verinoda.treestate`: tree hash over content
+    ids, computed while copying); ``file_ids`` (a dict) receives the per-file
+    content ids.
     """
     repo = Path(repo).resolve()
     cfg = load_config(repo)["experiments"]
@@ -393,6 +473,13 @@ def run(
         argv = shlex.split(argv, posix=(os.name != "nt"))
         if os.name == "nt":
             argv = [_strip_quotes(a) for a in argv]
+    source: dict = {"kind": "worktree"}
+    if ref is not None:
+        sha = treestate.resolve_commit(repo, ref)
+        source = {"kind": "commit", "commit": sha, "ref": treestate.check_ref(ref)}
+        commit = commit or sha
+    elif overlay:
+        raise ValueError("overlay applies to a commit copy only (give ref)")
     for name in plugins or {}:
         if not PLUGIN_NAME_RE.match(name):
             raise ValueError(f"plugin file name must be a plain module file name, not {name!r}")
@@ -416,6 +503,10 @@ def run(
         "claim_id": claim_id, "created_at": now(),
     }
     if level is None:
+        if source["kind"] == "commit":
+            reason_src = f" (source: commit {source['commit'][:12]})"
+        else:
+            reason_src = ""
         if isolation == "container" and not runtime:
             reason = "container isolation was requested and no container runtime (docker/podman) is available"
         else:
@@ -423,9 +514,10 @@ def run(
                       "Verinoda does not run non-allowlisted commands with process isolation only")
         if why_risky:
             reason = f"{reason} (why '{kind}': {why_risky})"
-        store.insert("experiments", {**base, "cwd": str(repo), "isolation": "none",
+        store.insert("experiments", {**base, "cwd": str(repo) + reason_src, "isolation": "none",
                                      "status": "refused", "summary": reason,
-                                     "environment": {"policy": {"kind": kind, "reason": why_risky}}})
+                                     "environment": {"policy": {"kind": kind, "reason": why_risky},
+                                                     "source": source}})
         raise ExperimentRefused(reason)
 
     out_dir = runs_dir(repo) / eid
@@ -434,7 +526,23 @@ def run(
     home = work / "_home"
     home.mkdir()
     copy = work / "repo"
-    copied = _copy_repo(repo, copy)
+    ids: dict[str, str] = {}
+    try:
+        if source["kind"] == "commit":
+            copy.mkdir()
+            copied = _copy_commit(repo, source["commit"], copy, ids)
+            if overlay:
+                source["overlay"] = _overlay(repo, copy, list(overlay), ids)
+            where = f"copy of commit {source['commit'][:12]} of {repo}"
+        else:
+            copied = _copy_repo(repo, copy, ids)
+            where = f"copy of {repo}"
+    except Exception:
+        shutil.rmtree(work, ignore_errors=True)
+        raise
+    tree = {"hash": treestate.tree_id(ids), "files": len(ids)}
+    if file_ids is not None:
+        file_ids.update(ids)
     env = _scrubbed_env(home)
     artifacts_dir = work / "_artifacts"
     artifacts_dir.mkdir()
@@ -488,7 +596,8 @@ def run(
     except OSError as exc:
         shutil.rmtree(work, ignore_errors=True)
         store.insert("experiments", {**base, "cwd": str(copy), "isolation": level, "status": "error",
-                                     "summary": f"could not start: {exc}", "environment": guarantees})
+                                     "summary": f"could not start: {exc}",
+                                     "environment": {**guarantees, "source": source, "tree_hash": tree["hash"]}})
         raise
     try:
         so, se = proc.communicate(timeout=timeout)
@@ -527,13 +636,15 @@ def run(
                  "outcome": "inconclusive" if inconclusive else ("pass" if matches else "fail"),
                  "raw_outcome": outcome, "expect": expect, "exit_code": code, "isolation": level,
                  **({"inconclusive_reason": why} if why else {}),
+                 "tree_hash": tree["hash"], "source": source,
                  "stdout": str(out_dir / "stdout.txt"), "stderr": str(out_dir / "stderr.txt")},
     }
     ev_id = evmod.add(store, ev)
     store.insert("experiments", {
-        **base, "cwd": f"copy of {repo} ({copied} files)", "isolation": level,
+        **base, "cwd": f"{where} ({copied} files)", "isolation": level,
         "environment": {"guarantees": guarantees, "limits": limits, "python": sys.version.split()[0],
-                        "platform": sys.platform, **({"plugins": sorted(plugins)} if plugins else {})},
+                        "platform": sys.platform, **({"plugins": sorted(plugins)} if plugins else {}),
+                        "source": source, "tree_hash": tree["hash"]},
         "exit_code": code, "duration_s": round(duration, 3), "timed_out": int(timed_out),
         "status": outcome, "summary": "; ".join(([why] if why else []) + summ["summary_lines"]) or None,
         "stdout_path": str(out_dir / "stdout.txt"), "stderr_path": str(out_dir / "stderr.txt"),
@@ -549,7 +660,8 @@ def run(
                                         + (f" ({why})" if why else ""))
     res = {"id": eid, "isolation": level, "guarantees": guarantees, "outcome": outcome,
            "matches_expectation": matches, "duration_s": round(duration, 3), "evidence_id": ev_id,
-           "summary": summ, "logs": {"stdout": str(out_dir / "stdout.txt"), "stderr": str(out_dir / "stderr.txt")}}
+           "summary": summ, "logs": {"stdout": str(out_dir / "stdout.txt"), "stderr": str(out_dir / "stderr.txt")},
+           "exit_code": code, "tree": tree, "source": source}
     if limits:
         res["limits"] = limits
     if artifacts:

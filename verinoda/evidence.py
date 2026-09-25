@@ -10,7 +10,8 @@ Source priority (lower rank = stronger), from the research protocol:
     6 reference repositories / original papers
     7 secondary sources
 
-``graph_edge``, ``user_feedback`` and ``search_result``/``model_summary``
+``graph_edge``, ``user_feedback``, ``agent_report`` (a run the agent reported
+to the debug ledger) and ``search_result``/``model_summary``
 are recorded for traceability but never count as verification on their own
 (see :data:`NON_VERIFYING`); a search result, model summary or user feedback
 is not even support for an inference by itself (:data:`NOT_SUPPORT`).
@@ -52,11 +53,14 @@ SOURCE_RANK: dict[str, int] = {
     "secondary": 7,
     "graph_edge": 8,
     "user_feedback": 9,
+    # a command the agent ran itself and reported to the debug ledger (output hash stored);
+    # Verinoda did not run it, so it never verifies anything (docs/DESIGN.md D34)
+    "agent_report": 9,
     "search_result": 10,
     "model_summary": 10,
 }
 
-NON_VERIFYING = {"graph_edge", "user_feedback", "search_result", "model_summary", "secondary"}
+NON_VERIFYING = {"graph_edge", "user_feedback", "search_result", "model_summary", "secondary", "agent_report"}
 # Pointers to evidence, not evidence: they cannot support even an inference on
 # their own (see claims.check_status for strong_inference).
 NOT_SUPPORT = {"user_feedback", "search_result", "model_summary"}
