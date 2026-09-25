@@ -1055,3 +1055,389 @@ def test_float_drift_alone_is_a_low_priority_status_of_its_own(tmp_path, capsys)
     assert rc == 3 and res["status"] == "numeric_drift_only", res["headline"]
     assert "only float drift" in res["headline"] and "behaviour changes" not in res["headline"]
     assert [d["class"] for d in res["differences"]] == ["numeric_drift"] and res["differences"][0]["low_priority"]
+
+
+# -- review findings (p3 fixer2) --------------------------------------------------------------------------------
+
+PLUGIN_LATER = r'''
+import asyncio, atexit, json, os, socket, sys, threading, weakref
+sys.path.insert(0, sys.argv[1])
+import probe_plugin as plug
+
+victim = sys.argv[2]
+
+
+def _w(tag):
+    getattr(__import__("builtins"), "op" + "en")(victim, "a").write(tag)
+
+
+class Handle:
+    def __del__(self):
+        _w("del")
+
+
+class Node:
+    def __init__(self):
+        self.me = self
+
+    def __del__(self):
+        _w("cycle")
+
+
+def make(x):
+    return Handle()
+
+
+def cyc(x):
+    Node()
+    return x
+
+
+class Box:
+    pass
+
+
+def boxed(x):
+    b = Box()
+    weakref.finalize(b, _w, "finalize")
+    return b
+
+
+def remember(x):
+    atexit.register(_w, "atexit")
+    return x
+
+
+async def _twice(x):
+    return 2 * x
+
+
+def loop(x):
+    return asyncio.run(_twice(x))
+
+
+def dial(x):
+    s = socket.socket()
+    try:
+        s.connect(("10.255.255.1", 9))
+    finally:
+        s.close()
+
+
+plug._S.main_thread = threading.get_ident()
+plug._S.known_threads = frozenset(t.ident for t in threading.enumerate())
+sys.addaudithook(plug._hook)
+plug._capture_atexit()
+plug._S.block, plug._S.armed = True, True
+out = {}
+for k, fn in enumerate((make, cyc, boxed, remember, loop, dial)):
+    plug._S.last_input = k
+    o, _ = plug._one_call(fn, None, {}, {"a": [k], "k": []}, [], [], 0, None)
+    out[fn.__name__] = sorted(o)
+    out[fn.__name__ + "_ev"] = [e["event"] for e in o.get("ev", [])]
+plug._exit_phase()
+out["stray"] = [(e["kind"], e.get("at_exit", False), e["after_input"]) for e in plug._S.stray]
+plug._S.armed = False
+out["exists"] = os.path.exists(victim)
+print(json.dumps(out))
+'''
+
+
+def test_finalizers_exit_handlers_and_the_asyncio_socket_pair_are_seen(tmp_path):
+    # review finding: a result's __del__, a weakref.finalize callback and an atexit handler ran in the main thread
+    # after the call's window had closed - real writes, and a normal differences_found; asyncio.run was refused as
+    # network on Windows (the loopback pair socket.socketpair() builds there)
+    script = tmp_path / "later.py"
+    script.write_text(PLUGIN_LATER, encoding="utf-8")
+    victim = tmp_path / "victim.txt"
+    proc = subprocess.run([sys.executable, str(script), str(ROOT / "verinoda" / "runtime"), str(victim)],
+                          capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    out = json.loads(proc.stdout.strip().splitlines()[-1])
+    for name in ("make", "cyc", "boxed"):  # released inside the call's window: blocked as the call's own
+        assert "b" in out[name] and out[name + "_ev"] == ["open"], (name, out)
+    assert "b" not in out["remember"] and "b" not in out["loop"], out
+    assert "b" in out["dial"] and out["dial_ev"] == ["socket.connect"], out  # a real address is still network
+    assert out["stray"] == [["file-write", True, 3]], out  # the handler ran in the exit phase, under the hook
+    assert not out["exists"] and not victim.exists()
+
+
+def test_the_process_ends_without_running_what_was_left_for_interpreter_exit():
+    src = plug.__file__
+    text = Path(src).read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_main")
+    calls = [ast.unparse(n.func) for n in ast.walk(main) if isinstance(n, ast.Call)]
+    # every way out of _main after the hook is armed ends with os._exit (via _end_process), after the exit phase
+    assert calls.count("_end_process") == 2 and "_exit_phase" in calls
+
+
+SQL_REACH = {"g/__init__.py": "",
+             "g/db.py": "def get_conn():\n    return getattr(__import__('sqlite3'), 'connect')('app.db')\n",
+             "g/q.py": 'class Q:\n    INSERT = "INSERT INTO orders VALUES (?)"\n',
+             "g/shapes.py": '''from g.db import get_conn
+from g.q import Q
+
+STATEMENTS = ("INSERT INTO orders VALUES (?)", "DELETE FROM orders")
+
+
+def _sql() -> str:
+    return "INSERT INTO orders VALUES (?)"
+
+
+def _stmt(t: str) -> str:
+    return "DELETE FROM " + t
+
+
+def from_helper(x: int) -> int:
+    get_conn().execute(_sql(), (x,))
+    return x
+
+
+def from_default(x: int, sql: str = "INSERT INTO orders VALUES (?)") -> int:
+    get_conn().execute(sql, (x,))
+    return x
+
+
+def from_other_class(x: int) -> int:
+    get_conn().execute(Q.INSERT, (x,))
+    return x
+
+
+def from_helper_concat(t: str) -> int:
+    get_conn().execute(_stmt(t))
+    return 0
+
+
+def from_loop(x: int) -> int:
+    for s in STATEMENTS:
+        get_conn().execute(s)
+    return x
+
+
+def only_logged(t: str) -> str:
+    q = _sql()
+    print("would run", q)
+    return q
+
+
+class Repo:
+    def __init__(self, n: int) -> None:
+        self.n = n
+        self.insert = "INSERT INTO orders VALUES (?)"
+
+    def put(self, x: int) -> int:
+        get_conn().execute(self.insert, (x,))
+        return x
+'''}
+
+
+@pytest.mark.parametrize("fn", ["from_helper", "from_default", "from_other_class", "from_helper_concat", "from_loop",
+                                "Repo.put"])
+def test_the_gate_follows_sql_statements_through_helpers_defaults_attributes_and_loops(tmp_path, fn):
+    # review finding: moving the SQL rule to the syntax tree let these six shapes pass (they were refused before)
+    repo = _plain_repo(tmp_path, SQL_REACH)
+    res = probe_gate.check(repo, _files(repo), [("g/shapes.py", fn)])
+    r = next((r for r in res["reasons"] if r["kind"] == "sql-write"), None)
+    assert r is not None and not r.get("heuristic"), res["reasons"]
+    assert r["at"].startswith("g/shapes.py:") and "execute()" in r["why"], r
+
+
+def test_a_statement_that_is_only_printed_still_runs(tmp_path):
+    repo = _plain_repo(tmp_path, SQL_REACH)
+    assert probe_gate.check(repo, _files(repo), [("g/shapes.py", "only_logged")])["verdict"] == "passed"
+
+
+CLASS_STATE = {"c/__init__.py": "", "c/state.py": '''from dataclasses import dataclass, field
+
+
+class Counter:
+    n = 0
+
+
+class Registry:
+    items: list = []
+
+    def add(self, x: int) -> int:
+        self.items.append(x)
+        return len(self.items)
+
+    def put(self, k: str) -> int:
+        self.items[0] = k
+        return 1
+
+
+class Own:
+    items: list = []
+
+    def __init__(self) -> None:
+        self.items = []
+
+    def add(self, x: int) -> int:
+        self.items.append(x)
+        return len(self.items)
+
+
+@dataclass
+class Bag:
+    items: list = field(default_factory=list)
+
+    def add(self, x: int) -> int:
+        self.items.append(x)
+        return len(self.items)
+
+
+class Rec:
+    def __del__(self):
+        open("gone.txt", "w").write("x")
+
+
+def bump(x: int) -> int:
+    setattr(Counter, "n", x)
+    return x
+
+
+def own_attr(x: int) -> int:
+    o = Own()
+    setattr(o, "items", [x])
+    return x
+
+
+def make(x: int) -> Rec:
+    return Rec()
+'''}
+
+
+@pytest.mark.parametrize("fn,refused", [("bump", True), ("Registry.add", True), ("Registry.put", True),
+                                        ("Own.add", False), ("Bag.add", False), ("own_attr", False),
+                                        ("make", True)])
+def test_the_gate_sees_setattr_on_a_class_shared_class_lists_and_finalizers(tmp_path, fn, refused):
+    # review finding: setattr(Counter, ...) and self.items.append() on a class-level list passed the gate, and a
+    # constructor's __del__ was not read
+    repo = _plain_repo(tmp_path, CLASS_STATE)
+    res = probe_gate.check(repo, _files(repo), [("c/state.py", fn)])
+    assert (res["verdict"] == "refused") == refused, res["reasons"]
+    if fn == "make":
+        assert res["reasons"][0]["kind"] == "file-write" and res["reasons"][0]["via"] == ["make", "Rec"]
+        assert res["reasons"][0]["line"].startswith('open("gone.txt"'), res["reasons"][0]
+
+
+def test_an_integer_that_became_a_float_or_a_flipped_zero_is_no_float_drift():
+    # review finding: [5] -> [5.0], {'qty': 3} -> {'qty': 3.0}, a 20-digit int -> a float, -0.0 -> 0.0 and an
+    # object's repr with unquoted digits were all numeric_drift ("only float drift ... in the last digits")
+    r = lambda text, t: {"r": text, "t": t}  # noqa: E731
+    for b, h, t in (("[5]", "[5.0]", "builtins.list"), ("{'qty': 3, 'sku': 'A1'}", "{'qty': 3.0, 'sku': 'A1'}",
+                                                        "builtins.dict"),
+                    ("(12345678901234567890,)", "(1.2345678901234567e+19,)", "builtins.tuple"),
+                    ("-0.0", "0.0", "builtins.float"), ("[0.0]", "[-0.0]", "builtins.list"),
+                    ("Money(12345678901.23)", "Money(12345678901.24)", "m.Money"),
+                    ("[Money(1.0000000000001)]", "[Money(1.0000000000002)]", "builtins.list")):
+        assert probe.classify(r(b, t), r(h, t), False) == "value_changed", (b, h)
+    assert probe.equal_under_eq(r("[5]", "builtins.list"), r("[5.0]", "builtins.list"))
+    assert probe.classify(r("[0.1, 0.2]", "builtins.list"), r("[0.1, 0.20000000000000004]", "builtins.list"),
+                          False) == "numeric_drift"
+    assert probe.classify(r("0.30000000000000004", "builtins.float"), r("0.3", "builtins.float"), False) == \
+        "numeric_drift"
+
+
+@needs_git
+def test_inputs_that_only_hang_or_end_the_process_are_no_pass(monkeypatch, tmp_path):
+    # review finding: every input ended the process on both sides (or hung) and the probe said
+    # no_difference_found "in 4 inputs", exit 0, with 296 inputs never run
+    repo = _repo(tmp_path)
+    _sub(repo, "orders/pricing.py", "if subtotal > DISCOUNT_THRESHOLD:", "if subtotal >= DISCOUNT_THRESHOLD:")
+    art = tmp_path / "art"
+    art.mkdir()
+    calls = _fake_runs(monkeypatch, art, [(_lines(HEADER, {"k": "ready"}), "", 3)])
+    st = open_store(repo)
+    res = probe.probe(st, repo, "orders/pricing.py::apply_discount", inputs=30)
+    st.close()
+    assert len(calls) == 8  # four runs per side, each ended by an input
+    assert res["status"] == "inconclusive" and "only 0 of" in res["headline"], res["headline"]
+    assert "ended the process" in res["headline"] and not res.get("claim_id")
+    assert res["inputs"]["compared"] == 0
+
+
+@needs_git
+def test_changed_is_no_pass_when_a_changed_file_does_not_parse(tmp_path, capsys):
+    # review finding: the only edit broke the syntax of a file, and --changed said nothing_changed, exit 0
+    repo = _repo(tmp_path)
+    _sub(repo, "orders/pricing.py", "if subtotal > DISCOUNT_THRESHOLD:", "if subtotal > DISCOUNT_THRESHOLD")
+    sha = _git(repo, "rev-parse", "HEAD").strip()
+    listed = probe.changed_functions(repo, sha)
+    assert listed == [{"symbol": "orders/pricing.py", "change": "unparseable", "line": None,
+                       "why": "does not parse as Python in the working tree"}]
+    rc = cli.main(["probe", "--changed", "--repo", str(repo), "--json"])
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 3 and out["status"] == "incomplete" and out["probes"] == [], out
+    assert out["skipped"][0]["symbol"] == "orders/pricing.py" and "does not parse" in out["skipped"][0]["why"]
+    assert "not readable as Python" in out["headline"] and "no pass" in out["headline"]
+
+
+def test_emitted_tests_rebuild_sorted_sets_and_long_integers(tmp_path):
+    # review finding: the pinned hash of a long set result (elements sorted by the plugin) and of an integer past
+    # the 4300-digit str limit could not be reproduced by the emitted test: it failed on the base
+    (tmp_path / "setmod.py").write_text(
+        "class M:\n    def __init__(self, v):\n        self.v = v\n\n    def __repr__(self):\n"
+        "        return f'M({self.v})'\n\n    def __hash__(self):\n        return hash(self.v)\n\n"
+        "    def __eq__(self, o):\n        return isinstance(o, M) and o.v == self.v\n\n\n"
+        "def many(n):\n    return set(range(600 + n))\n\n\ndef objs(n):\n    return {M(3), M(1), M(2)}\n\n\n"
+        "def big(n):\n    return 10 ** 5000 + n\n\n\ndef box(n):\n    return object()\n", encoding="utf-8")
+    sys.path.insert(0, str(tmp_path))
+    try:
+        import setmod
+    finally:
+        sys.path.remove(str(tmp_path))
+    fns = {"many": setmod.many, "objs": setmod.objs, "big": setmod.big, "box": setmod.box}
+    cases = [{"a": [0], "k": []}]
+    body = []
+    for name, fn in fns.items():
+        ob = plug._result(fn(0))
+        if name == "big" and not hasattr(sys, "get_int_max_str_digits"):
+            continue
+        res = {"differences": [{"class": "value_changed", "examples": [{"input": 0}]}]}
+        text = probe.emit_tests(res, cases, {0: {"x": [ob]}}, {0: {"x": [{"t": "builtins.int", "r": "1"}]}},
+                                {"module": "setmod", "call": {"kind": "function"}}, name, "abc", "prb_x")
+        ast.parse(text)
+        body.append((name, ob, text))
+    notes = {name: ob.get("np") for name, ob, _ in body}
+    assert notes["many"] == ["set"] and notes["objs"] == ["set"] and notes["box"] == ["masked"]
+    for name, _ob, text in body:
+        (tmp_path / f"test_{name}.py").write_text(text, encoding="utf-8")
+    proc = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rs", "."],
+                          cwd=tmp_path, capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 0, proc.stdout[-1500:]
+    assert "1 skipped" in proc.stdout and "cannot be pinned as text" in proc.stdout  # object(): an address
+    # the emitted helper renders what the plugin rendered
+    ns: dict = {}
+    exec(probe.PROBE_REPR_SOURCE, ns)  # noqa: S102 - the helper text Verinoda writes into an emitted test
+    for v in ({3, 1, 2}, [frozenset({"b", "a"}), {2: {1, 0}}], (set(),), {"k": [{"z", "y"}]}, "plain"):
+        assert ns["_probe_repr"](v) == plug._repr(v)
+
+
+@pytest.mark.experiment
+@needs_git
+def test_finalizers_and_exit_handlers_the_gate_cannot_see_are_blocked_end_to_end(tmp_path):
+    victim = tmp_path / "late.txt"
+    w = f"getattr(__import__('builtins'), 'op' + 'en')({str(victim)!r}, 'a').write('x')"
+    src = ("import asyncio\n\n\nclass Handle:\n    def __init__(self, v: int) -> None:\n        self.v = v\n\n"
+           f"    def __del__(self):\n        {w}\n\n    def __repr__(self) -> str:\n"
+           "        return f'Handle({self.v})'\n\n\ndef make(x: int) -> Handle:\n    return Handle(x)\n\n\n"
+           f"def _flush() -> None:\n    {w}\n\n\n"
+           "def remember(x: int) -> int:\n    getattr(__import__('atexit'), 'register')(_flush)\n    return x * 2\n\n\n"
+           "async def _double(x: int) -> int:\n    return x * 2\n\n\n"
+           "def run_double(x: int) -> int:\n    return asyncio.run(_double(x))\n")
+    repo = _repo(tmp_path, {"orders/late.py": src})
+    _sub(repo, "orders/late.py", "return Handle(x)", "return Handle(x + 1)")
+    _sub(repo, "orders/late.py", "return x * 2\n\n\nasync", "return x * 3\n\n\nasync")
+    _sub(repo, "orders/late.py", "asyncio.run(_double(x))", "asyncio.run(_double(x)) + 1")
+    st = open_store(repo)
+    res = probe.probe(st, repo, "orders/late.py::make", inputs=20)
+    assert res["status"] == "refused" and "at run time" in res["headline"], res["headline"]
+    res = probe.probe(st, repo, "orders/late.py::remember", inputs=20)
+    assert res["status"] == "refused" and "end of the process" in res["headline"], res["headline"]
+    assert res["blocked"]["example"]["where"].startswith("at the end of the process")
+    res = probe.probe(st, repo, "orders/late.py::run_double", inputs=20)
+    assert res["status"] == "differences_found", res["headline"]  # asyncio's loopback pair is not network
+    st.close()
+    assert not victim.exists()

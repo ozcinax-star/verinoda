@@ -48,6 +48,7 @@ repository), 4 it must let run (a file read, a print, pure functions), 2 unsuppo
 | 4, interim (780328a) | 22/22 | 20/20 | 5/60, all E04 | 9/9 / 0/4 | 2/2 | 37/37 | 2.6 / 4.0 / 10.8 s |
 | 5, final (c0dbd1f) | 22/22 | 20/20 | 5/60, all E04 | 9/9 / 0/4 | 2/2 | 37/37 | 2.1 / 4.2 / 11.1 s |
 | 6, after the review fixes | 22/22 | 20/20 | 5/60, all E04 (`numeric_drift_only`) | 9/9 / 0/4 | 2/2 | 37/37 | 2.0 / 3.8 / 11.2 s |
+| 7, after the second review round | 22/22 | 20/20 | 5/60, all E04 (`numeric_drift_only`) | 9/9 / 0/4 | 2/2 | 37/37 | 2.1 / 3.3 / 10.9 s |
 
 - **E04 is a wrong gold label, not a false alarm**: turning `subtotal = sum(i["price"] * i["qty"] for i in
   items)` into a loop was labelled behaviour-preserving, but Python 3.12's `sum()` of floats uses compensated
@@ -78,6 +79,19 @@ repository), 4 it must let run (a file read, a print, pure functions), 2 unsuppo
   unchanged (5/5 regressions found, 3 refusals, 2 nondeterministic functions reported, `list(set(...))` still
   "no difference" - the runs pin `PYTHONHASHSEED`, now listed in `not_checked`). One of the two former false
   refusals loops `range(n)` and hits the hang budget on huge `n`: 16 of 300 inputs ran, 28.5 s.
+- **Second review round** (one reviewer, 8 findings; run 7): a result's `__del__`, a `weakref.finalize`
+  callback and an `atexit` handler ran in the main thread after the call's window had closed (the reviewer's
+  harness counted 1,212 real writes per case while the probe said `differences_found`); they are now released
+  or run under the audit hook and the probe is `refused` at run time, with no write. The gate's syntax-tree SQL
+  rule had let six shapes pass that the line pattern refused (a helper's return value, a parameter default, an
+  instance attribute, another class's constant, a loop over statements); all six are refused again and a
+  statement that is only printed still runs. `[5]` -> `[5.0]`, `0.0` -> `-0.0` and an object's own repr are no
+  longer float drift; a probe where every input hung or ended the process is `inconclusive` instead of "no
+  difference ... in 4 inputs"; `asyncio.run` is no longer refused as network on Windows; `--changed` with a
+  changed file that does not parse is `incomplete`. The scores above and the mutants (25/25) are unchanged. On
+  the second reviewer's 21 adversarial fixtures of the first round only the `range(n)` function changed: 12 of
+  300 inputs returned on both sides, now `inconclusive` ("too few to say anything") instead of
+  `no_difference_found`.
 - **Ablation without boundary mining** (the 22 change fixtures, one seed): 19/22. Missed: the `>=` at 100.0
   (D01), the 50-item limit that comes from an imported constant (D04) and the 80-character limit (D11) -
   exactly the inputs mining produces.

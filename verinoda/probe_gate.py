@@ -12,10 +12,12 @@ run when the target is imported). It refuses the probe when any of them:
   ``requests``, ``urllib.request``, ``http.client`` ...), starts processes or
   threads (``subprocess``, ``os.system``, ``multiprocessing``,
   ``threading.Thread`` ...) or connects to a database (``sqlite3.connect`` ...);
-* passes an SQL write statement (``INSERT INTO`` ..., a literal or a name
-  assigned one) to a call that does not only build or log text
-  (``cur.execute("INSERT ...")``; a statement that is only returned or assigned
-  runs nothing); read queries are allowed;
+* passes an SQL write statement (``INSERT INTO`` ..., a literal, a name
+  assigned one, a parameter default, an instance attribute, a project class's or
+  module's constant, a loop variable over statements, or the return value of a
+  project function that returns one) to a call that does not only build or log
+  text (``cur.execute("INSERT ...")``, ``cur.execute(_sql())``; a statement that
+  is only returned or assigned runs nothing); read queries are allowed;
 * matches another sink line of :data:`verinoda.architecture_map.SINK_PATTERNS`
   (``.commit()``, ``.save()``, ``json.dump``): a text pattern, marked
   ``heuristic``; ``.commit()`` / ``.save()`` on ``self``, a parameter annotated
@@ -24,8 +26,14 @@ run when the target is imported). It refuses the probe when any of them:
 * changes state the probe cannot isolate between calls: a ``global`` name it
   assigns, a module-level container it mutates (``CACHE[k] = v``,
   ``_seen.append(x)``), an attribute of an imported module or a class
-  (``config.X = 1``, ``Cls.count += 1``), the environment, ``sys.path``, the
-  working directory, the global random seed, signal or exit handlers.
+  (``config.X = 1``, ``Cls.count += 1``, ``setattr(Cls, "n", x)``), a
+  class-level container changed through ``self`` (``items: list = []``, then
+  ``self.items.append(x)``; dataclass fields are the instance's), the
+  environment, ``sys.path``, the working directory, the global random seed,
+  signal or exit handlers.
+
+A constructor call reads ``__init__``, ``__post_init__``, ``__new__`` and the
+``__del__`` that runs when the object is released.
 
 Each reason names the line and the call chain that reaches it (``place_order ->
 OrderRepository.save``). The gate is static and therefore heuristic: calls
@@ -193,6 +201,7 @@ class Gate:
         self.checked: list[str] = []
         self._uses: dict[str, dict[int, object]] = {}
         self._sqlc: dict[str, dict[str, int]] = {}
+        self._sqlr: dict[str, tuple[str, int] | None] = {}
 
     # -- helpers ---------------------------------------------------------------------------
     def _uses_map(self, rel: str) -> dict[int, object]:
@@ -254,8 +263,8 @@ class Gate:
             node = _find_def(tree, qual) if tree is not None else None
             if node is None:
                 continue
-            if isinstance(node, ast.ClassDef):  # a constructor call: __init__ / __post_init__ / __new__
-                for m in ("__init__", "__post_init__", "__new__"):
+            if isinstance(node, ast.ClassDef):  # a constructor call: __init__ / __post_init__ / __new__, and the
+                for m in ("__init__", "__post_init__", "__new__", "__del__"):  # finalizer when it is released
                     if _find_def(tree, f"{qual}.{m}") is not None:
                         queue.append((rel, f"{qual}.{m}", depth, via))
                 continue
@@ -376,10 +385,86 @@ class Gate:
                             out[t.id] = ln
         return out
 
-    def _sql_source(self, rel: str, expr: ast.AST, local: dict[str, tuple[str, int]]
-                    ) -> tuple[str, int, str | None] | None:
+    def _sql_attrs(self, rel: str) -> dict[str, int]:
+        """Instance attributes of ``rel`` assigned an SQL write statement in a method (``self.insert = "INSERT
+        ..."`` in ``__init__``): attribute -> line."""
+        key = f"{rel}\0attrs"
+        if key in self._sqlc:
+            return self._sqlc[key]
+        out: dict[str, int] = {}
+        self._sqlc[key] = out
+        tree, _ = self.ix.tree(rel)
+        for n in ast.walk(tree) if tree is not None else []:
+            if isinstance(n, (ast.Assign, ast.AnnAssign)) and n.value is not None:
+                ln = _sql_literal_line(n.value)
+                if ln:
+                    for t in (n.targets if isinstance(n, ast.Assign) else [n.target]):
+                        if isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name) and \
+                                t.value.id in ("self", "cls"):
+                            out.setdefault(t.attr, ln)
+        return out
+
+    def _attr_sql(self, rel: str, n: ast.Attribute) -> tuple[str, int] | None:
+        """``self.X`` / ``cls.X`` (a class constant or an instance attribute of this file), ``Q.X`` (a class of the
+        project) or ``module.X`` (a project module) that holds an SQL write statement."""
+        if not isinstance(n.value, ast.Name):
+            return None
+        if n.value.id in ("self", "cls"):
+            consts, attrs = self._sql_consts(rel), self._sql_attrs(rel)
+            if n.attr in consts:
+                return rel, consts[n.attr]
+            return (rel, attrs[n.attr]) if n.attr in attrs else None
+        full = self._module_qual(rel, n.value.id)
+        if not full:
+            return None
+        where = self.ix.modules.get(full)  # `import orders.q as q; q.INSERT`
+        if where is None:
+            loc = self._locate(full)  # `from orders.q import Q; Q.INSERT`
+            where = loc[0] if loc is not None and "." not in loc[1] else None
+        if where is None:
+            return None
+        consts = self._sql_consts(where)
+        return (where, consts[n.attr]) if n.attr in consts else None
+
+    def _returns_sql(self, rel: str, qual: str, depth: int) -> tuple[str, int] | None:
+        """Where the SQL write statement is that project function ``qual`` of ``rel`` returns, else None
+        (``def _sql(): return "INSERT ..."``; followed 3 calls deep)."""
+        key = f"{rel}\0{qual}"
+        if key in self._sqlr:
+            return self._sqlr[key]
+        if depth > 3:
+            return None
+        self._sqlr[key] = None  # a recursive helper: no answer while it is being read
+        tree, _ = self.ix.tree(rel)
+        fn = _find_def(tree, qual) if tree is not None else None
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return None
+        cls = qual.rpartition(".")[0] or None
+        local = self._sql_locals(rel, fn, list(_scope_walk(fn)), cls, depth + 1)
+        for n in _scope_walk(fn):
+            if isinstance(n, ast.Return) and n.value is not None:
+                src = self._sql_source(rel, n.value, local, cls, depth + 1)
+                if src:
+                    self._sqlr[key] = (src[0], src[1])
+                    return self._sqlr[key]
+        return None
+
+    def _call_sql(self, rel: str, call: ast.Call, cls: str | None, depth: int) -> tuple[str, int] | None:
+        """The SQL write statement a call to a project function returns (``execute(_sql())``)."""
+        f = call.func
+        target = None
+        if isinstance(f, ast.Name):
+            full = self._module_qual(rel, f.id)
+            target = self._locate(full) if full else None
+        elif isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and f.value.id in ("self", "cls") \
+                and cls:
+            target = (rel, f"{cls}.{f.attr}")
+        return self._returns_sql(*target, depth) if target is not None else None
+
+    def _sql_source(self, rel: str, expr: ast.AST, local: dict[str, tuple[str, int]], cls: str | None = None,
+                    depth: int = 0) -> tuple[str, int, str | None] | None:
         """``(file, line, name)`` of an SQL write statement that ``expr`` contains (``name`` None) or names through a
-        variable or constant (``name``), else None."""
+        variable, a constant, an attribute or a project function's return value (``name``), else None."""
         ln = _sql_literal_line(expr)
         if ln:
             return rel, ln, None
@@ -394,28 +479,57 @@ class Gate:
                 loc = self._locate(full) if full else None
                 if loc is not None and "." not in loc[1] and loc[1] in self._sql_consts(loc[0]):
                     return loc[0], self._sql_consts(loc[0])[loc[1]], n.id
-            elif isinstance(n, ast.Attribute) and n.attr in consts and isinstance(n.value, ast.Name) and \
-                    n.value.id in ("self", "cls"):
-                return rel, consts[n.attr], ast.unparse(n)
+            elif isinstance(n, ast.Attribute):
+                src = self._attr_sql(rel, n)
+                if src:
+                    return (*src, ast.unparse(n)[:60])
+            elif isinstance(n, ast.Call) and depth <= 3:
+                src = self._call_sql(rel, n, cls, depth)
+                if src:
+                    return (*src, f"{ast.unparse(n.func)[:50]}()")
         return None
 
-    def _sql_writes(self, rel: str, root: ast.AST, via: list[str], phase: str) -> None:
+    def _sql_locals(self, rel: str, root: ast.AST, nodes: list, cls: str | None, depth: int = 0
+                    ) -> dict[str, tuple[str, int]]:
+        """Local names bound to an SQL write statement: assignments, parameter defaults (``sql="INSERT ..."``, used
+        when the caller leaves it out) and loop variables over a collection of statements."""
+        local: dict[str, tuple[str, int]] = {}
+        args = getattr(root, "args", None)
+        if args is not None:
+            pos = [*args.posonlyargs, *args.args]
+            pairs = list(zip(pos[len(pos) - len(args.defaults):], args.defaults))
+            pairs += [(p, d) for p, d in zip(args.kwonlyargs, args.kw_defaults) if d is not None]
+            for p, d in pairs:
+                src = self._sql_source(rel, d, local, cls, depth)
+                if src:
+                    local[p.arg] = (src[0], src[1])
+        for n in nodes:
+            value, targets = None, []
+            if isinstance(n, (ast.Assign, ast.AnnAssign, ast.AugAssign)) and n.value is not None:
+                value, targets = n.value, (n.targets if isinstance(n, ast.Assign) else [n.target])
+            elif isinstance(n, (ast.For, ast.AsyncFor, ast.comprehension)):
+                value, targets = n.iter, [n.target]
+            if value is None:
+                continue
+            src = self._sql_source(rel, value, local, cls, depth)
+            if src:
+                for t in targets:
+                    for x in ast.walk(t):
+                        if isinstance(x, ast.Name):
+                            local[x.id] = (src[0], src[1])
+        return local
+
+    def _sql_writes(self, rel: str, root: ast.AST, via: list[str], phase: str, cls: str | None = None) -> None:
         """An SQL write statement (``INSERT INTO`` ...) is a sink where it reaches a call's arguments -
-        ``cur.execute("INSERT ...")``, ``db.run(SQL)`` with ``SQL`` assigned one - and not a call that only builds
-        or logs text (``.format``, ``.join``, ``log.info``, an exception). A statement that is only returned,
-        assigned or compared runs nothing."""
+        ``cur.execute("INSERT ...")``, ``db.run(SQL)`` with ``SQL`` assigned one, a parameter default, an instance
+        attribute, another class's constant, a loop variable over statements or a project function's return value
+        - and not a call that only builds or logs text (``.format``, ``.join``, ``log.info``, an exception). A
+        statement that is only returned, assigned or compared runs nothing."""
         # a function with its nested functions (as the call walk); a module-level statement without the bodies of
         # the functions it defines (they do not run at import)
         nodes = list(ast.walk(root) if isinstance(root, (ast.FunctionDef, ast.AsyncFunctionDef)) else
                      _scope_walk(root))
-        local: dict[str, tuple[str, int]] = {}
-        for n in nodes:
-            if isinstance(n, (ast.Assign, ast.AnnAssign, ast.AugAssign)) and n.value is not None:
-                src = self._sql_source(rel, n.value, local)
-                if src:
-                    for t in (n.targets if isinstance(n, ast.Assign) else [n.target]):
-                        if isinstance(t, ast.Name):
-                            local[t.id] = (src[0], src[1])
+        local = self._sql_locals(rel, root, nodes, cls)
         for n in nodes:
             if not isinstance(n, ast.Call):
                 continue
@@ -423,7 +537,7 @@ class Gate:
             if name in TEXT_ONLY_CALLS or name.endswith(("Error", "Exception", "Warning")):
                 continue
             for arg in [*n.args, *(k.value for k in n.keywords)]:
-                src = self._sql_source(rel, arg, local)
+                src = self._sql_source(rel, arg, local, cls)
                 if not src:
                     continue
                 if src[2] is None:  # the statement is written in the call: its line
@@ -490,9 +604,9 @@ class Gate:
                     self._typed_method(rel, (node, cls), call) is not None:
                 ln = call.end_lineno or call.lineno
                 typed[ln] = typed.get(ln, 0) + 1
-        self._sql_writes(rel, node, via, phase)
+        self._sql_writes(rel, node, via, phase, cls)
         self._text(rel, node.lineno, node.end_lineno or node.lineno, via, phase, typed)
-        self._state_writes(rel, node, via, phase)
+        self._state_writes(rel, node, via, phase, cls)
         uses = self._uses_map(rel)
         out: list[tuple[str, str]] = []
         for call in ast.walk(node):
@@ -597,10 +711,34 @@ class Gate:
                     return loc[0], f"{loc[1]}.{method}"
         return None
 
-    def _state_writes(self, rel: str, fn: ast.AST, via: list[str], phase: str) -> None:
+    def _class_level(self, rel: str, cls: str | None) -> set[str]:
+        """Names assigned in the body of class ``cls`` of ``rel`` and not set on the instance in its ``__init__``
+        (``items: list = []``): ``self.items.append(x)`` changes state every instance shares."""
+        tree, _ = self.ix.tree(rel)
+        node = _find_def(tree, cls) if cls and tree is not None else None
+        if not isinstance(node, ast.ClassDef):
+            return set()
+        # annotated names of a dataclass, attrs or pydantic class, a NamedTuple ... are per-instance fields
+        plain = not node.decorator_list and not node.bases and not node.keywords
+        names: set[str] = set()
+        for st in node.body:
+            if isinstance(st, ast.Assign):
+                names |= {t.id for t in st.targets if isinstance(t, ast.Name)}
+            elif isinstance(st, ast.AnnAssign) and st.value is not None and isinstance(st.target, ast.Name) and \
+                    (plain or "ClassVar" in ast.unparse(st.annotation)):
+                names.add(st.target.id)
+        init = _find_def(tree, f"{cls}.__init__")
+        for n in ast.walk(init) if init is not None else []:
+            if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Store) and isinstance(n.value, ast.Name) \
+                    and n.value.id == "self":
+                names.discard(n.attr)
+        return names
+
+    def _state_writes(self, rel: str, fn: ast.AST, via: list[str], phase: str, cls: str | None = None) -> None:
         """Writes to state the probe cannot isolate between calls (see the module docstring)."""
         sc = self.ix.scopes(rel)
         module_names = set(sc.module.binds) if sc is not None else set()
+        shared = self._class_level(rel, cls)
         declared = {n for st in ast.walk(fn) if isinstance(st, ast.Global) for n in st.names}
         local: set[str] = set()
         args = getattr(fn, "args", None)
@@ -627,6 +765,29 @@ class Gate:
             while isinstance(e, (ast.Attribute, ast.Subscript)):
                 e = e.value
             return e
+
+        def class_object(e: ast.AST) -> bool:
+            """Is ``e`` a class: ``cls``, ``type(self)``, ``self.__class__`` or a project class's name?"""
+            if isinstance(e, ast.Name):
+                return e.id == "cls" or module_kind(e.id) == "class"
+            if isinstance(e, ast.Call):
+                return ast.unparse(e.func) == "type"
+            return isinstance(e, ast.Attribute) and e.attr == "__class__"
+
+        def on_class(e: ast.AST) -> bool:
+            """Does ``e`` (an object changed in place) live on a class: ``cls.X``, ``type(self).X``,
+            ``self.__class__.X``, ``Counter.X`` or ``self.X`` with X a class-level name of this class?"""
+            chain = []
+            while isinstance(e, (ast.Attribute, ast.Subscript)):
+                chain.append(e)
+                e = e.value
+            if not chain:
+                return False
+            first = chain[-1]
+            if class_object(e) or class_object(first):
+                return True
+            return isinstance(e, ast.Name) and e.id == "self" and isinstance(first, ast.Attribute) and \
+                first.attr in shared
 
         def target(t: ast.AST, line: int) -> None:
             if isinstance(t, (ast.Tuple, ast.List)):
@@ -659,6 +820,9 @@ class Gate:
                 elif r.id in ("self", "cls") and isinstance(t, ast.Attribute) and \
                         ast.unparse(t).startswith(("self.__class__.", "cls.")):
                     self._add("global-state", rel, line, f"changes class-level state (`{written}`)", via, phase)
+                elif r.id == "self" and isinstance(t, (ast.Attribute, ast.Subscript)) and on_class(t.value):
+                    # `self.items[k] = v` with `items` a class attribute: every instance shares it
+                    self._add("global-state", rel, line, f"changes class-level state (`{written}`)", via, phase)
             elif isinstance(r, ast.Call) and ast.unparse(r.func) == "type":
                 self._add("global-state", rel, line, f"changes class-level state (`{written}`)", via, phase)
 
@@ -685,6 +849,18 @@ class Gate:
                     if isinstance(r, ast.Name) and module_kind(r.id) == "value":
                         self._add("global-state", rel, n.lineno, f"mutates the module-level `{r.id}` "
                                                                  f"(`{written}()`)", via, phase)
+                    elif on_class(n.func.value):
+                        self._add("global-state", rel, n.lineno, f"changes class-level state (`{written}()`)",
+                                  via, phase)
+            elif isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in ("setattr", "delattr") \
+                    and n.args:
+                obj = n.args[0]
+                written = ast.unparse(n)[:60]
+                if isinstance(obj, ast.Name) and module_kind(obj.id) == "module":
+                    self._add("global-state", rel, n.lineno, f"sets an attribute of an imported module "
+                                                             f"(`{written}`)", via, phase)
+                elif class_object(obj) or on_class(obj):
+                    self._add("global-state", rel, n.lineno, f"changes class-level state (`{written}`)", via, phase)
 
 
 def check(repo: Path, files: list[str], roots: list[tuple[str, str]]) -> dict:

@@ -22,6 +22,7 @@ B1 case (D03) had been run once during development before `fixtures.py` was writ
 | `run6-fixer.json` | after the review fixes (fixer round: threads and child processes blocked at run time, a module name taken by another module, process exits, plugin errors, float drift only on floats and as its own status `numeric_drift_only`, the gate's SQL rule on the syntax tree, `--changed` no pass when a function was not compared) |
 | `mutants.py`, `mutants_survivors.json`, `mutant_labels.json`, `mutants_run1.json`, `mutants_run3-final.json` | 45 automated single-point mutants (comparison flips, and/or swap, `not` removal, `+`/`-`, `*`/`/`, integer constants +-1, float constants +1%) of 12 functions of the fixture project; 27 survive the tests; hand labels; the probe's results (first run, and the final code) |
 | `mutants_run4-fixer.json` | the same 27 surviving mutants after the review fixes |
+| `run7-fixer2.json`, `mutants_run5-fixer2.json` | after the second review round (finalizers, exit handlers and asyncio's socket pair at run time; SQL statements through helpers, defaults, attributes and loops in the gate; float drift only between float literals; no pass when fewer than half of the inputs returned or raised; an unparseable changed file) |
 
 Reproduce (from the repository root, with the project's venv): `python
 benchmarks/results/probe-2026-09-25/run_fixtures.py WORKDIR OUT.json` and `python mutants.py generate WORKDIR
@@ -38,6 +39,7 @@ WORKDIR receives the git copies (a scratch directory).
 | run4-780328a | 22/22 | 20/20 | 5/60 (E04) | 9/9 / 0/4 | 2/2 | 37/37 | 2.6 / 4.0 / 10.8 |
 | run5-final | 22/22 | 20/20 | 5/60 (E04) | 9/9 / 0/4 | 2/2 | 37/37 | 2.1 / 4.2 / 11.1 |
 | run6-fixer | 22/22 | 20/20 | 5/60 (E04, now `numeric_drift_only`) | 9/9 / 0/4 | 2/2 | 37/37 | 2.0 / 3.8 / 11.2 |
+| run7-fixer2 | 22/22 | 20/20 | 5/60 (E04, `numeric_drift_only`) | 9/9 / 0/4 | 2/2 | 37/37 | 2.1 / 3.3 / 10.9 |
 | ablation-no-mining (22 change fixtures) | 19/22 (D01, D04, D11 missed) | 17/20 | - | - | - | 22/22 | 3.3 / 3.7 / 13.1 |
 
 - E04's gold is wrong: `sum()` of floats is compensated on Python 3.12 (`sum([0.1] * 10) == 1.0`, a loop gives
@@ -48,4 +50,4 @@ WORKDIR receives the git copies (a scratch directory).
 - Automated mutants: 45 generated, 27 survive the tests, labelled 25 `change` and 2 `change_message_only`, none
   equivalent; the probe finds a difference in 25/25 and none in the 2 message-only ones (types are compared, not
   messages), in the first run, with the final code and after the review fixes (`mutants_run4-fixer.json`,
-  median 3.1 s per probe).
+  median 3.1 s per probe), and after the second review round (`mutants_run5-fixer2.json`, 25/25, median 2.75 s).

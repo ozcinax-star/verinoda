@@ -21,8 +21,9 @@ or a unique bare name; or every function changed against the base with
    environment and tree-killing timeout of every experiment. The base is a
    commit copy (``ref``); the working tree is the default copy. Each input is
    called twice per run; an audit hook blocks file writes, network, processes
-   and environment changes during the calls; a call that hangs ends the run and
-   the next run resumes after it.
+   and environment changes during the calls and in what they leave behind
+   (project threads, finalizers, exit handlers); a call that hangs ends the run
+   and the next run resumes after it.
 5. **Oracles**: the differential classes (``new_exception``,
    ``exception_type_changed``, ``value_changed_at_mined_boundary``,
    ``value_changed``, ``type_changed``, ``exception_removed``,
@@ -39,9 +40,11 @@ or a unique bare name; or every function changed against the base with
 7. **Recording**: every confirmed class becomes a ``behaviour`` claim with
    ``experiment_verified`` evidence scoped to the runs ("in run R at tree T",
    never "always"); "no difference" is ``weak_inference`` with the search space
-   stated. Nothing is judged a bug: a difference is a behaviour change, and the
-   agent compares it with what the user asked for. ``emit_test`` prints (never
-   writes) pytest functions that pin the base behaviour.
+   stated, and only when at least half of the inputs returned or raised on both
+   sides (else ``inconclusive``). Nothing is judged a bug: a difference is a
+   behaviour change, and the agent compares it with what the user asked for.
+   ``emit_test`` prints (never writes) pytest functions that pin the base
+   behaviour.
 
 Files: ``.verinoda/runs/<probe id>/corpus.json`` (the inputs) and
 ``probe.json`` (the result); each run's raw output is in its experiment's
@@ -106,12 +109,14 @@ NOT_CHECKED = [
     "iteration order that depends on string hashing (sets, and lists or dicts built from them): every run pins "
     "PYTHONHASHSEED=0, so such an order looks stable and the same on both sides",
 ]
-# results compared exactly: their digits are never float drift
-EXACT_TYPES = frozenset({"builtins.str", "builtins.bytes", "builtins.bytearray", "builtins.int", "builtins.bool",
-                         "decimal.Decimal", "fractions.Fraction"})
 _QUOTED = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
 NOT_CHECKED_PERF = "performance (run again with scaling)"
 _NUM = re.compile(r"(?<![\w.])-?(?:\d+\.\d*(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+|\d+|inf|nan)(?![\w.])")
+_NAME = re.compile(r"\b[A-Za-z_]\w*")
+_LITERAL_NAMES = frozenset({"inf", "nan", "True", "False", "None", "set", "frozenset"})
+# results whose repr is made of literals only: float drift is read in these (never in an object's own repr)
+DRIFT_TYPES = frozenset({"builtins.float", "builtins.list", "builtins.tuple", "builtins.dict", "builtins.set",
+                         "builtins.frozenset"})
 _LANG = {".kt": "Kotlin", ".kts": "Kotlin", ".java": "Java", ".js": "JavaScript", ".ts": "TypeScript",
          ".go": "Go", ".rs": "Rust", ".rb": "Ruby", ".cs": "C#", ".php": "PHP", ".c": "C", ".cpp": "C++",
          ".scala": "Scala", ".swift": "Swift", ".lua": "Lua"}
@@ -786,12 +791,21 @@ def _stable(row: dict) -> bool:
     return bool(xs) and all(_out_key(o) == _out_key(xs[0]) for o in xs[1:])
 
 
+def _float_token(t: str) -> bool:
+    """Is a number token of a repr a float literal (``0.1``, ``1e+16``), not an integer?"""
+    return any(c in t for c in ".eE")
+
+
 def _drift(a: str, b: str) -> bool:
-    """Do two reprs differ only in float digits (within DRIFT_REL)? Quoted text (strings, and ``Decimal('...')``
-    inside containers) must be identical: its digits are exact."""
+    """Do two reprs differ only in float digits (within DRIFT_REL)? Both tokens of every differing pair must be
+    float literals with different values: an integer that became a float (``3`` / ``3.0``, a 20-digit integer /
+    ``1.2345678901234567e+19``) and a flipped sign of zero (``0.0`` / ``-0.0``) are value changes. Quoted text
+    (strings, and ``Decimal('...')`` inside containers) must be identical: its digits are exact."""
     if _QUOTED.findall(a) != _QUOTED.findall(b):
         return False
     a, b = _QUOTED.sub("''", a), _QUOTED.sub("''", b)
+    if not set(_NAME.findall(a)) <= _LITERAL_NAMES:  # an object's own repr (`Money(1.5)`): its digits may be
+        return False  # a Decimal or an integer printed without quotes
     if _NUM.sub("#", a) != _NUM.sub("#", b):
         return False
     na, nb = _NUM.findall(a), _NUM.findall(b)
@@ -801,13 +815,13 @@ def _drift(a: str, b: str) -> bool:
     for x, y in zip(na, nb):
         if x == y:
             continue
-        if not any(c in x + y for c in ".eEn"):  # integers that differ are a value change
+        if not (_float_token(x) and _float_token(y)):  # an integer on either side: a value change
             return False
         try:
             fx, fy = float(x), float(y)
         except ValueError:
             return False
-        if not (math.isfinite(fx) and math.isfinite(fy)):
+        if not (math.isfinite(fx) and math.isfinite(fy)) or fx == fy:  # 0.0 / -0.0: equal, spelled apart
             return False
         if abs(fx - fy) > DRIFT_REL * max(abs(fx), abs(fy)):
             return False
@@ -834,7 +848,8 @@ def classify(b: dict, h: dict, mined: bool) -> str | None:
         return "type_changed"
     if b.get("r") == h.get("r") and b.get("h") == h.get("h"):
         return None if b.get("ap") == h.get("ap") else "argument_mutation_changed"
-    if b.get("h") is None and h.get("h") is None and b.get("t") not in EXACT_TYPES and \
+    t = str(b.get("t") or "")
+    if b.get("h") is None and h.get("h") is None and (t in DRIFT_TYPES or t.endswith(" (materialized)")) and \
             _drift(b.get("r") or "", h.get("r") or ""):
         return "numeric_drift"
     return "value_changed_at_mined_boundary" if mined else "value_changed"
@@ -1286,20 +1301,26 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
             ev = th["ev"][0]
             after = ev.get("after_input")
             call = _call_text(label, cases[after]) if isinstance(after, int) and 0 <= after < len(cases) else None
+            who, how = _stray_text(ev, qual)
             return _finish(store, repo, _result(
-                pid, sym, "refused", f"refused at run time: in the {name} run a thread the project started attempted a "
-                                     f"side effect outside any call of {qual} ({ev['kind']}: {ev['event']}"
-                                     + (f", after the calls of input #{after}" if call else ", after the import")
+                pid, sym, "refused", f"refused at run time: in the {name} run {who} attempted a side effect outside "
+                                     f"any call of {qual} ({ev['kind']}: {ev['event']}"
+                                     + ((f", registered during input #{after}" if ev.get("at_exit") else
+                                         f", after the calls of input #{after}") if call else ", after the import")
                                      + "); it was blocked, and no difference is reported", limits=limits,
                 blocked={"count": len(th["ev"]), "example": {"call": call, "event": f"{ev['kind']}: {ev['event']} "
                                                                                    f"{ev.get('detail', '')}"[:300],
-                                                             "events": th["ev"], "after_the_call": True}},
-                next_step="probe a function that does not start threads, or - only if the user agrees - "
-                          "allow_side_effects", **res_common), out_dir, t0)
+                                                             "events": th["ev"], "after_the_call": True,
+                                                             "where": how}},
+                next_step="probe a function that does not " + ("start threads" if ev.get("thread") else
+                                                               "leave work for later (finalizers, exit handlers)")
+                          + ", or - only if the user agrees - allow_side_effects", **res_common), out_dir, t0)
     rows_h = head_run["rows"]
     rows_b = base_run["rows"] if base_run else {}
     classes: dict[str, list[int]] = {}
     nondet, blocked, not_run = [], [], []
+    compared = 0  # inputs with a result (a value or an exception) on every side: what "in N inputs" counts
+    hung_inputs = ended_inputs = 0  # inputs that ran past the per-call timeout / ended the process on a side
     for i in range(len(cases)):
         rh, rb = rows_h.get(i), rows_b.get(i) if differential else None
         if rh is None or (differential and rb is None):
@@ -1311,10 +1332,18 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
         if not _stable(rh) or (rb is not None and not _stable(rb)):
             nondet.append(i)
             continue
+        firsts = [r["x"][0] for r in (rh, rb) if r is not None]
+        if all("r" in o or "e" in o for o in firsts):
+            compared += 1
+        elif any(o.get("hang") for o in firsts):
+            hung_inputs += 1
+        else:
+            ended_inputs += 1
         if differential:
             c = classify(rb["x"][0], rh["x"][0], _mined(meta[i]["tags"]))
             if c:
                 classes.setdefault(c, []).append(i)
+    inputs_info["compared"] = compared
     if blocked:
         i = blocked[0]
         o = next((o for o in (rows_h.get(i) or {}).get("x", []) + (rows_b.get(i) or {}).get("x", []) if "b" in o),
@@ -1452,8 +1481,7 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
         status = "inconclusive"
         headline = (f"{qual}: {sum(t['count'] for t in to_out)} input(s) ran past the {spec['per_call_timeout']:g} s "
                     "per-call timeout on one side only: slow or not ending, not judged (raise per_call_timeout, or "
-                    "measure growth with scaling); no other difference in "
-                    f"{len(cases) - len(not_run)} inputs")
+                    f"measure growth with scaling); no other difference in {compared} inputs")
     elif unstable and not differences:
         status = "inconclusive"
         headline = (f"{qual}: differences in the first runs did not reproduce in the confirmation runs "
@@ -1464,18 +1492,25 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
                     f"{counted} inputs of its annotated domain (working tree only)")
     elif low_div:
         status = "inconclusive"
-        headline = (f"{qual}: no finding in {counted} inputs, but the inputs are not diverse (no annotations or "
+        headline = (f"{qual}: no finding in {compared} inputs, but the inputs are not diverse (no annotations or "
                     "call-site literals to derive them from): this says little")
     elif nondet and len(nondet) >= max(1, counted // 2):
         status = "inconclusive"
         headline = f"{qual}: {len(nondet)} of {counted} inputs gave different results on two calls (nondeterministic)"
+    elif compared == 0 or compared * 2 < len(cases):  # a pass needs results: hangs and exits compare nothing
+        status = "inconclusive"
+        headline = (f"{qual}: only {compared} of {len(cases)} inputs returned or raised "
+                    + ("on both sides" if differential else "in the working tree")
+                    + f" ({len(not_run)} not run, {hung_inputs} past the per-call timeout, {ended_inputs} ended the "
+                    "process" + (f", {len(nondet)} nondeterministic" if nondet else "")
+                    + "): too few to say anything; no difference is claimed")
     elif differential:
         status = "no_difference_found"
         headline = (f"{qual}: no behaviour difference found between the base {base_sha[:12]} and the working tree in "
-                    f"{counted} inputs (a search, not a proof; the inputs are listed under inputs.sources)")
+                    f"{compared} inputs (a search, not a proof; the inputs are listed under inputs.sources)")
     else:
         status = "nothing_found"
-        headline = (f"{qual}: no counterexample in {counted} inputs (working tree only; a search, not a proof)")
+        headline = (f"{qual}: no counterexample in {compared} inputs (working tree only; a search, not a proof)")
     if head_run.get("hangs") or (base_run or {}).get("hangs"):
         limits.append(f"inputs that ran past the per-call timeout: working tree {len(head_run.get('hangs') or [])}"
                       + (f", base {len(base_run.get('hangs') or [])}" if base_run else ""))
@@ -1489,8 +1524,8 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
             continue
         side = "working-tree" if side_run["side"] == "head" else "base"
         if th.get("ev"):  # only when side effects were allowed: recorded, not blocked
-            limits.append(f"{side} run: side effects in threads the project started, outside any call: "
-                          f"{th['ev'][:2]}")
+            limits.append(f"{side} run: side effects outside any call (project threads, finalizers, exit "
+                          f"handlers): {th['ev'][:2]}")
         if th.get("alive"):
             limits.append(f"{side} run: {th['alive']} thread(s) the project started were still running after the "
                           "calls; the run was ended with them, and what they would have done later is not known")
@@ -1517,6 +1552,18 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
             res["claims_error"] = f"{type(exc).__name__}: {exc}"
     res["next_step"] = _next_step(res)
     return _finish(store, repo, res, out_dir, t0)
+
+
+def _stray_text(ev: dict, qual: str) -> tuple[str, str]:
+    """(who, where) for a side effect the plugin blocked outside any call: a project thread, code the call left
+    for later in the main thread (a result's ``__del__``, a ``weakref.finalize`` callback), or an exit handler."""
+    if ev.get("thread"):
+        return "a thread the project started", "in a thread, after the call had returned"
+    if ev.get("at_exit"):
+        return ("an exit handler or finalizer run at the end of the process",
+                "at the end of the process (an exit handler or a finalizer)")
+    return (f"code a call of {qual} left behind (a finalizer or callback that ran after it returned)",
+            "after the call had returned (a finalizer or callback)")
 
 
 def _simple_key(cases: list[dict], meta: list[dict], j: int) -> tuple:
@@ -1623,7 +1670,8 @@ def _record_claims(store, repo, res, rel, qual, head_node, cases, rows_b, rows_h
         d["claim_status"] = c["status"]
     if res["status"] in ("no_difference_found", "nothing_found"):
         meta = {"kind": "probe_summary", "probe_id": res["probe_id"], "symbol": sym, "outcome": "pass",
-                "inputs": res["inputs"]["count"], "corpus_sha256": corpus_sha, "base_commit": base_sha,
+                "inputs": res["inputs"]["count"], "compared": res["inputs"].get("compared"),
+                "corpus_sha256": corpus_sha, "base_commit": base_sha,
                 "tree_hash": trees.get("head"), "experiments": runs,
                 "scope": "a search over the listed inputs; never evidence of equivalence"}
         ev = evmod.source_evidence(repo, rel, head_node.lineno, commit=head_commit, source_type="experiment",
@@ -1649,6 +1697,29 @@ def _importable_exc(exc: str) -> bool:
     return all(part.isidentifier() for part in exc.split("."))
 
 
+# the plugin's _repr (runtime/probe_plugin.py) for an emitted test: set elements in sorted order
+PROBE_REPR_SOURCE = '''
+
+def _probe_repr(v, depth=0):
+    """repr with the elements of sets in sorted order, as verinoda probe rendered the result."""
+    t = type(v)
+    if depth > 20:
+        return repr(v)
+    if t in (set, frozenset) and len(v) <= 10_000:
+        items = sorted(_probe_repr(x, depth + 1) for x in v)
+        if t is set:
+            return "{" + ", ".join(items) + "}" if items else "set()"
+        return "frozenset({" + ", ".join(items) + "})" if items else "frozenset()"
+    if t in (list, tuple) and len(v) <= 10_000 and any(type(x) in (set, frozenset, list, tuple, dict) for x in v):
+        inner = ", ".join(_probe_repr(x, depth + 1) for x in v)
+        return f"[{inner}]" if t is list else ("(" + inner + ("," if len(v) == 1 else "") + ")")
+    if t is dict and len(v) <= 10_000 and any(type(x) in (set, frozenset, list, tuple, dict) for x in v.values()):
+        pairs = (f"{_probe_repr(k, depth + 1)}: {_probe_repr(x, depth + 1)}" for k, x in v.items())
+        return "{" + ", ".join(pairs) + "}"
+    return repr(v)
+'''
+
+
 def _expect_line(call: str, o: dict) -> list[str]:
     if "e" in o:
         exc = o["e"]
@@ -1658,11 +1729,21 @@ def _expect_line(call: str, o: dict) -> list[str]:
         name = exc.rpartition(".")[2]
         return [f"    with pytest.raises({name}):", f"        {call}"]
     r = o.get("r") or ""
+    notes = set(o.get("np") or [])
+    if notes & {"masked", "raised"}:  # memory addresses, the run's directory, a failing repr: no text to pin
+        return ["    pytest.skip(\"the base result's text held memory addresses or the probe run's directory (or its "
+                "repr failed): it cannot be pinned as text\")"]
     if str(o.get("t") or "").endswith(" (materialized)"):  # a generator: the plugin compared what it yields
         call = f"list({call})" if not o.get("h") else f"list(itertools.islice({call}, {MATERIALIZE_MAX}))"
+    text = f"_probe_repr({call})" if "set" in notes else f"repr({call})"
     if o.get("h"):
-        return [f"    # the base result is long ({o.get('n')} characters); its sha256 is {o['h']}",
-                f"    assert hashlib.sha256(repr({call}).encode()).hexdigest() == {o['h']!r}"]
+        check = [f"    # the base result is long ({o.get('n')} characters); its sha256 is {o['h']}",
+                 f"    assert hashlib.sha256({text}.encode()).hexdigest() == {o['h']!r}"]
+        if "digits" not in notes:
+            return check
+        # an integer past the 4300-digit str limit: rendered with the limit lifted, as the probe did
+        return ["    limit = sys.get_int_max_str_digits()", "    sys.set_int_max_str_digits(0)", "    try:",
+                *("    " + line for line in check), "    finally:", "        sys.set_int_max_str_digits(limit)"]
     if r == "nan":
         return [f"    assert math.isnan({call})"]
     if r.isprintable():
@@ -1671,7 +1752,7 @@ def _expect_line(call: str, o: dict) -> list[str]:
             return [f"    assert {call} == {r}"]
         except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
             pass
-    return [f"    assert repr({call}) == {r!r}"]
+    return [f"    assert {text} == {r!r}"]
 
 
 def emit_tests(res: dict, cases, rows_b, rows_h, spec: dict, qual: str, base_sha: str | None, pid: str) -> str:
@@ -1712,10 +1793,12 @@ def emit_tests(res: dict, cases, rows_b, rows_h, spec: dict, qual: str, base_sha
                   "# Each test pins the BASE behaviour on one input. Whether the change is intended is the user's "
                   "decision:", "# flip the expectation when it was meant. Verinoda did not write this file."]
     code = "\n".join(body)
-    std = [m for m in ("hashlib", "itertools", "math") if f"{m}." in code]
+    std = [m for m in ("hashlib", "itertools", "math", "sys") if f"{m}." in code]
     head_lines += [f"import {m}" for m in std] + ([""] if std else [])
-    head_lines += (["import pytest", ""] if "pytest.raises" in code else [])
+    head_lines += (["import pytest", ""] if "pytest." in code else [])
     head_lines += [f"from {m} import {', '.join(sorted(names))}" for m, names in sorted(imports.items())]
+    if "_probe_repr(" in code:
+        head_lines += PROBE_REPR_SOURCE.rstrip("\n").split("\n")
     return "\n".join(head_lines + body) + "\n"
 
 
@@ -1723,7 +1806,9 @@ def emit_tests(res: dict, cases, rows_b, rows_h, spec: dict, qual: str, base_sha
 
 def changed_functions(repo: Path, base_sha: str) -> list[dict]:
     """Python functions (top-level, and methods of top-level classes) whose signature or body differs from
-    the base, or that are new; test files are left out. Comments, docstrings and formatting are not changes."""
+    the base, or that are new; test files are left out. Comments, docstrings and formatting are not changes.
+    A changed file whose working-tree version cannot be read as Python is listed as itself with change
+    ``unparseable`` (its functions cannot be told apart, so none of them is compared)."""
     from verinoda import anchors
 
     ch = treestate.changes_vs_base(Path(repo).resolve(), base_sha)
@@ -1738,6 +1823,9 @@ def changed_functions(repo: Path, base_sha: str) -> list[dict]:
         fo = anchors.compute_facts(rel, old) if old is not None else None
         tree = _parse(new.decode("utf-8", "replace"))
         if not anchors.usable(fn) or tree is None:
+            why = "does not parse as Python in the working tree" if tree is None else \
+                f"its definitions could not be read ({(fn or {}).get('error') or 'no facts'})"
+            out.append({"symbol": rel, "change": "unparseable", "line": None, "why": why})
             continue
         defs = _defs(tree)
         for q, s in fn["symbols"].items():
@@ -1755,9 +1843,14 @@ def probe_changed(store: Store, repo: Path, *, base: str | None = "HEAD", limit:
     """Probe every changed function (at most ``limit``); each result is compacted."""
     repo = Path(repo).resolve()
     sha = treestate.resolve_commit(repo, base or "HEAD")
-    changed = changed_functions(repo, sha)
+    listed = changed_functions(repo, sha)
+    changed = [c for c in listed if c["change"] != "unparseable"]
+    unreadable = [c for c in listed if c["change"] == "unparseable"]
     files = list_files(repo)
     probes, skipped = [], []
+    for item in unreadable:  # a changed file that is not Python any more: none of its functions was compared
+        skipped.append({"symbol": item["symbol"], "why": f"{item['symbol']} {item['why']}: its changed functions "
+                                                         "cannot be listed or run"})
     for item in changed:
         if len(probes) >= limit:
             skipped.append({"symbol": item["symbol"], "why": f"over the limit of {limit} probes"})
@@ -1771,23 +1864,28 @@ def probe_changed(store: Store, repo: Path, *, base: str | None = "HEAD", limit:
     counts: dict[str, int] = {}
     for p in probes:
         counts[p["status"]] = counts.get(p["status"], 0) + 1
-    head = (f"{len(changed)} changed Python function(s) against {sha[:12]}; probed {len(probes)}: "
-            + (", ".join(f"{v} {k}" for k, v in sorted(counts.items())) or "none"))
+    head = (f"{len(changed)} changed Python function(s) against {sha[:12]}"
+            + (f" and {len(unreadable)} changed file(s) not readable as Python" if unreadable else "")
+            + f"; probed {len(probes)}: " + (", ".join(f"{v} {k}" for k, v in sorted(counts.items())) or "none"))
     # a function that was refused, unsupported, inconclusive or not probed is no pass
     open_ = [p for p in probes if p["status"] not in PASS_STATUSES + FINDING_STATUSES]
-    if open_ or skipped:
-        head += (f". Not compared: {len(open_) + len(skipped)} of {len(changed)} changed function(s) (see each "
-                 "status); that part is no pass")
+    fn_open = len(open_) + len(skipped) - len(unreadable)
+    if fn_open:
+        head += (f". Not compared: {fn_open} of {len(changed)} changed function(s) (see each status); that part is "
+                 "no pass")
+    if unreadable:
+        head += (f". Not read: {', '.join(u['symbol'] for u in unreadable[:3])}"
+                 + (" ..." if len(unreadable) > 3 else "") + " (not readable as Python): no pass")
     if any(p["status"] in FINDING_STATUSES for p in probes):
         status = "differences_found"
-    elif not changed:
+    elif not changed and not unreadable:
         status = "nothing_changed"
     elif open_ or skipped:
         status = "incomplete"
     else:
         status = "done"
     return {"status": status,
-            "headline": head, "base": sha, "changed": changed, "probes": probes, "skipped": skipped,
+            "headline": head, "base": sha, "changed": listed, "probes": probes, "skipped": skipped,
             "limits": ["only functions whose own signature or body changed are listed; a function whose behaviour "
                        "changed through a changed callee or constant is probed only when named"]}
 
@@ -1802,8 +1900,8 @@ def compact(res: dict, examples: int = 2) -> dict:
                        "unresolved_calls": g.get("unresolved_calls")}
     if res.get("inputs"):
         i = res["inputs"]
-        out["inputs"] = {k: i[k] for k in ("count", "generator", "corpus_sha256", "low_diversity", "corpus_path")
-                         if k in i}
+        out["inputs"] = {k: i[k] for k in ("count", "compared", "generator", "corpus_sha256", "low_diversity",
+                                           "corpus_path") if k in i}
         out["inputs"]["boundaries"] = i.get("boundaries", [])[:5]
     if res.get("differences"):
         out["differences"] = [{**d, "examples": d["examples"][:examples]} for d in res["differences"]]
@@ -1859,7 +1957,8 @@ def render(res: dict) -> str:
     if res.get("blocked"):
         bex = res["blocked"]["example"]
         lines.append("  blocked at run time: " + (f"{bex['call']}: " if bex.get("call") else "") + str(bex["event"])
-                     + (" (in a thread, after the call had returned)" if bex.get("after_the_call") else ""))
+                     + (f" ({bex.get('where') or 'in a thread, after the call had returned'})"
+                        if bex.get("after_the_call") else ""))
     i = res.get("inputs")
     if i:
         lines.append(f"  inputs: {i['count']} ({i['deterministic']} from annotations, call sites, boundaries and "
