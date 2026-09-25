@@ -1,0 +1,51 @@
+..FF.                                                                    [100%]
+================================== FAILURES ===================================
+_____________________________ test_compute_total ______________________________
+
+    def test_compute_total():
+>       assert compute_total([{"price": 10.0, "qty": 2}]) == 20.0
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_pricing.py:13: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+orders\pricing.py:7: in compute_total
+    subtotal = sum(i["price"] * i["quantity"] for i in items)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+.0 = <list_iterator object at 0x0000022750EF0040>
+
+>   subtotal = sum(i["price"] * i["quantity"] for i in items)
+                                ^^^^^^^^^^^^^
+E   KeyError: 'quantity'
+
+orders\pricing.py:7: KeyError
+_______________________ test_place_and_fetch_roundtrip ________________________
+
+    def test_place_and_fetch_roundtrip():
+        repo = OrderRepository(":memory:")
+>       oid = place_order(repo, "ada", [{"price": 5.0, "qty": 1}])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_service.py:9: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+orders\service.py:21: in place_order
+    total = compute_total(items)
+            ^^^^^^^^^^^^^^^^^^^^
+orders\pricing.py:7: in compute_total
+    subtotal = sum(i["price"] * i["quantity"] for i in items)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+.0 = <list_iterator object at 0x0000022750EF10C0>
+
+>   subtotal = sum(i["price"] * i["quantity"] for i in items)
+                                ^^^^^^^^^^^^^
+E   KeyError: 'quantity'
+
+orders\pricing.py:7: KeyError
+=========================== short test summary info ===========================
+FAILED tests/test_pricing.py::test_compute_total - KeyError: 'quantity'
+FAILED tests/test_service.py::test_place_and_fetch_roundtrip - KeyError: 'qua...
+2 failed, 3 passed in 0.23s
+

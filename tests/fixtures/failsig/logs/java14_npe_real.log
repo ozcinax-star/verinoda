@@ -1,0 +1,4 @@
+
+Exception in thread "main" java.lang.NullPointerException: Cannot invoke "com.example.glowmod.entity.Wisp$Target.distance()" because "this.target" is null
+	at com.example.glowmod.entity.Wisp.tick(Wisp.java:14)
+	at com.example.glowmod.Main.main(Main.java:11)

@@ -10,8 +10,8 @@ model reads, docs/DESIGN.md D20).
 Exit codes: 0 done; 1 error; 2 usage error, invalid plan, unresolved trace
 endpoint or blocked upstream command; 3 "needs more": a plan that needs
 clarification, a partial reference resolution, a refused experiment, an
-incomplete observation, no precise answer, an absent name (`check`) or a
-target not found (`api`; a target that could not be decided is 0).
+incomplete observation, no precise answer, an absent name (`check`), a
+target not found (`api`; a target that could not be decided is 0), a debug attempt that says stop.
 """
 
 from __future__ import annotations
@@ -1419,7 +1419,6 @@ def cmd_feedback(args) -> int:
 
 def cmd_experiment(args) -> int:
     from verinoda import experiments
-    from verinoda.paths import load_config
 
     repo = _repo(args)
     argv = args.command
@@ -1427,17 +1426,14 @@ def cmd_experiment(args) -> int:
         argv = argv[1:]
     if not argv:
         raise SystemExit("error: give the command after --")
+    if args.overlay and not args.ref:
+        raise SystemExit("error: --overlay needs --ref (it puts working-tree files over a commit copy)")
     try:
         res = experiments.run(_store(repo, create=True), repo, argv, hypothesis=args.hypothesis, expect=args.expect,
-                              timeout=args.timeout, claim_id=args.claim, isolation=args.isolation)
+                              timeout=args.timeout, claim_id=args.claim, isolation=args.isolation,
+                              ref=args.ref, overlay=args.overlay)
     except experiments.ExperimentRefused as exc:
-        allow = load_config(repo)["experiments"]["process_isolation_allowlist"]
-        out = {"status": "refused", "reason": str(exc),
-               "limits": ["without docker/podman only allowlisted test runners run, and only with process "
-                          "isolation (no network or filesystem confinement)",
-                          f"allowlist (config experiments.process_isolation_allowlist): {', '.join(allow)}"],
-               "next_step": "run the tests through an allowlisted runner with paths inside the repository, or "
-                            "install docker/podman for container isolation"}
+        out = experiments.refusal(repo, exc)
 
         def render_refused(r):
             print(f"refused: {r['reason']}")
@@ -1459,6 +1455,12 @@ def cmd_experiment(args) -> int:
             print(f"  inconclusive: {r['inconclusive_reason']}")
         if r.get("next_step"):
             print(f"  next: {r['next_step']}")
+        src = r.get("source") or {}
+        where = (f"commit {src['commit'][:12]}" + (f" + working-tree {', '.join(src['overlay'])}"
+                                                  if src.get("overlay") else "")
+                 if src.get("kind") == "commit" else "the working tree")
+        print(f"  ran on {where}: tree {(r.get('tree') or {}).get('hash', '?')[:12]} "
+              f"({(r.get('tree') or {}).get('files', '?')} files)")
         print(f"  evidence {r['evidence_id']}; full logs: {r['logs']['stdout']}")
         print("  isolation guarantees: " + ", ".join(k for k, v in r["guarantees"].items() if v)
               + "; NOT: " + ", ".join(k for k, v in r["guarantees"].items() if not v))
@@ -1587,6 +1589,249 @@ def cmd_observe(args) -> int:
     # 3: the run did not establish what was asked (incomplete trace, or reach asked with the tracer off)
     unobserved = any(not v["n"] and not v["observed"] for v in summary.get("target_reach", {}).values())
     return 0 if res.get("complete") and not unobserved else 3
+
+
+# -- debug ledger ------------------------------------------------------------------------------
+
+def _r_debug_attempt(r: dict) -> None:
+    """Answer first: the outcome and whether to stop; then the failure, the loop findings, what to do next."""
+    if r.get("session") and r.get("attempt") == 0:
+        print(f"debug session {r['session']} (base {r['base']['commit'][:12]}): {r.get('symptom')}")
+    tree = r.get("tree") or {}
+    src = tree.get("source") or {}
+    where = f"commit {src['commit'][:12]}" if src.get("commit") else "the working tree"
+    run = r.get("experiment_id") or "reported by the agent (not run by Verinoda)"
+    head = f"attempt {r['attempt']} ({r['kind']}): {r['outcome']}"
+    if r.get("stop"):
+        head += f"  - STOP: {r.get('stop_reason')}; stop editing and follow a strategy below"
+    elif r.get("flaky"):
+        head += "  - FLAKY: the same tree gave different results; loop rules are suspended"
+    print(head)
+    print(f"  run: {run}; tree {str(tree.get('hash') or '?')[:12]} ({where})")
+    if r.get("result"):
+        print(f"  {r['result']}")
+        for ln in r.get("not_run") or []:
+            print(f"  not run: {ln}")
+    sig = r.get("signature") or {}
+    for f in (sig.get("failures") or [])[:5]:
+        at = f.get("at_line") or f.get("at_symbol") or "?"
+        print(f"  failure: {f.get('exc') or '?'} at {f.get('at_symbol') or '?'} ({at})"
+              + (f" in {f['test']}" if f.get("test") else "") + (f": {f['msg_norm'][:100]}" if f.get("msg_norm") else ""))
+    if (sig.get("failures_total") or 0) > 5:
+        print(f"  ... {sig['failures_total'] - 5} more failure(s) (--json)")
+    if sig.get("note"):
+        print(f"  signature: {sig['note']}")
+    if r.get("progress") and r.get("attempt"):
+        print(f"  progress vs the previous attempt: {r['progress']}")
+    for c in tree.get("vs_prev") or []:
+        print(f"  changed since the previous attempt: {c['path']}" + (f" ({', '.join(c['symbols'])})" if c.get("symbols")
+                                                                       else ""))
+    er = r.get("edits_reached") or {}
+    for sym, tests in (er.get("by_failing_tests") or {}).items():
+        if tests:
+            print(f"  edit reached: {sym} by {', '.join(tests[:3])}")
+        elif sym in (er.get("called_elsewhere") or []):
+            print(f"  edit called outside the failing tests' calls (import time or another test): {sym}")
+        else:
+            print(f"  edit NOT reached: {sym}" + (" (complete trace; this run only)" if er.get("complete_trace")
+                                                  else " (the trace is incomplete: unknown)"))
+    if er.get("child_processes"):
+        print(f"  the tests started child processes (untraced): {', '.join(er['child_processes'][:3])}")
+    if r.get("chain"):
+        print("  call chain to the crash: " + " -> ".join(r["chain"]))
+    for f in r.get("loop") or []:
+        print(f"  loop [{f['strength']}{', suspended' if f.get('suspended') else ''}] {f['rule']}: {f['text']}")
+    for i, s in enumerate(r.get("strategies") or [], 1):
+        cmd = f" `{s['command']}`" if s.get("command") else ""
+        print(f"  next {i}. {s['id']}: {s['why']}{cmd} (~{s.get('cost_estimate_s')} s)")
+        for sus in (s.get("suspects") or [])[:5]:
+            print(f"      suspect {sus['at']}: {'; '.join(sus['evidence'][:3])}"
+                  + (f" - RULED OUT: {sus['ruled_out']}" if sus.get("ruled_out") else ""))
+    for q in r.get("questions_for_human") or []:
+        print(f"  ask the user: {q['question']}")
+        for t in q.get("test_side") or []:
+            print(f"    test says: {t}")
+        for c in q.get("code_side") or []:
+            print(f"    code: {c}")
+    if tree.get("patch"):
+        print(f"  patch vs base: {tree['patch']}")
+
+
+def _r_debug_status(r: dict) -> None:
+    latest = r.get("latest") or {}
+    head = f"debug session {r['session']} [{r['status']}]: {r['symptom']}"
+    if latest.get("stop"):
+        head += f"  - STOP at attempt {latest['attempt']}: {latest.get('stop_reason')}"
+    print(head)
+    print(f"  repro: {' '.join(r['command'])}; base {r['base']['commit'][:12]} ({r['base'].get('ref')})")
+    if r.get("result"):
+        print(f"  {r['result']}")
+    if r.get("flaky"):
+        print(f"  FLAKY: {r['flaky']}")
+    for ln in r.get("other_commands_passed") or []:
+        print(f"  other command: {ln}")
+    for a in r.get("attempts") or []:
+        what = a.get("failure") or ""
+        where = f"commit {a['commit']}" if a.get("commit") else f"tree {a['tree']}"
+        loop = f"  loop: {', '.join(a['loop'])}" if a.get("loop") else ""
+        print(f"  #{a['n']} {a['kind']:<12} {a['outcome']:<5} {where}  {what}  [{a.get('progress') or '-'}]"
+              f"{'  (agent-reported)' if a['run_by'] == 'agent' else ''}{loop}")
+        print(f"      hypothesis: {a['hypothesis']}")
+    for i, s in enumerate(latest.get("strategies") or [], 1):
+        if s.get("done"):
+            print(f"  next {i}. {s['id']}: done - {s['done']}")
+            continue
+        print(f"  next {i}. {s['id']}: {s['why']}" + (f" `{s['command']}`" if s.get("command") else ""))
+    for ln in r.get("not_run") or []:
+        print(f"  not run: {ln}")
+
+
+def _r_debug_strategy(r: dict) -> None:
+    print(f"{r.get('strategy')}: {r.get('conclusion') or r.get('next_step') or r.get('status')}")
+    if r.get("overlay"):
+        print(f"  laid over the base: {', '.join(r['overlay'])} ({r.get('overlay_why')})")
+    if r.get("agent_reports"):
+        print(f"  {r['agent_reports']}")
+    for h in r.get("hunks") or []:
+        tag = f"#{h['rank']} " if h.get("rank") else ""
+        why = h.get("why") or ("on the failing path" if h.get("on_failing_path") else "")
+        print(f"  {tag}{h['at']} {', '.join(h.get('symbols') or [])}  ({why})")
+        for ln in (h.get("removed") or [])[:2]:
+            print(f"      - {ln.strip()[:110]}")
+        for ln in (h.get("added") or [])[:2]:
+            print(f"      + {ln.strip()[:110]}")
+    for run in r.get("runs") or []:
+        print(f"  {'recorded' if run.get('recorded') else 'ran'} {run['commit'][:12]}: {run['outcome']} "
+              f"(attempt {run['attempt']})")
+    for test, d in ((r.get("trace_diff") or {}).get("tests") or {}).items():
+        print(f"  calls of {test}:")
+        for e in d.get("only_when_failing")[:5]:
+            print(f"      only when failing: {e}")
+        for e in d.get("only_when_passing")[:5]:
+            print(f"      only at the base:  {e}")
+    if (r.get("trace_diff") or {}).get("status") == "unknown":
+        print(f"  trace diff: unknown - {r['trace_diff']['why']}")
+    if r.get("first_bad_commit"):
+        fb = r["first_bad_commit"]
+        print(f"  first failing commit: {fb['commit'][:12]} {fb.get('subject') or ''}")
+    if r.get("cost"):
+        print(f"  cost: {r['cost']}")
+    if "pass_rate" in r:
+        print(f"  pass rate {r['pass_rate']} ({r['passed']}/{r['runs']})")
+    if r.get("prepared_copy"):
+        print(f"  prepared copy: {r['prepared_copy']}")
+    if r.get("next_step") and r.get("conclusion"):
+        print(f"  next: {r['next_step']}")
+    for ln in r.get("limits") or []:
+        print(f"  limit: {ln}")
+
+
+def _debug_command(args) -> list[str] | None:
+    argv = list(getattr(args, "command", None) or [])
+    if argv and argv[0] == "--":
+        argv = argv[1:]
+    return argv or None
+
+
+def _observed(args) -> tuple[bytes | None, int | None]:
+    path = getattr(args, "observed_output", None)
+    if path is None:
+        if getattr(args, "exit_code", None) is not None:
+            raise SystemExit("error: --exit-code goes with --observed-output FILE")
+        return None, None
+    if args.exit_code is None:
+        raise SystemExit("error: --observed-output needs --exit-code N (the exit code of the run you made)")
+    try:
+        return Path(path).read_bytes(), int(args.exit_code)
+    except OSError as exc:
+        raise SystemExit(f"error: cannot read {path}: {exc}")
+
+
+def cmd_debug(args) -> int:
+    from verinoda import debug, experiments
+
+    repo = _repo(args)
+    sub = args.debug_cmd
+    st = _store(repo, create=sub == "start")
+    try:
+        if sub == "start":
+            argv = _debug_command(args)
+            if not argv:
+                raise SystemExit("error: give the repro command after --")
+            obs, code = _observed(args)
+            res = debug.start(st, repo, args.symptom, argv, base=args.base, trace=args.trace, timeout=args.timeout,
+                              observed_output=obs, exit_code=code)
+            _emit(args, res, _r_debug_attempt)
+            return 3 if res.get("stop") else 0
+        if sub == "try":
+            obs, code = _observed(args)
+            res = debug.attempt(st, repo, args.session, hypothesis=args.hypothesis, expect=args.expect,
+                                command=_debug_command(args), kind=args.kind, observed_output=obs, exit_code=code,
+                                trace=True if args.trace else None, timeout=args.timeout)
+            _emit(args, res, _r_debug_attempt)
+            return 3 if res.get("stop") else 0
+        if sub == "status":
+            _emit(args, debug.status(st, repo, args.id), _r_debug_status)
+            return 0
+        if sub == "diff":
+            res = debug.diff(st, repo, args.id, attempt_n=args.attempt, base=args.base)
+
+            def render(r):
+                print(f"working tree vs {r['against']}: {r['files_total']} file(s)")
+                for f in r["files"]:
+                    print(f"  {f['status']} {f['path']}" + (f" ({', '.join(f['symbols'])})" if f.get("symbols") else ""))
+                if r.get("patch"):
+                    print(r["patch"].rstrip("\n"))
+            _emit(args, res, render)
+            return 0
+        if sub == "close":
+            res = debug.close(st, repo, args.id, resolved_by=args.resolved_by, abandoned=args.abandoned,
+                              note=args.note, accept_test_edit=args.accept_test_edit)
+
+            def render(r):
+                print(f"session {r['session']} closed: {r['status']}" + (f" - {r['result']}" if r.get("result") else ""))
+                if r.get("tree_runs"):
+                    print(f"  runs of this tree: {r['tree_runs']}")
+                if r.get("accepted_test_edit"):
+                    print(f"  test change accepted by the user: {r['accepted_test_edit']}")
+                for ln in r.get("not_run") or []:
+                    print(f"  not run: {ln}")
+                if r.get("basis"):
+                    print(f"  basis: {r['basis']}")
+            _emit(args, res, render)
+            return 0
+        if sub == "differential":
+            res = debug.differential(st, repo, args.session, base=args.base, prepare=args.prepare,
+                                     trace=args.trace, overlay=args.overlay)
+        elif sub == "bisect":
+            res = debug.bisect(st, repo, args.session, good=args.good, bad=args.bad, overlay=args.overlay,
+                               max_runs=args.max_runs)
+        elif sub == "rerun":
+            res = debug.rerun(st, repo, args.session, times=args.times)
+        elif sub == "observe":
+            res = debug.observe(st, repo, args.session)
+            _emit(args, res, _r_debug_attempt)
+            return 3 if res.get("stop") else 0
+        else:  # pragma: no cover - argparse restricts the choices
+            raise SystemExit(f"error: unknown debug command {sub}")
+        _emit(args, res, _r_debug_strategy)
+        # 3: the strategy did not settle it (bisect open or unknown, differential inconclusive, rerun flaky)
+        return 3 if res.get("status") in ("unknown", "range", "inconclusive") or \
+            (sub == "rerun" and str(res.get("conclusion", "")).startswith("flaky")) else 0
+    except experiments.ExperimentRefused as exc:
+        out = experiments.refusal(repo, exc)
+        out["next_step"] = ("run the command yourself and record it: `verinoda debug try --hypothesis ... "
+                            "--observed-output FILE --exit-code N -- <the command you ran>` (agent-reported, lower "
+                            "trust; to open a session: `verinoda debug start ... --observed-output FILE --exit-code N "
+                            "-- <command>`)")
+
+        def render_refused(r):
+            print(f"refused: {r['reason']}")
+            print(f"  next: {r['next_step']}")
+        _emit(args, out, render_refused)
+        return 3
+    finally:
+        st.close()
 
 
 def _r_resolution(r: dict) -> None:
@@ -2202,7 +2447,85 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--timeout", type=float)
     c.add_argument("--claim")
     c.add_argument("--isolation", choices=["auto", "process", "container"], default="auto")
+    c.add_argument("--ref", help="run on a copy of this commit instead of the working tree (git archive-like; "
+                                 "the working tree and .git are not touched)")
+    c.add_argument("--overlay", action="append", metavar="PATH",
+                   help="with --ref: copy this working-tree file over the commit copy (repeatable; recorded)")
     c.add_argument("command", nargs=argparse.REMAINDER)
+
+    sp = sub.add_parser("debug", help="debug ledger: record every fix attempt against one repro, detect loops "
+                                      "(exit 3 when the ledger says stop)")
+    dsub = sp.add_subparsers(dest="debug_cmd", required=True)
+    c = add("start", cmd_debug, "open a session and run the repro once (attempt 0)", parent=dsub)
+    c.add_argument("symptom", help="what is wrong, in a sentence")
+    c.add_argument("--base", help="the commit to compare every attempt with (default HEAD)")
+    c.add_argument("--trace", action="store_true", help="pytest repro: run every attempt under the call tracer "
+                                                        "(enables the off_path rule)")
+    c.add_argument("--timeout", type=float, help="seconds per run (default: the experiment timeout)")
+    c.add_argument("--observed-output", metavar="FILE", help="a run you made yourself: its output (agent-reported)")
+    c.add_argument("--exit-code", type=int, help="with --observed-output: the exit code of that run")
+    c.set_defaults(command=None)  # everything after `--` (split off in main)
+    c.epilog = "the repro command follows --, e.g. verinoda debug start \"totals are wrong\" -- python -m pytest -q tests/test_pricing.py"
+    c = add("try", cmd_debug, "record one attempt after an edit: runs the repro (or records your own run)",
+            parent=dsub)
+    c.add_argument("--hypothesis", required=True, help="what you believe and why (checked for repeats)")
+    c.add_argument("--expect", choices=["pass", "fail"], default="pass")
+    c.add_argument("--kind", choices=["fix", "probe", "rerun", "differential"], default="fix",
+                   help="fix (default), probe (no fix intended), rerun, differential (with --observed-output: "
+                        "a run on the prepared base copy)")
+    c.add_argument("--session", help="session id (default: the latest open session)")
+    c.add_argument("--trace", action="store_true", help="run this attempt under the call tracer")
+    c.add_argument("--timeout", type=float)
+    c.add_argument("--observed-output", metavar="FILE", help="a run you made yourself: its output (agent-reported; "
+                                                             "name the command you ran after --)")
+    c.add_argument("--exit-code", type=int, help="with --observed-output: the exit code of that run")
+    c.set_defaults(command=None)  # `-- <command>` (default: the session's repro; split off in main)
+    c.epilog = ("a command after -- replaces the session's repro for this attempt only; a pass of another command "
+                "never counts as a pass of the repro. With --observed-output the command you ran is required")
+    c = add("status", cmd_debug, "the session's ledger: attempts, failures, loop findings, next steps", parent=dsub)
+    c.add_argument("id", nargs="?", help="session id (default: the latest open session)")
+    c = add("diff", cmd_debug, "the working tree against the session base, a commit or an attempt's tree",
+            parent=dsub)
+    c.add_argument("id", nargs="?", help="session id (default: the latest open session)")
+    g = c.add_mutually_exclusive_group()
+    g.add_argument("--base", help="compare with this commit instead of the session base")
+    g.add_argument("--attempt", type=int, help="compare with the tree of attempt N")
+    c = add("close", cmd_debug, "close a session: resolved by a passing attempt on the current tree, or "
+                                "abandoned", parent=dsub)
+    c.add_argument("id", nargs="?", help="session id (default: the latest open session)")
+    g = c.add_mutually_exclusive_group(required=True)
+    g.add_argument("--resolved-by", type=int, metavar="N", help="the passing attempt of the repro command (its tree "
+                                                                "must be current; every run of that tree must pass)")
+    g.add_argument("--abandoned", action="store_true")
+    c.add_argument("--note")
+    c.add_argument("--accept-test-edit", action="store_true",
+                   help="tests were changed since attempt 0: the user decided the test change is right (recorded)")
+    c = add("differential", cmd_debug, "strategy: the repro on a copy of the base; if it passes, rank the diff's "
+                                       "hunks (exit 3 when inconclusive)", parent=dsub)
+    c.add_argument("--session")
+    c.add_argument("--base", help="another commit to compare with")
+    c.add_argument("--prepare", action="store_true", help="only write a copy of the base under .verinoda/runs "
+                                                          "for a command you run yourself")
+    c.add_argument("--trace", action="store_true", help="pytest: also compare the failing tests' observed calls at "
+                                                        "the base with the failing tree")
+    c.add_argument("--overlay", action="append", metavar="PATH",
+                   help="lay this working-tree file (e.g. a new test) over the base copy; by default the failing "
+                        "tests' files are laid over it when they differ there")
+    c = add("bisect", cmd_debug, "strategy: binary search over commits (throw-away copies) for the first failing "
+                                 "one", parent=dsub)
+    c.add_argument("--session")
+    c.add_argument("--good", help="a commit where the repro passes (default: a known passing run, else step back)")
+    c.add_argument("--bad", help="a commit where it fails (default: the session base)")
+    c.add_argument("--overlay", action="append", metavar="PATH",
+                   help="lay this working-tree file (e.g. the current test) over every old commit; recorded")
+    c.add_argument("--max-runs", type=int)
+    c = add("rerun", cmd_debug, "strategy: run the repro N times on the current tree (flakiness, pass rate; exit 3 "
+                                "when flaky)", parent=dsub)
+    c.add_argument("--session")
+    c.add_argument("--times", type=int)
+    c = add("observe", cmd_debug, "strategy: the repro once more under the call tracer (are the edits reached?)",
+            parent=dsub)
+    c.add_argument("--session")
 
     sp = add("observe", cmd_observe, "run tests under the call tracer (isolated copy) and summarise what they "
                                      "reached (exit 3 when the trace is incomplete)")
@@ -2330,7 +2653,14 @@ def main(argv: list[str] | None = None) -> int:
         except (AttributeError, ValueError):
             pass
     parser = build_parser()
+    argv = list(sys.argv[1:] if argv is None else argv)
+    tail = None
+    if argv[:2] in (["debug", "start"], ["debug", "try"]) and "--" in argv:
+        i = argv.index("--")  # the repro command: taken as given, never parsed as options
+        argv, tail = argv[:i], argv[i + 1:]
     args = parser.parse_args(argv)
+    if tail is not None:
+        args.command = tail
     if not getattr(args, "fn", None):
         parser.print_help()
         return 0

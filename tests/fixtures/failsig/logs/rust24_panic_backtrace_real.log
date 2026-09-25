@@ -1,0 +1,33 @@
+
+running 1 test
+tests::negative_quantity_is_rejected --- FAILED
+
+failures:
+
+---- tests::negative_quantity_is_rejected stdout ----
+
+thread 'tests::negative_quantity_is_rejected' (37808) panicked at src\lib.rs:24:9:
+negative quantity -1
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+             at /rustc/01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf/library\std\src/panicking.rs:689:5
+   1: core::panicking::panic_fmt
+             at /rustc/01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf/library\core\src/panicking.rs:80:14
+   2: calc::checked_qty
+             at .\src\lib.rs:24:9
+   3: calc::tests::negative_quantity_is_rejected
+             at .\src\lib.rs:47:20
+   4: calc::tests::negative_quantity_is_rejected::{{closure}}
+             at .\src\lib.rs:46:39
+   5: core::ops::function::FnOnce::call_once
+             at /rustc/01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf\library\core\src\ops/function.rs:250:5
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    tests::negative_quantity_is_rejected
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.01s
+
+
+error: test failed, to rerun pass `--lib`

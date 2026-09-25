@@ -99,6 +99,11 @@ TOOL_NAMES: tuple[str, ...] = (
     "decision_record",
     "decision_check",
     "decision_brief",
+    "experiment_run",
+    "debug_start",
+    "debug_attempt",
+    "debug_status",
+    "debug_strategy",
 )
 
 MAX_RESPONSE_CHARS = int(os.environ.get("VERINODA_MCP_MAX_CHARS", "12000"))
@@ -116,6 +121,8 @@ QUERY_FORMATS = ("text", "json")
 DECISION_ACTIONS = ("list", "record", "import", "guard", "accept", "waive", "answer")
 # what changes what is enforced, and the user's answers to a brief: the user's own words
 DECISION_NEEDS_USER = ("record", "guard", "accept", "waive", "answer")
+DEBUG_KINDS = ("fix", "probe", "rerun", "differential")
+DEBUG_STRATEGIES = ("differential", "bisect", "rerun", "observe")
 # analyze: what the agent reads first and what is cut last (the interpretation and the per-sub-question verdicts)
 ANALYZE_KEEP = ("understood_as", "subquestions", "plan_check")
 ANALYZE_FIRST_CUT = ("steps", "critique", "passages")  # passages: `query` gives them in full; claims come first
@@ -169,6 +176,17 @@ def _str_list(value: Any, name: str) -> list[str]:
         raise ToolFailure("invalid_argument", f"{name} must be a list of strings, got {type(value).__name__}",
                           f"pass {name} as a list of strings")
     return list(dict.fromkeys(str(v).strip() for v in value if str(v).strip()))
+
+
+def _argv_list(value: Any, name: str) -> list[str]:
+    """A command as given: a list of strings, in order, with repeats and empty strings kept (``-p a -p b``
+    and ``-k ''`` mean something); None -> []."""
+    if value is None:
+        return []
+    if not isinstance(value, (list, tuple)) or not all(isinstance(v, str) for v in value):
+        raise ToolFailure("invalid_argument", f"{name} must be a list of strings (one per argument)",
+                          f"pass {name} as a list of strings, e.g. ['python', '-m', 'pytest', '-q']")
+    return list(value)
 
 
 def _choice(value: Any, valid: tuple[str, ...], name: str) -> str:
@@ -1286,6 +1304,89 @@ class AtlasTools:
                 return workflow.update(st, self.repo)
         return self._run("index_update", go)
 
+    # -- experiments and the debug ledger ----------------------------------------------
+    def experiment_run(self, command: list[str], hypothesis: str, expect: str = "pass", timeout: float | None = None,
+                       claim_id: str | None = None, ref: str | None = None,
+                       overlay: list[str] | None = None) -> dict:
+        def go():
+            from verinoda import experiments
+
+            argv = _argv_list(command, "command")
+            if not argv:
+                raise ToolFailure("invalid_argument", "command is empty", "pass the command as a list of arguments, "
+                                  "e.g. ['python', '-m', 'pytest', '-q', 'tests/test_x.py']")
+            exp = _choice(expect, ("pass", "fail"), "expect")
+            t = None if timeout is None else _clamp(timeout, 1, 3600, "timeout", float)
+            with self._store() as st:
+                try:
+                    return experiments.run(st, self.repo, argv, hypothesis=_text(hypothesis, "hypothesis"), expect=exp,
+                                           timeout=t, claim_id=_opt_text(claim_id), ref=_opt_text(ref),
+                                           overlay=_str_list(overlay, "overlay") or None)
+                except experiments.ExperimentRefused as exc:
+                    return experiments.refusal(self.repo, exc)
+        return self._run("experiment_run", go, keep=("id", "outcome", "status", "reason", "tree"))
+
+    def _debug(self, tool: str, fn: Callable, keep: tuple[str, ...] = ()) -> dict:
+        def go():
+            from verinoda import debug, experiments
+
+            with self._store() as st:
+                try:
+                    return debug.compact(fn(debug, st))
+                except experiments.ExperimentRefused as exc:
+                    out = experiments.refusal(self.repo, exc)
+                    out["next_step"] = ("run the command yourself and record it with debug_attempt(observed_output="
+                                        "..., exit_code=..., command=[the command you ran]) (agent-reported, lower "
+                                        "trust), or debug_start(..., observed_output=..., exit_code=...)")
+                    return out
+        return self._run(tool, go, keep=("session", "attempt", "outcome", "stop", "stop_reason", "strategies",
+                                         "questions_for_human", "loop", "status", "reason", *keep),
+                         first=("stop", "stop_reason", "outcome", "loop", "strategies"))
+
+    def debug_start(self, symptom: str, command: list[str], base: str | None = None, trace: bool = False,
+                    observed_output: str | None = None, exit_code: int | None = None) -> dict:
+        def call(d, st):
+            argv = _argv_list(command, "command")
+            code = None if exit_code is None else _clamp(exit_code, -2 ** 31, 2 ** 31, "exit_code")
+            return d.start(st, self.repo, _text(symptom, "symptom"), argv, base=_opt_text(base), trace=bool(trace),
+                           observed_output=None if observed_output is None else str(observed_output), exit_code=code)
+        return self._debug("debug_start", call)
+
+    def debug_attempt(self, hypothesis: str, session_id: str | None = None, command: list[str] | None = None,
+                      expect: str = "pass", kind: str = "fix", observed_output: str | None = None,
+                      exit_code: int | None = None, trace: bool | None = None) -> dict:
+        def call(d, st):
+            argv = _argv_list(command, "command") or None
+            exp = _choice(expect, ("pass", "fail"), "expect")
+            k = _choice(kind, DEBUG_KINDS, "kind")
+            code = None if exit_code is None else _clamp(exit_code, -2 ** 31, 2 ** 31, "exit_code")
+            return d.attempt(st, self.repo, _opt_text(session_id), hypothesis=_text(hypothesis, "hypothesis"),
+                             expect=exp, command=argv, kind=k,
+                             observed_output=None if observed_output is None else str(observed_output),
+                             exit_code=code, trace=trace)
+        return self._debug("debug_attempt", call)
+
+    def debug_status(self, session_id: str | None = None) -> dict:
+        return self._debug("debug_status", lambda d, st: d.status(st, self.repo, _opt_text(session_id)),
+                           keep=("symptom", "attempts", "latest", "result"))
+
+    def debug_strategy(self, strategy: str, session_id: str | None = None, good: str | None = None,
+                       bad: str | None = None, times: int | None = None, prepare: bool = False,
+                       trace: bool = False, overlay: list[str] | None = None) -> dict:
+        def call(d, st):
+            s = _choice(strategy, DEBUG_STRATEGIES, "strategy")
+            sid = _opt_text(session_id)
+            lay = _str_list(overlay, "overlay") or None
+            if s == "differential":
+                return d.differential(st, self.repo, sid, prepare=bool(prepare), trace=bool(trace), overlay=lay)
+            if s == "bisect":
+                return d.bisect(st, self.repo, sid, good=_opt_text(good), bad=_opt_text(bad), overlay=lay)
+            if s == "rerun":
+                return d.rerun(st, self.repo, sid, times=None if times is None else _clamp(times, 1, 20, "times"))
+            return d.observe(st, self.repo, sid)
+        return self._debug("debug_strategy", call, keep=("strategy", "conclusion", "hunks", "first_bad_commit",
+                                                         "pass_rate", "next_step"))
+
 
 def _error_code(exc: BaseException) -> str:
     name = type(exc).__name__
@@ -1293,6 +1394,8 @@ def _error_code(exc: BaseException) -> str:
         return "rule_violation"
     if name == "ExperimentRefused":
         return "refused"
+    if name == "NotAGitTree":
+        return "not_a_git_tree"
     if isinstance(exc, (ValueError, TypeError)):
         return "invalid_argument"
     return "internal_error"
@@ -1346,6 +1449,11 @@ Tools:
 - decision_brief: for a should/which/scale question: forces from the code with evidence, what is absent, decisions
   on record, options and questions_for_human. No recommendation: ask the user those questions, record each answer
   (decision_record action='answer'), and never pick an option for the user.
+- experiment_run: run one allowlisted command (tests) in a throw-away copy (of the working tree or a commit, ref).
+- debug_start / debug_attempt / debug_status / debug_strategy: the debug ledger. Before the first edit of a bug fix,
+  debug_start(symptom, command); after every edit, debug_attempt(hypothesis). When the answer says stop=true, stop
+  editing, run strategies[0] with debug_strategy and show the user debug_status. Never change a test's expected
+  value without asking the user (questions_for_human). Never say "fixed": say the repro passed at tree T in run R.
 
 Rules: graph edges (EXTRACTED/INFERRED) are extractions, never verification. Claim status is one of
 observed, experiment_verified, statically_verified, primary_source_verified, strong_inference,
@@ -1537,11 +1645,44 @@ DESCRIPTIONS: dict[str, str] = {
         "with its scope and limits; waived; unknown. base (a git revision) or changed_only (= HEAD) labels "
         "findings new/touched or pre-existing, and then only new ones count (exit 1). Refreshes a stale index "
         "first when a no_edge guard needs the graph (refresh=false skips it). Never edits code or records."),
+    "experiment_run": (
+        "Run one command as a recorded experiment in a throw-away copy of the working tree (or, with ref, of that "
+        "commit; overlay lays working-tree files over it): allowlisted test runners only under process isolation, "
+        "anything else needs docker/podman or is refused (the refusal says why). Returns outcome (pass | fail | "
+        "timeout | inconclusive), the tree hash of what ran, log paths and the evidence id; with claim_id the run "
+        "supports or refutes that claim (an inconclusive run only qualifies it)."),
+    "debug_start": (
+        "Open a debug session before the first edit of a bug fix: the symptom, the repro command (argument list) "
+        "and a base commit (default HEAD). The repro runs once as attempt 0 in a throw-away copy (pytest gets a "
+        "failure-signature plugin; trace=true adds the call tracer, which enables the off_path rule). A command "
+        "Verinoda may not run (e.g. Gradle) is reported instead: observed_output (the run's output) + exit_code, "
+        "recorded as agent-reported. Returns the session id and the attempt record (see debug_attempt)."),
+    "debug_attempt": (
+        "Record one attempt after an edit: hypothesis (what you believe and why) is required; the session's repro "
+        "runs again on the current tree (or give command, or observed_output + exit_code for a run you made). "
+        "Returns outcome, the tree (hash, files changed vs base and since the previous attempt, with symbols), the "
+        "failure signature (exception at file::symbol per failing test), progress (improved | same | regressed | "
+        "unknown), loop findings (definitive: tree_reverted, signature_recurred, no_progress, test_edited, "
+        "off_path; heuristic: error_moved, masking, hypothesis_repeated; each cites the attempts it rests on), "
+        "flaky, stop, strategies and questions_for_human. stop=true: stop editing and follow strategies[0]. "
+        "Never reports 'fixed': a pass is 'the repro passed at tree T in run R' plus what was not run."),
+    "debug_status": (
+        "The ledger of a debug session (default: the latest open one): every attempt with its hypothesis, tree, "
+        "failure, progress and loop findings, the latest stop and strategies, and - when an attempt passed - "
+        "whether that passing tree is still the current one. Show it to the user when a session stops. Read-only."),
+    "debug_strategy": (
+        "Run a strategy the ledger proposed (each run is recorded as an attempt): differential (the repro on a copy "
+        "of the base commit; when it passes there, the diff's hunks ranked by the failure's traceback; trace=true "
+        "also compares the failing tests' observed calls at the base and in the failing tree; prepare=true only "
+        "writes the copy for a command you run yourself), bisect (binary search over commits in throw-away copies "
+        "from good to bad; commits that cannot run are skipped; returns the first failing commit and its hunks), "
+        "rerun (times runs of the current tree: pass rate, flakiness), observe (one run under the call tracer: "
+        "which failing tests reached each edited function, and the call chain to the crash)."),
 }
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
-              "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check",
-              "api_members"}
+              "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members",
+              "debug_status"}
 _OPEN_WORLD = {"reference_research", "reference_compare", "feedback_submit", "feedback_process", "reference_resolve"}
 
 
@@ -1943,6 +2084,86 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None):
                                                               "named option.")] = None,
     ) -> dict[str, Any]:
         return emit(t.decision_brief(question, options=options, quotes=quotes, agent_arguments=agent_arguments))
+    Cmd = Annotated[list[str], Field(description="The command as a list of arguments, e.g. ['python', '-m', "
+                                                 "'pytest', '-q', 'tests/test_x.py'].")]
+    SessionId = Annotated[OptStr, Field(description="A debug session id ('dbg_...'); default: the latest open "
+                                                    "session.")]
+
+    @register("experiment_run")
+    def experiment_run(
+        command: Cmd,
+        hypothesis: Annotated[str, Field(description="What the run is meant to show.")],
+        expect: Annotated[Literal["pass", "fail"], Field(description="The outcome the hypothesis predicts.")] = "pass",
+        timeout: Annotated[float | None, Field(description="Seconds (1-3600; default: the configured timeout).")]
+        = None,
+        claim_id: Annotated[OptStr, Field(description="A claim the run supports or refutes.")] = None,
+        ref: Annotated[OptStr, Field(description="Run on a copy of this commit instead of the working tree.")] = None,
+        overlay: Annotated[list[str] | None, Field(description="With ref: working-tree files laid over the commit "
+                                                               "copy (recorded).")] = None,
+    ) -> dict[str, Any]:
+        return emit(t.experiment_run(command, hypothesis, expect=expect, timeout=timeout, claim_id=claim_id, ref=ref,
+                                     overlay=overlay))
+
+    @register("debug_start")
+    def debug_start(
+        symptom: Annotated[str, Field(description="What is wrong, in a sentence.")],
+        command: Annotated[list[str], Field(description="The repro command as a list of arguments (e.g. the "
+                                                        "failing test).")],
+        base: Annotated[OptStr, Field(description="The commit every attempt is compared with (default HEAD).")]
+        = None,
+        trace: Annotated[bool, Field(description="pytest repro: run every attempt under the call tracer.")] = False,
+        observed_output: Annotated[OptStr, Field(description="The output of a run you made yourself (for commands "
+                                                             "Verinoda may not run).")] = None,
+        exit_code: Annotated[int | None, Field(description="With observed_output: that run's exit code.")] = None,
+    ) -> dict[str, Any]:
+        return emit(t.debug_start(symptom, command, base=base, trace=trace, observed_output=observed_output,
+                                  exit_code=exit_code))
+
+    @register("debug_attempt")
+    def debug_attempt(
+        hypothesis: Annotated[str, Field(description="What you believe and why (repeats of refuted hypotheses are "
+                                                     "flagged).")],
+        session_id: SessionId = None,
+        command: Annotated[list[str] | None, Field(description="A command instead of the session's repro (its pass "
+                                                               "is never a pass of the repro); required with "
+                                                               "observed_output: the command you ran.")] = None,
+        expect: Annotated[Literal["pass", "fail"], Field(description="The outcome the hypothesis predicts.")] = "pass",
+        kind: Annotated[Literal["fix", "probe", "rerun", "differential"],
+                        Field(description="fix (default), probe (no fix intended), rerun, differential (with "
+                                          "observed_output: a run on the prepared base copy).")] = "fix",
+        observed_output: Annotated[OptStr, Field(description="The output of a run you made yourself "
+                                                             "(agent-reported).")] = None,
+        exit_code: Annotated[int | None, Field(description="With observed_output: that run's exit code.")] = None,
+        trace: Annotated[bool | None, Field(description="Run this attempt under the call tracer (default: the "
+                                                        "session setting).")] = None,
+    ) -> dict[str, Any]:
+        return emit(t.debug_attempt(hypothesis, session_id=session_id, command=command, expect=expect, kind=kind,
+                                    observed_output=observed_output, exit_code=exit_code, trace=trace))
+
+    @register("debug_status")
+    def debug_status(session_id: SessionId = None) -> dict[str, Any]:
+        return emit(t.debug_status(session_id))
+
+    @register("debug_strategy")
+    def debug_strategy(
+        strategy: Annotated[Literal["differential", "bisect", "rerun", "observe"],
+                            Field(description="Which strategy to run (see strategies in debug_attempt).")],
+        session_id: SessionId = None,
+        good: Annotated[OptStr, Field(description="bisect: a commit where the repro passes (default: a known "
+                                                  "passing run, else Verinoda steps back).")] = None,
+        bad: Annotated[OptStr, Field(description="bisect: a commit where it fails (default: the session base).")]
+        = None,
+        times: Annotated[int | None, Field(description="rerun: how many runs (1-20, default 5).")] = None,
+        prepare: Annotated[bool, Field(description="differential: only write a copy of the base for a command you "
+                                                   "run yourself.")] = False,
+        trace: Annotated[bool, Field(description="differential, pytest: also compare the failing tests' observed "
+                                                 "calls at the base with the failing tree.")] = False,
+        overlay: Annotated[list[str] | None, Field(description="differential, bisect: working-tree files (e.g. a new "
+                                                               "test) laid over the old commit copies; recorded.")]
+        = None,
+    ) -> dict[str, Any]:
+        return emit(t.debug_strategy(strategy, session_id=session_id, good=good, bad=bad, times=times,
+                                     prepare=prepare, trace=trace, overlay=overlay))
 
     return srv
 

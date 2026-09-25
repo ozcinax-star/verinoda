@@ -54,6 +54,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D31 | No laundering (truth rules) | implemented | Python for relation scopes, config bindings, order and location existence; other languages keep their grades. Word overlap alone never verifies; `contains:` verifies only the quoted text; written claims naming more than the typed check binds stay partial. In-sample fixtures; no held-out false-sentence set yet. |
 | D32 | Name-existence check | partial | Python only: `verinoda check` (files, `--diff`, `--stdin --as`) and `verinoda api`, MCP `code_check` / `api_members`, skill text. Not done: mod config keys and resource ids, JVM jars, JS/TS, `--against PKG==VER`, the environment fingerprint in snapshots. Measurements in BENCHMARKS.md (the fixture set was written by the rule author: in-sample). |
 | D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`; decision records (`verinoda/decisions.py`, schema v5 log, `decide record/import/guard/accept/waive/list`, MCP `decision_record`); guards and `decide check` (`verinoda/guards.py`, MCP `decision_check`, a one-line summary in `update`; critique's exclusivity check and feedback's exclusive corrections use the same engine). Guard mutations (54 cases on the three examples, written by the rule author, plus 22 forms from the two reviews added by the fixer: all in-sample): VIOLATED precision 1.00, recall 1.00 in reach, 13/13 out-of-reach forms named in limits or POSSIBLE; the old raw-regex scan on the same orders_app cases tp 7 fp 8 fn 6. `decide check` median 42 ms per example case, about 2 s (1.8-2.2 s) on the full Verinoda tree (3 guards; results in `benchmarks/results/decide-2026-09-25/`). The decision brief (`verinoda/decision_brief.py`, `decide brief/answer`, MCP `decision_brief`, answers through `decision_record(action='answer')`; `analyze` routes decide sub-questions to it): on orders_app, EN and TR question, 8/8 gold forces, 19/19 cited evidence re-checks, 5/5 gold question kinds - in-sample (the gold came with the design and the probes were written after it). Not built: `analyze` impact questions do not include violations; the UI shows no decision badge; claims for accepted guards (kinds `exclusive` / `layering`); an ADR's reasons are matched by a few phrasings only; `research.dependencies` itself still reads no Gradle/Maven (the guards and the brief read them). Intent routing: the only held-out set left (held-out 4, 20 questions by the fixer, hashed before the review fixes' cue rules were written): precision 0.83, recall 0.50 - the recall bar (0.85) is not met; every other set (written, held-out 1-3, the reviewers' 52) is in-sample now. A missed choice question can still be judged `met`; its words then get a note at most. |
+| D34 | Debug ledger (loop detection, strategies) | partial | Built 2026-09-25 (section 7): `verinoda debug start/try/status/diff/close`, strategies `differential/bisect/rerun/observe`, MCP `debug_start` / `debug_attempt` / `debug_status` / `debug_strategy` / `experiment_run`, schema v6. debugloops_v1 (12 sessions written by the builder, gold fixed before the rules ran; in-sample after three fixes): definitive precision 11/11, loop recall 8/8, 0/4 controls stopped, top strategy 8/8. A review found 27 problems (25 distinct: false stops, false "passed", unverified bisect ends, git-safety gaps); all fixed with regression tests (section 7.5), the benchmark scores unchanged after the fixes. Not built: a real agent session with and without the protocol. `debug try` overhead is copy-bound on big trees (median 2.4-5.0 s on 2,341 files, depending on machine load). |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -1115,6 +1116,223 @@ records what the human chose and checks the code against it.
   still judged by the intent it was given (a note says it may ask for a
   choice when its words suggest one). A host agent that writes the plan can set
   the intent itself; the rules are the fallback.
+
+## 7. Debugging loops (D34, 2026-09-25)
+
+### 7.1 Findings that drive the design
+
+- An agent fixing a bug through `verinoda experiment run` produced four unconnected runs: nothing
+  recorded which code each ran on (the CLI passed no commit; evidence `commit_sha` was NULL), two of
+  them ran byte-identical trees, and the exception was only in `stdout.txt`.
+- Typical loops: editing the test instead of the code, masking the error (`.get(k, 0)`), reverting to
+  a state already run, the error moving while the failing tests stay, the same fix idea retried.
+- A differential run of the repro on the base commit, in a copy, pointed at the real cause in one
+  step in the prototype.
+
+### 7.2 Decisions
+
+- **Tree identity** (`treestate.py`, cross-cutting): content id = sha256 of the CRLF-normalised
+  bytes; tree hash over (path, id). `experiments.run` computes it while copying and records it on
+  every run (`result.tree`, evidence `meta.tree_hash`). An attempt stores only the files that differ
+  from the session base (`{path: id | None}`), their contents by id (`runs/blobs/`) and a patch
+  (`runs/<attempt>/change.patch`); any two recorded trees can be diffed exactly. Hunks are mapped to
+  the definitions they touch with `anchors.enclosing`.
+- **Commit copies**: `experiments.run(ref=...)` copies the regular files of one commit (raw blobs
+  through `git cat-file --batch`: no smudge filters run, unlike `git archive` with filters configured;
+  symlinks and submodules are left out) under the same policy and isolation, optionally with
+  working-tree files laid over it (`overlay`, recorded). The user's tree, index and `.git` are only
+  read: git is read with plumbing (`diff-index`, `diff-tree`, not the porcelain `git diff`, which
+  rewrote `.git/index` for stat-dirty files even with `--no-optional-locks`). Refs from users or agents
+  pass `rev-parse --verify --end-of-options` and are refused when they start with `-`. Paths from
+  history that a file system may fold to `.git` (`.GIT`, `.git.`, `git~1`, NTFS streams, Unicode HFS+
+  ignores) or `.verinoda` are never written, and an overlay path is checked the same way and may not
+  go through a symlink; a file this OS cannot hold (`what?.md`, `NUL` on Windows) is left out of the
+  copy and named in the run's `source.skipped` and limits. A project below its git top level works on
+  its own subtree (`rev-parse --show-prefix`; commit copies hold only that subtree). A tracked
+  symlink checked out as a plain file (`core.symlinks=false`) is not a change. A run of a commit copy
+  attached to a claim only qualifies it, unless it is the claim's own commit without overlay.
+- **Failure signatures** (`failsig.py`): the `verinoda_failsig` pytest plugin (standard library only,
+  loaded next to the copy like the call tracer) records the exception, message, crash location and
+  in-repo traceback entries; regex parsers cover pytest text, Python tracebacks / unittest,
+  JUnit / Gradle / Maven, Go, Rust and Node. The crash symbol is the innermost in-repository frame,
+  mapped to `path::Qualified.name` by `anchors.enclosing` (a Python file with a syntax error: by
+  indentation). JVM chains use the root cause (`Caused by`). Messages are normalised for addresses,
+  JVM identity hashes, UUIDs, hex ids and hashes, long ids, durations, timestamps, ports, pids and
+  copy/temp paths - also in their `repr()` form with doubled backslashes, and anything under the
+  run's own throw-away directory (whose `_home` is the run's HOME/TEMP). `sig_exact` = (test, exception,
+  symbol, message); `sig_coarse` = (exception, symbol). A failing run without a complete record is
+  `unknown`/`partial` and has no keys.
+- **Loop rules** (`looprules.py`), each citing its attempts. Definitive (set `stop`):
+  `tree_reverted`, `signature_recurred`, `no_progress`, `test_edited`, `failing_tests_skipped`,
+  `off_path`. Heuristic (never stop): `file_reverted`, `error_moved`, `masking`,
+  `hypothesis_repeated`, `possibly_flaky`. `flaky` suspends all of them and their `stop` except the
+  two test rules. Budget: `debug.max_no_progress` (3) fix attempts in a row without measured progress
+  also stops, flaky or not. On a *passing* attempt only the two test rules stop.
+  Interpretations of the design, fixed before the benchmark ran (with the review changes of 6.5):
+  - `tree_reverted`: the whole tree, or the *code* (Python files compared by their syntax tree
+    without docstrings: comments, docstrings and formatting aside), is back to an earlier attempt's
+    after being different in between. One file back at a content an earlier *fix attempt* introduced,
+    with the rest of the code new, is the heuristic `file_reverted` (review: undoing one's own last
+    edit while fixing another file is not a loop); a file going back to its starting content (attempt
+    0 or the base) is an undo, not reported. A rerun of the same tree is not a revert.
+  - `signature_recurred` needs A, then a different *known failing* signature B, then A on another
+    tree (the same tree is `tree_reverted`).
+  - `no_progress` counts fix attempts only (not the baseline, probes or reruns), and only since the
+    last passing attempt (a flaky test is not three attempts without progress).
+  - `test_edited` concerns existing test files with replaced or removed lines, or with added lines
+    that switch a test off (a skip/xfail marker, `pytest.skip(`, an early `return` inside a test
+    function), or a test configuration whose added lines change the selection (`addopts`, `-k`,
+    `--deselect`, `collect_ignore`, `testpaths`, Jest's `testPathIgnorePatterns`, ...). A test file is
+    one by name (Python, `x.test.js` / `x.spec.ts`, `x_test.go`, `FooTest.java`) or the file a failing
+    test of the session lives in. Adding a new test, only adding lines to one (a print, a comment), or
+    a change of formatting alone (the file's syntax tree unchanged; an assertion line whose statement
+    is the same after parsing) is not flagged. "An assertion or expected value" = a removed/changed
+    line matching assertion forms (`assert`, `self.assert*`, `expect(`, `assertThat`, `assert_eq!`,
+    `t.Errorf`, `pytest.raises`, `expected =`/`want :=`, ...). It stops even a passing attempt (a test
+    edited until it passes is the case to ask about).
+  - `failing_tests_skipped`: a test that failed at the baseline (or at the previous attempt, if it
+    existed at the baseline) is skipped, xfailed, deselected or not collected in this run (the
+    plugin's per-test outcomes; unknown without them). It stops even a passing attempt, and such a
+    pass is reported as "exited 0, but N earlier failing tests did not pass".
+  - `off_path` reads the call trace of the repro run itself (`debug start --trace`, `debug try
+    --trace`, or the `observe` strategy, which is a traced probe of the repro), complete traces only,
+    and only when every edited item is a function or method in a non-test Python file; the trace must
+    be taken with the edit in the tree. It needs the edited functions to be called *nowhere* in the
+    run - not by any test, not at import/collection time - and no process-starting call
+    (`subprocess.*`, `multiprocessing.*`, `os.system`, ...) seen in the run (review: import-time code
+    and child processes reach the failing test without being on its call path).
+  - `flaky` (one tree and command: another outcome, another set of failing tests, or another coarse
+    signature; the message is not compared) is cleared only by a rerun series (3 or more) of a tree
+    whose recorded runs all agree; a series on the tree that disagreed never clears it. Found on the
+    flaky control (see BENCHMARKS.md). An agent-reported run does not count for a tree Verinoda ran.
+    Two different trees with the same code and different results are the heuristic
+    `possibly_flaky` (rerun proposed first).
+  - Progress between two runs of the same tree or code with different results is `unknown`, and so is
+    a run after a test was edited or failing tests were skipped.
+- **Strategies** (proposed on `stop` or `flaky`, in the design's fixed order; run on request;
+  recorded as attempts): `rerun` first when flaky; `differential` when the tree differs from the base
+  and the base is not known to fail; `bisect` when the base is known to fail (a clean baseline, or a
+  differential that failed) - both ends are established first (the bad end, default the session
+  base, must fail and the good end must pass: a run recorded in the session on that commit, or a
+  clean baseline for the base, counts; otherwise it is run; if an end does not behave, bisect says so
+  and stops with `unknown`), then first-parent binary search in commit copies, commits that cannot run
+  are skipped, without `--good` Verinoda steps back 1, 2, 4, ... commits, and the conclusion cites the
+  attempt that shows each side; `observe`; `narrowing` (a suspect list: traceback symbols and symbols
+  changed since the last passing state, each with its evidence; only a complete trace in which a
+  changed function was called nowhere, with no child process started, rules it out);
+  `minimal_repro` (the repro narrowed to the failing tests; when a test passes alone and failed in
+  the full repro on the same tree, the attempt reports the heuristic `order_dependent`); `ask_human`
+  when a test rule fired or nothing else applies.
+  The differential holds the symptom's test fixed: when the files of attempt 0's failing tests differ
+  at the base (a new or changed test), the working tree's versions - if still attempt 0's - are laid
+  over the base copy (`--overlay` names files explicitly); if the failing tests did not run at the
+  base (per-test outcomes), the result is `inconclusive`, never "the cause is in the diff". It ranks
+  hunks: code before test files, and files whose code is unchanged (comments/docstrings only) last;
+  while the failure still shows the symptom the session started with (same coarse signature or the
+  same failing tests as attempt 0), hunks already there at attempt 0 first (found on L6), then on the
+  failure's traceback, reached by the failing tests in a complete trace, others; when the failure has
+  changed, the traceback/reach tier first (review: the agent's own new bug on the traceback belongs
+  above an unrelated earlier change). For a command Verinoda may not run (Gradle, Maven)
+  `differential --prepare` writes a plain copy of the base under `.verinoda/runs/` and the agent
+  reports its run there (`--kind differential --observed-output ... -- <command>`).
+- **Honesty**: never "fixed"; a pass is "the repro command passed at tree T in run R" plus
+  `not_run` (tests outside the selection, `-k`/`-m`/`--deselect`/`--ignore`, skipped and xfailed
+  tests, other environments, agent-reported) - and only for the session's own repro command: a
+  narrowed or other command's pass is reported as that command's and never resolves the session.
+  Closing as resolved needs a pass of the repro command whose tree hash equals the current tree, in
+  which the tests that failed before passed (not skipped), with no run of that tree by Verinoda that
+  did not pass (flaky), and - when tests changed between attempt 0 and that tree - `--accept-test-edit`,
+  the user's decision, recorded in the close note. Agent-reported runs must name the command they
+  ran, are labelled, their output sha256 kept, their evidence type `agent_report` is non-verifying,
+  and they never make a tree Verinoda ran flaky or resolve it. Verinoda never edits or reverts the
+  user's files.
+- **Surfaces**: CLI `verinoda debug start|try|status|diff|close|differential|bisect|rerun|observe`
+  (exit 3 when the ledger says stop, a command is refused, or a strategy did not settle it: bisect
+  unknown/open, differential inconclusive, rerun flaky), MCP `debug_start`, `debug_attempt`,
+  `debug_status`, `debug_strategy` (with `overlay` for differential and bisect) and `experiment_run`
+  (a command passes through as given: repeated and empty arguments are kept), skill protocol in both
+  skills. Deviation:
+  the design asked to add `experiment run` / `debug` to Claude's `allowed-tools`; only the read-only
+  `debug status` / `debug diff` are pre-approved, because the others run the project's tests and
+  experiment runs already keep the user's permission prompt (tests/test_agents.py).
+- **Schema v6** (v5 is reserved for the decisions branch): `debug_sessions` (symptom, command, base
+  immutable; a closed session stays closed) and `debug_attempts` (append-only).
+
+### 7.3 Measurements (docs/BENCHMARKS.md, Update 2026-09-25: debug ledger)
+
+- debugloops_v1, 12 scripted sessions (8 looping, 4 controls) over orders_app and glow_mod copies,
+  written with gold before the rules ran. First run: definitive precision 10/10, loop recall 7/8, 0/4
+  controls stopped, top strategy 7/8. After three fixes found on these sessions (JVM identity hashes
+  in messages; differential ranks attempt-0 hunks first, by line; flaky clearing): 11/11, 8/8, 0/4,
+  8/8. In-sample; the sessions and their gold are the builder's. After the review fixes (6.5), run 8:
+  11/11, 8/8, 0/4, 8/8, cause named 7/8 - every attempt's findings and stops as before (run 7, with a
+  first ranking fix, named 5/8).
+- Signature parser: 30 log fixtures (21 real runs, 9 hand-written for tools not installed here:
+  Gradle, Maven, Go, Jest): 18/30 exact on the first run, 30/30 after format fixes (in-sample); 10
+  held-out real logs: 8/10 on their first run, 10/10 after two fixes. Zero crashes; a property test
+  feeds arbitrary text.
+- `debug try` overhead beyond the command, committed code: orders_app median 0.14 s, p90 0.25 s,
+  max 0.49 s (20 tries on a shared machine); with the tracer median 0.15 s. A 2,341-file tree: median
+  5.0 s, dominated by copying the tree per run (threaded copy: 1.8 s vs 3.0 s sequential for the copy
+  alone). After the review fixes: orders_app median 0.08 s (p90 0.11 s), the clone median 2.4 s (a
+  less loaded machine; the copy was not changed); a 17,504-line changed lockfile 4.7 s -> 0.13 s.
+
+### 7.4 Not done / limits
+
+- `narrowing`, `order_dependent`, the `observe` report (which failing tests reached each edited
+  function; the observed call chain from the first failing test to its crash symbol) and the
+  differential trace (`differential --trace`: the failing tests' observed calls at the base vs in the
+  failing tree) were added after the benchmark and are covered by tests only.
+- A real agent session with and without the protocol; the container isolation path; Gradle/Maven
+  runs (agent-reported runs only).
+- A copy per run makes big trees slow; reusing a per-session copy synced by content id would remove
+  most of it and is not built.
+- Heuristic rules have no gold labels: in the 12 sessions they fired 15 times (error_moved 7,
+  hypothesis_repeated 6, masking 2), 0 times on the controls; their precision is not measured.
+- Rust `#[cfg(test)]` modules inside `src/` are not recognised as tests (a test edit there is not
+  `test_edited`); per-test outcomes (`failing_tests_skipped`, the differential's check that the failing
+  tests ran at the base) exist for pytest only - other runners report "unknown" there. Process
+  detection for `off_path` sees only calls made from repository code.
+
+### 7.5 Review of the ledger (2026-09-25) and what changed
+
+Two reviewers reported 27 findings (25 distinct) against the built ledger; every one was reproduced
+on the code as built, fixed, and covered by a regression test (tests/test_debug.py,
+test_looprules.py, test_treestate.py, test_failsig.py). The false results, by kind:
+
+- **False "passed" / false resolution**: a narrowed command's pass was "the repro command passed"
+  and closed the session; skipped / xfailed / early-returned / deselected failing tests counted as a
+  pass; an agent report outweighed three failing Verinoda runs of the same tree; status and close
+  ignored later failures of the same tree. Now: only the repro command's pass counts, the new rule
+  `failing_tests_skipped`, `test_edited` for switched-off tests and test selection, agent reports
+  must name their command and never outweigh Verinoda's runs, close refuses flaky trees and asks for
+  `--accept-test-edit`.
+- **False stops**: undoing one's own last edit while fixing another file (`tree_reverted` per file ->
+  heuristic `file_reverted`, and only the test rules stop a pass); `off_path` for import-time code
+  and child processes (now: called nowhere in the run, no process started); `test_edited` for a
+  quote change (now compared by syntax tree).
+- **Missed loops**: temp paths in `repr()` form, timestamps and hex ids made every run's signature
+  new, so the tree looked flaky and even the budget was suspended (normalised; flaky is judged on
+  outcome, failing tests and the coarse signature; the budget holds while flaky); a flaky test was a
+  definitive `no_progress` (the rule no longer spans a pass; same-code flips are `possibly_flaky` with
+  rerun first).
+- **Unverified conclusions**: bisect named a first failing commit with zero runs, or with a `--good`
+  that failed (ends are run first now); the differential said "the cause is in the diff" for a new
+  test that the base lacks (the symptom's test is held fixed, else inconclusive); the ranking put an
+  unrelated attempt-0 docstring edit above the agent's new bug on the traceback.
+- **Safety and robustness**: MCP de-duplicated command arguments (`-p a -p b` lost a `-p`); a
+  project below the git top level saw the whole repository as changed; commit copies wrote a
+  `.GIT/config` from history (case-insensitive file systems) and the overlay accepted `.GIT/config`;
+  `git diff` rewrote `.git/index`; a Windows-invalid name in history crashed every commit copy; a
+  failed baseline left an open session with no attempt; a 17.5k-line changed lockfile cost 4.8 s per
+  attempt (now diffed once per session, with difflib's junk heuristic above 2,000 lines: 0.13 s);
+  `core.symlinks=false` symlinks were reported as added; a commit-copy run attached to a claim counted
+  as support; `debug differential` exited 0 when inconclusive.
+
+The first fix of the ranking (tiers before "already there at attempt 0" whenever the coarse signature
+changed) cost two causes on debugloops_v1 (run 7: cause named 5/8); the rule that replaced it (code
+before tests, comment-only files last, and "same symptom" also when the failing tests are the same)
+restored 7/8 (run 8). Both runs are in-sample.
 
 ## Sources
 

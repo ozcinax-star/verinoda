@@ -1,0 +1,6 @@
+--- FAIL: TestDiscount (0.00s)
+    --- FAIL: TestDiscount/at (0.00s)
+        pricing_test.go:20: Discount(100) = 90, want 100
+FAIL
+exit status 1
+FAIL	example.com/orders	0.003s

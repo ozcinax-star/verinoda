@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _SCHEMA_V1 = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -429,12 +429,84 @@ CREATE TRIGGER IF NOT EXISTS no_update_decision_answers BEFORE UPDATE ON decisio
 BEGIN SELECT RAISE(ABORT, 'answers are append-only'); END;
 """
 
-_MIGRATIONS: dict[int, str] = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4, 5: _SCHEMA_V5}
+# v6 (docs/DESIGN.md D34): the debug ledger. A session is one symptom with one repro command; an
+# attempt is one run of it (or a run the agent reports) with the tree it ran on, the failure
+# signature and the loop findings computed at that moment. Attempts are append-only; a session
+# only changes status when it is closed.
+_SCHEMA_V6 = """
+CREATE TABLE IF NOT EXISTS debug_sessions (
+    id TEXT PRIMARY KEY,
+    symptom TEXT NOT NULL,
+    command TEXT NOT NULL,
+    base_ref TEXT,
+    base_commit TEXT,
+    settings TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL CHECK (status IN ('open','resolved','abandoned')),
+    resolved_by INTEGER,
+    close_note TEXT,
+    created_at TEXT NOT NULL,
+    closed_at TEXT
+);
+CREATE TABLE IF NOT EXISTS debug_attempts (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES debug_sessions(id),
+    n INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('baseline','fix','probe','rerun','differential','bisect')),
+    hypothesis TEXT NOT NULL,
+    hypothesis_terms TEXT NOT NULL DEFAULT '[]',
+    command TEXT NOT NULL,
+    expect TEXT,
+    run_by TEXT NOT NULL CHECK (run_by IN ('verinoda','agent')),
+    copy_source TEXT NOT NULL DEFAULT '{}',
+    tree_hash TEXT,
+    tree_files TEXT NOT NULL DEFAULT '{}',
+    patch_path TEXT,
+    touched TEXT NOT NULL DEFAULT '{}',
+    experiment_id TEXT REFERENCES experiments(id),
+    evidence_id TEXT REFERENCES evidence(id),
+    runtime_run_id TEXT,
+    outcome TEXT NOT NULL,
+    exit_code INTEGER,
+    duration_s REAL,
+    output_sha256 TEXT,
+    signature TEXT NOT NULL DEFAULT '{}',
+    sig_exact TEXT,
+    sig_coarse TEXT,
+    trace TEXT NOT NULL DEFAULT '{}',
+    progress TEXT,
+    findings TEXT NOT NULL DEFAULT '[]',
+    stop INTEGER NOT NULL DEFAULT 0,
+    stop_reason TEXT,
+    strategies TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    UNIQUE (session_id, n)
+);
+CREATE INDEX IF NOT EXISTS idx_debug_attempts_session ON debug_attempts(session_id, n);
+CREATE INDEX IF NOT EXISTS idx_debug_sessions_status ON debug_sessions(status, created_at);
+CREATE TRIGGER IF NOT EXISTS no_delete_debug_sessions BEFORE DELETE ON debug_sessions
+BEGIN SELECT RAISE(ABORT, 'debug sessions are never deleted; close them'); END;
+CREATE TRIGGER IF NOT EXISTS no_update_debug_session_identity
+BEFORE UPDATE OF symptom, command, base_ref, base_commit, settings, created_at ON debug_sessions
+BEGIN SELECT RAISE(ABORT, 'a debug session''s symptom, command and base are immutable; start a new session'); END;
+CREATE TRIGGER IF NOT EXISTS no_reopen_debug_sessions
+BEFORE UPDATE OF status, resolved_by, close_note, closed_at ON debug_sessions WHEN OLD.status <> 'open'
+BEGIN SELECT RAISE(ABORT, 'a closed debug session stays closed; start a new session'); END;
+CREATE TRIGGER IF NOT EXISTS no_delete_debug_attempts BEFORE DELETE ON debug_attempts
+BEGIN SELECT RAISE(ABORT, 'debug attempts are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS no_update_debug_attempts BEFORE UPDATE ON debug_attempts
+BEGIN SELECT RAISE(ABORT, 'debug attempts are append-only'); END;
+"""
+
+_MIGRATIONS: dict[int, str] = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4, 5: _SCHEMA_V5,
+                               6: _SCHEMA_V6}
 
 _JSON_COLS = {
     "plan", "check_result", "facts", "header", "tests", "flags", "explicit", "detail",
     "spec", "subjects", "uncertainties", "meta", "payload", "resolution", "environment",
     "notes", "budget", "usage", "result", "command", "guards", "waivers", "governs", "revisit_when",
+    # debug ledger (v6)
+    "settings", "hypothesis_terms", "copy_source", "tree_files", "touched", "signature", "findings", "trace",
+    "strategies",
 }
 
 

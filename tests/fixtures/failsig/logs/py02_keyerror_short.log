@@ -1,0 +1,32 @@
+..FF.                                                                    [100%]
+================================== FAILURES ===================================
+_____________________________ test_compute_total ______________________________
+tests\test_pricing.py:13: in test_compute_total
+    assert compute_total([{"price": 10.0, "qty": 2}]) == 20.0
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+orders\pricing.py:7: in compute_total
+    subtotal = sum(i["price"] * i["quantity"] for i in items)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+orders\pricing.py:7: in <genexpr>
+    subtotal = sum(i["price"] * i["quantity"] for i in items)
+                                ^^^^^^^^^^^^^
+E   KeyError: 'quantity'
+_______________________ test_place_and_fetch_roundtrip ________________________
+tests\test_service.py:9: in test_place_and_fetch_roundtrip
+    oid = place_order(repo, "ada", [{"price": 5.0, "qty": 1}])
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+orders\service.py:21: in place_order
+    total = compute_total(items)
+            ^^^^^^^^^^^^^^^^^^^^
+orders\pricing.py:7: in compute_total
+    subtotal = sum(i["price"] * i["quantity"] for i in items)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+orders\pricing.py:7: in <genexpr>
+    subtotal = sum(i["price"] * i["quantity"] for i in items)
+                                ^^^^^^^^^^^^^
+E   KeyError: 'quantity'
+=========================== short test summary info ===========================
+FAILED tests/test_pricing.py::test_compute_total - KeyError: 'quantity'
+FAILED tests/test_service.py::test_place_and_fetch_roundtrip - KeyError: 'qua...
+2 failed, 3 passed in 0.21s
+

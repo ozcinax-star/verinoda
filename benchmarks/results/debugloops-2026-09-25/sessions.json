@@ -1,0 +1,797 @@
+{
+ "_note": "debugloops_v1: the 12 scripted sessions with their gold, written before the loop rules were run on them (see README.md). Edits: [\"sub\", path, old, new] replaces the first occurrence; [\"write\", path, text] writes a file.",
+ "sessions": [
+  {
+   "id": "L1_key_rename",
+   "example": "orders_app",
+   "looping": true,
+   "setup": [
+    [
+     "sub",
+     "orders/pricing.py",
+     "i[\"qty\"]",
+     "i[\"quantity\"]"
+    ]
+   ],
+   "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider"
+   ],
+   "attempts": [
+    {
+     "hypothesis": "the qty -> quantity rename broke order totals"
+    },
+    {
+     "hypothesis": "the pricing test data still uses the old qty key",
+     "edits": [
+      [
+       "sub",
+       "tests/test_pricing.py",
+       "\"qty\": 2",
+       "\"quantity\": 2"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "a missing quantity should default to zero instead of raising",
+     "edits": [
+      [
+       "sub",
+       "orders/pricing.py",
+       "i[\"quantity\"]",
+       "i.get(\"quantity\", 0)"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "the default hid the value; index quantity directly again",
+     "edits": [
+      [
+       "sub",
+       "orders/pricing.py",
+       "i.get(\"quantity\", 0)",
+       "i[\"quantity\"]"
+      ]
+     ]
+    }
+   ],
+   "established_at": 1,
+   "definitive_ok": {
+    "1": [
+     "test_edited"
+    ],
+    "3": [
+     "tree_reverted",
+     "signature_recurred"
+    ]
+   },
+   "first_strategy": "differential",
+   "cause": "orders/pricing.py:7"
+  },
+  {
+   "id": "L2_regression_in_history",
+   "example": "orders_app",
+   "looping": true,
+   "commits": [
+    [
+     "c1 threshold test",
+     [
+      [
+       "sub",
+       "tests/test_pricing.py",
+       "def test_compute_total():",
+       "def test_threshold_is_not_discounted():\n    assert apply_discount(100.0) == 100.0\n\n\ndef test_compute_total():"
+      ]
+     ]
+    ],
+    [
+     "c2 readme",
+     [
+      [
+       "sub",
+       "README.md",
+       "# ",
+       "# Orders: "
+      ]
+     ]
+    ],
+    [
+     "c3 inclusive threshold",
+     [
+      [
+       "sub",
+       "orders/pricing.py",
+       "if subtotal > DISCOUNT_THRESHOLD:",
+       "if subtotal >= DISCOUNT_THRESHOLD:"
+      ]
+     ]
+    ],
+    [
+     "c4 config comment",
+     [
+      [
+       "sub",
+       "orders/config.py",
+       "\"\"\"Runtime configuration read from the environment.\"\"\"",
+       "\"\"\"Runtime configuration read from the environment (ORDERS_*).\"\"\""
+      ]
+     ]
+    ],
+    [
+     "c5 service docstring",
+     [
+      [
+       "sub",
+       "orders/service.py",
+       "\"\"\"Business logic between the HTTP layer and the repository.\"\"\"",
+       "\"\"\"Business logic between the HTTP layer and the repository (orders).\"\"\""
+      ]
+     ]
+    ]
+   ],
+   "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "tests/test_pricing.py"
+   ],
+   "attempts": [
+    {
+     "hypothesis": "the threshold test fails at HEAD"
+    },
+    {
+     "hypothesis": "rounding to one decimal keeps 100 at 100",
+     "edits": [
+      [
+       "sub",
+       "orders/pricing.py",
+       "round(subtotal * 0.9, 2)",
+       "round(subtotal * 0.9, 1)"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "the factor literal is off; write 0.90",
+     "edits": [
+      [
+       "sub",
+       "orders/pricing.py",
+       "round(subtotal * 0.9, 1)",
+       "round(subtotal * 0.90, 1)"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "the discount needs an explicit float conversion",
+     "edits": [
+      [
+       "sub",
+       "orders/pricing.py",
+       "round(subtotal * 0.90, 1)",
+       "float(round(subtotal * 0.9, 2))"
+      ]
+     ]
+    }
+   ],
+   "established_at": 3,
+   "definitive_ok": {
+    "3": [
+     "no_progress"
+    ]
+   },
+   "first_strategy": "bisect",
+   "good": "c1",
+   "cause": "orders/pricing.py:13",
+   "cause_commit": "c3"
+  },
+  {
+   "id": "L3_off_path",
+   "example": "orders_app",
+   "looping": true,
+   "trace": true,
+   "setup": [
+    [
+     "sub",
+     "orders/pricing.py",
+     "i[\"price\"] * i[\"qty\"]",
+     "i[\"price\"] + i[\"qty\"]"
+    ]
+   ],
+   "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "tests/test_pricing.py"
+   ],
+   "attempts": [
+    {
+     "hypothesis": "compute_total gives the wrong total"
+    },
+    {
+     "hypothesis": "the settings lack a currency, so totals are wrong",
+     "edits": [
+      [
+       "sub",
+       "orders/config.py",
+       "        \"database_url\": DATABASE_URL,",
+       "        \"currency\": \"EUR\",\n        \"database_url\": DATABASE_URL,"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "max_items must be an int in the settings",
+     "edits": [
+      [
+       "sub",
+       "orders/config.py",
+       "\"max_items\": MAX_ITEMS_PER_ORDER,",
+       "\"max_items\": int(MAX_ITEMS_PER_ORDER),"
+      ]
+     ]
+    }
+   ],
+   "established_at": 2,
+   "definitive_ok": {
+    "1": [
+     "off_path"
+    ],
+    "2": [
+     "off_path"
+    ]
+   },
+   "first_strategy": "differential",
+   "cause": "orders/pricing.py:7"
+  },
+  {
+   "id": "L4_flip_flop",
+   "example": "orders_app",
+   "looping": true,
+   "setup": [
+    [
+     "sub",
+     "orders/pricing.py",
+     "round(subtotal * 0.9, 2)",
+     "round(subtotal * 0.09, 2)"
+    ]
+   ],
+   "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "tests/test_pricing.py"
+   ],
+   "attempts": [
+    {
+     "hypothesis": "the discount above the threshold is wrong"
+    },
+    {
+     "hypothesis": "the comparison is inverted and the factor is a typo",
+     "edits": [
+      [
+       "sub",
+       "orders/pricing.py",
+       "if subtotal > DISCOUNT_THRESHOLD:",
+       "if subtotal < DISCOUNT_THRESHOLD:"
+      ],
+      [
+       "sub",
+       "orders/pricing.py",
+       "round(subtotal * 0.09, 2)",
+       "round(subtotal * 0.9, 2)"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "the comparison was right; express the factor as a percentage",
+     "edits": [
+      [
+       "sub",
+       "orders/pricing.py",
+       "if subtotal < DISCOUNT_THRESHOLD:",
+       "if subtotal > DISCOUNT_THRESHOLD:"
+      ],
+      [
+       "sub",
+       "orders/pricing.py",
+       "round(subtotal * 0.9, 2)",
+       "round(subtotal * 9 / 100, 2)"
+      ]
+     ]
+    }
+   ],
+   "established_at": 2,
+   "definitive_ok": {
+    "2": [
+     "signature_recurred"
+    ]
+   },
+   "first_strategy": "differential",
+   "cause": "orders/pricing.py:14"
+  },
+  {
+   "id": "L5_no_progress",
+   "example": "orders_app",
+   "looping": true,
+   "setup": [
+    [
+     "sub",
+     "orders/service.py",
+     "    if not items:",
+     "    if items:"
+    ]
+   ],
+   "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider"
+   ],
+   "attempts": [
+    {
+     "hypothesis": "orders are rejected by validation"
+    },
+    {
+     "hypothesis": "the item limit check is off by one",
+     "edits": [
+      [
+       "sub",
+       "orders/service.py",
+       "if len(items) > MAX_ITEMS_PER_ORDER:",
+       "if len(items) >= MAX_ITEMS_PER_ORDER:"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "the configured item limit is too low",
+     "edits": [
+      [
+       "sub",
+       "orders/config.py",
+       "\"ORDERS_MAX_ITEMS\", \"50\"",
+       "\"ORDERS_MAX_ITEMS\", \"500\""
+      ]
+     ]
+    },
+    {
+     "hypothesis": "the limit error message hides the count",
+     "edits": [
+      [
+       "sub",
+       "orders/service.py",
+       "raise ValidationError(\"too many items\")",
+       "raise ValidationError(f\"too many items: {len(items)}\")"
+      ]
+     ]
+    }
+   ],
+   "established_at": 3,
+   "definitive_ok": {
+    "3": [
+     "no_progress"
+    ]
+   },
+   "first_strategy": "differential",
+   "cause": "orders/service.py:13"
+  },
+  {
+   "id": "L6_file_reverted",
+   "example": "orders_app",
+   "looping": true,
+   "setup": [
+    [
+     "sub",
+     "orders/repository.py",
+     "\"total\": row[2]",
+     "\"total\": row[1]"
+    ]
+   ],
+   "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "tests/test_service.py"
+   ],
+   "attempts": [
+    {
+     "hypothesis": "fetched orders carry the wrong total"
+    },
+    {
+     "hypothesis": "the total comes back as text; convert it",
+     "edits": [
+      [
+       "sub",
+       "orders/service.py",
+       "    return repo.get(order_id)",
+       "    order = repo.get(order_id)\n    order[\"total\"] = float(order[\"total\"])\n    return order"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "unconvertible totals should fall back to zero",
+     "edits": [
+      [
+       "sub",
+       "orders/service.py",
+       "    order[\"total\"] = float(order[\"total\"])\n",
+       "    try:\n        order[\"total\"] = float(order[\"total\"])\n    except ValueError:\n        order[\"total\"] = 0.0\n"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "go back to the plain conversion and document get()",
+     "edits": [
+      [
+       "sub",
+       "orders/service.py",
+       "    try:\n        order[\"total\"] = float(order[\"total\"])\n    except ValueError:\n        order[\"total\"] = 0.0\n",
+       "    order[\"total\"] = float(order[\"total\"])\n"
+      ],
+      [
+       "sub",
+       "orders/repository.py",
+       "    def get(self, order_id: int):\n",
+       "    def get(self, order_id: int):\n        \"\"\"One order by id, or None.\"\"\"\n"
+      ]
+     ]
+    }
+   ],
+   "established_at": 3,
+   "definitive_ok": {
+    "3": [
+     "tree_reverted",
+     "signature_recurred"
+    ]
+   },
+   "first_strategy": "differential",
+   "cause": "orders/repository.py:27"
+  },
+  {
+   "id": "L7_java_agent_reported",
+   "example": "glow_mod",
+   "looping": true,
+   "agent_reported": true,
+   "setup": [
+    [
+     "sub",
+     "src/main/java/com/example/glowmod/entity/Wisp.java",
+     "        }\n    }\n}\n",
+     "        }\n    }\n\n    @Override\n    public void tick() {\n        super.tick();\n        ServerWorld serverWorld = (ServerWorld) getWorld();\n        Datapack.run(serverWorld, getPos(), \"wisp_tick\");\n    }\n}\n"
+    ]
+   ],
+   "command": [
+    "gradlew",
+    "runGametest"
+   ],
+   "attempts": [
+    {
+     "hypothesis": "wisps crash when they tick",
+     "observed": [
+      "> Task :runGametest\n\nWispTests > wispAppearsWhereAsked() FAILED\n    java.lang.ClassCastException: class net.minecraft.client.world.ClientWorld cannot be cast to class net.minecraft.server.world.ServerWorld (net.minecraft.client.world.ClientWorld and net.minecraft.server.world.ServerWorld are in unnamed module of loader 'knot' @1a2b3c4d)\n        at com.example.glowmod.entity.Wisp.tick(Wisp.java:49)\n        at net.minecraft.entity.LivingEntity.baseTick(LivingEntity.java:385)\n        at net.minecraft.server.world.ServerWorld.tickEntity(ServerWorld.java:760)\n        at com.example.glowmod.test.WispTests.wispAppearsWhereAsked(WispTests.java:16)\n\n1 test completed, 1 failed\n\n> Task :runGametest FAILED\n",
+      1
+     ]
+    },
+    {
+     "hypothesis": "get the server world from the server instead of casting",
+     "edits": [
+      [
+       "sub",
+       "src/main/java/com/example/glowmod/entity/Wisp.java",
+       "ServerWorld serverWorld = (ServerWorld) getWorld();",
+       "ServerWorld serverWorld = getWorld().getServer().getOverworld();"
+      ]
+     ],
+     "observed": [
+      "> Task :runGametest\n\nWispTests > wispAppearsWhereAsked() FAILED\n    java.lang.NullPointerException: Cannot invoke \"net.minecraft.server.MinecraftServer.getOverworld()\" because the return value of \"net.minecraft.world.World.getServer()\" is null\n        at com.example.glowmod.entity.Wisp.tick(Wisp.java:49)\n        at net.minecraft.entity.LivingEntity.baseTick(LivingEntity.java:385)\n        at net.minecraft.server.world.ServerWorld.tickEntity(ServerWorld.java:760)\n        at com.example.glowmod.test.WispTests.wispAppearsWhereAsked(WispTests.java:16)\n\n1 test completed, 1 failed\n\n> Task :runGametest FAILED\n",
+      1
+     ]
+    },
+    {
+     "hypothesis": "the cast is fine once the world is read into a local first",
+     "edits": [
+      [
+       "sub",
+       "src/main/java/com/example/glowmod/entity/Wisp.java",
+       "ServerWorld serverWorld = getWorld().getServer().getOverworld();",
+       "World world = getWorld();\n        ServerWorld serverWorld = (ServerWorld) world;"
+      ]
+     ],
+     "observed": [
+      "> Task :runGametest\n\nWispTests > wispAppearsWhereAsked() FAILED\n    java.lang.ClassCastException: class net.minecraft.client.world.ClientWorld cannot be cast to class net.minecraft.server.world.ServerWorld (net.minecraft.client.world.ClientWorld and net.minecraft.server.world.ServerWorld are in unnamed module of loader 'knot' @5e6f7a8b)\n        at com.example.glowmod.entity.Wisp.tick(Wisp.java:50)\n        at net.minecraft.entity.LivingEntity.baseTick(LivingEntity.java:385)\n        at net.minecraft.server.world.ServerWorld.tickEntity(ServerWorld.java:760)\n        at com.example.glowmod.test.WispTests.wispAppearsWhereAsked(WispTests.java:16)\n\n1 test completed, 1 failed\n\n> Task :runGametest FAILED\n",
+      1
+     ]
+    }
+   ],
+   "established_at": 2,
+   "definitive_ok": {
+    "2": [
+     "signature_recurred"
+    ]
+   },
+   "first_strategy": "differential",
+   "cause": "src/main/java/com/example/glowmod/entity/Wisp.java:50"
+  },
+  {
+   "id": "L8_expectation_edited",
+   "example": "orders_app",
+   "looping": true,
+   "setup": [
+    [
+     "sub",
+     "orders/pricing.py",
+     "sum(i[\"price\"] * i[\"qty\"] for i in items)",
+     "sum(i[\"price\"] * i[\"qty\"] * 1.1 for i in items)"
+    ]
+   ],
+   "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider"
+   ],
+   "attempts": [
+    {
+     "hypothesis": "totals come out about 10% too high"
+    },
+    {
+     "hypothesis": "the discount rounding adds the extra",
+     "edits": [
+      [
+       "sub",
+       "orders/pricing.py",
+       "round(subtotal * 0.9, 2)",
+       "round(subtotal * 0.9, 3)"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "totals include tax now, so the test expectation is outdated",
+     "edits": [
+      [
+       "sub",
+       "tests/test_pricing.py",
+       "assert compute_total([{\"price\": 10.0, \"qty\": 2}]) == 20.0",
+       "assert round(compute_total([{\"price\": 10.0, \"qty\": 2}]), 2) == 22.0"
+      ],
+      [
+       "sub",
+       "orders/pricing.py",
+       "def compute_total(items: list[dict]) -> float:\n",
+       "def compute_total(items: list[dict]) -> float:\n    # tax included\n"
+      ]
+     ]
+    }
+   ],
+   "established_at": 2,
+   "definitive_ok": {
+    "2": [
+     "test_edited"
+    ]
+   },
+   "first_strategy": "differential",
+   "cause": "orders/pricing.py:8",
+   "question_expected": true
+  },
+  {
+   "id": "C1_progressing",
+   "example": "orders_app",
+   "looping": false,
+   "setup": [
+    [
+     "sub",
+     "orders/pricing.py",
+     "round(subtotal * 0.9, 2)",
+     "round(subtotal * 0.8, 2)"
+    ],
+    [
+     "sub",
+     "orders/pricing.py",
+     "i[\"price\"] * i[\"qty\"]",
+     "i[\"price\"] + i[\"qty\"]"
+    ],
+    [
+     "sub",
+     "orders/service.py",
+     "    if not items:",
+     "    if not items and False:"
+    ]
+   ],
+   "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider"
+   ],
+   "attempts": [
+    {
+     "hypothesis": "four tests fail after the pricing and validation changes"
+    },
+    {
+     "hypothesis": "the discount factor must be 0.9",
+     "edits": [
+      [
+       "sub",
+       "orders/pricing.py",
+       "round(subtotal * 0.8, 2)",
+       "round(subtotal * 0.9, 2)"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "line totals multiply price by quantity",
+     "edits": [
+      [
+       "sub",
+       "orders/pricing.py",
+       "i[\"price\"] + i[\"qty\"]",
+       "i[\"price\"] * i[\"qty\"]"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "empty orders must be rejected again",
+     "edits": [
+      [
+       "sub",
+       "orders/service.py",
+       "    if not items and False:",
+       "    if not items:"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "C2_flaky",
+   "example": "orders_app",
+   "looping": false,
+   "expect_flaky": true,
+   "setup": [
+    [
+     "write",
+     "tests/test_flaky.py",
+     "import random\n\nfrom orders.pricing import apply_discount\n\n\ndef test_discount_is_stable():\n    assert apply_discount(200.0) == 180.0\n    assert random.random() >= 0.5, \"intermittent failure\"\n"
+    ]
+   ],
+   "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "tests/test_flaky.py"
+   ],
+   "attempts": [
+    {
+     "hypothesis": "the discount test fails sometimes"
+    },
+    {
+     "hypothesis": "rerun to see whether it is stable",
+     "kind": "probe"
+    },
+    {
+     "hypothesis": "rerun again",
+     "kind": "probe"
+    },
+    {
+     "hypothesis": "rerun once more",
+     "kind": "probe"
+    }
+   ],
+   "run_rerun_strategy": true
+  },
+  {
+   "id": "C3_clean_fix",
+   "example": "orders_app",
+   "looping": false,
+   "setup": [
+    [
+     "sub",
+     "orders/pricing.py",
+     "i[\"qty\"]",
+     "i[\"quantity\"]"
+    ]
+   ],
+   "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider"
+   ],
+   "attempts": [
+    {
+     "hypothesis": "the rename broke totals"
+    },
+    {
+     "hypothesis": "the item dicts use qty; revert the key",
+     "edits": [
+      [
+       "sub",
+       "orders/pricing.py",
+       "i[\"quantity\"]",
+       "i[\"qty\"]"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "C4_probe_cleanup",
+   "example": "orders_app",
+   "looping": false,
+   "setup": [
+    [
+     "sub",
+     "orders/pricing.py",
+     "i[\"qty\"]",
+     "i[\"quantity\"]"
+    ]
+   ],
+   "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider"
+   ],
+   "attempts": [
+    {
+     "hypothesis": "the rename broke totals"
+    },
+    {
+     "hypothesis": "print the items to see their keys",
+     "edits": [
+      [
+       "sub",
+       "orders/service.py",
+       "    validate_items(items)\n",
+       "    validate_items(items)\n    print(\"items\", items)\n"
+      ]
+     ]
+    },
+    {
+     "hypothesis": "the items use qty: drop the print and revert the key",
+     "edits": [
+      [
+       "sub",
+       "orders/service.py",
+       "    print(\"items\", items)\n",
+       ""
+      ],
+      [
+       "sub",
+       "orders/pricing.py",
+       "i[\"quantity\"]",
+       "i[\"qty\"]"
+      ]
+     ]
+    }
+   ]
+  }
+ ]
+}

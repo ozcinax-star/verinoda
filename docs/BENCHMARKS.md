@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,89 @@ Sections: [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-25: debug ledger (debugloops_v1)
+
+Result files: `benchmarks/results/debugloops-2026-09-25/` (its README says how they were produced).
+Everything here is in-sample: the sessions, their gold and the loop rules have one author; the gold
+was fixed before the rules ran on any session, and three fixes followed from the first runs.
+
+**Loop detection, 12 scripted sessions** (8 looping, 4 controls, on git copies of `orders_app` and
+`glow_mod`; L7 is a Gradle session reported by the "agent" because Gradle does not run here):
+
+| run | definitive precision | loop recall (stop at or before the gold attempt) | controls stopped | top strategy correct | first strategy names the cause |
+|---|---|---|---|---|---|
+| 1, first | 10/10 | 7/8 | 0/4 | 7/8 | 6/7 |
+| 5, after three fixes | 11/11 | 8/8 | 0/4 | 8/8 | 7/8 |
+| 6, committed code (after review changes) | 11/11 | 8/8 | 0/4 | 8/8 | 7/8 |
+| 7, review fixes, first ranking change | 11/11 | 8/8 | 0/4 | 8/8 | 5/8 |
+| 8, review fixes as committed | 11/11 | 8/8 | 0/4 | 8/8 | 7/8 |
+
+Runs 7 and 8 follow a review that found 25 distinct problems (docs/DESIGN.md section 7.5): false
+stops, false "passed", unverified bisect ends, git-safety gaps. The fixes changed which findings
+fire; on these 12 sessions every attempt's definitive and heuristic findings and stops came out the
+same as in run 6 (L6's revert is now found as a code-identical revert: the tree differed from
+attempt 1's only in a docstring). Two intended differences: progress after a test edit (L1 attempt 1,
+L8 attempt 2) is now "unknown" instead of "improved", and C2, random by design, happened to pass all
+four attempts in run 8, so flakiness first showed in its rerun series (1 of 5 passed; 5 of 9 runs of
+the tree). Run 7 used the first fix of the ranking (tiers before "already
+there at attempt 0" when the failure's coarse signature changed): L6 and L8 lost their cause, the
+agent's own edits ranking first. Run 8 is the committed rule (code before test files, comment-only
+files last, "same symptom" also when the failing tests are the same), which ranks the reviewers'
+counter-example right as well. In-sample: the counter-example and the fix are known to the author.
+
+The misses of run 1: a JVM class-loader identity hash (`'knot' @1a2b3c4d`) in the message made a
+recurring Java failure look new (now normalised); the differential ranked the agent's own edit above
+the cause that was already there when the symptom was recorded (hunks present at attempt 0 now come
+first, matched line by line). Run 4 then showed a rerun series of five passes on a tree that had failed
+reported as "stable"; a series on a tree that disagreed no longer clears flakiness, and the pass rate
+counts every recorded run of the tree. Run 6 is the committed code after later review changes
+(narrowing suspects, order-dependence, `test_edited` needing replaced or removed test lines); it
+scored the same. The 7/8: L7's differential can only prepare a copy of the base
+(Gradle is not runnable here). The heuristic rules have no gold; they fired 15 times in the looping
+sessions and never on the controls.
+
+**Failure signatures**: 30 log fixtures (21 real runs of pytest, unittest, Python, Java, Rust and
+Node; 9 hand-written in the Gradle, Maven, Go and Jest formats), exact exception and `path::symbol`:
+18/30 on the first score, 30/30 after format fixes found on them. 10 held-out real logs produced
+after that: 8/10 on their first score (a `--tb=native` pytest section, a bare `Error:` in Node),
+10/10 after two fixes. No crash on any log, and a property test feeds arbitrary text.
+
+**`debug try` overhead** beyond the command's own run (`overhead.json`, the committed code, 20
+attempts per series; `overhead-before-review.json` is the same measurement before the review changes):
+
+| tree | median | p90 | max | command median |
+|---|---|---|---|---|
+| orders_app (11 files) | 0.14 s | 0.25 s | 0.49 s | 0.59 s |
+| orders_app, `--trace` | 0.15 s | 0.18 s | 0.23 s | 0.63 s |
+| clone of this repository (2,341 files) | 5.0 s | 6.4 s | 9.1 s | 0.66 s |
+
+(Before the review changes: 0.12 / 0.15 / 0.16 s, 0.12 / 0.17 / 0.17 s and 4.5 / 5.9 / 7.2 s.) The
+design's bar (0.3 s on the examples) holds at the median and p90; one of the 20 untraced attempts took
+0.49 s in the last series (the machine was shared with other agents' benchmark runs). On the big tree
+it does not hold: every run copies the
+whole tree (per-file open/close dominates; copying with 8 threads took the copy alone from 3.0 s to
+1.8 s, median of 6 alternating runs each). Reusing one copy per session, synced by content id, would
+remove most of it and is not built. Other agents were running on the machine; single attempts took up
+to seconds longer in other runs.
+
+After the review fixes (`overhead-after-review.json`, same script, 20 attempts per series):
+
+| tree | median | p90 | max | command median |
+|---|---|---|---|---|
+| orders_app (11 files) | 0.08 s | 0.11 s | 0.18 s | 0.67 s |
+| orders_app, `--trace` | 0.08 s | 0.09 s | 0.10 s | 0.63 s |
+| clone of this repository (2,342 files) | 2.4 s | 2.8 s | 3.3 s | 0.75 s |
+
+The big-tree number is lower than before because the machine was less loaded, not because of the
+fixes: the step that dominates, copying the tree for each run (`run_s` 3.1 s median here), was not
+changed. A reviewer's case the fixes did change: one 17,504-line lockfile changed vs the base made
+every attempt re-diff it (difflib without its junk heuristic): 4.7 s overhead median of 3 probes
+before, 0.13 s after (the diff is now reused while the file's content is unchanged, and files above
+2,000 lines use difflib's junk heuristic; measured with the reviewer's generator on orders_app).
+
+Not measured: a real agent with and without the protocol; container isolation; precision of the
+heuristic rules; Gradle or Maven runs.
 
 ## Update 2026-09-25: decisions stay human (D33)
 

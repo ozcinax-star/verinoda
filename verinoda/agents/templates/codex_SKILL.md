@@ -46,9 +46,8 @@ On Windows PowerShell, put regular expressions and globs in single quotes.
 
 If the `verinoda` MCP server is configured (`[mcp_servers.verinoda]` in `~/.codex/config.toml`,
 or in the project's `.codex/config.toml` when the project is trusted), prefer its tools where they
-cover the task: they call the same core functions as the CLI. For anything else (for example
-experiments), or without the server, run the CLI below, always with `--json`, and read the fields
-instead of scraping text.
+cover the task: they call the same core functions as the CLI. For anything else, or without the
+server, run the CLI below, always with `--json`, and read the fields instead of scraping text.
 
 If the CLI fails inside the Codex sandbox with `PermissionError` or `ModuleNotFoundError` while
 importing `verinoda` (observed on Windows when Verinoda was installed with uv's default hardlinks,
@@ -244,6 +243,29 @@ propose Python code, and after every edit:
    something absent or a version differs from the lock (`exit_because`); `incomplete` lists files not
    checked. If `env.note` says a `.venv` was not used, tell the user; never pass `--env` to run what it
    names. A PostToolUse hook running `verinoda check --diff` only if the user agrees.
+
+## Fixing a bug: keep a debug ledger
+
+Before the first edit of a bug fix, record the repro (for pytest, `--trace` also checks whether your edits are
+even reached): `verinoda debug start "<symptom>" --json -- <repro command>` (MCP `debug_start`).
+After every edit: `verinoda debug try --hypothesis "<what you believe and why>" --json` (MCP `debug_attempt`).
+A command Verinoda may not run (Gradle, Maven): run it yourself, save the output and record it with
+`--observed-output out.txt --exit-code N -- <the command you ran>` (labelled agent-reported; it never verifies
+anything, and Verinoda's own runs of the same tree outweigh it).
+
+- `stop: true` (exit 3): stop editing. Run `strategies[0]` (e.g. `verinoda debug differential --json`, MCP
+  `debug_strategy`), then show the user `verinoda debug status`.
+- `questions_for_human`: never change a test's expected value on your own, and never skip, xfail or deselect a
+  failing test (`failing_tests_skipped`); ask the user (`request_user_input`, or a plain-text question), quoting
+  both sides.
+- Do not retry a hypothesis whose attempt did not make the repro pass (`hypothesis_repeated`) without new evidence.
+- `flaky` or `possibly_flaky`: run `verinoda debug rerun --json` first; loop findings wait until the result is
+  stable.
+- A narrowed command (`debug try ... -- <other command>`) is a probe: its pass is never a pass of the repro.
+- Never say "fixed": say "the repro command passed at tree T in run R" and list `not_run`. Close with
+  `verinoda debug close --resolved-by N` only when attempt N is a pass of the repro command on the current tree;
+  add `--accept-test-edit` only after the user decided that a test change made since attempt 0 is right.
+- Verinoda never edits or reverts code; strategies run in throw-away copies.
 
 ## After editing code
 

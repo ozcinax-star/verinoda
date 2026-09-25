@@ -1,0 +1,17 @@
+C:\work\app\src\cart.js:2
+  return item.price * item.qty.value;
+                               ^
+
+TypeError: Cannot read properties of undefined (reading 'value')
+    at lineTotal (C:\work\app\src\cart.js:2:32)
+    at C:\work\app\src\cart.js:6:44
+    at Array.reduce (<anonymous>)
+    at total (C:\work\app\src\cart.js:6:16)
+    at main (C:\work\app\scripts\report.js:4:15)
+    at Object.<anonymous> (C:\work\app\scripts\report.js:7:1)
+    at Module._compile (node:internal/modules/cjs/loader:1761:14)
+    at Object..js (node:internal/modules/cjs/loader:1893:10)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+
+Node.js v24.11.1

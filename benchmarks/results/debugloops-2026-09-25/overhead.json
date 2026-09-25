@@ -1,0 +1,53 @@
+{
+ "orders_app": {
+  "start_overhead_s": 0.138,
+  "start_wall_s": 0.78,
+  "n": 20,
+  "overhead_median_s": 0.1395,
+  "overhead_p90_s": 0.25,
+  "overhead_max_s": 0.485,
+  "command_median_s": 0.5934999999999999,
+  "steps_median": {
+   "run_s": 0.703,
+   "tree_s": 0.0015,
+   "signature_s": 0.002,
+   "rules_s": 0.018,
+   "store_s": 0.007
+  },
+  "files": 11
+ },
+ "orders_app_trace": {
+  "start_overhead_s": 0.159,
+  "start_wall_s": 1.266,
+  "n": 20,
+  "overhead_median_s": 0.146,
+  "overhead_p90_s": 0.18,
+  "overhead_max_s": 0.228,
+  "command_median_s": 0.625,
+  "steps_median": {
+   "run_s": 0.7795000000000001,
+   "tree_s": 0.0015,
+   "signature_s": 0.001,
+   "rules_s": 0.018,
+   "store_s": 0.008
+  },
+  "files": 11
+ },
+ "verinoda_clone": {
+  "start_overhead_s": 17.663,
+  "start_wall_s": 18.65,
+  "n": 20,
+  "overhead_median_s": 4.9725,
+  "overhead_p90_s": 6.423,
+  "overhead_max_s": 9.099,
+  "command_median_s": 0.664,
+  "steps_median": {
+   "run_s": 6.0275,
+   "tree_s": 0.014,
+   "signature_s": 0.024,
+   "rules_s": 0.0415,
+   "store_s": 0.006
+  },
+  "files": 2341
+ }
+}

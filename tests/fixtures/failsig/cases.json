@@ -1,0 +1,200 @@
+{
+ "_note": "A subset of the 30 signature fixtures of the debugloops_v1 measurement (docs/BENCHMARKS.md); machine paths replaced by C:\\work\\app.",
+ "cases": [
+  {
+   "case": "py01_keyerror_long",
+   "project": "orders_app",
+   "gold": [
+    [
+     "KeyError",
+     "orders/pricing.py::compute_total"
+    ]
+   ],
+   "source": "real"
+  },
+  {
+   "case": "py02_keyerror_short",
+   "project": "orders_app",
+   "gold": [
+    [
+     "KeyError",
+     "orders/pricing.py::compute_total"
+    ]
+   ],
+   "source": "real"
+  },
+  {
+   "case": "py03_assert_long",
+   "project": "orders_app",
+   "gold": [
+    [
+     "AssertionError",
+     "tests/test_service.py::test_place_and_fetch_roundtrip"
+    ]
+   ],
+   "source": "real"
+  },
+  {
+   "case": "py04_collect_importerror",
+   "project": "orders_app",
+   "gold": [
+    [
+     "ImportError",
+     "tests/test_pricing.py::<module>"
+    ]
+   ],
+   "source": "real"
+  },
+  {
+   "case": "py07_tb_line",
+   "project": "orders_app",
+   "gold": [
+    [
+     "KeyError",
+     "orders/pricing.py::compute_total"
+    ]
+   ],
+   "source": "real"
+  },
+  {
+   "case": "gradle12_full_hand",
+   "project": "java",
+   "gold": [
+    [
+     "NullPointerException",
+     "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+    ]
+   ],
+   "source": "hand"
+  },
+  {
+   "case": "java14_npe_real",
+   "project": "java",
+   "gold": [
+    [
+     "NullPointerException",
+     "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+    ]
+   ],
+   "source": "real"
+  },
+  {
+   "case": "java16_caused_by_real",
+   "project": "java",
+   "gold": [
+    [
+     "NumberFormatException",
+     "src/main/java/com/example/glowmod/ritual/Ritual.java::Ritual.steps"
+    ]
+   ],
+   "source": "real"
+  },
+  {
+   "case": "maven15_surefire_hand",
+   "project": "java",
+   "gold": [
+    [
+     "NullPointerException",
+     "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+    ],
+    [
+     "AssertionFailedError",
+     "src/test/java/com/example/glowmod/WispTest.java::WispTest.glowLevelCountsTrail"
+    ]
+   ],
+   "source": "hand"
+  },
+  {
+   "case": "gradle18_multi_hand",
+   "project": "java",
+   "gold": [
+    [
+     "NullPointerException",
+     "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+    ],
+    [
+     "AssertionFailedError",
+     "src/test/java/com/example/glowmod/WispTest.java::WispTest.glowLevelCountsTrail"
+    ]
+   ],
+   "source": "hand"
+  },
+  {
+   "case": "go19_index_panic_hand",
+   "project": "go",
+   "gold": [
+    [
+     "runtime.Error",
+     "pricing.go::Last"
+    ]
+   ],
+   "source": "hand"
+  },
+  {
+   "case": "go20_subtest_hand",
+   "project": "go",
+   "gold": [
+    [
+     "go.TestFailure",
+     "pricing_test.go::TestDiscount"
+    ]
+   ],
+   "source": "hand"
+  },
+  {
+   "case": "rust22_assert_eq_real",
+   "project": "rust",
+   "gold": [
+    [
+     "panic",
+     "src/lib.rs::tests.total_counts_quantities"
+    ]
+   ],
+   "source": "real"
+  },
+  {
+   "case": "rust24_panic_backtrace_real",
+   "project": "rust",
+   "gold": [
+    [
+     "panic",
+     "src/lib.rs::checked_qty"
+    ]
+   ],
+   "source": "real"
+  },
+  {
+   "case": "node26_uncaught_typeerror_real",
+   "project": "node",
+   "gold": [
+    [
+     "TypeError",
+     "src/cart.js::lineTotal"
+    ]
+   ],
+   "source": "real"
+  },
+  {
+   "case": "node27_test_spec_real",
+   "project": "node",
+   "gold": [
+    [
+     "AssertionError",
+     "test/cart.test.js::<module>"
+    ]
+   ],
+   "source": "real"
+  },
+  {
+   "case": "node29_jest_hand",
+   "project": "node",
+   "gold": [
+    [
+     "expect",
+     "test/cart.jest.test.js::<module>"
+    ]
+   ],
+   "source": "hand"
+  }
+ ]
+}

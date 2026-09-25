@@ -75,9 +75,18 @@ EXPECTED_PARAMS = {
                          "user_statement", "question_id"}, {"action"}),
     "decision_check": ({"base", "changed_only", "refresh"}, set()),
     "decision_brief": ({"question", "options", "quotes", "agent_arguments"}, {"question"}),
+    "experiment_run": ({"command", "hypothesis", "expect", "timeout", "claim_id", "ref", "overlay"},
+                       {"command", "hypothesis"}),
+    "debug_start": ({"symptom", "command", "base", "trace", "observed_output", "exit_code"}, {"symptom", "command"}),
+    "debug_attempt": ({"hypothesis", "session_id", "command", "expect", "kind", "observed_output", "exit_code",
+                       "trace"}, {"hypothesis"}),
+    "debug_status": ({"session_id"}, set()),
+    "debug_strategy": ({"strategy", "session_id", "good", "bad", "times", "prepare", "trace", "overlay"},
+                       {"strategy"}),
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
-             "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members"}
+             "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members",
+             "debug_status"}
 
 
 # -- fixtures & helpers -----------------------------------------------------------
@@ -238,6 +247,11 @@ def _all_calls(t: AtlasTools) -> dict:
         "decision_record": lambda: t.decision_record("list"),
         "decision_check": lambda: t.decision_check(),
         "decision_brief": lambda: t.decision_brief("should we move to PostgreSQL?"),
+        "experiment_run": lambda: t.experiment_run(["python", "-m", "pytest", "-q"], "the tests pass"),
+        "debug_start": lambda: t.debug_start("totals are wrong", ["python", "-m", "pytest", "-q"]),
+        "debug_attempt": lambda: t.debug_attempt("the rename broke it"),
+        "debug_status": lambda: t.debug_status(),
+        "debug_strategy": lambda: t.debug_strategy("differential"),
     }
 
 

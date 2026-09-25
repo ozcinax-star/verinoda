@@ -1,0 +1,11 @@
+
+Exception in thread "main" java.lang.IllegalStateException: ritual config is not a number
+	at com.example.glowmod.ritual.Ritual.start(Ritual.java:18)
+	at com.example.glowmod.Main.main(Main.java:12)
+Caused by: java.lang.NumberFormatException: For input string: "three"
+	at java.base/java.lang.NumberFormatException.forInputString(NumberFormatException.java:67)
+	at java.base/java.lang.Integer.parseInt(Integer.java:565)
+	at java.base/java.lang.Integer.parseInt(Integer.java:662)
+	at com.example.glowmod.ritual.Ritual.steps(Ritual.java:11)
+	at com.example.glowmod.ritual.Ritual.start(Ritual.java:16)
+	... 1 more
