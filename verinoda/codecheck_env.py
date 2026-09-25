@@ -28,6 +28,7 @@ found anywhere on the search path" from "found, but jedi cannot read it"
 from __future__ import annotations
 
 import ast
+import functools
 import hashlib
 import json
 import os
@@ -65,16 +66,28 @@ class EnvInfo:
     path: Path | None = None        # the venv directory
     jedi_env: object = None
     sys_path: list[str] = field(default_factory=list)   # stdlib + site-packages (no project dirs)
-    stdlib_dirs: list[Path] = field(default_factory=list)
     site_dirs: list[Path] = field(default_factory=list)
     dists: dict[str, tuple[str, str, Path]] = field(default_factory=dict)   # norm name -> (name, version, dist-info)
     top_level: dict[str, str] = field(default_factory=dict)                 # top-level module -> norm dist name
     fingerprint: str = ""
     _oracle: object = None
+    _stdlib: list[Path] | None = None   # asked from the interpreter on first use (the oracle starts early)
 
     @property
     def python(self) -> str:
         return ".".join(str(x) for x in self.version)
+
+    @property
+    def stdlib_dirs(self) -> list[Path]:
+        """The interpreter's own standard-library directories (never a PYTHONPATH entry or the project)."""
+        if self._stdlib is None:
+            info = self.oracle().ask("sys")
+            if info.get("ok"):
+                self._stdlib = [Path(d) for d in info.get("stdlib_dirs", [])]
+            else:  # the interpreter would not answer: its Lib/DLLs and zip entries as a last resort
+                self._stdlib = [Path(x) for x in self.sys_path
+                                if Path(x).name.lower() in ("lib", "dlls") or x.endswith(".zip")]
+        return self._stdlib
 
     def oracle(self) -> "StdlibOracle":
         if self._oracle is None:
@@ -127,6 +140,7 @@ def _under(p: Path, roots: list[Path]) -> bool:
     return False
 
 
+@functools.lru_cache(maxsize=1)
 def jedi_typeshed_dir() -> Path | None:
     try:
         import jedi
@@ -135,15 +149,28 @@ def jedi_typeshed_dir() -> Path | None:
     return Path(jedi.__file__).resolve().parent / "third_party" / "typeshed"
 
 
-def is_jedi_stdlib_stub(p: Path) -> bool:
+@functools.lru_cache(maxsize=16384)
+def _typeshed_part(p: str) -> str | None:
+    """"stdlib" / "stubs" for a file inside jedi's bundled typeshed, else None."""
     ts = jedi_typeshed_dir()
-    return bool(ts) and _under(p.resolve() if p.is_absolute() else p, [ts / "stdlib"])
+    if not ts:
+        return None
+    for cand in (Path(p), Path(p).resolve() if Path(p).is_absolute() else Path(p)):
+        try:
+            rel = cand.relative_to(ts)
+        except ValueError:
+            continue
+        return "stdlib" if rel.parts and rel.parts[0] == "stdlib" else "stubs"
+    return None
+
+
+def is_jedi_stdlib_stub(p: Path | str) -> bool:
+    return _typeshed_part(str(p)) == "stdlib"
 
 
 def is_jedi_bundled_stub(p: Path | str | None) -> bool:
     """A third-party stub shipped inside jedi (it may not match the installed version)."""
-    ts = jedi_typeshed_dir()
-    return bool(p) and bool(ts) and _under(Path(p), [ts]) and not is_jedi_stdlib_stub(Path(p))
+    return bool(p) and _typeshed_part(str(p)) == "stubs"
 
 
 def _own_stdlib_dirs() -> list[Path]:
@@ -251,11 +278,7 @@ def _from_jedi_env(jenv, kind: str, venv: Path | None, repo: Path) -> EnvInfo:
     exe = str(jenv.executable)
     site_dirs = [Path(p) for p in sp if "site-packages" in Path(p).parts or "dist-packages" in Path(p).parts]
     oracle = StdlibOracle(exe)
-    info = oracle.ask("sys")
-    if info.get("ok"):
-        stdlib_dirs = [Path(d) for d in info.get("stdlib_dirs", [])]
-    else:  # the interpreter would not answer: the base prefix's Lib as a last resort
-        stdlib_dirs = [Path(p) for p in sp if Path(p).name.lower() in ("lib", "dlls") or p.endswith(".zip")]
+    oracle.prefetch("sys")   # the interpreter starts while jedi works; stdlib_dirs reads the answer
     if venv is not None:
         try:
             rel = venv.resolve().relative_to(repo)
@@ -267,9 +290,8 @@ def _from_jedi_env(jenv, kind: str, venv: Path | None, repo: Path) -> EnvInfo:
     label = f"{where} (python {'.'.join(map(str, vi))})"
     dists, top = _dists(site_dirs)
     env = EnvInfo(kind=kind, label=label, executable=exe, version=vi, third_party=True, path=venv,
-                  jedi_env=jenv, sys_path=sp, stdlib_dirs=stdlib_dirs, site_dirs=site_dirs, dists=dists,
-                  top_level=top, _oracle=oracle)
-    env.fingerprint = _fingerprint(exe, vi, site_dirs, stdlib_dirs)
+                  jedi_env=jenv, sys_path=sp, site_dirs=site_dirs, dists=dists, top_level=top, _oracle=oracle)
+    env.fingerprint = _fingerprint(exe, vi, site_dirs, [Path(x) for x in sp])
     return env
 
 
@@ -286,7 +308,7 @@ def own_env(note: str) -> EnvInfo:
     info = EnvInfo(kind="verinoda", label=f"Verinoda's interpreter, standard library only (python "
                                           f"{'.'.join(map(str, vi))})",
                    executable=sys.executable, version=vi, third_party=False, note=note, jedi_env=jenv,
-                   sys_path=[str(p) for p in std], stdlib_dirs=std)
+                   sys_path=[str(p) for p in std], _stdlib=std)
     info.fingerprint = _fingerprint(sys.executable, vi, [], std)
     return info
 
@@ -426,6 +448,7 @@ def handle(req):
             info["meta_getattr"] = any("__getattr__" in vars(k) for k in meta.__mro__)
             info["inst_dict"] = any("__dict__" in vars(k) for k in mro if k is not type)
             info["custom_meta"] = meta not in STD_META
+            info["meta"] = meta.__module__ + "." + meta.__qualname__
             info["mro"] = [[k.__module__, k.__qualname__, src(k), "__dict__" in vars(k)] for k in mro]
         if parent is not None and inspect.isclass(parent) and last:
             st = inspect.getattr_static(parent, last, None)
@@ -463,7 +486,7 @@ def handle(req):
             elif callable(v) and not isinstance(v, type):
                 params, text = sig(v)
                 if params is not None:
-                    row["signature"] = text
+                    row["signature"] = n + text
             rows.append(row)
         return {"ok": True, "kind": kind_of(o), "members": rows}
     if op == "sys":
@@ -479,7 +502,7 @@ def handle(req):
         dirs.append(os.path.join(sys.base_prefix, "DLLs"))
         dirs += [p for p in sys.path if p.endswith(".zip")]
         return {"ok": True, "builtin_module_names": sorted(sys.builtin_module_names),
-                "stdlib_module_names": sorted(STD), "version": list(sys.version_info[:3]),
+                "stdlib_module_names": sorted(STD), "version": list(sys.version_info[:3]), "platform": sys.platform,
                 "stdlib_dirs": [d for d in dict.fromkeys(dirs) if os.path.exists(d)]}
     return {"ok": False, "error": "unknown op " + op}
 
@@ -500,6 +523,7 @@ class StdlibOracle:
         self.executable = executable
         self._proc: subprocess.Popen | None = None
         self._memo: dict[tuple, dict] = {}
+        self._pending: list[tuple] = []
         self._lock = threading.Lock()
         self.broken: str | None = None
 
@@ -510,6 +534,24 @@ class StdlibOracle:
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, encoding="utf-8", errors="replace", bufsize=1)
 
+    def prefetch(self, op: str, **kw) -> None:
+        """Send a request now and read its answer on the first ask() (the child starts meanwhile)."""
+        with self._lock:
+            try:
+                self._send(op, kw)
+                self._pending.append((op, *sorted(kw.items())))
+            except (OSError, ValueError, AssertionError) as exc:
+                self.broken = f"standard-library oracle failed: {type(exc).__name__}: {exc}"
+                self.close()
+
+    def _send(self, op: str, kw: dict) -> None:
+        if self._proc is None or self._proc.poll() is not None:
+            self._pending.clear()
+            self._start()
+        assert self._proc is not None and self._proc.stdin and self._proc.stdout
+        self._proc.stdin.write(json.dumps({"op": op, **kw}) + "\n")
+        self._proc.stdin.flush()
+
     def ask(self, op: str, **kw) -> dict:
         key = (op, *sorted(kw.items()))
         hit = self._memo.get(key)
@@ -519,11 +561,12 @@ class StdlibOracle:
             if self.broken:
                 return {"ok": False, "error": self.broken}
             try:
-                if self._proc is None or self._proc.poll() is not None:
-                    self._start()
-                assert self._proc is not None and self._proc.stdin and self._proc.stdout
-                self._proc.stdin.write(json.dumps({"op": op, **kw}) + "\n")
-                self._proc.stdin.flush()
+                while self._pending:   # answers come back in the order the requests were sent
+                    self._memo[self._pending.pop(0)] = _readline(self._proc, ORACLE_TIMEOUT)
+                hit = self._memo.get(key)
+                if hit is not None:
+                    return hit
+                self._send(op, kw)
                 res = _readline(self._proc, ORACLE_TIMEOUT)
             except (OSError, ValueError, AssertionError, TimeoutError) as exc:
                 self.broken = f"standard-library oracle failed: {type(exc).__name__}: {exc}"

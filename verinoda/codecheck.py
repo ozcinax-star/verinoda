@@ -40,6 +40,7 @@ were read from, the set of project files, or Verinoda changes.
 from __future__ import annotations
 
 import ast
+import functools
 import hashlib
 import json
 import os
@@ -55,6 +56,7 @@ from verinoda import codecheck_facts as cf
 from verinoda.codecheck_facts import Member, Sig, dotted
 
 CHECK_VERSION = "1"
+PROJECT_CONTENT = Path("<project-content>")   # a cache dependency on the content of every project file
 VERDICTS = ("absent", "not_installed", "unknown", "guarded", "exists")
 SITE_KINDS = ("import", "attribute", "kwarg", "dict_key")
 SKIP_DIRS = {".git", ".hg", ".svn", ".verinoda", "__pycache__", "node_modules", ".tox", ".nox", ".mypy_cache",
@@ -191,8 +193,6 @@ class FileCtx:
                 elif isinstance(x, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and x.name == n \
                         and x is not fn:
                     binds.append(x)
-            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and stmt.name == n:
-                binds.append(stmt)
         for x in ast.walk(fn):
             if isinstance(x, ast.Nonlocal) and n in x.names:
                 return None, f"`{n}` is rebound by a nested function (nonlocal)"
@@ -275,7 +275,21 @@ class Checker:
         self._declared: dict | None = None
         self._defs_index: dict | None = None
         self._pkg_index: dict = {}
+        self._search_roots: list[Path] | None = None
+        self._stores: dict[str, str] | None = None
         self.stats = {"jedi_calls": 0, "jedi_s": 0.0}
+
+    def begin(self) -> None:
+        """A new call: forget what was derived from project files (they may have changed since); parsed
+        files stay cached by their stat, jedi and the standard-library oracle stay warm."""
+        self._mod_memo.clear()
+        self._cls_memo.clear()
+        self._universes.clear()
+        self._pkg_index.clear()
+        self._defs_index = None
+        self._declared = None
+        self._search_roots = None
+        self._stores = None
 
     # -- plumbing --------------------------------------------------------------------------------------
     def goto(self, script, line: int, col: int) -> list:
@@ -288,8 +302,22 @@ class Checker:
         self.stats["jedi_s"] += time.perf_counter() - t0
         uniq: dict = {}
         for d in defs:
+            if d.module_path and self.foreign(d.module_path):
+                continue
             uniq.setdefault((str(d.module_path) if d.module_path else d.module_name, d.line, d.column, d.type), d)
         return list(uniq.values())
+
+    def foreign(self, path) -> bool:
+        """A file outside the project, the environment's search path and the standard library: jedi reached it
+        through its own process (jedi and parso are imported there), not through the checked environment."""
+        p = Path(path)
+        if _inside(p, self.repo) or cenv.jedi_typeshed_dir() and _under_any(p, [cenv.jedi_typeshed_dir()]):
+            return False
+        if self._search_roots is None:
+            u = self.universe(self.repo)
+            self._search_roots = [*u.dirs, *[d for d in u.editable.values()], *self.env.stdlib_dirs,
+                                  *self.env.site_dirs]
+        return not _under_any(p, self._search_roots)
 
     def script_for(self, path: Path):
         key = cf.stat_key(path)
@@ -981,6 +1009,11 @@ class Checker:
     def _ctor_sig(self, c: Container) -> tuple[Sig | None, str]:
         if not c.closed:
             return None, f"{c.label} is not closed ({c.why})"
+        for e in c.mro:   # a metaclass other than type decides the call's arguments (Enum: Color(value=1))
+            meta = e.info.get("meta") if isinstance(e, StdClass) else \
+                next((dotted(k.value) for k in e.node.keywords if k.arg == "metaclass"), None)
+            if meta and meta not in ("builtins.type", "type", "abc.ABCMeta", "ABCMeta"):
+                return None, f"the metaclass {meta} decides the constructor's arguments"
         for e in c.mro:
             if isinstance(e, StdClass):
                 if e.full in ("builtins.object", "object"):
@@ -1080,6 +1113,10 @@ class Checker:
             return self._guarded(v, guard)
         parent = ".".join(parts[:miss_at])
         pspecs = found_prefix
+        if miss_at == 0 and base_dir is not None:   # `from .missing import x`: the importing package itself
+            init = next((base_dir / i for i in ("__init__.py", "__init__.pyi") if (base_dir / i).is_file()), None)
+            pspecs = [cenv.ModSpec(base_dir.name, "package" if init else "namespace", init, [base_dir])]
+            parent = base_dir.name
         pfile = next((s.file for s in pspecs if s.file), None)
         cont = self.module_container(parent, pfile, fx) if pfile or not pspecs else None
         if cont is not None and parts[miss_at] in cont.names:
@@ -1145,6 +1182,8 @@ class Checker:
                 continue
             s = self._site(fx, al.lineno, al.col_offset, "import", f"{expr}.{al.name}", al.name)
             defs = fx.goto(*fx.pos(al.lineno, al.col_offset))
+            if container is not None and container.source == "stdlib" and al.name not in container.names:
+                defs = self._not_stub_only(container, defs)
             if defs:
                 out.append(self._exists(s, defs[0], fx))
                 continue
@@ -1159,6 +1198,13 @@ class Checker:
             out.append(self._judge(fx, node, s, container, al.name))
         return out
 
+    def _not_stub_only(self, c: Container, defs: list) -> list:
+        """For a standard-library container the interpreter is the authority: a name it lacks that jedi
+        finds only in a stub is platform- or version-conditional (see :meth:`stub_declares`), not proof."""
+        if c.source != "stdlib":
+            return defs
+        return [d for d in defs if not (d.module_path and str(d.module_path).endswith(".pyi"))]
+
     def eval_attribute(self, fx: FileCtx, node: ast.Attribute) -> dict:
         line = node.end_lineno or node.lineno
         bcol = (node.end_col_offset or 0) - len(node.attr.encode())
@@ -1169,7 +1215,7 @@ class Checker:
             if m is not None:
                 return self._verdict(site, "exists", source=rec.source, container=rec.label,
                                      at_def=self._member_at(m, rec))
-            defs = fx.goto(*fx.pos(line, bcol))
+            defs = self._not_stub_only(rec, fx.goto(*fx.pos(line, bcol)))
             if defs:
                 return self._exists(site, defs[0], fx)
             return self._judge(fx, node, site, rec, node.attr)
@@ -1227,6 +1273,10 @@ class Checker:
             return None
         if not isinstance(call.func, (ast.Name, ast.Attribute)):
             return None
+        if isinstance(call.func, ast.Attribute):
+            rec = self.receiver(fx, call.func.value)
+            if not (isinstance(rec, Container) and rec.kind == "module"):
+                return None   # a method: a subclass may return other keys
         defs = self._callee_defs(fx, call.func)
         if len(defs) != 1 or defs[0].type != "function" or not defs[0].module_path:
             return None
@@ -1234,7 +1284,8 @@ class Checker:
         if self.origin(path) == "stdlib" or cenv.is_jedi_bundled_stub(path):
             return None
         fn = cf.function_at(path, defs[0].line)
-        if fn is None or cf.unsafe_decorators(fn):
+        # any decorator (a cache shares one dict between callers) or a method: not closed
+        if fn is None or getattr(fn, "decorator_list", None) or _in_class(path, fn):
             return None
         keys, why = cf.dict_return_keys(fn)
         if why:
@@ -1297,6 +1348,20 @@ class Checker:
                                  where=c.where, source=c.source,
                                  next_step="read the container's source or run the tests that reach this line")
         kind = "attribute" if site["kind"] == "attribute" else "import"
+        stub = self.stub_declares(c, name)
+        if stub:
+            return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
+                                 why=f"{name} is not in {c.label} of this interpreter ({self.env.label}, "
+                                     f"{self.platform()}), but the standard-library stubs declare it ({stub}), "
+                                     "under a platform or Python-version condition",
+                                 next_step="check which platforms and Python versions the code must run on")
+        fx.deps.add(PROJECT_CONTENT)   # the answer below depends on every project file (attribute stores)
+        store = self.attr_store(name)
+        if store:
+            return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
+                                 why=f"{name} is not in {c.label}, but the project assigns an attribute of that name "
+                                     f"({store}); it may be set at runtime",
+                                 next_step="read that assignment; run the code path if it matters")
         near = nearest(name, c.names, want_call=_is_called(fx, node) if isinstance(node, ast.Attribute) else None,
                        disp=self.disp)
         v = self._verdict(site, "absent", container=c.label, where=c.where, source=c.source,
@@ -1305,8 +1370,9 @@ class Checker:
         return self._guarded(v, self._guard(fx, node, kind, name))
 
     def _next_absent(self, near: list[dict], c: Container) -> str:
-        hint = f"use a real name (nearest: {', '.join(n['name'] for n in near)})" if near else "use a real name"
-        return f"{hint}; `verinoda api {c.full}` lists the real names" if c.full else hint
+        if c.full:
+            return f"use a real name: `verinoda api {c.full}` lists them"
+        return "use a real name (nearest, elsewhere)"
 
     def _guarded(self, v: dict, guard: str | None) -> dict:
         if guard and v["verdict"] in ("absent", "not_installed"):
@@ -1367,6 +1433,74 @@ class Checker:
                 break
         return out
 
+    def platform(self) -> str:
+        info = self.env.oracle().ask("sys")
+        return str(info.get("platform") or "platform unknown")
+
+    def stub_declares(self, c: Container, name: str) -> str | None:
+        """Where the typeshed stubs bundled with jedi declare ``name`` for a standard-library container
+        (every ``if sys.platform`` / ``sys.version_info`` branch counts): "file:line", or None."""
+        if c.source != "stdlib":
+            return None
+        ts = cenv.jedi_typeshed_dir()
+        if not ts:
+            return None
+        targets: list[tuple[str, str | None]] = []
+        if c.kind == "module":
+            for m in (c.full or "").split(" ")[0:1] + ([c.stdlib_module] if c.stdlib_module else []):
+                targets.append((m, None))
+            if c.full and "(" in c.label:   # os.path (ntpath, posixpath)
+                targets += [(m.strip(), None) for m in c.label.split("(", 1)[1].rstrip(")").split(",")]
+        else:
+            for e in c.mro:
+                if isinstance(e, StdClass):
+                    mod = str(e.info.get("module") or "")
+                    qual = e.full[len(mod) + 1:] if mod and e.full.startswith(mod + ".") else e.full.rsplit(".", 1)[-1]
+                    targets.append((mod or e.full.rsplit(".", 1)[0], qual))
+        for mod, qual in targets:
+            if not mod:
+                continue
+            base = ts / "stdlib" / Path(*mod.split("."))
+            stub = next((f for f in (base.with_suffix(".pyi"), base / "__init__.pyi") if f.is_file()), None)
+            if stub is None:
+                continue
+            if qual is None:
+                m = cf.module_facts(stub).names.get(name)
+            else:
+                facts = cf.class_by_qualname(stub, qual)
+                m = facts.body.get(name) if facts else None
+            if m is not None:
+                return f"{self.disp(stub)}:{m.line}"
+        return None
+
+    def attr_store(self, name: str) -> str | None:
+        """Where the project assigns an attribute ``name`` on something other than a variable, self or cls
+        (``mod.x = ...``, ``Cls.x = ...``, ``setattr(mod, "x", ...)``): a module or class may get it at
+        runtime. Only files whose text could hold such a store are parsed."""
+        if self._stores is None:
+            self._stores = {}
+            self._store_files: dict[str, list[Path]] = {}
+            for p in iter_py_files(self.repo, [self.repo]):   # a text pre-filter, once per call
+                for n in _store_like_names(p):
+                    self._store_files.setdefault(n, []).append(p)
+        if name in self._stores:
+            return self._stores[name]
+        hit = None
+        for p in self._store_files.get(name, []):   # the AST decides
+            hit = _file_attr_stores(p, self.disp).get(name)
+            if hit:
+                break
+        self._stores[name] = hit
+        return hit
+
+    def attr_stores(self) -> dict[str, str]:
+        """Every attribute store of the project (see :meth:`attr_store`): name -> first file:line."""
+        out: dict[str, str] = {}
+        for p in iter_py_files(self.repo, [self.repo]):
+            for k, v in _file_attr_stores(p, self.disp).items():
+                out.setdefault(k, v)
+        return out
+
     def _project_defs(self) -> dict:
         if self._defs_index is None:
             self._defs_index = _defs_index(iter_py_files(self.repo, [self.repo]))
@@ -1423,6 +1557,67 @@ def _attr_base_pos(f: ast.Attribute, lines: list[str]) -> tuple[int, int]:
     return line, _char_col(lines[line - 1] if 0 < line <= len(lines) else "", bcol)
 
 
+_STORES: dict[tuple, dict[str, int]] = {}
+_STORE_LIKE: dict[tuple, frozenset] = {}
+# `.name =`, `.name: T =`, `.name[k] =`, `.name,` (a tuple target), `for/as x.name`, `setattr(x, "name"`
+_STORE_RX = re.compile(rb"\.\s*([A-Za-z_]\w*)\s*(?:\[[^\]\n]*\]\s*)?(?::[^=\n]*)?(?:=(?!=)|,)|"
+                       rb"\b(?:as|for)\s+[\w.]*\.([A-Za-z_]\w*)\b|setattr\s*\([^\n]*?['\"]([A-Za-z_]\w*)['\"]")
+
+
+def _store_like_names(path: Path) -> frozenset:
+    """Names that may be assigned as attributes in a file, by a regex over its text (cached by stat)."""
+    key = cf.stat_key(path)
+    hit = _STORE_LIKE.get(key) if key else None
+    if hit is None:
+        try:
+            data = path.read_bytes()
+        except OSError:
+            data = b""
+        hit = frozenset(g.decode("ascii", "replace") for m in _STORE_RX.finditer(data) for g in m.groups() if g)
+        if key:
+            if len(_STORE_LIKE) > 8192:
+                _STORE_LIKE.clear()
+            _STORE_LIKE[key] = hit
+    return hit
+
+
+def _file_attr_stores(path: Path, disp) -> dict[str, str]:
+    """Attribute stores of one file on something that is not a variable of its scope, self or cls
+    (``mod.x = ...``, ``Cls.x = ...``, ``setattr(mod, "x", ...)``): name -> "file:line". Cached by stat."""
+    key = cf.stat_key(path)
+    lines = _STORES.get(key) if key else None
+    if lines is None:
+        lines = {}
+        tree = cf.parse_file(path)[0]
+        scopes = [] if tree is None else \
+            [tree, *(n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)))]
+        for scope in scopes:
+            # names bound as variables in a scope hold ordinary objects: their attributes reach no module or class
+            variables = {"self", "cls"}
+            if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                a = scope.args
+                variables |= {x.arg for x in [*a.posonlyargs, *a.args, *a.kwonlyargs, a.vararg, a.kwarg] if x}
+            body = [n for stmt in scope.body for n in cf._walk_no_scopes(stmt)]  # type: ignore[attr-defined]
+            variables |= {n.id for n in body if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
+            for n in body:
+                if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Store):
+                    recv, name = n.value, n.attr
+                elif isinstance(n, ast.Call) and dotted(n.func) == "setattr" and len(n.args) >= 2 and \
+                        isinstance(n.args[1], ast.Constant) and isinstance(n.args[1].value, str):
+                    recv, name = n.args[0], n.args[1].value
+                else:
+                    continue
+                if isinstance(recv, ast.Name) and recv.id in variables:
+                    continue
+                lines.setdefault(name, n.lineno)
+        if key:
+            if len(_STORES) > 4096:
+                _STORES.clear()
+            _STORES[key] = lines
+    rel = disp(path)
+    return {k: f"{rel}:{v}" for k, v in lines.items()}
+
+
 def _is_called(fx: FileCtx, node: ast.AST) -> bool:
     p = fx.parents.get(id(node))
     return isinstance(p, ast.Call) and p.func is node
@@ -1472,21 +1667,32 @@ def _short(node: ast.AST, limit: int = 80) -> str:
     return s if len(s) <= limit else s[: limit - 3] + "..."
 
 
+@functools.lru_cache(maxsize=65536)
+def _real(p: str) -> Path:
+    try:
+        return Path(p).resolve()
+    except (OSError, RuntimeError):
+        return Path(p)
+
+
 def _under_any(p: Path, roots: list[Path]) -> bool:
-    for r in roots:
-        try:
-            p.relative_to(r)
-            return True
-        except ValueError:
-            continue
+    """``p`` is under one of ``roots``, as written or with symlinks resolved (/var vs /private/var)."""
+    for cand in (p, _real(str(p))):
+        for r in roots:
+            for root in (r, _real(str(r))):
+                try:
+                    cand.relative_to(root)
+                    return True
+                except ValueError:
+                    continue
     return False
 
 
 def _inside(p: Path, root: Path) -> bool:
     try:
-        p.resolve().relative_to(root)
+        _real(str(p)).relative_to(root)
         return True
-    except (ValueError, OSError):
+    except ValueError:
         return False
 
 
@@ -1681,6 +1887,7 @@ def get_checker(repo: Path, env: cenv.EnvInfo) -> Checker:
                     oracle.close()
             _CHECKERS.clear()
         ck = _CHECKERS[key] = Checker(repo, env)
+    ck.begin()
     return ck
 
 
@@ -1809,12 +2016,23 @@ class _Cache:
         self.env = env
         self.hits = self.misses = 0
         self._tree: str | None = None
+        self._content: str | None = None
         self._sha: dict[str, str | None] = {}
 
     def tree(self) -> str:
         if self._tree is None:
             self._tree = _tree_fp(self.repo)
         return self._tree
+
+    def content(self) -> str:
+        """Every project file by stat (answers that read the project-wide attribute stores depend on it)."""
+        if self._content is None:
+            h = hashlib.sha256()
+            for p in iter_py_files(self.repo, [self.repo]):
+                st = cf.stat_key(p)
+                h.update(repr(st).encode("utf-8", "replace"))
+            self._content = h.hexdigest()
+        return self._content
 
     def _key(self, rel: str, sha: str) -> str:
         import verinoda
@@ -1836,7 +2054,8 @@ class _Cache:
         except (OSError, ValueError):
             self.misses += 1
             return None
-        if data.get("tree") != self.tree() or any(self._dep_sha(d) != s for d, s in data.get("deps", {}).items()):
+        if data.get("tree") != self.tree() or any(self._dep_sha(d) != s for d, s in data.get("deps", {}).items()) \
+                or (data.get("content") and data["content"] != self.content()):
             self.misses += 1
             return None
         if want is None and not data.get("complete"):
@@ -1864,6 +2083,8 @@ class _Cache:
                     depmap[r] = self._dep_sha(r)
             body = {"version": CHECK_VERSION, "rel": rel, "sha256": sha, "tree": self.tree(), "deps": depmap,
                     "complete": lines is None, "lines": sorted(lines) if lines else [], "sites": sites}
+            if PROJECT_CONTENT in deps:
+                body["content"] = self.content()
             tmp = self.dir / f".{os.getpid()}.tmp"
             tmp.write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8", newline="\n")
             os.replace(tmp, self.dir / f"{self._key(rel, sha)}.json")
@@ -2059,8 +2280,9 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
                 obj_kind = "class"
                 continue
             obj_kind = info.get("kind", "variable")
+            sig = info.get("signature")
             return {**head, "found": True, "kind": obj_kind, "source": "stdlib", "at": f"<stdlib>:{std_full}",
-                    "signature": info.get("signature"), "exit": 0}
+                    **({"signature": part + sig} if sig else {}), "exit": 0}
         if m.kind == "class" and m.file and m.line:
             cls_facts, err = cf.class_at(Path(m.file), m.line)
             if cls_facts is None:
@@ -2118,4 +2340,6 @@ def reset_caches() -> None:
             oracle.close()
     _CHECKERS.clear()
     _ENVS.clear()
+    _STORES.clear()
+    _STORE_LIKE.clear()
     cf.reset_caches()

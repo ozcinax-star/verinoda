@@ -102,16 +102,18 @@ def _pattern_names(p: ast.AST, out: list[tuple[str, int]]) -> None:
                 out.append((x, getattr(n, "lineno", 0)))
 
 
+_SCOPE_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+
+
 def _walk_no_scopes(node: ast.AST):
-    """ast.walk that does not enter nested function, lambda or class bodies."""
+    """ast.walk that yields function, lambda and class nodes (the root too) but does not enter their bodies."""
     stack = [node]
     while stack:
         n = stack.pop()
         yield n
-        for c in ast.iter_child_nodes(n):
-            if isinstance(c, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
-                continue
-            stack.append(c)
+        if isinstance(n, _SCOPE_NODES):
+            continue
+        stack.extend(ast.iter_child_nodes(n))
 
 
 _TRY = tuple(t for t in (ast.Try, getattr(ast, "TryStar", None)) if t is not None)

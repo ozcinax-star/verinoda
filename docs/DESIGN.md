@@ -622,6 +622,14 @@ catches the benchmark's wrong finding in 6 ms.
   without `**kwargs` or an unknown decorator; the keys of dict literals a
   function returns. A parameter, an annotation or an inferred return value
   leaves the receiver `unknown`. jedi must also fail to find the name.
+- Still `unknown` although the container is closed: a name the project
+  assigns elsewhere (`mod.x = ...`, `setattr(Cls, "x", ...)`); a
+  standard-library name this interpreter lacks but the typeshed stubs declare
+  under a platform or version condition (`os.fork` on Windows); constructor
+  keywords under a metaclass other than `type` (`Color(value=1)` for an Enum).
+- jedi answers from outside the project, the environment's search path and
+  the standard library are ignored: jedi's own process has `jedi` and `parso`
+  imported, which would otherwise make them "exist" in any environment.
 - Guards: try/except ImportError (AttributeError, TypeError, KeyError for the
   other kinds), `if TYPE_CHECKING`, version and platform tests and `hasattr`
   make a missing name `guarded`.

@@ -25,7 +25,12 @@ from verinoda import codecheck_env as cenv  # noqa: E402
 jedi = pytest.importorskip("jedi", reason="optional extra 'precise' (jedi) not installed")
 
 CORE = '''\
+import enum
 import functools
+
+
+class Color(enum.Enum):
+    RED = 1
 
 
 class Repo:
@@ -37,6 +42,9 @@ class Repo:
 
     def get(self, order_id):
         return None
+
+    def conf(self):
+        return {"a": 1}
 
 
 class Dyn:
@@ -120,10 +128,11 @@ import sys
 from typing import TYPE_CHECKING
 
 from pkg import lazymod
-from pkg.core import (Dyn, Leaky, Reads, Repo, Slotted, compute, flexible, cached, mixed, po, settings,
-                      wrapped)
+from pkg.core import (Color, Dyn, Leaky, Reads, Repo, Slotted, compute, flexible, cached, mixed, po,
+                      settings, wrapped)
 from pkg.core import compute_totl
 from pkg.helpers import nothing
+from .helpers2 import nothing2
 import definitely_missing_xyz
 
 try:
@@ -176,6 +185,7 @@ def use(r: Repo, other):
     wrapped(1, z=2)
     cached(1, z=2)
     po(a=1, b=2)
+    Color(value=1)
     s1 = settings()["database_url"]
     s2 = settings()["database_uri"]
     st = settings()
@@ -184,7 +194,9 @@ def use(r: Repo, other):
     grown["x"] = 1
     s4 = grown["x"]
     s5 = mixed(True)["a"]
-    return a, b, c, d, e, f, g, h, i, j, k, m, n, o, p, q, s1, s2, s3, s4, s5, other
+    s6 = Repo().conf()["zzz"]
+    s7 = json.patched_here
+    return a, b, c, d, e, f, g, h, i, j, k, m, n, o, p, q, s1, s2, s3, s4, s5, s6, s7, other
 '''
 
 
@@ -206,6 +218,7 @@ def proj(tmp_path_factory):
     _write(root, "pkg/core.py", CORE)
     _write(root, "pkg/lazymod.py", LAZY)
     _write(root, "pkg/use.py", USE)
+    _write(root, "pkg/patcher.py", "import json\n\njson.patched_here = 1\n")
     _write(root, "pyproject.toml", '[project]\nname = "demo"\nversion = "0"\ndependencies = ["declaredpkg>=1"]\n')
     yield root
     codecheck.reset_caches()
@@ -259,6 +272,8 @@ def test_open_receivers_are_unknown_never_absent(result):
     assert n["verdict"] == "unknown" and "register" in n["why"]                      # self handed to a setter
     assert site(result, "o = Reads().extra", "extra")["verdict"] == "absent"         # handed to a reader only
     assert site(result, "p = Slotted().extra", "extra")["verdict"] == "absent"       # no __dict__ at all
+    patched = site(result, "s7 = json.patched_here", "patched_here")                  # json.patched_here = 1
+    assert patched["verdict"] == "unknown" and "pkg/patcher.py:3" in patched["why"]
 
 
 def test_imports(result):
@@ -267,6 +282,8 @@ def test_imports(result):
     assert t["nearest"][0]["at"] == f"pkg/core.py:{core_line('def compute(')}"
     h = site(result, "from pkg.helpers import nothing", "helpers")
     assert h["verdict"] == "absent" and "no module helpers in package pkg" in h["message"]
+    rel = site(result, "from .helpers2 import nothing2", "helpers2")
+    assert rel["verdict"] == "absent" and "no module helpers2 in package pkg" in rel["message"]
     # no project environment: a third-party module is never absent
     x = site(result, "import definitely_missing_xyz", "definitely_missing_xyz")
     assert x["verdict"] == "not_installed" and "third-party names are not checked" in x["why"]
@@ -302,6 +319,8 @@ def test_keyword_arguments(result):
     assert site(result, "cached(1, z=2)", "z", "kwarg")["verdict"] == "absent"                   # lru_cache keeps it
     p = site(result, "po(a=1, b=2)", "a", "kwarg")
     assert p["verdict"] == "absent" and "positional-only" in p["message"]
+    e = site(result, "Color(value=1)", "value", "kwarg")                                        # EnumType.__call__
+    assert e["verdict"] == "unknown" and "metaclass" in e["why"]
 
 
 def test_dict_keys_of_functions_returning_literals(result):
@@ -313,6 +332,7 @@ def test_dict_keys_of_functions_returning_literals(result):
     grown = site(result, 's4 = grown["x"]', "x", "dict_key")
     assert grown["verdict"] == "unknown" and "keys are added" in grown["why"]
     assert not [s for s in result["sites"] if s["kind"] == "dict_key" and s["name"] == "a"]    # not all literals
+    assert not [s for s in result["sites"] if s["kind"] == "dict_key" and s["name"] == "zzz"]  # a method
 
 
 def test_report_shape_and_exit(result):
@@ -357,7 +377,7 @@ def _make_venv(root: Path) -> Path:
 def test_project_environment_is_used_and_third_party_is_judged_there(tmp_path):
     _make_venv(tmp_path)
     _write(tmp_path, "app.py", "import fancylib\n\nfancylib.real_fn(1, retries=2)\nfancylib.fake_fn(1)\n"
-                               "fancylib.real_fn(1, retry=2)\nimport not_anywhere_xyz\n")
+                               "fancylib.real_fn(1, retry=2)\nimport not_anywhere_xyz\nimport jedi\n")
     _write(tmp_path, "pyproject.toml", '[project]\nname = "a"\nversion = "0"\ndependencies = ["declaredpkg"]\n')
     _write(tmp_path, "b.py", "import declaredpkg\n")
     res = codecheck.check(tmp_path, ["app.py", "b.py"], include_exists=True, use_cache=False)
@@ -371,12 +391,14 @@ def test_project_environment_is_used_and_third_party_is_judged_there(tmp_path):
     assert fake["nearest"][0]["name"] == "real_fn"
     assert by[(5, "retry", "kwarg")]["verdict"] == "absent"
     assert by[(6, "not_anywhere_xyz", "import")]["verdict"] == "absent"
+    # installed next to Verinoda (jedi is), not in the project's .venv: judged by the .venv only
+    assert by[(7, "jedi", "import")]["verdict"] == "absent"
     decl = [s for s in res["sites"] if s["path"] == "b.py"][0]
     assert decl["verdict"] == "not_installed" and "pyproject.toml" in decl["why"]
     # the same code without the project environment: never absent for third-party names
     none = codecheck.check(tmp_path, ["app.py"], env="none", include_exists=True, use_cache=False)
-    assert {s["verdict"] for s in none["sites"] if "fancylib" in s["expr"] or s["name"] == "not_anywhere_xyz"} \
-        <= {"not_installed", "unknown"}
+    third = [s for s in none["sites"] if "fancylib" in s["expr"] or s["name"] in ("not_anywhere_xyz", "jedi")]
+    assert third and {s["verdict"] for s in third} <= {"not_installed", "unknown"}
     codecheck.reset_caches()
 
 
@@ -389,6 +411,15 @@ def test_environment_choice_fallbacks(tmp_path):
     with pytest.raises(ValueError, match="not a usable Python environment"):
         cenv.select_env(tmp_path, str(tmp_path / "no-such-env"))
     env.oracle().close()
+
+
+def test_a_name_of_another_platform_is_unknown_not_absent(proj):
+    other = "fork" if sys.platform == "win32" else "startfile"   # os.fork: not on Windows; startfile: only there
+    res = codecheck.check(proj, snippet=f"import os\nos.{other}\nos.forkk_nope\n", as_path="pkg/plat.py",
+                          env="none", include_exists=True, use_cache=False)
+    by = {s["name"]: s for s in res["sites"] if s["kind"] == "attribute"}
+    assert by[other]["verdict"] == "unknown" and "stubs declare it" in by[other]["why"]
+    assert by["forkk_nope"]["verdict"] == "absent"
 
 
 def test_stdlib_names_come_from_the_interpreter_not_from_stubs(tmp_path):
@@ -470,6 +501,12 @@ def test_cache_is_keyed_by_content_and_dropped_when_a_dependency_changes(tmp_pat
     b = codecheck.check(tmp_path, ["pkg/a.py"], env="none")
     assert a["cache"] == {"hits": 0, "misses": 1} and b["cache"] == {"hits": 1, "misses": 0}
     assert a["sites"] == b["sites"] and b["summary"]["absent"] == 1
+    # another file starts assigning that attribute: the absent answer read every file, so it is redone
+    _write(tmp_path, "pkg/other.py", "import pkg.core\n\npkg.core.Repo.fetch = None\n")
+    _write(tmp_path, "pkg/other.py", "import pkg.core\n\npkg.core.Repo.fetch = None  # set at runtime\n")
+    other = codecheck.check(tmp_path, ["pkg/a.py"], env="none")
+    assert other["cache"]["hits"] == 0 and other["summary"]["absent"] == 0 and other["summary"]["unknown"] == 1
+    (tmp_path / "pkg" / "other.py").unlink()
     # the class the verdict was read from changes: the cached answer is not used
     _write(tmp_path, "pkg/core.py", CORE.replace("    def get(self, order_id):", "    def fetch(self):\n"
                                                  "        return 1\n\n    def get(self, order_id):"))
