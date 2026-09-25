@@ -230,6 +230,22 @@ def test_cli_debug_commands(tmp_path, capsys):
     assert json.loads(capsys.readouterr().out)["run_by"] == "agent"
 
 
+@pytest.mark.parametrize("agent", ["claude", "codex"])
+def test_skills_carry_the_debug_protocol_and_do_not_preapprove_runs(agent):
+    from verinoda import agents
+
+    text = agents.render_skill(agent).decode("utf-8")
+    for needle in ("verinoda debug start", "debug try --hypothesis", "stop: true", "strategies[0]",
+                   "questions_for_human", "Never say \"fixed\"", "--observed-output", "debug_attempt"):
+        assert needle in text, needle
+    if agent == "claude":
+        head = text.split("\n---", 1)[0]  # the front matter (allowed-tools)
+        assert "Bash(verinoda debug status *)" in head and "PowerShell(verinoda debug diff *)" in head
+        # commands that run the project's tests keep the user's permission prompt
+        for cmd in ("start", "try", "differential", "bisect", "rerun", "observe"):
+            assert f"verinoda debug {cmd}" not in head, cmd
+
+
 def test_mcp_debug_tools(tmp_path):
     from verinoda.mcp.server import AtlasTools
 
