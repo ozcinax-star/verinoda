@@ -655,7 +655,8 @@ file); not when lines move or symbols change, and not on the first update after 
 or removed or after a scan (the upstream merge carries the previous graph's community numbers
 into the next graph, so it comes out different once more). (4) The 112 data-shaped JSON files the
 upstream extractor skips are remembered by path and bytes, and fewer than 64 files left to
-extract are extracted in the process instead of by a process pool.
+extract are extracted in the process instead of by a process pool (after the second review:
+on Windows only, and only up to 256 KiB of source; see below).
 
 `verinoda update` on two identical copies of Verinoda's own repository (about 1,200 files), the
 command itself (`python -m verinoda update`, wall clock), run one after the other at the same
@@ -704,6 +705,37 @@ ignore files, a hand-edited label, a removed sidecar and report, a date rollover
 `scan`, `scan --force`) gave identical outputs in every step, and `verinoda query`, `map` and
 `notes` the same text. The timings above were taken on Verinoda's own repository, where
 graph.json is rewritten after every build; the fixes do not change what an update does there.
+
+A second review found four more things, all fixed. (a) A data JSON file rewritten while a build
+ran was remembered under the digest of the bytes read before extraction with the result of the
+bytes the extractor read later (`cfg.json` holding config JSON when the build started and data
+JSON when it was extracted), so its config nodes stayed out of the graph in every later update
+and even after `scan --force`. A skipped result is now kept only when the file holds the same
+bytes after extraction as before, a `force` build replays nothing, and the store's version went
+up, so a store written by the earlier code is dropped (the review's steps now give main's graph
+byte for byte). (b) The 64-file rule slowed updates of projects with 20 to 63 JavaScript or
+TypeScript files of ordinary size (upstream never caches them, so every update extracts them
+all): 40 TypeScript files of about 1 MB updated about 1.5 s slower than main. What is left is now
+extracted in the process only when it is at most 256 KiB of source (here about 2 ms per KB of
+TypeScript in the process, while a pool costs 0.6-0.8 s before it starts), and only on Windows,
+where that was measured; otherwise it goes to the pool as on main. `verinoda update` after a
+comment edit in a Python file, the command itself, main against this code at one path in
+alternating order, graph.json byte-identical in every pair (median difference, this code minus
+main): 24 TypeScript files of 224 KB in total, extracted in the process, -0.1 s (6 pairs); 60
+files, 178 KB, in the process, -0.1 s (6); 60 files, 599 KB, pool, +0.06 s (4); 40 files, 993
+KB, pool, -0.2 s (4). One scan of the 40-file project took 25.1 s against main's 10.9 s in that
+run; 7 more scans of fresh copies in both orders took 8.6-9.5 s with either code. In an update of
+Verinoda's own repository what is left after the replay is 23 files, 172 KB, extracted in the
+process as before, so the figures above stand. (c) Each JSON file to extract was read whole to
+hash it, also one past the extractor's 1 MiB limit (an update with a 400 MB data file peaked at
+446 MB, main at 50 MB). Now at most 1 MiB + 1 bytes are read, as the extractor reads, and such a
+file counts no bytes towards the rule in (b); with a 100 MB data file each of three updates
+peaked at 50 MB (main: 50 MB twice, and once 1,376 MB, as high as the scan; not investigated). (d) The code stamp of `rebuild_record.json` was read from disk when first needed, so
+a process that kept running (the MCP server) while Verinoda's files changed on disk wrote a
+record of the old code's output under the new code's stamp, and the next `verinoda update` kept
+a graph.json the new code would have written differently. A process now neither writes nor uses
+a record once a stamped file changed on disk after it was loaded; in the review's steps the next
+update writes the new code's graph.json, as main does.
 
 Found on the way, not changed (the outputs had to stay the same): an id made portable whose
 plain form is taken gets `_unresolved` appended without checking that name too, and the upstream

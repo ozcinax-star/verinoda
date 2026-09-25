@@ -1,0 +1,250 @@
+{
+  "about": "Second review of the update changes (2026-09-25). before = main (d3165b8), after = this code; the command itself (python -m verinoda, wall clock), both copies at one path, order alternating (in 'order', main = before and branch = after); other agents busy on the 6-core machine. See README.md and docs/BENCHMARKS.md.",
+  "typescript_updates": [
+    {
+      "project": "base2 + 24 TypeScript files",
+      "lines": 8904,
+      "kb": 224,
+      "scan_before_s": 3.8,
+      "scan_after_s": 3.7,
+      "updates": [
+        {
+          "order": "main/branch",
+          "before_s": 3.0,
+          "after_s": 2.3,
+          "graph_json_identical": true
+        },
+        {
+          "order": "branch/main",
+          "before_s": 2.3,
+          "after_s": 2.2,
+          "graph_json_identical": true
+        },
+        {
+          "order": "main/branch",
+          "before_s": 2.5,
+          "after_s": 2.2,
+          "graph_json_identical": true
+        },
+        {
+          "order": "branch/main",
+          "before_s": 2.3,
+          "after_s": 2.3,
+          "graph_json_identical": true
+        },
+        {
+          "order": "main/branch",
+          "before_s": 2.3,
+          "after_s": 2.3,
+          "graph_json_identical": true
+        },
+        {
+          "order": "branch/main",
+          "before_s": 2.4,
+          "after_s": 2.2,
+          "graph_json_identical": true
+        }
+      ]
+    },
+    {
+      "project": "base2 + 60 TypeScript files",
+      "lines": 7080,
+      "kb": 178,
+      "scan_before_s": 4.6,
+      "scan_after_s": 3.8,
+      "updates": [
+        {
+          "order": "main/branch",
+          "before_s": 2.1,
+          "after_s": 2.1,
+          "graph_json_identical": true
+        },
+        {
+          "order": "branch/main",
+          "before_s": 2.2,
+          "after_s": 2.1,
+          "graph_json_identical": true
+        },
+        {
+          "order": "main/branch",
+          "before_s": 2.1,
+          "after_s": 2.1,
+          "graph_json_identical": true
+        },
+        {
+          "order": "branch/main",
+          "before_s": 2.2,
+          "after_s": 2.1,
+          "graph_json_identical": true
+        },
+        {
+          "order": "main/branch",
+          "before_s": 2.1,
+          "after_s": 2.1,
+          "graph_json_identical": true
+        },
+        {
+          "order": "branch/main",
+          "before_s": 2.3,
+          "after_s": 2.0,
+          "graph_json_identical": true
+        }
+      ]
+    },
+    {
+      "project": "base2 + 60 TypeScript files",
+      "lines": 23760,
+      "kb": 599,
+      "scan_before_s": 7.0,
+      "scan_after_s": 7.2,
+      "updates": [
+        {
+          "order": "main/branch",
+          "before_s": 5.1,
+          "after_s": 3.7,
+          "graph_json_identical": true
+        },
+        {
+          "order": "branch/main",
+          "before_s": 3.7,
+          "after_s": 3.8,
+          "graph_json_identical": true
+        },
+        {
+          "order": "main/branch",
+          "before_s": 3.7,
+          "after_s": 3.8,
+          "graph_json_identical": true
+        },
+        {
+          "order": "branch/main",
+          "before_s": 3.6,
+          "after_s": 3.6,
+          "graph_json_identical": true
+        }
+      ]
+    },
+    {
+      "project": "base2 + 40 TypeScript files",
+      "lines": 39360,
+      "kb": 993,
+      "scan_before_s": 10.9,
+      "scan_after_s": 25.1,
+      "updates": [
+        {
+          "order": "main/branch",
+          "before_s": 16.4,
+          "after_s": 13.8,
+          "graph_json_identical": true
+        },
+        {
+          "order": "branch/main",
+          "before_s": 5.6,
+          "after_s": 5.4,
+          "graph_json_identical": true
+        },
+        {
+          "order": "main/branch",
+          "before_s": 5.6,
+          "after_s": 5.1,
+          "graph_json_identical": true
+        },
+        {
+          "order": "branch/main",
+          "before_s": 5.1,
+          "after_s": 5.1,
+          "graph_json_identical": true
+        }
+      ]
+    }
+  ],
+  "scans_40_typescript_files_fresh_copies": [
+    {
+      "order": "main/branch",
+      "before_s": 9.5,
+      "after_s": 9.1,
+      "graph_json_identical": true
+    },
+    {
+      "order": "branch/main",
+      "before_s": 9.4,
+      "after_s": 9.5,
+      "graph_json_identical": true
+    },
+    {
+      "order": "main/branch",
+      "before_s": 9.4,
+      "after_s": 9.4,
+      "graph_json_identical": true
+    },
+    {
+      "order": "branch/main",
+      "before_s": 9.1,
+      "after_s": 9.1,
+      "graph_json_identical": true
+    },
+    {
+      "order": "tsbench start, main",
+      "seconds": 9.2
+    },
+    {
+      "order": "tsbench start, branch",
+      "seconds": 9.1
+    },
+    {
+      "order": "tsbench start, branch",
+      "seconds": 8.6
+    },
+    {
+      "order": "tsbench start, main",
+      "seconds": 8.9
+    },
+    {
+      "order": "tsbench start, main",
+      "seconds": 9.1
+    },
+    {
+      "order": "tsbench start, branch",
+      "seconds": 8.7
+    }
+  ],
+  "data_json_100mb_note": "main's first update peaked as high as both scans (1376 MB); not investigated (the review's run of main with a 400 MB file peaked at 50 MB in all four updates). Before this fix the review measured 446 MB in every update with the 400 MB file.",
+  "data_json_100mb_update_peak_working_set": [
+    {
+      "update": 0,
+      "before_s": 1.6,
+      "before_peak_mb": 1376,
+      "after_s": 0.8,
+      "after_peak_mb": 50
+    },
+    {
+      "update": 1,
+      "before_s": 0.8,
+      "before_peak_mb": 50,
+      "after_s": 0.9,
+      "after_peak_mb": 50
+    },
+    {
+      "update": 2,
+      "before_s": 0.8,
+      "before_peak_mb": 50,
+      "after_s": 0.8,
+      "after_peak_mb": 50
+    }
+  ],
+  "verinoda_repository_left_after_replay": [
+    {
+      "update": 0,
+      "files": 23,
+      "kb": 172,
+      "in_process": true
+    },
+    {
+      "update": 1,
+      "files": 23,
+      "kb": 172,
+      "in_process": true
+    }
+  ],
+  "race_json_rewritten_during_build": "graph.json identical: True"
+}

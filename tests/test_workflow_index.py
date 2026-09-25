@@ -542,3 +542,24 @@ def test_a_record_of_a_graph_json_nothing_rewrote_is_not_used(dangling, tmp_path
     _restore(saved, repo)
     full, _ = _update_once(repo, monkeypatch, comment, fast=False)
     assert fast == full
+
+
+def test_a_process_whose_code_changed_on_disk_neither_uses_nor_writes_a_record(
+        dangling, tmp_path, monkeypatch):
+    # e.g. the MCP server running while Verinoda is edited or upgraded: the stamp on disk is not
+    # the code that runs, so the full path runs and nothing is recorded for the next process
+    repo = dangling
+    svc, saved = _recorded(repo, tmp_path, monkeypatch)
+    rp = index_dir(repo) / index.REBUILD_RECORD
+
+    def comment():
+        svc.write_bytes(svc.read_bytes().replace(b"# edit ", b"# an edit, longer: "))
+
+    with monkeypatch.context() as m:
+        m.setattr(index, "_LOADED_CODE", ())  # not the files on disk now
+        stale, stale_stats = _update_once(repo, monkeypatch, comment, fast=True)
+    assert "graph_kept" not in stale_stats and not rp.exists()
+    _restore(saved, repo)
+    full, _ = _update_once(repo, monkeypatch, comment, fast=False)
+    assert rp.exists()  # the same build, with the code as loaded, is recorded
+    assert stale == full
