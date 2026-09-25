@@ -29,3 +29,11 @@ value in a data-shaped JSON file (no graph rebuild); `jsoncode:N` does that and 
 
 Each file: a list of `{step, before_s, after_s, outputs, differences}` and, last, `{query, outputs}`.
 See docs/BENCHMARKS.md (Update 2026-09-25, *Update time, second round*).
+
+`5-second-review.json` is of another kind: the measurements behind the fixes of the second review
+(before = main d3165b8, after = the fixed code, the command at one path in alternating order).
+Updates after a comment edit in a Python file of orders_app with 24 to 60 TypeScript files added
+(graph.json compared in every pair), `verinoda scan` of fresh copies of the 40-file project, the
+peak working set of updates with a 100 MB data JSON file, what is left to extract after the replay
+in two updates of a copy of Verinoda's own repository (an in-process probe, not timed), and the
+last line of the review's steps with a JSON file rewritten during a build.
