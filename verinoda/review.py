@@ -225,10 +225,8 @@ class _Ctx:
         """Lines with comments blanked (strings kept)."""
         key = (rel, side)
         if key not in self._code:
-            from verinoda.guards import code_text
-
             t = self.text(rel, side)
-            self._code[key] = code_text(t, _suffix(rel), keep_strings=True).split("\n") if t is not None else []
+            self._code[key] = _code_lines(t, _suffix(rel)) if t is not None else []
         return self._code[key]
 
     def facts(self, rel: str, side: str = "new") -> dict | None:
@@ -239,9 +237,29 @@ class _Ctx:
                 f = anchors.facts_for(self.store, self.repo, rel)
             else:
                 t = self.text(rel, side)
-                f = anchors.compute_facts(rel, t.encode("utf-8", "surrogatepass")) if t is not None else None
+                f = self._facts_of_text(rel, t) if t is not None else None
             self._facts[key] = f if anchors.usable(f) else None
         return self._facts[key]
+
+    def _facts_of_text(self, rel: str, text: str) -> dict | None:
+        """Facts of one version's text through the facts cache (keyed by the content's sha256): the base version
+        of a file usually is what the last ``update`` indexed, and an MCP session reviews the same text again."""
+        data = text.encode("utf-8", "surrogatepass")
+        sha = hashlib.sha256(data).hexdigest()
+        hit = anchors.facts_by_sha(self.store, rel, sha)
+        if hit is not None:
+            return hit
+        f = anchors.compute_facts(rel, data)
+        scheme = anchors.scheme_for(rel)
+        if f is not None and scheme is not None and anchors.usable(f):
+            f["sha256"] = sha
+            anchors._mem_put(sha, scheme, f)
+            if self.store is not None:
+                try:
+                    self.store.put_file_facts(sha, scheme, f)
+                except Exception:  # noqa: BLE001 - a read-only or busy store: the review still runs
+                    pass
+        return f
 
     def pytree(self, rel: str, side: str = "new") -> ast.AST | None:
         key = (rel, side)
@@ -384,6 +402,8 @@ class _Ctx:
         return self._regs
 
     def registered(self, rel: str, qual: str) -> list[dict]:
+        if _suffix(rel) not in (".java", ".kt", ".kts", ".js", ".ts"):
+            return []   # method references name JVM / JS members: a Python definition is never one
         name = _last(qual)
         owner = _last(qual.rpartition(".")[0]) if "." in qual else PurePosixPath(rel).stem
         return [r for r in self.registrations() if r["name"] == name and r["owner"] in (owner, "this", "super")]
@@ -526,7 +546,7 @@ class _Ctx:
             return None
 
         if isinstance(f, ast.Name):
-            u = resolve_name(f.id) if f.id not in self.shadow(rel).get(id(f), ()) else None
+            u = resolve_name(f.id) if f.id not in _fn_locals(fn) else None   # a parameter or local hides it
             if u:
                 return u, "Python: name bound in the file or by an import", "EXTRACTED"
         elif isinstance(f, ast.Attribute):
@@ -661,6 +681,37 @@ class _Ctx:
 
 
 # -- 1. the diff ------------------------------------------------------------------------------------------
+
+def _fn_locals(fn: ast.AST | None) -> set[str]:
+    """Names a function binds locally (:func:`review_rules.py_scope_names`), kept on its node."""
+    if fn is None or not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        return set()
+    got = getattr(fn, "_verinoda_locals", None)
+    if got is None:
+        got = rr.py_scope_names(fn)
+        try:
+            fn._verinoda_locals = got
+        except AttributeError:
+            pass
+    return got
+
+
+_CODE_CACHE: dict[tuple[str, str], list[str]] = {}
+
+
+def _code_lines(text: str, suffix: str) -> list[str]:
+    """Lines of ``text`` with comments blanked (strings kept), kept per content hash across reviews in this
+    process (an MCP session reviews the same files again)."""
+    from verinoda.guards import code_text
+
+    key = (hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest(), suffix)
+    hit = _CODE_CACHE.get(key)
+    if hit is None:
+        if len(_CODE_CACHE) > 1024:
+            _CODE_CACHE.clear()
+        hit = _CODE_CACHE[key] = code_text(text, suffix, keep_strings=True).split("\n")
+    return hit
+
 
 def _decode(data: bytes | None) -> str | None:
     """Text of a file as the review reads it: UTF-8, LF line ends, without a leading byte-order mark (Python
@@ -1679,7 +1730,8 @@ def _cond_rows(ctx: _Ctx, c: Change) -> list[tuple[str, int]]:
     if _suffix(c.file) in (".py", ".pyi"):
         return rr.py_conditions(rr.py_def_at(ctx.pytree(c.file), c.def_line or c.lines[0]))
     facts = ctx.facts(c.file) or {}
-    own = _own_lines(facts, c.qual) if c.qual in (facts.get("symbols") or {}) else set(range(c.lines[0], c.lines[1] + 1))
+    own = _own_lines(facts, c.qual) if c.qual in (facts.get("symbols") or {}) else \
+        set(range(c.lines[0], c.lines[1] + 1))
     return [r for r in rr.ts_conditions(ctx.tstree(c.file), *c.lines) if r[1] in own]
 
 
@@ -1832,8 +1884,8 @@ def _guard_diff(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                                    ", which has no exit guard"),
                                 "statically_verified", f"{c.file}:{ln}",
                                 evidence_at=[f"{c.file}:{c.lines[0]}"] if c.lines else (),
-                                basis="the base version's syntax tree has the guard; the new version's has no condition "
-                                      "holding it, its negation, a split of it or a helper returning it",
+                                basis="the base version's syntax tree has the guard; the new version's has no "
+                                      "condition holding it, its negation, a split of it or a helper returning it",
                                 derived_by="review.guard_diff", for_symbol=c.symbol, side="base"))
         # new guards no old one was paired with: cited on the changed guards of the same definition
         for f in changed_findings:
@@ -2526,7 +2578,6 @@ def _removed_method_py(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
     the caller's line. When nothing binds, calls of ``.m(`` through receivers of unknown type are an unknown."""
     out: list[dict] = []
     owner_q = c.qual.rpartition(".")[0]
-    owner = owner_q.rpartition(".")[2]
     tree = ctx.pytree(c.file)
     cls = rr.py_def_at(tree, (ctx.sym(c.file, owner_q) or {}).get("def", -1)) if ctx.sym(c.file, owner_q) else None
     bases = [rr.dotted(b) or "?" for b in getattr(cls, "bases", [])] if isinstance(cls, ast.ClassDef) else []
@@ -2683,8 +2734,8 @@ def _manifest_findings(ctx: _Ctx, changes: list[Change]) -> list[dict]:
         if row is None or not any(c.qual == p or c.qual.startswith(p + ".") or not p for p in row[1]):
             continue
         if c.lines is None:
-            ln, side, what = c.old_lines[0], "base", "removed: `" + ctx.lines(c.file, "old")[c.old_lines[0] - 1].strip()[
-                :100] + "`"
+            ln, side = c.old_lines[0], "base"
+            what = "removed: `" + ctx.lines(c.file, "old")[ln - 1].strip()[:100] + "`"
         else:
             ln, side = c.lines[0], None
             new = ctx.lines(c.file)[ln - 1].strip()[:100]
@@ -2786,6 +2837,33 @@ def _call_text(text: str, a: int, b: int) -> str:
         if depth == 0:
             break
     return rr.cond_key(text[a:j])
+
+
+def _enclosing_call(text: str, a: int, b: int) -> str:
+    """The call ``text[a:b]`` is an argument of, callee name and all its arguments (``define("k", 15, 0, 100)``);
+    the operand around it (:func:`_segment`) when it is no call argument on this line."""
+    depth, i = 0, a - 1
+    while i >= 0:
+        ch = text[i]
+        if ch in ")]}":
+            depth += 1
+        elif ch in "([{":
+            if depth == 0:
+                break
+            depth -= 1
+        i -= 1
+    if i < 0 or text[i] != "(":
+        return _segment(text, a, b)
+    start = i
+    while start > 0 and (text[start - 1].isalnum() or text[start - 1] in "_."):
+        start -= 1
+    depth, j = 0, i
+    while j < len(text):
+        depth += {"(": 1, ")": -1}.get(text[j], 0)
+        j += 1
+        if depth == 0:
+            break
+    return rr.cond_key(text[start:j])
 
 
 def _segment(text: str, a: int, b: int) -> str:
@@ -2926,12 +3004,18 @@ def _jvm_config(ctx: _Ctx, c: Change, cfg_keys: dict[str, list[str]]) -> list[di
     old_segs: dict[str, int] = {}
     for ln in c.old_changed:
         if ln <= len(ocode):
-            for m in list(rr.QUOTED_KEY.finditer(ocode[ln - 1])) + list(rr.CONFIG_READ_JVM.finditer(ocode[ln - 1])):
+            for m in rr.QUOTED_KEY.finditer(ocode[ln - 1]):   # a key: the whole call it is an argument of
+                k = _enclosing_call(ocode[ln - 1], m.start(), m.end())
+                old_segs[k] = old_segs.get(k, 0) + 1
+            for m in rr.CONFIG_READ_JVM.finditer(ocode[ln - 1]):
                 k = _segment(ocode[ln - 1], m.start(), m.end())
                 old_segs[k] = old_segs.get(k, 0) + 1
 
     def unchanged(line: str, m) -> bool:
-        k = _segment(line, m.start(), m.end())
+        if m.re is rr.QUOTED_KEY:
+            k = _enclosing_call(line, m.start(), m.end())
+        else:
+            k = _segment(line, m.start(), m.end())
         if old_segs.get(k, 0) > 0:
             old_segs[k] -= 1
             return True
@@ -2984,8 +3068,8 @@ def _jvm_config(ctx: _Ctx, c: Change, cfg_keys: dict[str, list[str]]) -> list[di
                                 f"a changed line reads the config value {cls}.{member}"
                                 + (f" (defined at {where})" if where else ""), "strong_inference", f"{c.file}:{ln}",
                                 evidence_at=[where] if where else [], basis="config class read (text rule); the "
-                                "expression around it differs from the base version's", derived_by="review.CONFIG_READ_JVM",
-                                for_symbol=c.symbol, key=f"{cls}.{member}"))
+                                "expression around it differs from the base version's",
+                                derived_by="review.CONFIG_READ_JVM", for_symbol=c.symbol, key=f"{cls}.{member}"))
     # a field of a config class (its default values) initialised on a changed line of the class's own lines
     cls_name = _last(c.qual) if c.qual and (ctx.sym(c.file, c.qual) or {}).get("kind") == "class" else ""
     if cls_name and _CONFIG_CLASS.search(cls_name):
@@ -3104,7 +3188,8 @@ def _hot_info(ctx: _Ctx, node: str | None, unit: tuple[str, str]) -> dict | None
         if m:
             return {"why": f"@SubscribeEvent for {m.group(1)}", "at": f"{rel}:{s['start']}",
                     "basis": "event type in the handler's signature (text)", "status": "strong_inference"}
-    if _suffix(rel) in (".java", ".kt", ".kts") and name in rr.HOT_OVERRIDES and _GAME_IMPORT.search(ctx.text(rel) or ""):
+    if _suffix(rel) in (".java", ".kt", ".kts") and name in rr.HOT_OVERRIDES and \
+            _GAME_IMPORT.search(ctx.text(rel) or ""):
         return {"why": f"{name}() is a method the game calls every tick or frame (by name, in a file that imports "
                        "the game)", "at": None, "basis": "method name table (inference)", "status": "weak_inference"}
     if node is not None and _suffix(rel) in (".py", ".pyi"):
@@ -3234,7 +3319,7 @@ def _static_tests(ctx: _Ctx, changes: list[Change]) -> tuple[dict[str, dict], di
             if en is not None:
                 seeds.append((en, 0))
         if py and c.node is None and c.kind != "removed":
-            for unit, u, _fn, _calls in _py_callers(ctx, (c.file, c.qual), None):
+            for _unit, u, _fn, _calls in _py_callers(ctx, (c.file, c.qual), None):
                 if u is not None:
                     seeds.append((u, 1))
         if py and changed_tests and c.kind != "removed":

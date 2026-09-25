@@ -202,13 +202,21 @@ def py_parse(text: str | None) -> ast.AST | None:
 
 
 def py_def_at(tree: ast.AST | None, def_line: int) -> ast.AST | None:
-    """The def/class node whose ``def`` line is ``def_line``."""
+    """The def/class node whose ``def`` line is ``def_line`` (the first in walk order; the index of a tree's
+    definitions is built once and kept on the tree)."""
     if tree is None:
         return None
-    for n in ast.walk(tree):
-        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.lineno == def_line:
-            return n
-    return None
+    idx = getattr(tree, "_verinoda_defs", None)
+    if idx is None:
+        idx = {}
+        for n in ast.walk(tree):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                idx.setdefault(n.lineno, n)
+        try:
+            tree._verinoda_defs = idx
+        except AttributeError:
+            pass
+    return idx.get(def_line)
 
 
 def call_name(call: ast.Call) -> str | None:
@@ -286,7 +294,20 @@ def py_carry(fn: ast.AST, callee: str, call_lines: set[int] | None = None) -> Ca
     argument to another call (per call site; names bound from it are followed through assignments)?
 
     Straight-line reading: a later reassignment does not untaint a name, branches are not told apart
-    (the result is what *may* carry the value)."""
+    (the result is what *may* carry the value). Kept on the function node per callee name."""
+    memo = getattr(fn, "_verinoda_carry", None)
+    if memo is None:
+        memo = {}
+        try:
+            fn._verinoda_carry = memo
+        except AttributeError:
+            pass
+    if callee not in memo:
+        memo[callee] = _py_carry(fn, callee)
+    return memo[callee]
+
+
+def _py_carry(fn: ast.AST, callee: str) -> Carry:
     tainted: set[str] = set()
     stmts = [n for n in own_nodes(fn) if isinstance(n, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr))]
     stmts.sort(key=lambda n: (n.lineno, n.col_offset))
@@ -580,6 +601,15 @@ def py_security_ops(tree: ast.AST, rel: str, ix, lines: set[int] | None = None) 
     from verinoda import guards
 
     out: list[tuple[int, str, str, str, str]] = []
+    imports = py_import_map(tree)
+    # the engine follows only calls whose last name is a target's (or a local alias of one): when no such name
+    # is on the lines asked about, it can find nothing there - skip its whole-file scope analysis
+    last = {t.rpartition(".")[2] for t in PY_SECURITY_CALLS}
+    wanted = last | {a for a, full in imports.items() if full.rpartition(".")[2] in last}
+    if ix is not None and lines is not None and not any(
+            (isinstance(n, ast.Name) and n.id in wanted) or (isinstance(n, ast.Attribute) and n.attr in wanted)
+            for n in _walk_lines(tree, lines)):
+        ix = None
     if ix is not None:
         try:
             scan = guards.Scan()
@@ -590,15 +620,22 @@ def py_security_ops(tree: ast.AST, rel: str, ix, lines: set[int] | None = None) 
                                 "review.PY_SECURITY_CALLS via the guards import/alias engine", "statically_verified"))
         except Exception:  # noqa: BLE001 - the syntax-tree rules below still run
             pass
-    imports = py_import_map(tree)
-    bound = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)} | \
-        {a.asname or a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names} | \
-        {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
-    funcs = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    lazy: dict[str, object] = {}
+
+    def bound() -> set[str]:   # names the file binds itself (a local `eval` is not the builtin)
+        if "bound" not in lazy:
+            lazy["bound"] = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)} \
+                | {a.asname or a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))
+                   for a in n.names} \
+                | {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                                                     ast.ClassDef))}
+        return lazy["bound"]  # type: ignore[return-value]
 
     def enclosing_fn(ln: int):
+        if "funcs" not in lazy:
+            lazy["funcs"] = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
         best = None
-        for f in funcs:
+        for f in lazy["funcs"]:  # type: ignore[union-attr]
             if f.lineno <= ln <= (f.end_lineno or f.lineno) and (best is None or f.lineno > best.lineno):
                 best = f
         return best
@@ -614,7 +651,7 @@ def py_security_ops(tree: ast.AST, rel: str, ix, lines: set[int] | None = None) 
             out.append((ln, "sql-built-from-strings", f"SQL text built with {how} (not seen reaching a database "
                         "call in this function)", "review.SQL_TEXT", "strong_inference"))
 
-    for n in ast.walk(tree):
+    for n in _walk_lines(tree, lines):
         if not isinstance(n, (ast.Call, ast.JoinedStr, ast.BinOp)):
             continue
         ln = getattr(n, "lineno", None)
@@ -623,7 +660,7 @@ def py_security_ops(tree: ast.AST, rel: str, ix, lines: set[int] | None = None) 
         if isinstance(n, ast.Call):
             name = call_name(n)
             qual = py_qualified(n.func, imports)
-            if isinstance(n.func, ast.Name) and name in PY_SECURITY_BUILTINS and name not in bound:
+            if isinstance(n.func, ast.Name) and name in PY_SECURITY_BUILTINS and name not in bound():
                 out.append((ln, PY_SECURITY_BUILTINS[name], f"{name}() on dynamic input", "review.PY_SECURITY_BUILTINS",
                             "statically_verified"))
             if qual in PY_SECURITY_CALLS:
@@ -856,6 +893,25 @@ def alpha(text: str, params: list[str]) -> str:
             continue
         out = re.sub(rf"(?<![\w.]){re.escape(p)}\b", f"$p{i}", out)
     return out
+
+
+def _walk_lines(tree: ast.AST, lines: set[int] | None):
+    """``ast.walk`` limited to the nodes whose line span meets ``lines`` (all nodes when ``lines`` is None):
+    subtrees on other lines are not entered."""
+    if lines is None:
+        yield from ast.walk(tree)
+        return
+    lo, hi = min(lines, default=0), max(lines, default=-1)
+    stack = [tree]
+    while stack:
+        n = stack.pop()
+        ln = getattr(n, "lineno", None)
+        if ln is not None:
+            end = getattr(n, "end_lineno", None) or ln
+            if end < lo or ln > hi or not any(x in lines for x in range(ln, end + 1)):
+                continue
+        yield n
+        stack.extend(ast.iter_child_nodes(n))
 
 
 def py_params(fn: ast.AST) -> dict:

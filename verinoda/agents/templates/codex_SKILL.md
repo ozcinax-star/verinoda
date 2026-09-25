@@ -22,8 +22,7 @@ read its structured output, and report exactly what the evidence supports.
 
 - "How does X work / where is X / what calls X / how does data get from A to B?"
 - "Why is it built this way?" (git history and design docs are searched)
-- "Should we switch to X / which one should we pick / how will this scale?" (the code's side of a
-  decision; the user decides)
+- "Should we switch to X / which one should we pick / how will this scale?" (the code's side; the user decides)
 - "What breaks if I change X?" (`verinoda review --target`; before you finish a change: `verinoda review`)
 - Verifying, re-checking or challenging an earlier conclusion, yours or the user's.
 - Comparing a mechanism with a reference repository or an official document.
@@ -231,6 +230,7 @@ superseded or the site waived; never edit, supersede or waive a decision record 
 Before editing a function: `verinoda review --target FILE::NAME --change body|signature|remove --json` (MCP
 `change_review`); read its `read_first` in order, not whole files. Before saying done: `verinoda review --json`
 (`--run-tests` for pytest): report every concern and `unknown`, fix or defer each; "no finding" never means safe.
+`tests.reach_unknown` (no static caller) is not "no test reaches it"; `--staged` runs the staged tree or refuses.
 
 ## Answer format
 

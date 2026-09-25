@@ -268,6 +268,7 @@ superseded or the site waived; never edit, supersede or waive a decision record 
 Before editing a function: `verinoda review --target FILE::NAME --change body|signature|remove --json` (MCP
 `change_review`); read its `read_first` in order, not whole files. Before saying done: `verinoda review --json`
 (`--run-tests` for pytest): report every concern and `unknown`, fix or defer each; "no finding" never means safe.
+`tests.reach_unknown` (no static caller) is not "no test reaches it"; `--staged` runs the staged tree or refuses.
 
 ## Answer format
 

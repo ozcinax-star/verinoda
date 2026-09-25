@@ -637,10 +637,10 @@ def _project(tmp_path, name: str, files: dict[str, str]) -> Path:
 
 
 def test_staged_diff_of_many_files_reads_every_blob(tmp_path):
-    # r1: 900 staged files put every path on `git ls-files` (past the Windows command-line limit): every staged file
-    # was read as deleted and every definition "removed"
+    # r1: 900 staged files put every path on `git ls-files` (past the Windows 32,767-character command line): each
+    # staged file was read as deleted and every definition "removed" (500 paths of 79 characters exceed that limit)
     repo = tmp_path / "many"
-    names = [f"pkg/a_rather_long_directory_name_for_paths/module_with_a_long_file_name_{i:04d}.py" for i in range(400)]
+    names = [f"pkg/a_rather_long_directory_name_for_paths/module_with_a_long_file_name_{i:04d}.py" for i in range(500)]
     for rel in names:
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text("def f(x):\n    return x + 1\n", encoding="utf-8", newline="\n")
@@ -652,7 +652,7 @@ def test_staged_diff_of_many_files_reads_every_blob(tmp_path):
     _git(repo, "add", "-A")
     head = _git(repo, "rev-parse", "HEAD").strip()
     diffs, skipped = rv._diff_staged(repo, head)
-    assert len(diffs) == 400 and not skipped
+    assert len(diffs) == 500 and not skipped
     assert all(d.old and d.new and "x + 2" in d.new for d in diffs)
 
 
