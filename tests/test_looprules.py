@@ -117,6 +117,9 @@ def test_adding_a_new_test_file_is_not_test_edited():
     cur = _att(1, exact="A", vs_prev=[_change("tests/test_new.py", ("test_b",), test=True, status="added",
                                                added=["    assert f() == 1"])])
     assert _rules(lr.evaluate(h, cur)) == []
+    probe = _att(1, exact="A", vs_prev=[_change("tests/test_x.py", ("test_a",), test=True,
+                                                 added=["    print('items', items)"])])
+    assert _rules(lr.evaluate(h, probe)) == []  # only lines added to a test: a probe, not an edit
 
 
 def test_a_passing_attempt_that_edited_the_test_still_stops():

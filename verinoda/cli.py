@@ -1298,7 +1298,7 @@ def _r_debug_attempt(r: dict) -> None:
         print(f"  ... {sig['failures_total'] - 5} more failure(s) (--json)")
     if sig.get("note"):
         print(f"  signature: {sig['note']}")
-    if r.get("progress"):
+    if r.get("progress") and r.get("attempt"):
         print(f"  progress vs the previous attempt: {r['progress']}")
     for c in tree.get("vs_prev") or []:
         print(f"  changed since the previous attempt: {c['path']}" + (f" ({', '.join(c['symbols'])})" if c.get("symbols")
@@ -1308,6 +1308,9 @@ def _r_debug_attempt(r: dict) -> None:
     for i, s in enumerate(r.get("strategies") or [], 1):
         cmd = f" `{s['command']}`" if s.get("command") else ""
         print(f"  next {i}. {s['id']}: {s['why']}{cmd} (~{s.get('cost_estimate_s')} s)")
+        for sus in (s.get("suspects") or [])[:5]:
+            print(f"      suspect {sus['at']}: {'; '.join(sus['evidence'][:3])}"
+                  + (f" - RULED OUT: {sus['ruled_out']}" if sus.get("ruled_out") else ""))
     for q in r.get("questions_for_human") or []:
         print(f"  ask the user: {q['question']}")
         for t in q.get("test_side") or []:
@@ -1328,13 +1331,16 @@ def _r_debug_status(r: dict) -> None:
     if r.get("result"):
         print(f"  {r['result']}")
     for a in r.get("attempts") or []:
-        what = a.get("failure") or a["outcome"]
+        what = a.get("failure") or ""
         where = f"commit {a['commit']}" if a.get("commit") else f"tree {a['tree']}"
         loop = f"  loop: {', '.join(a['loop'])}" if a.get("loop") else ""
         print(f"  #{a['n']} {a['kind']:<12} {a['outcome']:<5} {where}  {what}  [{a.get('progress') or '-'}]"
               f"{'  (agent-reported)' if a['run_by'] == 'agent' else ''}{loop}")
         print(f"      hypothesis: {a['hypothesis']}")
     for i, s in enumerate(latest.get("strategies") or [], 1):
+        if s.get("done"):
+            print(f"  next {i}. {s['id']}: done - {s['done']}")
+            continue
         print(f"  next {i}. {s['id']}: {s['why']}" + (f" `{s['command']}`" if s.get("command") else ""))
     for ln in r.get("not_run") or []:
         print(f"  not run: {ln}")

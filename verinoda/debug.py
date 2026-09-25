@@ -403,7 +403,7 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
            "experiment_id": exp["id"] if exp else None, "tree_hash": tree_hash, "tree_files": ch["tree_files"],
            "signature": sig, "sig_exact": sig_exact, "sig_coarse": sig_coarse, "hypothesis": hypothesis,
            "hypothesis_terms": looprules.terms(hypothesis), "expect": expect, "vs_prev": vs_prev,
-           "trace": trace_info, "command": argv}
+           "trace": trace_info, "command": argv, "vs_base": ch["vs_base"]}
     steps["signature_s"] = round(time.perf_counter() - t_step, 3)
     t_step = time.perf_counter()
     hist = [_as_rule_input(a) for a in loop_prior]
@@ -412,6 +412,7 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
     else:
         ev = {"progress": None, "findings": [], "stop": False, "stop_reason": None, "flaky": None,
               "no_progress_streak": None, "assertion_lines": []}
+    ev["findings"] = ev["findings"] + _order_dependent(prior, sess, argv, tree_hash, sig, n)
     questions = _questions(cur, prev, ev)
     strategies = propose(store, repo, sess, prior, cur, ev) if (ev["stop"] or ev["flaky"]) else []
     row = {"id": aid, "session_id": sess["id"], "n": n, "kind": kind, "hypothesis": hypothesis,
@@ -576,6 +577,13 @@ def propose(store: Store, repo: Path, sess: dict, prior: list[dict], cur: dict, 
                                             "the failing tests at all, and which calls lead to the crash",
                     "command": f"verinoda debug observe --session {sid}",
                     "cost_estimate_s": round(1.5 * run_s, 1), "runnable_by_verinoda": runnable})
+    suspects = _suspects(repo, sess, prior, cur)
+    if suspects:
+        out.append({"id": "narrowing", "why": "suspects, each with its evidence: the failure's traceback, what "
+                                              "changed since the last passing state, and whether the failing tests "
+                                              "reached it; only a complete trace that did not reach a suspect rules "
+                                              "it out", "command": None, "cost_estimate_s": 0,
+                    "suspects": suspects[:LIST_CAP]})
     failing = sorted((cur.get("signature") or {}).get("failed_tests") or [])
     if experiments._is_pytest(argv) and failing and not any("::" in a for a in argv):
         narrow = argv + failing[:5]
@@ -588,6 +596,79 @@ def propose(store: Store, repo: Path, sess: dict, prior: list[dict], cur: dict, 
         out.append({"id": "ask_human", "why": "a test was edited, or nothing else narrows the cause: only the user "
                                               "knows the intended behaviour", "command": None, "cost_estimate_s": 0})
     return out
+
+
+def _suspects(repo: Path, sess: dict, prior: list[dict], cur: dict) -> list[dict]:
+    """Traceback symbols and symbols changed since the last passing state (else since the base), with evidence;
+    a Python function the failing tests did not reach in a complete trace is marked ruled out."""
+    from verinoda.runtime.trace import is_test_path
+
+    found: dict[tuple[str, str], dict] = {}
+    functions: set[tuple[str, str]] = set()  # changed Python functions: the only suspects a trace can rule out
+
+    def add(path: str, sym: str, why: str) -> None:
+        if not path or not sym or sym.startswith("#"):
+            return
+        s = found.setdefault((path, sym), {"at": f"{path}::{sym}", "evidence": []})
+        if why not in s["evidence"]:
+            s["evidence"].append(why)
+
+    for f in (cur.get("signature") or {}).get("failures") or []:
+        for fr in f.get("frames") or []:
+            add(fr.get("path"), fr.get("symbol"), f"on the traceback of attempt {cur['n']} "
+                                                  f"({fr.get('path')}:{fr.get('line')})")
+        add(f.get("path"), f.get("symbol"), f"crash site of attempt {cur['n']} ({f.get('path')}:{f.get('line')})")
+    passing = [a for a in prior if a["outcome"] == "pass" and a["kind"] in LOOP_KINDS and
+               (a.get("copy_source") or {}).get("kind", "worktree") == "worktree"]
+    if passing:
+        ref = passing[-1]
+        changes = treestate.diff_trees(repo, sess["base_commit"], ref.get("tree_files") or {},
+                                       cur.get("tree_files") or {})
+        label = f"changed since attempt {ref['n']} passed"
+    else:
+        changes = cur.get("vs_base") or []
+        label = f"changed vs the base {sess['base_commit'][:12]}"
+    for c in changes:
+        for s in c.get("symbols") or []:
+            if s != "<module>":
+                add(c["path"], s, label)
+                if (c.get("kinds") or {}).get(s) == "def" and c["path"].endswith(".py") and not c.get("test"):
+                    functions.add((c["path"], s))
+    tr = cur.get("trace") or {}
+    reached: set[str] = set()
+    for t_ in tr.get("failing") or []:
+        reached |= set((tr.get("reached") or {}).get(t_) or [])
+    for (path, sym), s in found.items():
+        if tr.get("complete") and path.endswith(".py"):
+            if s["at"] in reached:
+                s["evidence"].append(f"reached by the failing tests in run {tr.get('run_id')}")
+            elif (path, sym) in functions and not is_test_path(path) and not any(
+                    e.startswith(("on the traceback", "crash site")) for e in s["evidence"]):
+                s["ruled_out"] = f"not reached by the failing tests in the complete trace of run {tr.get('run_id')}"
+    ranked = sorted(found.values(), key=lambda s: (bool(s.get("ruled_out")), is_test_path(s["at"].split("::")[0]),
+                                                   -len(s["evidence"]), s["at"]))
+    return ranked
+
+
+def _order_dependent(prior: list[dict], sess: dict, argv: list[str], tree_hash: str | None, sig: dict,
+                     n: int) -> list[dict]:
+    """A narrowed pytest command passed tests the session's full repro failed on the same tree."""
+    if argv == list(sess["command"]) or not experiments._is_pytest(argv):
+        return []
+    passed = {t for t, o in (sig.get("tests") or {}).items() if o == "passed"}
+    if not passed:
+        return []
+    for a in reversed(prior):
+        if a["command"] == list(sess["command"]) and a.get("tree_hash") == tree_hash and a["outcome"] == "fail":
+            both = sorted(passed & set((a.get("signature") or {}).get("failed_tests") or []))
+            if both:
+                return [{"rule": "order_dependent", "strength": "heuristic",
+                         "text": f"{', '.join(both[:3])} passed alone (attempt {n}) but failed in the full repro on "
+                                 f"the same tree (attempt {a['n']}): order-dependent, or flaky",
+                         "evidence": [{"attempt": a["n"], "run": a.get("experiment_id")},
+                                      {"attempt": n, "run": None}]}]
+            break
+    return []
 
 
 def _traceback_symbols(a: dict) -> set[tuple[str, str]]:
@@ -903,9 +984,15 @@ def status(store: Store, repo: Path, session_id: str | None = None) -> dict:
            "command": sess["command"], "base": {"ref": sess.get("base_ref"), "commit": sess["base_commit"]},
            "attempts": rows, "current_tree": cur_state["hash"]}
     if last_loop is not None:
+        strategies = [dict(s) for s in last_loop.get("strategies") or []]
+        ran_as = {"differential": ("differential",), "bisect": ("bisect",), "rerun": ("rerun",), "observe": ("probe",)}
+        for s in strategies:
+            later = [a for a in attempts if a["n"] > last_loop["n"] and a["kind"] in ran_as.get(s["id"], ())
+                     and (s["id"] != "observe" or (a.get("trace") or {}).get("run_id"))]
+            if later:
+                s["done"] = f"attempt {later[-1]['n']} ({later[-1]['kind']}): {later[-1]['outcome']}"
         out["latest"] = {"attempt": last_loop["n"], "stop": bool(last_loop.get("stop")),
-                         "stop_reason": last_loop.get("stop_reason"),
-                         "strategies": last_loop.get("strategies") or [],
+                         "stop_reason": last_loop.get("stop_reason"), "strategies": strategies,
                          "tree_is_current": last_loop.get("tree_hash") == cur_state["hash"]}
     passing = [a for a in attempts if a["outcome"] == "pass" and a["kind"] in LOOP_KINDS]
     if passing:

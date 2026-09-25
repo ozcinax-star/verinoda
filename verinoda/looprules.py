@@ -14,8 +14,9 @@ Every finding names the attempts (and runs) it rests on. Two strengths:
     failing signature B, then A again on another tree (``sig_exact``);
   - ``no_progress``: the same ``sig_exact`` on 3 or more fix attempts with
     different trees;
-  - ``test_edited``: an attempt changed only existing test files, or changed
-    an assertion / expected-value line of an existing test;
+  - ``test_edited``: an attempt changed only existing test files (replaced or
+    removed lines; a line only added, such as a print, does not count), or
+    changed an assertion / expected-value line of an existing test;
   - ``off_path``: the symbols a fix attempt edited were not reached by the
     failing tests in a *complete* call trace taken with or after that edit
     (run-scoped; it says nothing about other tests or other runs).
@@ -256,7 +257,10 @@ def _test_edited(hist: list[dict], cur: dict) -> tuple[list[dict], list[dict]]:
     if not changes:
         return [], []
     prev = hist[-1] if hist else None
-    existing_tests = [c for c in changes if c.get("test") and c.get("status") in ("modified", "removed")]
+    # an existing test whose lines were replaced or removed (a print or a comment added to a test is not an edit
+    # of what it checks)
+    existing_tests = [c for c in changes if c.get("test") and (c.get("status") == "removed" or (
+        c.get("status") == "modified" and any(h.get("removed") for h in c.get("hunks") or [])))]
     lines = []
     for c in existing_tests:
         for h in c.get("hunks") or []:

@@ -35,6 +35,7 @@ PLUGIN_MODULE = "verinoda_failsig"
 PLUGIN_FILE = "failsig.jsonl"
 MAX_FAILURES = 200
 MAX_FRAMES = 12
+MAX_LINE = 8000  # characters of one log line the parsers look at
 
 # -- message normalisation ----------------------------------------------------------------------
 
@@ -270,6 +271,18 @@ def summary(sig: dict) -> list[str]:
 
 def plugin_source() -> bytes:
     return (Path(__file__).parent / "runtime" / "failsig_plugin.py").read_bytes()
+
+
+def plugin_outcomes(data: bytes) -> dict[str, str] | None:
+    """Each test's outcome as the plugin recorded it (passed, failed, error, skipped, xfailed)."""
+    for raw in reversed(data.decode("utf-8", "replace").splitlines()):
+        try:
+            rec = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(rec, dict) and rec.get("k") == "outcomes" and isinstance(rec.get("tests"), dict):
+            return {str(k): str(v) for k, v in rec["tests"].items()}
+    return None
 
 
 def from_plugin(data: bytes, resolver: PathResolver, mapper: SymbolMapper | None) -> dict | None:
@@ -860,6 +873,8 @@ _PARSERS: tuple[tuple[str, Callable], ...] = (
 def parse_text(text: str, resolver: PathResolver, mapper: SymbolMapper | None = None, *,
                prefer: str | None = None) -> dict:
     """The signature of a log by the regex parsers (first that finds failures wins)."""
+    if any(len(ln) > MAX_LINE for ln in text.splitlines()):  # agent-supplied logs: bound every regex's input
+        text = "\n".join(ln[:MAX_LINE] for ln in text.splitlines())
     order = sorted(_PARSERS, key=lambda p: 0 if prefer and p[0].startswith(prefer) else 1)
     for name, fn in order:
         try:
@@ -880,7 +895,11 @@ def extract(stdout: str, stderr: str, *, outcome: str, files: Iterable[str],
     that ran; ``reader`` gives a file's content in that tree (for symbols).
     """
     if outcome == "pass":
-        return {"status": "none", "parser": None, "failures": [], "failed_tests": []}
+        out = {"status": "none", "parser": None, "failures": [], "failed_tests": []}
+        tests = plugin_outcomes(plugin_data) if plugin_data else None
+        if tests:
+            out["tests"] = tests
+        return out
     resolver = PathResolver(files, roots)
     mapper = SymbolMapper(reader)
     if plugin_data:

@@ -167,6 +167,27 @@ def test_trace_enables_off_path(tmp_path):
     a1 = debug.attempt(st, repo, hypothesis="the settings lack a currency")
     assert _rules(a1) == ["off_path"] and a1["stop"] and a1["trace"]["complete"]
     assert "orders/config.py::load_settings" in a1["loop"][0]["text"]
+    narrowing = next(s for s in a1["strategies"] if s["id"] == "narrowing")
+    sus = {s["at"]: s for s in narrowing["suspects"]}
+    assert "orders/pricing.py::compute_total" in sus and "ruled_out" not in sus["orders/pricing.py::compute_total"]
+    assert any(e.startswith("reached by the failing tests") for e in sus["orders/pricing.py::compute_total"]["evidence"])
+    assert sus["orders/config.py::load_settings"]["ruled_out"].startswith("not reached")
+    assert narrowing["suspects"][-1]["at"] == "orders/config.py::load_settings"  # ruled-out suspects last
+
+
+def test_a_test_that_passes_alone_but_fails_in_the_suite_is_flagged(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / "tests" / "test_order.py").write_text(
+        "STATE = []\n\n\ndef test_a():\n    STATE.append(1)\n\n\ndef test_b():\n    assert STATE == []\n",
+        encoding="utf-8")
+    st = open_store(repo)
+    s = debug.start(st, repo, "test_b fails in the suite", PT + ["tests/test_order.py"])
+    assert s["signature"]["failures"][0]["test"] == "tests/test_order.py::test_b"
+    alone = debug.attempt(st, repo, hypothesis="test_b alone", kind="probe",
+                          command=PT + ["tests/test_order.py::test_b"])
+    assert alone["outcome"] == "pass"
+    od = [f for f in alone["loop"] if f["rule"] == "order_dependent"]
+    assert od and od[0]["strength"] == "heuristic" and "passed alone" in od[0]["text"]
 
 
 def test_flaky_sessions_are_flagged_and_rerun_reports_a_pass_rate(tmp_path, monkeypatch):

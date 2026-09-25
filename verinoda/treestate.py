@@ -376,7 +376,9 @@ def changes_from_ids(repo: Path, base: str, ids: dict[str, str], base_map: dict[
     """:func:`changes_vs_base` from content ids alone: no ``git diff``; base contents of the changed
     paths come from the blob store (or one ``git cat-file``, then stored)."""
     repo = Path(repo).resolve()
-    changed = sorted(p for p in set(ids) | set(base_map) if ids.get(p) != base_map.get(p))
+    # a symlink is copied as its target's content but is not a regular file of the commit: not a change
+    changed = sorted(p for p in set(ids) | set(base_map) if ids.get(p) != base_map.get(p)
+                     and not (p not in base_map and (repo / p).is_symlink()))
     tree_files: dict[str, str | None] = {p: ids.get(p) for p in changed}
     base_contents: dict[str, bytes] = {}
     missing = []
