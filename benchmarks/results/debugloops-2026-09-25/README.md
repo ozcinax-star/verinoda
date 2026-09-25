@@ -41,13 +41,14 @@ failing commit and its first hunk).
   suspects, order-dependence, `test_edited` needing replaced or removed test lines, the human question's
   code side, the minimal-repro command). Same scores as run 5. It ran while the full product test suite
   was running on the same machine: `debug try` overhead median 0.16 s, p90 0.55 s, max 0.77 s; see
-  `overhead.json` for a measurement without that contention.
+  `overhead.json` for a separate measurement (without the test suite running next to it).
 
-## Overhead (`overhead.json`)
+## Overhead (`overhead.json`, and `overhead-before-review.json` for the code before the review changes)
 
 20 `debug try` attempts in a row (alternating two edits) per series, the overhead being the attempt's
 wall time minus the command's own run time: orders_app (11 files) untraced and with `--trace`, and a
-`git clone` of this repository (2,331 files) with `tests/test_looprules.py` as the repro. Each record
+`git clone` of this repository (2,341 files; 2,331 before the review changes) with
+`tests/test_looprules.py` as the repro. Each record
 has the median, p90 and max, and the median per step (`run_s` includes copying the tree). Other agents
 were running on the 6-core machine; single attempts can take seconds longer.
 
@@ -59,5 +60,6 @@ Jest). Gold (exception type and `path::symbol` of the crash) was written from ea
 parser was scored. First score 18/30; after format fixes found on them 30/30. Then 10 held-out real
 logs were produced and labelled the same way: 8/10 on their first score, 10/10 after two fixes (so
 they are no longer held out). 17 of the 30 fixtures, with machine paths replaced, are in
-`tests/fixtures/failsig/` and run in the product tests. The scripts that produced the logs and the
+`tests/fixtures/failsig/` and run in the product tests (sources with a `.fixture` suffix and logs as
+`.log`, so that indexing this repository does not take them for its own code). The scripts that produced the logs and the
 harness that ran the sessions are not in the repository.

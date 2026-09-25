@@ -56,15 +56,19 @@ Node; 9 hand-written in the Gradle, Maven, Go and Jest formats), exact exception
 after that: 8/10 on their first score (a `--tb=native` pytest section, a bare `Error:` in Node),
 10/10 after two fixes. No crash on any log, and a property test feeds arbitrary text.
 
-**`debug try` overhead** beyond the command's own run (`overhead.json`, 20 attempts per series):
+**`debug try` overhead** beyond the command's own run (`overhead.json`, the committed code, 20
+attempts per series; `overhead-before-review.json` is the same measurement before the review changes):
 
 | tree | median | p90 | max | command median |
 |---|---|---|---|---|
-| orders_app (11 files) | 0.12 s | 0.15 s | 0.16 s | 0.58 s |
-| orders_app, `--trace` | 0.12 s | 0.17 s | 0.17 s | 0.59 s |
-| clone of this repository (2,331 files) | 4.5 s | 5.9 s | 7.2 s | 0.63 s |
+| orders_app (11 files) | 0.14 s | 0.25 s | 0.49 s | 0.59 s |
+| orders_app, `--trace` | 0.15 s | 0.18 s | 0.23 s | 0.63 s |
+| clone of this repository (2,341 files) | 5.0 s | 6.4 s | 9.1 s | 0.66 s |
 
-The design's bar (0.3 s on the examples) holds. On the big tree it does not: every run copies the
+(Before the review changes: 0.12 / 0.15 / 0.16 s, 0.12 / 0.17 / 0.17 s and 4.5 / 5.9 / 7.2 s.) The
+design's bar (0.3 s on the examples) holds at the median and p90; one of the 20 untraced attempts took
+0.49 s in the last series (the machine was shared with other agents' benchmark runs). On the big tree
+it does not hold: every run copies the
 whole tree (per-file open/close dominates; copying with 8 threads took the copy alone from 3.0 s to
 1.8 s, median of 6 alternating runs each). Reusing one copy per session, synced by content id, would
 remove most of it and is not built. Other agents were running on the machine; single attempts took up
