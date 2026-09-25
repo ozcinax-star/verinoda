@@ -40,7 +40,7 @@ import hashlib
 import re
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
 from verinoda import anchors
@@ -57,9 +57,10 @@ DEFAULT_MAX_CHARS = 6000
 CODE_SUFFIXES = tuple(sorted({".py", ".pyi", *anchors.TS_LANGS}))
 REVIEWABLE_SUFFIXES = tuple(sorted({*CODE_SUFFIXES, *rr.CONFIG_SUFFIXES, *anchors.MD_SUFFIXES, ".gradle", ".xml",
                                     ".mcfunction", ".sql", ".sh", ".ps1", ".cfg", ".txt"}))
+DATA_SUFFIXES = (".json", ".mcfunction", ".mcmeta", ".txt", ".csv", ".lang", ".svg", ".html", ".css", ".rst")
 RULES = {
     "persistence": ["sink pattern on a changed line (architecture_map.SINK_PATTERNS + review NBT rows)",
-                    "a call on a changed line whose callee reaches a sink (depth <= 2)",
+                    "a call on a changed line whose callee reaches a write sink (depth <= 2)",
                     "Python: the changed function's return value carried by its callers (def-use per hop) into a "
                     "call that writes it in a sink statement"],
     "security": ["security-sensitive operations on changed lines (Python: calls bound through imports, builtins, "
@@ -185,8 +186,8 @@ class _Ctx:
 
     # texts ------------------------------------------------------------------------------------------
     def text(self, rel: str, side: str = "new") -> str | None:
-        if side == "old":
-            return self.base_texts.get(rel, self.text(rel)) if rel in self.base_texts else self.text(rel)
+        if side == "old":   # the base version of a file in the diff; any other file is the same in both
+            return self.base_texts[rel] if rel in self.base_texts else self.text(rel)
         if rel not in self._text:
             try:
                 data = (self.repo / rel).read_bytes()
@@ -616,8 +617,6 @@ def _changed_lines(old: str | None, new: str | None) -> tuple[set[int], set[int]
             continue
         old_l.update(range(i1 + 1, i2 + 1))
         new_l.update(range(j1 + 1, j2 + 1))
-        if tag == "delete" and b:   # the new-side place of a pure deletion, for the enclosing symbol
-            new_l.discard(0)
     return new_l, old_l
 
 
@@ -641,10 +640,17 @@ def _classify(ctx: _Ctx, fd: FileDiff) -> tuple[list[Change], dict]:
     fn = ctx.facts(rel, "new") if fd.new is not None else None
     suffix = _suffix(rel)
     info: dict = {"file": rel, "status": "added" if fd.old is None else ("removed" if fd.new is None else "modified")}
-    if suffix in rr.CONFIG_SUFFIXES or (CONFIG_FILE_RE.search(rel) and suffix not in CODE_SUFFIXES):
+    if suffix not in CODE_SUFFIXES and (CONFIG_FILE_RE.search(rel) or suffix in (".properties", ".conf")):
+        if fd.old is None or fd.new is None:   # a config file added or removed: one change, not one per key
+            n = len((fd.new or fd.old or "").split("\n"))
+            return [Change(rel, None, info["status"], lines=(1, n) if fd.new is not None else None,
+                           old_lines=(1, n) if fd.old is not None else None, new_changed=new_l,
+                           old_changed=old_l, test=test)], {**info, "kind": "config"}
         return _config_changes(ctx, fd, new_l, old_l), {**info, "kind": "config"}
     if suffix in anchors.MD_SUFFIXES:
         return [], {**info, "kind": "doc"}
+    if suffix in DATA_SUFFIXES:   # data (json that is not configuration, game data, text): listed, not reviewed
+        return [], {**info, "kind": "data"}
     if (fd.old is not None and fo is None) or (fd.new is not None and fn is None):
         why = "does not parse" if anchors.scheme_for(rel) else "no symbol facts for this language"
         return [Change(rel, None, "file_only", lines=(min(new_l), max(new_l)) if new_l else None,
@@ -864,20 +870,32 @@ def _persistence(ctx: _Ctx, changes: list[Change], walk: dict) -> list[dict]:
     # changed calls that reach a sink
     for c in _code_units(changes):
         unit = (c.file, c.qual)
+        grouped: dict[str, dict] = {}   # one finding per sink kind and changed definition; more calls as evidence
         for line, name, tgt, how, conf in ctx.callees(unit, c.new_changed):
             if tgt is None or f"{c.file}:{line}" in seen_at:
                 continue
-            hits = ctx.sink_reach(tgt, depth=2)
+            hits = [h for h in ctx.sink_reach(tgt, depth=2) if h["kind"] in rr.WRITE_SINKS]
             if not hits:
                 continue
             s = hits[0]
             seen_at.add(f"{c.file}:{line}")
+            if s["kind"] in grouped:
+                f = grouped[s["kind"]]
+                if len(f["evidence_at"]) < 6:
+                    f["evidence_at"].append(f"{c.file}:{line}")
+                f["calls"] = f.get("calls", 1) + 1
+                continue
             path = " -> ".join(_last(u[1]) for u in s["path"])
-            out.append(_finding("persistence", "changed-call-reaches-sink",
-                                f"the changed call to {name}() at line {line} reaches a {s['kind']} at {s['at']} "
-                                f"(via {path})", "strong_inference", f"{c.file}:{line}", evidence_at=[s["at"]],
-                                basis=f"call resolved: {how}" + (f", edge {conf}" if conf else ""),
-                                derived_by=s["derived_by"], for_symbol=c.symbol))
+            grouped[s["kind"]] = _finding("persistence", "changed-call-reaches-sink",
+                                          f"the changed call to {name}() at line {line} reaches a {s['kind']} at "
+                                          f"{s['at']} (via {path})", "strong_inference", f"{c.file}:{line}",
+                                          evidence_at=[s["at"]],
+                                          basis=f"call resolved: {how}" + (f", edge {conf}" if conf else ""),
+                                          derived_by=s["derived_by"], for_symbol=c.symbol)
+        for f in grouped.values():
+            if f.get("calls", 1) > 1:
+                f["finding"] += f"; {f['calls'] - 1} more changed call(s) of {c.name} reach one (see evidence_at)"
+            out.append(f)
     # the changed function's value carried by its callers into a sink call (Python, def-use per hop)
     for c in _code_units(changes):
         if _suffix(c.file) not in (".py", ".pyi") or ((ctx.sym(c.file, c.qual) or {}).get("kind") == "class"):
@@ -925,8 +943,8 @@ def _value_flow(ctx: _Ctx, c: Change, seen_at: set[str]) -> list[dict]:
                     bound = isinstance(call.func, ast.Attribute) and "." in tgt[1] and \
                         (ctx.sym(tgt[0], tgt[1].rpartition(".")[0]) or {}).get("kind") == "class"
                     params = rr.py_carrying_params(call, tfn, carry.tainted, callee_name, bound=bound)
-                    hits = [s for s in ctx.unit_sinks(tgt)
-                            if params and rr.py_flows_to_line(tfn, params, int(s["at"].rsplit(":", 1)[1]))]
+                    hits = [s for s in ctx.unit_sinks(tgt) if s["kind"] in rr.WRITE_SINKS
+                            and params and rr.py_flows_to_line(tfn, params, int(s["at"].rsplit(":", 1)[1]))]
                     if not hits:
                         continue
                     seen_at.add(at)
@@ -994,6 +1012,10 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
     added_all = []
     per_change = []
     for c in changes:
+        if not c.test and c.kind == "added" and c.qual and c.lines is not None:
+            # a guard can move into a new helper (an extracted function): its guards count as added ones
+            added_all += [(c, cond, ln) for cond, ln in _guards(ctx, c, "new")]
+            continue
         if c.test or c.kind not in ("body", "signature") or not c.qual or c.old_lines is None or c.lines is None:
             continue
         old_g, new_g = _guards(ctx, c, "old"), _guards(ctx, c, "new")
@@ -1004,8 +1026,9 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
     for c, old_g, new_g in per_change:
         o_conds = [g[0] for g in old_g]
         n_conds = [g[0] for g in new_g]
-        gone = [(cond, ln) for cond, ln in old_g if o_conds.count(cond) > n_conds.count(cond) and ln in c.old_changed]
-        new = [(cond, ln) for cond, ln in new_g if n_conds.count(cond) > o_conds.count(cond) and ln in c.new_changed]
+        # the syntax trees decide, not the line diff (which pairs a moved line with its old place)
+        gone = [(cond, ln) for cond, ln in old_g if o_conds.count(cond) > n_conds.count(cond)]
+        new = [(cond, ln) for cond, ln in new_g if n_conds.count(cond) > o_conds.count(cond)]
         for cond, ln in gone:
             moved = [a for a in added_all if a[1] == cond and a[0] is not c]
             partner = max(new, key=lambda x: difflib.SequenceMatcher(None, cond, x[0]).ratio(), default=None)
@@ -1079,6 +1102,7 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
         for ln in sorted(c.new_changed):
             if ln <= len(code) and f"{c.file}:{ln}" not in flagged and rr.AUTH_WORDS.search(code[ln - 1]):
                 words += 1
+                flagged.add(f"{c.file}:{ln}")
                 out.append(_finding("security", "security-words", "a changed line names a security-relevant "
                                     f"concept: `{ctx.lines(c.file)[ln - 1].strip()[:90]}`", "weak_inference",
                                     f"{c.file}:{ln}", basis="word match (heuristic)", derived_by="review.AUTH_WORDS",
@@ -1356,7 +1380,15 @@ def _public_api(ctx: _Ctx, changes: list[Change], unknown: list[dict]) -> list[d
             else:
                 out += _jvm_arity(ctx, c)
         elif c.kind == "removed" or (c.kind == "module_statement" and c.lines is None and c.old_lines):
-            out += _removed_refs(ctx, c, unknown)
+            # a name the module still binds (an import rewritten to import more names, a function replaced by
+            # an import of it) is not removed
+            planned = ctx.base_texts.get(c.file) == ctx.text(c.file)   # a planned removal: the code is unchanged
+            still = set() if planned else set(((ctx.facts(c.file) or {}).get("bindings") or {}))
+            names = [n for n in c.qual.split(",") if n] if c.kind == "module_statement" else [c.qual]
+            for name in names:
+                if "." not in name and name in still:
+                    continue
+                out += _removed_refs(ctx, c if name == c.qual else replace(c, qual=name), unknown)
     return out
 
 
@@ -1623,6 +1655,12 @@ def _config(ctx: _Ctx, changes: list[Change]) -> list[dict]:
         if c.test:
             continue
         rel = c.file
+        if c.qual is None and c.kind in ("added", "removed"):   # a whole config file added or removed
+            add(_finding("config", "config-file", f"config file {rel} was {c.kind}", "strong_inference",
+                         f"{rel}:1", basis="the file is a config file by name (architecture_map.CONFIG_FILE_RE)",
+                         derived_by="architecture_map.CONFIG_FILE_RE", for_symbol=c.symbol,
+                         **({"side": "base"} if c.kind == "removed" else {})))
+            continue
         if c.kind == "config_key":
             ln = (c.lines or c.old_lines)[0]
             side = "new" if c.lines else "old"
@@ -1838,11 +1876,19 @@ def _hot_info(ctx: _Ctx, node: str | None, unit: tuple[str, str]) -> dict | None
     return None
 
 
+def _nested_in_function(ctx: _Ctx, unit: tuple[str, str]) -> bool:
+    rel, qual = unit
+    owner = qual.split("#")[0].rpartition(".")[0]
+    return bool(owner) and (ctx.sym(rel, owner) or {}).get("kind") == "def"
+
+
 def _entries(ctx: _Ctx, changes: list[Change], walk: dict) -> list[dict]:
     out: dict[str, dict] = {}
     g = ctx.g
     for c in _code_units(changes) + [c for c in changes if c.kind in ("removed", "module_statement") and not c.test]:
         unit = (c.file, c.qual) if c.qual and c.kind not in ("removed", "module_statement") else None
+        if unit and _nested_in_function(ctx, unit):
+            continue   # a function defined inside another one is not called from outside it
         info = _entry_info(ctx, c.node, unit)
         if info and c.lines:
             at = f"{c.file}:{c.def_line or c.lines[0]}"
@@ -1858,6 +1904,8 @@ def _entries(ctx: _Ctx, changes: list[Change], walk: dict) -> list[dict]:
         if info["dist"] == 0 or _is_test(g.file(n) or ""):
             continue
         unit = ctx.unit_of(n)
+        if unit and _nested_in_function(ctx, unit):
+            continue
         e = _entry_info(ctx, n, unit)
         if not e:
             continue
@@ -1983,7 +2031,10 @@ def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concer
             a, b = c.lines
             if b - a > 60 and c.new_changed:   # a long definition: the changed lines with context
                 a, b = max(a, min(c.new_changed) - 3), min(b, max(c.new_changed) + 3)
-            items.append((c.file, a, b, "new", f"changed ({c.kind})"))
+            why = f"changed ({c.kind})"
+            if b - a > 80:
+                b, why = a + 80, why + ", first 80 lines"
+            items.append((c.file, a, b, "new", why))
         elif c.kind == "removed" and c.old_lines:
             items.append((c.file, c.old_lines[0], c.old_lines[1], "old", "removed (base version)"))
     for d in dependents:
@@ -2335,7 +2386,8 @@ def _tests(ctx: _Ctx, changes: list[Change], *, run_tests: bool, observe: bool, 
         {s for s, t in ((observed or {}).get("reached") or {}).items() if t}
     out["no_test_reaches"] = [c.symbol for c in code_changes if c.symbol not in reached_any]
     langs = {_lang(c.file) for c in code_changes}
-    py_ids = [t for t in static if t.split("::")[0].endswith(".py")]
+    # test ids become command arguments: one that could be read as an option (a file named "-p.py") is never run
+    py_ids = [t for t in static if t.split("::")[0].endswith(".py") and not t.startswith("-")]
     if langs - {"python"}:
         others = ", ".join(sorted({"jvm": "Java/Kotlin"}.get(x, x) for x in langs - {"python"}))
         unknown.append({"kind": "runtime_tests", "what": f"what the tests of the {others} code do at run time",
@@ -2443,6 +2495,7 @@ def _graph_note(ctx: _Ctx, cited: set[str]) -> dict:
                 stale.append(rel)
     note = {"snapshot": (snap or {}).get("id"), "commit": (snap or {}).get("commit_sha"),
             "changed_files_reparsed": sorted(ctx.base_texts),
+            "python_calls_read_from": sorted(ctx.reparsed)[:20],
             "note": "graph edges come from the last snapshot; the changed files are read from the tree under "
                     "review (Python calls re-parsed from its syntax tree, other languages' calls re-found by name)",
             "stale_files": stale}
@@ -2455,7 +2508,9 @@ def _summary(res: dict) -> str:
              f"the {'staged changes' if res['mode'] == 'staged' else 'working tree'} against "
              f"{res['base']['ref']} ({res['base']['commit'][:10]})")
     if not ch:
-        return f"Review of {where}: no changed definition (comments, whitespace and docstrings are not changes)."
+        other = sum(1 for f in res.get("files") or [] if f.get("kind") in ("data", "doc"))
+        return (f"Review of {where}: no changed definition (comments, whitespace and docstrings are not changes)."
+                + (f" {other} data or documentation file(s) changed (listed under files)." if other else ""))
     kinds: dict[str, int] = {}
     for c in ch:
         kinds[c["kind"]] = kinds.get(c["kind"], 0) + 1
@@ -2466,6 +2521,10 @@ def _summary(res: dict) -> str:
                  + (f" No finding from the rules for: {', '.join(quiet)}." if quiet and counts else ""))
     if res["unknown"]:
         parts.append(f"{len(res['unknown'])} unknown(s) to report.")
+    other = sum(1 for f in res.get("files") or [] if f.get("kind") in ("data", "doc"))
+    if other:
+        parts.append(f"{other} data or documentation file(s) changed too (listed under files, not reviewed by "
+                     "concern).")
     return " ".join(parts)
 
 

@@ -31,6 +31,10 @@ EXTRA_SINK_PATTERNS = [
 ]
 REVIEW_SINKS = [(rx, kind, "architecture_map.SINK_PATTERNS") for rx, kind in SINK_PATTERNS] + \
     [(rx, kind, "review.EXTRA_SINK_PATTERNS") for rx, kind in EXTRA_SINK_PATTERNS]
+# the sink kinds that store something (persistence is about writes; reads and connections count on a changed line
+# itself and inside loops)
+WRITE_SINKS = {"sql-write", "orm-write", "file-write", "kv/object-store", "saved-data-write (NBT)",
+               "saved-data-write (dirty flag)"}
 
 # Python calls, resolved through imports and aliases (guards engine): qualified name -> kind
 PY_SECURITY_CALLS = {
@@ -66,7 +70,7 @@ PERMISSION_CALL = re.compile(
     r"is_authenticated|is_superuser|is_staff|check_password|verify_password|authorize|authenticate)\s*[({]")
 # words that make a changed line security-relevant (heuristic: weak_inference at most)
 AUTH_WORDS = re.compile(r"(?i)\b(password|passwd|secret|api_?key|token|credential|csrf|permission|is_admin|"
-                        r"authori[sz]\w*|authenticat\w*|signature|encrypt\w*|decrypt\w*)\b|verify\s*=\s*False")
+                        r"authori[sz]\w*|authenticat\w*|encrypt\w*|decrypt\w*)\b|verify\s*=\s*False")
 # a function whose name says it decides whether something is allowed or valid
 CHECK_NAME = re.compile(r"^(?:is|has|can|may|still|check|validate|verify|authori[sz]e|allow)[A-Z_]"
                         r"|^(?:stillValid|mayPlace|mayPickup|canUse|isValid|hasPermission)$|_valid$|_allowed$", re.I)

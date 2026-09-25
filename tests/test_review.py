@@ -390,6 +390,16 @@ def test_a_removed_function_still_imported_and_called(orders):
     assert {"orders/api.py:4", "orders/api.py:25", "tests/test_service.py:4", "tests/test_service.py:10"} <= ats
 
 
+def test_a_rewritten_import_is_not_a_removed_name(orders):
+    # found on the held-out fixture HO4 (after the rules were frozen): the old import statement's key goes away,
+    # the name it bound is still imported by the new statement
+    _edit(orders, "orders/pricing.py", "from orders.config import DISCOUNT_THRESHOLD\n",
+          "from orders.config import DATABASE_URL, DISCOUNT_THRESHOLD\n")
+    res = _review(orders)
+    assert {c["kind"] for c in res["changes"]} == {"module_statement"}
+    assert res["concerns"]["public_api"] == []
+
+
 def test_java_arity_break_ignores_a_same_named_class_elsewhere(jvm):
     _edit(jvm, "src/main/java/com/ex/core/Forge.java", "    public static int stoke(Object pos, int amount) {",
           "    public static int stoke(Object pos, int amount, boolean natural) {")
@@ -423,6 +433,28 @@ def test_config_file_key_with_its_reader(tmp_path):
                                                                     "config_key")]
     [f] = _by(res, "config", "config-file-key")
     assert f["at"] == "settings.yml:2" and f["readers"] == ["src/Conf.java:5"]
+
+
+def test_data_files_are_listed_not_read_as_config_and_a_new_config_file_is_one_change(orders):
+    # found by reviewing Verinoda's own branch: every key of new JSON result files became a "config key"
+    (orders / "results.json").write_text('{"a": {"b": 1, "c": 2}}\n', encoding="utf-8")
+    (orders / "settings.toml").write_text("[x]\nlimit = 3\nname = 'n'\n", encoding="utf-8")
+    res = _review(orders)
+    assert [(c["symbol"], c["kind"]) for c in res["changes"]] == [("settings.toml", "added")]
+    kinds = {f["file"]: f["kind"] for f in res["files"]}
+    assert kinds == {"results.json": "data", "settings.toml": "config"}
+    assert [f["rule"] for f in res["concerns"]["config"]] == ["config-file"]
+
+
+def test_a_guard_moved_into_a_new_helper_is_not_removed(orders):
+    _edit(orders, "orders/service.py", "    if len(items) > MAX_ITEMS_PER_ORDER:\n"
+          "        raise ValidationError(\"too many items\")\n", "    _check_size(items)\n")
+    _edit(orders, "orders/service.py", "def place_order(", "def _check_size(items: list[dict]) -> None:\n"
+          "    if len(items) > MAX_ITEMS_PER_ORDER:\n        raise ValidationError(\"too many items\")\n\n\n"
+          "def place_order(")
+    res = _review(orders)
+    [f] = _by(res, "security")
+    assert f["rule"] == "guard-moved" and f["status"] == "weak_inference" and f["side"] == "base"
 
 
 # -- tests, dependents, budget ----------------------------------------------------------------------------
@@ -509,6 +541,21 @@ def test_the_review_is_recorded_without_touching_the_users_files(orders):
     assert row["result"]["kind"] == "review" and row["question"].startswith("review ")
     assert {p: p.read_bytes() for p in orders.rglob("*.py")} == before
     assert (orders / ".git" / "index").read_bytes() == index_before
+
+
+def test_a_test_id_that_could_be_an_option_is_never_run(orders, monkeypatch):
+    from verinoda import experiments
+
+    ran = []
+    monkeypatch.setattr(experiments, "run", lambda st, repo, argv, **kw: ran.append(argv) or {"id": "exp_x",
+                                                                                                "outcome": "pass"})
+    monkeypatch.setattr(rv, "_static_tests", lambda ctx, changes: (
+        {"-p.py::test_x": {"distance": 1, "reaches": []}, "tests/test_pricing.py::test_compute_total":
+         {"distance": 1, "reaches": []}}, {}))
+    _edit(orders, "orders/pricing.py", "        return round(subtotal * 0.9, 2)\n", "        return subtotal * 0.9\n")
+    res = _review(orders, run_tests=True)
+    assert res["tests"]["run"]["outcome"] == "pass"
+    assert ran and "-p.py::test_x" not in ran[0] and "tests/test_pricing.py::test_compute_total" in ran[0]
 
 
 def test_unknown_concern_is_refused(orders):
