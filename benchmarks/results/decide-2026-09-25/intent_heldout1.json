@@ -1,0 +1,13 @@
+{"written_at": "2026-09-25, before any decide cue was written or tuned; labels by the builder (in-sample author, not independent)",
+ "questions": [
+  {"id": "h01", "repo": "orders_app", "decide": true,  "q": "Is it time to split the pricing rules into their own service, or keep them in orders?"},
+  {"id": "h02", "repo": "forge_mod",  "decide": true,  "q": "Kotlin mu Java mı: yeni komutları hangi dilde yazalım?"},
+  {"id": "h03", "repo": "orders_app", "decide": true,  "q": "Do we need a message queue between the API and the repository once we have many writers?"},
+  {"id": "h04", "repo": "orders_app", "decide": true,  "q": "Sipariş tablosunu ayrı bir veritabanına taşımak mantıklı olur mu?"},
+  {"id": "h05", "repo": "glow_mod",   "decide": true,  "q": "Should the client key binding stay in GlowModClient or move to a shared module?"},
+  {"id": "h06", "repo": "forge_mod",  "decide": false, "q": "Where does the ember forge register its network payloads?"},
+  {"id": "h07", "repo": "orders_app", "decide": false, "q": "Which database does the orders app use?"},
+  {"id": "h08", "repo": "orders_app", "decide": false, "q": "Siparişler hangi dosyada veritabanına yazılıyor?"},
+  {"id": "h09", "repo": "forge_mod",  "decide": false, "q": "How does the heat value grow while the forge burns?"},
+  {"id": "h10", "repo": "orders_app", "decide": false, "q": "Why did we pick SQLite for orders?"}
+ ]}

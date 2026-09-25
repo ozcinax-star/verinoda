@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,53 @@ Sections: [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-25: decisions stay human (D33)
+
+Branch p2/decide (docs/DESIGN.md section 6). Result files and the harnesses that wrote them:
+`benchmarks/results/decide-2026-09-25/` (its README says how to run them; nothing needs the network).
+Everything here is in-sample unless it says held out: the author of the rules also wrote the cases,
+the gold and the questions.
+
+**Intent routing.** Before: both decision questions of the design came back `met` with flow or
+dataflow claims. Now a should/which/scale question is intent `decide`, verdict
+`human_decision_required`. 24 written questions: 24/24 (in-sample). Two held-out sets of 10, each
+written and hashed before the rules it measured, each run once with frozen rules: precision 1.00 and
+recall 0.40 on both. The bar was precision ≥ 0.90 and recall ≥ 0.85: **recall is not met**. The first
+set's three misses were fixed afterwards (so it is in-sample now), the second's were not. None of the
+616 benchmark questions is read as a decision. A host agent that writes the plan can set the intent
+itself; the cue tables are the fallback.
+
+**Guards** (`guard_mutations.json`). 54 mutations on git copies of orders_app, glow_mod and
+forge_mod: 25 violating, 20 benign, 9 out of reach (bars: at least 30 / 12 / 12 / 6). VIOLATED
+precision 1.00 (25 of 25) and recall 1.00 on the in-reach violations (bars 1.00 and 0.90); no benign
+or out-of-reach case gave a VIOLATED finding, and all 9 out-of-reach forms (getattr with a literal or
+a computed name, importlib, `__import__`, exec, `sys.modules`, a star import, reflection by class
+name, a call chain in Java) are named in the limits or reported POSSIBLE. On the 33 orders_app cases
+of the `sqlite3.connect` guard the raw per-line regex the old exclusivity check used had tp 7, fp 8,
+fn 6; the engine tp 13, fp 0, fn 0. Two cases were added after the first run: V25 (a Java import of a
+Kotlin class, a file-node label the first engine mismatched) and B20 (a `def` that shadows an
+imported name: the first engine reported it VIOLATED; found by reading the code, not by the set).
+`decide check` per case: median 42 ms, max 89 ms (bar 1 s; one earlier run had a single 969 ms
+outlier). On Verinoda's own code (`check-time-verinoda*.json`): a prepared 78-file copy with the
+index, 4 guards incl. no_edge, 0.48-0.64 s; the full tree, 631 .py of 2,309 files, 3 guards without
+the index, 1.6-2.7 s (bar 5 s; before two pre-filters were added it was 6.6-11.3 s).
+
+**Decision brief** (`brief_orders_app.json`). orders_app, the design's EN and TR question: 8 of 8
+gold forces each, 18 of 18 cited evidence items re-read equal to what the brief recorded (precision
+1.00), the 5 gold question kinds asked, no question the code answers, no recommendation field, 0.11-0.17
+s. In-sample: the gold came with the design and the probes were written after reading it. On the
+full Verinoda tree a brief takes 5.6-6.2 s (44 forces).
+
+**No regression.** Fast harness, the eight public sets: no difference in any question and approach
+between integrate/0925 (`fast-base.json`) and this branch after each of the four steps
+(`fast-step4.json` is the last); against `er_new` the only differences are the five Turkish results
+integrate/0925 already improved.
+
+**Not measured.** A real agent session with the new skill text (Claude Code or Codex); the brief on
+any repository other than orders_app against a gold (forge_mod and a message-broker question were
+only read); held-out guard cases; `decide check` in a real CI job; a quote pin against a live page
+(the tests use a cached page, the network was off).
 
 ## Update 2026-09-25: analyze keeps what query found, grounded verdicts, Turkish, update time
 

@@ -1,0 +1,386 @@
+{
+ "intent_heldout1.json": {
+  "tp": 5,
+  "fp": 0,
+  "fn": 0,
+  "tn": 5,
+  "precision": 1.0,
+  "recall": 1.0,
+  "rows": [
+   {
+    "id": "h01",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h02",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h03",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h04",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h05",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h06",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h07",
+    "gold": false,
+    "read": [
+     "dataflow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h08",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h09",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "h10",
+    "gold": false,
+    "read": [
+     "why"
+    ],
+    "ok": true
+   }
+  ]
+ },
+ "intent_heldout2.json": {
+  "tp": 2,
+  "fp": 0,
+  "fn": 3,
+  "tn": 5,
+  "precision": 1.0,
+  "recall": 0.4,
+  "rows": [
+   {
+    "id": "k01",
+    "gold": true,
+    "read": [
+     "behaviour"
+    ],
+    "ok": false
+   },
+   {
+    "id": "k02",
+    "gold": true,
+    "read": [
+     "behaviour"
+    ],
+    "ok": false
+   },
+   {
+    "id": "k03",
+    "gold": true,
+    "read": [
+     "behaviour"
+    ],
+    "ok": false
+   },
+   {
+    "id": "k04",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k05",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k06",
+    "gold": false,
+    "read": [
+     "dataflow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k07",
+    "gold": false,
+    "read": [
+     "locate",
+     "define"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k08",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k09",
+    "gold": false,
+    "read": [
+     "impact"
+    ],
+    "ok": true
+   },
+   {
+    "id": "k10",
+    "gold": false,
+    "read": [
+     "dataflow"
+    ],
+    "ok": true
+   }
+  ]
+ },
+ "intent_written.json": {
+  "tp": 12,
+  "fp": 0,
+  "fn": 0,
+  "tn": 12,
+  "precision": 1.0,
+  "recall": 1.0,
+  "rows": [
+   {
+    "id": "d01",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d02",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d03",
+    "gold": true,
+    "read": [
+     "decide",
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d04",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d05",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d06",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d07",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d08",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d09",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d10",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d11",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "d12",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n01",
+    "gold": false,
+    "read": [
+     "why"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n02",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n03",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n04",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n05",
+    "gold": false,
+    "read": [
+     "dataflow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n06",
+    "gold": false,
+    "read": [
+     "tests"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n07",
+    "gold": false,
+    "read": [
+     "impact"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n08",
+    "gold": false,
+    "read": [
+     "callers"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n09",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n10",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n11",
+    "gold": false,
+    "read": [
+     "config"
+    ],
+    "ok": true
+   },
+   {
+    "id": "n12",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true
+   }
+  ]
+ }
+}

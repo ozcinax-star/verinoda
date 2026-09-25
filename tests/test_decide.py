@@ -452,6 +452,21 @@ def test_only_in_follows_a_re_export_and_grades_a_shadowing_parameter_possible(t
     assert _at(res["possible"]) == ["orders/reports.py:11"] and "parameter" in res["possible"][0]["why"]
 
 
+def test_only_in_never_verifies_a_name_a_def_shadows(tmp_path):
+    from verinoda import guards
+
+    repo = tmp_path / "r"
+    (repo / "pkg").mkdir(parents=True)
+    (repo / "pkg" / "a.py").write_text("from sqlite3 import connect\n\n\ndef connect(u):\n    return u\n\n\n"
+                                       "def d():\n    return connect(1)\n", encoding="utf-8")
+    (repo / "pkg" / "b.py").write_text("import sqlite3\n\n\ndef e(u):\n    return sqlite3.connect(u)\n",
+                                       encoding="utf-8")
+    ctx = guards._Ctx(repo, ["pkg/a.py", "pkg/b.py"])
+    hits, scan, _ = guards.check_only_in(ctx, {"kind": "only_in", "calls": ["sqlite3.connect"], "allowed": []})
+    assert [(h[0], h[1], h[2]) for h in hits] == [("VIOLATED", "pkg/b.py", 5)]
+    assert scan.files["python"] == 2
+
+
 def test_no_edge_on_glow_mod_import_is_violated_inferred_call_possible_comment_nothing(templates, tmp_path):
     repo, _ = _case(templates, tmp_path, "glow", ["no_edge from=src/main/** to=src/client/**"])
     clean = _check(repo)

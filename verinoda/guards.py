@@ -438,6 +438,9 @@ class _PyIndex:
                 for t in targets:
                     if isinstance(t, ast.Name):
                         out["assigned"].setdefault(t.id, []).append(node)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                # a def of the same name as an import shadows it somewhere: the name is not resolved
+                out["assigned"].setdefault(node.name, []).append(node)
         self._binds[rel] = out
         return out
 
@@ -460,7 +463,7 @@ class _PyIndex:
                 return ".".join([next(iter(quals)), *attrs]), "import"
             return None, f"`{e.id}` is imported from several places"
         if assigned and not binds and len(assigned) == 1 and depth < 3:
-            v = assigned[0].value
+            v = getattr(assigned[0], "value", None)
             if isinstance(v, (ast.Attribute, ast.Name)):
                 q, _ = self.qualify(rel, v, depth + 1)
                 if q:
@@ -486,7 +489,7 @@ class _PyIndex:
                     return self.resolve(".".join([q, *rest[1:]]), depth + 1)
             tree, _ = self.tree(rel)
             if tree is not None and len(b["assigned"].get(name) or []) == 1 and not binds:
-                v = b["assigned"][name][0].value
+                v = getattr(b["assigned"][name][0], "value", None)
                 if isinstance(v, (ast.Attribute, ast.Name)):
                     q, _ = self.qualify(rel, v)
                     if q:
@@ -495,13 +498,16 @@ class _PyIndex:
         return qual
 
 
-def _rebound_locally(tree: ast.AST, call: ast.AST, name: str) -> str | None:
+def _functions(tree: ast.AST) -> list[ast.AST]:
+    return [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))]
+
+
+def _rebound_locally(tree: ast.AST, call: ast.AST, name: str, funcs: list[ast.AST] | None = None) -> str | None:
     """Why ``name`` at ``call`` may not be the imported one (a parameter or an assignment in its function)."""
     line = getattr(call, "lineno", 0)
     best = None
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)) and \
-                node.lineno <= line <= (getattr(node, "end_lineno", None) or node.lineno):
+    for node in funcs if funcs is not None else _functions(tree):
+        if node.lineno <= line <= (getattr(node, "end_lineno", None) or node.lineno):
             best = node if best is None or node.lineno >= best.lineno else best
     if best is None:
         return None
@@ -519,8 +525,12 @@ def _rebound_locally(tree: ast.AST, call: ast.AST, name: str) -> str | None:
     return None
 
 
-def _py_only_in(ix: _PyIndex, rel: str, targets: dict[str, str], scan: Scan) -> list[tuple[str, int, str]]:
-    """``(level, line, why)`` for calls in ``rel`` that bind to one of ``targets`` (qualified -> shown)."""
+def _py_only_in(ix: _PyIndex, rel: str, targets: dict[str, str], scan: Scan,
+                names: set[str] | None = None) -> list[tuple[str, int, str]]:
+    """``(level, line, why)`` for calls in ``rel`` that bind to one of ``targets`` (qualified -> shown).
+
+    ``names``: the last parts a call's qualified name can have to reach a target (the target functions
+    and the names they are re-exported under); any other call is not followed through the project."""
     tree, text = ix.tree(rel)
     if text is None:
         return []
@@ -531,7 +541,9 @@ def _py_only_in(ix: _PyIndex, rel: str, targets: dict[str, str], scan: Scan) -> 
     out = []
     funcs = {t.rpartition(".")[2] for t in targets}
     mods = {t.rpartition(".")[0] for t in targets}
+    names = set(names or ()) | funcs
     b = ix.bindings(rel)
+    fns: list[ast.AST] | None = None
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -557,13 +569,17 @@ def _py_only_in(ix: _PyIndex, rel: str, targets: dict[str, str], scan: Scan) -> 
                     if full in targets:
                         out.append((POSSIBLE, node.lineno, f"`{last}()` may come from `from {base} import *`"))
             continue
+        if q.rpartition(".")[2] not in names:
+            continue
         full = ix.resolve(q)
         if full not in targets:
             continue
         root = f
         while isinstance(root, ast.Attribute):
             root = root.value
-        why_not = _rebound_locally(tree, node, root.id) if isinstance(root, ast.Name) else None
+        if fns is None:
+            fns = _functions(tree)
+        why_not = _rebound_locally(tree, node, root.id, fns) if isinstance(root, ast.Name) else None
         mod_assigned = isinstance(root, ast.Name) and b["assigned"].get(root.id) and how == "import"
         shown = targets[full]
         if why_not or mod_assigned:
@@ -675,8 +691,11 @@ def _jvm_only_in(repo: Path, rel: str, targets: dict[str, str], scan: Scan) -> l
     if text is None:
         return []
     suffix = PurePosixPath(rel).suffix.lower()
-    code = code_text(text, suffix)
     methods = {_jvm_target(t)[2] for t in targets}
+    if not any(m in text for m in methods):  # cheap first: most files name none of the methods
+        scan.count("jvm")
+        return []
+    code = code_text(text, suffix)
     if not any(re.search(rf"\b{re.escape(m)}\b", code) for m in methods):
         scan.count("jvm")
         return []
@@ -760,6 +779,8 @@ def _text_only_in(repo: Path, rel: str, targets: dict[str, str], scan: Scan) -> 
     if text is None:
         return []
     scan.count("text")
+    if not any(t.rpartition(".")[2] in text for t in targets):  # cheap first
+        return []
     code = code_text(text, PurePosixPath(rel).suffix).split("\n")
     out = []
     for t, shown in targets.items():
@@ -817,27 +838,59 @@ def check_only_in(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
     what += f" (allowed: {', '.join(g.get('allowed') or [])})"
     out: list[tuple[str, str, int, str]] = []
     if targets:
-        funcs = {t.rpartition(".")[2] for t in targets}
         py_files = [f for f in files if f.endswith(PY_SUFFIXES)]
-        # a re-export: a module that binds the target at module level makes its own name a target too
-        names = set(funcs)
-        for rel in ctx.all_files:
-            if not rel.endswith(PY_SUFFIXES):
-                continue
-            text = _read(ctx.repo / rel)
-            if text is None or not any(f in text for f in funcs):
-                continue
-            b = ctx.py.bindings(rel)
-            for name, binds in b["names"].items():
-                if any(ctx.py.resolve(q) in targets for q, _, _ in binds):
-                    names.add(name)
+        # A re-export - a module that binds the target (by import or assignment) - makes its own name a
+        # target too; a chain of them is followed a few rounds deep. A file can reach a target only by
+        # naming its module (import, getattr, importlib) or a module of the project that re-exports it:
+        # every other file is skipped without parsing. JVM classes (java.sql.DriverManager) are no
+        # Python targets.
+        py_targets = {t: s for t, s in targets.items() if not _jvm_target(t)[1]}
+        roots = {t.split(".")[0] for t in py_targets}
+        names = {t.rpartition(".")[2] for t in py_targets}
+        reexporters: set[str] = set()
+
+        def candidate(text: str | None) -> bool:
+            return text is not None and (any(r in text for r in roots) or any(m in text for m in reexporters))
+
+        all_py = [r for r in ctx.all_files if r.endswith(PY_SUFFIXES)]
+        texts = {r: _read(ctx.repo / r) for r in all_py}
+        for _round in range(4):
+            grew = False
+            for rel in all_py:
+                if not candidate(texts.get(rel)):
+                    continue
+                b = ctx.py.bindings(rel)
+                found = False
+                for name, binds in b["names"].items():
+                    if any(q.rpartition(".")[2] in names and ctx.py.resolve(q) in py_targets for q, _, _ in binds):
+                        found = True
+                        if name not in names:
+                            names.add(name)
+                            grew = True
+                for name, nodes in b["assigned"].items():
+                    v = getattr(nodes[0], "value", None) if len(nodes) == 1 else None
+                    if isinstance(v, (ast.Attribute, ast.Name)):
+                        q, _ = ctx.py.qualify(rel, v)
+                        if q and q.rpartition(".")[2] in names and ctx.py.resolve(q) in py_targets:
+                            found = True
+                            if name not in names:
+                                names.add(name)
+                                grew = True
+                mod = (_module_of(rel) or "").rpartition(".")[2]
+                if found and mod and mod not in reexporters:
+                    reexporters.add(mod)
+                    grew = True
+            if not grew:
+                break
         for rel in py_files:
-            text = _read(ctx.repo / rel)
-            if text is None or not any(n in text for n in names):
+            text = texts.get(rel)
+            if not candidate(text):
                 scan.count("python")
                 continue
-            for level, line, why in _py_only_in(ctx.py, rel, targets, scan) + \
-                    _dynamic_import_hint(rel, text, code_text(text, ".py"), targets):
+            hits = _py_only_in(ctx.py, rel, py_targets, scan, names)
+            if "import_module" in text or "__import__" in text:
+                hits += _dynamic_import_hint(rel, text, code_text(text, ".py"), py_targets)
+            for level, line, why in hits:
                 out.append((level, rel, line, why))
         for rel in files:
             if rel.endswith(JVM_SUFFIXES):

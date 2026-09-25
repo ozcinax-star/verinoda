@@ -198,6 +198,12 @@ class _Probe:
         self.forces: list[dict] = []
         self.absences: list[dict] = []
         self.facts: dict = {}
+        self._lines: dict[str, list[str]] = {}
+
+    def lines(self, rel: str) -> list[str]:
+        if rel not in self._lines:
+            self._lines[rel] = _read_lines(self.repo, rel)
+        return self._lines[rel]
 
     def force(self, probe: str, fact: str, evidence: list[dict | None], *, status: str = "statically_verified",
               serves: tuple[str, ...] = KINDS, **extra) -> dict | None:
@@ -238,8 +244,11 @@ class _Probe:
                        [_ev(self.repo, rel, line, needle=re.escape(name.rpartition('.')[2]))],
                        serves=("datastore", "scaling", "dependency"))
         sinks: list[tuple[str, int, str]] = []
+        any_sink = re.compile("|".join(f"(?:{rx.pattern})" for rx, _ in SINK_PATTERNS), re.I)
         for rel in self.product:
-            for i, ln in enumerate(_read_lines(self.repo, rel), 1):
+            if not any_sink.search("\n".join(self.lines(rel))):
+                continue
+            for i, ln in enumerate(self.lines(rel), 1):
                 for rx, kind in SINK_PATTERNS:
                     if rx.search(ln):
                         sinks.append((rel, i, kind))
@@ -267,7 +276,7 @@ class _Probe:
 
         reads = []
         for rel in self.product:
-            for i, ln in enumerate(_read_lines(self.repo, rel), 1):
+            for i, ln in enumerate(self.lines(rel), 1):
                 for rx, _lang in ENV_PATTERNS:
                     for m in rx.finditer(ln):
                         d = DEFAULT_RX.search(ln)
@@ -326,7 +335,7 @@ class _Probe:
         self.facts["servers"] = servers
         # JVM builds: the Java toolchain and the platform versions in gradle.properties
         for rel in [f for f in self.files if PurePosixPath(f).name in ("build.gradle", "build.gradle.kts")][:2]:
-            for i, ln in enumerate(_read_lines(self.repo, rel), 1):
+            for i, ln in enumerate(self.lines(rel), 1):
                 m = re.search(r"(?:JavaLanguageVersion\.of|jvmToolchain)\(\s*(\d+)\s*\)", ln)
                 if m:
                     self.facts.setdefault("java", (m.group(1), rel, i))
@@ -336,7 +345,7 @@ class _Probe:
                     break
         props = [f for f in self.files if PurePosixPath(f).name == "gradle.properties"][:1]
         for rel in props:
-            for i, ln in enumerate(_read_lines(self.repo, rel), 1):
+            for i, ln in enumerate(self.lines(rel), 1):
                 m = re.match(r"\s*((?:minecraft|neo|neoforge|forge|fabric|loader|loom|kotlin|kff)\w*_version)\s*=\s*(\S+)",
                              ln)
                 if m:
@@ -364,7 +373,7 @@ class _Probe:
                 and re.search(r"(^|/)(adr|adrs|decisions?|rfcs?)/", f, re.I)
                 and not (d_dir and (self.repo / f).resolve().is_relative_to(d_dir))]
         for rel in docs:
-            lines = _read_lines(self.repo, rel)
+            lines = self.lines(rel)
             text = "\n".join(lines)
             folded = _fold(text)
             # relevant: it names a word of the question or an option, or it is about the same kind of choice
@@ -415,8 +424,22 @@ class _Probe:
 
     # P5 -----------------------------------------------------------------------------------------------
     def deployment(self) -> None:
-        found = [f for f in self.files if any(self.guards.glob_match(f, g) or
-                                              PurePosixPath(f).match(g) for g in DEPLOY_GLOBS)]
+        import fnmatch
+
+        def deploy(f: str) -> bool:
+            name = f.rpartition("/")[2]
+            for g in DEPLOY_GLOBS:
+                if g.endswith("/**"):
+                    if f.startswith(g[:-2]) or ("/" + g[:-2]) in f:
+                        return True
+                elif "/" in g:
+                    if fnmatch.fnmatchcase(f, g) or fnmatch.fnmatchcase(f, "*/" + g):
+                        return True
+                elif fnmatch.fnmatchcase(name, g):
+                    return True
+            return False
+
+        found = [f for f in self.files if deploy(f)]
         self.facts["deploy"] = found
         if found:
             for f in found[:4]:
@@ -432,11 +455,15 @@ class _Probe:
     # P6 -----------------------------------------------------------------------------------------------
     def concurrency(self) -> None:
         conc = []
+        signals = ("threading", "asyncio", "multiprocessing", "concurrent", "gevent", "trio", "anyio", "async ",
+                   "global ")
         for rel in self.product:
             if not rel.endswith((".py", ".pyi")):
                 continue
-            lines = _read_lines(self.repo, rel)
+            lines = self.lines(rel)
             text = "\n".join(lines)
+            if not any(s in text for s in signals):
+                continue
             try:
                 tree = ast.parse(text)
             except (SyntaxError, ValueError):
@@ -487,7 +514,7 @@ class _Probe:
     def tests_pinning(self) -> None:
         pins = []
         for rel in self.tests:
-            for i, ln in enumerate(_read_lines(self.repo, rel), 1):
+            for i, ln in enumerate(self.lines(rel), 1):
                 m = TEST_PIN_RX.search(ln)
                 if m:
                     pins.append((rel, i, m.group(0)))
@@ -587,7 +614,7 @@ def importers(pb: _Probe, key: str, limit: int = 200) -> list[tuple[str, int, st
             rx = re.compile(rf"\s*import\s+(?:static\s+)?({'|'.join(re.escape(p.rstrip('.')) for p in prefixes)})[.\w]*")
         else:
             continue
-        for i, ln in enumerate(_read_lines(pb.repo, rel), 1):
+        for i, ln in enumerate(pb.lines(rel), 1):
             m = rx.match(ln)
             if m:
                 out.append((rel, i, m.group(1)))
