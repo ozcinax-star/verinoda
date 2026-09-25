@@ -1392,17 +1392,46 @@ def _removed_sinks(ctx: _Ctx, c: Change) -> list[dict]:
             now[t] -= 1
             left[kind] = left.get(kind, 0) + 1
     out = []
+    moved_to: dict[str, tuple[int, str, str]] | None = None
     for line, kind, by in gone:
         if left.get(kind, 0) > 0:
             left[kind] -= 1
             continue
-        if kind not in rr.IO_ONLY_SINKS:
+        if kind in rr.IO_ONLY_SINKS:
+            continue
+        text = ctx.lines(c.file, "old")[line - 1].strip()
+        if moved_to is None:
+            moved_to = _sinks_of_new_callees(ctx, c, norm)
+        dest = moved_to.get(norm(ocode[line - 1]))
+        if dest is not None:   # extracted into a helper the definition now calls (`self._flush()`)
             out.append(_finding("persistence", "sink-line-removed",
-                                f"a {kind} line was removed or changed (base line {line}): "
-                                f"`{ctx.lines(c.file, 'old')[line - 1].strip()[:90]}`", "strong_inference",
-                                f"{c.file}:{line}", basis="sink pattern over the base version's code; the new version "
-                                "of the definition has no line with that code", derived_by=by, for_symbol=c.symbol,
+                                f"a {kind} line left {c.name} (base line {line}): `{text[:90]}` - the same line is in "
+                                f"{dest[1]}() at {dest[2]}, which {c.name} now calls at line {dest[0]}",
+                                "weak_inference", f"{c.file}:{line}", evidence_at=[dest[2], f"{c.file}:{dest[0]}"],
+                                basis="sink lines of both versions compared as code; the calls on the definition's "
+                                      "changed lines resolved to their callees", derived_by=by, for_symbol=c.symbol,
                                 side="base"))
+            continue
+        out.append(_finding("persistence", "sink-line-removed",
+                            f"a {kind} line was removed or changed (base line {line}): `{text[:90]}`",
+                            "strong_inference", f"{c.file}:{line}", basis="sink pattern over the base version's "
+                            "code; the new version of the definition has no line with that code", derived_by=by,
+                            for_symbol=c.symbol, side="base"))
+    return out
+
+
+def _sinks_of_new_callees(ctx: _Ctx, c: Change, norm) -> dict[str, tuple[int, str, str]]:
+    """Sink lines (normalised code -> (call line, callee name, "file:line")) of the definitions that the changed
+    lines of ``c`` call: where a removed sink line may have been extracted to."""
+    out: dict[str, tuple[int, str, str]] = {}
+    for ln, name, tgt, _how, _conf in ctx.callees((c.file, c.qual), c.new_changed) if c.qual else ():
+        if tgt is None:
+            continue
+        for s in ctx.unit_sinks(tgt):
+            rel, _, at = s["at"].rpartition(":")
+            code = ctx.code(rel)
+            if at.isdigit() and int(at) <= len(code):
+                out.setdefault(norm(code[int(at) - 1]), (ln, name, s["at"]))
     return out
 
 

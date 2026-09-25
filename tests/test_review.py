@@ -1576,6 +1576,13 @@ def test_a_commit_removed_from_save_while_a_new_method_next_to_it_commits(orders
           "        self.conn.commit()\n        return ids\n")
     [f] = _by(_review(orders), "persistence", "sink-line-removed")
     assert f["at"] == "orders/repository.py:19" and f["for"] == "orders/repository.py::OrderRepository.save"
+    assert f["status"] == "strong_inference"
+    # the commit extracted into a helper that save() now calls is a move (weak), not a removal
+    _git(orders, "checkout", "--", "orders/repository.py")
+    _edit(orders, "orders/repository.py", "        self.conn.commit()\n        return cur.lastrowid\n",
+          "        self._flush()\n        return cur.lastrowid\n\n    def _flush(self):\n        self.conn.commit()\n")
+    [f] = _by(_review(orders), "persistence", "sink-line-removed")
+    assert f["status"] == "weak_inference" and "_flush()" in f["finding"]
 
 
 def test_a_constructor_that_gains_a_required_parameter_breaks_its_constructions(orders):
