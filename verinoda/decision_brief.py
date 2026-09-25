@@ -133,9 +133,10 @@ LIMITS = ["Verinoda has no load model: performance and scale behaviour are not p
 
 def _read_lines(repo: Path, rel: str) -> list[str]:
     try:
-        return (Path(repo) / rel).read_bytes().decode("utf-8", errors="replace").replace("\r\n", "\n").split("\n")
+        text = (Path(repo) / rel).read_bytes().decode("utf-8", errors="replace")
     except OSError:
         return []
+    return (text[1:] if text.startswith("\ufeff") else text).replace("\r\n", "\n").split("\n")
 
 
 def _ev(repo: Path, rel: str, a: int, b: int | None = None, *, needle: str, source_type: str = "source_code"
@@ -311,11 +312,40 @@ class _Probe:
         self.facts: dict = {}
         self._lines: dict[str, list[str]] = {}
         self._masked: dict[tuple[str, bool], list[str]] = {}
+        self._imports: dict[str, list[tuple[int, str]]] = {}
+        self.presence_notes: dict[str, str] = {}
 
     def lines(self, rel: str) -> list[str]:
         if rel not in self._lines:
             self._lines[rel] = _read_lines(self.repo, rel)
         return self._lines[rel]
+
+    def py_imports(self, rel: str) -> list[tuple[int, str]]:
+        """``(line, module)`` of every absolute import in a Python file, read from its syntax tree (``import
+        os, sqlite3`` names both; an example in a docstring or a comment names none). A file that does not
+        parse is read line by line with its comments and strings removed."""
+        if rel not in self._imports:
+            out: list[tuple[int, str]] = []
+            try:
+                tree = ast.parse("\n".join(self.lines(rel)))
+            except (SyntaxError, ValueError, RecursionError):
+                tree = None
+            if tree is not None:
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        out += [(node.lineno, a.name) for a in node.names]
+                    elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                        out.append((node.lineno, node.module))
+            else:
+                rx = re.compile(r"^\s*(?:from\s+([\w.]+)\s+import\b|import\s+([\w.\s,]+))")
+                for i, ln in enumerate(self.code_lines(rel, keep_strings=False), 1):
+                    m = rx.match(ln)
+                    if m and m.group(1):
+                        out.append((i, m.group(1)))
+                    elif m:
+                        out += [(i, part.split()[0]) for part in m.group(2).split(",") if part.split()]
+            self._imports[rel] = sorted(out)
+        return self._imports[rel]
 
     def code_lines(self, rel: str, *, keep_strings: bool) -> list[str]:
         """The file's lines with comments removed (and string literals too, unless ``keep_strings``)."""
@@ -475,7 +505,7 @@ class _Probe:
         self.facts["servers"] = servers
         # JVM builds: the Java toolchain and the platform versions in gradle.properties
         for rel in [f for f in self.files if PurePosixPath(f).name in ("build.gradle", "build.gradle.kts")][:2]:
-            for i, ln in enumerate(self.lines(rel), 1):
+            for i, ln in enumerate(self.guards.build_code("\n".join(self.lines(rel)), rel).split("\n"), 1):
                 m = re.search(r"(?:JavaLanguageVersion\.of|jvmToolchain)\(\s*(\d+)\s*\)", ln)
                 if m:
                     self.facts.setdefault("java", (m.group(1), rel, i))
@@ -748,6 +778,11 @@ def _present(pb: _Probe, name: str) -> tuple[bool | None, list[dict]]:
         evs.append(_ev(pb.repo, rel, i, needle=re.escape(what)))
     for rel, i in used_by_code(pb, key)[:3]:
         evs.append(_ev(pb.repo, rel, i, needle=OPTION_USE[key].pattern))
+    # a connection the engine bound to this option's driver (``sqlite3.connect``) is the code using it
+    for rel, line, why in pb.facts.get("connections") or []:
+        call = re.search(r"call to ([\w.]+)", why)
+        if known and call and call.group(1).split(".")[0] in known[2]:
+            evs.append(_ev(pb.repo, rel, line, needle=re.escape(call.group(1).rpartition(".")[2])))
     if key == "kotlin":
         kt = [f for f in pb.product if f.endswith((".kt", ".kts"))]
         if kt:
@@ -755,7 +790,20 @@ def _present(pb: _Probe, name: str) -> tuple[bool | None, list[dict]]:
     evs = [e for e in evs if e]
     if evs:
         return True, evs
-    return (False if known or key in JVM_PREFIXES else None), []
+    if not (known or key in JVM_PREFIXES):
+        return None, []
+    # a connection made through an engine that serves many databases (SQLAlchemy's create_engine, JDBC's
+    # DriverManager): which database it reaches is chosen at run time, so "not present" is not shown
+    if known and known[0] == "datastore":
+        drivers = {m.split(".")[0] for k in KNOWN_OPTIONS.values() if k[0] == "datastore" for m in k[2]}
+        generic = [(rel, line, c.group(1)) for rel, line, why in pb.facts.get("connections") or []
+                   for c in [re.search(r"call to ([\w.]+)", why)] if not c or c.group(1).split(".")[0] not in drivers]
+        if generic:
+            rel, line, call = generic[0]
+            pb.presence_notes[key] = (f"a database connection is made at {rel}:{line} through {call or 'a call'}, "
+                                      "which does not name the database: which one it reaches is not resolved")
+            return None, []
+    return False, []
 
 
 def used_by_code(pb: _Probe, key: str) -> list[tuple[str, int]]:
@@ -771,23 +819,25 @@ def used_by_code(pb: _Probe, key: str) -> list[tuple[str, int]]:
 
 
 def importers(pb: _Probe, key: str, limit: int = 200) -> list[tuple[str, int, str]]:
-    """``(file, line, module)`` of the product files that import an option's Python modules or JVM packages."""
+    """``(file, line, module)`` of the product files that import an option's Python modules or JVM packages
+    (imports read from the code: not from comments or docstrings)."""
     known = KNOWN_OPTIONS.get(key)
     mods = known[2] if known else ()
     prefixes = JVM_PREFIXES.get(key, ())
     out = []
     for rel in pb.product:
         if rel.endswith(".py") and mods:
-            rx = re.compile(rf"\s*(?:import|from)\s+({'|'.join(re.escape(x) for x in mods)})\b")
+            hit = next(((i, m) for i, name in pb.py_imports(rel) for m in mods
+                        if name == m or name.startswith(m + ".")), None)
+            if hit:
+                out.append((rel, hit[0], hit[1]))
         elif rel.endswith((".java", ".kt", ".kts")) and prefixes:
             rx = re.compile(rf"\s*import\s+(?:static\s+)?({'|'.join(re.escape(p.rstrip('.')) for p in prefixes)})[.\w]*")
-        else:
-            continue
-        for i, ln in enumerate(pb.lines(rel), 1):
-            m = rx.match(ln)
-            if m:
-                out.append((rel, i, m.group(1)))
-                break
+            for i, ln in enumerate(pb.code_lines(rel, keep_strings=False), 1):  # not in a comment
+                m = rx.match(ln)
+                if m:
+                    out.append((rel, i, m.group(1)))
+                    break
         if len(out) >= limit:
             break
     return out
@@ -858,9 +908,10 @@ def _pin_quote(store, repo: Path, url: str, text: str) -> dict:
 
 # -- questions for the human -------------------------------------------------------------------------------
 
-def _q(qid: str, en: str, tr: str, because: str, options: list[str], *, kind: str, needs: str) -> dict:
-    return {"id": qid, "text_en": en, "text_tr": tr, "asked_because": because, "discriminates": options,
-            "kind": kind, "needs": needs}
+def _q(qid: str, en: str, tr: str, because: str, options: list[str], *, kind: str, needs: str,
+       because_tr: str) -> dict:
+    return {"id": qid, "text_en": en, "text_tr": tr, "asked_because": because, "asked_because_tr": because_tr,
+            "discriminates": options, "kind": kind, "needs": needs}
 
 
 def questions(pb: _Probe, kinds: list[str], options: list[str], decisions: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -875,15 +926,22 @@ def questions(pb: _Probe, kinds: list[str], options: list[str], decisions: list[
     deploy = pb.facts.get("deploy") or []
     if "datastore" in kinds or "scaling" in kinds:
         conc = pb.facts.get("concurrency") or []
+        # the shared instance is a strong_inference force: said as one, never as a fact
+        loc = shared[0]["evidence"][0]["locator"] if shared else None
         because = ("how many writers you expect is not in the code" +
                    (f" (context: {len(conc)} concurrency site(s) in the product code, e.g. {conc[0][0]}:{conc[0][1]})"
                     if conc else "") +
-                   (f"; {shared[0]['evidence'][0]['locator']} keeps one instance per process" if shared else ""))
+                   (f"; {loc} appears to keep one instance per process ({shared[0]['status']})" if shared else ""))
+        because_tr = ("kaç yazıcı beklediğiniz kodda yok" +
+                      (f" (bağlam: ürün kodunda {len(conc)} eşzamanlılık yeri, ör. {conc[0][0]}:{conc[0][1]})"
+                       if conc else "") +
+                      (f"; {loc} süreç başına tek bir örnek tutuyor gibi görünüyor ({shared[0]['status']})"
+                       if shared else ""))
         workers = [f for f in deploy if re.search(r"gunicorn|uvicorn|Procfile", f, re.I)]
         cands.append({**_q("q1", "How many processes or servers will write at the same time, now and at the growth "
                                  "you expect?",
                            "Şu an ve beklediğiniz büyümede aynı anda kaç süreç ya da sunucu yazacak?", because, opts,
-                           kind="concurrency", needs="concurrent writers"),
+                           kind="concurrency", needs="concurrent writers", because_tr=because_tr),
                       **({"partly_answered_by": workers[:3]} if workers else {})})
         keep = [e for e in pb.facts.get("env") or [] if re.search(r"RETENTION|TTL|EXPIR|KEEP|PURGE|DAYS", e[0])]
         cands.append({**_q("q2", "How many records per day do you expect, and how long must they be kept?",
@@ -891,7 +949,11 @@ def questions(pb: _Probe, kinds: list[str], options: list[str], decisions: list[
                            "the volume you expect is not in the code (no load model)" +
                            (f"; {keep[0][0]} defaults to {keep[0][3]} at {keep[0][1]}:{keep[0][2]}, the retention "
                             "you need is yours" if keep and keep[0][3] else "; the retention you need is yours"),
-                           opts, kind="volume", needs="volume and retention"),
+                           opts, kind="volume", needs="volume and retention",
+                           because_tr="beklediğiniz hacim kodda yok (yük modeli yok)" +
+                           (f"; {keep[0][0]} varsayılanı {keep[0][3]} ({keep[0][1]}:{keep[0][2]}), gereken saklama "
+                            "süresi sizin kararınız" if keep and keep[0][3] else
+                            "; gereken saklama süresi sizin kararınız")),
                       **({"partly_answered_by": [f"{e[1]}:{e[2]}" for e in keep[:3]]} if keep else {})})
         db_service = []
         for f in deploy:
@@ -908,7 +970,12 @@ def questions(pb: _Probe, kinds: list[str], options: list[str], decisions: list[
                            f"deployment files ({', '.join(deploy[:3])}) " +
                            (f"name a database service ({', '.join(db_service[:2])}), not where production runs"
                             if db_service else "name no database image or managed database"),
-                           opts, kind="hosting", needs="hosting"),
+                           opts, kind="hosting", needs="hosting",
+                           because_tr="aranan dağıtım dosyası adlarına uyan bir dosya yok" if not deploy else
+                           f"dağıtım dosyaları ({', '.join(deploy[:3])}) " +
+                           (f"bir veritabanı hizmeti adlandırıyor ({', '.join(db_service[:2])}), üretimin nerede "
+                            "çalıştığını değil" if db_service else
+                            "veritabanı imajı ya da yönetilen veritabanı adlandırmıyor")),
                       **({"partly_answered_by": db_service[:3]} if db_service else {})})
         migrations = [f for f in pb.files if re.search(r"(^|/)(alembic\.ini|migrations?/|flyway|liquibase)", f)]
         cands.append(_q("q4", "Who will run backups and schema migrations, and how?",
@@ -916,7 +983,10 @@ def questions(pb: _Probe, kinds: list[str], options: list[str], decisions: list[
                         "no file matching alembic.ini, migrations/, flyway or liquibase (migrations written in the "
                         "code itself are not searched for); who runs backups is not in the code" if not migrations
                         else f"migrations exist ({migrations[0]}) but who runs them is not in the code", opts,
-                        kind="operations", needs="operations"))
+                        kind="operations", needs="operations",
+                        because_tr="alembic.ini, migrations/, flyway ya da liquibase'e uyan dosya yok (kodun içinde "
+                        "yazılmış geçişler aranmadı); yedekleri kimin aldığı kodda yok" if not migrations
+                        else f"geçişler var ({migrations[0]}) ama onları kimin çalıştırdığı kodda yok"))
         for d in decisions:
             if d.get("reason"):
                 num = re.match(r"^(?:adr[-_]?)?(\d{1,6})\b", PurePosixPath(d["doc"]).name, re.I)
@@ -925,42 +995,52 @@ def questions(pb: _Probe, kinds: list[str], options: list[str], decisions: list[
                                 f"{ident} kararındaki gerekçe (\"{d['reason']}\") hâlâ bir hedef mi?",
                                 f"{d.get('reason_at') or d['doc']} states it (read by rules from the paragraph that "
                                 "states the decision); whether it still holds is the user's call", opts,
-                                kind="adr_reason", needs="the recorded reason"))
+                                kind="adr_reason", needs="the recorded reason",
+                                because_tr=f"{d.get('reason_at') or d['doc']} bunu söylüyor (kararı belirten "
+                                "paragraftan kurallarla okundu); hâlâ geçerli olup olmadığı kullanıcının kararı"))
                 break
         cands.append(_q("q6", "What response time and availability must it meet?",
                         "Hangi yanıt süresini ve erişilebilirliği karşılaması gerekiyor?",
-                        "no service-level target is in the code", opts, kind="slo", needs="service levels"))
+                        "no service-level target is in the code", opts, kind="slo", needs="service levels",
+                        because_tr="kodda bir hizmet düzeyi hedefi yok"))
     if "dependency" in kinds:
         rp = pb.facts.get("requires_python")
         java = pb.facts.get("java")
         q = _q("q7", "Which language and runtime versions must keep working?",
                "Hangi dil ve çalışma ortamı sürümleri çalışmaya devam etmeli?",
                "the build states what it targets, not what the users must be able to run", opts, kind="versions",
-               needs="versions")
+               needs="versions", because_tr="derleme neyi hedeflediğini söylüyor, kullanıcıların neyi "
+               "çalıştırabilmesi gerektiğini değil")
         part = ([f"pyproject.toml:{rp[1]} (requires-python {rp[0]})"] if rp else []) + \
             ([f"{java[1]}:{java[2]} (Java {java[0]})"] if java else [])
         cands.append({**q, **({"partly_answered_by": part} if part else {})})
         cands.append(_q("q8", "Are the licences and the maintenance status of the options acceptable to you?",
                         "Seçeneklerin lisansları ve bakım durumu sizin için kabul edilebilir mi?",
-                        "licence acceptability is a policy decision", opts, kind="licence", needs="licence policy"))
+                        "licence acceptability is a policy decision", opts, kind="licence", needs="licence policy",
+                        because_tr="lisansın kabul edilebilirliği bir politika kararı"))
         cands.append(_q("q9", "Who will do the migration work, and how much time is there for it?",
                         "Geçiş işini kim yapacak ve bunun için ne kadar zaman var?",
-                        "effort and schedule are not in the code", opts, kind="effort", needs="effort"))
+                        "effort and schedule are not in the code", opts, kind="effort", needs="effort",
+                        because_tr="emek ve takvim kodda yok"))
     if "boundary" in kinds:
         cands.append(_q("q10", "Will another team or another deployable own this part?",
                         "Bu parçanın sahibi başka bir ekip ya da ayrı yayımlanan bir birim olacak mı?",
-                        "ownership is not in the code", opts, kind="ownership", needs="ownership"))
+                        "ownership is not in the code", opts, kind="ownership", needs="ownership",
+                        because_tr="sahiplik kodda yok"))
         cands.append(_q("q11", "Which callers must keep working unchanged?",
                         "Hangi çağıranların değişmeden çalışmaya devam etmesi gerekiyor?",
                         "the code shows the callers, not which of them may change", opts, kind="compatibility",
-                        needs="compatibility"))
+                        needs="compatibility", because_tr="kod çağıranları gösteriyor, hangilerinin "
+                        "değişebileceğini değil"))
     if kinds == ["other"] or not cands:
         cands.append(_q("q12", "What matters most for this choice: cost, speed of delivery, safety or simplicity?",
                         "Bu seçimde en çok ne önemli: maliyet, teslim hızı, güvenlik mi, sadelik mi?",
-                        "priorities are the user's", opts, kind="priorities", needs="priorities"))
+                        "priorities are the user's", opts, kind="priorities", needs="priorities",
+                        because_tr="öncelikler kullanıcının"))
         cands.append(_q("q13", "Which constraints must any option meet (budget, deadline, compliance)?",
                         "Her seçeneğin karşılaması gereken kısıtlar neler (bütçe, süre, uyumluluk)?",
-                        "constraints are not in the code", opts, kind="constraints", needs="constraints"))
+                        "constraints are not in the code", opts, kind="constraints", needs="constraints",
+                        because_tr="kısıtlar kodda yok"))
     seen, asked = set(), []
     for q in cands:
         if q["kind"] in seen:
@@ -1035,9 +1115,10 @@ def brief(repo: Path, question: str, *, store=None, graph=None, options: list[st
             constraints.append({"fact": f"no distribution of {', '.join(py_dists[:3])} is installed in the "
                                         "project's environment: its requirements and licence are unknown offline",
                                 "evidence": None})
+        note = pb.presence_notes.get(_fold(n).replace(" ", "")) if present is None else None
         options_out.append({
             "name": n, "proposed_by": "user" if n in names else "project",
-            "present_in_project": present, "presence_evidence": evs,
+            "present_in_project": present, "presence_evidence": evs, **({"presence_note": note} if note else {}),
             "change_surface": surface if present is not True else [],
             "what_moving_away_touches": surface if present is True else [],
             "constraints": constraints, "external": [], "agent_arguments": []})
@@ -1143,7 +1224,9 @@ def compact(b: dict, lang: str | None = None) -> dict:
             "forces": [{"fact": f["fact"], "at": [e["locator"] for e in f["evidence"]], "status": f["status"]}
                        for f in b.get("forces") or []][:10],
             "absences": [{"what": a["what"], "searched": a["searched"][:6]} for a in b.get("absences") or []],
-            "options": [{"name": o["name"], "present_in_project": o["present_in_project"]}
+            "options": [{"name": o["name"], "present_in_project": o["present_in_project"],
+                         **({"presence_note": o["presence_note"]} if o.get("presence_note") else {})}
                         for o in b.get("options") or []],
             "questions_for_human": [{"id": q["id"], "text": q["text_tr"] if tr else q["text_en"],
-                                     "asked_because": q["asked_because"]} for q in b.get("questions_for_human") or []]}
+                                     "asked_because": (q.get("asked_because_tr") if tr else None) or q["asked_because"]}
+                                    for q in b.get("questions_for_human") or []]}

@@ -369,8 +369,8 @@ def _r_update(r: dict) -> None:
     elif dec:
         print(f"  decisions: could not be checked ({dec['error']})" if dec.get("error") else
               f"  decisions: {dec['violations']} violated, {dec['possible']} possible, {dec['reviews']} review, "
-              f"{dec['triggers']} trigger" + (" - `verinoda decide check` for the sites" if any(dec.values())
-                                              else ""))
+              f"{dec['triggers']} trigger" + (f", {dec['not_checked']} not checked" if dec.get("not_checked") else "")
+              + (" - `verinoda decide check` for the sites" if any(dec.values()) else ""))
     _r_derived(r)
     if r.get("error"):
         print(f"error: {r['error']}", file=sys.stderr)
@@ -591,7 +591,10 @@ def _decision_summary(repo: Path, *, noop: bool = False) -> dict | None:
             return {"skipped": "no file changed since the last update, so not checked again "
                                "(`verinoda decide check` checks now)"}
         res = guards.check(repo, graph=index.load(repo) if graph_path(repo).exists() else None, records=recs)
-        return {k: len(res[k]) for k in ("violations", "possible", "reviews", "triggers")}
+        out = {k: len(res[k]) for k in ("violations", "possible", "reviews", "triggers")}
+        # what was not checked (a file that does not parse, a record that cannot be read) is never "0 violated"
+        out["not_checked"] = len(res["unknown"]) + sum(1 for n in res["not_enforced"] if n.get("problem"))
+        return out
     except Exception as exc:  # noqa: BLE001 - the update itself succeeded; say why the check did not run
         return {"error": f"{type(exc).__name__}: {exc}"[:200]}
 
@@ -960,6 +963,10 @@ def _r_decision(d: dict, indent: str = "") -> None:
               + f": {w['reason']}")
     for p in d.get("problems") or []:
         print(f"{indent}  problem: {p}")
+    for p in d.get("not_enforced_because") or []:
+        print(f"{indent}  not enforced: {p}")
+    for p in d.get("warnings") or []:
+        print(f"{indent}  warning: {p}")
     if d.get("log"):
         print(f"{indent}  note: {d['log']}")
 
@@ -1046,6 +1053,7 @@ def _r_brief(b: dict, indent: str = "") -> None:
         where = ", ".join(e["locator"] for e in o.get("presence_evidence") or [])
         touch = o.get("change_surface") or o.get("what_moving_away_touches") or []
         print(f"{indent}option {o['name']} ({o['proposed_by']}): {pres}" + (f" ({where})" if where else "")
+              + (f" ({o['presence_note']})" if o.get("presence_note") else "")
               + (f"; a change touches {len(touch)} site(s): {', '.join(t['at'] for t in touch[:5])}" if touch else ""))
         for c in o.get("constraints") or []:
             print(f"{indent}    {c['fact']}")
@@ -1061,7 +1069,8 @@ def _r_brief(b: dict, indent: str = "") -> None:
     print(f"{indent}questions only the user can answer (ask them; record each with `verinoda decide answer`):")
     for q in b.get("questions_for_human") or []:
         print(f"{indent}  {q['id']}: {q['text_tr'] if tr else q['text_en']}")
-        print(f"{indent}      because {q['asked_because']}; decides between {', '.join(q['discriminates'])}")
+        because = (q.get("asked_because_tr") if tr else None) or q["asked_because"]
+        print(f"{indent}      because {because}; decides between {', '.join(q['discriminates'])}")
         if q.get("partly_answered_by"):
             print(f"{indent}      context from the code: {', '.join(q['partly_answered_by'])}")
     for q in b.get("answered_by_code") or []:
@@ -1099,6 +1108,8 @@ def _decide_check(args, repo: Path) -> int:
     try:
         res = guards.check(repo, graph=graph, base=args.base, changed_only=args.changed, records=recs)
     except ValueError as exc:
+        if getattr(args, "json", False):  # like every other error of decide check: JSON on stdout too
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
         print(f"error: {exc}", file=sys.stderr)
         return 2
     if note:

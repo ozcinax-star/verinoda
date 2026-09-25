@@ -193,6 +193,16 @@ what they changed, measured on this machine against an export of the branch befo
   same copies): no difference in any of the 86 questions for any of the three Verinoda approaches
   (facts found: analyze 284, retrieve 231, retrieve_text 283 of 319, before and after; the negatives
   matched did not change either): `fast-35d2987.json` and `fast-review-fixes.json`.
+- *Review round 3 (same day, by the fixer; not re-recorded in the result files).* The reviewer's 40 new
+  questions (20 choices, 20 look-alikes, written before running the router): precision 1.00, recall
+  0.55; the cues added for its misses make it 20/20 and in-sample. Held-out 4 with those cues: precision
+  0.86, recall 0.60, but its one new hit ("what would you pick") was a phrasing DESIGN section 6 named
+  from its misses, so it is no longer clean. A question whose words may ask for a choice is now at most
+  `met_with_inference` (it was only a note). The 119 benchmark texts: still no decision and no note, and
+  their rule plans are identical before and after. Guard mutations: all 76 cases unchanged (commented-out
+  Gradle/Maven dependencies, generated files and sample folders were added as tests in
+  `tests/test_decide_review3.py`). Brief on orders_app: 8/8 gold forces, 20/20 evidence re-checks (one
+  more item: the connection line now also backs SQLite's presence).
 
 **Not measured.** A real agent session with the new skill text (Claude Code or Codex); the brief on
 any repository other than orders_app against a gold (forge_mod and a message-broker question were

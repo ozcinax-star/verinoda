@@ -1974,7 +1974,8 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
 def _choice_guard(ctx: _Ctx, sub: _Sub) -> None:
     """A sub-question another intent answered whose words still ask for a choice (a plan written by a host
     agent, or a clause the cue rules gave another intent): the facts stay as context, and the choice is not
-    judged met (docs/DESIGN.md D33). Words that only may ask for one get a note, never another verdict."""
+    judged met (docs/DESIGN.md D33). Words that only may ask for one get a note, and the verdict is at most
+    met_with_inference (:func:`judge`)."""
     text = sub.sq.get("text") or ""
     if qp.asks_for_choice(text):
         _h_decide(ctx, sub)
@@ -2076,7 +2077,9 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
     code that does not exist here (``flags["not_found"]``: claims about other names do not answer it);
     ``not_supported`` / ``blocked_by_clarification`` come from the handler. A ``decide`` sub-question is
     ``human_decision_required`` whatever its claims say: a choice between options is never ``met`` by
-    evidence (docs/DESIGN.md D33), and an option the code does not have does not make it ``unmet``.
+    evidence (docs/DESIGN.md D33), and an option the code does not have does not make it ``unmet``. One whose
+    words may ask for a choice (``flags["may_ask_for_choice"]``) is at most ``met_with_inference``: its claims
+    say what the code does, which may not be what was asked.
     """
     flags = flags or {}
     if flags.get("blocked"):
@@ -2099,7 +2102,8 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
             return "met_with_inference"
         return "unmet"
     best = min(live, key=lambda c: _RANK[c["status"]])["status"]
-    if best in VERIFIED and _RANK[best] <= _RANK.get(min_status, _RANK[MIN_STATUS_DEFAULT]):
+    if best in VERIFIED and _RANK[best] <= _RANK.get(min_status, _RANK[MIN_STATUS_DEFAULT]) \
+            and not flags.get("may_ask_for_choice"):
         return "met"
     return "met_with_inference"
 

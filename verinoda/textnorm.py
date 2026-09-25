@@ -176,7 +176,8 @@ def tr_stem(word: str, vocab: Callable[[str], bool] | Iterable[str] | None = Non
 TR_QUESTION_WORDS = frozenset(
     """nasil nerede nereye nereden neresi hangi hangisi hangileri ne neyi neler nedir neden nicin
     niye kim kime kimi kimin mi mu midir mudur""".split()
-)
+) | frozenset(  # the question particle with a personal ending ("geçmeli miyiz", typed "gecmeli miyiz")
+    "miyim miyiz misin misiniz muyum muyuz musun musunuz miydi muydu".split())
 
 # Turkish case suffix (folded, after an apostrophe or stripped from a word) -> role.
 TR_CASE_ROLES: dict[str, str] = {}

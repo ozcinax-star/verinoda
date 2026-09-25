@@ -105,6 +105,11 @@ class Decision:
     body: str = ""
     path: Path | None = None
     problems: list[str] = field(default_factory=list)
+    # not enforced for a reason another record gives (a later record supersedes it), though its own file
+    # reads fully: verinoda may still rewrite it
+    inactive: list[str] = field(default_factory=list)
+    # entries that are not applied (a waiver whose `until` is not a date): the rest is enforced
+    warnings: list[str] = field(default_factory=list)
 
     def front(self) -> dict:
         return {"verinoda-decision": FORMAT_VERSION, "id": self.id, "title": self.title, "status": self.status,
@@ -115,8 +120,8 @@ class Decision:
 
     @property
     def enforced(self) -> bool:
-        """Its guards are checked: accepted, decided by the human, and readable."""
-        return self.status == "accepted" and self.decided_by == HUMAN and not self.problems
+        """Its guards are checked: accepted, decided by the human, readable, and not superseded."""
+        return self.status == "accepted" and self.decided_by == HUMAN and not self.problems and not self.inactive
 
 
 # -- ids, paths and the folder --------------------------------------------------------------------
@@ -204,6 +209,33 @@ def split_front(text: str) -> tuple[dict | None, str]:
     return None, text
 
 
+def _unread_front_lines(text: str) -> list[int]:
+    """Header lines :func:`split_front` does not read (an indented line or a YAML ``- item`` of a block
+    list, a line without ``key:``): whatever they held is not in the record."""
+    lines = text.split("\n")
+    out = []
+    for i in range(1, len(lines)):
+        ln = lines[i]
+        if ln.strip() == "---":
+            break
+        if not ln.strip() or ln.lstrip().startswith("#"):
+            continue
+        key, sep, _ = ln.partition(":")
+        if ln[:1].isspace() or ln.startswith("-") or not sep or not key.strip():
+            out.append(i + 1)
+    return out
+
+
+def _date_or_none(value) -> str | None:
+    """A ``YYYY-MM-DD`` date that exists, else None."""
+    if not isinstance(value, str) or not _DATE_RX.match(value):
+        return None
+    try:
+        return date.fromisoformat(value).isoformat()
+    except ValueError:
+        return None
+
+
 def _dump_front(front: dict) -> str:
     out = ["---"]
     for k in FRONT_ORDER:
@@ -262,11 +294,16 @@ def parse(path: Path) -> Decision | None:
                                                  "`---` line and the header must end with another `---` line"])
         return None
     problems = []
+    unread = _unread_front_lines(text)
+    if unread:  # e.g. guards written as a YAML block list: the record would be enforced without them
+        problems.append(f"front matter line(s) {', '.join(map(str, unread[:6]))} are not one-line `key: value` "
+                        "(YAML block lists and nested values are not read; a list is one line of JSON, such as "
+                        "guards: [{...}])")
     try:
         did = norm_id(front.get("id") or "")
     except DecisionError as exc:
         return Decision(id=str(front.get("id")), number=0, title=str(front.get("title") or ""), path=path,
-                        problems=[str(exc)])
+                        problems=[str(exc), *problems])
     lists = {}
     for key in ("governs", "guards", "revisit-when", "waivers"):
         v = front.get(key)
@@ -288,18 +325,50 @@ def parse(path: Path) -> Decision | None:
             validate_guard(g)
         except DecisionError as exc:
             problems.append(f"guard {g.get('id')}: {exc}")
+    # a waiver whose `until` is not a date is not applied (it must never waive forever)
+    warnings = [f"waiver of {w.get('guard')} at {w.get('at')}: until {w['until']!r} is not a date (YYYY-MM-DD), so "
+                "the waiver is not applied" for w in lists["waivers"]
+                if w.get("until") not in (None, "") and _date_or_none(w.get("until")) is None]
     return Decision(id=did, number=int(did[4:]), title=str(front.get("title") or ""), status=status,
                     decided_by=by, date=str(front.get("date") or ""), chosen=front.get("chosen"),
                     brief=front.get("brief"), source=front.get("source"), supersedes=front.get("supersedes"),
                     superseded_by=front.get("superseded-by"), governs=lists["governs"], guards=lists["guards"],
                     revisit_when=lists["revisit-when"], waivers=lists["waivers"], body=body, path=path,
-                    problems=problems)
+                    problems=problems, warnings=warnings)
 
 
 def load_all(repo: Path) -> list[Decision]:
-    """Every record in ``decisions.dir``, by number."""
+    """Every record in ``decisions.dir``, by number.
+
+    Records that contradict each other are not both enforced: two files with the same id both carry a
+    problem, and an accepted record that another enforced record supersedes is not enforced (its own file
+    may still say accepted, e.g. after a merge)."""
     d = decisions_dir(repo)
     out = [x for p in sorted(d.glob("*.md")) if (x := parse(p)) is not None] if d.is_dir() else []
+    by_id: dict[str, list[Decision]] = {}
+    for x in out:
+        if x.id.startswith("ADR-"):
+            by_id.setdefault(x.id, []).append(x)
+    for same in by_id.values():
+        if len(same) > 1:
+            for x in same:
+                others = ", ".join(o.path.name if o.path else "?" for o in same if o is not x)
+                x.problems.append(f"id {x.id} is also used by {others}: which record holds is not known")
+    sup: list[tuple[Decision, str]] = []
+    for x in out:
+        if x.enforced and x.supersedes:
+            try:
+                sup.append((x, norm_id(x.supersedes)))
+            except DecisionError:
+                continue
+    pairs = {(x.id, old) for x, old in sup}
+    for x, old in sup:
+        if (old, x.id) in pairs:
+            x.problems.append(f"{x.id} and {old} supersede each other: which one holds is not known")
+            continue
+        for y in by_id.get(old) or []:
+            if y is not x and y.status == "accepted":
+                y.inactive.append(f"{x.id} supersedes it (its own file still says status accepted)")
     return sorted(out, key=lambda x: (x.number, str(x.path)))
 
 
@@ -346,6 +415,22 @@ _DOTTED = re.compile(r"^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$")
 _NAME = re.compile(r"^[A-Za-z_][\w.+-]*(?::[A-Za-z_][\w.+-]*)?$")  # a package, or Maven group:artifact
 
 
+def _texts(g: dict, key: str, *, paths: bool = False) -> list[str]:
+    """``g[key]`` as a list of non-empty strings (a hand edit may write one string: its characters would be
+    read as paths), inside the repository when ``paths``."""
+    v = g.get(key)
+    if v is None:
+        return []
+    if not isinstance(v, list) or not all(isinstance(x, str) and x.strip() for x in v):
+        raise DecisionError(f"{key} must be a JSON list of non-empty strings, such as [\"orders/repository.py\"]; "
+                            f"got {json.dumps(v, ensure_ascii=False)[:80]}")
+    for p in v if paths else []:
+        q = p.strip().replace("\\", "/")
+        if q.startswith("/") or re.match(r"^[A-Za-z]:", q) or ".." in q.split("/"):
+            raise DecisionError(f"{key} {p!r} is not a path inside the repository (relative, no '..')")
+    return v
+
+
 def validate_guard(g: dict) -> dict:
     """Raise :class:`DecisionError` unless ``g`` is a guard this version can check."""
     kind = g.get("kind")
@@ -353,6 +438,13 @@ def validate_guard(g: dict) -> dict:
         raise DecisionError(f"guard kind {kind!r} is not one of {', '.join(GUARD_KINDS)}")
     if g.get("status", "accepted") not in ("proposed", "accepted"):
         raise DecisionError(f"guard status {g.get('status')!r} is not proposed/accepted")
+    for key in ("pattern", "sink", "from", "to", "absent", "present", "scope"):
+        if g.get(key) is not None and not isinstance(g[key], str):
+            raise DecisionError(f"{key} must be a string")
+    _texts(g, "calls")
+    _texts(g, "relations")
+    _texts(g, "allowed", paths=True)
+    _texts(g, "exclude", paths=True)
     if kind == "only_in":
         what = [k for k in ("calls", "sink", "pattern") if g.get(k)]
         if len(what) != 1:
@@ -667,7 +759,7 @@ def waive(store, repo: Path, did: str, guard_id: str, *, at: str, reason: str, u
     path = rel_path(repo, path, "--at")
     if not str(reason or "").strip():
         raise DecisionError("a waiver needs a reason (--reason)")
-    if until and not _DATE_RX.match(until):
+    if until and _date_or_none(until) is None:
         raise DecisionError(f"--until {until!r} must be a date (YYYY-MM-DD)")
     d.waivers.append({"guard": guard_id, "at": f"{path}:{line}" if line else path, "reason": reason.strip(),
                       "until": until or None, "date": _today()})
@@ -678,8 +770,12 @@ def waived(d: Decision, guard_id: str, path: str, line: int | None, today: str |
     """The waiver that excuses ``path[:line]`` from ``guard_id`` today, if any."""
     today = today or _today()
     for w in d.waivers:
-        if w.get("guard") != guard_id or (w.get("until") and str(w["until"]) < today):
+        until = w.get("until")
+        if w.get("guard") != guard_id:
             continue
+        if until not in (None, ""):  # an unreadable date never waives (parse() lists it as a warning)
+            if _date_or_none(until) is None or _date_or_none(until) < today:
+                continue
         wp, _, wl = str(w.get("at") or "").rpartition(":") if re.search(r":\d+$", str(w.get("at") or "")) \
             else (w.get("at"), "", "")
         if wp == path and (not wl or (line is not None and int(wl) == line)):
@@ -787,6 +883,10 @@ def as_dict(repo: Path, d: Decision, *, store=None) -> dict:
            "file": d.path.resolve().relative_to(Path(repo).resolve()).as_posix() if d.path else None}
     if d.problems:
         out["problems"] = d.problems
+    if d.inactive:
+        out["not_enforced_because"] = d.inactive
+    if d.warnings:
+        out["warnings"] = d.warnings
     if store is not None and d.path is not None:
         row = _last_row(store, d.id)
         try:
