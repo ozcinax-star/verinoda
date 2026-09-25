@@ -121,7 +121,8 @@ def test_the_strategy_renderer_takes_a_rerun_count(capsys):
 def test_debug_rerun_in_text_mode_exits_3_on_a_flaky_tree(tmp_path, capsys):
     counter = (tmp_path / "count.txt").as_posix()
     flip = (f"import pathlib\n\n\ndef test_flip():\n    p = pathlib.Path({counter!r})\n"
-            "    n = int(p.read_text()) if p.exists() else 0\n    p.write_text(str(n + 1))\n    assert n % 2 == 0\n")
+            "    n = int(p.read_text()) if p.exists() else 0\n    p.write_text(str(n + 1))\n    assert n % 2 == 1\n")
+    # the baseline run fails (the symptom reproduces); the two reruns then pass once and fail once
     repo = _copy(tmp_path / "orders", {"tests/test_flip.py": flip})
     r = str(repo)
     assert cli.main(["debug", "start", "sometimes fails", "--repo", r, "--json", "--", *PT,
