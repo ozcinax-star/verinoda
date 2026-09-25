@@ -55,6 +55,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D32 | Name-existence check | partial | Python only: `verinoda check` (files, `--diff`, `--stdin --as`) and `verinoda api`, MCP `code_check` / `api_members`, skill text. Not done: mod config keys and resource ids, JVM jars, JS/TS, `--against PKG==VER`, the environment fingerprint in snapshots. Measurements in BENCHMARKS.md (the fixture set was written by the rule author: in-sample). |
 | D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`; decision records (`verinoda/decisions.py`, schema v5 log, `decide record/import/guard/accept/waive/list`, MCP `decision_record`); guards and `decide check` (`verinoda/guards.py`, MCP `decision_check`, a one-line summary in `update`; critique's exclusivity check and feedback's exclusive corrections use the same engine). Guard mutations (54 cases on the three examples, written by the rule author, plus 22 forms from the two reviews added by the fixer: all in-sample): VIOLATED precision 1.00, recall 1.00 in reach, 13/13 out-of-reach forms named in limits or POSSIBLE; the old raw-regex scan on the same orders_app cases tp 7 fp 8 fn 6. `decide check` median 42 ms per example case, about 2 s (1.8-2.2 s) on the full Verinoda tree (3 guards; results in `benchmarks/results/decide-2026-09-25/`). The decision brief (`verinoda/decision_brief.py`, `decide brief/answer`, MCP `decision_brief`, answers through `decision_record(action='answer')`; `analyze` routes decide sub-questions to it): on orders_app, EN and TR question, 8/8 gold forces, 19/19 cited evidence re-checks, 5/5 gold question kinds - in-sample (the gold came with the design and the probes were written after it). Not built: `analyze` impact questions do not include violations; the UI shows no decision badge; claims for accepted guards (kinds `exclusive` / `layering`); an ADR's reasons are matched by a few phrasings only; `research.dependencies` itself still reads no Gradle/Maven (the guards and the brief read them). Intent routing: the last held-out set (held-out 4, 20 questions by the fixer, hashed before the review fixes' cue rules were written): precision 0.83, recall 0.50 - the recall bar (0.85) is not met; every other set (written, held-out 1-3, the reviewers' 52) is in-sample. Review round 3 (40 new questions, written before running the router: recall 0.55) added cues that make its set in-sample (20/20) and held-out 4 no longer clean (0.86 / 0.60, its new hit a phrasing section 6 had named): no clean held-out set is left. A missed choice question whose words may ask for a choice is at most `met_with_inference`; one without such words can still be judged `met`. |
 | D34 | Debug ledger (loop detection, strategies) | partial | Built 2026-09-25 (section 7): `verinoda debug start/try/status/diff/close`, strategies `differential/bisect/rerun/observe`, MCP `debug_start` / `debug_attempt` / `debug_status` / `debug_strategy` / `experiment_run`, schema v6. debugloops_v1 (12 sessions written by the builder, gold fixed before the rules ran; in-sample after three fixes): definitive precision 11/11, loop recall 8/8, 0/4 controls stopped, top strategy 8/8. A review found 27 problems (25 distinct: false stops, false "passed", unverified bisect ends, git-safety gaps); all fixed with regression tests (section 7.5), the benchmark scores unchanged after the fixes. Not built: a real agent session with and without the protocol. `debug try` overhead is copy-bound on big trees (median 2.4-5.0 s on 2,341 files, depending on machine load). |
+| D35 | Change review (`verinoda review`) | partial | Built 2026-09-25 (section 8): `verinoda review` (working tree vs HEAD, `--base`, `--staged`, a planned change with `--target` + `--change`), MCP `change_review` (34 tools), rule tables in `review_rules.py`, the review stored in `analyses`, a review step in both skills. review fixtures (36 dev + 11 held-out, gold hashed before any rule; one documented gold amendment before the first run): dev, in-sample, precision 0.92 and recall 1.00 at strong_inference or above; held-out, its only run with the rules frozen: precision 0.79 (bar 0.8 not met), recall 18/18, must-say-unknown 2/2; 0.81 after seven later fixes (one from that run, six from reviewing Verinoda's own branch; no longer clean). Time with the graph loaded: 0.19-0.21 s median on the examples, 1.8 s median (5.4 s max) on the 380-file copy. Not built: findings as claims and critique on them, the entail predicate for a carried value, line-level coverage of changed lines, nested-loop and unbounded-append rules, value and parameter flow outside Python. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -1450,6 +1451,150 @@ test_experiments.py):
 Not changed: per-test outcomes (so `failing_tests_skipped` and the symptom judgement by test) exist for
 pytest only; other runners fall back to the coarse signature. A per-session reusable copy (7.4) is
 still not built.
+
+## 8. Change review (D35, 2026-09-25)
+
+### 8.1 Findings that drive the design
+
+- `verinoda map --view impact` seeds whole files, climbs `method` and `imports` edges and cuts its lists
+  silently (80 symbols, 40 files): on a one-function change of the 380-file Verinoda copy it listed 80+
+  symbols in 40 files; on forge_mod a tick handler reached 21 items through its class while the real caller,
+  a `Cls::method` ticker registration, is no edge at all. It says nothing about which definition changed or
+  what the change touches (a value written to the database, a removed check, a loop in a tick).
+- Nothing classified a change by concern, nothing linked a diff to the tests that reach it, and the skill had
+  no review step after an edit.
+
+### 8.2 Decisions
+
+- **Surfaces**: `verinoda review [PATH] [--base REF | --staged] [--target FILE[::Qual] ... --change
+  body|signature|remove] [--concerns ...] [--run-tests] [--observe] [--max-chars N] [--json]` and MCP
+  `change_review` (same arguments). Exit 0 = no finding at strong_inference or above and no unknown; 3 =
+  findings or unknowns to report; 1 error; 2 usage. The review is stored in `analyses` (`rev_...`,
+  `question = "review <base>..<mode> <hash>"`): no schema change.
+- **The diff**: the working tree (tracked files, and untracked ones only when they are source, config or
+  documents; binaries skipped and listed) or the index against a base resolved with `rev-parse --verify
+  --end-of-options` (a ref starting with `-` is refused), read through `treestate` (plumbing only). Planned
+  targets must be repository-relative paths inside the project. **Deviation**: a stale git index (a copied
+  checkout) makes git report every file as changed and the review compares each one by content - correct but
+  slow (11 s instead of 2 s on the 380-file copy); the review never refreshes the index (that would write
+  `.git/index`).
+- **Changed definitions**: `anchors.compute_facts` of both versions, compared per definition: `signature`,
+  `body`, `added`, `removed`; module statements (`module_statement`, named by the names they bind), changed
+  keys of config files (`config_key`, by line and key path), `file_only` without facts. A definition whose own
+  lines did not change (only a nested one) is not reported. **Deviation** found on the dev fixtures: for
+  grammars without a `body` field (Kotlin) the facts' signature hash covers the whole definition, so the text
+  before the body decides signature vs body.
+- **Dependents by change kind** over the last snapshot's graph, depth 3, never through `method` edges: body -
+  calls, references and construction (callers of the class run `__init__`); signature - also imports,
+  inheritance and uses; removal - every reference (depth 1). Each dependent carries its via-chain (relation,
+  line, EXTRACTED / INFERRED; lines in changed files re-found by name) and, for Python, whether it receives the
+  changed value (def-use per hop). The list is capped at 40 with the total and `dependents_truncated`; readers
+  of changed module-level bindings (Python names; `Class.CONSTANT` of a JVM class whose static initialiser
+  changed) are listed separately. The graph is not rebuilt: Python calls in changed functions are re-resolved
+  from the working tree's syntax tree; for other languages the graph's call edges are used and calls on changed
+  lines are matched to same-file definitions by name.
+- **Concern rules** (tables in `review_rules.py`, each hit with `derived_by`):
+  - persistence: a sink (`SINK_PATTERNS`, plus NBT saved-data rows) on a changed line; a changed call whose
+    callee reaches a write (SQL, ORM, file, key-value, saved data) within 2 hops, one finding per changed
+    function and kind; the changed function's value carried by its callers (Python def-use per hop: assignments
+    and transforming builtins carry it, containers, object fields and other calls do not) into a call whose
+    parameter reaches the callee's write statement. **Deviation** found on the dev fixtures (the
+    Verinoda copy): a value reaching a callee that only *calls* a sink produced findings for any string that
+    ended up in a record; the last hop must now reach the sink's own statement.
+  - security: operations on changed lines (Python calls bound through imports and aliases by the decision
+    guards' engine, `eval`/`exec`, `shell=True`, `verify=False`, unsafe `yaml.load`, SQL text built with
+    f-strings / `%` / `+` / `.format`; text rows for Java, JS, Go); exit guards removed or changed by syntax-tree
+    diff (Python `ast`, tree-sitter), where a guard is an `if` ending in raise / throw / break / continue or in a
+    return of a fixed value (**deviation** found on dev fixture O01: a branch returning a computed value is
+    logic, not a guard) - a guard whose condition moved to another changed or new function is `guard-moved`
+    (weak_inference); permission checks written as calls (`hasPermission`, `requires`, `withLevel`, ...) removed
+    or changed; a check function (`stillValid`, `is_*`, `validate*`...) made a constant return; security words
+    on changed lines (weak_inference). For Python operations, the parameter flow from an entry point's
+    parameter to the operation (def-use per hop, up to 3 callers) is attached.
+  - performance: a call in a loop whose callee reaches a sink (N+1), or a sink in the loop body, on changed
+    lines; with the loop bound when a `len(x) > N` guard is found in the function or in a check it calls before
+    the loop, else the unknown `loop_bound`; a loop added, or a loop condition changed (a removed counter bound
+    named), in a hot path: a method registered by `Owner::name` in a tick / render / chunk-load registration,
+    a tick-like override name, a NeoForge tick event handler, or a Python request handler.
+  - public_api: Python call sites bound to the changed function (imports, module attributes, `self`,
+    annotated receivers, the graph's edges) whose arguments no longer fit the new signature
+    (`statically_verified` when bound through an import or the module, a decorated definition at most
+    strong_inference); Java/Kotlin call sites (graph edges, or `Owner.name(` in files that import the owner's
+    package) whose argument count no longer fits, single-overload classes only; names removed but still
+    imported or used (a name the module still binds - an import rewritten - is not removed).
+  - config: environment reads on changed lines; names read on changed lines that are bound to an environment
+    read or live in a config module; JVM config values (`*Config.X`) and quoted keys in config calls or present
+    in the repository's config files; changed keys of config files with their readers (literal key search).
+  - entry_points: the changed symbol or a dependent (depth 3) that is an entry by the map's heuristics or by a
+    registration (client->server packets, commands, interaction callbacks, input overrides by name); strong
+    with a decorator, a registration or two reasons, else weak_inference; functions nested in functions are
+    never entries.
+  - config files: a changed config file (by name: `.env`, `*.toml`, `*.yml`, `*.ini`, `*.cfg`, `config.*`,
+    `.properties`) gives one change per changed key, an added or removed one a single change; other data files
+    (JSON that is not configuration, game data, text) are listed under `files`, not reviewed by concern.
+- **Status**: mechanical facts re-read from the current files are `statically_verified` (a call bound through
+  imports on a changed line, a guard in the base syntax tree and not in the working tree's, an arity mismatch
+  bound through an import); everything else is at most `strong_inference`, word heuristics `weak_inference`.
+  These are the review's grades in the claims vocabulary; the findings are not stored as claims
+  (**deviation**, 8.4). An empty concern says "no finding from rules: ..." with the rules that ran.
+- **Tests**: static reach (the tracer's selection rule; JUnit/GameTest methods by annotation), the tracer's
+  latest complete run (tests that reached each changed Python function, labelled run-scoped and with its
+  commit), `--observe` (runs the selected pytest tests under the tracer: reached, and selected-but-not-reaching
+  in a complete trace) and `--run-tests` (the selected pytest tests through `experiments.run`); symbols no test
+  reaches; `runtime_tests` unknown for Java/Kotlin (Gradle is not allowlisted).
+- **Unknowns** with a next step: `runtime_tests`, `loop_bound`, `method_reference` (callers only by text),
+  `no_callers`, `dynamic_callers`, `string_reference`, `graph_stale` (cited files changed since the snapshot),
+  `unsupported_file`, `target_not_found`.
+- **read_first**: changed spans (a long definition: the changed lines with context), first-hop call sites (+-3
+  lines), finding and evidence lines (+-1) by status, merged per file, packed into `--max-chars` (default
+  6,000); the rest goes to `budget.more` with its count.
+
+### 8.3 Measurements (docs/BENCHMARKS.md, Update 2026-09-25: change review)
+
+- review fixtures (`benchmarks/review_fixtures/`): 36 dev + 11 held-out changes on git copies of orders_app,
+  glow_mod, forge_mod and a clone of the 380-file Verinoda copy, gold written and hashed before any rule
+  (one amendment, before the first run, recorded in `MANIFEST.json`). The builder wrote the fixtures, the gold
+  and the rules: the dev numbers are in-sample (the rules were written knowing them), the held-out set only
+  guards against tuning on its answers.
+- Dev, rules as frozen (commit 3b73872): precision 66/72 = 0.92 and recall 62/62 at strong_inference or above;
+  every false positive is an entry point that does reach the change on a fixture whose gold listed no entry
+  points (G03, G05, G06). Changed symbols exact 36/36, must-say-unknown 9/9, static test reach 22/22, gold
+  dependents 19/19, gold locations inside `read_first` 62/62, silent truncation 0.
+- Held-out, its only run with the frozen rules: precision 23/29 = 0.79 (bar 0.8 not met), recall 18/18,
+  must-say-unknown 2/2, changed symbols exact 10/11 (HO4: two import statements the gold did not list). False
+  positives: 4 value flows of `snapshot.git`'s output into records and 1 entry point on HV1 (the gold says no
+  persistence), 1 import rewritten read as a removed name on HO4 - a bug, fixed after that run.
+- After the frozen run: the HO4 fix and six fixes found by reviewing Verinoda's own branch against main with the
+  tool (JSON data files read as config key by key, persistence through a callee counting reads, ungrouped
+  findings, a guard moved into a new helper reported as removed, nested functions as entry points, "signature"
+  as a security word). Held-out 22/27 = 0.81 (no longer clean for these rules), dev 65/71 = 0.92, recall
+  unchanged; the branch review (321 changed definitions) took 48 s, 85 s before the fixes.
+- Time per review with the graph loaded (the CLI's case, index refreshed as `git status` does): orders_app
+  0.19 s median, forge_mod 0.21 s, glow_mod 0.20 s, the 380-file copy 1.8 s median and 5.4 s max (bars 2 s /
+  6 s); a cold CLI process (Python start-up included) 0.66-0.95 s on the examples and 2.2-2.4 s on the copy.
+  With the graph kept in memory (MCP): 0.13-0.16 s and 0.8 s median.
+- Blast radius against `map --view impact` on the same diff: 67-100% fewer items on every dev fixture with
+  dependents (A1 = O01: 3 vs 11; A7 = F02: 0 vs 28, its caller being a registration reported as an unknown;
+  A8 = V01: 7 vs 80+, the view's list capped), gold dependents 19/19.
+- Gold locations inside `read_first`: 62/62 dev and 18/18 held-out, median 642 characters per dev fixture; the
+  baseline (the impact view plus the changed and affected files) covers the same files at a median of 11,530
+  characters and exceeds 6,000 on half of the dev fixtures.
+- A8 with `--run-tests`: 19 selected tests, `test_policy_rejects_arguments_that_leave_the_copy` among them; the
+  run failed (8 failed, 66 passed); the failures read in the log are the `..` cases the removed guard handled.
+
+### 8.4 Not done / limits
+
+- Findings are not stored as claims and critique does not run on them; no entail predicate grades a carried
+  value (the review's own def-use check does, Python only).
+- Which changed lines the tests execute (a LINE-event tracer option) is not built; `--observe` reports which
+  tests reach the changed functions, and `--run-tests` runs the selected tests without the tracer (pass/fail).
+- Nested loops over one collection and unbounded appends to module-level containers are not checked; value and
+  parameter flow exist for Python only; Java callers through method references are found by text (inference).
+- Entry and hot-path tables cover web decorators and handler names, NeoForge and Fabric registrations and
+  tick-like override names; other frameworks give silent misses (a concern without findings names the rules
+  that ran in `concerns_checked`).
+- The graph is the last snapshot's: a new caller in an unchanged file appears only after `verinoda update`.
+- No agent session with and without the review step has been measured.
 
 ## Sources
 

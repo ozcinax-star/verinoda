@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,78 @@ Sections: [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debu
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-25: change review (`verinoda review`, D35)
+
+Result files: `benchmarks/results/review-2026-09-25/` (its README lists the runs made while the rules were
+written and what each changed). Fixtures: `benchmarks/review_fixtures/` - 36 dev and 11 held-out changes on git
+copies of `orders_app`, `glow_mod`, `forge_mod` and a clone of a 380-file copy of Verinoda's repository, each with
+must-find, may-find and must-not-flag concerns (file:line), must-say-unknown items, test reach and the
+dependents a reviewer must see. The fixtures, the gold and the rules have one author (the builder); the gold was
+hashed before any rule existed. The dev numbers are in-sample; the held-out set was run once, with the rules
+frozen (commit 3b73872), and only guards against tuning on its answers.
+
+| split | precision (>= strong_inference) | recall (must-find) | must-say-unknown | changed symbols exact | gold dependents listed | gold lines in `read_first` |
+|---|---|---|---|---|---|---|
+| dev, frozen rules (in-sample) | 66/72 = 0.92 | 62/62 | 9/9 | 36/36 | 19/19 | 62/62 |
+| held-out, frozen rules (only run) | 23/29 = 0.79 | 18/18 | 2/2 | 10/11 | 3/3 | 18/18 |
+| held-out after the later fixes (no longer clean) | 22/27 = 0.81 | 18/18 | 2/2 | 10/11 | 3/3 | 18/18 |
+| dev after the later fixes (in-sample) | 65/71 = 0.92 | 62/62 | 9/9 | 36/36 | 19/19 | 62/62 |
+
+The later fixes: the HO4 bug below, and six found by running the review on Verinoda's own branch against
+main (a 321-definition diff): JSON data files were read as config files key by key (1,395 "changes"),
+persistence through a callee now counts writes only, one changed function's findings are grouped per sink
+kind, a guard moved into a new helper is `guard-moved` (weak) instead of removed, functions nested in
+functions are no entry points, and "signature" is no longer a security word. That branch review took 85 s
+before and 48 s after these fixes (with the test suite running on the same machine).
+
+Per concern (dev, frozen): persistence 10/10 precision, 8/8 recall; security 12/12, 12/12; performance 3/3, 3/3;
+public API 21/21, 21/21; config 5/5, 5/5; entry points 15/21, 13/13. Held-out (frozen): persistence 6/10, 3/3;
+security 6/6, 6/6; performance 2/2, 2/2; config 3/3, 2/2; entry points 6/7, 5/5; public API 0/1 (no must-find).
+Unknowns are 22% of the reported items on both splits (22 of 99 on dev, 11 of 49 on held-out); 5 dev and 9
+held-out findings are below strong_inference (word hits, moved guards, name-only entries).
+
+The false positives: on dev, six entry points that do reach the change (commands, a packet handler, a chunk
+event) on three glow_mod fixtures whose gold lists no entry points; on held-out, the output of `snapshot.git`
+carried into four stored records and one entry point on HV1 (its gold says "no persistence"), and an import
+statement rewritten to import more names read as a removed name on HO4 - a bug, fixed after that run. HO4's
+changed symbols also list two import statements the gold left out.
+
+**Time per review** (without `--run-tests` and without `update`; the copy's git index refreshed as `git
+status` would; median / max):
+
+| project | graph loaded (the CLI's case) | graph kept in memory (MCP) | cold CLI process |
+|---|---|---|---|
+| orders_app | 0.19 / 0.19 s | 0.13 / 0.15 s | 0.66-0.75 s |
+| forge_mod | 0.21 / 0.24 s | 0.16 / 0.18 s | 0.74-0.77 s |
+| glow_mod | 0.20 / 0.27 s | 0.14 / 0.19 s | 0.95 s |
+| 380-file Verinoda copy | 1.85 / 5.4 s | 0.78 / 1.3 s | 2.2-2.4 s |
+
+(dev, frozen rules; the cold CLI column from separate runs on the same copies.) The design's bars, 2 s on the
+examples and 6 s on the copy, hold. With a stale git index (a freshly copied checkout) git reports every file
+as changed and the review reads each one: 11 s on the copy; the review does not refresh the index itself, since
+that writes `.git/index`.
+
+**Blast radius** against `verinoda map --view impact` on the same diff: fewer items on every fixture with
+dependents - A1 (O01) 3 vs 11, A7 (F02) 0 vs 28 (the tick handler's caller is a method-reference registration,
+reported as an unknown), A8 (V01) 7 vs the view's capped 80 - with every gold dependent listed (19/19, 3/3).
+The review counts non-test dependents; the view also counts tests and files. One held-out fixture keeps more:
+HV1 (`snapshot.git`) has 61 dependents against the view's capped 80.
+
+**What to read**: every gold location lies inside the review's `read_first` (62/62 dev, 18/18 held-out) at a
+median of 642 characters per dev fixture (max 3,400; the budget is 6,000). The design's baseline, `map --view
+impact` plus reading the changed and affected files, also covers every gold file (62/62) but at a median of
+11,530 characters; 18 of the 36 dev fixtures exceed 6,000 characters that way, and on the Verinoda copy it is
+1.4-1.5 million characters (scratch measurement on the dev copies, not in the result files).
+
+**A8 with `--run-tests`** (`a8-run-tests.json`): 19 tests selected statically, among them
+`tests/test_experiments.py::test_policy_rejects_arguments_that_leave_the_copy`; the run failed (8 failed, 66
+passed, 30 s); the failures in the log are the `..` cases that the removed guard handled. A1 with `--observe`:
+the four tests that reach `apply_discount` at run time were reported as reached, and
+`test_empty_order_rejected` (statically selected) as selected but not reaching it.
+
+Not measured: an agent session with and without the review step; repositories of 2,000+ files; the precision of
+the word heuristics on their own; Java/Kotlin test runs (Gradle is not allowlisted).
 
 ## Update 2026-09-25: debug ledger (debugloops_v1)
 

@@ -1,0 +1,91 @@
+{
+ "note": "fixture V01 (design A8) reviewed with --run-tests on its copy, rules at 3b73872",
+ "changes": [
+  {
+   "file": "verinoda/experiments.py",
+   "symbol": "verinoda/experiments.py::path_escape",
+   "kind": "body",
+   "lines": "165-188",
+   "base_lines": "165-190"
+  }
+ ],
+ "security": [
+  {
+   "concern": "security",
+   "rule": "guard-removed",
+   "finding": "the exit guard `if depth < 0: <exit>` of path_escape (base line 186) is gone",
+   "status": "statically_verified",
+   "at": "verinoda/experiments.py:186",
+   "evidence_at": [
+    "verinoda/experiments.py:165"
+   ],
+   "basis": "the base version's syntax tree has it, the working tree's does not",
+   "derived_by": "review.guard_diff",
+   "for": "verinoda/experiments.py::path_escape",
+   "side": "base"
+  }
+ ],
+ "selected_tests": [
+  "tests/test_experiments.py::test_path_escape_is_lexical_and_os_independent",
+  "tests/test_experiments.py::test_policy_keeps_paths_inside_the_copy_allowlisted",
+  "tests/test_experiments.py::test_policy_rejects_arguments_that_leave_the_copy",
+  "tests/test_experiments.py::test_allowlisted_pytest_passes_in_a_copy_with_process_isolation",
+  "tests/test_experiments.py::test_audit_absolute_test_path_outside_the_project_is_refused",
+  "tests/test_experiments.py::test_classify",
+  "tests/test_experiments.py::test_classify_accepts_absolute_interpreter_paths_for_pytest_only",
+  "tests/test_experiments.py::test_container_run_is_named_and_killed_by_name_on_timeout",
+  "tests/test_experiments.py::test_experiment_attached_to_a_claim_supports_or_refutes_it",
+  "tests/test_experiments.py::test_guarantees_say_writes_are_not_confined_under_process_isolation",
+  "tests/test_experiments.py::test_inconclusive_run_only_qualifies_the_claim",
+  "tests/test_experiments.py::test_logs_stay_on_disk_and_only_a_summary_is_returned",
+  "tests/test_experiments.py::test_non_allowlisted_command_is_refused_without_container",
+  "tests/test_experiments.py::test_parent_secrets_are_not_visible_to_the_child",
+  "tests/test_experiments.py::test_plugins_env_extra_and_artifacts",
+  "tests/test_experiments.py::test_project_config_controls_the_allowlist",
+  "tests/test_experiments.py::test_project_venv_without_pytest_is_inconclusive_not_failed",
+  "tests/test_experiments.py::test_timeout_kills_the_process_tree_and_is_recorded",
+  "tests/test_safety.py::test_an_unrelated_passing_test_run_does_not_verify"
+ ],
+ "run": {
+  "experiment": "exp_9bca2cde25d5",
+  "outcome": "fail",
+  "summary": {
+   "exit_code": 1,
+   "timed_out": false,
+   "summary_lines": [
+    "8 failed, 66 passed in 30.21s"
+   ],
+   "relevant_lines": [
+    "        assert experiments.path_escape(\"a/b/../c\") is None",
+    ">       assert experiments.path_escape(\"a/../..\") and \"'..'\" in experiments.path_escape(\"a/../..\")",
+    "E       AssertionError: assert (None)",
+    "tests\\test_experiments.py:512: AssertionError",
+    ">       assert kind == \"risky\" and why in reason, reason",
+    "E       AssertionError: None",
+    "E       assert ('allowlisted' == 'risky'",
+    "tests\\test_experiments.py:492: AssertionError",
+    ">       assert kind == \"risky\" and why in reason, reason",
+    "E       AssertionError: None",
+    "E       assert ('allowlisted' == 'risky'",
+    "tests\\test_experiments.py:492: AssertionError",
+    ">       assert kind == \"risky\" and why in reason, reason",
+    "E       AssertionError: None",
+    "E       assert ('allowlisted' == 'risky'"
+   ],
+   "tail": [
+    "FAILED tests/test_experiments.py::test_policy_rejects_arguments_that_leave_the_copy[argv23-'..'] - AssertionError: None",
+    "assert ('allowlisted' == 'risky'",
+    "  ",
+    "  - risky",
+    "  + allowlisted)",
+    "FAILED tests/test_experiments.py::test_audit_absolute_test_path_outside_the_project_is_refused - Failed: DID NOT RAISE ExperimentRefused",
+    "8 failed, 66 passed in 30.21s",
+    ""
+   ],
+   "total_lines": 346
+  },
+  "tests": 19,
+  "tree": "6a190ff7c3fbb39f5ac72903b97d1311dbfca91a142d41d64904689cd3e74c2d"
+ },
+ "seconds": 40.187
+}
