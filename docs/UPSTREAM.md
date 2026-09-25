@@ -118,6 +118,25 @@ scan root folded into `_` parts, user name included.
   corpora no id carries the root, so they are unchanged (fresh-index A/B,
   2026-09-24: identical results).
 
+**Case-distinct ids.** The pipeline folds case into every id (`make_id`) and
+keeps colliding ids apart only across files, so two symbols of one file whose
+names differ only in case were one node: `class OrderService` and `export const
+orderService = new OrderService()` merged into a node with the class's kind and
+the const's label and line, and `new OrderService()` and `import { orderService }`
+both landed on it (senior evaluation, 2026-09-26).
+
+- **Where:** `verinoda.case_ids.split_case_collisions()`, run by
+  `verinoda.index._distinct_case_ids` for the length of a build on the output of
+  the pipeline's `extract()` and on the input of its `build_from_json()` (a
+  wrapper of the module attributes, as for the other build-time patches). No
+  vendored file changes.
+- **What it changes:** only such groups, and only in case-sensitive languages
+  (JS/TS, Python, Java, Kotlin, Go, Rust, C/C++, C#, Swift, Ruby, ...; not SQL,
+  Pascal, Fortran, PHP, Apex). The name that sorts first keeps the id; each other
+  gets `<id>_<6 hex of sha1(name)>`. Edges are moved by the line they were read
+  from (details in the module docstring); an update, which keeps the unchanged
+  files' nodes, routes a new edge into such a pair the same way.
+
 **No upstream graph.html.** `verinoda.index.build()` runs the pipeline with
 `GRAPHIFY_VIZ_NODE_LIMIT=0` (the upstream switch; `_without_upstream_html`)
 unless the variable is set, so no `graph.html` is written and the pipeline

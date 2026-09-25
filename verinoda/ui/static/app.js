@@ -510,8 +510,8 @@
   async function openByName(name) { // [[Name]]: the note of that name, else the best match
     let r;
     try { r = await api("/api/search?q=" + encodeURIComponent(name)); } catch (_) { return; }
-    const items = r.results || [], lower = name.toLowerCase().replace(/\(\)$/, "");
-    const hit = items.find((x) => x.title.toLowerCase().replace(/\(\)$/, "") === lower) || items[0];
+    const items = r.results || [], bare = (s) => String(s).replace(/\(\)$/, ""), want = bare(name);
+    const hit = items.find((x) => bare(x.title) === want) || items.find((x) => bare(x.title).toLowerCase() === want.toLowerCase()) || items[0];
     if (hit) location.hash = noteHref(hit.id);
   }
   function userNoteBox(n, u) {
@@ -1906,23 +1906,23 @@
   }
   let offRows = null;
   function offlineSearch(query) {
-    const q = query.trim().split(/\s+/).join(" ").toLowerCase().replace(/\(\)$/, "");
+    const raw = query.trim().split(/\s+/).join(" ").replace(/\(\)$/, ""), q = raw.toLowerCase();
     if (!q) return [];
     if (!offRows) { // a file's note and the symbols of its outline; a symbol opens the note of its file
       offRows = [];
       for (const n of Object.values(OFFLINE.notes)) {
-        const name = String(n.title).toLowerCase();
-        offRows.push({ id: n.id, title: n.title, kind: n.kind, file: n.file || "", name, own: name, path: String(n.file || "").toLowerCase(), test: !!n.test });
+        const name = String(n.title).toLowerCase(), cased = String(n.title).replace(/\(\)$/, "");
+        offRows.push({ id: n.id, title: n.title, kind: n.kind, file: n.file || "", name, own: name, cased, path: String(n.file || "").toLowerCase(), test: !!n.test });
         for (const o of n.outline || []) {
-          const nm = String(o.title).replace(/\(\)$/, "").toLowerCase();
-          offRows.push({ id: n.id, title: o.title, kind: o.kind, file: n.file || "", line: o.line, name: nm, own: nm.split(".").pop(), path: "", test: !!n.test });
+          const cased = String(o.title).replace(/\(\)$/, ""), nm = cased.toLowerCase();
+          offRows.push({ id: n.id, title: o.title, kind: o.kind, file: n.file || "", line: o.line, name: nm, own: nm.split(".").pop(), cased: cased.split(".").pop(), path: "", test: !!n.test });
         }
       }
     }
     const dotted = q.includes("."), out = [];
     for (const r of offRows) {
       let s = 0, why = "";
-      if (r.own === q || r.name === q) { s = 3; why = "name"; }
+      if (r.own === q || r.name === q) { s = r.cased === raw ? 3.5 : 3; why = "name"; } // the name with its case first
       else if (r.own.startsWith(q) || (dotted && r.name.startsWith(q))) { s = 2; why = "name starts with"; }
       else if (r.own.includes(q) || (dotted && r.name.includes(q))) { s = 1.5; why = "name contains"; }
       else if (r.path.includes(q)) { s = 1; why = "path"; }

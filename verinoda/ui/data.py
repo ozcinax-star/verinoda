@@ -583,6 +583,8 @@ class Snapshot:
         for own, title, fname, path, nid, pen, k in self._search_rows():
             if ql in (own, title, fname):
                 s, why = 3.0, "name"
+                if q == self.own_name(nid):   # `orderService` the const before the class OrderService
+                    s += 0.5
             elif own.startswith(ql) or ("." in ql and title.startswith(ql)):  # "Wisp.sp" -> Wisp.spawn()
                 s, why = 2.0, "name starts with"
             elif ql in own or (ql in title and "." in ql):
