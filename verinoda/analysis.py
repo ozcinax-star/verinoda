@@ -1957,7 +1957,26 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
         HANDLERS[sq["intent"]](ctx, sub)
     if ctx.run_tests and sq["intent"] != "tests" and "_h_tests" not in handler_names and (rel or subject_nodes):
         _h_tests(ctx, sub)
+    _choice_guard(ctx, sub)
     return _finish_sub(ctx, sub, out, "+".join(h[3:] for h in handler_names) or "location")
+
+
+def _choice_guard(ctx: _Ctx, sub: _Sub) -> None:
+    """A sub-question another intent answered whose words still ask for a choice (a plan written by a host
+    agent, or a clause the cue rules gave another intent): the facts stay as context, and the choice is not
+    judged met (docs/DESIGN.md D33). Words that only may ask for one get a note, never another verdict."""
+    text = sub.sq.get("text") or ""
+    if qp.asks_for_choice(text):
+        _h_decide(ctx, sub)
+        return
+    word = qp.may_ask_for_choice(text)
+    if word:
+        sub.flags["may_ask_for_choice"] = word
+        _unknown(ctx, sub, {"question": text,
+                            "why": f"the question may ask for a choice ('{word}'): the claims say what the code "
+                                   "does; which option to take is the user's decision, not a fact Verinoda found",
+                            "next_step": "if it is a choice: `verinoda decide brief \"<the question>\"` collects what "
+                                         "the code says about it, then ask the user"})
 
 
 def _finish_sub(ctx: _Ctx, sub: _Sub, out: dict, handler: str) -> dict:
@@ -2050,7 +2069,7 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
     flags = flags or {}
     if flags.get("blocked"):
         return "blocked_by_clarification"
-    if sq.get("intent") == "decide":
+    if sq.get("intent") == "decide" or flags.get("human_decision"):
         return qp.HUMAN_DECISION
     kind, min_status, kinds = _verdict_kinds(sq)
     live = [c for c in claims if c.get("kind") in kinds and c.get("status") in _RANK and c["status"] != "unknown"]

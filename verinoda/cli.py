@@ -358,7 +358,9 @@ def _r_update(r: dict) -> None:
     for w in r.get("warnings") or []:
         print(f"  warning: {w}")
     dec = r.get("decisions")
-    if dec:
+    if dec and dec.get("skipped"):
+        print(f"  decisions: {dec['skipped']}")
+    elif dec:
         print(f"  decisions: could not be checked ({dec['error']})" if dec.get("error") else
               f"  decisions: {dec['violations']} violated, {dec['possible']} possible, {dec['reviews']} review, "
               f"{dec['triggers']} trigger" + (" - `verinoda decide check` for the sites" if any(dec.values())
@@ -561,15 +563,16 @@ def cmd_update(args) -> int:
     st = _store(repo, create=True)
     res = workflow.update(st, repo)
     if not res.get("error"):
-        summary = _decision_summary(repo)
+        summary = _decision_summary(repo, noop=res.get("mode") == "noop")
         if summary:
             res["decisions"] = summary
     _emit(args, res, _r_update)
     return 1 if res.get("error") else 0
 
 
-def _decision_summary(repo: Path) -> dict | None:
-    """One line for `update`: what `decide check` would report now (None when there are no records)."""
+def _decision_summary(repo: Path, *, noop: bool = False) -> dict | None:
+    """One line for `update`: what `decide check` would report now (None when there are no records). On a
+    no-op update (no file changed) the check is not run again: the line says so."""
     try:
         from verinoda import decisions as dm
         from verinoda import guards, index
@@ -578,6 +581,9 @@ def _decision_summary(repo: Path) -> dict | None:
         recs = dm.load_all(repo)
         if not recs:
             return None
+        if noop:
+            return {"skipped": "no file changed since the last update, so not checked again "
+                               "(`verinoda decide check` checks now)"}
         res = guards.check(repo, graph=index.load(repo) if graph_path(repo).exists() else None, records=recs)
         return {k: len(res[k]) for k in ("violations", "possible", "reviews", "triggers")}
     except Exception as exc:  # noqa: BLE001 - the update itself succeeded; say why the check did not run
@@ -1000,7 +1006,7 @@ def _r_check(r: dict) -> None:
     for o in r.get("ok") or []:
         scope = ", ".join(f"{k} {v}" for k, v in (o.get("scope") or {}).items())
         print(f"ok {o['decision']} {o['guard']} {o['kind']} {o['what']}" + (f" ({scope})" if scope else ""))
-        for lim in (o.get("limits") or [])[:4]:
+        for lim in o.get("limits") or []:  # all of them: an ok is only as broad as its scope and limits
             print(f"     limit: {lim}")
     for u in r.get("unknown") or []:
         print(f"unknown {u['decision']} {u.get('guard') or ''}: {u['why']}")
@@ -1041,10 +1047,17 @@ def _r_brief(b: dict, indent: str = "") -> None:
             print(f"{indent}    external [{p['status']}] {p['url']}: {p.get('why')}")
         for a in o.get("agent_arguments") or []:
             print(f"{indent}    agent argument [weak_inference]: {a['text']}")
+    loose = b.get("not_tied_to_an_option") or {}
+    for p in loose.get("external") or []:
+        print(f"{indent}external, no option named [{p['status']}] {p['url']}: {p.get('why')}")
+    for a in loose.get("agent_arguments") or []:
+        print(f"{indent}agent argument, no option named [weak_inference]: {a['text']}")
     print(f"{indent}questions only the user can answer (ask them; record each with `verinoda decide answer`):")
     for q in b.get("questions_for_human") or []:
         print(f"{indent}  {q['id']}: {q['text_tr'] if tr else q['text_en']}")
         print(f"{indent}      because {q['asked_because']}; decides between {', '.join(q['discriminates'])}")
+        if q.get("partly_answered_by"):
+            print(f"{indent}      context from the code: {', '.join(q['partly_answered_by'])}")
     for q in b.get("answered_by_code") or []:
         print(f"{indent}  not asked ({q['kind']}): answered by {q.get('answered_by')}")
     if b.get("next_step") and not indent:
@@ -1095,8 +1108,11 @@ def cmd_decide(args) -> int:
     if args.decide_cmd == "check":
         try:
             return _decide_check(args, repo)
-        except dm.DecisionError as exc:
-            print(f"error: {exc}", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001 - exit 1 means VIOLATED: an error must never look like one
+            msg = str(exc) if isinstance(exc, dm.DecisionError) else f"{type(exc).__name__}: {exc}"
+            if getattr(args, "json", False):
+                print(json.dumps({"status": "error", "exit": 2, "error": msg[:600]}, ensure_ascii=False))
+            print(f"error: {msg}", file=sys.stderr)
             return 2
     if args.decide_cmd in ("brief", "answer"):
         from verinoda import decision_brief as dbr
@@ -1938,7 +1954,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="an external claim: the page (fetched as research.network allows) must contain TEXT "
                         "verbatim; repeatable")
     c.add_argument("--argument", action="append", metavar="TEXT",
-                   help="the agent's own argument, shown as weak_inference; repeatable")
+                   help="the agent's own argument, shown as weak_inference; 'OPTION: text' ties it to a named "
+                        "option, otherwise it is listed under no option; repeatable")
     c = add("answer", cmd_decide, "record the user's answer to one question of a brief (answered_by: user)",
             parent=dsub)
     c.add_argument("brief_id")

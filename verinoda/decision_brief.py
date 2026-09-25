@@ -12,14 +12,16 @@ A brief never recommends and has no score. It holds:
   project (evidence), the code a change would touch, constraints from installed metadata, and external
   claims only as quote-checked pins; the agent's own arguments are ``weak_inference``;
 * ``questions_for_human`` - at most five, in English and Turkish, each saying why it is asked and what
-  it would decide between; a question the code answers is never asked;
+  it would decide between; a file that bears on a question (a Procfile, a compose file with a database
+  image, a retention setting) is attached to it as ``partly_answered_by`` - the question is still asked,
+  because no rule here can show that a file answers what the human expects;
 * ``verdict`` - always ``human_decision_required``.
 
 Probes (each serves some decision kinds): P1 storage sinks and how concentrated they are, P2
 environment and configuration reads with their defaults, P3 declared dependencies (Python, npm, Go,
 Cargo, Gradle, Maven) and ``requires-python``, P4 decision documents, P5 deployment and CI files, P6
-concurrency signals and module-level shared state, P7 tests that pin the implementation, P8 churn from
-git, P9 numeric limits in configuration.
+concurrency signals and module-level shared state, P7 test code that names the store, P8 churn from
+git, P9 numeric settings in configuration. Comments and docstrings are never read as code.
 
 External facts: ``quotes`` (``{url, text}``) are fetched through :mod:`verinoda.research` as the
 project's ``research.network`` allows; a quote counts only if it occurs verbatim in the fetched text,
@@ -52,20 +54,24 @@ KIND_RX = {
     "boundary": re.compile(r"\b(module\w*|service\w*|layer\w*|split\w*|separat\w*|extract\w*|interface\w*|"
                            r"boundar\w*|client|server|package\w*|modul\w*|ayir\w*|katman\w*|servis\w*|istemci\w*)\b"),
 }
-# option name (folded) -> (kind, dependency names that make it present, Python modules that make it present)
+# option name (folded) -> (kind, dependency names that make it present, Python modules that make it present);
+# Maven group:artifact names cover JDBC drivers and Java clients
+_PG = ("psycopg", "psycopg2", "psycopg2-binary", "asyncpg", "pg8000", "org.postgresql:postgresql")
+_MONGO = ("pymongo", "motor", "org.mongodb:mongodb-driver-sync", "org.mongodb:mongodb-driver-core")
 KNOWN_OPTIONS: dict[str, tuple[str, tuple[str, ...], tuple[str, ...]]] = {
-    "sqlite": ("datastore", (), ("sqlite3", "aiosqlite")),  # in Python's standard library: nothing to declare
-    "postgresql": ("datastore", ("psycopg", "psycopg2", "psycopg2-binary", "asyncpg", "pg8000"),
-                   ("psycopg", "psycopg2", "asyncpg", "pg8000")),
-    "postgres": ("datastore", ("psycopg", "psycopg2", "psycopg2-binary", "asyncpg", "pg8000"),
-                 ("psycopg", "psycopg2", "asyncpg", "pg8000")),
-    "mysql": ("datastore", ("pymysql", "mysqlclient", "mysql-connector-python"), ("pymysql", "MySQLdb", "mysql")),
-    "mariadb": ("datastore", ("mariadb", "pymysql"), ("mariadb", "pymysql")),
-    "mongodb": ("datastore", ("pymongo", "motor"), ("pymongo", "motor")),
-    "mongo": ("datastore", ("pymongo", "motor"), ("pymongo", "motor")),
-    "redis": ("datastore", ("redis",), ("redis",)),
-    "duckdb": ("datastore", ("duckdb",), ("duckdb",)),
-    "dynamodb": ("datastore", ("boto3",), ("boto3",)),
+    # sqlite3 is in Python's standard library: nothing to declare for Python
+    "sqlite": ("datastore", ("org.xerial:sqlite-jdbc",), ("sqlite3", "aiosqlite")),
+    "postgresql": ("datastore", _PG, ("psycopg", "psycopg2", "asyncpg", "pg8000")),
+    "postgres": ("datastore", _PG, ("psycopg", "psycopg2", "asyncpg", "pg8000")),
+    "mysql": ("datastore", ("pymysql", "mysqlclient", "mysql-connector-python", "com.mysql:mysql-connector-j",
+                            "mysql:mysql-connector-java"), ("pymysql", "MySQLdb", "mysql")),
+    "mariadb": ("datastore", ("mariadb", "pymysql", "org.mariadb.jdbc:mariadb-java-client"), ("mariadb", "pymysql")),
+    "mongodb": ("datastore", _MONGO, ("pymongo", "motor")),
+    "mongo": ("datastore", _MONGO, ("pymongo", "motor")),
+    "redis": ("datastore", ("redis", "redis.clients:jedis", "io.lettuce:lettuce-core"), ("redis",)),
+    "duckdb": ("datastore", ("duckdb", "org.duckdb:duckdb_jdbc"), ("duckdb",)),
+    # boto3 is the whole AWS SDK: DynamoDB is present only where the code asks boto3 for it (OPTION_USE)
+    "dynamodb": ("datastore", (), ()),
     "sqlalchemy": ("dependency", ("sqlalchemy",), ("sqlalchemy",)),
     "django": ("dependency", ("django",), ("django",)),
     "kafka": ("dependency", ("kafka-python", "confluent-kafka", "aiokafka"), ("kafka", "confluent_kafka", "aiokafka")),
@@ -77,6 +83,8 @@ KNOWN_OPTIONS: dict[str, tuple[str, tuple[str, ...], tuple[str, ...]]] = {
     "toml": ("dependency", ("tomli", "toml"), ("tomllib", "tomli", "toml")),
     "yaml": ("dependency", ("pyyaml", "ruamel.yaml"), ("yaml", "ruamel")),
 }
+# code that makes an option present when no dependency or import can (an SDK that serves many services)
+OPTION_USE = {"dynamodb": re.compile(r"""\b(?:client|resource)\(\s*['"]dynamodb['"]""")}
 # Java/Kotlin packages that make an option present (and whose importers a change would touch)
 JVM_PREFIXES = {"neoforge": ("net.neoforged",), "fabric": ("net.fabricmc",), "forge": ("net.minecraftforge",),
                 "quilt": ("org.quiltmc",), "spring": ("org.springframework",), "kotlin": ("kotlin.",),
@@ -86,14 +94,19 @@ DISPLAY = {"sqlite": "SQLite", "postgresql": "PostgreSQL", "postgres": "PostgreS
            "dynamodb": "DynamoDB", "sqlalchemy": "SQLAlchemy", "django": "Django", "kafka": "Kafka",
            "rabbitmq": "RabbitMQ", "celery": "Celery", "fabric": "Fabric", "neoforge": "NeoForge", "kotlin": "Kotlin",
            "toml": "TOML", "yaml": "YAML"}
+# database drivers and ORMs (not general SDKs such as boto3, which serve many services besides a database)
 DRIVER_DEPS = ("psycopg", "psycopg2", "psycopg2-binary", "asyncpg", "pg8000", "pymysql", "mysqlclient",
                "mysql-connector-python", "mariadb", "pymongo", "motor", "redis", "sqlalchemy", "peewee", "tortoise-orm",
-               "django", "aiosqlite", "duckdb", "boto3", "org.xerial:sqlite-jdbc", "org.postgresql:postgresql",
-               "mysql:mysql-connector-java", "com.h2database:h2", "org.hibernate:hibernate-core")
-DEPLOY_GLOBS = ("Dockerfile", "Dockerfile.*", "*.dockerfile", "docker-compose*.yml", "docker-compose*.yaml",
-                "compose*.yml", "compose*.yaml", "Procfile", "k8s/**", "kubernetes/**", "helm/**", "charts/**",
-                "Chart.yaml", "*.tf", "fly.toml", "app.yaml", "render.yaml", "vercel.json", "netlify.toml",
-                "serverless.yml", ".github/workflows/*", ".gitlab-ci.yml", "Jenkinsfile", "azure-pipelines.yml",
+               "django", "aiosqlite", "duckdb", "org.xerial:sqlite-jdbc", "org.postgresql:postgresql",
+               "mysql:mysql-connector-java", "com.mysql:mysql-connector-j", "org.mariadb.jdbc:mariadb-java-client",
+               "org.mongodb:mongodb-driver-sync", "redis.clients:jedis", "io.lettuce:lettuce-core",
+               "com.h2database:h2", "org.hibernate:hibernate-core", "org.hibernate.orm:hibernate-core")
+DEPLOY_GLOBS = ("Dockerfile", "Dockerfile.*", "*.dockerfile", "Containerfile", "docker-compose*.yml",
+                "docker-compose*.yaml", "compose*.yml", "compose*.yaml", "Procfile", "k8s/**", "kubernetes/**",
+                "helm/**", "charts/**", "Chart.yaml", "skaffold.yaml", "*.tf", "*.nomad", "fly.toml", "app.yaml",
+                "app.json", "render.yaml", "vercel.json", "netlify.toml", "serverless.yml", "serverless.yaml",
+                "cloudbuild.yaml", "buildspec.yml", ".github/workflows/*", ".gitlab-ci.yml", ".travis.yml",
+                "bitbucket-pipelines.yml", ".drone.yml", "appveyor.yml", "Jenkinsfile", "azure-pipelines.yml",
                 ".circleci/config.yml")
 CONCURRENCY_MODULES = ("threading", "asyncio", "multiprocessing", "concurrent.futures", "gevent", "trio", "anyio")
 SERVER_DEPS = ("flask", "fastapi", "django", "gunicorn", "uvicorn", "aiohttp", "tornado", "starlette", "sanic",
@@ -142,9 +155,15 @@ def _ev(repo: Path, rel: str, a: int, b: int | None = None, *, needle: str, sour
 def recheck(repo: Path, ev: dict) -> bool:
     """Does an evidence item of a brief still hold (its lines exist and carry its needle)?"""
     loc = ev.get("locator") or ""
+    if ev.get("source_type") == "git_history":  # the commit it cites must exist in the repository
+        from verinoda.snapshot import git
+
+        sha = str(ev.get("excerpt") or "")
+        return bool(re.fullmatch(r"[0-9a-f]{7,64}", sha)) and \
+            git(Path(repo), "cat-file", "-e", f"{sha}^{{commit}}") is not None
     m = re.match(r"^(.+?):(\d+)(?:-(\d+))?$", loc)
     if not m or not ev.get("needle"):
-        return ev.get("source_type") == "git_history"
+        return False
     return _ev(repo, m.group(1), int(m.group(2)), int(m.group(3) or m.group(2)), needle=ev["needle"]) is not None
 
 
@@ -178,11 +197,98 @@ def options_from_question(question: str) -> list[str]:
     return out
 
 
+def _set_once(fn: ast.AST, name: str) -> int | None:
+    """The line of the ``if <name> is None`` / ``if not <name>`` test that guards every assignment of the
+    module-level ``name`` in ``fn`` (the instance is created once and then shared); None when an
+    assignment runs unguarded."""
+    guards: list[int] = []
+
+    def unset_test(test: ast.AST) -> bool:
+        if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+            return isinstance(test.operand, ast.Name) and test.operand.id == name
+        return (isinstance(test, ast.Compare) and isinstance(test.left, ast.Name) and test.left.id == name
+                and len(test.ops) == 1 and isinstance(test.ops[0], ast.Is)
+                and isinstance(test.comparators[0], ast.Constant) and test.comparators[0].value is None)
+
+    def visit(node: ast.AST, guarded_at: int | None) -> bool:
+        """False when an assignment of ``name`` runs outside such a test."""
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+                continue
+            at = guarded_at
+            if isinstance(child, ast.If) and unset_test(child.test):
+                at = child.lineno
+                for s in child.orelse:  # the else branch runs when it is already set
+                    if not _assigns(s, name, guarded_at, guards) or not visit(s, guarded_at):
+                        return False
+                for s in child.body:
+                    if not visit(s, at) or not _assigns(s, name, at, guards):
+                        return False
+                continue
+            if not _assigns(child, name, at, guards) or not visit(child, at):
+                return False
+        return True
+
+    ok = visit(fn, None)
+    return guards[0] if ok and guards else None
+
+
+def _assigns(node: ast.AST, name: str, guarded_at: int | None, seen: list[int]) -> bool:
+    """False when ``node`` assigns ``name`` with no guard around it; records the guard line otherwise."""
+    targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(
+        node, (ast.AnnAssign, ast.AugAssign)) else []
+    if any(isinstance(t, ast.Name) and t.id == name for t in targets):
+        if guarded_at is None:
+            return False
+        seen.append(guarded_at)
+    return True
+
+
+_DECISION_HEADING = re.compile(r"(?i)\bdecision\b|\bkarar\b|\bchosen option\b")
+_DECISION_VERB = re.compile(r"(?i)\bwe (?:will|shall|decided|decide|chose|choose|use|keep|persist|store|adopt|"
+                            r"go with)\b|\b(?:decided|chose) to\b|\bis chosen\b|\bchosen option\b|\bkarar verdik\b")
+_REASON_MARK = re.compile(r"(?i)\b(?:chosen for|so that|in order to|to keep|reason:?)\s+([^.;]+)")
+
+
+def _decision_reason(lines: list[str], status_i: int | None) -> dict | None:
+    """The reason a decision document gives, read by rules from the paragraph that states the decision
+    (under a Decision heading, or a paragraph with "we will / we use / we decided ..."): its first "chosen
+    for / so that / in order to / to keep" clause, else its first "because" clause. A context paragraph
+    ("Orders were lost because ...") states a problem, not the reason: it is never used."""
+    paras: list[tuple[str, list[int]]] = []
+    heading, cur = "", []
+    for i, ln in enumerate(lines, 1):
+        s = ln.strip()
+        if s.startswith("#") or not s or i == status_i:
+            if cur:
+                paras.append((heading, cur))
+                cur = []
+            if s.startswith("#"):
+                heading = s.lstrip("#").strip()
+            continue
+        cur.append(i)
+    if cur:
+        paras.append((heading, cur))
+
+    def text(p: list[int]) -> str:
+        return " ".join(lines[i - 1].strip() for i in p)
+
+    stated = [p for h, p in paras if _DECISION_HEADING.search(h)] or \
+        [p for h, p in paras if _DECISION_VERB.search(text(p)) and not re.search(r"(?i)\bcontext\b|\bbaglam", h)]
+    for rx in (_REASON_MARK, re.compile(r"(?i)\bbecause\s+([^.;]+)")):
+        for p in stated:
+            m = rx.search(text(p))
+            if m:
+                return {"reason": m.group(0).strip(), "reason_at": f"{p[0]}-{p[-1]}" if len(p) > 1 else str(p[0]),
+                        "reason_derived_by": "rules: the first 'chosen for / so that / in order to / to keep' "
+                                             "(else 'because') clause of the paragraph that states the decision"}
+    return None
+
+
 # -- probes ------------------------------------------------------------------------------------------
 
 class _Probe:
     def __init__(self, repo: Path, graph=None):
-        from verinoda.architecture_map import is_test_file
         from verinoda.snapshot import list_files
 
         self.repo = Path(repo).resolve()
@@ -192,18 +298,32 @@ class _Probe:
 
         self.guards = guards
         roots = guards._excluded_roots(self.repo)
-        self.product = [f for f in self.files if f.endswith(guards.CODE_SUFFIXES) and not is_test_file(f)
-                        and not f.startswith(".verinoda/") and not any(f == r or f.startswith(r + "/") for r in roots)]
-        self.tests = [f for f in self.files if is_test_file(f) and f.endswith(guards.CODE_SUFFIXES)]
+
+        def in_scope(f: str) -> bool:  # not Verinoda's own folder, a reference tree or a detected copy
+            return f.endswith(guards.CODE_SUFFIXES) and not f.startswith(".verinoda/") and \
+                not any(f == r or f.startswith(r + "/") for r in roots)
+
+        self.product = [f for f in self.files if in_scope(f) and not guards.is_test_file(f)]
+        self.tests = [f for f in self.files if in_scope(f) and guards.is_test_file(f)]
+        self.python = any(f.endswith((".py", ".pyi")) for f in self.product)
         self.forces: list[dict] = []
         self.absences: list[dict] = []
         self.facts: dict = {}
         self._lines: dict[str, list[str]] = {}
+        self._masked: dict[tuple[str, bool], list[str]] = {}
 
     def lines(self, rel: str) -> list[str]:
         if rel not in self._lines:
             self._lines[rel] = _read_lines(self.repo, rel)
         return self._lines[rel]
+
+    def code_lines(self, rel: str, *, keep_strings: bool) -> list[str]:
+        """The file's lines with comments removed (and string literals too, unless ``keep_strings``)."""
+        key = (rel, keep_strings)
+        if key not in self._masked:  # both masks from one tokenize pass
+            code, with_strings = self.guards.code_texts("\n".join(self.lines(rel)), PurePosixPath(rel).suffix)
+            self._masked[(rel, False)], self._masked[(rel, True)] = code.split("\n"), with_strings.split("\n")
+        return self._masked[key]
 
     def force(self, probe: str, fact: str, evidence: list[dict | None], *, status: str = "statically_verified",
               serves: tuple[str, ...] = KINDS, **extra) -> dict | None:
@@ -243,24 +363,35 @@ class _Probe:
                              + (f" (in {sym})" if sym else ""),
                        [_ev(self.repo, rel, line, needle=re.escape(name.rpartition('.')[2]))],
                        serves=("datastore", "scaling", "dependency"))
-        sinks: list[tuple[str, int, str]] = []
+        # the connections the engine bound (any language it checks: Python, Java/Kotlin JDBC) are sinks too,
+        # so an absence below can never contradict a connection force above
+        found: dict[tuple[str, int], tuple[str, int, str, str]] = {}
+        for rel, line, why in conns:
+            call = re.search(r"call to ([\w.]+)", why)
+            found[(rel, line)] = (rel, line, "db-connection",
+                                  re.escape((call.group(1) if call else "connect").rpartition(".")[2]))
         any_sink = re.compile("|".join(f"(?:{rx.pattern})" for rx, _ in SINK_PATTERNS), re.I)
         for rel in self.product:
             if not any_sink.search("\n".join(self.lines(rel))):
                 continue
-            for i, ln in enumerate(self.lines(rel), 1):
+            # a comment or a docstring is not a sink; a connection call is matched on code without strings,
+            # SQL, file modes and key-value writes on code that keeps its string literals
+            code = self.code_lines(rel, keep_strings=False)
+            with_strings = self.code_lines(rel, keep_strings=True)
+            for i in range(min(len(code), len(with_strings))):
                 for rx, kind in SINK_PATTERNS:
-                    if rx.search(ln):
-                        sinks.append((rel, i, kind))
+                    if rx.search(code[i] if kind == "db-connection" else with_strings[i]):
+                        found.setdefault((rel, i + 1), (rel, i + 1, kind, rx.pattern))
                         break
+        ordered = sorted(found.values(), key=lambda s: (s[0], s[1]))
+        sinks = [(rel, i, kind) for rel, i, kind, _ in ordered]
         self.facts["sinks"] = sinks
         self.facts["connections"] = conns
         files = sorted({s[0] for s in sinks})
         pats = [kind for _rx, kind in SINK_PATTERNS]
         if sinks:
             kinds = sorted({s[2] for s in sinks})
-            evs = [_ev(self.repo, rel, i, needle=next(rx.pattern for rx, k in SINK_PATTERNS if k == kind))
-                   for rel, i, kind in sinks[:8]]
+            evs = [_ev(self.repo, rel, i, needle=needle) for rel, i, _kind, needle in ordered[:8]]
             where = files[0] if len(files) == 1 else f"{len(files)} files ({', '.join(files[:4])})"
             self.force("P1", f"all {len(sinks)} storage sink line(s) found in the product code are in "
                              f"{'one file: ' if len(files) == 1 else ''}{where} (kinds: {', '.join(kinds)})",
@@ -268,7 +399,9 @@ class _Probe:
                        f"{len(self.product)} product code file(s), tests excluded")
         else:
             self.absence("P1", "no storage sink (database connection, SQL, ORM write, file write, key-value store) "
-                               "in the product code", pats, f"{len(self.product)} product code file(s), tests excluded")
+                               "in the product code", pats,
+                         f"{len(self.product)} product code file(s), tests excluded; comments and docstrings are "
+                         "not read; connection calls the engine binds (Python, Java/Kotlin JDBC) included")
 
     # P2 / P9 ---------------------------------------------------------------------------------------
     def config(self, kinds: list[str]) -> None:
@@ -276,7 +409,10 @@ class _Probe:
 
         reads = []
         for rel in self.product:
-            for i, ln in enumerate(self.lines(rel), 1):
+            text = "\n".join(self.lines(rel))
+            if not any(rx.search(text) for rx, _lang in ENV_PATTERNS):
+                continue
+            for i, ln in enumerate(self.code_lines(rel, keep_strings=True), 1):  # not in a comment
                 for rx, _lang in ENV_PATTERNS:
                     for m in rx.finditer(ln):
                         d = DEFAULT_RX.search(ln)
@@ -292,7 +428,9 @@ class _Probe:
                        [_ev(self.repo, rel, i, needle=re.escape(var) + (".*" + re.escape(default) if default else ""))],
                        serves=("datastore", "scaling", "dependency"))
         for var, rel, i, default in numeric[:3]:
-            self.force("P9", f"numeric limit {var} (default {default.strip(chr(34) + chr(39))}) at {rel}:{i}",
+            # a limit only when its name says so (MAX, LIMIT, POOL ...): a price threshold is just a setting
+            what = "numeric limit" if KIND_ENV["scaling"].search(var) else "numeric setting"
+            self.force("P9", f"{what} {var} (default {default.strip(chr(34) + chr(39))}) at {rel}:{i}",
                        [_ev(self.repo, rel, i, needle=re.escape(var))], serves=("scaling", "datastore", "other"))
         if not reads:
             self.absence("P2", "no environment variable read in the product code",
@@ -300,7 +438,9 @@ class _Probe:
 
     # P3 -----------------------------------------------------------------------------------------------
     def dependencies(self, kinds: list[str]) -> None:
-        deps = self.guards.declared_dependencies(self.repo)
+        deps = self.guards.declared_dependencies(self.repo, self.files)
+        # a build file the root build does not include is not stated as the project's own dependency
+        deps = {**deps, "items": [it for it in deps.get("items") or [] if it.get("build") != "other"]}
         self.facts["deps"] = deps
         manifests = deps.get("manifests") or []
         items = deps.get("items") or []
@@ -406,10 +546,9 @@ class _Probe:
                             _ev(self.repo, rel, status_i, needle=r"(?i)status", source_type="design_doc")
                             if status_i else None],
                            status="primary_source_verified", serves=KINDS, doc=rel)
-                reason = re.search(r"(?i)\b(?:chosen for|because|so that|in order to|to keep|reason:?)\s+([^.;]+)",
-                                   excerpt)
-                if reason:
-                    item["reason"] = reason.group(0).strip()
+            reason = _decision_reason(lines, status_i)
+            if reason:
+                item.update({**reason, "reason_at": f"{rel}:{reason['reason_at']}"})
         for d in own:
             item = {"doc": d.path.resolve().relative_to(self.repo).as_posix() if d.path else None, "record": d.id,
                     "status": d.status, "chosen": d.chosen,
@@ -447,10 +586,10 @@ class _Probe:
                                                                           source_type="config")],
                            serves=("scaling", "datastore", "other"))
         else:
-            self.absence("P5", "no deployment or CI file in the repository (no Dockerfile, compose file, Procfile, "
-                               "Kubernetes/Helm, Terraform, platform or CI workflow file)", list(DEPLOY_GLOBS),
-                         "the repository's files (git ls-files, tracked and untracked); deployment may be "
-                         "configured elsewhere")
+            self.absence("P5", "no file in the repository matches a deployment or CI file name searched for "
+                               "(Dockerfile, compose, Procfile, Kubernetes/Helm, Terraform, platform and CI files)",
+                         list(DEPLOY_GLOBS), "the repository's files (git ls-files, tracked and untracked); a file "
+                         "under another name, or deployment configured elsewhere, is not seen")
 
     # P6 -----------------------------------------------------------------------------------------------
     def concurrency(self) -> None:
@@ -488,12 +627,20 @@ class _Probe:
                     for name in g.names:
                         if name in module_names:
                             a, b = fn.lineno, fn.end_lineno or fn.lineno
+                            evs = [_ev(self.repo, rel, module_names[name], needle=rf"^\s*{re.escape(name)}\s*="),
+                                   _ev(self.repo, rel, a, b, needle=rf"global\s+{re.escape(name)}")]
+                            guard = _set_once(fn, name)
+                            if guard is None:  # assigned on every call: nothing says the instance is shared
+                                self.force("P6", f"{rel}: {fn.name}() assigns the module-level `{name}` (line "
+                                                 f"{module_names[name]}) through `global {name}` (lines {a}-{b})",
+                                           evs, serves=("scaling", "datastore", "boundary"))
+                                continue
                             self.force("P6", f"{rel} keeps one module-level `{name}` (line {module_names[name]}) that "
-                                             f"{fn.name}() sets through `global {name}` (lines {a}-{b}): every caller "
-                                             "in the process shares one instance",
-                                       [_ev(self.repo, rel, module_names[name], needle=rf"^\s*{re.escape(name)}\s*="),
-                                        _ev(self.repo, rel, a, b, needle=rf"global\s+{re.escape(name)}")],
-                                       serves=("scaling", "datastore", "boundary"))
+                                             f"{fn.name}() sets through `global {name}` only while it is unset "
+                                             f"(line {guard}): the callers in one process share that instance",
+                                       [*evs, _ev(self.repo, rel, guard, needle=re.escape(name))],
+                                       status="strong_inference", serves=("scaling", "datastore", "boundary"),
+                                       shares=True)
         self.facts["concurrency"] = conc
         for rel, line, what, needle in conc[:3]:
             self.force("P6", f"concurrency in the product code: {what} at {rel}:{line}",
@@ -505,7 +652,8 @@ class _Probe:
                        serves=("scaling",))
         if not conc and not servers:
             self.absence("P6", "no threading, asyncio, multiprocessing or concurrent.futures import and no async def "
-                               "in the product code, and no server framework among the declared dependencies",
+                               "in the product's Python code, and no server framework among the declared "
+                               "dependencies",
                          [*CONCURRENCY_MODULES, "async def", *SERVER_DEPS],
                          f"{sum(f.endswith('.py') for f in self.product)} product .py file(s); other languages "
                          "are not inspected for concurrency")
@@ -513,8 +661,10 @@ class _Probe:
     # P7 -----------------------------------------------------------------------------------------------
     def tests_pinning(self) -> None:
         pins = []
-        for rel in self.tests:
-            for i, ln in enumerate(self.lines(rel), 1):
+        for rel in self.tests:  # reference trees and detected copies are left out, as for the product code
+            if not TEST_PIN_RX.search("\n".join(self.lines(rel))):
+                continue
+            for i, ln in enumerate(self.code_lines(rel, keep_strings=True), 1):  # a comment pins nothing
                 m = TEST_PIN_RX.search(ln)
                 if m:
                     pins.append((rel, i, m.group(0)))
@@ -525,7 +675,7 @@ class _Probe:
                 groups.setdefault(tok.strip("'\""), []).append((rel, i))
             for tok, sites in list(groups.items())[:3]:
                 at = ", ".join(f"{r}:{i}" for r, i in sites[:6])
-                self.force("P7", f"tests pin the implementation: {tok!r} at {at}",
+                self.force("P7", f"test code names {tok!r} (outside comments and docstrings) at {at}",
                            [_ev(self.repo, r, i, needle=re.escape(tok)) for r, i in sites[:6]],
                            serves=("datastore", "dependency"))
 
@@ -534,17 +684,22 @@ class _Probe:
         from verinoda.snapshot import git
 
         files = sorted({s[0] for s in self.facts.get("sinks") or []})[:3]
+        recent = git(self.repo, "rev-list", "--max-count=50", "HEAD")
+        if recent is None:
+            return
+        window = [ln.strip() for ln in recent.split("\n") if ln.strip()]  # the last (up to) 50 commits
         for rel in files:
-            out = git(self.repo, "log", "-n", "50", "--format=%H", "--", rel)
+            if rel.startswith("-"):  # from the file list; never an option
+                continue
+            out = git(self.repo, "rev-list", "--max-count=50", "HEAD", "--", rel)
             if out is None:
                 return
-            shas = [ln for ln in out.split("\n") if ln.strip()]
-            total = git(self.repo, "rev-list", "--count", "--max-count=50", "HEAD")
-            if shas:
-                self.force("P8", f"{rel} changed in {len(shas)} of the last {(total or '').strip() or '?'} commit(s)",
-                           [{"locator": f"git log -n 50 -- {rel}", "source_type": "git_history",
-                             "excerpt": shas[0][:12]}], status="primary_source_verified",
-                           serves=("datastore", "boundary", "other"))
+            touched = [s for s in (ln.strip() for ln in out.split("\n")) if s in set(window)]
+            self.force("P8", f"{rel} changed in {len(touched)} of the last {len(window)} commit(s)",
+                       [{"locator": f"git rev-list --max-count=50 HEAD -- {rel}", "source_type": "git_history",
+                         # the last commit that touched it in the window, else the commit the window ends at
+                         "excerpt": (touched[0] if touched else window[0])[:12]}],
+                       status="primary_source_verified", serves=("datastore", "boundary", "other"))
 
 
 # -- options ---------------------------------------------------------------------------------------------
@@ -591,6 +746,8 @@ def _present(pb: _Probe, name: str) -> tuple[bool | None, list[dict]]:
                 evs.append(e)
     for rel, i, what in importers(pb, key)[:3]:
         evs.append(_ev(pb.repo, rel, i, needle=re.escape(what)))
+    for rel, i in used_by_code(pb, key)[:3]:
+        evs.append(_ev(pb.repo, rel, i, needle=OPTION_USE[key].pattern))
     if key == "kotlin":
         kt = [f for f in pb.product if f.endswith((".kt", ".kts"))]
         if kt:
@@ -599,6 +756,18 @@ def _present(pb: _Probe, name: str) -> tuple[bool | None, list[dict]]:
     if evs:
         return True, evs
     return (False if known or key in JVM_PREFIXES else None), []
+
+
+def used_by_code(pb: _Probe, key: str) -> list[tuple[str, int]]:
+    """``(file, line)`` where product code asks an SDK for the option (``boto3.client("dynamodb")``)."""
+    rx = OPTION_USE.get(key)
+    if rx is None:
+        return []
+    out = []
+    for rel in pb.product:
+        if rx.search("\n".join(pb.lines(rel))):
+            out += [(rel, i) for i, ln in enumerate(pb.code_lines(rel, keep_strings=True), 1) if rx.search(ln)]
+    return out
 
 
 def importers(pb: _Probe, key: str, limit: int = 200) -> list[tuple[str, int, str]]:
@@ -699,48 +868,63 @@ def questions(pb: _Probe, kinds: list[str], options: list[str], decisions: list[
     opts = options or ["the options"]
     cands: list[dict] = []
     answered: list[dict] = []
-    shared = [f for f in pb.forces if f["probe"] == "P6" and "module-level" in f["fact"]]
+    # No rule here can show that a file answers one of these questions (a Procfile does not say how many
+    # processes will write at the expected growth; a compose file does not say where production runs), so a
+    # file that bears on a question is attached to it as context and the question is still asked.
+    shared = [f for f in pb.forces if f["probe"] == "P6" and f.get("shares")]
     deploy = pb.facts.get("deploy") or []
     if "datastore" in kinds or "scaling" in kinds:
         conc = pb.facts.get("concurrency") or []
-        because = ("concurrency is not in the code: " + (f"{len(conc)} concurrency site(s) found"
-                   if conc else "no threading/asyncio import found") +
-                   (f"; {shared[0]['evidence'][0]['locator']} shares one instance per process" if shared else ""))
+        because = ("how many writers you expect is not in the code" +
+                   (f" (context: {len(conc)} concurrency site(s) in the product code, e.g. {conc[0][0]}:{conc[0][1]})"
+                    if conc else "") +
+                   (f"; {shared[0]['evidence'][0]['locator']} keeps one instance per process" if shared else ""))
         workers = [f for f in deploy if re.search(r"gunicorn|uvicorn|Procfile", f, re.I)]
-        q = _q("q1", "How many processes or servers will write at the same time, now and at the growth you expect?",
-               "Şu an ve beklediğiniz büyümede aynı anda kaç süreç ya da sunucu yazacak?", because, opts,
-               kind="concurrency", needs="concurrent writers")
-        (answered if workers else cands).append({**q, **({"answered_by": workers[0]} if workers else {})})
-        cands.append(_q("q2", "How many records per day do you expect, and how long must they be kept?",
-                        "Günde kaç kayıt bekliyorsunuz ve ne kadar süre saklanmaları gerekiyor?",
-                        "data volume and retention are not in the code (no load model)", opts, kind="volume",
-                        needs="volume and retention"))
+        cands.append({**_q("q1", "How many processes or servers will write at the same time, now and at the growth "
+                                 "you expect?",
+                           "Şu an ve beklediğiniz büyümede aynı anda kaç süreç ya da sunucu yazacak?", because, opts,
+                           kind="concurrency", needs="concurrent writers"),
+                      **({"partly_answered_by": workers[:3]} if workers else {})})
+        keep = [e for e in pb.facts.get("env") or [] if re.search(r"RETENTION|TTL|EXPIR|KEEP|PURGE|DAYS", e[0])]
+        cands.append({**_q("q2", "How many records per day do you expect, and how long must they be kept?",
+                           "Günde kaç kayıt bekliyorsunuz ve ne kadar süre saklanmaları gerekiyor?",
+                           "the volume you expect is not in the code (no load model)" +
+                           (f"; {keep[0][0]} defaults to {keep[0][3]} at {keep[0][1]}:{keep[0][2]}, the retention "
+                            "you need is yours" if keep and keep[0][3] else "; the retention you need is yours"),
+                           opts, kind="volume", needs="volume and retention"),
+                      **({"partly_answered_by": [f"{e[1]}:{e[2]}" for e in keep[:3]]} if keep else {})})
         db_service = []
         for f in deploy:
             if re.search(r"compose|\.tf$|helm|k8s|kubernetes", f, re.I):
                 text = "\n".join(_read_lines(pb.repo, f))
-                if re.search(r"postgres|mysql|mariadb|mongo|redis|rds|cloudsql", text, re.I):
+                # a database image or a managed-database resource, not a word inside another word ("records")
+                if re.search(r"(?im)^\s*image:\s*['\"]?[\w./-]*\b(postgres|postgis|mysql|mariadb|mongo|redis)\b"
+                             r"|\bresource\s+\"(aws_db_instance|aws_rds_cluster|google_sql_database_instance|"
+                             r"azurerm_(postgresql|mysql)_\w+)\"", text):
                     db_service.append(f)
-        q = _q("q3", "Where will it run, and is a managed database service available there?",
-               "Nerede çalışacak ve orada yönetilen bir veritabanı hizmeti var mı?",
-               "no deployment file in the repository" if not deploy else
-               f"deployment files ({', '.join(deploy[:3])}) name no database service", opts, kind="hosting",
-               needs="hosting")
-        (answered if db_service else cands).append({**q, **({"answered_by": db_service[0]} if db_service else {})})
+        cands.append({**_q("q3", "Where will it run, and is a managed database service available there?",
+                           "Nerede çalışacak ve orada yönetilen bir veritabanı hizmeti var mı?",
+                           "no file matching the deployment file names searched for" if not deploy else
+                           f"deployment files ({', '.join(deploy[:3])}) " +
+                           (f"name a database service ({', '.join(db_service[:2])}), not where production runs"
+                            if db_service else "name no database image or managed database"),
+                           opts, kind="hosting", needs="hosting"),
+                      **({"partly_answered_by": db_service[:3]} if db_service else {})})
         migrations = [f for f in pb.files if re.search(r"(^|/)(alembic\.ini|migrations?/|flyway|liquibase)", f)]
-        q = _q("q4", "Who will run backups and schema migrations, and how?",
-               "Yedekleri ve şema geçişlerini kim, nasıl yapacak?",
-               "no migration tool or backup script in the repository" if not migrations else
-               f"migrations exist ({migrations[0]}) but who runs them is not in the code", opts, kind="operations",
-               needs="operations")
-        cands.append(q)
+        cands.append(_q("q4", "Who will run backups and schema migrations, and how?",
+                        "Yedekleri ve şema geçişlerini kim, nasıl yapacak?",
+                        "no file matching alembic.ini, migrations/, flyway or liquibase (migrations written in the "
+                        "code itself are not searched for); who runs backups is not in the code" if not migrations
+                        else f"migrations exist ({migrations[0]}) but who runs them is not in the code", opts,
+                        kind="operations", needs="operations"))
         for d in decisions:
             if d.get("reason"):
                 num = re.match(r"^(?:adr[-_]?)?(\d{1,6})\b", PurePosixPath(d["doc"]).name, re.I)
                 ident = d.get("record") or (f"ADR-{int(num.group(1)):04d}" if num else PurePosixPath(d["doc"]).stem)
                 cands.append(_q("q5", f"Is {ident}'s reason (\"{d['reason']}\") still a goal?",
                                 f"{ident} kararındaki gerekçe (\"{d['reason']}\") hâlâ bir hedef mi?",
-                                f"{d['doc']} states it; whether it still holds is the user's call", opts,
+                                f"{d.get('reason_at') or d['doc']} states it (read by rules from the paragraph that "
+                                "states the decision); whether it still holds is the user's call", opts,
                                 kind="adr_reason", needs="the recorded reason"))
                 break
         cands.append(_q("q6", "What response time and availability must it meet?",
@@ -824,7 +1008,8 @@ def brief(repo: Path, question: str, *, store=None, graph=None, options: list[st
     for key, (kind, _deps, mods) in KNOWN_OPTIONS.items():
         if kind in kinds and mods and not any(_fold(n) == key or _fold(n).startswith(key) for n in names):
             present, evs = _present(pb, key)
-            if present and key not in ("postgres", "mongo"):
+            # only an option the code uses (an import, an SDK call), never a declared dependency alone
+            if present and key not in ("postgres", "mongo") and (importers(pb, key) or used_by_code(pb, key)):
                 current.append((key, evs))
     options_out = []
     all_names = names + [DISPLAY.get(c[0], c[0]) for c in current]
@@ -840,12 +1025,14 @@ def brief(repo: Path, question: str, *, store=None, graph=None, options: list[st
     for n in all_names:
         present, evs = presence[n]
         known = KNOWN_OPTIONS.get(_fold(n).replace(" ", ""))
-        meta = _installed_meta(repo, known[1]) if known else []
+        # installed metadata is read for the Python packages of a project that has Python code
+        py_dists = tuple(d for d in (known[1] if known else ()) if ":" not in d) if pb.python else ()
+        meta = _installed_meta(repo, py_dists) if py_dists else []
         constraints = [{"fact": f"{m['name']} {m['version']} is installed in the project's environment, licence "
                                 f"{m['license']}, requires Python {m['requires_python'] or 'not stated'}",
                         "evidence": {"locator": m["site"], "source_type": "installed_metadata"}} for m in meta]
-        if known and not meta and known[1]:
-            constraints.append({"fact": f"no distribution of {', '.join(known[1][:3])} is installed in the "
+        if py_dists and not meta:
+            constraints.append({"fact": f"no distribution of {', '.join(py_dists[:3])} is installed in the "
                                         "project's environment: its requirements and licence are unknown offline",
                                 "evidence": None})
         options_out.append({
@@ -854,12 +1041,16 @@ def brief(repo: Path, question: str, *, store=None, graph=None, options: list[st
             "change_surface": surface if present is not True else [],
             "what_moving_away_touches": surface if present is True else [],
             "constraints": constraints, "external": [], "agent_arguments": []})
+    unassigned: dict[str, list] = {"external": [], "agent_arguments": []}
+
     def target(name: str | None, by: str) -> dict:
-        hit = next((o for o in options_out if name and o["name"].lower() == name.strip().lower()), None)
-        if hit is None and not name and options_out:
-            hit = options_out[0]
+        """The option an item is about; an item that names none is kept on its own, never put under an
+        option it may argue against."""
+        if not name or not name.strip():
+            return unassigned
+        hit = next((o for o in options_out if o["name"].lower() == name.strip().lower()), None)
         if hit is None:
-            hit = {"name": name or "(unnamed)", "proposed_by": by, "present_in_project": None,
+            hit = {"name": name.strip(), "proposed_by": by, "present_in_project": None,
                    "presence_evidence": [], "change_surface": [], "what_moving_away_touches": [], "constraints": [],
                    "external": [], "agent_arguments": []}
             options_out.append(hit)
@@ -869,9 +1060,13 @@ def brief(repo: Path, question: str, *, store=None, graph=None, options: list[st
         pin = _pin_quote(store, repo, str(q.get("url") or ""), str(q.get("text") or ""))
         target(q.get("option"), "user")["external"].append(pin)
     for a in agent_arguments:
-        if str(a).strip():  # the agent's own reasoning: shown, never evidence
-            target(None, "agent")["agent_arguments"].append({"text": str(a).strip()[:500],
-                                                             "status": "weak_inference", "by": "agent"})
+        # "PostgreSQL: handles many writers" is about the option named before the colon, when it is one
+        text = str(a).strip()
+        opt, sep, rest = text.partition(":")
+        named = sep and rest.strip() and any(o["name"].lower() == opt.strip().lower() for o in options_out)
+        if text:  # the agent's own reasoning: shown, never evidence
+            target(opt if named else None, "agent")["agent_arguments"].append(
+                {"text": (rest.strip() if named else text)[:500], "status": "weak_inference", "by": "agent"})
     asked, answered = questions(pb, kinds, [o["name"] for o in options_out], decs)
     # only what bears on this kind of choice (a framework choice gets no "no environment variable" absence)
     relevant = set(kinds) | ({*KINDS} if kinds == ["other"] else set())
@@ -904,6 +1099,8 @@ def brief(repo: Path, question: str, *, store=None, graph=None, options: list[st
         "verdict": HUMAN, "forces": forces, "absences": pb.absences, "existing_decisions": decs,
         "options": options_out, "questions_for_human": asked, "answered_by_code": answered, "limits": LIMITS,
         "elapsed_s": round(time.monotonic() - t0, 3)}
+    if unassigned["agent_arguments"] or unassigned["external"]:  # items that name no option
+        res["not_tied_to_an_option"] = unassigned
     if dropped:
         res["dropped_forces"] = dropped
     res["next_step"] = ("ask the user questions_for_human (AskUserQuestion / request_user_input), record each answer "

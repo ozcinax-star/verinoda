@@ -83,6 +83,23 @@ def test_judge_never_meets_a_decision_whatever_its_claims():
     assert analysis.judge(sq, strong, {"blocked": "c-version"}) == "blocked_by_clarification"
 
 
+def test_a_choice_under_another_intent_is_never_met(orders):
+    """R2-5: a plan (a host agent's, or a clause the rules read otherwise) that gives a choice another intent
+    keeps its facts as context, but the verdict is the human's; words that only may ask for a choice get a
+    note, never another verdict."""
+    repo, st = orders
+    plan = qp.draft("What database would you recommend for this app?", None)
+    for sq in plan["sub_questions"]:
+        sq["intent"], sq["done_when"] = "dataflow", {"kind": "path_found", "min_status": "strong_inference",
+                                                     "detail": "a data path"}
+    res = analysis.analyze(st, repo, plan["user_message"], plan=plan, challenge=False)
+    assert [s["status"] for s in res["subquestions"]] == [qp.HUMAN_DECISION]
+    assert res["subquestions"][0]["intent"] == "dataflow" and res["subquestions"][0].get("decision_brief")
+    maybe = analysis.analyze(st, repo, "What would you pick for caching orders: Redis or a dict?", challenge=False)
+    assert all(s["status"] != qp.HUMAN_DECISION for s in maybe["subquestions"])
+    assert any("may ask for a choice ('pick')" in u["why"] for u in maybe["unknowns"])
+
+
 def test_a_compound_question_keeps_its_code_part_answerable(orders):
     repo, st = orders
     res = analysis.analyze(st, repo, "Why do we use SQLite for orders, and should we move to PostgreSQL?",
@@ -115,11 +132,14 @@ def test_brief_collects_the_forces_asks_the_human_and_recommends_nothing(orders,
     assert any("same repository interface" in t and "docs/adr/0001-sqlite-persistence.md:5-7" in at
                for t, at in facts.items())
     assert any(re.search(r"all \d+ storage sink.*in one file: orders/repository.py", t) for t in facts)
-    assert any("`_repo`" in t and at == ["orders/api.py:6", "orders/api.py:9-13"] for t, at in facts.items())
+    # one shared instance: the module-level global is set only while it is unset (`if _repo is None`, line 11),
+    # which the evidence cites; the sharing is read from that code (strong_inference)
+    assert any("`_repo`" in f["fact"] and "only while it is unset" in f["fact"] and f["status"] == "strong_inference"
+               and _locs(f) == ["orders/api.py:6", "orders/api.py:9-13", "orders/api.py:11"] for f in b["forces"])
     assert any("':memory:'" in t and at == ["tests/test_service.py:8", "tests/test_service.py:15"]
                for t, at in facts.items())
     absences = " | ".join(a["what"] for a in b["absences"])
-    assert "no deployment or CI file" in absences and "no database driver" in absences
+    assert "deployment or CI file name" in absences and "no database driver" in absences
     assert all(a["searched"] and a["scope_note"] for a in b["absences"])
     # every cited line re-checks, and nothing is claimed without evidence
     assert all(f["evidence"] and all(dbr.recheck(repo, e) for e in f["evidence"]) for f in b["forces"])
@@ -132,16 +152,101 @@ def test_brief_collects_the_forces_asks_the_human_and_recommends_nothing(orders,
     assert st.get("decision_briefs", b["brief_id"])["result"]["verdict"] == qp.HUMAN_DECISION
 
 
-def test_a_question_the_code_answers_is_not_asked(tmp_path):
+def test_a_file_that_bears_on_a_question_is_context_not_an_answer(tmp_path):
+    """A compose file with a database image does not say where production runs; a Procfile does not say how
+    many processes will write at the growth the user expects: the questions are still asked, with the file."""
     from verinoda import decision_brief as dbr
 
     repo = _copy(ORDERS, tmp_path / "orders_app", scan=False)
     (repo / "docker-compose.yml").write_text("services:\n  db:\n    image: postgres:16\n", encoding="utf-8")
+    (repo / "Procfile").write_text("web: python -m orders.api\n", encoding="utf-8")
     b = dbr.brief(repo, EN_Q, record=False)
-    assert "hosting" not in [q["kind"] for q in b["questions_for_human"]]
-    assert [q["answered_by"] for q in b["answered_by_code"]] == ["docker-compose.yml"]
+    asked = {q["kind"]: q for q in b["questions_for_human"]}
+    assert asked["hosting"]["partly_answered_by"] == ["docker-compose.yml"]
+    assert asked["concurrency"]["partly_answered_by"] == ["Procfile"]
+    assert b["answered_by_code"] == []
     assert any("docker-compose.yml" in f["fact"] for f in b["forces"])
     assert not any("deployment" in a["what"] for a in b["absences"])
+
+
+def test_brief_reads_code_not_comments_and_claims_only_what_it_saw(tmp_path):
+    """R2-8 .. R2-14, R2-20 .. R2-23 (review of p2/decide): a comment is no storage sink and pins no test; a
+    global assigned on every call is not a shared instance; 'rds' inside 'records' is no database service;
+    the churn window counts only the last 50 commits; a context sentence of an ADR is not its reason; an
+    argument that names no option is not put under the first option."""
+    from verinoda import decision_brief as dbr
+
+    repo = _copy(ORDERS, tmp_path / "orders_app", scan=False)
+    _write(repo, "orders/pricing.py", '"""Prices."""\n\n\ndef price(x):\n    # never call sqlite3.connect( here: '
+                                      'storage goes through OrderRepository\n    return x\n')
+    _write(repo, "tests/test_pricing.py", "# TODO: one day also run the service tests against postgres\n"
+                                          "def test_price():\n    assert 1\n")
+    _write(repo, "docker-compose.yml", "services:\n  web:\n    build: .\n    volumes:\n      - ./records:/data\n")
+    _write(repo, ".travis.yml", "language: python\ndeploy:\n  provider: heroku\n")
+    # a configured reference tree: its tests are not this project's tests
+    _write(repo, "ref/tests/test_other.py", "import sqlite3\n\n\ndef test_x():\n    sqlite3.connect('other.db')\n")
+    _write(repo, ".verinoda/config.json", '{"index": {"reference": ["ref"]}}')
+    api = repo / "orders/api.py"
+    api.write_bytes(api.read_bytes().replace(b"    if _repo is None:\n        _repo = OrderRepository()\n",
+                                             b"    _repo = OrderRepository()\n"))
+    _write(repo, "docs/adr/0001-sqlite-persistence.md",
+           "# ADR 0001: SQLite\n\nStatus: accepted\n\nOrders were lost in the old CSV export because two writers "
+           "appended to the same file at once.\n\nThe team met twice about it.\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "case")
+    for i in range(51):  # repository.py changed in none of the last 50 commits
+        _write(repo, "CHANGES.txt", f"{i}\n")
+        _git(repo, "add", "CHANGES.txt")
+        _git(repo, "commit", "-q", "-m", f"c{i}")
+    b = dbr.brief(repo, EN_Q, record=False, agent_arguments=["PostgreSQL handles many writers",
+                                                             "PostgreSQL: MVCC"])
+    facts = [f["fact"] for f in b["forces"]]
+    assert any(re.search(r"all \d+ storage sink.*in one file: orders/repository.py", t) for t in facts)
+    assert not any("orders/pricing.py" in e["locator"] for f in b["forces"] for e in f["evidence"])
+    assert not any("postgres" in t for t in facts if t.startswith("test code"))
+    assert not any("shares" in t or "share that instance" in t for t in facts)
+    assert any("get_repo() assigns the module-level `_repo`" in t for t in facts)
+    assert any(t == "orders/repository.py changed in 0 of the last 50 commit(s)" for t in facts)
+    assert all(dbr.recheck(repo, e) for f in b["forces"] for e in f["evidence"])
+    assert not any("ref/" in e["locator"] for f in b["forces"] for e in f["evidence"])  # R2-10
+    assert "deployment/CI file present: .travis.yml" in facts  # R2-20
+    assert any(t.startswith("numeric setting ORDERS_DISCOUNT_THRESHOLD") for t in facts)  # R2-22
+    asked = {q["kind"]: q for q in b["questions_for_human"]}
+    assert asked["concurrency"]["asked_because"].startswith("how many writers you expect is not in the code")
+    assert "hosting" in asked and not asked["hosting"].get("partly_answered_by")
+    assert "adr_reason" not in asked and all(not d.get("reason") for d in b["existing_decisions"])
+    opts = {o["name"]: o for o in b["options"]}
+    assert not opts["SQLite"]["agent_arguments"]
+    assert [a["text"] for a in opts["PostgreSQL"]["agent_arguments"]] == ["MVCC"]
+    assert [a["text"] for a in b["not_tied_to_an_option"]["agent_arguments"]] == ["PostgreSQL handles many writers"]
+
+
+def test_brief_on_a_jvm_project_and_an_sdk_dependency(templates, tmp_path):
+    """R2-12, R2-13: a JDBC connection and a Maven/Gradle driver count for the options and the storage absence;
+    boto3 declared for another AWS service does not make DynamoDB present."""
+    from verinoda import decision_brief as dbr
+
+    repo = tmp_path / "forge"
+    shutil.copytree(templates["forge"], repo)
+    _write(repo, "src/main/java/net/ashvale/emberforge/util/ForgeStore.java",
+           "package net.ashvale.emberforge.util;\n\nimport java.sql.Connection;\nimport java.sql.DriverManager;\n\n"
+           "public final class ForgeStore {\n    public static Connection open(String url) throws Exception {\n"
+           "        return DriverManager.getConnection(url);\n    }\n}\n")
+    gradle = repo / "build.gradle"
+    gradle.write_bytes(gradle.read_bytes().replace(b"dependencies {", b'dependencies {\n    implementation '
+                                                                        b'"org.postgresql:postgresql:42.7.3"', 1))
+    b = dbr.brief(repo, "Should we move the forge statistics from PostgreSQL to SQLite?", record=False)
+    assert not any("no storage sink" in a["what"] for a in b["absences"])
+    opts = {o["name"]: o for o in b["options"]}
+    assert opts["PostgreSQL"]["present_in_project"] is True
+    assert not any("psycopg" in c["fact"] for o in b["options"] for c in o["constraints"])
+    orders = _copy(ORDERS, tmp_path / "orders_boto", scan=False)
+    _write(orders, "orders/ai.py", "import boto3\n\n\ndef ask(q):\n    return boto3.client('bedrock-runtime')\n")
+    b = dbr.brief(orders, EN_Q, record=False)
+    assert "DynamoDB" not in [o["name"] for o in b["options"]]
+    _write(orders, "orders/table.py", "import boto3\n\n\ndef t():\n    return boto3.resource('dynamodb')\n")
+    b = dbr.brief(orders, "Should we keep SQLite or use DynamoDB?", record=False)
+    assert {o["name"]: o["present_in_project"] for o in b["options"]}["DynamoDB"] is True
 
 
 def test_brief_answers_quotes_and_the_record_that_uses_them(orders, tmp_path, capsys):
@@ -166,9 +271,12 @@ def test_brief_answers_quotes_and_the_record_that_uses_them(orders, tmp_path, ca
     pg = next(o for o in b["options"] if o["name"] == "PostgreSQL")
     assert [p["quote_found"] for p in pg["external"]] == [True, False]
     assert pg["external"][0]["status"] == "primary_source_verified" and "not that it applies" in pg["external"][0]["why"]
-    other = next(o for o in b["options"] if o["name"] == "SQLite")["external"]
-    assert other and other[0]["status"] == "unknown"  # not fetched: cache, then network per config (off here)
-    assert all(a["status"] == "weak_inference" for o in b["options"] for a in o["agent_arguments"])
+    # a quote and an argument that name no option are kept on their own, not put under the first option (R2-23)
+    assert not next(o for o in b["options"] if o["name"] == "SQLite")["external"]
+    loose = b["not_tied_to_an_option"]
+    assert loose["external"][0]["status"] == "unknown"  # not fetched: cache, then network per config (off here)
+    assert [a["status"] for a in loose["agent_arguments"]] == ["weak_inference"]
+    assert not any(o["agent_arguments"] for o in b["options"])
     with pytest.raises(ValueError, match="no question q9"):
         dbr.answer(st, b["brief_id"], "q9", "x")
     res = dbr.answer(st, b["brief_id"], "q1", "two app servers, maybe four next year")
@@ -589,6 +697,9 @@ def test_cli_and_mcp_decide_check_exit_codes(templates, tmp_path, capsys):
     capsys.readouterr()
     assert cli.main(["update", str(repo)]) == 0
     assert "decisions: 1 violated, 0 possible, 0 review, 0 trigger" in capsys.readouterr().out
+    # R1-9: a no-op update does not run every guard again, and says so
+    assert cli.main(["update", str(repo)]) == 0
+    assert "decisions: no file changed since the last update, so not checked again" in capsys.readouterr().out
 
 
 def test_critique_exclusivity_uses_the_engine(templates, tmp_path):
@@ -617,3 +728,251 @@ def test_critique_exclusivity_uses_the_engine(templates, tmp_path):
         assert "orders/notes.py" not in fail["detail"]
     finally:
         st.close()
+
+
+# -- review of p2/decide: regression tests for the reviewers' findings ---------------------------------
+
+def _only_in(repo: Path, rel: str, text: str, spec: str):
+    from verinoda import decisions as dm
+    from verinoda import guards
+
+    _write(repo, rel, text)
+    ctx = guards._Ctx(repo, [rel])
+    hits, scan, _ = guards.check_only_in(ctx, dm.parse_guard(spec, repo, "g1"))
+    return [(h[0], h[2]) for h in hits], scan
+
+
+ORD_G = "only_in calls=sqlite3.connect allowed=orders/repository.py"
+SINK_G = "only_in sink=db-connection allowed=orders/repository.py"
+
+
+@pytest.mark.parametrize("text,spec,want", [
+    # R1-1 / R2-3: never a silent ok when the import can reach the call
+    ("try:\n    import psycopg2\nexcept ImportError:\n    psycopg2 = None\n\n\ndef r(dsn):\n"
+     "    return psycopg2.connect(dsn)\n", SINK_G, [("POSSIBLE", 8)]),
+    ("import sqlite3\n\n\ndef r(u):\n    return sqlite3.connect(u)\n\n\ndef f():\n    sqlite3 = None\n"
+     "    return sqlite3\n", ORD_G, [("VIOLATED", 5)]),  # a local of another function rebinds nothing here
+    ("import os\n\nif os.environ.get('PG'):\n    from psycopg import connect\nelse:\n    from sqlite3 import connect\n"
+     "\n\ndef o(d):\n    return connect(d)\n", SINK_G, [("VIOLATED", 10)]),  # every branch binds a connection
+    ("import os\n\nif os.environ.get('PG'):\n    from psycopg import connect\nelse:\n    from sqlite3 import connect\n"
+     "\n\ndef o(d):\n    return connect(d)\n", ORD_G, [("POSSIBLE", 10)]),  # only one branch binds sqlite3.connect
+    ("from sqlite3 import connect\n\n\nclass Archive:\n    def connect(self):\n        return connect('a.db')\n",
+     ORD_G, [("VIOLATED", 6)]),  # a method name does not shadow the module name inside the method
+    ("def a(u):\n    import sqlite3 as db\n    return db.connect(u)\n\n\ndef b(u):\n    import json as db\n"
+     "    return db.loads(u)\n", ORD_G, [("VIOLATED", 3)]),
+    ("import sqlite3\n\n\ndef reset():\n    global sqlite3\n    sqlite3 = None\n\n\ndef go(u):\n"
+     "    return sqlite3.connect(u)\n", ORD_G, [("POSSIBLE", 10)]),
+    # R1-3 / R2-0: a name bound by an enclosing function, a loop, with, except or a comprehension is not verified
+    ("from sqlite3 import connect\n\n\ndef with_driver(connect):\n    def open_db(url):\n        return connect(url)\n"
+     "    return open_db\n\n\ndef local_default():\n    return connect(':memory:')\n", ORD_G,
+     [("POSSIBLE", 6), ("VIOLATED", 11)]),
+    ("import sqlite3\nFAKES = []\nCONNS = [sqlite3.connect(':memory:') for sqlite3 in FAKES]\n", ORD_G,
+     [("POSSIBLE", 3)]),
+    ("import sqlite3\n\nfor sqlite3 in []:\n    sqlite3.connect('x')\n", ORD_G, [("POSSIBLE", 4)]),
+    ("import sqlite3\nfrom contextlib import nullcontext\n\nwith nullcontext(object()) as sqlite3:\n    pass\n\n"
+     "sqlite3.connect('x')\n", ORD_G, [("POSSIBLE", 7)]),
+    ("import sqlite3\n\ntry:\n    pass\nexcept Exception as sqlite3:\n    sqlite3.connect('x')\n", ORD_G,
+     [("POSSIBLE", 6)]),
+    ("from sqlite3 import connect\n\n\ndef connect(u):\n    return u\n\n\ndef d():\n    return connect(1)\n", ORD_G, []),
+    # R2-18: the target used as a value
+    ("import functools\nimport sqlite3\n\nopener = functools.partial(sqlite3.connect, 'x.db')\n", ORD_G,
+     [("POSSIBLE", 4)]),
+    ("import sqlite3\n\n\nclass Repo:\n    opener = sqlite3.connect\n\n    def go(self):\n        return self.opener('x')\n",
+     ORD_G, [("POSSIBLE", 5)]),
+    ("import sqlite3\n\nopener = sqlite3.connect\n\n\ndef d(u):\n    return opener(u)\n", ORD_G, [("VIOLATED", 7)]),
+])
+def test_python_only_in_resolves_names_by_scope(tmp_path, text, spec, want):
+    got, _scan = _only_in(tmp_path, "pkg/m.py", text, spec)
+    assert [(lvl, line) for lvl, line in got] == want, got
+
+
+def test_java_and_kotlin_receivers_bound_without_a_type_and_import_aliases(templates, tmp_path):
+    """R2-1: a lambda parameter or `var` loop variable of another type is not VIOLATED; R2-17: a Kotlin
+    import alias binds the class."""
+    from verinoda import decisions as dm
+    from verinoda import guards
+
+    repo = tmp_path / "forge"
+    shutil.copytree(templates["forge"], repo)
+    base = "src/main/java/net/ashvale/emberforge/net2/"
+    kt = "src/main/kotlin/net/ashvale/emberforge/net2/"
+    imp = "import net.neoforged.neoforge.network.registration.PayloadRegistrar"
+    files = {
+        base + "Helper.java": "package x;\n\n" + imp + ";\nimport java.util.List;\n\nclass Helper {\n"
+        "    static String d(PayloadRegistrar registrar) { return String.valueOf(registrar); }\n"
+        "    static void f(List<Bus> buses, Object m) {\n        buses.forEach(registrar -> registrar.playToServer(m));\n"
+        "    }\n}\n",
+        base + "Helper2.java": "package x;\n\n" + imp + ";\nimport java.util.List;\n\nclass Helper2 {\n"
+        "    static String d(PayloadRegistrar registrar) { return String.valueOf(registrar); }\n"
+        "    static void f(List<Bus> buses, Object m) {\n        for (var registrar : buses) {\n"
+        "            registrar.playToServer(m);\n        }\n    }\n}\n",
+        kt + "Helper3.kt": "package x\n\n" + imp + "\n\nfun d(registrar: PayloadRegistrar) = registrar.toString()\n\n"
+        "fun f(buses: List<Bus>, m: Any) {\n    buses.forEach { registrar -> registrar.playToServer(m) }\n}\n",
+        kt + "Reg.kt": "package x\n\n" + imp + " as PR\n\nfun reg(r: PR, p: Any) {\n    r.playToServer(p, p, p)\n}\n",
+    }
+    for rel, text in files.items():
+        _write(repo, rel, text)
+    g = dm.parse_guard(f"only_in calls=PayloadRegistrar.playToServer allowed={NET}", repo, "g1")
+    hits, scan, _ = guards.check_only_in(guards._Ctx(repo, list(files)), g)
+    got = {(h[1].rpartition("/")[2], h[2]): h[0] for h in hits}
+    assert got == {("Helper.java", 9): "POSSIBLE", ("Helper2.java", 10): "POSSIBLE", ("Helper3.kt", 8): "POSSIBLE",
+                   ("Reg.kt", 6): "VIOLATED"}, got
+    assert any("without a written type" in lim for lim in scan.limits)
+
+
+def test_changed_counts_a_subdirectory_project_non_ascii_paths_and_re_export_chains(tmp_path):
+    """R1-0 / R2-2: the project is a subdirectory of its git repository; R1-2: a Turkish file name;
+    R2-7: a re-export module changed, the call site did not."""
+    from verinoda import decisions as dm
+    from verinoda import guards
+
+    root = tmp_path / "mono"
+    proj = root / "svc"
+    shutil.copytree(ORDERS, proj, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc", "*.db"))
+    _write(proj, "orders/rapor_sipariş.py", '"""rapor"""\n')
+    _write(proj, "orders/dbutil.py", "def open_db(path):\n    return None\n")
+    _write(proj, "orders/reports.py", "from orders.dbutil import open_db\n\n\ndef r(path):\n    return open_db(path)\n")
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "init")
+    workflow.init(proj)
+    st = open_store(proj)
+    try:
+        dm.record(st, proj, chosen="SQLite", rationale="r", guards=[ORD_G])
+    finally:
+        st.close()
+    svc = proj / "orders/service.py"
+    svc.write_bytes(svc.read_bytes() + b"\n\nimport sqlite3\n\n\ndef audit():\n    return sqlite3.connect('a.db')\n")
+    _write(proj, "orders/rapor_sipariş.py", '"""rapor"""\nimport sqlite3\n\n\ndef r():\n    return sqlite3.connect("r")\n')
+    _write(proj, "orders/dbutil.py", "from sqlite3 import connect as open_db\n")
+    res = guards.check(proj, changed_only=True)
+    since = {v["at"]: v["since"] for v in res["violations"]}
+    assert res["exit"] == 1 and not res["pre_existing"], res["pre_existing"]
+    assert since["orders/rapor_sipariş.py:6"] == "new/touched since HEAD"
+    assert any(at.startswith("orders/service.py:") for at in since)
+    assert since["orders/reports.py:5"] == "new/touched since HEAD (through orders/dbutil.py)"
+    assert guards.changed_since(proj, guards.validate_ref(proj, "HEAD")) >= {"orders/service.py", "orders/dbutil.py",
+                                                                             "orders/rapor_sipariş.py"}
+
+
+POM = ("<project>\n  <dependencies>\n    <dependency>\n      <groupId>org.postgresql</groupId>\n"
+       "      <artifactId>postgresql</artifactId>\n      <version>42.7.3</version>\n    </dependency>\n"
+       "  </dependencies>\n</project>\n")
+
+
+def _rec(repo: Path, spec: str):
+    from verinoda import decisions as dm
+
+    return dm.Decision(id="ADR-0009", number=9, title="t", guards=[dm.parse_guard(spec, repo, "g1")])
+
+
+def test_dependency_guard_reads_the_projects_builds_and_cites_the_named_line(tmp_path):
+    """R1-7 / R2-15: a multi-line Maven dependency is VIOLATED at its artifactId line; R2-4: a test fixture's
+    build file is not the project's, a build the root does not include is POSSIBLE, a git-ignored one is not
+    read; R1-10: one declaration in two optional groups is cited once per line, each in its own group."""
+    from verinoda import guards
+
+    def case(name, files, spec):
+        repo = _copy(ORDERS, tmp_path / name, scan=False)
+        for rel, text in files.items():
+            _write(repo, rel, text)
+        return guards.check(repo, records=[_rec(repo, spec)])
+
+    res = case("pom", {"pom.xml": POM}, "dependency absent=org.postgresql:postgresql")
+    assert [v["at"] for v in res["violations"]] == ["pom.xml:5"] and res["exit"] == 1
+    res = case("ignored", {".gitignore": "node_modules/\n", "node_modules/lib/pom.xml": POM},
+               "dependency absent=postgresql")
+    assert res["exit"] == 0 and not res["possible"] and not res["violations"]
+    res = case("fixture", {"tests/fixtures/legacy/build.gradle": 'dependencies {\n    runtimeOnly '
+                           '"org.postgresql:postgresql:42.7.3"\n}\n'}, "dependency absent=postgresql")
+    assert res["exit"] == 0 and not res["violations"] and not res["possible"]
+    assert any("tests/fixtures/legacy/build.gradle" in lim for o in res["ok"] for lim in o["limits"])
+    res = case("nested", {"tools/gen/build.gradle": 'dependencies {\n    implementation '
+                          '"org.postgresql:postgresql:42.7.3"\n}\n'}, "dependency absent=postgresql")
+    assert res["exit"] == 0 and [p["at"] for p in res["possible"]] == ["tools/gen/build.gradle:2"]
+    res = case("included", {"settings.gradle": "include ':tools:gen'\n", "build.gradle": "plugins { id 'java' }\n",
+                            "tools/gen/build.gradle": 'dependencies {\n    implementation '
+                            '"org.postgresql:postgresql:42.7.3"\n}\n'}, "dependency absent=postgresql")
+    assert [v["at"] for v in res["violations"]] == ["tools/gen/build.gradle:2"]
+    repo = _copy(ORDERS, tmp_path / "optional", scan=False)
+    pp = repo / "pyproject.toml"
+    pp.write_bytes(pp.read_bytes().replace(b'requires-python = ">=3.10"', b'requires-python = ">=3.10"\n\n'
+                                           b'[project.optional-dependencies]\npostgres = [\n    "psycopg[binary]",\n]\n'
+                                           b'all = [\n    "rich[jupyter]",\n    "psycopg[binary]",\n]'))
+    res = guards.check(repo, records=[_rec(repo, "dependency absent=psycopg")])
+    assert sorted(v["at"] for v in res["violations"]) == ["pyproject.toml:12", "pyproject.toml:8"]
+
+
+def test_conftest_is_test_code(tmp_path):
+    """R2-16: pytest fixtures in a root conftest.py are out of the product scope."""
+    from verinoda import guards
+
+    repo = _copy(ORDERS, tmp_path / "o", scan=False)
+    _write(repo, "conftest.py", "import sqlite3\n\n\ndef db():\n    return sqlite3.connect(':memory:')\n")
+    res = guards.check(repo, records=[_rec(repo, ORD_G)])
+    assert res["exit"] == 0 and not res["violations"]
+
+
+def test_guard_specs_keep_backslashes_and_records_survive_hand_edits(tmp_path, capsys):
+    """R1-4: a Windows path and a regex keep their backslashes; R1-5: a byte-order mark does not hide a
+    record; R1-6: a malformed hand-edited entry makes that record not enforced, the others are checked, and
+    an error never exits 1."""
+    import json
+
+    from verinoda import cli
+    from verinoda import decisions as dm
+    from verinoda import guards
+
+    repo = _copy(ORDERS, tmp_path / "o", scan=False)
+    workflow.init(repo)
+    assert dm.parse_guard(r"only_in calls=sqlite3.connect allowed=orders\repository.py", repo, "g1")["allowed"] == \
+        ["orders/repository.py"]
+    assert dm.parse_guard(r"only_in pattern=\bexecute\b allowed=a.py", repo, "g1")["pattern"] == r"\bexecute\b"
+    assert dm.parse_guard(r"only_in pattern=sqlite3\.connect\( allowed=a.py", repo, "g1")["pattern"] == \
+        r"sqlite3\.connect\("
+    st = open_store(repo)
+    try:
+        rec = dm.record(st, repo, chosen="SQLite", rationale="r", guards=[ORD_G])
+    finally:
+        st.close()
+    p = repo / rec["file"]
+    p.write_bytes(b"\xef\xbb\xbf" + p.read_bytes())
+    _write(repo, "orders/audit.py", "import sqlite3\n\n\ndef a():\n    return sqlite3.connect('a.db')\n")
+    assert [d.id for d in dm.load_all(repo)] == [rec["id"]] and guards.check(repo)["exit"] == 1
+    d = dm.decisions_dir(repo)
+    (d / "ADR-0003-hand.md").write_text('---\nverinoda-decision: 1\nid: ADR-0003\ntitle: h\nstatus: accepted\n'
+                                        'decided-by: human\ngoverns: [{"id": "v1", "symbol": "orders/x.py::X"}]\n'
+                                        '---\n', encoding="utf-8")
+    (d / "ADR-0006-hand.md").write_text('verinoda-decision: 1\nid: ADR-0006\n', encoding="utf-8")
+    capsys.readouterr()
+    assert cli.main(["decide", "check", "--repo", str(repo), "--json", "--no-refresh"]) == 1  # the real violation
+    res = json.loads(capsys.readouterr().out)
+    why = {n["decision"]: n["why"] for n in res["not_enforced"]}
+    assert "governs entry v1: file, qual missing" in why["ADR-0003"]
+    assert "front matter is not readable" in why["ADR-0006"]
+    st = open_store(repo)
+    try:
+        with pytest.raises(dm.DecisionError, match="has problems"):
+            dm.add_guards(st, repo, "ADR-3", ["dependency absent=psycopg"])
+    finally:
+        st.close()
+
+
+def test_form_feed_does_not_shift_the_comment_mask():
+    """R1-11: rows are counted as tokenize counts them."""
+    from verinoda import guards
+
+    text = "import os\n\x0c\ndef helper():\n    # never call sqlite3.connect here\n    return os.getcwd()\n"
+    assert "sqlite3" not in guards.code_text(text, ".py")
+
+
+def test_ok_prints_every_limit(templates, tmp_path, capsys):
+    """R2-19: the test-exclusion scope note is printed with the other limits."""
+    from verinoda import cli
+
+    repo, _ = _case(templates, tmp_path, "orders", [ORD_G])
+    _write(repo, "web/app.js", "export function hello() { return 1; }\n")
+    capsys.readouterr()
+    assert cli.main(["decide", "check", "--repo", str(repo), "--no-refresh"]) == 0
+    out = capsys.readouterr().out
+    assert "languages other than Python" in out and "test file(s) are out of scope" in out

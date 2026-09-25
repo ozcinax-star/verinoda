@@ -332,6 +332,17 @@ DECIDE = [
     "Do we need a message queue between the API and the repository once we have many writers?",
     "Sipariş tablosunu ayrı bir veritabanına taşımak mantıklı olur mu?",
     "Should the client key binding stay in GlowModClient or move to a shared module?",
+    # review of p2/decide (R2-5): a recommendation or a choice asked for in other words
+    "Is SQLite still the right choice for us?", "Postgres or SQLite for production?",
+    "What database would you recommend for this app?", "Do you think we should switch the mod loader to Fabric?",
+    "What's the best way to scale order processing?",
+    "We expect 100x traffic next year; what should our storage strategy be?",
+    "Is PostgreSQL overkill for this project?", "Which ORM do you recommend?", "Redis kullanmak iyi bir fikir mi?",
+    "Hangi mesaj kuyruğunu önerirsin?", "Bu mimari on kat yüke dayanır mı?",
+    "Would Redis be a better fit than SQLite for the order cache?",
+    "Siparişleri kalıcı hale getirmek için ORM'e geçsek mi?",
+    "Is SQLite enough for us if the shop gets a thousand orders a minute?",
+    "Is it a good idea to read ORDERS_DATABASE_URL at import time?",
 ]
 NOT_DECIDE = [
     "Why do we use SQLite for orders?", "Where is the order total computed?",
@@ -346,6 +357,19 @@ NOT_DECIDE = [
     # the code decides, not we: a question about code
     "Where does RepoAtlas decide whether an experiment command needs a container?",
     "Siparişler SQLite'a mı yoksa dosyaya mı yazılıyor?", "Bakalım sipariş nerede kaydediliyor?",
+    # review of p2/decide (R1-8, R2-6): how-to, code behaviour and history questions keep their intents
+    "Kodu nasıl çalıştıralım?", "Testleri nasıl çalıştıralım?", "Bu fonksiyonu nerede çağıralım?",
+    "Önce hangi dosyayı okuyalım?", "Which config value should I use for the database path?",
+    "How do I migrate the schema from v4 to v5?", "What happens if the number of orders grows beyond 50 items?",
+    "If the order count grows past 50, does validate_items reject it?",
+    "What happens in get_repo when the number of orders grows?", "How do we decide whether an order is valid?",
+    "Why did we decide on SQLite?", "How did we decide whether to use SQLite?", "What trade-offs did ADR-0001 record?",
+    "What are the pros and cons listed in the ADR?", "How does store.py migrate the database from v4 to v5?",
+    "Kullanıcı sayısı artarsa get_repo aynı nesneyi mi döndürür?", "Isı hesabı nasıl ölçekleniyor?",
+    "HeatMath büyütme katsayısını nereden alıyor?", "Sunucu tarafında oyuncu sayısı artarsa ne oluyor?",
+    "Hangi testi çalıştıralım?", "Hangi fonksiyonu çağıralım?", "ADR'de hangi artıları ve eksileri yazmışız?",
+    "Which function decides whether an order gets a discount?", "Which option does parse_args pick when both flags "
+    "are given?",
 ]
 
 
@@ -357,6 +381,16 @@ def test_a_choice_is_read_as_a_decision(question):
 @pytest.mark.parametrize("question", NOT_DECIDE)
 def test_a_question_about_the_code_is_not_a_decision(question):
     assert "decide" not in _read(question), (question, _read(question))
+
+
+def test_a_choice_asked_in_so_many_words_and_one_that_only_may_be():
+    assert qp.asks_for_choice("What database would you recommend for this app?")
+    assert qp.asks_for_choice("Redis kullanmak iyi bir fikir mi?")
+    assert not qp.asks_for_choice("Where is the SQLite connection opened?")
+    assert qp.may_ask_for_choice("What would you pick for caching orders: Redis or a dict?") == "pick"
+    # a question about what the code picks or what was picked is no choice to make
+    assert qp.may_ask_for_choice("How does the pricing code choose the discount rate?") is None
+    assert qp.may_ask_for_choice("Why did we pick SQLite for orders?") is None
 
 
 def test_decide_is_a_plan_intent_judged_by_a_brief():

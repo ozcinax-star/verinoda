@@ -253,32 +253,7 @@ EN_CUES: dict[str, list[str]] = {
     "define": [r"\bwhat (is|are)\b", r"\bmeans?\b", r"\bmeaning\b", r"\bwhat does .+ do\b", r"\bpurpose of\b"],
     "usage": [r"\bhow (do|can|should) (i|we|you) (use|call|run|configure)\b", r"\bexamples?\b", r"\busage\b"],
     "architecture": [r"\barchitecture\b", r"\boverview\b", r"\bstructure\b", r"\blayers?\b"],
-    # A choice the human makes (docs/DESIGN.md D33): "should we ...", "which X should we pick", migrating,
-    # scaling, load growth. "which function should I call" is a usage question, not a decision.
-    "decide": [
-        # a clause that opens with "should": "should we ...", "should the key binding stay in ..."
-        r"(?:^|[,;:(]\s*|\b(?:or|and|so|then|now|also)\s+)(?:should|shall) [\w.`'-]+\b"
-        r"(?! (?:call|invoke|run|import|pass|look|see|read|check|expect)\b)",
-        r"\bis it time to\b|\bdo we (?:really |still )?need (?:a|an|another|more|to (?:add|introduce|switch|move|"
-        r"migrate|split|replace))\b|\bor (?:just )?(?:keep|stay with|leave)\b",
-        r"\bshould (?:we|i) (?:(?:still|rather|instead|now|also) )?(?:use|switch|move|migrate|adopt|choose|pick|"
-        r"select|go with|replace|keep|stay|drop|introduce|add|split|merge|rewrite|port|upgrade|downgrade|prefer|"
-        r"standardi[sz]e|extract|separate|consolidate)\b",
-        r"\b(?:which|what) (?!(?:functions?|methods?|class(?:es)?|files?|modules?|commands?|tests?|lines?|"
-        r"variables?|endpoints?|fields?|arguments?|parameters?|values?)\b)(?:[\w-]+ ){0,2}(?:should|shall) "
-        r"(?:we|i) (?:use|choose|pick|select|adopt|go with|prefer|switch to|move to|migrate to|standardi[sz]e on)\b",
-        # we/I choose or decide; "where does the code decide whether ..." is a question about code
-        r"\b(?:we|i|to|should|must|can|could|help (?:me|us)) (?:choose|pick|select|decide) "
-        r"(?:between|among|whether|if|on|which)\b",
-        r"\bmigrat(?:e|ing) (?:[\w-]+ ){0,4}?(?:from|to|off|away)\b",
-        r"\bhow (?:will|would|can|could|should|do we|does it|would it|will it) (?:[\w'-]+ ){0,8}?scale\b(?! with\b)",
-        r"\bscalab\w*|\bscale (?:up|out|horizontally|vertically|beyond)\b|"
-        r"\b(?:will|would|does|can) (?:it|this|that|the \w+) scale\b(?! with\b)",
-        r"\b(?:if|when|as|once) (?:the |our )?(?:traffic|load|users?|orders?|data|volume|requests?|writers?|"
-        r"customers?|players?|number of [\w-]+) (?:[\w-]+ ){0,2}?(?:grows?|grew|increases?|doubles?|spikes?)\b",
-        r"\bis it worth\b|\bwould it be better\b|\bis it better to\b|\bdoes it make sense to\b|\ba good idea\b|"
-        r"\bpros and cons\b|\btrade-?offs?\b|\bwhich (?:one )?is better\b",
-    ],
+    # "decide" (a choice the human makes) is set below: DECIDE_STRONG_EN + DECIDE_EN, with vetoes
 }
 # Weak cues count only when no other cue fires in the clause.
 EN_WEAK: dict[str, list[str]] = {}
@@ -322,20 +297,104 @@ TR_CUES: dict[str, list[tuple[str, bool]]] = {
                (r"\bne demek\w*", False), (r"\banlami\w*", False)],
     "usage": [(r"\bnasil kullan\w*", False), (r"\bornek\w*", False), (r"\bkullanim\w*", False)],
     "architecture": [(r"\bmimari\w*", False), (r"\bgenel bakis\w*", False), (r"\bkatman\w*", False)],
-    # seçmeli-, seçelim, hangisini kullan/seç, büyüt-, ölçekle-, -meli miyiz / -malıyız, the optative
-    # "-(y)alım/-(y)elim" in a question ("mı toplayalım yoksa ..."), load growth ("sayısı artarsa")
-    "decide": [(r"\bsecmeli\w*|\bsecelim\b|\bsecmemiz (?:gerek|lazim)\w*", False),
-               (r"\bhangisini (?:kullan|sec|tercih)\w*|\bhangisi daha iyi\b", False),
-               (r"\bbuyut\w*|\bolcekle\w*|\bolceklen\w*", False),
-               (r"\b\w{2,}m[ae]li\s+m[iu](?:y[iu]z|y[iu]m|s[iu]n|s[iu]n[iu]z)?\b|\b\w{2,}m[ae]l[iu]y[iu]z\b", False),
-               (r"\b(?!(?:bakalim|gorelim|gelelim|diyelim|anlayalim)\b)\w{2,}(?:y?alim|y?elim)\b"
-                r"(?=[^.!]*(?:\?|\bm[iu]\b|\byoksa\b))|\b(?:hangi|m[iu])\b[^.!?]*"
-                r"\b(?!(?:bakalim|gorelim|gelelim|diyelim|anlayalim)\b)\w{2,}(?:y?alim|y?elim)\b", False),
-               (r"\b(?:siparis|trafik|yuk|kullanici|istek|veri|oyuncu|musteri)\w* (?:\w+ ){0,2}?"
-                r"(?:artarsa|artinca|buyurse|buyuyunce|katlanirsa)\b", False),
-               (r"\bdeger mi\b|\bdaha iyi olur\w*|\bmantikli\w*|\bartilari\w*|\bavantajlari\w*|"
-                r"\btercih et(?:meli|elim)\w*", False)],
+    # "decide" is set below: DECIDE_STRONG_TR + DECIDE_TR, with vetoes
 }
+# -- decide: a choice the human makes (docs/DESIGN.md D33) --------------------------------------------
+# Strong cues ask for a choice or a recommendation in so many words ("should we use", "would you
+# recommend", "is X the right choice", "iyi bir fikir mi", "önerirsin"); they always read as a decision.
+# The other cues ("should the X live in ...", "X or Y", "do we need a ...", "-meli miyiz", the optative)
+# read as one only when no veto fires: a past tense ("why did we decide"), a question about what the
+# code does ("how does X migrate", "what happens", "nasıl/nerede", a present-tense "-iyor"), or a usage
+# verb ("hangi testi çalıştıralım"). A growth condition ("if traffic grows") is never a decision alone.
+_TECH = (r"(?:sqlite\w*|postgres\w*|mysql|mariadb|mongo\w*|redis|memcached|duckdb|dynamodb|cassandra|kafka|"
+         r"rabbitmq|celery|sqlalchemy|django|flask|fastapi|orm|fabric|neoforge|forge|quilt|spring|kotlin|java|"
+         r"python|toml|yaml|json|xml|graphql|grpc|rest|nosql|sql)")
+_CODE_NOUN_EN = (r"(?:functions?|methods?|class(?:es)?|files?|modules?|commands?|subcommands?|tests?|lines?|"
+                 r"variables?|endpoints?|fields?|arguments?|args?|parameters?|values?|settings?|flags?|paths?|"
+                 r"ports?|keys?|options?|scripts?|branch(?:es)?|names?|imports?|hooks?|tools?|env)")
+_CHOICE_VERB_EN = (r"(?:use|switch|move|migrate|adopt|choose|pick|select|go with|replace|keep|stay|drop|introduce|"
+                   r"add|split|merge|rewrite|port|upgrade|downgrade|prefer|standardi[sz]e|extract|separate|"
+                   r"consolidate)")
+DECIDE_STRONG_EN = [
+    # "should we use ...", at the start of a clause or after "do you think" ("which value should I use" is not)
+    r"(?:^|[,;:(]\s*|\b(?:or|and|so|then|now|also|think|believe|guess)\s+)should (?:we|i) "
+    r"(?:(?:still|rather|instead|now|also|really|just) )?" + _CHOICE_VERB_EN + r"\b",
+    r"\b(?:we|i) should (?:(?:still|rather|instead|now|also|really|just) )?" + _CHOICE_VERB_EN + r"\b",
+    # a recommendation asked for
+    r"\b(?:do|would|can|could|will) you (?:recommend|suggest|advise|propose)\b|\byour (?:recommendation|advice)\b",
+    # a judgment of an option
+    r"\bright (?:choice|call|tool|fit)\b|\bbetter (?:fit|choice|option|idea)\b|\boverkill\b|\ba good idea\b"
+    r"|\bis it (?:wise|worth|time|better) to\b|\bis it worth\b|\bwould it (?:make sense|be better|be wise)\b"
+    r"|\bdoes it make sense to\b|\bmakes? (?:more )?sense to\b|\bwhich (?:one )?is better\b",
+    # "which X should we pick" (not "which function / value should I ...": the head noun is not code)
+    r"\b(?:which|what) (?:[\w'-]+ ){0,2}(?!" + _CODE_NOUN_EN + r"\b)[\w'-]+ (?:should|shall) (?:we|i) "
+    r"(?:use|choose|pick|select|adopt|go with|prefer|switch to|move to|migrate to|standardi[sz]e on)\b",
+    r"\b(?:should|must|shall|let's|lets|help (?:me|us)(?: to)?|(?:we|i) (?:need|have|want|ought) to|how (?:should|"
+    r"shall) (?:we|i)) (?:choose|pick|select|decide) (?:between|among|whether|if|on|which)\b",
+    r"\bwhat should (?:our|my|the) [\w' -]{1,40}? be\b",
+    r"\bor do (?:we|i) need\b|\bor (?:should|shall) (?:we|i)\b",
+    r"\bbest (?:way|approach|option|strategy) (?:to|for) (?:scale|scaling|store|storing|persist|deploy|host|structure|"
+    r"organi[sz]e|split|migrate|cache|caching|queue)\b",
+    r"\b(?:enough|sufficient) for (?:us|our|this|the (?:project|app|shop|team|load)|production|now)\b",
+]
+DECIDE_EN = [
+    # a clause that opens with "should": "should the key binding stay in ...", "should pricing be deployed ..."
+    r"(?:^|[,;:(]\s*|\b(?:or|and|so|then|now|also)\s+)(?:should|shall) [\w.`'-]+\b"
+    r"(?! (?:call|invoke|run|import|pass|look|see|read|check|expect)\b)",
+    r"\bdo (?:we|i) (?:really |still )?need (?:a|an|another|more|to (?:add|introduce|switch|move|migrate|split|"
+    r"replace))\b|\bor (?:just )?(?:keep|stay with|leave|switch to|move to|migrate to|go with)\b",
+    r"\bhow (?:will|would|could|should) (?:[\w'-]+ ){0,8}?scale\b(?! with\b)|\bscalab\w*"
+    r"|\bscale (?:up|out|horizontally|vertically|beyond)\b|\b(?:will|would|can|could) (?:it|this|that|the \w+) "
+    r"scale\b(?! with\b)",
+    r"\b" + _TECH + r"\b[^.?!]{0,40}?\b(?:or|vs\.?|versus|instead of|rather than|than)\b[^.?!]{0,40}?\b"
+    + _TECH + r"\b",
+    r"\b(?:pros and cons|trade-?offs?|advantages|disadvantages) (?:of|between|for)\b",
+]
+DECIDE_VETO_EN = [
+    r"\b(?:did|was|were|had|has been|have been|recorded|listed|documented|wrote|written)\b",
+    r"^\W*(?:how|where|when|what|which|why|who)\s+(?:does|do|is|are)\s+(?!(?:we|i|you)\b)",
+    r"\bwhat happens\b|\bwhat (?:does|do) (?!(?:we|i|you)\b)",
+    r"\b(?:does|do|is|are) (?:it|this|the (?:code|app|project|service|system))\b",
+    r"\bhow (?:do|can|to) (?:i|we)\b",
+]
+_CODE_NOUN_TR = r"(?:fonksiyon|metot|metod|sinif|dosya|modul|komut|test|satir|degisken|parametre|alan|kod)"
+_USAGE_VERB_TR = r"(?:calistir|cagir|oku|bak|incele|kontrol et|dene|test ed|derle|ac|kapat|sil)"
+DECIDE_STRONG_TR = [
+    r"\bsecmeli\w*|\bsecelim\b|\bsecmemiz (?:gerek|lazim)\w*",
+    r"\bhangisini (?:kullan|sec|tercih)\w*|\bhangisi daha (?:iyi|uygun|dogru)\b",
+    r"\biyi bir fikir m[iu]\b|\bdeger m[iu]\b|\bdaha (?:iyi|dogru|uygun|mantikli) olur\w*|\bmantikli\w*",
+    r"\boner(?:ir|irsin|irsiniz|ebilir|ebilirsin|ebilirsiniz|iyor musun|iyor musunuz)\w*"
+    r"|\btavsiye (?:eder|edersin|edersiniz|et)\w*",
+    r"\byeterli m[iu]\b|\byeterli olur mu\b",
+    r"\b(?:yuk|trafig|istek)\w* (?:\w+ )?(?:dayanir|kaldirir) m[iu]\b",
+    r"\btercih et(?:meli|elim|memiz|mek)\w*",
+    # growing the system, in the first person or with a modal: "nasıl büyütürüz", "ölçeklendirmeliyiz"
+    r"\b(?:buyut|olcekle|olceklendir)\w*(?:uz|iz|elim|alim|meli\w*|mali\w*)\b",
+]
+DECIDE_TR = [
+    r"\b\w{2,}m[ae]li\s+m[iu](?:y[iu]z|y[iu]m|s[iu]n|s[iu]n[iu]z)?\b|\b\w{2,}m[ae]l[iu]y[iu]z\b",
+    # the optative in a question ("mı toplayalım yoksa ...", "hangi dilde yazalım?")
+    r"\b(?!(?:bakalim|gorelim|gelelim|diyelim|anlayalim)\b)\w{2,}(?:y?alim|y?elim)\b(?=[^.!]*(?:\?|\bm[iu]\b|"
+    r"\byoksa\b))|\b(?:hangi|m[iu])\b[^.!?]*\b(?!(?:bakalim|gorelim|gelelim|diyelim|anlayalim)\b)\w{2,}(?:y?alim|"
+    r"y?elim)\b",
+    # "geçsek mi", "kullansak mı"
+    r"\b\w{2,}s[ae]k\s+m[iu]\b",
+    r"\b" + _TECH + r"\w*(?:'\w+)?\s+m[iu]\b[^.?!]*\byoksa\b|\byoksa\b[^.?!]*\b" + _TECH,
+    r"\bartilari\w*|\bavantajlari\w*|\bdezavantaj\w*",
+]
+DECIDE_VETO_TR = [
+    r"\b(?:nasil|nerede|nereden|ne zaman|neden|niye|nicin|ne olur|ne oluyor)\b",
+    r"\bhangi " + _CODE_NOUN_TR + r"\w*",
+    r"\b" + _USAGE_VERB_TR + r"\w*(?:alim|elim|mali|meli|sak|sek)\w*",
+    r"\b\w+(?:iyor|uyor)(?:lar|sa|mu|mi)?\b",
+    r"\b\w+(?:mis|mus)(?:iz|uz|siniz|lar|tir|tur)?\b|\bkarar ver(?:dik|mistik)\b|\bsect(?:ik|iniz)\b",
+]
+EN_CUES["decide"] = DECIDE_STRONG_EN + DECIDE_EN
+TR_CUES["decide"] = [(p, False) for p in DECIDE_STRONG_TR + DECIDE_TR]
+_DECIDE_STRONG_EN_RX = [re.compile(p) for p in DECIDE_STRONG_EN]
+_DECIDE_STRONG_TR_RX = [re.compile(p) for p in DECIDE_STRONG_TR]
+_DECIDE_VETO_EN_RX = [re.compile(p) for p in DECIDE_VETO_EN]
+_DECIDE_VETO_TR_RX = [re.compile(p) for p in DECIDE_VETO_TR]
 # Primary-intent precedence when a clause carries several cues. A choice (decide) outranks everything:
 # "should we move X from A to B" is a decision, not a flow question.
 PRIORITY = ("decide", "callers", "performance", "why", "history", "impact", "tests", "compare_reference", "config",
@@ -372,6 +431,45 @@ def _shadowed(word: str, lexicon) -> bool:
     return any(hit["targets"] for hit in lexicon.seed([word]))
 
 
+def asks_for_choice(text: str) -> bool:
+    """Does ``text`` ask for a choice or a recommendation in so many words (a strong decide cue)?
+
+    Such a question is the human's to decide whatever intent a plan gives it (docs/DESIGN.md D33)."""
+    low = tn.nfc(text or "").lower()
+    if any(rx.search(low) for rx in _DECIDE_STRONG_EN_RX):
+        return True
+    return _uses_turkish_cues(text or "") and \
+        any(rx.search(tn.fold_tr(tn.nfc(text))) for rx in _DECIDE_STRONG_TR_RX)
+
+
+# words that may ask for a choice without a decide cue ("what would you pick", "fits best", "smarter"):
+# only a note on the answer, never a verdict (tuned on in-sample questions: see docs/BENCHMARKS.md)
+_MAYBE_CHOICE_EN = re.compile(r"\b(?:better|best|worth|wise|smart(?:er|est)?|recommend\w*|suggest\w*|advis\w*|"
+                              r"prefer\w*|pick|choose|good idea|bad idea|overkill|enough|fits?|make sense|makes sense|"
+                              r"instead of)\b|\bright (?:choice|call|way|approach|time)\b|\bor (?:keep|wait|stay)\b"
+                              r"|\bvs\.?\s")
+_MAYBE_CHOICE_TR = re.compile(r"\boner\w*|\btavsiye\w*|\btercih\w*|\bdaha iyi\b|\ben iyi\b|\bmantikli\w*|\bdogru "
+                              r"(?:zaman|secim|karar)\w*|\bdeger mi\b|\byeterli\w*|\b\w{2,}s[ae]k\b[^.?!]*(?:\?|"
+                              r"\bm[iu]\b)|\bm[iu]\b[^.?!]*\byoksa\b")
+
+
+def may_ask_for_choice(text: str) -> str | None:
+    """The word that may make ``text`` a request for a choice (no decide cue, no veto), else None."""
+    if not text or _decide_vetoed(text):
+        return None
+    m = _MAYBE_CHOICE_EN.search(tn.nfc(text).lower())
+    if m is None and _uses_turkish_cues(text):
+        m = _MAYBE_CHOICE_TR.search(tn.fold_tr(tn.nfc(text)))
+    return m.group(0).strip() if m else None
+
+
+def _decide_vetoed(text: str) -> bool:
+    low = tn.nfc(text).lower()
+    if any(rx.search(low) for rx in _DECIDE_VETO_EN_RX):
+        return True
+    return _uses_turkish_cues(text) and any(rx.search(tn.fold_tr(tn.nfc(text))) for rx in _DECIDE_VETO_TR_RX)
+
+
 def clause_cues(text: str, lexicon=None) -> list[dict]:
     """Intent cues found in one clause: ``[{intent, cue, lang}]`` in :data:`PRIORITY` order."""
     low = tn.nfc(text).lower()
@@ -395,6 +493,10 @@ def clause_cues(text: str, lexicon=None) -> list[dict]:
                 found[intent] = {"intent": intent, "cue": hits[0][0].group(0), "lang": "tr"}
         if "flow" not in found and _case_pair(folded):
             found["flow"] = {"intent": "flow", "cue": "ablative+dative", "lang": "tr"}
+    # a decide cue that is not a strong one does not survive a veto (past tense, a question about what the
+    # code does, a usage verb): the clause keeps its other intents
+    if "decide" in found and not asks_for_choice(text) and _decide_vetoed(text):
+        del found["decide"]
     # "who calls X" / "X kimler tarafından çağrılıyor": the call verb is the callers cue, not a flow one
     if "callers" in found and "flow" in found and \
             re.fullmatch(r"calls?|called|cagir\w*|cagri\w*", found["flow"]["cue"]):

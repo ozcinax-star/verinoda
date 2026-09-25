@@ -35,7 +35,8 @@ checked. A file edited by hand since its last logged event is reported as such, 
 silently: the next event keeps the hand-edited body and rewrites only the front matter and the block
 between the ``verinoda:generated`` markers.
 
-Guard specs (``--guard``) are ``KIND key=value ...``; list values are comma-separated:
+Guard specs (``--guard``) are ``KIND key=value ...``; list values are comma-separated; a value with spaces
+is quoted; a backslash is kept as written (``allowed=orders\\repository.py``, ``pattern=\\bexecute\\b``):
 
 * ``only_in calls=sqlite3.connect[,...] allowed=PATH|GLOB[,...] [scope=product|all] [exclude=GLOB,...]``
   (or ``sink=db-connection`` / ``pattern=REGEX`` instead of ``calls=``): the call may appear only in the
@@ -213,14 +214,52 @@ def _dump_front(front: dict) -> str:
     return "\n".join(out)
 
 
+def _entry_problems(lists: dict[str, list[dict]]) -> list[str]:
+    """What a hand edit broke in the entries the check reads (a record with any of these is not enforced)."""
+    out: list[str] = []
+
+    def text(x) -> bool:
+        return isinstance(x, str) and bool(x.strip())
+
+    ids: dict[str, set] = {}
+    for key, need in (("governs", ("id", "file", "qual", "symbol")), ("revisit-when", ("id", "kind", "value")),
+                      ("guards", ("id",)), ("waivers", ("guard", "at", "reason"))):
+        for i, e in enumerate(lists.get(key) or [], 1):
+            missing = [k for k in need if not text(e.get(k))]
+            if missing:
+                out.append(f"{key} entry {e.get('id') or i}: {', '.join(missing)} missing or not text")
+                continue
+            if "id" in need:
+                if e["id"] in ids.setdefault(key, set()):
+                    out.append(f"{key} id {e['id']} is used twice")
+                ids[key].add(e["id"])
+            if key == "revisit-when" and e["kind"] not in REVISIT_KINDS:
+                out.append(f"revisit-when {e['id']}: kind {e['kind']!r} is not one of {', '.join(REVISIT_KINDS)}")
+            if key in ("governs", "waivers"):
+                p = str(e.get("file") if key == "governs" else e.get("at")).replace("\\", "/")
+                if p.startswith("/") or re.match(r"^[A-Za-z]:", p) or ".." in p.split("/"):
+                    out.append(f"{key} entry {e.get('id') or i}: {p!r} is not a path inside the repository")
+    return out
+
+
 def parse(path: Path) -> Decision | None:
     """A decision from a Markdown file with a ``verinoda-decision`` front matter, else None."""
     try:
-        text = path.read_bytes().decode("utf-8", errors="replace").replace("\r\n", "\n")
+        # utf-8-sig: an editor that saves with a byte-order mark must not make the record disappear
+        text = path.read_bytes().decode("utf-8-sig", errors="replace").replace("\r\n", "\n")
     except OSError:
         return None
     front, body = split_front(text)
     if not front or "verinoda-decision" not in front:
+        if "verinoda-decision" in text[:4000]:  # meant as a record, but its front matter is not readable
+            m = re.match(r"^(ADR-\d{1,6})\b", path.name, re.I)
+            try:
+                did = norm_id(m.group(1)) if m else path.stem
+            except DecisionError:
+                did = path.stem
+            return Decision(id=did, number=int(did[4:]) if did.startswith("ADR-") else 0, title=path.name,
+                            path=path, problems=["the front matter is not readable: the file must start with a "
+                                                 "`---` line and the header must end with another `---` line"])
         return None
     problems = []
     try:
@@ -237,6 +276,7 @@ def parse(path: Path) -> Decision | None:
             problems.append(f"{key} is not a JSON list of objects")
             v = []
         lists[key] = v
+    problems += _entry_problems(lists)
     status = str(front.get("status") or "")
     if status not in STATUSES:
         problems.append(f"status {status!r} is not one of {', '.join(STATUSES)}")
@@ -271,9 +311,19 @@ def find(repo: Path, did: str) -> Decision | None:
 
 # -- specs ----------------------------------------------------------------------------------------
 
+def _split(spec: str) -> list[str]:
+    """Shell-like words, but a backslash is kept as written (a Windows path, ``\\b`` or ``\\.`` in a regex):
+    only quotes group words."""
+    lx = shlex.shlex(spec, posix=True)
+    lx.whitespace_split = True
+    lx.escape = ""
+    lx.commenters = ""
+    return list(lx)
+
+
 def _kv(spec: str, what: str) -> tuple[str, dict[str, str]]:
     try:
-        toks = shlex.split(spec, posix=True)
+        toks = _split(spec)
     except ValueError as exc:
         raise DecisionError(f"{what} {spec!r}: {exc}") from None
     if not toks:
@@ -536,6 +586,7 @@ def record(store, repo: Path, *, chosen: str, rationale: str, title: str | None 
                                 "(`verinoda decide import` a hand-written ADR first)")
         if old.status == "superseded":
             raise DecisionError(f"{old.id} is already superseded by {old.superseded_by}")
+        _refuse_unreadable(old)
     n = _next_number(store, repo)
     did = f"ADR-{n:04d}"
     title = str(title or "").strip() or (f"Use {chosen}" if not brief else str(brief.get("question") or "")[:100]
@@ -570,7 +621,15 @@ def _require(repo: Path, did: str) -> Decision:
     d = find(repo, did)
     if d is None:
         raise DecisionError(f"no decision record {norm_id(did)} in {decisions_dir(repo)} (`verinoda decide list`)")
+    _refuse_unreadable(d)
     return d
+
+
+def _refuse_unreadable(d: Decision) -> None:
+    """A record whose front matter could not be read fully is never rewritten (it would lose what was there)."""
+    if d.problems:
+        raise DecisionError(f"{d.id} ({d.path}) has problems: {'; '.join(d.problems)}. Fix its front matter by hand "
+                            "first; verinoda does not rewrite a record it cannot read fully")
 
 
 def add_guards(store, repo: Path, did: str, specs: list[str], *, user_statement: str | None = None,

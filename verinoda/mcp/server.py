@@ -1844,7 +1844,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None):
                           Field(description="External claims as {url, text[, option]}: counted only when the page "
                                             "contains text verbatim (network per research.network).")] = None,
         agent_arguments: Annotated[StrList, Field(description="Your own arguments; shown as weak_inference, "
-                                                              "never as evidence.")] = None,
+                                                              "never as evidence. 'OPTION: text' ties one to a "
+                                                              "named option.")] = None,
     ) -> dict[str, Any]:
         return emit(t.decision_brief(question, options=options, quotes=quotes, agent_arguments=agent_arguments))
 
