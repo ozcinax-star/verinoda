@@ -109,6 +109,24 @@ retrieve 50 → 45: in a mod, those words are how the data files are found), and
 `degis` → change (değişince, değişirse; 3 results down, all on one user question whose answer
 is not about changes, none up).
 
+**Turkish questions: code words, short stems.** An English word typed into a Turkish question took
+up to three of the lexicon's co-occurrence pairs (`update` -> issue, cli, audit; `graphify` ->
+install, uninstall, hook): names it occurs with, not what it means. An English question never gets
+them, and the question plan already skipped them for words the repository uses. Now a question word
+the code uses as a name part keeps only the repository's own translation pairs. Two cleanups came
+with it: a Turkish word the index does not know expands through its stem only when the stem has 4+
+letters and the corpus term is that stem inflected (`sayıyor` reached `sayfa`, `sığmak` `signal`;
+a Turkish spelling of an English word, `artifaktları` -> `artifact`, is no longer reached this way
+either), and a term reached by several routes keeps its highest weight. Same prepared indexes
+(question-time change; `9-before-tr-question-words.json` -> `9-tr-question-words.json`), eight public
+sets: analyze 282 -> 284, JSON 229 -> 231, text 280 -> 283, negatives unchanged. Five results change,
+all up: `verinoda_user_tr` u09 0 -> 2 / 1 / 2 (analyze / JSON / text; in-sample; the set is now
+13 / 9 / 13 of 30) and `graphify_core_tr` g04 text 2 -> 3, g08 JSON 0 -> 1 (the change was not
+tuned on that set). Measured one at a time on prototypes, all of it comes from the first change;
+the other two moved rankings only. The private set was not run for this change. The larger cause is still open: each dictionary gloss of a Turkish word scores as its
+own term (bul -> find, lookup, search), so correct additions hurt: Turkish verb forms (yeniliyor ->
+refresh) cost the user set 5 facts, the UI's own en/tr strings as glosses 1; neither was kept.
+
 **Final answers.** `verinoda bench run --answer-cmd CMD` hands each approach's context and the
 question to any command (a local model, a command-line client) and scores the answer it writes:
 gold facts, known-wrong statements, `answers_correct` (every fact, no wrong statement); analyze's
