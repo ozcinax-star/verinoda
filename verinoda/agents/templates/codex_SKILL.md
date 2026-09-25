@@ -123,7 +123,9 @@ read a pinned reference with `verinoda research --resolution <id> --reference-id
 For "should we / which X should we pick / how will this scale" (`human_decision_required`):
 1. `verinoda decide brief "<the question, verbatim>" --json` (MCP `decision_brief`): forces from the
    code with evidence, absences (with what was searched), decisions on record, options and
-   `questions_for_human`. It never recommends.
+   `questions_for_human`. It never recommends. The routing rules miss some phrasings: run the brief
+   yourself whenever the user asks which option to take or what you recommend, or an unknown says the
+   question "may ask for a choice". Tie your own arguments to an option: `--argument "NAME: text"`.
 2. Show the forces and absences, ask the `questions_for_human` (with `request_user_input` when it is
    available, otherwise as plain text, and wait), and record each answer:
    `verinoda decide answer <brief-id> --q qN "<their words>"`.

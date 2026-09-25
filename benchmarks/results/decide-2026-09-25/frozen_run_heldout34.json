@@ -1,0 +1,422 @@
+{
+ "intent_heldout3.json": {
+  "tp": 12,
+  "fp": 0,
+  "fn": 0,
+  "tn": 12,
+  "precision": 1.0,
+  "recall": 1.0,
+  "rows": [
+   {
+    "id": "h01",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Would it make sense to replace SQLite with DuckDB for the reports?"
+   },
+   {
+    "id": "h02",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Should the payment code live in its own service?"
+   },
+   {
+    "id": "h03",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Is MongoDB a better fit than PostgreSQL for order history?"
+   },
+   {
+    "id": "h04",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Which message broker do you suggest for the order events?"
+   },
+   {
+    "id": "h05",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Do we keep the repository pattern or switch to an ORM?"
+   },
+   {
+    "id": "h06",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Can SQLite handle ten times the current order volume, or do we need a server database?"
+   },
+   {
+    "id": "h07",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "What storage should we pick for audit logs?"
+   },
+   {
+    "id": "h08",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Bu projede Redis mi yoksa Memcached mi kullanmalıyız?"
+   },
+   {
+    "id": "h09",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Sipariş servisini ayrı bir mikroservise taşımak mantıklı mı?"
+   },
+   {
+    "id": "h10",
+    "gold": true,
+    "read": [
+     "decide",
+     "decide"
+    ],
+    "ok": true,
+    "q": "SQLite bizim için yeterli mi, yoksa PostgreSQL'e mi geçelim?"
+   },
+   {
+    "id": "h11",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Hangi ORM'i tercih etmemiz daha doğru olur?"
+   },
+   {
+    "id": "h12",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Is it wise to adopt Kafka for this app?"
+   },
+   {
+    "id": "h13",
+    "gold": false,
+    "read": [
+     "config"
+    ],
+    "ok": true,
+    "q": "How does OrderRepository decide which table to write to?"
+   },
+   {
+    "id": "h14",
+    "gold": false,
+    "read": [
+     "impact"
+    ],
+    "ok": true,
+    "q": "Which tests should I run after changing pricing.py?"
+   },
+   {
+    "id": "h15",
+    "gold": false,
+    "read": [
+     "config"
+    ],
+    "ok": true,
+    "q": "What did ADR-0001 decide about persistence?"
+   },
+   {
+    "id": "h16",
+    "gold": false,
+    "read": [
+     "locate",
+     "locate"
+    ],
+    "ok": true,
+    "q": "When the order count grows past MAX_ITEMS, what error does place_order raise?"
+   },
+   {
+    "id": "h17",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true,
+    "q": "How do I switch the database path with ORDERS_DATABASE_URL?"
+   },
+   {
+    "id": "h18",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true,
+    "q": "Where is the SQLite connection opened?"
+   },
+   {
+    "id": "h19",
+    "gold": false,
+    "read": [
+     "why"
+    ],
+    "ok": true,
+    "q": "Why was SQLite chosen?"
+   },
+   {
+    "id": "h20",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true,
+    "q": "How is the discount threshold applied when totals increase?"
+   },
+   {
+    "id": "h21",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true,
+    "q": "Hangi fonksiyon siparişi veritabanına yazıyor?"
+   },
+   {
+    "id": "h22",
+    "gold": false,
+    "read": [
+     "tests"
+    ],
+    "ok": true,
+    "q": "Testleri hangi komutla çalıştırırız?"
+   },
+   {
+    "id": "h23",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true,
+    "q": "Veritabanı bağlantısı nerede açılıyor?"
+   },
+   {
+    "id": "h24",
+    "gold": false,
+    "read": [
+     "why"
+    ],
+    "ok": true,
+    "q": "ADR'de SQLite neden seçilmiş?"
+   }
+  ]
+ },
+ "intent_heldout4.json": {
+  "tp": 5,
+  "fp": 1,
+  "fn": 5,
+  "tn": 9,
+  "precision": 0.833,
+  "recall": 0.5,
+  "rows": [
+   {
+    "id": "f01",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Are we better off with an ORM than with raw SQL here?"
+   },
+   {
+    "id": "f02",
+    "gold": true,
+    "read": [
+     "locate"
+    ],
+    "ok": false,
+    "q": "What would you pick for caching orders: Redis or an in-process dict?"
+   },
+   {
+    "id": "f03",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Should pricing and orders be deployed separately?"
+   },
+   {
+    "id": "f04",
+    "gold": true,
+    "read": [
+     "locate"
+    ],
+    "ok": false,
+    "q": "Which web framework fits this project best?"
+   },
+   {
+    "id": "f05",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Is Kotlin worth keeping in this mod, or should everything be Java?"
+   },
+   {
+    "id": "f06",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "Would you advise moving the config to a YAML file?"
+   },
+   {
+    "id": "f07",
+    "gold": true,
+    "read": [
+     "behaviour"
+    ],
+    "ok": false,
+    "q": "Is it smarter to shard the orders table now or wait?"
+   },
+   {
+    "id": "f08",
+    "gold": true,
+    "read": [
+     "impact"
+    ],
+    "ok": false,
+    "q": "Veritabanını değiştirmek için doğru zaman mı?"
+   },
+   {
+    "id": "f09",
+    "gold": true,
+    "read": [
+     "behaviour",
+     "behaviour"
+    ],
+    "ok": false,
+    "q": "Önbellek için Redis mi kullansak, yoksa hiç gerek yok mu?"
+   },
+   {
+    "id": "f10",
+    "gold": true,
+    "read": [
+     "decide"
+    ],
+    "ok": true,
+    "q": "NeoForge yerine Fabric'e geçmek bize ne kazandırır, geçmeli miyiz?"
+   },
+   {
+    "id": "f11",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true,
+    "q": "Which module talks to the database?"
+   },
+   {
+    "id": "f12",
+    "gold": false,
+    "read": [
+     "decide"
+    ],
+    "ok": false,
+    "q": "Should the validate_items test fail when there are no items?"
+   },
+   {
+    "id": "f13",
+    "gold": false,
+    "read": [
+     "flow"
+    ],
+    "ok": true,
+    "q": "How does the code pick the discount when the total grows?"
+   },
+   {
+    "id": "f14",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true,
+    "q": "What did we choose for the order id format?"
+   },
+   {
+    "id": "f15",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true,
+    "q": "Where would I add a new endpoint for refunds?"
+   },
+   {
+    "id": "f16",
+    "gold": false,
+    "read": [
+     "config",
+     "define"
+    ],
+    "ok": true,
+    "q": "Which config file sets the database URL, and what is the default?"
+   },
+   {
+    "id": "f17",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true,
+    "q": "Hangi sınıf siparişi kaydediyor?"
+   },
+   {
+    "id": "f18",
+    "gold": false,
+    "read": [
+     "tests"
+    ],
+    "ok": true,
+    "q": "Bu fonksiyonu nasıl test edelim?"
+   },
+   {
+    "id": "f19",
+    "gold": false,
+    "read": [
+     "locate"
+    ],
+    "ok": true,
+    "q": "İndirim eşiği nereden okunuyor?"
+   },
+   {
+    "id": "f20",
+    "gold": false,
+    "read": [
+     "why"
+    ],
+    "ok": true,
+    "q": "Why is the repository created lazily in get_repo?"
+   }
+  ]
+ }
+}

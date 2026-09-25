@@ -43,3 +43,28 @@ The last two copy `examples/` into a temporary folder, `git init` and scan each 
 - `check-time-verinoda-full.json`: `decide check` with three guards (no index: no no_edge) and a brief
   on the full tree of this branch (631 .py of 2,309 files). Run 1 of each is with a cold file cache.
   These two were written by scratch scripts, not by a harness in this folder.
+
+## After the two reviews (same day, by the fixer)
+
+- `guard_mutations.py` / `.json` now hold 76 cases: the 54 above (their results did not change) plus 22
+  forms the reviewers found (V26-V32, B21-B31, O10-O13). The new ones are in-sample for the fix: it was
+  written against them.
+- `intent_reviewers.json`: the reviewers' 52 questions (in-sample: the cue rules were changed against them).
+- `intent_heldout3.json` (sha256 `237d7770e73a6267f1301f959117bc71a212ef3b2cd5d14e1d09d92d7855657e`):
+  24 questions the fixer wrote and hashed before changing the cues, but after seeing the reviewers' lists;
+  the fixer also saw its results under the builder's rules before writing the new cues, so it is not a
+  clean held-out set.
+- `intent_heldout4.json` (sha256 `7b3d5a5de5a495ec91ed60a5b5a28d1205dcfec9d24220012c6f64dc849b6463`):
+  20 questions written and hashed before the new cue rules were written; cues that echoed its phrasings
+  were removed before the run; run once with the rules frozen (`frozen_run_heldout34.json`;
+  question_plan.py's sha256 at that moment began `ba8564c2`; later edits to it added only the note-only
+  `may_ask_for_choice` and wrapped a line, and `intent_results.json` gives the same numbers):
+  precision 0.83, recall 0.50. It is the only set here that measures questions the rules were not tuned on.
+- `intent_results.json`: regenerated with the new rules on all intent files.
+- `check-time-review-fixes.json`: `decide check` (3 guards) and a brief on the full tree, the code of
+  35d2987 and the review fixes on the same files (a scratch script, like the two files above).
+- `fast-35d2987.json` / `fast-review-fixes.json`: the fast harness (the builder's script, run with the
+  code of 35d2987 and with the review fixes on the same prepared copies; the eight public sets): no
+  difference in any question.
+- `fast-base.json`, `fast-step4.json` and the two `*_frozen_run.txt` files were converted to LF line
+  endings (no recorded hash covers them).

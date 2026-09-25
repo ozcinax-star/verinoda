@@ -66,6 +66,51 @@ between integrate/0925 (`fast-base.json`) and this branch after each of the four
 (`fast-step4.json` is the last); against `er_new` the only differences are the five Turkish results
 integrate/0925 already improved.
 
+**After the two reviews (same day).** Two reviewers found 37 problems (some the same); the fixes and
+what they changed, measured on this machine against an export of the branch before the fixes (35d2987):
+
+- *Guards.* Python names are now resolved by scope (a closure's parameter, a module-level `for`/`with`/
+  `except`/comprehension variable, `except ImportError: psycopg2 = None`, two drivers in two branches, a
+  method named like the import); Java/Kotlin receivers bound without a written type stay POSSIBLE and
+  Kotlin import aliases bind; Maven items are cited at their `<artifactId>` line; build files are taken
+  from the project's file list (git-ignored ones are not read), test/sample/fixture/vendor ones are
+  skipped and a build the root does not include is POSSIBLE; `conftest.py` is test code;
+  `--changed`/`--base` read project-relative, NUL-separated paths and count a finding as new when a file
+  its binding passes through changed. Every one of the reviewers' forms was reproduced first. The
+  mutation set is now 76 cases (22 added from the reviews: in-sample for the fix): VIOLATED precision
+  1.00 (32 of 32), recall 1.00 in reach, 13 of 13 out-of-reach forms named or POSSIBLE; the 54 original
+  cases give exactly the results they gave before. Raw regex on the 45 orders_app `sqlite3.connect`
+  cases: tp 9, fp 15, fn 8; the engine tp 17, fp 0, fn 0. Per case: median 42 ms, max 61 ms.
+- *Time on the full tree* (631 .py of 2,314 files, 3 guards without the index, records in memory, 3 runs
+  each, same session, other agents loading the machine; `check-time-review-fixes.json`): `decide check`
+  1.97-2.12 s against 1.84-2.16 s before - no change (bar: 5 s). The brief got slower: 7.7-8.0 s
+  against 5.0-5.5 s, because its probes now read code without comments and docstrings (one tokenize
+  pass per file that holds a sink word). A no-op `verinoda update` no longer runs every guard again (it
+  says so); `no_edge` re-checks mask each file once per check.
+- *Brief* (`brief_orders_app.json`): 8 of 8 gold forces, 19 of 19 cited evidence items re-read equal
+  (one more than before: the `if _repo is None` line that makes the shared instance a strong inference),
+  5 of 5 gold question kinds, for both questions. The reviewers' adversarial copies (a comment naming a
+  connection, a TODO in a test, a global assigned on every call, `./records` in a compose file, a Java
+  project with a JDBC driver, boto3 for Bedrock, 61 commits of churn, an ADR whose first `because` is
+  context) now give no false force, absence or skipped question (tests in `tests/test_decide.py`).
+- *Intent routing.* The reviewers measured the builder's rules on their own questions: precision 0.42,
+  recall 0.50 on 44, and 7 of 8 how-to questions read as decisions. The cues now separate strong ones
+  from ones a veto cancels (past tense, a question about what the code does, a usage verb); a growth
+  condition alone is no decision. In-sample (the rules were changed against them): the reviewers' 52
+  questions 52/52, the written 24 and held-out 1 and 2 all correct, and held-out 3 (24 questions the
+  fixer wrote before changing the cues but after seeing their results under the old rules) 24/24. The
+  one set left out of the tuning, **held-out 4** (20 questions, hashed before the new cues were written,
+  run once): **precision 0.83, recall 0.50** - the recall bar (0.85) is still not met. Of its 5 misses,
+  4 carry a word ("pick", "fits ... best", "smarter", "doğru zaman") that now adds a note that the
+  question may ask for a choice (a note, never another verdict; that word list was written after seeing
+  those misses, so it is in-sample). The 86 benchmark questions (119 texts with their English versions)
+  are read as no decision and get no note. A sub-question another intent answers but whose words ask
+  for a choice in so many words is `human_decision_required` whatever plan gave its intent.
+- *No regression* (fast harness, the eight public sets, prepared indexes, baseline and fixed code on the
+  same copies): no difference in any of the 86 questions for any of the three Verinoda approaches
+  (facts found: analyze 284, retrieve 231, retrieve_text 283 of 319, before and after; the negatives
+  matched did not change either): `fast-35d2987.json` and `fast-review-fixes.json`.
+
 **Not measured.** A real agent session with the new skill text (Claude Code or Codex); the brief on
 any repository other than orders_app against a gold (forge_mod and a message-broker question were
 only read); held-out guard cases; `decide check` in a real CI job; a quote pin against a live page

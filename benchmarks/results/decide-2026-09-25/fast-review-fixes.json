@@ -81,7 +81,7 @@
    "verinoda_retrieve_text": 0
   },
   "facts": 68,
-  "seconds": 5.9
+  "seconds": 5.2
  },
  "glow_mod": {
   "verinoda_analyze": 48,
@@ -165,7 +165,7 @@
    "verinoda_retrieve_text": 0
   },
   "facts": 50,
-  "seconds": 4.4
+  "seconds": 4.0
  },
  "orders_app": {
   "verinoda_analyze": 32,
@@ -229,7 +229,7 @@
    "verinoda_retrieve_text": 0
   },
   "facts": 32,
-  "seconds": 3.8
+  "seconds": 3.0
  },
  "orders_app_tr": {
   "verinoda_analyze": 32,
@@ -293,7 +293,7 @@
    "verinoda_retrieve_text": 0
   },
   "facts": 32,
-  "seconds": 6.5
+  "seconds": 4.0
  },
  "graphify_core": {
   "verinoda_analyze": 36,
@@ -352,7 +352,7 @@
    "verinoda_retrieve_text": 0
   },
   "facts": 37,
-  "seconds": 42.0
+  "seconds": 25.6
  },
  "graphify_core_tr": {
   "verinoda_analyze": 31,
@@ -411,7 +411,7 @@
    "verinoda_retrieve_text": 0
   },
   "facts": 37,
-  "seconds": 26.0
+  "seconds": 32.3
  },
  "heldout_repoatlas": {
   "verinoda_analyze": 26,
@@ -465,7 +465,7 @@
    "verinoda_retrieve_text": 0
   },
   "facts": 33,
-  "seconds": 16.0
+  "seconds": 21.7
  },
  "verinoda_user_tr": {
   "verinoda_analyze": 13,
@@ -539,6 +539,6 @@
    "verinoda_retrieve_text": 0
   },
   "facts": 30,
-  "seconds": 20.7
+  "seconds": 31.4
  }
 }

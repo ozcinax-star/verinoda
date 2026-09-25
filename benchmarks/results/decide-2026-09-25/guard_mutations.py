@@ -274,6 +274,83 @@ CASES = [
          "src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java", "\n}",
          "\n    static Object db(String u) throws Exception {\n"
          "        return java.sql.DriverManager.getConnection(u); // <<\n    }\n}")}, "violating", []),
+    # -- added by the fixer from the two reviews of p2/decide (in-sample for the fix: it was written
+    #    against these forms; the reviewers found them, not this set) ---------------------------------
+    ("V26 a local of the same name in another function", "orders", ORD_G,
+     {R: py("import sqlite3\n\n\ndef daily(u):\n    return sqlite3.connect(u)  # <<\n\n\n"
+            "def _fallback():\n    sqlite3 = None\n    return sqlite3")}, "violating", []),
+    ("V27 driver chosen at import time (sink)", "orders", SINK_G,
+     {R: py("import os\n\nif os.environ.get('PG'):\n    from psycopg import connect\nelse:\n"
+            "    from sqlite3 import connect\n\n\ndef d(u):\n    return connect(u)  # <<")}, "violating", []),
+    ("V28 a method named like the import", "orders", ORD_G,
+     {R: py("from sqlite3 import connect\n\n\nclass Archive:\n    def connect(self):\n"
+            "        return connect('a.db')  # <<")}, "violating", []),
+    ("V29 two local imports under one name", "orders", ORD_G,
+     {R: py("def a(u):\n    import sqlite3 as db\n    return db.connect(u)  # <<\n\n\n"
+            "def b(u):\n    import json as db\n    return db.loads(u)")}, "violating", []),
+    ("V30 the alias rebound in another function", "orders", ORD_G,
+     {R: py("import sqlite3\n\n\ndef x():\n    import json as sqlite3\n    return sqlite3\n\n\n"
+            "def y(u):\n    return sqlite3.connect(u)  # <<")}, "violating", []),
+    ("V31 multi-line Maven dependency", "orders", ["dependency absent=org.postgresql:postgresql"],
+     {"pom.xml": "<project>\n  <dependencies>\n    <dependency>\n      <groupId>org.postgresql</groupId>\n"
+                 "      <artifactId>postgresql</artifactId> <!-- // << -->\n      <version>42.7.3</version>\n"
+                 "    </dependency>\n  </dependencies>\n</project>\n"}, "violating", []),
+    ("V32 Kotlin import alias", "forge", FORGE_G,
+     {"src/main/kotlin/net/ashvale/emberforge/net2/Reg.kt": "package net.ashvale.emberforge.net2\n\n"
+      "import net.neoforged.neoforge.network.registration.PayloadRegistrar as PR\n\n"
+      "fun reg(r: PR, p: Any) {\n    r.playToServer(p, p, p) // <<\n}\n"}, "violating", []),
+    ("B21 closure parameter shadows the import", "orders", ORD_G,
+     {R: py("from sqlite3 import connect\n\n\ndef make_opener(connect):\n    def opener(dsn):\n"
+            "        return connect(dsn)\n    return opener")}, "benign", []),
+    ("B22 module-level comprehension variable", "orders", ORD_G,
+     {R: py("import sqlite3\nFAKES = []\nCONNS = [sqlite3.connect(':memory:') for sqlite3 in FAKES]")}, "benign", []),
+    ("B23 module-level for variable", "orders", ORD_G,
+     {R: py("import sqlite3\n\nfor sqlite3 in []:\n    sqlite3.connect('x')")}, "benign", []),
+    ("B24 with ... as the name", "orders", ORD_G,
+     {R: py("import sqlite3\nfrom contextlib import nullcontext\n\nwith nullcontext(object()) as sqlite3:\n"
+            "    pass\n\nsqlite3.connect('x')")}, "benign", []),
+    ("B25 except ... as the name", "orders", ORD_G,
+     {R: py("import sqlite3\n\ntry:\n    pass\nexcept Exception as sqlite3:\n    sqlite3.connect('x')")},
+     "benign", []),
+    ("B26 Java lambda parameter of another type", "forge", FORGE_G,
+     {"src/main/java/net/ashvale/emberforge/net2/Helper.java": "package net.ashvale.emberforge.net2;\n\n"
+      "import net.neoforged.neoforge.network.registration.PayloadRegistrar;\nimport java.util.List;\n\n"
+      "class Helper {\n    static String d(PayloadRegistrar registrar) { return String.valueOf(registrar); }\n"
+      "    static void f(List<Bus> buses, Object m) {\n        buses.forEach(registrar -> registrar.playToServer(m));\n"
+      "    }\n}\n"}, "benign", []),
+    ("B27 Java var loop variable of another type", "forge", FORGE_G,
+     {"src/main/java/net/ashvale/emberforge/net2/Helper2.java": "package net.ashvale.emberforge.net2;\n\n"
+      "import net.neoforged.neoforge.network.registration.PayloadRegistrar;\nimport java.util.List;\n\n"
+      "class Helper2 {\n    static String d(PayloadRegistrar registrar) { return String.valueOf(registrar); }\n"
+      "    static void f(List<Bus> buses, Object m) {\n        for (var registrar : buses) {\n"
+      "            registrar.playToServer(m);\n        }\n    }\n}\n"}, "benign", []),
+    ("B28 Kotlin lambda parameter of another type", "forge", FORGE_G,
+     {"src/main/kotlin/net/ashvale/emberforge/net2/Helper3.kt": "package net.ashvale.emberforge.net2\n\n"
+      "import net.neoforged.neoforge.network.registration.PayloadRegistrar\n\n"
+      "fun d(registrar: PayloadRegistrar) = registrar.toString()\n\n"
+      "fun f(buses: List<Bus>, m: Any) {\n    buses.forEach { registrar -> registrar.playToServer(m) }\n}\n"},
+     "benign", []),
+    ("B29 a test fixture's build file", "orders", ["dependency absent=postgresql"],
+     {"tests/fixtures/legacy_java/build.gradle": "dependencies {\n    runtimeOnly "
+                                                 "\"org.postgresql:postgresql:42.7.3\"\n}\n"}, "benign", []),
+    ("B30 root conftest.py", "orders", ORD_G,
+     {"conftest.py": py("import sqlite3\n\n\ndef db():\n    return sqlite3.connect(':memory:')")}, "benign", []),
+    ("B31 a git-ignored pom.xml", "orders", ["dependency absent=postgresql"],
+     {".gitignore": "node_modules/\n", "node_modules/lib/android/pom.xml":
+      "<project><dependencies><dependency><groupId>org.postgresql</groupId>"
+      "<artifactId>postgresql</artifactId></dependency></dependencies></project>\n"}, "benign", []),
+    ("O10 optional import with a None fallback", "orders", SINK_G,
+     {R: py("try:\n    import psycopg2\nexcept ImportError:\n    psycopg2 = None\n\n\ndef d(dsn):\n"
+            "    return psycopg2.connect(dsn)")}, "out_of_reach", ["can also be"]),
+    ("O11 functools.partial of the target", "orders", ORD_G,
+     {R: py("import functools\nimport sqlite3\n\nopener = functools.partial(sqlite3.connect, 'x.db')\n\n\n"
+            "def d():\n    return opener()")}, "out_of_reach", ["used as a value"]),
+    ("O12 the target as a class attribute", "orders", ORD_G,
+     {R: py("import sqlite3\n\n\nclass Repo:\n    opener = sqlite3.connect\n\n    def go(self):\n"
+            "        return self.opener('x')")}, "out_of_reach", ["used as a value"]),
+    ("O13 a build the root build does not include", "orders", ["dependency absent=postgresql"],
+     {"tools/gen/build.gradle": "dependencies {\n    implementation \"org.postgresql:postgresql:42.7.3\"\n}\n"},
+     "out_of_reach", ["root build does not include"]),
 ]
 
 

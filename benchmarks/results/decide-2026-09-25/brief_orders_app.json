@@ -13,8 +13,8 @@
    "7 no DB driver declared in pyproject.toml": true,
    "8 tests pin :memory: at tests/test_service.py:8,15": true
   },
-  "evidence_items": 18,
-  "evidence_rechecked": 18,
+  "evidence_items": 19,
+  "evidence_rechecked": 19,
   "evidence_precision": 1.0,
   "questions": 5,
   "question_kinds": [
@@ -29,7 +29,7 @@
   "answered_by_code_not_asked": [],
   "forces": 10,
   "absences": 3,
-  "seconds": 0.167,
+  "seconds": 0.152,
   "options": [
    [
     "SQLite",
@@ -55,8 +55,8 @@
    "7 no DB driver declared in pyproject.toml": true,
    "8 tests pin :memory: at tests/test_service.py:8,15": true
   },
-  "evidence_items": 18,
-  "evidence_rechecked": 18,
+  "evidence_items": 19,
+  "evidence_rechecked": 19,
   "evidence_precision": 1.0,
   "questions": 5,
   "question_kinds": [
@@ -71,7 +71,7 @@
   "answered_by_code_not_asked": [],
   "forces": 10,
   "absences": 3,
-  "seconds": 0.11,
+  "seconds": 0.101,
   "options": [
    [
     "SQLite",

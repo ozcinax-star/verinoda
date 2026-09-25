@@ -1,0 +1,23 @@
+{"written_at": "2026-09-25 by the fixer of p2/decide, after designing (not yet writing) the new cue rules and after seeing held-out 3's failures under the builder's rules; hashed before the new rules were written and run once after they were frozen; same author, not independent",
+ "questions": [
+  {"id": "f01", "repo": "orders_app", "decide": true,  "q": "Are we better off with an ORM than with raw SQL here?"},
+  {"id": "f02", "repo": "orders_app", "decide": true,  "q": "What would you pick for caching orders: Redis or an in-process dict?"},
+  {"id": "f03", "repo": "orders_app", "decide": true,  "q": "Should pricing and orders be deployed separately?"},
+  {"id": "f04", "repo": "orders_app", "decide": true,  "q": "Which web framework fits this project best?"},
+  {"id": "f05", "repo": "forge_mod",  "decide": true,  "q": "Is Kotlin worth keeping in this mod, or should everything be Java?"},
+  {"id": "f06", "repo": "orders_app", "decide": true,  "q": "Would you advise moving the config to a YAML file?"},
+  {"id": "f07", "repo": "orders_app", "decide": true,  "q": "Is it smarter to shard the orders table now or wait?"},
+  {"id": "f08", "repo": "orders_app", "decide": true,  "q": "Veritabanını değiştirmek için doğru zaman mı?"},
+  {"id": "f09", "repo": "orders_app", "decide": true,  "q": "Önbellek için Redis mi kullansak, yoksa hiç gerek yok mu?"},
+  {"id": "f10", "repo": "forge_mod",  "decide": true,  "q": "NeoForge yerine Fabric'e geçmek bize ne kazandırır, geçmeli miyiz?"},
+  {"id": "f11", "repo": "orders_app", "decide": false, "q": "Which module talks to the database?"},
+  {"id": "f12", "repo": "orders_app", "decide": false, "q": "Should the validate_items test fail when there are no items?"},
+  {"id": "f13", "repo": "orders_app", "decide": false, "q": "How does the code pick the discount when the total grows?"},
+  {"id": "f14", "repo": "orders_app", "decide": false, "q": "What did we choose for the order id format?"},
+  {"id": "f15", "repo": "orders_app", "decide": false, "q": "Where would I add a new endpoint for refunds?"},
+  {"id": "f16", "repo": "orders_app", "decide": false, "q": "Which config file sets the database URL, and what is the default?"},
+  {"id": "f17", "repo": "orders_app", "decide": false, "q": "Hangi sınıf siparişi kaydediyor?"},
+  {"id": "f18", "repo": "orders_app", "decide": false, "q": "Bu fonksiyonu nasıl test edelim?"},
+  {"id": "f19", "repo": "orders_app", "decide": false, "q": "İndirim eşiği nereden okunuyor?"},
+  {"id": "f20", "repo": "orders_app", "decide": false, "q": "Why is the repository created lazily in get_repo?"}
+ ]}
