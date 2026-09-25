@@ -94,6 +94,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "feedback_resolve",
     "index_update",
     "decision_record",
+    "decision_check",
 )
 
 MAX_RESPONSE_CHARS = int(os.environ.get("VERINODA_MCP_MAX_CHARS", "12000"))
@@ -1173,6 +1174,42 @@ class AtlasTools:
                                   "decision_record(action='list') shows the records, their guards and ids") from None
         return self._run("decision_record", go)
 
+    def decision_check(self, base: str | None = None, changed_only: bool = False, refresh: bool = True) -> dict:
+        def go():
+            from verinoda import decisions as dm
+            from verinoda import guards
+
+            b = _opt_text(base)
+            if b and changed_only:
+                raise ToolFailure("invalid_argument", "give base or changed_only, not both",
+                                  "changed_only=true is base='HEAD'")
+            try:
+                recs = dm.load_all(self.repo)
+            except dm.DecisionError as exc:
+                raise ToolFailure("invalid_argument", str(exc)[:600], "fix decisions.dir in .verinoda/config.json")
+            note, graph = None, None
+            if any(d.enforced and g.get("kind") == "no_edge" and g.get("status") == "accepted"
+                   for d in recs for g in d.guards):
+                with self._store() as st:
+                    graph = self._graph_for_analysis(st)
+                    if graph is None and refresh:
+                        from verinoda import workflow
+
+                        up = workflow.update(st, self.repo)
+                        note = (f"refreshed first ({up.get('mode')}, {up.get('changed_count') or 0} changed "
+                                "file(s))") if not up.get("error") else f"could not be refreshed: {up['error']}"
+                if graph is None and graph_path(self.repo).exists():
+                    graph = self._graph()
+            try:
+                res = guards.check(self.repo, graph=graph, base=b, changed_only=bool(changed_only), records=recs)
+            except ValueError as exc:
+                raise ToolFailure("invalid_argument", str(exc)[:600], "base is a git revision such as HEAD~1 or "
+                                                                       "origin/main") from None
+            if note:
+                res["index"] = note
+            return res
+        return self._run("decision_check", go, keep=("status", "exit", "violations", "next_step"))
+
     # -- index ----------------------------------------------------------------------
     def index_update(self) -> dict:
         def go():
@@ -1234,6 +1271,8 @@ Tools:
 - index_update: re-index after editing files (marks affected claims stale).
 - decision_record: what the user decided (records, guards, waivers). A choice between options is the user's:
   never record, accept or waive without their words (user_statement).
+- decision_check: the code against every accepted guard (VIOLATED / POSSIBLE / REVIEW / TRIGGER, ok with its
+  limits). Call it (changed_only=true) before finishing a code change; on VIOLATED fix the code or ask the user.
 
 Rules: graph edges (EXTRACTED/INFERRED) are extractions, never verification. Claim status is one of
 observed, experiment_verified, statically_verified, primary_source_verified, strong_inference,
@@ -1383,6 +1422,15 @@ DESCRIPTIONS: dict[str, str] = {
         "absent=psycopg'; revisit_when: 'dependency_added=NAME' or 'file_appears=GLOB'. record, guard, accept "
         "and waive need user_statement: the user's own words, verbatim - Verinoda never decides and neither "
         "may the agent."),
+    "decision_check": (
+        "Check the working tree against every accepted guard of every accepted decision record (the same as "
+        "`verinoda decide check`). violations: VIOLATED sites, statically verified (Python calls bound through "
+        "imports and aliases, Java/Kotlin import-bound calls, EXTRACTED graph edges whose line re-checks, "
+        "declared dependencies); possible: heuristic hits (text matches, INFERRED edges, unresolved receivers); "
+        "reviews: governed code that changed; triggers: revisit conditions that hold; ok: guards that hold, each "
+        "with its scope and limits; waived; unknown. base (a git revision) or changed_only (= HEAD) labels "
+        "findings new/touched or pre-existing, and then only new ones count (exit 1). Refreshes a stale index "
+        "first when a no_edge guard needs the graph (refresh=false skips it). Never edits code or records."),
 }
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
@@ -1729,6 +1777,16 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None):
                                       brief_id=brief_id, guards=guards, governs=governs, revisit_when=revisit_when,
                                       supersedes=supersedes, guard_ids=guard_ids, at=at, reason=reason, until=until,
                                       document=document, user_statement=user_statement))
+
+    @register("decision_check")
+    def decision_check(
+        base: Annotated[OptStr, Field(description="A git revision (e.g. 'origin/main'): findings in files changed "
+                                                  "since it are new/touched, the rest pre-existing.")] = None,
+        changed_only: Annotated[bool, Field(description="The same against HEAD (the agent's own changes).")] = False,
+        refresh: Annotated[bool, Field(description="Update a stale index first when a no_edge guard needs "
+                                                   "the graph.")] = True,
+    ) -> dict[str, Any]:
+        return emit(t.decision_check(base=base, changed_only=changed_only, refresh=refresh))
 
     return srv
 

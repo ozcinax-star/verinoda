@@ -15,6 +15,8 @@ allowed-tools:
   - Bash(verinoda verify *)
   - Bash(verinoda challenge *)
   - Bash(verinoda update *)
+  - Bash(verinoda decide check *)
+  - Bash(verinoda decide list *)
   - PowerShell(verinoda doctor *)
   - PowerShell(verinoda query *)
   - PowerShell(verinoda trace *)
@@ -27,6 +29,8 @@ allowed-tools:
   - PowerShell(verinoda verify *)
   - PowerShell(verinoda challenge *)
   - PowerShell(verinoda update *)
+  - PowerShell(verinoda decide check *)
+  - PowerShell(verinoda decide list *)
 ---
 <!-- verinoda-managed v1 -->
 <!-- Managed by `verinoda install`. After a local install, edits are kept: install will not overwrite them and uninstall leaves the file. A copy with no local install record is refreshed by install. Delete the marker line above to take ownership. -->
@@ -221,6 +225,9 @@ unresolved, say what evidence would settle it.
 
 Run `verinoda update .` after you or the user change code. It re-indexes the changed files
 and marks claims whose evidence changed as `stale`; `verify` them again before relying on them.
+Before you finish a code change, run `verinoda decide check --changed --json` (MCP `decision_check`
+with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be
+superseded or the site waived; never edit, supersede or waive a decision record yourself.
 
 ## Answer format
 

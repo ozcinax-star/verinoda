@@ -204,6 +204,9 @@ unresolved, say what evidence would settle it.
 
 Run `verinoda update .` after you or the user change code. It re-indexes the changed files
 and marks claims whose evidence changed as `stale`; `verify` them again before relying on them.
+Before you finish a code change, run `verinoda decide check --changed --json` (MCP `decision_check`
+with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be
+superseded or the site waived; never edit, supersede or waive a decision record yourself.
 
 ## Answer format
 

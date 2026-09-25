@@ -114,7 +114,7 @@ def test_record_writes_a_human_decision_with_front_matter_and_logs_it(tmp_path):
         assert front["guards"][0]["calls"] == ["sqlite3.connect"] and front["guards"][0]["status"] == "accepted"
         assert front["governs"][0]["qual"] == "OrderRepository.__init__" and front["governs"][0]["fp"]
         assert front["revisit-when"] == [{"id": "r1", "kind": "dependency_added", "value": "psycopg",
-                                          "spec": "dependency_added=psycopg"}]
+                                          "spec": "dependency_added=psycopg", "baseline": False}]
         assert "keep SQLite for now" in body and dm.GEN_START in body
         d = dm.find(repo, "adr-2")
         assert d is not None and d.enforced and d.guards == front["guards"]
@@ -248,3 +248,239 @@ def test_cli_and_mcp_record_need_the_users_words(tmp_path, capsys):
     assert "inside the repository" in capsys.readouterr().err
     assert cli.main(["decide", "list", "--repo", str(repo)]) == 0
     assert "ADR-0002 [accepted]" in capsys.readouterr().out
+
+
+# -- guards and `decide check` (step 3) --------------------------------------------------------------
+
+GLOW = ROOT / "examples" / "glow_mod"
+FORGE = ROOT / "examples" / "forge_mod"
+NET = "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java"
+EVENTS = "src/main/java/net/ashvale/emberforge/event/ModEvents.java"
+
+
+@pytest.fixture(scope="module")
+def templates(tmp_path_factory):
+    base = tmp_path_factory.mktemp("guard_tpl")
+    return {name: _copy(src, base / name) for name, src in (("orders", ORDERS), ("glow", GLOW), ("forge", FORGE))}
+
+
+def _case(templates, tmp_path, name: str, guards: list[str], **kw):
+    from verinoda import decisions as dm
+
+    repo = tmp_path / name
+    shutil.copytree(templates[name], repo)
+    st = open_store(repo)
+    try:
+        rec = dm.record(st, repo, chosen="c", rationale="r", guards=guards, **kw)
+    finally:
+        st.close()
+    return repo, rec
+
+
+def _write(repo: Path, rel: str, text: str) -> None:
+    p = repo / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(text.encode("utf-8"))
+
+
+def _check(repo: Path, **kw):
+    from verinoda import guards, index, workflow
+
+    st = open_store(repo)
+    try:
+        workflow.update(st, repo)
+    finally:
+        st.close()
+    return guards.check(repo, graph=index.load(repo), **kw)
+
+
+def _at(items):
+    return sorted(f["at"] for f in items)
+
+
+def test_only_in_python_catches_aliases_and_ignores_comments_strings_and_tests(templates, tmp_path):
+    repo, _ = _case(templates, tmp_path, "orders", ["only_in calls=sqlite3.connect allowed=orders/repository.py"])
+    clean = _check(repo)
+    assert clean["exit"] == 0 and not clean["violations"] and not clean["possible"]
+    (ok,) = clean["ok"]
+    assert ok["scope"]["python"] >= 1 and any("getattr" in lim for lim in ok["limits"])
+    assert any("test file" in lim for lim in ok["limits"])
+    _write(repo, "orders/reports.py",
+           '"""Unlike sqlite3.connect(...), this module reads a cache.\n\nsqlite3.connect is not used."""\n'
+           "import sqlite3\nimport sqlite3 as sq\nfrom sqlite3 import connect as open_db\n"
+           "from orders.config import DATABASE_URL\n\n\n"
+           "def daily_total():\n    # sqlite3.connect(DATABASE_URL) would be wrong here\n"
+           "    a = sqlite3.connect(DATABASE_URL)\n    b = sq.connect(DATABASE_URL)\n    c = open_db(DATABASE_URL)\n"
+           "    d = getattr(sqlite3, 'connect')(DATABASE_URL)\n    msg = 'sqlite3.connect(x)'\n"
+           "    return a, b, c, d, msg\n")
+    _write(repo, "tests/test_reports.py", "import sqlite3\n\n\ndef test_x():\n    sqlite3.connect(':memory:')\n")
+    res = _check(repo)
+    assert _at(res["violations"]) == ["orders/reports.py:12", "orders/reports.py:13", "orders/reports.py:14"]
+    assert all(v["status"] == "statically_verified" for v in res["violations"])
+    assert "as `sq.connect`" in res["violations"][1]["why"] and "as `open_db`" in res["violations"][2]["why"]
+    assert _at(res["possible"]) == ["orders/reports.py:15"] and "getattr" in res["possible"][0]["why"]
+    assert res["exit"] == 1 and "never edit or supersede" in res["next_step"]
+
+
+def test_only_in_follows_a_re_export_and_grades_a_shadowing_parameter_possible(templates, tmp_path):
+    repo, _ = _case(templates, tmp_path, "orders", ["only_in sink=db-connection allowed=orders/repository.py"])
+    _write(repo, "orders/dbutil.py", "from sqlite3 import connect as open_db\n")
+    _write(repo, "orders/reports.py", "import sqlite3\n\nfrom .dbutil import open_db\n\n\ndef d(u):\n"
+                                      "    return open_db(u)\n\n\ndef e(sqlite3):\n    return sqlite3.connect('x')\n")
+    res = _check(repo)
+    assert _at(res["violations"]) == ["orders/reports.py:7"] and "through orders.dbutil.open_db" in \
+        res["violations"][0]["why"]
+    # the parameter shadows the imported module: not verified
+    assert _at(res["possible"]) == ["orders/reports.py:11"] and "parameter" in res["possible"][0]["why"]
+
+
+def test_no_edge_on_glow_mod_import_is_violated_inferred_call_possible_comment_nothing(templates, tmp_path):
+    repo, _ = _case(templates, tmp_path, "glow", ["no_edge from=src/main/** to=src/client/**"])
+    clean = _check(repo)
+    assert clean["exit"] == 0 and clean["ok"][0]["scope"] == {"edges": 0}
+    assert any("string class loading" in lim for lim in clean["ok"][0]["limits"])
+    gm = repo / "src/main/java/com/example/glowmod/GlowMod.java"
+    t = gm.read_text(encoding="utf-8").replace(
+        "import com.example.glowmod.command.GlowCommands;",
+        "import com.example.glowmod.client.GlowModClient;\nimport com.example.glowmod.command.GlowCommands;")
+    t = t.replace("        LOGGER.info", "        // GlowModClient is client only\n"
+                                         "        new GlowModClient().onInitializeClient();\n        LOGGER.info")
+    gm.write_bytes(t.encode("utf-8"))
+    res = _check(repo)
+    main = "src/main/java/com/example/glowmod/GlowMod.java"
+    assert _at(res["violations"]) == [f"{main}:3"] and "EXTRACTED" in res["violations"][0]["why"]
+    assert all(p["at"].startswith(main) and "INFERRED" in p["why"] for p in res["possible"])
+    lines = gm.read_text(encoding="utf-8").split("\n")
+    assert not any("//" in lines[int(p["at"].rpartition(":")[2]) - 1] for p in res["possible"])  # not the comment
+
+
+def test_only_in_java_and_kotlin_bind_calls_through_imports_and_declared_types(templates, tmp_path):
+    repo, _ = _case(templates, tmp_path, "forge",
+                    [f"only_in calls=PayloadRegistrar.playToServer,PayloadRegistrar.playToClient allowed={NET}",
+                     "no_edge from=src/main/java/** to=src/main/kotlin/net/ashvale/emberforge/client/**"])
+    clean = _check(repo)
+    assert clean["exit"] == 0 and len(clean["ok"]) == 2
+    ev = repo / EVENTS
+    t = ev.read_text(encoding="utf-8").replace(
+        "import net.neoforged.neoforge.event.RegisterCommandsEvent;",
+        "import net.neoforged.neoforge.event.RegisterCommandsEvent;\n"
+        "import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;\n"
+        "import net.neoforged.neoforge.network.registration.PayloadRegistrar;\n"
+        "import net.ashvale.emberforge.client.EmberForgeScreen;")
+    t = t.replace("    /** Punching", "    @SubscribeEvent\n    public static void onPayloads(RegisterPayloadHandlersEvent e) {\n"
+                  "        PayloadRegistrar registrar = e.registrar(\"1\");\n"
+                  "        registrar.playToClient(A.TYPE, A.CODEC, ModEvents::h); // registrar.playToServer(x)\n"
+                  "        e.registrar(\"2\").playToServer(B.TYPE, B.CODEC, ModEvents::h);\n    }\n\n    /** Punching")
+    ev.write_bytes(t.encode("utf-8"))
+    _write(repo, "src/main/kotlin/net/ashvale/emberforge/heat/Wire.kt",
+           "package net.ashvale.emberforge.heat\n\nimport net.neoforged.neoforge.network.registration.PayloadRegistrar\n"
+           "\nfun wire(r: PayloadRegistrar) {\n    r.playToServer(T, C)\n}\n")
+    res = _check(repo)
+    viol = _at(res["violations"])
+    assert f"{EVENTS}:31" in viol and "src/main/kotlin/net/ashvale/emberforge/heat/Wire.kt:6" in viol
+    assert f"{EVENTS}:15" in viol  # the Java import of the Kotlin client screen (a file node "X.kt")
+    assert len(viol) == 3
+    assert f"{EVENTS}:32" in _at(res["possible"])  # a call chain: the receiver's type is not resolved
+
+
+def test_governs_is_a_review_revisit_a_trigger_and_dependencies_are_read(templates, tmp_path):
+    repo, rec = _case(templates, tmp_path, "orders", ["dependency absent=psycopg"],
+                      governs=["orders/repository.py::OrderRepository.__init__"],
+                      revisit_when=["dependency_added=psycopg", "file_appears=docker-compose*.yml"])
+    clean = _check(repo)
+    assert clean["exit"] == 0 and not clean["reviews"] and not clean["triggers"]
+    p = repo / "orders/repository.py"
+    p.write_bytes(p.read_bytes().replace(b"sqlite3.connect(url)", b"sqlite3.connect(url, check_same_thread=False)"))
+    pp = repo / "pyproject.toml"
+    pp.write_bytes(pp.read_bytes().replace(b'requires-python = ">=3.10"',
+                                           b'requires-python = ">=3.10"\ndependencies = ["psycopg>=3.1"]'))
+    _write(repo, "docker-compose.yml", "services: {}\n")
+    res = _check(repo)
+    assert [r["kind"] for r in res["reviews"]] == ["governs"] and "changed since the decision" in res["reviews"][0]["why"]
+    assert not any(v["kind"] == "governs" for v in res["violations"])  # a review, never a violation
+    assert sorted(t["guard"] for t in res["triggers"]) == ["r1", "r2"]
+    assert _at(res["violations"]) == ["pyproject.toml:5"] and res["violations"][0]["kind"] == "dependency"
+
+
+def test_base_labels_new_and_pre_existing_waivers_and_proposed_guards(templates, tmp_path):
+    from verinoda import decisions as dm
+    from verinoda import guards
+
+    repo, rec = _case(templates, tmp_path, "orders", ["only_in calls=sqlite3.connect allowed=orders/repository.py"])
+    _write(repo, "orders/old.py", "import sqlite3\n\n\ndef f():\n    return sqlite3.connect('a')\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "old violation")
+    _write(repo, "orders/new.py", "import sqlite3\n\n\ndef g():\n    return sqlite3.connect('b')\n")
+    res = guards.check(repo, changed_only=True)
+    assert _at(res["violations"]) == ["orders/new.py:5"] and res["violations"][0]["since"] == "new/touched since HEAD"
+    assert _at(res["pre_existing"]) == ["orders/old.py:5"] and res["exit"] == 1
+    (repo / "orders/new.py").unlink()
+    only_old = guards.check(repo, base="HEAD")
+    assert only_old["exit"] == 0 and only_old["pre_existing"] and not only_old["violations"]
+    assert guards.check(repo)["exit"] == 1  # without a base every violation counts
+    for bad in ("--output=/tmp/x", "-p", "HEAD\nx", "no-such-ref"):
+        with pytest.raises(ValueError):
+            guards.check(repo, base=bad)
+    st = open_store(repo)
+    try:
+        dm.waive(st, repo, rec["id"], "g1", at="orders/old.py:5", reason="legacy, until the port",
+                 until="2999-01-01")
+        dm.add_guards(st, repo, rec["id"], ["dependency absent=psycopg"], status="proposed")
+    finally:
+        st.close()
+    res = guards.check(repo)
+    assert res["exit"] == 0 and _at(res["waived"]) == ["orders/old.py:5"]
+    assert any(n.get("guard") == "g2" and "proposed" in n["why"] for n in res["not_enforced"])
+
+
+def test_cli_and_mcp_decide_check_exit_codes(templates, tmp_path, capsys):
+    import json
+
+    from verinoda import cli
+    from verinoda.mcp.server import AtlasTools
+
+    repo, _ = _case(templates, tmp_path, "orders", ["only_in calls=sqlite3.connect allowed=orders/repository.py"])
+    assert cli.main(["decide", "check", "--repo", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert "ok ADR-0002 g1 only_in" in out and "limit:" in out
+    _write(repo, "orders/reports.py", "import sqlite3\n\n\ndef f():\n    return sqlite3.connect('x')\n")
+    assert cli.main(["decide", "check", "--repo", str(repo), "--changed", "--json"]) == 1
+    res = json.loads(capsys.readouterr().out)
+    assert res["violations"][0]["at"] == "orders/reports.py:5"
+    assert cli.main(["decide", "check", "--repo", str(repo), "--base=--output=x"]) == 2
+    assert "not a git revision" in capsys.readouterr().err
+    t = AtlasTools(repo)
+    m = t.decision_check(changed_only=True)
+    assert m["exit"] == 1 and m["violations"][0]["at"] == "orders/reports.py:5"
+    assert t.decision_check(base="-x")["error"] == "invalid_argument"
+    capsys.readouterr()
+    assert cli.main(["update", str(repo)]) == 0
+    assert "decisions: 1 violated, 0 possible, 0 review, 0 trigger" in capsys.readouterr().out
+
+
+def test_critique_exclusivity_uses_the_engine(templates, tmp_path):
+    from verinoda import critique
+    from verinoda import evidence as evmod
+    from verinoda.claims import Claims
+
+    repo = tmp_path / "orders"
+    shutil.copytree(templates["orders"], repo)
+    st = open_store(repo)
+    try:
+        snap = st.latest_snapshot()
+        ev = evmod.source_evidence(repo, "orders/repository.py", 10, commit=snap["commit_sha"])
+        c = Claims(st, repo).create("Only orders/repository.py opens a database connection", project=snap["project"],
+                                    snapshot=snap, status="statically_verified", evidence=[(ev, "supports")],
+                                    kind="exclusive", subjects=["orders/repository.py"],
+                                    spec={"pattern": r"sqlite3\.connect\(", "allowed_files": ["orders/repository.py"]})
+        _write(repo, "orders/notes.py", '"""Never call sqlite3.connect( here."""\n# sqlite3.connect( is not used\n'
+                                        "MSG = 'sqlite3.connect('\n")
+        ok = critique.challenge(st, repo, c["id"])
+        assert {f["check"]: f["result"] for f in ok["findings"]}["exclusivity"] == "pass"
+        _write(repo, "orders/audit.py", "import sqlite3 as sq\n\n\ndef log():\n    return sq.connect('audit.db')\n")
+        bad = critique.challenge(st, repo, c["id"])
+        fail = next(f for f in bad["findings"] if f["check"] == "exclusivity")
+        assert fail["result"] == "fail" and "orders/audit.py:5" in fail["detail"]
+        assert "orders/notes.py" not in fail["detail"]
+    finally:
+        st.close()

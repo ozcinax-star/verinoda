@@ -71,6 +71,7 @@ EXPECTED_PARAMS = {
     "decision_record": ({"action", "decision_id", "chosen", "rationale", "title", "brief_id", "guards", "governs",
                          "revisit_when", "supersedes", "guard_ids", "at", "reason", "until", "document",
                          "user_statement"}, {"action"}),
+    "decision_check": ({"base", "changed_only", "refresh"}, set()),
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
              "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call"}
@@ -230,6 +231,7 @@ def _all_calls(t: AtlasTools) -> dict:
         "feedback_resolve": lambda: t.feedback_resolve("fb_1", "confirmed", "because", ["evd_1"]),
         "index_update": lambda: t.index_update(),
         "decision_record": lambda: t.decision_record("list"),
+        "decision_check": lambda: t.decision_check(),
     }
 
 

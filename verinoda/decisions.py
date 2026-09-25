@@ -293,7 +293,7 @@ def _list(v: str | None) -> list[str]:
 
 
 _DOTTED = re.compile(r"^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$")
-_NAME = re.compile(r"^[A-Za-z_][\w.+-]*$")
+_NAME = re.compile(r"^[A-Za-z_][\w.+-]*(?::[A-Za-z_][\w.+-]*)?$")  # a package, or Maven group:artifact
 
 
 def validate_guard(g: dict) -> dict:
@@ -545,7 +545,12 @@ def record(store, repo: Path, *, chosen: str, rationale: str, title: str | None 
     for spec in guards:
         d.guards.append(parse_guard(spec, repo, _next_id(d.guards, "g")))
     for spec in revisit_when:
-        d.revisit_when.append(parse_revisit(spec, repo, _next_id(d.revisit_when, "r")))
+        r = parse_revisit(spec, repo, _next_id(d.revisit_when, "r"))
+        from verinoda import guards
+
+        # a condition that already holds now is not news later: it fires only once it starts to hold
+        r["baseline"] = bool(guards.revisit_holds(repo, r))
+        d.revisit_when.append(r)
     for spec in governs:
         d.governs.append(parse_governs(repo, spec, _next_id(d.governs, "v"), graph))
     said = f"\n\nIn the user's words: \"{user_statement.strip()}\"" if user_statement and user_statement.strip() else ""

@@ -51,7 +51,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D28 | Runtime observation | implemented | CLI `observe` and `analyze --observe`, MCP `runtime_observe`. Deviations: overhead is 1.39× CPU (median) on 533 Graphify tests, against the research's 1.23×, because boundary calls are recorded and the trace is written inside the timed window. The `setprofile` fallback costs about 4.5× and was only forced on CPython 3.12. Child processes are not traced. The container path has not been run against a real docker/podman. The observed-edge retrieval channel is not built. |
 | D29 | Precise resolution | implemented | `verinoda[precise]` (jedi), `resolve-call`, `scan --precise`, `scan --scip FILE`, MCP `resolve_call`, per-analysis budget. Stricter than the research: a method called on a parameter or local receiver is `dynamic`, never definitive. SCIP is used for non-Python files only. |
 | D30 | Measurement harness | implemented | `verinoda benchmark staleness replay\|mutations` and `verinoda benchmark critique-eval`. The replay samples claims whose evidence is in modified files; incoming relations from unchanged files are not sampled. |
-| D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`; decision records (`verinoda/decisions.py`, schema v5 log, `decide record/import/guard/accept/waive/list`, MCP `decision_record`). Not built yet: guards checked against the code (`decide check`), the decision brief (section 6). Intent routing: 24 written questions 24/24 (in-sample); two held-out sets of 10, each measured once with frozen rules: precision 1.00 and recall 0.40 on both (the first set's misses were then fixed, so it is in-sample now). |
+| D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`; decision records (`verinoda/decisions.py`, schema v5 log, `decide record/import/guard/accept/waive/list`, MCP `decision_record`); guards and `decide check` (`verinoda/guards.py`, MCP `decision_check`, a one-line summary in `update`; critique's exclusivity check and feedback's exclusive corrections use the same engine). Guard mutations (53 cases on the three examples, written by the rule author: in-sample): VIOLATED precision 1.00, recall 1.00 in reach, 9/9 out-of-reach forms named in limits; the old raw-regex scan on the same orders_app cases tp 7 fp 8 fn 6. `decide check` 45-80 ms per example case, 1.4-1.9 s on Verinoda's own code (4 guards). Not built yet: the decision brief (section 6); `analyze` impact questions do not include violations; the UI shows no decision badge. Intent routing: 24 written questions 24/24 (in-sample); two held-out sets of 10, each measured once with frozen rules: precision 1.00 and recall 0.40 on both (the first set's misses were then fixed, so it is in-sample now). |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -645,6 +645,25 @@ records what the human chose and checks the code against it.
   only/must/never that name code the index knows) until the human accepts
   them. A record that says `decided-by` anything but `human` is reported and
   not enforced.
+- *Guards* (`verinoda/guards.py`, one rule engine). `only_in` (a call may
+  appear only in the allowed files; product code by default: tests,
+  reference trees, detected copies and the decision folder are out of
+  scope): Python calls bound through imports, aliases, simple assignments
+  and re-exports through the project's own modules are VIOLATED; a locally
+  rebound name, `getattr(m, "f")`, `importlib`/`__import__` and star imports
+  are POSSIBLE; Java/Kotlin calls are VIOLATED when the class is import-bound
+  (static call, or a receiver declared with the class in the same file),
+  otherwise POSSIBLE; other languages are a regex over the code with comments
+  and strings removed, POSSIBLE at most. `no_edge` reads graph edges: an
+  EXTRACTED edge whose cited line still names the target in code is
+  VIOLATED, an INFERRED one POSSIBLE. `dependency absent|present` reads the
+  manifests (plus Gradle and Maven). `governs` compares the symbol's anchor
+  fingerprint: REVIEW, never VIOLATED. `revisit-when` fires TRIGGER once its
+  condition starts to hold. Every `ok` states its scope and limits.
+  `decide check` exits 1 on VIOLATED; with `--base REF` / `--changed` only
+  new/touched violations count (pre-existing ones are listed). A ref is
+  refused when it starts with `-` and is resolved with `rev-parse --verify
+  --end-of-options`; `--` precedes paths.
 - *What stays human:* choosing between options; load, growth, SLO, budget,
   hosting, team and compliance facts; whether a guard proposed from prose means
   what the record meant; waivers; superseding a decision.

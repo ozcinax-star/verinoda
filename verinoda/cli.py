@@ -346,6 +346,12 @@ def _r_update(r: dict) -> None:
         print(f"  stale: {s['id']} {s['text'][:90]}  <- {', '.join(c['file'] for c in s.get('changed') or [])}")
     for w in r.get("warnings") or []:
         print(f"  warning: {w}")
+    dec = r.get("decisions")
+    if dec:
+        print(f"  decisions: could not be checked ({dec['error']})" if dec.get("error") else
+              f"  decisions: {dec['violations']} violated, {dec['possible']} possible, {dec['reviews']} review, "
+              f"{dec['triggers']} trigger" + (" - `verinoda decide check` for the sites" if any(dec.values())
+                                              else ""))
     _r_derived(r)
     if r.get("error"):
         print(f"error: {r['error']}", file=sys.stderr)
@@ -543,8 +549,28 @@ def cmd_update(args) -> int:
     repo = Path(given).resolve() if given else find_repo_root()
     st = _store(repo, create=True)
     res = workflow.update(st, repo)
+    if not res.get("error"):
+        summary = _decision_summary(repo)
+        if summary:
+            res["decisions"] = summary
     _emit(args, res, _r_update)
     return 1 if res.get("error") else 0
+
+
+def _decision_summary(repo: Path) -> dict | None:
+    """One line for `update`: what `decide check` would report now (None when there are no records)."""
+    try:
+        from verinoda import decisions as dm
+        from verinoda import guards, index
+        from verinoda.paths import graph_path
+
+        recs = dm.load_all(repo)
+        if not recs:
+            return None
+        res = guards.check(repo, graph=index.load(repo) if graph_path(repo).exists() else None, records=recs)
+        return {k: len(res[k]) for k in ("violations", "possible", "reviews", "triggers")}
+    except Exception as exc:  # noqa: BLE001 - the update itself succeeded; say why the check did not run
+        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
 
 
 def _port(value: str) -> int:
@@ -934,10 +960,94 @@ def _r_decide(res: dict) -> None:
               f"`verinoda decide accept {res['id']} {' '.join(proposed)}`")
 
 
+def _r_check(r: dict) -> None:
+    base = r.get("base") or {}
+    print(f"decide check: {len(r['violations'])} violated, {len(r['possible'])} possible, {len(r['reviews'])} "
+          f"review, {len(r['triggers'])} trigger ({r['decisions']} decision record(s), {r['elapsed_s']} s)"
+          + (f"; base {base['ref']} {base['commit'][:10]}, {base['changed_files']} changed file(s)" if base else ""))
+    if r.get("index"):
+        print(f"  index: {r['index']}")
+    shown: set = set()
+    for key, label in (("violations", "VIOLATED"), ("possible", "POSSIBLE"), ("pre_existing", "VIOLATED")):
+        for f in r.get(key) or []:
+            head = (key, f["decision"], f["guard"])
+            if head not in shown:
+                shown.add(head)
+                pre = "pre-existing " if key == "pre_existing" else ""
+                print(f"{pre}{label} {f['decision']} {f['guard']} {f['kind']} {f.get('what') or ''}")
+            tags = ", ".join(x for x in (f.get("status"), f.get("since")) if x)
+            print(f"  {f['at']} {f.get('line') or ''}  [{tags}]")
+            print(f"     {f['why']}")
+    for f in r.get("reviews") or []:
+        print(f"REVIEW {f['decision']} {f['guard']} governs {f['at']}: {f['why']}")
+    for f in r.get("triggers") or []:
+        print(f"TRIGGER {f['decision']} {f['guard']} {f['why']}")
+    for f in r.get("waived") or []:
+        w = f["waiver"]
+        print(f"waived {f['decision']} {f['guard']} {f['at']} ({w['reason']}"
+              + (f", until {w['until']}" if w.get("until") else "") + ")")
+    for o in r.get("ok") or []:
+        scope = ", ".join(f"{k} {v}" for k, v in (o.get("scope") or {}).items())
+        print(f"ok {o['decision']} {o['guard']} {o['kind']} {o['what']}" + (f" ({scope})" if scope else ""))
+        for lim in (o.get("limits") or [])[:4]:
+            print(f"     limit: {lim}")
+    for u in r.get("unknown") or []:
+        print(f"unknown {u['decision']} {u.get('guard') or ''}: {u['why']}")
+    for n in r.get("not_enforced") or []:
+        print(f"not enforced {n['decision']} {n.get('guard') or ''}: {n['why']}")
+    if not r["decisions"]:
+        print("  no decision records (`verinoda decide record` / `decide import`; they live in decisions.dir)")
+    if r.get("next_step"):
+        print(f"next: {r['next_step']}")
+
+
+def _decide_check(args, repo: Path) -> int:
+    from verinoda import decisions as dm
+    from verinoda import guards
+    from verinoda.paths import db_path, graph_path
+
+    recs = dm.load_all(repo)
+    graph, note = None, None
+    if any(d.enforced and g.get("kind") == "no_edge" and g.get("status") == "accepted"
+           for d in recs for g in d.guards):
+        if not args.no_refresh and db_path(repo).is_file():
+            from verinoda import workflow
+            from verinoda.snapshot import current_state
+
+            st = _store(repo)
+            try:
+                snap = st.latest_snapshot()
+                if snap is None or snap["tree_hash"] != current_state(repo, store=st)["tree_hash"]:
+                    up = workflow.update(st, repo)
+                    note = f"refreshed first ({up.get('mode')}, {up.get('changed_count') or 0} changed file(s))" \
+                        if not up.get("error") else f"could not be refreshed: {up['error']}"
+            finally:
+                st.close()
+        if graph_path(repo).exists():
+            from verinoda import index
+
+            graph = index.load(repo)
+    try:
+        res = guards.check(repo, graph=graph, base=args.base, changed_only=args.changed, records=recs)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if note:
+        res["index"] = note
+    _emit(args, res, _r_check)
+    return res["exit"]
+
+
 def cmd_decide(args) -> int:
     from verinoda import decisions as dm
 
     repo = _repo(args)
+    if args.decide_cmd == "check":
+        try:
+            return _decide_check(args, repo)
+        except dm.DecisionError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     graph = None
     if getattr(args, "governs", None) or args.decide_cmd == "import":
         from verinoda import index
@@ -1741,6 +1851,13 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--until", metavar="YYYY-MM-DD")
     c.add_argument("--said", help=said_help)
     add("list", cmd_decide, "decision records, their guards and waivers, and ADRs without a record", parent=dsub)
+    c = add("check", cmd_decide, "check the code against every accepted guard (exit 1 on VIOLATED: usable in CI)",
+            parent=dsub)
+    grp = c.add_mutually_exclusive_group()
+    grp.add_argument("--changed", action="store_true",
+                     help="label findings new/touched since HEAD or pre-existing; only new ones fail")
+    grp.add_argument("--base", metavar="REF", help="as --changed, against this git revision (e.g. origin/main)")
+    c.add_argument("--no-refresh", action="store_true", help="do not update a stale index first (no_edge guards)")
 
     sp = sub.add_parser("claim", help="inspect or add claims")
     csub = sp.add_subparsers(dest="claim_cmd", required=True)
