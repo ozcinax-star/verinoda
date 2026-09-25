@@ -32,6 +32,11 @@ Per claim kind:
 * ``flow``: each hop line graded like a relation; sink lines by the sink
   pattern the claim names.
 * ``exclusive`` (``spec.pattern``): full when the cited line matches it.
+* ``behaviour``: an order claim (``spec.proposition`` "A before B in F" with
+  ``spec.holds``) is full when, in the whole body of the Python definition F,
+  the first call of the call stated first comes before the first call of the
+  other one (:func:`call_order`); a pattern claim (``spec.pattern``) like
+  ``exclusive``.
 * ``test_run``: full only when the claim spec names the run (``spec.experiment``
   or all ``spec.command`` ids in its command line) and every claim subject is
   exercised by it (test files in the command; code reached through the test
@@ -41,13 +46,23 @@ Per claim kind:
   cannot be entailed mechanically. ``partial`` needs *attribution*: the record
   must state every content term the claim attributes to it (for history, the
   claim must name the commit); anything less is ``none``.
-* anything else (``general``): term coverage. ``full`` when every key term
-  (identifiers, numbers, product names such as ``PostgreSQL`` or ``AES-256``)
-  and every content word of the claim appears in the evidence (cited lines,
-  enclosing symbol, file name; for a run: its command and summary), the claim
-  cites no other location, and it has no negation or quantifier ("not",
-  "only", "all" ...) - text overlap cannot establish those. This grade is a
-  labelled heuristic (``Grade.reason`` says so).
+* anything else (``general``): term coverage, which is ``partial`` at most:
+  every key term (identifiers, numbers, product names such as ``PostgreSQL``
+  or ``AES-256``) and every content word of the claim appearing in the
+  evidence (cited lines, enclosing symbol, file name; for a run: its command
+  and summary) makes the evidence relevant, never a verification, because
+  order, direction, conditions and roles are invisible to word overlap
+  ("apply_discount returns the subtotal above the threshold" has every word
+  of the lines that return ``subtotal * 0.9`` there). Only a verbatim quote
+  (``contains: <text>``) or a kind's typed check is ``full``. This grade is a
+  labelled heuristic (``Grade.reason`` says so, ``Grade.code`` is
+  ``coverage``).
+
+Text written by a user or an agent (``spec.free_text``, ``claim add``) must
+also bind every role it states (:func:`assess`): it names the kind's symbol;
+a relation's text states the caller and the callee in that direction
+(:func:`relation_roles`); a config claim's subject is the name the
+environment read is bound to (:func:`env_bindings`).
 """
 
 from __future__ import annotations
@@ -215,6 +230,7 @@ ABBREV = {
     "resp": ("response",), "arg": ("argument",), "args": ("arguments",), "param": ("parameter",),
     "init": ("initialize", "initialise", "initialization"), "str": ("string",), "dir": ("directory",),
     "pkg": ("package",), "fn": ("function",), "func": ("function",), "var": ("variable",),
+    "max": ("maximum",), "min": ("minimum",), "num": ("number",),
 }
 _ABBREV_BACK = {full: short for short, fulls in ABBREV.items() for full in fulls}
 
@@ -264,17 +280,184 @@ def _coverage_grade(terms: Terms, text: str, *, locator_ok: bool = True, strict_
     complete = not cov["missing"]
     if complete:
         if not locator_ok:
-            return Grade("partial", "terms covered, but the claim cites another location (heuristic: term coverage)")
+            return Grade("partial", "terms covered, but the claim cites another location (heuristic: term coverage)",
+                         "coverage")
         if terms.negated or terms.quantified:
             return Grade("partial", "terms covered, but a negation/quantifier cannot be established by text "
-                                    "(heuristic: term coverage)")
-        return Grade("full", "every term of the claim appears in the evidence (heuristic: term coverage)")
+                                    "(heuristic: term coverage)", "coverage")
+        # word overlap never verifies: order, direction, conditions and roles are invisible to it
+        return Grade("partial", "every term of the claim appears in the evidence, but term coverage does not check "
+                                "order, direction, conditions or roles (heuristic: term coverage)", "coverage")
     relevant = bool(cov["keys_hit"]) or len(cov["words_hit"]) >= 2 or \
         (not terms.keys and cov["words_hit"] and 2 * len(cov["words_hit"]) >= len(cov["words"]))
     if relevant:
-        return Grade("partial", "evidence is about the claim's subject; missing: " + ", ".join(cov["missing"][:6]))
+        return Grade("partial", "evidence is about the claim's subject; missing: " + ", ".join(cov["missing"][:6]),
+                     "coverage")
     return Grade("none", "evidence shares no key term with the claim"
                  + (f" (missing: {', '.join(cov['missing'][:6])})" if cov["missing"] else ""))
+
+
+# =============================================================================
+# roles in written text: who calls whom, what a setting is bound to
+# =============================================================================
+
+FILE_EXTS = frozenset("""py pyi js mjs cjs ts tsx jsx go rs java kt kts rb php cs md rst txt json toml yaml yml cfg ini
+xml html css sql sh c h cc cpp hpp lua scala swift gradle properties""".split())
+_CODE_NAME = re.compile(r"`([^`]+)`|(?<![\w./`$-])([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?:\(\))?)")
+
+
+def is_code_shaped(tok: str) -> bool:
+    """A token written as code: snake_case, camelCase/CamelCase, dotted, or ``name()``."""
+    t = (tok or "").strip().strip("`")
+    if t.endswith("()"):
+        return True
+    return "." in t.strip(".") or "_" in t.strip("_") or t.startswith("_") or bool(re.search(r"[a-z0-9][A-Z]", t))
+
+
+def code_names(text: str) -> list[tuple[int, int, str]]:
+    """``(start, end, name)`` of the code-shaped names in ``text``, in order (backticked ones too)."""
+    out: list[tuple[int, int, str]] = []
+    for m in _CODE_NAME.finditer(text or ""):
+        if m.group(1) is not None:
+            name = m.group(1).strip()
+            if not re.fullmatch(r"\.?[\w$]+(?:\.[\w$]+)*(?:\(\))?", name):
+                continue  # backticked prose or code, not a name
+        else:
+            name = m.group(2)
+            parts = name.rstrip("()").split(".")
+            if len(parts) > 1 and parts[-1].lower() in FILE_EXTS:
+                continue  # a file name
+            if not is_code_shaped(name) or all(len(p) <= 1 for p in parts):
+                continue  # a plain word, or "e.g"
+        name = name[:-2] if name.endswith("()") else name
+        out.append((m.start(), m.end(), name.lstrip(".")))
+    return out
+
+
+_REL_VERB = re.compile(r"\b(?:calls?|invokes?|uses?|imports?|inherits?|extends|instantiates|constructs|creates|"
+                       r"çağırır|çağırıyor|kullanır|kullanıyor)\b", re.I)
+_PASSIVE = re.compile(r"\b(?:called|invoked|used|imported|instantiated|constructed|created)\s+(?:by|from)\b", re.I)
+_TR_AGENT = re.compile(r"\btarafından\b", re.I)
+
+
+def relation_roles(text: str, target: str | None = None) -> tuple[str | None, str | None]:
+    """``(caller, callee)`` as a relation claim's text states them, ``(None, None)`` when it does not say.
+
+    "A calls B", "B is called by A", "A, B'yi çağırır", "B, A tarafından çağrılır". The names are the
+    text's code names; a plain-word ``target`` (``save``) counts where the text writes it.
+    """
+    text = text or ""
+    names = code_names(text)
+    tok = _token(target) if target else ""
+    if tok:
+        for m in re.finditer(rf"(?<![\w.`]){re.escape(tok)}(?![\w`])", text):
+            if not any(a <= m.start() < b for a, b, _ in names):
+                names.append((m.start(), m.end(), tok))
+        names.sort()
+    if len(names) < 2:
+        return None, None
+    agent = _TR_AGENT.search(text)
+    if agent:  # the name right before "tarafından" is the one that calls
+        before = [n[2] for n in names if n[1] <= agent.start()]
+        if before:
+            return before[-1], next((n[2] for n in names if n[2] != before[-1]), None)
+    passive = _PASSIVE.search(text)
+    verb = passive or _REL_VERB.search(text)
+    if verb:
+        before = [n[2] for n in names if n[1] <= verb.start()]
+        after = [n[2] for n in names if n[0] >= verb.end()]
+        if before and after:
+            return (after[0], before[-1]) if passive else (before[-1], after[0])
+        if len(before) >= 2 and not passive:  # Turkish word order: "A B'yi çağırır"
+            return before[-2], before[-1]
+    return names[0][2], names[1][2]
+
+
+_ORDER_WORD = re.compile(r"\b(before|after|önce|sonra)\b", re.I)
+
+
+def order_proposition(text: str, where: str | None = None) -> str | None:
+    """"A before B in F" from written text: the code names around 'before'/'after' ('önce'/'sonra').
+
+    "`F` calls `A` before `B`", "In F, `B` runs after `A`", "F, `B`'den önce `A`'yı çağırır". ``where``
+    is F, the function whose body is checked (default: the text's first code name). None when the
+    text does not name two calls and their order.
+    """
+    names = code_names(text)
+    where = (where or "").strip().strip("`").removesuffix("()") if where else (names[0][2] if names else "")
+    rest = [n for n in names if _token(n[2]) != _token(where)]
+    m = _ORDER_WORD.search(text or "")
+    if not where or not m or len(rest) < 2:
+        return None
+    before = [n[2] for n in rest if n[1] <= m.start()]
+    after = [n[2] for n in rest if n[0] >= m.end()]
+    word = fold_tr(m.group(1))
+    if word in ("before", "after"):
+        if not before or not after:
+            return None
+        a, b = before[-1], after[0]
+        if word == "after":
+            a, b = b, a
+    else:  # Turkish: "B'den önce A": the name right before önce/sonra is the one compared against
+        if not before:
+            return None
+        ref = before[-1]
+        other = before[-2] if len(before) >= 2 else (after[0] if after else None)
+        if other is None:
+            return None
+        a, b = (other, ref) if word == "once" else (ref, other)
+    return f"{a} before {b} in {where}"
+
+
+def claimed_caller(spec: dict | None, subjects: list[str] | None, text: str | None) -> str | None:
+    """The caller a relation claim states: its first subject's symbol, the spec's ``source_label``, or, for
+    written text (``spec.free_text``), the name the text puts before the verb."""
+    spec = spec or {}
+    subjects = list(subjects or [])
+    _, a_sym = _subject_parts(subjects[0] if subjects else None)
+    caller = a_sym or spec.get("source_label")
+    if caller:
+        if re.search(r"\.[A-Za-z]{1,5}$", caller.strip()) and not caller.strip().endswith(")"):
+            return None  # the caller is a module (file node): no enclosing def to check
+        return caller
+    if spec.get("free_text"):  # file names are never code names, so this is a definition's name
+        caller = relation_roles(text or "", spec.get("target_label"))[0]
+        if caller and _token(caller) != _token(spec.get("target_label")):
+            return caller
+    return None
+
+
+# Words that describe a setting, not what it sets ("... is read from the environment variable X").
+_CONFIG_WORDS = frozenset("""environment environ variable variables env setting settings config configuration
+configured configurable value values default defaults come comes coming taken given control controls controlled
+set sets option options parameter parameters key keys name""".split())
+
+
+def config_subject(text: str, var: str) -> list[str]:
+    """What a config claim's text says ``var`` sets: its content words and the parts of its code names,
+    without the variable's own words and the vocabulary of settings."""
+    var_parts = {p for w in split_identifier(var) for p in (w, _stem(w))}
+    out: list[str] = []
+    for _, _, name in code_names(text):
+        if name == var or name.lower() == var.lower():
+            continue
+        out += [_stem(p) for p in split_identifier(name.replace(".", "_")) if len(p) >= 2]
+    for w in claim_terms(_BACKTICK.sub(" ", text or "")).words:
+        if w in _CONFIG_WORDS or _stem(w) in {_stem(x) for x in _CONFIG_WORDS}:
+            continue
+        if split_identifier(w) and all(p in var_parts for p in split_identifier(w)):
+            continue
+        out.append(w)
+    return [w for w in dict.fromkeys(out) if not _word_hit(w, var_parts)]
+
+
+def binds(names: list[str], subject: list[str]) -> list[str]:
+    """The subject words that the binding ``names`` (assignment targets, keys, enclosing definitions) spell."""
+    parts: set[str] = set()
+    for n in names:
+        for p in split_identifier(n):
+            parts.update((p, _stem(p)))
+    return [w for w in subject if _word_hit(w, parts)]
 
 
 # =============================================================================
@@ -787,6 +970,155 @@ def call_site(repo: Path | str | None, path: str, line: int, target_label: str, 
     return _other_call_grade(text, path, line, token, target_path=target_path)
 
 
+def _defs_named(tree: ast.AST, name: str) -> list[ast.AST]:
+    """Definitions called ``name`` (``Cls.name``: methods of class ``Cls``; a class counts with its whole
+    body), in source order."""
+    owner, _, bare = name.strip().strip("`").rstrip("()").rpartition(".")
+    owner = owner.rpartition(".")[2]
+    out = []
+
+    def walk(node: ast.AST, cls: str | None) -> None:
+        for ch in ast.iter_child_nodes(node):
+            if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and ch.name == bare and \
+                    (not owner or owner == cls):
+                out.append(ch)
+            walk(ch, ch.name if isinstance(ch, ast.ClassDef) else cls)
+
+    walk(tree, None)
+    return out
+
+
+def calls_in(tree: ast.AST, fn: ast.AST, token: str) -> list[int]:
+    """Lines in ``fn``'s whole body with a call whose callee is named ``token``: ``token(...)``, an import
+    alias of it, or ``x.token(...)`` on any receiver (a method call counts: its receiver is not resolved)."""
+    aliases = set(_import_names(tree, token)) | {token}
+    out = []
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call):
+            f = node.func
+            if (isinstance(f, ast.Name) and f.id in aliases) or (isinstance(f, ast.Attribute) and f.attr == token):
+                out.append(f.end_lineno if isinstance(f, ast.Attribute) else node.lineno)
+    return sorted(set(out))
+
+
+def caller_scope(repo, caller: str, token: str, *, path: str | None = None, files: list[str] | None = None) -> dict | None:
+    """Direct calls to ``token`` in the whole body of every Python definition named ``caller``.
+
+    Looks in ``path`` first, then in ``files`` (other files that define the caller, e.g. from the graph).
+    ``{"defs": [(file, name, start, end)], "calls": [(file, line)], "scope": "..."}``, or None when
+    no definition of the caller is found or a file does not parse - then nothing can be said about the
+    whole body. Calls through other names (a variable holding the function, ``getattr``, dynamic
+    dispatch) are not followed; the scope text says so.
+    """
+    if repo is None or not caller or not token:
+        return None
+    defs: list[tuple[str, ast.AST, ast.AST]] = []
+    for rel in dict.fromkeys([p for p in [path, *(files or [])] if p]):
+        if not rel.endswith((".py", ".pyi")):
+            continue
+        try:
+            text = (Path(repo) / rel).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        tree = _py_tree(text)
+        if tree is None:
+            return None
+        defs += [(rel, tree, d) for d in _defs_named(tree, caller)]
+        if defs and rel == path:
+            break  # the cited file defines it: that is the caller the claim cites
+    if not defs:
+        return None
+    calls = [(rel, ln) for rel, tree, d in defs for ln in calls_in(tree, d, token)]
+    where = ", ".join(f"{rel}:{d.lineno}-{d.end_lineno or d.lineno}" for rel, _, d in defs[:3])
+    name = caller.strip().rstrip("()")
+    scope = (f"{name} ({where})" if len(defs) == 1 else f"the {len(defs)} definitions named {name} ({where})")
+    return {"defs": [(rel, d.name, d.lineno, d.end_lineno or d.lineno) for rel, _, d in defs], "calls": calls,
+            "scope": scope,
+            "miss": f"no direct call to {token} in {scope}; calls through other names are not followed"}
+
+
+_ORDER_PROP = re.compile(r"^\s*`?([\w.]+?)(?:\(\))?`?\s+before\s+`?([\w.]+?)(?:\(\))?`?\s+in\s+`?([\w./:]+?)(?:\(\))?`?\s*$",
+                         re.I)
+
+
+def call_order(text: str, rel: str, where: str, first: str, second: str, *,
+               near: tuple[int, int] | None = None) -> dict | None:
+    """Where the first calls of ``first`` and ``second`` are in the whole body of the definition ``where``.
+
+    ``{"name", "start", "end", "lines": {name: first call line}, "branchy"}`` (a name with no direct call is
+    missing from ``lines``), or None when the file is not Python or defines no ``where``. With several
+    definitions of that name, the one overlapping ``near`` (the cited lines) is used.
+    """
+    if not rel.endswith((".py", ".pyi")):
+        return None
+    tree = _py_tree(text)
+    if tree is None:
+        return None
+    fns = _defs_named(tree, where.rpartition("::")[2])
+    if near:
+        fns = sorted(fns, key=lambda d: not (d.lineno <= near[1] and near[0] <= (d.end_lineno or d.lineno)))
+    if not fns:
+        return None
+    fn = fns[0]
+    lines = {}
+    for want in (first, second):
+        found = calls_in(tree, fn, want.rpartition(".")[2])
+        if found:
+            lines[want] = found[0]
+    branchy = any(isinstance(n, (ast.If, ast.For, ast.While, ast.Try, ast.With, ast.AsyncFor, ast.AsyncWith))
+                  for n in ast.walk(fn) if n is not fn)
+    return {"name": fn.name, "start": fn.lineno, "end": fn.end_lineno or fn.lineno, "lines": lines,
+            "branchy": branchy}
+
+
+def order_check(repo, ev: dict, proposition: str, holds: bool = True) -> Grade | None:
+    """Grade the order a proposition "A before B in F" states (``holds``: as written, else reversed).
+
+    Codes: ``order`` (full), ``reversed`` and ``no_call`` (none; exhaustive over F's body),
+    ``same_line`` / ``outside_citation`` (partial). None when the proposition is not of that form.
+    """
+    m = _ORDER_PROP.match(proposition or "")
+    if not m:
+        return None
+    a, b, where = m.group(1), m.group(2), m.group(3)
+    first, second = (a, b) if holds else (b, a)
+    _shown, s, e, full = _evidence_text(Path(repo) if repo else None, ev)
+    if full is None or not s:
+        return Grade("none", "cited file cannot be read", "unreadable")
+    info = call_order(full, ev["path"], where, first, second, near=(int(s), int(e or s)))
+    if info is None:
+        return Grade("none", f"{ev['path']} has no Python definition `{where}`", "no_def")
+    scope = f"{info['name']} ({ev['path']}:{info['start']}-{info['end']})"
+    lines = info["lines"]
+    missing = [x for x in (first, second) if x not in lines]
+    if missing:
+        return Grade("none", f"no direct call to {', '.join(missing)} in {scope}; calls through other names are "
+                             "not followed", "no_call")
+    la, lb = lines[first], lines[second]
+    if la == lb:
+        return Grade("partial", f"`{first}` and `{second}` are first called on the same line {la} of {scope}",
+                     "same_line")
+    if la > lb:
+        return Grade("none", f"in {scope}, `{second}` is first called at line {lb}, before `{first}` at line {la}",
+                     "reversed")
+    if not (int(s) <= la <= int(e or s) and int(s) <= lb <= int(e or s)):
+        return Grade("partial", f"in {scope}, `{first}` (line {la}) comes before `{second}` (line {lb}), but the "
+                                "cited lines do not show both calls", "outside_citation")
+    return Grade("full", f"in {scope}, `{first}` is first called at line {la} and `{second}` at line {lb} (AST)",
+                 "order")
+
+
+def _behaviour(repo, spec: dict, ev: dict, text: str, subjects: list[str]) -> Grade:
+    if evmod.effective_type(ev) in evmod.FILE_TYPES and ev.get("path") and spec.get("proposition") \
+            and "holds" in spec:
+        g = order_check(repo, ev, str(spec["proposition"]), bool(spec.get("holds")))
+        if g is not None:
+            return g
+    if spec.get("pattern"):
+        return _exclusive(repo, spec, ev, text, subjects)
+    return _general(repo, ev, text)
+
+
 def _call_grade(repo, ev: dict, token: str, *, caller: str | None, target_path: str | None,
                 target_qual: str | None, relation: str | None) -> Grade:
     shown, a, b, full = _evidence_text(repo, ev)
@@ -812,7 +1144,6 @@ def _call_grade(repo, ev: dict, token: str, *, caller: str | None, target_path: 
 
 def _relation(repo, spec: dict, ev: dict, text: str, subjects: list[str]) -> Grade:
     typ = evmod.effective_type(ev)
-    a_path, a_sym = _subject_parts(subjects[0] if subjects else None)
     b_path, b_sym = _subject_parts(subjects[1] if len(subjects) > 1 else None)
     label = spec.get("target_label") or b_sym or ""
     token = _token(label)
@@ -849,11 +1180,9 @@ def _relation(repo, spec: dict, ev: dict, text: str, subjects: list[str]) -> Gra
             return Grade("partial", "call observed" + (" only through a test double" if doubles else " elsewhere"))
         return Grade("none", "runtime trace does not show this call")
     if typ in evmod.FILE_TYPES and ev.get("path"):
-        caller = a_sym or spec.get("source_label")
-        if caller and re.search(r"\.[A-Za-z]{1,5}$", caller.strip()) and not caller.strip().endswith(")"):
-            caller = None  # the caller is a module (file node): no enclosing def to check
-        return _call_grade(repo, ev, token, caller=caller, target_path=b_path, target_qual=b_sym,
-                           relation=spec.get("relation"))
+        # the caller the claim states (a module caller has no enclosing def to check)
+        return _call_grade(repo, ev, token, caller=claimed_caller(spec, subjects, text), target_path=b_path,
+                           target_qual=b_sym, relation=spec.get("relation"))
     return _general(repo, ev, text)
 
 
@@ -930,11 +1259,16 @@ def _config(repo, spec: dict, ev: dict, text: str, subjects: list[str]) -> Grade
 
 
 def _is_env_read(node: ast.AST, var: str) -> bool:
+    return _env_var_of(node) == var
+
+
+def _env_var_of(node: ast.AST) -> str | None:
+    """The variable name an environment read reads (a string literal), else None."""
     def is_environ(e: ast.AST) -> bool:
         return (isinstance(e, ast.Attribute) and e.attr == "environ") or (isinstance(e, ast.Name) and e.id == "environ")
 
-    def lit(e: ast.AST | None) -> bool:
-        return isinstance(e, ast.Constant) and e.value == var
+    def lit(e: ast.AST | None) -> str | None:
+        return e.value if isinstance(e, ast.Constant) and isinstance(e.value, str) else None
 
     if isinstance(node, ast.Call):
         f = node.func
@@ -947,9 +1281,95 @@ def _is_env_read(node: ast.AST, var: str) -> bool:
     if isinstance(node, ast.Subscript) and is_environ(node.value):
         sl = node.slice
         return lit(sl.value if isinstance(sl, ast.Index) else sl)  # type: ignore[attr-defined]
-    if isinstance(node, ast.Compare) and lit(node.left) and any(is_environ(c) for c in node.comparators):
-        return True
-    return False
+    if isinstance(node, ast.Compare) and any(is_environ(c) for c in node.comparators):
+        return lit(node.left)
+    return None
+
+
+def env_bindings(tree: ast.AST, var: str | None = None) -> list[dict]:
+    """Environment reads (of ``var``, or of every literal name) and the names each is bound to.
+
+    ``{"var", "line", "names"}``: the assignment targets (``X = int(os.environ.get("V"))``,
+    ``self.x = ...``), dict keys and keyword names around the read, then the definitions that
+    enclose it, innermost first.
+    """
+    parents: dict[ast.AST, ast.AST] = {}
+    for node in ast.walk(tree):
+        for ch in ast.iter_child_nodes(node):
+            parents[ch] = node
+    out = []
+    for node in ast.walk(tree):
+        v = _env_var_of(node)
+        if v is None or (var is not None and v != var):
+            continue
+        names: list[str] = []
+        cur = node
+        while cur in parents:
+            par = parents[cur]
+            if isinstance(par, ast.keyword) and par.arg:
+                names.append(par.arg)
+            elif isinstance(par, ast.Dict):
+                names += [k.value for k, val in zip(par.keys, par.values)
+                          if val is cur and isinstance(k, ast.Constant) and isinstance(k.value, str)]
+            elif isinstance(par, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                for t in (par.targets if isinstance(par, ast.Assign) else [par.target]):
+                    for n in ast.walk(t):
+                        if isinstance(n, ast.Name) and n.id not in ("self", "cls"):
+                            names.append(n.id)
+                        elif isinstance(n, ast.Attribute):
+                            names.append(n.attr)
+                        elif isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Constant) \
+                                and isinstance(n.slice.value, str):
+                            names.append(n.slice.value)
+            elif isinstance(par, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.append(par.name)
+            cur = par
+        out.append({"var": v, "line": node.lineno, "names": list(dict.fromkeys(names))})
+    return sorted(out, key=lambda b: b["line"])
+
+
+def config_binding(repo, ev: dict, var: str, text: str) -> dict | None:
+    """Is the subject of a config claim's text the name the cited read of ``var`` is bound to?
+
+    ``{"ok", "subject", "reads", "alt", "why"}``, or None when there is nothing to check (not Python, no
+    read of ``var`` at the cited lines, or the text names no subject besides the variable).
+    ``alt`` is another read in the same file whose binding spells the whole subject: the text is
+    about that setting, which reads another variable.
+    """
+    if not str(ev.get("path") or "").endswith(".py"):
+        return None
+    _shown, a, b, full = _evidence_text(Path(repo) if repo else None, ev)
+    if full is None or not a:
+        return None
+    return binding_check(ev["path"], full, var, text, (int(a), int(b or a)))
+
+
+def binding_check(rel: str, full: str, var: str, text: str, lines: tuple[int, int] | None = None) -> dict | None:
+    """:func:`config_binding` on a file's text (the reads of ``var`` within ``lines``, or anywhere)."""
+    subject = config_subject(text, var)
+    tree = _py_tree(full) if subject else None
+    if tree is None:
+        return None
+    every = env_bindings(tree)
+    reads = [r for r in every if r["var"] == var and (lines is None or lines[0] <= r["line"] <= lines[1])]
+    if not reads:
+        return None
+    hit = max(reads, key=lambda r: len(binds(r["names"], subject)))
+    got = binds(hit["names"], subject)
+    loc = f"{rel}:{hit['line']}"
+    if 2 * len(got) >= len(subject):
+        return {"ok": True, "subject": subject, "reads": reads, "alt": None,
+                "why": f"{loc} binds {var} to {', '.join(hit['names'][:2])}"}
+    alt = None
+    if not got:  # another read whose binding spells the whole subject: the text is about that setting
+        alts = [r for r in every if r["var"] != var and r["names"] and len(binds(r["names"], subject)) == len(subject)]
+        alt = alts[0] if alts else None
+    why = f"{loc} binds {var} to {hit['names'][0] if hit['names'] else 'no name'}"
+    if alt is not None:
+        why += f"; {alt['names'][0]} reads {alt['var']} at {rel}:{alt['line']} (scope: environment reads in {rel})"
+    else:
+        why += f", which does not name '{' '.join(subject)}'"
+    return {"ok": False, "subject": subject, "reads": reads, "alt": alt, "why": why}
 
 
 def _flow(repo, spec: dict, ev: dict, text: str, subjects: list[str]) -> Grade:
@@ -1151,7 +1571,9 @@ def _general(repo, ev: dict, text: str) -> Grade:
     quote = re.search(r"\bcontains:\s*(.+)$", text or "", re.S)
     if quote and locator_ok and ev.get("path"):
         q = " ".join(quote.group(1).split()).rstrip(".")
-        if len(q) >= 8 and q in " ".join((shown or "").split()):
+        cited = " ".join((shown or "").split())
+        # a short quote only as the whole cited text ("config.toml:24 contains: [debug]")
+        if (len(q) >= 8 and q in cited) or (re.search(r"\w", q) and q == cited.rstrip(".")):
             return Grade("full", "the cited lines contain the quoted text verbatim")
     ctx = _context_text(repo, ev, a, b, full)
     return _coverage_grade(terms, f"{shown}\n{ctx}", locator_ok=locator_ok)
@@ -1188,8 +1610,24 @@ def cap_grade(g: Grade, ceiling: str) -> Grade:
 
 _PREDICATES = {
     "relation": _relation, "location": _location, "config": _config, "flow": _flow, "exclusive": _exclusive,
-    "tests": _tests, "test_run": _test_run, "impact": _impact,
+    "tests": _tests, "test_run": _test_run, "impact": _impact, "behaviour": _behaviour,
 }
+
+
+def typed(kind: str, spec: dict | None, text: str | None = None) -> bool:
+    """Does a claim of this kind and spec get a typed check (not term coverage)?"""
+    spec = spec or {}
+    if kind == "relation":
+        return bool(_token(spec.get("target_label")))
+    if kind == "location":
+        return bool(spec.get("symbol") or _BACKTICK.search(text or ""))
+    if kind == "config":
+        return bool(spec.get("env"))
+    if kind == "behaviour":
+        return bool(spec.get("pattern") or (spec.get("proposition") and "holds" in spec))
+    if kind == "exclusive":
+        return bool(spec.get("pattern"))
+    return kind in ("flow", "test_run")
 _CACHE: dict[str, Grade] = {}
 
 
@@ -1243,6 +1681,18 @@ def assess(kind: str, repo: Path | str | None, spec: dict | None, evidence_row: 
         sym = _token(spec.get("symbol") or spec.get("target_label") or spec.get("env") or "")
         if sym and not re.search(rf"(?<![\w]){re.escape(fold_tr(sym))}(?![\w])", fold_tr(text)):
             problems.append(f"the claim text does not name '{sym}'")
+        if kind == "relation" and sym:
+            # the direction the text states: the target must be what is called, not the caller
+            _caller, callee = relation_roles(text, spec.get("target_label"))
+            if callee and _token(callee) != sym:
+                problems.append(f"the text makes `{_token(callee)}` the callee, not `{sym}`")
+        if kind == "config" and spec.get("env") and evmod.effective_type(ev) in evmod.FILE_TYPES:
+            try:
+                bound = config_binding(repo, ev, spec["env"], text)
+            except (OSError, ValueError, RecursionError):
+                bound = None
+            if bound is not None and not bound["ok"]:
+                problems.append(bound["why"])
         try:
             _t, _a, _b, _full = _evidence_text(Path(repo) if repo else None, ev)
             ev_txt = _full or _t or ""  # key terms may sit in the enclosing def (the caller's name)

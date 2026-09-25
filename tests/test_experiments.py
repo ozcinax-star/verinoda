@@ -276,11 +276,17 @@ def test_logs_stay_on_disk_and_only_a_summary_is_returned(proj):
 def test_experiment_attached_to_a_claim_supports_or_refutes_it(proj):
     repo, st = proj
     cl = Claims(st, repo)
-    c = cl.create("the pricing tests pass", project="orders_app", snapshot=None, status="unknown")
+    c = cl.create("the pricing tests pass", project="orders_app", snapshot=None, status="unknown",
+                  kind="test_run", spec={"command": ["tests/test_pricing.py"]})
     ok = experiments.run(st, repo, [*PYTEST, "tests/test_pricing.py"], hypothesis="pricing ok", claim_id=c["id"])
     assert [e["relation"] for e in cl.evidence(c["id"])] == ["supports"]
     assert cl.set_status(c["id"], "experiment_verified", reason="ran", downgrade=False)["status"] == \
         "experiment_verified"
+    # the same run under a plain-text claim: its words are in the command line, which is no verification
+    plain = cl.create("the pricing tests pass", project="orders_app", snapshot=None, status="unknown")
+    cl.attach(plain["id"], ok["evidence_id"], "supports")
+    assert cl.set_status(plain["id"], "experiment_verified", reason="ran", downgrade=True)["status"] == \
+        "strong_inference"
     bad = _probe(repo, "test_probe_fail.py", "def test_fails():\n    assert False\n")
     c2 = cl.create("the probe passes", project="orders_app", snapshot=None, status="unknown")
     res = experiments.run(st, repo, [*PYTEST, bad], hypothesis="probe ok", claim_id=c2["id"])

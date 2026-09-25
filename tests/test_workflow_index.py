@@ -243,7 +243,7 @@ def test_noop_update_still_rechecks_citations_of_ignored_files(proj):
     snap = st.latest_snapshot()
     assert "local/settings.py" not in st.snapshot_files(snap["id"])  # gitignored: never hashed
     ev = evmod.source_evidence(repo, "local/settings.py", 1, commit=snap["commit_sha"])
-    c = Claims(st, repo).create("CACHE_SECONDS is 30 in local/settings.py:1", project=snap["project"],
+    c = Claims(st, repo).create("local/settings.py:1 contains: CACHE_SECONDS = 30", project=snap["project"],
                                 snapshot=snap, subjects=["local/settings.py"], status="statically_verified",
                                 evidence=[(ev, "supports")], actor="test")
     assert c["status"] == "statically_verified", c

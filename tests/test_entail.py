@@ -197,11 +197,16 @@ def test_test_run_claims_must_name_the_run_and_be_exercised_by_it(repo):
 
 
 def test_general_claims_and_runs_use_term_coverage(repo):
+    # term coverage makes evidence relevant (partial), never a verification (D31)
     pricing = run("run exp_p: python -m pytest -q tests/test_pricing.py")
-    assert entail.grade("general", repo, {}, pricing, text="the pricing tests pass") == "full"
+    assert entail.grade("general", repo, {}, pricing, text="the pricing tests pass") == "partial"
     assert entail.grade("general", repo, {}, pricing, text="Orders are encrypted with AES-256") == "none"
     line = src(repo, "orders/pricing.py", 6, 8)
-    assert entail.grade("general", repo, {}, line, text="compute_total applies the discount") == "full"
+    g = entail.assess("general", repo, {}, line, text="compute_total applies the discount")
+    assert (g.grade, g.code) == ("partial", "coverage") and "does not check order" in g.reason
+    # a verbatim quote of the cited lines is the one way a general claim is full
+    quote = 'orders/pricing.py:6-8 contains: subtotal = sum(i["price"] * i["qty"] for i in items)'
+    assert entail.grade("general", repo, {}, line, text=quote) == "full"
     assert entail.grade("general", repo, {}, line, text="compute_total does not apply the discount") == "partial"
     assert entail.grade("general", repo, {}, line, text="only compute_total applies the discount") == "partial"
     assert entail.grade("general", repo, {}, line, text="Orders are stored in PostgreSQL") == "none"
@@ -273,3 +278,124 @@ def test_java_dotted_qualifiers_are_packages_only_when_written_like_one(qualifie
     g = entail._other_call_grade(src, "src/main/java/com/other/C.java", 2, "spawn",
                                  target_path="src/main/java/com/mod/Spirits.java")
     assert (g.grade, g.code) == (grade, code)
+
+
+# -- written text binds every role (docs/DESIGN.md D31) ------------------------------------------
+
+@pytest.mark.parametrize("text, target, roles", [
+    ("create_order_handler calls save", "save", ("create_order_handler", "save")),
+    ("`place_order` calls `OrderRepository.save`", "save", ("place_order", "OrderRepository.save")),
+    ("OrderRepository.save calls place_order", "place_order", ("OrderRepository.save", "place_order")),
+    ("validate_items is called by place_order", "validate_items", ("place_order", "validate_items")),
+    ("place_order validate_items'ı çağırır", None, ("place_order", "validate_items")),
+    ("validate_items, place_order tarafından çağrılır", None, ("place_order", "validate_items")),
+    ("orders/api.py calls place_order", "place_order", (None, None)),  # a file is not a caller name
+])
+def test_relation_roles_read_the_direction_the_text_states(text, target, roles):
+    assert entail.relation_roles(text, target) == roles
+
+
+def test_code_names_skip_files_prose_and_abbreviations():
+    names = [n for _, _, n in entail.code_names("see `x.y()` and config.py, e.g. load_settings or `two words`")]
+    assert names == ["x.y", "load_settings"]
+    assert entail.is_code_shaped("OrderRepository") and not entail.is_code_shaped("Orders")
+
+
+@pytest.mark.parametrize("text, where, prop", [
+    ("`place_order` calls `save` before `validate_items`", "place_order", "save before validate_items in place_order"),
+    ("In place_order, `validate_items` runs after `repo.save`", "place_order",
+     "repo.save before validate_items in place_order"),
+    ("place_order, `save`'i `validate_items`'dan önce çağırır", "place_order",
+     "save before validate_items in place_order"),
+    ("place_order, `validate_items`'dan sonra `save`'i çağırır", None, "validate_items before save in place_order"),
+    ("place_order saves the order before it validates the items", "place_order", None),  # no two calls named
+])
+def test_order_proposition_from_written_text(text, where, prop):
+    assert entail.order_proposition(text, where) == prop
+
+
+def test_free_text_relation_is_graded_from_the_caller_the_text_names(repo):
+    spec = {"free_text": True, "target_label": "place_order", "at": "orders/service.py:22", "symbol": "place_order"}
+    line = src(repo, "orders/service.py", 22)
+    g = entail.assess("relation", repo, spec, line, text="OrderRepository.save calls place_order",
+                      subjects=["orders/service.py"])
+    assert (g.grade, g.code) == ("none", "outside_caller") and "not inside `save`" in g.reason
+    ok = {**spec, "target_label": "validate_items", "symbol": "validate_items", "at": "orders/service.py:20"}
+    assert entail.grade("relation", repo, ok, src(repo, "orders/service.py", 20),
+                        text="validate_items is called by place_order", subjects=["orders/service.py"]) == "full"
+    # the target the claim names must be the callee of the text, not its caller
+    rev = {**ok, "target_label": "place_order", "symbol": "place_order"}
+    g = entail.assess("relation", repo, rev, src(repo, "orders/service.py", 20),
+                      text="place_order is called by validate_items", subjects=["orders/service.py"])
+    assert g.grade != "full"
+
+
+def test_free_text_config_claim_is_bound_to_what_the_read_sets(repo):
+    def cfg(text, var, line):
+        return entail.assess("config", repo, {"free_text": True, "env": var, "symbol": var},
+                             src(repo, "orders/config.py", line), text=text, subjects=["orders/config.py"])
+
+    assert cfg("The discount threshold is read from ORDERS_DISCOUNT_THRESHOLD", "ORDERS_DISCOUNT_THRESHOLD", 7).grade \
+        == "full"
+    assert cfg("The maximum number of items per order is read from ORDERS_MAX_ITEMS", "ORDERS_MAX_ITEMS", 6).grade \
+        == "full"
+    assert cfg("orders/config.py reads ORDERS_DATABASE_URL", "ORDERS_DATABASE_URL", 5).grade == "full"  # no subject
+    g = cfg("The discount threshold is read from ORDERS_MAX_ITEMS", "ORDERS_MAX_ITEMS", 6)
+    assert g.grade == "partial" and "binds ORDERS_MAX_ITEMS to MAX_ITEMS_PER_ORDER" in g.reason
+    res = entail.config_binding(repo, src(repo, "orders/config.py", 6), "ORDERS_MAX_ITEMS",
+                                "The discount threshold is read from ORDERS_MAX_ITEMS")
+    assert not res["ok"] and res["alt"]["names"][0] == "DISCOUNT_THRESHOLD"
+    assert res["why"] == ("orders/config.py:6 binds ORDERS_MAX_ITEMS to MAX_ITEMS_PER_ORDER; DISCOUNT_THRESHOLD "
+                          "reads ORDERS_DISCOUNT_THRESHOLD at orders/config.py:7 (scope: environment reads in "
+                          "orders/config.py)")
+    # generated (not written) text is not held to it: the analysis states the binding by construction
+    assert entail.grade("config", repo, {"env": "ORDERS_MAX_ITEMS"}, src(repo, "orders/config.py", 6),
+                        text="The discount threshold is read from ORDERS_MAX_ITEMS") == "full"
+
+
+def test_env_bindings_name_targets_keys_keywords_and_definitions():
+    tree = entail._py_tree("import os\n\nclass S:\n    def __init__(self):\n        self.url = os.getenv('DB_URL')\n\n"
+                           "def opts():\n    return {'retries': int(os.environ['RETRIES']),\n"
+                           "            'x': dict(timeout=os.environ.get('TIMEOUT'))}\n")
+    got = {b["var"]: b["names"] for b in entail.env_bindings(tree)}
+    assert got == {"DB_URL": ["url", "__init__", "S"], "RETRIES": ["retries", "opts"],
+                   "TIMEOUT": ["timeout", "x", "opts"]}
+
+
+def test_order_claims_are_checked_over_the_whole_function_body(repo):
+    body = src(repo, "orders/service.py", 19, 22)
+    good = entail.assess("behaviour", repo, {"proposition": "validate_items before save in place_order", "holds": True},
+                         body, text="x")
+    assert (good.grade, good.code) == ("full", "order") and "line 20" in good.reason and "line 22" in good.reason
+    rev = entail.assess("behaviour", repo, {"proposition": "save before validate_items in place_order", "holds": True},
+                        body, text="x")
+    assert (rev.grade, rev.code) == ("none", "reversed")
+    # analysis records the proposition as asked and whether it holds: holds=False states the reverse
+    assert entail.grade("behaviour", repo, {"proposition": "save before validate_items in place_order",
+                                            "holds": False}, body, text="x") == "full"
+    miss = entail.assess("behaviour", repo, {"proposition": "validate_items before get in place_order", "holds": True},
+                         body, text="x")
+    assert (miss.grade, miss.code) == ("none", "no_call") and "calls through other names" in miss.reason
+    # a regex behaviour claim: the cited line matches the pattern
+    assert entail.grade("behaviour", repo, {"pattern": r"repo\.save\("}, src(repo, "orders/service.py", 22),
+                        text="x") == "full"
+
+
+def test_caller_scope_reads_the_whole_body_and_says_what_it_did_not_follow(repo):
+    hit = entail.caller_scope(repo, "place_order()", "compute_total", path="orders/service.py")
+    assert hit["calls"] == [("orders/service.py", 21)] and hit["scope"] == "place_order (orders/service.py:19-22)"
+    miss = entail.caller_scope(repo, "create_order_handler", "save", path="orders/api.py")
+    assert miss["calls"] == [] and miss["miss"] == ("no direct call to save in create_order_handler "
+                                                    "(orders/api.py:16-21); calls through other names are not followed")
+    # a method of another file, found through the files the caller is defined in
+    other = entail.caller_scope(repo, "OrderRepository.save", "place_order", path="orders/service.py",
+                                files=["orders/repository.py"])
+    assert other["calls"] == [] and "OrderRepository.save (orders/repository.py:15-20)" in other["scope"]
+    assert entail.caller_scope(repo, "no_such_function", "save", path="orders/api.py") is None
+
+
+def test_typed_kinds_are_the_ones_with_a_mechanical_check():
+    assert entail.typed("relation", {"target_label": "save"}) and not entail.typed("relation", {})
+    assert entail.typed("config", {"env": "X"}) and entail.typed("location", {}, "`f` is defined at a.py:1-2")
+    assert entail.typed("behaviour", {"proposition": "a before b in f", "holds": True})
+    assert not entail.typed("general", {}) and not entail.typed("behaviour", {"proposition": "a before b in f"})

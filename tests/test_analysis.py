@@ -509,6 +509,21 @@ def test_compound_question_gets_one_verdict_per_clause(proj):
     assert any("apply_discount" in by_id[c]["text"] for c in q1["claim_ids"] if c in by_id)
 
 
+def test_a_name_written_as_code_that_does_not_exist_is_unmet_not_substituted(proj):
+    repo, st = proj
+    for q in ("Where is place_orders defined?", "place_orders fonksiyonu nerede tanımlı?"):
+        res = analysis.analyze(st, repo, q)
+        (sq,) = res["subquestions"]
+        assert sq["status"] == "unmet" and sq["claim_ids"] == [], q
+        assert res["unknowns"][0]["why"] == ("no symbol named `place_orders` in this repository; nearest: "
+                                             "place_order (orders/service.py:19)"), q
+    # with another name that does exist the sub-question still runs, but it is not answered as asked
+    sq = {"id": "q1", "intent": "locate", "done_when": {"kind": "location_verified"}}
+    rows = [{"id": "c1", "kind": "location", "status": "statically_verified"}]
+    assert analysis.judge(sq, rows, {}) == "met"
+    assert analysis.judge(sq, rows, {"not_found": ["m1"]}) == "unmet"
+
+
 def test_turkish_question_is_understood_and_answered(proj):
     repo, st = proj
     res = analysis.analyze(st, repo, "İndirim nerede uygulanıyor?")

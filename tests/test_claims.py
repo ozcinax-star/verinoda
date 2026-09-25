@@ -28,7 +28,8 @@ from verinoda.store import Store  # noqa: E402
 CODE = "def total(items):\n    s = sum(items)\n    return s\n\n\ndef helper():\n    return 1\n"
 DOC = "# ADR 7\n\nStatus: accepted\n\nWe sum items in total().\n"
 CONFIG = 'import os\n\nDATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")\n'
-TEXT = "total() sums items"  # what pkg/calc.py:1-3 states
+# what pkg/calc.py:1-3 states, quoted: word overlap alone ("total() sums items") never verifies (D31)
+TEXT = "pkg/calc.py:1-3 contains: def total(items): s = sum(items)"
 
 
 @pytest.fixture
@@ -69,6 +70,7 @@ def run_result(outcome: str) -> dict:
 
 
 RUN_TEXT = "the total tests pass"
+RUN_CLAIM = {"text": RUN_TEXT, "kind": "test_run", "spec": {"experiment": "exp_x"}}
 
 
 def make(cl: Claims, status: str, evidence=(), **kw) -> dict:
@@ -153,8 +155,11 @@ def test_experiment_verified_needs_a_passing_relevant_run(env):
     assert failing["status"] not in VERIFIED
     with pytest.raises(ClaimRuleError, match="passed"):
         cl.set_status(failing["id"], "experiment_verified", reason="x", downgrade=False)
-    passing = make(cl, "experiment_verified", [(run_result("pass"), "supports")], text=RUN_TEXT)
+    passing = make(cl, "experiment_verified", [(run_result("pass"), "supports")], **RUN_CLAIM)
     assert (passing["status"], passing["confidence"]) == ("experiment_verified", 0.95)
+    # the same run under a plain-text claim is only word overlap: relevant, never verifying
+    plain = make(cl, "experiment_verified", [(run_result("pass"), "supports")], text=RUN_TEXT)
+    assert plain["status"] == "strong_inference"
     # A source line is not an experiment.
     assert make(cl, "experiment_verified", [(src(repo), "supports")])["status"] == "statically_verified"
 
@@ -162,11 +167,14 @@ def test_experiment_verified_needs_a_passing_relevant_run(env):
 def test_primary_source_verified_needs_a_primary_source(env):
     repo, st, cl = env
     text = "We sum items in total()"
-    assert make(cl, "primary_source_verified", [(doc(repo), "supports")], text=text)["status"] == \
+    assert make(cl, "primary_source_verified", [(doc(repo), "supports")], text=text, kind="decision")["status"] == \
         "primary_source_verified"
     sec = {"source_type": "secondary", "locator": "https://blog.example", "content_hash": "sha256:1",
            "excerpt": "We sum items in total()"}
-    assert make(cl, "primary_source_verified", [(sec, "supports")], text=text)["status"] == "strong_inference"
+    assert make(cl, "primary_source_verified", [(sec, "supports")], text=text, kind="decision")["status"] == \
+        "strong_inference"
+    # the record's words in a plain-text claim: relevant, but word overlap never verifies
+    assert make(cl, "primary_source_verified", [(doc(repo), "supports")], text=text)["status"] == "strong_inference"
 
 
 def test_refutation_at_least_as_strong_blocks_verification(env):
@@ -185,7 +193,8 @@ def test_refutation_at_least_as_strong_blocks_verification(env):
 
 def test_refutation_that_outranks_support_contradicts(env):
     repo, st, cl = env
-    c = make(cl, "primary_source_verified", [(doc(repo), "supports")], text="We sum items in total()")
+    c = make(cl, "primary_source_verified", [(doc(repo), "supports")], text="We sum items in total()",
+             kind="decision")
     assert c["status"] == "primary_source_verified"
     cl.attach(c["id"], src(repo), "refutes", note="code says otherwise")
     after = cl.reassess(c["id"], reason="code refutes the doc")
@@ -254,7 +263,7 @@ def test_best_status_respects_order_and_ceiling(env):
     assert best_status(evs, "weak_inference", grades=full)[0] == "weak_inference"
     assert best_status([], None)[0] == "unknown"
     assert ORDER[0] == "experiment_verified" and ORDER[-1] == "unknown"
-    # graded for this claim ("total() sums items"), the run is irrelevant: the source lines decide
+    # graded for this claim (it quotes pkg/calc.py), the run is irrelevant: the source lines decide
     assert best_status(evs, claim=cl.get(c["id"]), repo=repo)[0] == "statically_verified"
 
 
@@ -370,10 +379,12 @@ def test_unrelated_source_line_never_verifies_a_claim_on_any_path(env):
     cl.attach(e["id"], eid, "supports")
     assert cl.reassess(e["id"], reason="x")["status"] not in VERIFIED
     assert cl.grades(e["id"]) == {eid: "none"}
-    # the same line verifies a claim it does state
+    # the same line verifies a claim it does state (a typed config claim; as plain text it is only relevant)
     ok = make(cl, "statically_verified", [(eid, "supports")],
-              text="DATABASE_URL is read from ORDERS_DATABASE_URL")
+              text="DATABASE_URL is read from ORDERS_DATABASE_URL", kind="config", spec={"env": "ORDERS_DATABASE_URL"})
     assert ok["status"] == "statically_verified"
+    plain = make(cl, "statically_verified", [(eid, "supports")], text="DATABASE_URL is read from ORDERS_DATABASE_URL")
+    assert plain["status"] == "strong_inference"
 
 
 def test_unrelated_passing_run_never_verifies(env):
@@ -386,8 +397,27 @@ def test_unrelated_passing_run_never_verifies(env):
     d = make(cl, "unknown", text="Orders are encrypted with AES-256")
     cl.attach(d["id"], dict(pricing_run), "supports")
     assert cl.reassess(d["id"], reason="ran tests")["status"] not in VERIFIED
-    assert make(cl, "experiment_verified", [(dict(pricing_run), "supports")],
-                text="the pricing tests pass")["status"] == "experiment_verified"
+    assert make(cl, "experiment_verified", [(dict(pricing_run), "supports")], text="the pricing tests pass",
+                kind="test_run", spec={"experiment": "exp_p"})["status"] == "experiment_verified"
+
+
+def test_word_overlap_never_verifies_and_written_text_needs_a_quote_or_a_typed_kind(env):
+    repo, _st, cl = env
+    # generated text: every word in the lines makes the evidence relevant, not a verification
+    gen = make(cl, "statically_verified", [(src(repo), "supports")], text="total() sums items")
+    assert gen["status"] == "strong_inference"
+    # the same words written by a user or an agent (claim add): at most weak_inference
+    written = make(cl, "statically_verified", [(src(repo), "supports")], text="total() sums items",
+                   spec={"free_text": True})
+    assert written["status"] == "weak_inference"
+    reason = cl.show(written["id"])["history"][-1]["reason"]
+    assert "verbatim quote" in reason and "allows weak_inference" in reason
+    # a verbatim quote, or a kind with a typed check, is what verifies written text
+    assert make(cl, "statically_verified", [(src(repo), "supports")], spec={"free_text": True})["status"] == \
+        "statically_verified"
+    typed = make(cl, "statically_verified", [(src(repo), "supports")], text="`total` is defined at pkg/calc.py:1-3",
+                 kind="location", spec={"free_text": True, "symbol": "total"})
+    assert typed["status"] == "statically_verified"
 
 
 def test_negations_and_quantifiers_are_not_verified_by_term_overlap(env):
@@ -403,7 +433,7 @@ def test_markdown_recorded_as_source_code_is_a_design_doc(env):
     assert ev["source_type"] == "design_doc" and ev["meta"]["reclassified_from"] == "source_code"
     legacy = {**ev, "source_type": "source_code"}  # a row recorded before the rule
     assert evmod.effective_type(legacy) == "design_doc" and evmod.rank(legacy) == 3
-    c = make(cl, "statically_verified", [(legacy, "supports")], text="We sum items in total()")
+    c = make(cl, "statically_verified", [(legacy, "supports")], text="We sum items in total()", kind="decision")
     assert c["status"] == "primary_source_verified"  # a document, not verified code
 
 

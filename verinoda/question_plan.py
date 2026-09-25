@@ -31,7 +31,14 @@ same object from rules, so analysis always runs through a plan.
    that match nothing are rejected and never used as seeds. Status: *linked*
    (>= 0.70 and 0.15 ahead of the next family), *ambiguous*, *weak*
    (0.40-0.70; claims carry the uncertainty) or *unlinked* (unknown + next
-   step). Before an ambiguous entity is asked about, a graph probe checks
+   step). A mention written as code (backticks, a path, snake_case,
+   camelCase, dotted, ``name()``) is never replaced by a similar name: it
+   needs a name tier; otherwise it is at most *weak* when the repository
+   spells it somewhere outside import statements (:func:`name_site`), and
+   *not_found* (with ``did_you_mean`` and the first unknown "no symbol named
+   `x` in this repository; nearest: ...") when it spells it nowhere; its
+   sub-question is ``unmet``. Before an ambiguous entity is asked about, a
+   graph probe checks
    whether the choice changes the answer; if not, the families are merged
    silently (``family_merged``). Domain concepts ("order", "sipariş") are
    expected to match many names and are always merged;
@@ -55,6 +62,7 @@ import hashlib
 import json
 import math
 import re
+import time
 from collections import defaultdict
 from functools import lru_cache
 from importlib import resources
@@ -545,6 +553,8 @@ class _Index:
         self.prose: set[str] = set()
         self.compact_labels: list[str] = []
         self.compact_owner: list[str] = []
+        self.sites: dict[str, str | None] = {}   # name_site() results for this graph
+        self.repo_files: list[str] | None = None
         for n, d in g.G.nodes(data=True):
             f = d.get("source_file")
             if not f:
@@ -673,6 +683,124 @@ def _near_misses(ix: _Index, text: str, limit: int = 4) -> list[tuple[str, float
     hits = process.extract(cmp_, ix.compact_labels, scorer=fuzz.ratio,
                            score_cutoff=THRESHOLDS["did_you_mean"], limit=limit)
     return [(ix.compact_owner[i], score) for _, score, i in hits]
+
+
+# -- code-shaped names: an exact name, a verbatim occurrence, or not found --------------------------
+
+def code_shape(text: str) -> str | None:
+    """``"file"`` or ``"name"`` for a mention written as code (backticked, a path, snake_case, camelCase,
+    dotted, ``name()``, UPPER_SNAKE), None for words. Such a mention names one thing exactly: it is
+    never replaced by a merely similar name."""
+    base = tn.split_apostrophe((text or "").strip())[0].strip()
+    if not base or " " in base.strip("`").strip():
+        return None
+    kind = _code_kind(base)
+    if kind is None or kind == "error_message" or base[:1] in "\"“":
+        return None
+    return "file" if kind == "file" else "name"
+
+
+_IMPORT_LINE = re.compile(r"^\s*(?:from\s+[\w.]+\s+import\b|import\b)")
+_TEXT_SUFFIXES_SKIP = (".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".jar", ".class", ".so", ".dll",
+                       ".exe", ".pyc", ".woff", ".woff2", ".ttf", ".db", ".sqlite", ".bin", ".ogg", ".wav", ".mp3")
+_SITE_MAX_BYTES = 1_000_000
+_SITE_SECONDS = 2.0   # a scan that takes longer proves nothing: the name counts as spelled (UNCHECKED)
+UNCHECKED = "(not checked: the repository is too large to scan)"
+
+
+def _outside_imports(lines: list[str]) -> list[tuple[int, str]]:
+    """``(line number, text)`` of the lines that are not import statements (``from x import (...)``,
+    ``import {a, b} from 'y'`` blocks included): a name that only an import spells is defined nowhere here."""
+    out = []
+    close = None
+    for i, ln in enumerate(lines, 1):
+        if close is not None:
+            if close in ln:
+                close = None
+            continue
+        if _IMPORT_LINE.match(ln):
+            for opener, closer in (("(", ")"), ("{", "}")):
+                if opener in ln and closer not in ln.split(opener, 1)[1]:
+                    close = closer
+            continue
+        out.append((i, ln))
+    return out
+
+
+def name_site(g, text: str) -> str | None:
+    """Where the repository spells a code-shaped name outside import statements (``file:line``), or a
+    file with that path; None when it spells it nowhere (then the name does not exist here).
+
+    Lenient on purpose: a dotted name counts when its last part occurs, any letter case counts. Only
+    a name found nowhere is reported as not found.
+    """
+    ix = _index(g)
+    name = tn.split_apostrophe((text or "").strip())[0].strip().strip("`").strip()
+    name = name[:-2] if name.endswith("()") else name
+    if not name:
+        return None
+    if name in ix.sites:
+        return ix.sites[name]
+    if ix.repo_files is None:
+        from verinoda.snapshot import list_files
+
+        try:
+            ix.repo_files = list_files(Path(g.root))
+        except (OSError, ValueError):
+            ix.repo_files = sorted(ix.files)
+    posix = name.replace("\\", "/").lstrip("./")
+    as_paths = {posix} | ({posix.replace(".", "/")} if "/" not in posix and "." in posix else set())
+
+    def names_file(f: str) -> bool:
+        stem = f.rpartition(".")[0] if "." in PurePosixPath(f).name else f
+        return any(f == q or f.endswith("/" + q) or stem == q or stem.endswith("/" + q) for q in as_paths)
+
+    site = next((f for f in ix.repo_files if names_file(f)), None)
+    if site is None:
+        last = re.split(r"[./]", posix)[-1] if "/" not in posix and "." in posix and \
+            posix.rpartition(".")[2].lower() not in _CODE_EXTS else None
+        pats = [re.compile(rf"(?<![\w]){re.escape(posix)}(?![\w])")]
+        if last and len(last) >= 3:
+            pats.append(re.compile(rf"(?<![\w]){re.escape(last)}(?![\w])"))
+        pats.append(re.compile(rf"(?<![\w]){re.escape(posix)}(?![\w])", re.I))
+        deadline = time.perf_counter() + _SITE_SECONDS
+        for f in ix.repo_files:
+            if f.lower().endswith(_TEXT_SUFFIXES_SKIP):
+                continue
+            if time.perf_counter() > deadline:
+                site = UNCHECKED
+                break
+            p = Path(g.root) / f
+            try:
+                if p.stat().st_size > _SITE_MAX_BYTES:
+                    continue
+                data = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if not any(rx.search(data) for rx in pats):
+                continue
+            hit = next((i for i, ln in _outside_imports(data.splitlines()) if any(rx.search(ln) for rx in pats)), None)
+            if hit is not None:
+                site = f"{f}:{hit}"
+                break
+    ix.sites[name] = site
+    return site
+
+
+def _exact_name(scored: dict[str, dict]) -> bool:
+    """Did the mention's own text match some node at a name tier? (A host candidate that differs from
+    what the user wrote is the host's reading, not the user's name: it does not count.)"""
+    return any(m["type"] in NAME_TIERS and m["via"] == "text" for info in scored.values() for m in info["matches"])
+
+
+def not_found_line(g, text: str, near: list[dict]) -> str:
+    """"no symbol named `x` in this repository; nearest: y (file:line)"."""
+    shape = code_shape(text) or "name"
+    name = tn.split_apostrophe((text or "").strip())[0].strip().strip("`")
+    line = f"no {'file' if shape == 'file' else 'symbol'} named `{name}` in this repository"
+    if near:
+        line += "; nearest: " + ", ".join(f"{_bare(n['label'])} ({n['site']})" for n in near[:2])
+    return line
 
 
 # -- mention linking ------------------------------------------------------------------------------
@@ -876,6 +1004,22 @@ def link_mention(mention: dict, graph, lexicon=None, *, with_hash: bool = True) 
         info["matches"].sort(key=lambda m: -m["score"])
     link: dict = {"mention": mention.get("id"), "text": mention.get("text"), "status": "unlinked",
                   "alternatives": [], "rejected_candidates": rejected, "nodes": []}
+    shape = code_shape(mention.get("text") or "")
+    if shape and not _exact_name(scored):
+        # A name written as code is never replaced by a similar one: without an exact name it is
+        # either spelled somewhere in the repository (a key, a string, an external name: the link
+        # below stays, at most weak) or it does not exist here.
+        site = name_site(g, mention.get("text") or "")
+        if site is None:
+            near = _near_misses(ix, mention.get("text") or "")
+            link["status"] = "not_found"
+            link["near_misses"] = [{"node": n, "label": g.label(n), "at": _at(g, n), "site": _site(g, n),
+                                    "similarity": round(s, 1)} for n, s in near]
+            link["did_you_mean"] = [f"{_bare(nm['label'])} ({nm['site']})" for nm in link["near_misses"]]
+            link["not_found"] = not_found_line(g, mention.get("text") or "", link["near_misses"])
+            return link
+        if site != UNCHECKED:
+            link["occurs_at"] = site
     fams = _families(g, ix, scored)
     link["entropy"] = _entropy([f["score"] for f in fams])
     if not fams or fams[0]["score"] < THRESHOLDS["weak"]:
@@ -893,9 +1037,13 @@ def link_mention(mention: dict, graph, lexicon=None, *, with_hash: bool = True) 
     close = [f for f in fams if f["score"] >= THRESHOLDS["link"]
              and best["score"] - f["score"] < THRESHOLDS["margin"]]
     link["_close"] = [f["best"] for f in close]
-    if best["score"] < THRESHOLDS["link"]:
+    if best["score"] < THRESHOLDS["link"] or link.get("occurs_at"):
         link["status"] = "weak"
         link["uncertainty"] = f"'{mention.get('text')}' linked only by {link['tier']} (score {best['score']:.2f})"
+        if link.get("occurs_at"):
+            link["uncertainty"] = (f"`{mention.get('text')}` is not a name defined in this repository (it occurs at "
+                                   f"{link['occurs_at']}); linked by {link['tier']} to {g.label(best['best'])}, "
+                                   "not by its name")
         link["nodes"] = [f["best"] for f in fams if best["score"] - f["score"] < THRESHOLDS["margin"]][:5]
     elif len(close) == 1:
         link["status"] = "linked"
@@ -1187,11 +1335,13 @@ def _entity_clarifications(plan: dict, graph, links: list[dict]) -> list[dict]:
             out.append(_clarification(plan, f"c-{lk['mention']}", lk["mention"], "entity", lk["text"], opts,
                                       lk.get("probe") or "several candidates score alike",
                                       _blocks(plan, lk["mention"])))
-        elif lk["status"] == "unlinked" and m.get("required", True) and not _is_concept(m) and lk.get("near_misses"):
+        elif lk["status"] in ("unlinked", "not_found") and m.get("required", True) and not _is_concept(m) \
+                and lk.get("near_misses"):
             opts = [{"value": nm["node"], "label": f"{nm['label']} ({nm['at']})",
                      "evidence": f"similar name ({nm['similarity']})"} for nm in lk["near_misses"][:4]]
             out.append(_clarification(plan, f"c-{lk['mention']}", lk["mention"], "did_you_mean", lk["text"], opts,
-                                      "no exact match; similar names exist", _blocks(plan, lk["mention"])))
+                                      lk.get("not_found") or "no exact match; similar names exist",
+                                      _blocks(plan, lk["mention"])))
     return out
 
 
@@ -1381,6 +1531,14 @@ def check(plan: dict, graph, repo=None, lexicon=None, *, source: str = "host") -
         result["links"] = links
         clar = _entity_clarifications(plan, graph, links) + _deixis_clarifications(plan, graph, links) + clar
         mentions = {m["id"]: m for m in plan.get("mentions") or []}
+        for lk in links:  # a name that does not exist comes first: nothing about it can be answered
+            if lk["status"] == "not_found" and mentions[lk["mention"]].get("required", True):
+                result["unknowns"].append({
+                    "about": lk["mention"], "question": f"what is `{lk['text']}` in this repository?",
+                    "why": lk["not_found"],
+                    "next_step": "use a name as written in the code" + (f" (did you mean {lk['did_you_mean'][0]}?)"
+                                                                         if lk.get("did_you_mean") else "")
+                                 + ", or check whether it comes from a library (`verinoda research`)"})
         for lk in links:
             m = mentions[lk["mention"]]
             if lk["status"] == "unlinked" and m.get("required", True) and not lk.get("near_misses"):
@@ -1414,9 +1572,13 @@ def compact_check(res: dict) -> dict:
     for lk in res.get("links") or []:
         best = lk.get("best") or {}
         item = {"mention": lk["mention"], "text": lk["text"], "status": lk["status"]}
-        if best and lk["status"] != "unlinked":
+        if best and lk["status"] not in ("unlinked", "not_found"):
             item.update({"at": best.get("at"), "label": best.get("label"), "score": best.get("score"),
                          "tier": lk.get("tier")})
+        if lk["status"] == "not_found":
+            item.update({"not_found": lk.get("not_found"), "did_you_mean": lk.get("did_you_mean") or []})
+        elif lk.get("occurs_at"):
+            item["occurs_at"] = lk["occurs_at"]
         if lk.get("family_merged"):
             item["merged"] = len(lk["family_merged"])
         if lk.get("rejected_candidates"):

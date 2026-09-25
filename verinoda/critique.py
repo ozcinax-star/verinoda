@@ -11,6 +11,9 @@ Checks (each yields pass / warn / fail with a concrete detail):
 * graph_only     - is the support only graph edges (EXTRACTED/INFERRED)?
 * call_site      - for relation claims, is there an AST call to the target at the
                    cited line, inside the claimed caller (import aliases count)?
+                   When the line shows none, the caller's whole body is read: no
+                   direct call there refutes within that stated scope, a call at
+                   another line is only a warning (the citation is off).
 * ambiguity      - could an INFERRED call (a relation, or any INFERRED hop of a
                    flow) resolve to another symbol with the same name?
 * exclusivity    - for "only X does Y" claims, does Y appear anywhere else?
@@ -18,7 +21,14 @@ Checks (each yields pass / warn / fail with a concrete detail):
                    (symbol facets; files for claims without recorded dependencies)?
 * probes         - counter-hypotheses from :data:`PROBES` (CoVe/CRITIC-style, no
                    LLM): each answers one verification question from source/AST
-                   using only the claim's spec and subjects, never its evidence.
+                   using only the claim's spec and subjects, never its evidence
+                   (among them a written config text's binding, a written
+                   definition's existence and the order "A before B in F" over
+                   F's whole body).
+
+:func:`check_at_creation` runs the checks that can refute definitively within a
+stated scope (call site and caller body, :data:`SCOPE_PROBES`) when ``claim add``
+creates a claim, so such a miss is ``contradicted`` at once (docs/DESIGN.md D31).
 
 Every finding that refutes carries a *strength*. A ``definitive`` refutation (an
 exhaustive check within a stated scope: the cited line has no call to the
@@ -48,6 +58,7 @@ and confidence only ever go down here.
 from __future__ import annotations
 
 import ast
+import difflib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -311,6 +322,91 @@ def probe_config_read(ctx: ProbeContext) -> list[ProbeResult]:
                         at=f"{path}:{line}")]
 
 
+def _subject_py_files(ctx: ProbeContext) -> list[tuple[str, str]]:
+    out = []
+    for s in ctx.subjects:
+        p = str(s).partition("::")[0]
+        if not p.endswith((".py", ".pyi")) or any(p == q for q, _ in out):
+            continue
+        try:
+            out.append((p, (ctx.repo / p).read_text(encoding="utf-8", errors="replace")))
+        except OSError:
+            continue
+    return out
+
+
+def probe_location_exists(ctx: ProbeContext) -> list[ProbeResult]:
+    """L0: written text that places a definition in a file ("`place_orders` is defined in service.py"):
+    no definition of that name in the Python file refutes it (definitive within its syntax tree)."""
+    sym = str(ctx.spec.get("symbol") or "").strip().strip("`")
+    if not sym or not ctx.spec.get("free_text"):
+        return []
+    out = []
+    for p, text in _subject_py_files(ctx):
+        facts = anchors.facts_for(None, ctx.repo, p)
+        if not anchors.usable(facts) or facts.get("lang") != "python" or anchors.symbols_named(facts, sym):
+            continue
+        names = sorted({q.split("#")[0].rpartition(".")[2] for q in facts.get("symbols", {})})
+        near = difflib.get_close_matches(sym.split("(")[0].rpartition(".")[2], names, n=2, cutoff=0.8)
+        out.append(ProbeResult("location_exists", f"`{sym}` is not defined in {p}", "refutes", "definitive",
+                               f"no definition named `{sym}` in {p} (scope: its syntax tree)"
+                               + (f"; nearest: {', '.join(near)}" if near else ""),
+                               at=f"{p}:1-{max(1, len(text.splitlines()))}"))
+    return out
+
+
+def probe_config_binding(ctx: ProbeContext) -> list[ProbeResult]:
+    """C1: written text about a setting ("the discount threshold is read from X") is about the name the
+    read of X is bound to. Another read in the same file whose binding spells the text's whole subject,
+    while no read of X is bound to any of it, refutes the text (definitive within that file's
+    environment reads)."""
+    var = ctx.spec.get("env")
+    if not var or not ctx.spec.get("free_text"):
+        return []
+    out = []
+    for p, text in _subject_py_files(ctx):
+        res = entail.binding_check(p, text, var, ctx.text)
+        if res is None or res["ok"] or res["alt"] is None:
+            continue
+        alt = res["alt"]
+        out.append(ProbeResult("config_binding", f"the text is about {alt['names'][0]}, which reads {alt['var']}",
+                               "refutes", "definitive", res["why"], at=f"{p}:{alt['line']}"))
+    return out
+
+
+def probe_order(ctx: ProbeContext) -> list[ProbeResult]:
+    """O1: "A before B in F" against the first calls of A and B in F's whole body. A missing call is
+    definitive (within F; calls through other names are not followed); a reversed order is definitive
+    when F has no branches or loops, else heuristic."""
+    if "holds" not in ctx.spec:
+        return []
+    m = entail._ORDER_PROP.match(str(ctx.spec.get("proposition") or ""))
+    if not m:
+        return []
+    a, b, where = m.groups()
+    first, second = (a, b) if ctx.spec.get("holds") else (b, a)
+    for p, text in _subject_py_files(ctx):
+        info = entail.call_order(text, p, where, first, second)
+        if info is None:
+            continue
+        scope = f"{info['name']} ({p}:{info['start']}-{info['end']})"
+        lines = info["lines"]
+        missing = [x for x in (first, second) if x not in lines]
+        if missing:
+            return [ProbeResult("order", f"{scope} does not call {', '.join(missing)}", "refutes", "definitive",
+                                f"no direct call to {', '.join(missing)} in {scope}; calls through other names are "
+                                "not followed", at=f"{p}:{info['start']}-{info['end']}")]
+        if lines[first] > lines[second]:
+            lo, hi = lines[second], lines[first]
+            return [ProbeResult("order", f"{second} comes before {first} in {info['name']}", "refutes",
+                                "heuristic" if info["branchy"] else "definitive",
+                                f"in {scope}, `{second}` is first called at line {lo}, before `{first}` at line {hi}"
+                                + ("; branches or loops may change the order at runtime" if info["branchy"] else ""),
+                                at=f"{p}:{lo}-{hi}")]
+        return []
+    return []
+
+
 def probe_decision_status(ctx: ProbeContext) -> list[ProbeResult]:
     """D1: a decision record whose status says superseded/deprecated/rejected (heuristic)."""
     out = []
@@ -332,10 +428,95 @@ def probe_decision_status(ctx: ProbeContext) -> list[ProbeResult]:
 # kind -> probes, run in cost order (AST first). Each takes a ProbeContext.
 PROBES: dict[str, list[Callable[[ProbeContext], list[ProbeResult]]]] = {
     "tests": [probe_tests_early_exit],
-    "location": [probe_location_span],
-    "config": [probe_config_read],
+    "location": [probe_location_span, probe_location_exists],
+    "config": [probe_config_read, probe_config_binding],
     "decision": [probe_decision_status],
+    "behaviour": [probe_order],
 }
+# Probes that can refute definitively within a stated scope: run when a claim is created too
+# (:func:`check_at_creation`), not only when it is challenged.
+SCOPE_PROBES: dict[str, list[Callable[[ProbeContext], list[ProbeResult]]]] = {
+    "location": [probe_location_exists],
+    "config": [probe_config_read, probe_config_binding],
+    "behaviour": [probe_order],
+}
+
+
+# =============================================================================
+# the call site of a relation, and the caller's whole body
+# =============================================================================
+
+# call-site codes after which the caller's whole body is read: the line shows no call, but the
+# caller may still make it at another line (then the citation is off, the relation is not refuted)
+_SCOPE_CODES = {"absent", "outside_caller", "string_only"}
+
+
+def _caller_files(graph, caller: str) -> list[str]:
+    """Files that define a symbol named like ``caller`` (from the graph; none without one)."""
+    if graph is None:
+        return []
+    tok = _name_token(caller)
+    return sorted({graph.file(n) for n in graph.G.nodes if graph.file(n) and _name_token(graph.label(n)) == tok})
+
+
+def call_site_check(repo: Path, c: dict, *, graph=None) -> dict:
+    """Does the cited line of relation claim ``c`` call its target inside the claimed caller?
+
+    ``{"result": pass|warn|fail, "strength": definitive|heuristic|None, "detail", "evidence", "note"}``.
+    A line that shows no call (absent, outside the caller, only in a string) is checked against the
+    caller's whole body (:func:`verinoda.entail.caller_scope`): no direct call there refutes the claim
+    within that stated scope; a call at another line makes the finding a heuristic warning (the
+    citation is off, the relation holds). ``evidence`` is the refuting evidence to attach.
+    """
+    spec = c.get("spec") or {}
+    at = spec["at"]
+    path, _, line = at.rpartition(":")
+    label = spec.get("target_label", "")
+    target = _name_token(label)
+    subjects = [str(s) for s in c.get("subjects") or []]
+    caller = entail.claimed_caller(spec, subjects, c.get("text"))
+    b_path = subjects[1].partition("::")[0] if len(subjects) > 1 and "::" in subjects[1] else None
+    b_sym = subjects[1].partition("::")[2] if len(subjects) > 1 and "::" in subjects[1] else None
+    g = entail.call_site(repo, path, int(line), label, caller=caller, target_path=b_path,
+                         target_qual=b_sym or label, relation=spec.get("relation"))
+    result, strength = _CALL_VERDICT.get(g.code, ("warn", "heuristic"))
+    _, matched, text = callsite.check(repo, at, label)
+    out = {"result": result, "strength": strength, "evidence": None, "note": None, "code": g.code}
+    if g.code == "unreadable":
+        return {**out, "result": "fail", "strength": None, "detail": f"cited line {at} does not exist"}
+    if result == "pass":
+        return {**out, "detail": f"{at} names '{target}'"
+                + (f" through the import alias '{matched}'" if matched and matched != target else "")
+                + f" ({g.reason})"}
+    if strength != "definitive":
+        return {**out, "result": "warn", "strength": "heuristic", "detail": f"{at}: {g.reason}"}
+    detail = (f"{at} does not mention '{target}': {(text or '').strip()[:100]}"
+              if g.code == "absent" else f"{at}: {g.reason}")
+    scope = None
+    if g.code in _SCOPE_CODES and caller and (spec.get("relation") or "calls").lower() in ("calls", "call"):
+        try:
+            scope = entail.caller_scope(repo, caller, target, path=path, files=_caller_files(graph, caller))
+        except (OSError, ValueError, RecursionError):
+            scope = None
+    if scope is not None and scope["calls"]:
+        f, ln = scope["calls"][0]
+        return {**out, "result": "warn", "strength": "heuristic",
+                "detail": f"{detail}; but {caller.strip().rstrip('()')} calls {target} at {f}:{ln} (the cited line "
+                          "is not the call site)"}
+    ev = None
+    if scope is not None:  # the caller's whole body is the counterexample
+        f, _name, a, b = scope["defs"][0]
+        detail = f"{detail}; {scope['miss']}"
+        ev = evmod.source_evidence(repo, f, a, b, commit=c.get("commit_sha"),
+                                   meta={"check": "call_scope", "expected": target, "strength": "definitive",
+                                         "code": g.code, "scope": scope["scope"]})
+        note = scope["miss"][:200]
+    if ev is None:
+        ev = evmod.source_evidence(repo, path, int(line), commit=c.get("commit_sha"),
+                                   meta={"check": "call_site", "expected": target, "strength": "definitive",
+                                         "code": g.code})
+        note = f"cited line does not show a call to '{target}' ({g.code})"
+    return {**out, "detail": detail, "evidence": ev, "note": note}
 
 
 # =============================================================================
@@ -447,39 +628,21 @@ def challenge(store: Store, repo: Path, cid: str, *, graph=None, actor: str = "c
         add("graph_only", "warn", f"support is only graph edges ({', '.join(sorted(map(str, confs)))}); "
             "a graph edge is an extraction, not a verification")
 
-    # call site: an AST call to the target at the cited line, inside the claimed caller
+    # call site: an AST call to the target at the cited line, inside the claimed caller (and, when the
+    # line shows none, in the caller's whole body)
     if c["kind"] == "relation" and spec.get("at"):
-        path, _, line = spec["at"].rpartition(":")
-        target = _name_token(spec.get("target_label", ""))
-        subjects = c.get("subjects") or []
-        a_sym = str(subjects[0]).partition("::")[2] if subjects and "::" in str(subjects[0]) else None
-        if a_sym and re.search(r"\.[A-Za-z]{1,5}$", a_sym.strip()) and not a_sym.strip().endswith(")"):
-            a_sym = None
-        b_path = str(subjects[1]).partition("::")[0] if len(subjects) > 1 and "::" in str(subjects[1]) else None
-        b_sym = str(subjects[1]).partition("::")[2] if len(subjects) > 1 and "::" in str(subjects[1]) else None
-        g = entail.call_site(repo, path, int(line), spec.get("target_label", ""), caller=a_sym,
-                             target_path=b_path, target_qual=b_sym or spec.get("target_label"),
-                             relation=spec.get("relation"))
-        result, strength = _CALL_VERDICT.get(g.code, ("warn", "heuristic"))
-        _, matched, text = callsite.check(repo, spec["at"], spec.get("target_label", ""))
-        if g.code == "unreadable":
-            add("call_site", "fail", f"cited line {spec['at']} does not exist")
-        elif result == "pass":
-            add("call_site", "pass", f"{spec['at']} names '{target}'"
-                + (f" through the import alias '{matched}'" if matched and matched != target else "")
-                + f" ({g.reason})")
-        elif strength == "definitive":
-            ev = evmod.source_evidence(repo, path, int(line), commit=c["commit_sha"],
-                                       meta={"check": "call_site", "expected": target, "strength": "definitive",
-                                             "code": g.code})
-            detail = (f"{spec['at']} does not mention '{target}': {(text or '').strip()[:100]}"
-                      if g.code == "absent" else f"{spec['at']}: {g.reason}")
-            if ev:
-                refute.append((ev, f"cited line does not show a call to '{target}' ({g.code})", "call_site"))
-            add("call_site", "fail", detail, strength="definitive")
+        cs = call_site_check(repo, c, graph=graph)
+        if cs["result"] == "pass":
+            add("call_site", "pass", cs["detail"])
+        elif cs["strength"] == "definitive":
+            if cs["evidence"]:
+                refute.append((cs["evidence"], cs["note"], "call_site"))
+            add("call_site", "fail", cs["detail"], strength="definitive")
+        elif cs["strength"] == "heuristic":
+            heuristic.append((f"call site {cs['detail']}", None, "call_site"))
+            add("call_site", "warn", cs["detail"], strength="heuristic")
         else:
-            heuristic.append((f"call site {spec['at']}: {g.reason}", None, "call_site"))
-            add("call_site", "warn", f"{spec['at']}: {g.reason}", strength="heuristic")
+            add("call_site", "fail", cs["detail"])
 
     # ambiguity for inferred relations and every INFERRED hop of a flow
     if graph is not None:
@@ -669,3 +832,50 @@ def challenge(store: Store, repo: Path, cid: str, *, graph=None, actor: str = "c
         "refuting_evidence_added": added,
         **({"uncertainties_added": unc_added} if unc_added else {}),
     }
+
+
+def check_at_creation(store: Store, repo: Path, cid: str, *, graph=None, actor: str = "scope_check") -> dict:
+    """The definitive, scope-stated checks of a claim just created (``claim add``).
+
+    A relation's call site and its caller's whole body (:func:`call_site_check`) and the kind's
+    :data:`SCOPE_PROBES` (a config text's binding, an order "A before B in F"). A definitive miss makes
+    the claim ``contradicted`` now, with the scope in the reason, instead of waiting for a challenge;
+    heuristic findings are left to ``challenge``. Returns ``{"claim", "status", "findings"}``.
+    """
+    repo = Path(repo).resolve()
+    cl = Claims(store, repo)
+    c = cl.get(cid)
+    spec = c.get("spec") or {}
+    refute: list[tuple[dict, str, str]] = []
+    if c["kind"] == "relation" and spec.get("at"):
+        cs = call_site_check(repo, c, graph=graph)
+        if cs["strength"] == "definitive" and cs["evidence"]:
+            refute.append((cs["evidence"], cs["note"], cs["detail"]))
+    pctx = ProbeContext(repo=repo, kind=c["kind"], spec=spec, subjects=[str(s) for s in c.get("subjects") or []],
+                        text=c["text"], graph=graph)
+    for probe in SCOPE_PROBES.get(c["kind"], []):
+        try:
+            results = probe(pctx)
+        except (OSError, SyntaxError, ValueError, RecursionError):
+            continue
+        for r in results:
+            if r.result != "refutes" or r.strength != "definitive" or not r.at:
+                continue
+            p, _, rng = r.at.rpartition(":")
+            a, _, b = rng.partition("-")
+            ev = evmod.source_evidence(repo, p, int(a), int(b) if b.isdigit() else None, commit=c["commit_sha"],
+                                       meta={"check": r.probe, "strength": "definitive"}) if a.isdigit() else None
+            if ev:
+                refute.append((ev, r.detail[:200], r.detail))
+    if not refute:
+        return {"claim": cid, "status": c["status"], "findings": []}
+    evs = cl.evidence(cid)
+    for ev, note, _detail in refute:
+        if not _same_refutation(evs, ev):
+            cl.attach(cid, ev, "refutes", note=note)
+    details = list(dict.fromkeys(d for _, _, d in refute))
+    after = cl.set_status(cid, "contradicted", actor=actor, downgrade=True,
+                          reason="checked at creation: " + "; ".join(details)[:600],
+                          payload={"findings": details},
+                          confidence=min(c["confidence"] or 0.0, CONFIDENCE_CAP["contradicted"]))
+    return {"claim": cid, "status": after["status"], "findings": details}

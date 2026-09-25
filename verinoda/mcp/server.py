@@ -1224,7 +1224,8 @@ DESCRIPTIONS: dict[str, str] = {
         "Validate and ground a plan given as JSON text: schema, unique ids and a sub-question DAG, every "
         "mention/reference quoted verbatim from the message, every version token carried, mentions linked "
         "to graph nodes in evidence tiers (linked / ambiguous / weak / unlinked; host candidates that match "
-        "nothing are rejected). The plan and its check are stored (plan_id). status: ready | "
+        "nothing are rejected; a name written as code that the repository spells nowhere is not_found, with "
+        "did_you_mean, never replaced by a similar name). The plan and its check are stored (plan_id). status: ready | "
         "needs_clarification (ask the user the clarifications, record answers[] with their clarification_id) "
         "| invalid (returned as an error with the problems)."),
     "analyze": (

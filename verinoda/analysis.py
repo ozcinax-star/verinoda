@@ -1834,18 +1834,23 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
                                          + (", or `verinoda resolve` the reference" if c["kind"] == "version"
                                             else "")})
         return _finish_sub(ctx, sub, out, "none")
+    required_unlinked = [lk for lk in links if lk["status"] in ("unlinked", "not_found")
+                         and mentions.get(lk["mention"], {}).get("required", True)]
+    usable = [lk for lk in links if lk["status"] in ("linked", "weak", "ambiguous")]
+    for u in ctx.check.get("unknowns") or []:  # a name that does not exist first (plan check orders them)
+        if u.get("about") in {lk["mention"] for lk in required_unlinked}:
+            _unknown(ctx, sub, {k: v for k, v in u.items() if k != "about"})
+    # a name written as code that the repository does not have: whatever else is found, the
+    # sub-question as asked is not answered
+    not_found = [lk["mention"] for lk in required_unlinked if lk["status"] == "not_found"]
+    if not_found:
+        sub.flags["not_found"] = not_found
     if pinned_elsewhere and sq["intent"] != "compare_reference":
         _unknown(ctx, sub, {"question": sq.get("text") or "",
                             "why": f"the question names {', '.join(pinned_elsewhere)}; only the working tree was "
                                    "analysed",
                             "next_step": "read that version with `verinoda research <repository> --ref <version>` "
                                          "(or `verinoda resolve` the reference first)"})
-    required_unlinked = [lk for lk in links if lk["status"] == "unlinked"
-                         and mentions.get(lk["mention"], {}).get("required", True)]
-    usable = [lk for lk in links if lk["status"] in ("linked", "weak", "ambiguous")]
-    for u in ctx.check.get("unknowns") or []:
-        if u.get("about") in {lk["mention"] for lk in required_unlinked}:
-            _unknown(ctx, sub, {k: v for k, v in u.items() if k != "about"})
     if required_unlinked and not usable and not subject_nodes:
         sub.flags["unlinked"] = [lk["mention"] for lk in required_unlinked]
         return _finish_sub(ctx, sub, out, "none")
@@ -1990,12 +1995,15 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
     ``done_when.min_status``; ``met_with_inference``: relevant claims exist but
     only at a weaker level, or only about code ranked near the subject rather than
     the subject itself (``flags["off_subject"]``: context claims for other symbols);
-    ``unmet``: none (stale, contradicted and unknown claims never count); ``not_supported`` / ``blocked_by_clarification`` come
-    from the handler.
+    ``unmet``: none (stale, contradicted and unknown claims never count), or the sub-question names
+    code that does not exist here (``flags["not_found"]``: claims about other names do not answer it);
+    ``not_supported`` / ``blocked_by_clarification`` come from the handler.
     """
     flags = flags or {}
     if flags.get("blocked"):
         return "blocked_by_clarification"
+    if flags.get("not_found"):
+        return "unmet"
     kind, min_status, kinds = _verdict_kinds(sq)
     live = [c for c in claims if c.get("kind") in kinds and c.get("status") in _RANK and c["status"] != "unknown"]
     off = set(flags.get("off_subject") or [])

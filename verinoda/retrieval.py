@@ -619,6 +619,50 @@ def _hints(g: Graph, text: str) -> list[dict]:
     return out
 
 
+def _names_exactly(g: Graph, query: str, node: str) -> bool:
+    """Does ``query`` name ``node`` itself (its id, file, label, ``Class.method``, ``file::symbol``), rather
+    than something the fuzzy scorer found similar?"""
+    if query in g.G:
+        return query == node
+    q = query.strip().strip("`")
+    q = q[:-2] if q.endswith("()") else q
+    if "::" in q:
+        f, _, sym = q.partition("::")
+        return g.file(node) == f.replace("\\", "/") and fold_tr(g.label(node).strip(".()")) == fold_tr(sym.strip(".()"))
+    f = g.file(node) or ""
+    if g.is_file_node(node) and (f == q or f.endswith("/" + q.replace("\\", "/"))):
+        return True
+    label = fold_tr(g.label(node).strip().lstrip(".").split("(")[0])
+    if label == fold_tr(q):
+        return True
+    owner, _, last = q.rpartition(".")
+    if not owner or label != fold_tr(last):
+        return False
+    # `Owner.name`: the owner must be the node's class or its module, not just any `name`
+    owners = {fold_tr(g.label(c).strip().strip(".()")) for c, _ in g.in_edges(node, {"method"})}
+    return fold_tr(owner.rpartition(".")[2]) in owners | {fold_tr(f.rpartition("/")[2].partition(".")[0])}
+
+
+def _endpoint_notes(g: Graph, text: str, nid: str) -> tuple[str | None, str | None]:
+    """``(not_found, fuzzy)``: a code-shaped endpoint the graph has no such name for is not substituted
+    ("no symbol named `x` in this repository; nearest: ..."); a plain-words endpoint resolved by
+    similarity is kept, and said so."""
+    from verinoda import question_plan as qp
+
+    if _names_exactly(g, text, nid):
+        return None, None
+    if qp.code_shape(text):
+        ix = qp._index(g)
+        near = [{"label": g.label(n), "site": qp._site(g, n)} for n, _ in qp._near_misses(ix, text)]
+        line = qp.not_found_line(g, text, near)
+        site = qp.name_site(g, text)
+        if site and site != qp.UNCHECKED:
+            line = line.replace(" in this repository", f" in this repository (the name occurs at {site})", 1)
+        return line, None
+    return None, (f"'{text}' has no exact match; resolved by similarity to {g.label(nid)} "
+                  f"({g.file(nid)}:{g.line(nid)})")
+
+
 def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int = 8,
           mode: str = "flow") -> dict:
     """Directed paths between two symbols/files, each hop with its edge location.
@@ -630,15 +674,31 @@ def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int
     (``call``, ``construction``, ``containment``, ``reference``, ``import``,
     ``inheritance``) and a path with a non-call hop is reported as
     ``structural``, not as reachability. An endpoint that does not resolve
-    comes back with ``hints`` (likely symbols) and a ``next_step``.
+    comes back with ``hints`` (likely symbols) and a ``next_step``. An
+    endpoint written as code that names no symbol exactly is not replaced by
+    a similar one (``not_found``: "no symbol named `x` in this repository;
+    nearest: ..."); a plain-words endpoint resolved by similarity is kept and
+    reported in ``fuzzy``.
     """
     s, s_cands = g.resolve(source)
     t, t_cands = g.resolve(target)
+    not_found: dict[str, str] = {}
+    fuzzy: dict[str, str] = {}
+    for side, text, nid in (("source", source, s), ("target", target, t)):
+        if nid:
+            nf, fz = _endpoint_notes(g, text, nid)
+            if nf:
+                not_found[side] = nf
+            if fz:
+                fuzzy[side] = fz
+    s = None if "source" in not_found else s
+    t = None if "target" in not_found else t
     out = {"source": source, "target": target,
            "resolved": {"source": s and {"id": s, "at": f"{g.file(s)}:{g.line(s)}"},
                         "target": t and {"id": t, "at": f"{g.file(t)}:{g.line(t)}"}},
            "candidates": {"source": [c for _, c in s_cands], "target": [c for _, c in t_cands]},
-           "paths": [], "direction": "directed", "mode": mode}
+           "paths": [], "direction": "directed", "mode": mode,
+           **({"not_found": not_found} if not_found else {}), **({"fuzzy": fuzzy} if fuzzy else {})}
     if not s or not t:
         out["status"] = "unresolved"
         out["hints"] = {k: _hints(g, text) for k, text, nid in (("source", source, s), ("target", target, t))

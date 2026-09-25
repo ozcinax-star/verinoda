@@ -18,7 +18,10 @@ Status rules (enforced by :func:`check_status`, tested in tests/test_claims.py):
 * ``strong_inference``      at least one relevant (graded ``partial`` or better)
   supporting evidence that is not a search result, model summary or user
   feedback (a graph edge between the claimed endpoints is enough here - that is
-  what inference means; a search hit or a summary is not).
+  what inference means; a search hit or a summary is not). Text a user or an
+  agent wrote (``spec.free_text``, ``claim add``) that no typed check covers
+  needs evidence graded ``full`` (a verbatim quote): its word overlap with the
+  cited lines allows ``weak_inference`` only.
 * ``weak_inference``        at least one supporting evidence of any kind.
 * ``unknown``               nothing: a claim without evidence is unknown.
 * ``contradicted``          at least one *definitive* refutation (an exhaustive
@@ -139,11 +142,16 @@ def groups(evs: list[dict], kind: str | None = None) -> dict[str, list[dict]]:
 
 class _Ctx:
     def __init__(self, evs: list[dict], checks: dict[str, bool] | None, grades: dict[str, str] | None,
-                 kind: str | None):
+                 kind: str | None, claim: dict | None = None):
         self.evs = evs
         self.checks = checks or {}
         self.grades = grades
         self.kind = kind or "general"
+        spec = (claim or {}).get("spec") or {}
+        # text a user or an agent wrote (`claim add`) that no typed check covers: word overlap with the
+        # cited lines is not support for it, so it needs a verbatim quote for strong_inference
+        self.written = bool(spec.get("free_text")) and self.kind not in entail.DOCUMENTARY and \
+            not entail.typed(self.kind, spec, (claim or {}).get("text"))
         live = _live(evs, self.checks)
         self.sup = _supports(live)
         self.ref_def = [e for e in _refutes(live) if strength(e) == "definitive"]
@@ -225,6 +233,9 @@ def _allows(status: str, ctx: _Ctx) -> str | None:
                 return ("strong_inference requires supporting evidence other than "
                         + ", ".join(sorted({evmod.effective_type(e) for e in ctx.sup})))
             return "strong_inference requires at least one supporting evidence"
+        if ctx.grades is not None and ctx.written and not any(entail.at_least(ctx.grade(e), "full") for e in usable):
+            return ("strong_inference for written text needs a verbatim quote ('contains: ...') or a typed claim "
+                    "kind; word overlap with the cited lines allows weak_inference")
         if ctx.grades is not None and not any(entail.at_least(ctx.grade(e), "partial") for e in usable):
             return "strong_inference requires relevant evidence; the supporting evidence is not about the claim"
     elif status == "weak_inference":
@@ -259,7 +270,7 @@ def check_status(status: str, evs: list[dict], source_checks: dict[str, bool] | 
     """
     if grades is None and claim is not None:
         grades = grade_evidence(claim, evs, repo)
-    ctx = _Ctx(evs, source_checks, grades, (claim or {}).get("kind"))
+    ctx = _Ctx(evs, source_checks, grades, (claim or {}).get("kind"), claim)
     why = _allows(status, ctx)
     if why is not None:
         return why
@@ -279,7 +290,7 @@ def best_status(evs: list[dict], ceiling: str | None = None,
     """
     if grades is None and claim is not None:
         grades = grade_evidence(claim, evs, repo)
-    ctx = _Ctx(evs, source_checks, grades, (claim or {}).get("kind"))
+    ctx = _Ctx(evs, source_checks, grades, (claim or {}).get("kind"), claim)
     if ctx.ref_def and not ctx.sup:
         return "contradicted", ["only refuting evidence is recorded"]
     reasons: list[str] = []
@@ -518,6 +529,8 @@ class Claims:
                 self.store.update_claim(cid, {"verified_at": fields["verified_at"]})
             return self.get(cid)
         full_reason = reason if not notes else f"{reason} (downgraded: {notes[0]})"
+        if len(notes) > 1 and notes[-1] != notes[0]:  # and why it stopped where it did
+            full_reason = f"{full_reason[:-1]}; {notes[-1]})"
         self.store.record_transition(
             cid, from_status=c["status"], to_status=status, from_conf=c["confidence"],
             to_conf=conf, reason=full_reason, actor=actor,

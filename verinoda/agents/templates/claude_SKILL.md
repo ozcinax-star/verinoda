@@ -96,7 +96,12 @@ Rules:
 - Never present `weak_inference` or `unknown` as fact. Never invent a relation, call path,
   file, line, test result or benchmark number.
 - A graph edge alone is never verification: `trace` and `query` give leads; confirm them with
-  source lines (`analyze`, `claim add --source`, `verify`).
+  source lines (`analyze`, `claim add --source`, `verify`). Confirm a sentence of your own with a
+  typed claim (`--kind relation|config|location|order --symbol X`): plain text is at most
+  `weak_inference` unless it quotes the lines (`"f.py:12 contains: <exact text>"`); a
+  `contradicted` result states its scope: correct the sentence, do not reword it.
+- A name written as code that `plan check` or `trace` reports `not_found` does not exist here:
+  say so with its `did_you_mean`; never answer about the similar name instead.
 - Do not upgrade a status by wording. Change status only through Verinoda (`verify`,
   `experiment run`, `claim add --source`, which downgrades a requested status the evidence
   does not allow).
@@ -163,7 +168,7 @@ verinoda trace create_order save_order --mode any --json
 # inspect, re-check and attack claims
 verinoda claim show <claim-id> --json
 verinoda claim list --status unknown --json
-verinoda claim add "Totals are computed in pricing.total" --source src/pricing.py:10-24 --json
+verinoda claim add "place_order calls validate_items" --kind relation --source src/service.py:20 --json
 verinoda verify <claim-id> --json
 verinoda verify <claim-id> --run --json
 verinoda challenge <claim-id> --json

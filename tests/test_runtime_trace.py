@@ -159,8 +159,14 @@ def test_evidence_is_call_trace_and_can_verify_an_observed_edge(orders):
     assert check_status("experiment_verified", [{**ev, "id": "e1", "relation": "supports"}]) is None
     cl = Claims(st, repo)
     c = cl.create("In run R, compute_total called apply_discount at orders/pricing.py:8", project="orders_app",
-                  snapshot=st.latest_snapshot(), status="experiment_verified", evidence=[(ev, "supports")])
+                  snapshot=st.latest_snapshot(), status="experiment_verified", evidence=[(ev, "supports")],
+                  kind="relation", spec={"target_label": "apply_discount()", "at": "orders/pricing.py:8"},
+                  subjects=["orders/pricing.py::compute_total()", "orders/pricing.py::apply_discount()"])
     assert c["status"] == "experiment_verified"
+    # as plain text the same observation is word overlap: relevant, not a verification
+    plain = cl.create("In run R, compute_total called apply_discount at orders/pricing.py:8", project="orders_app",
+                      snapshot=st.latest_snapshot(), status="experiment_verified", evidence=[(dict(ev), "supports")])
+    assert plain["status"] == "strong_inference"
 
 
 def test_reach_evidence_for_presence_and_absence(orders):

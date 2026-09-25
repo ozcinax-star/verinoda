@@ -133,6 +133,28 @@ def test_trace_unresolved_endpoints(g):
     assert res2["status"] == "unresolved" and res2["resolved"]["target"] is None
 
 
+def test_trace_never_replaces_a_name_written_as_code(g):
+    # a code-shaped endpoint with no such symbol is not traced to a similar one
+    res = retrieval.trace(g, "create_order_handler", "place_orders")
+    assert res["status"] == "unresolved" and res["resolved"]["target"] is None and res["paths"] == []
+    assert res["not_found"]["target"] == ("no symbol named `place_orders` in this repository; nearest: place_order "
+                                          "(orders/service.py:19)")
+    assert "fuzzy" not in res and "not_found" not in retrieval.trace(g, "create_order_handler", "place_order")
+    # `Owner.name` needs that owner: another class's `save` is not `Foo.save`
+    foo = retrieval.trace(g, "create_order_handler", "Foo.save")
+    assert foo["status"] == "unresolved" and foo["not_found"]["target"].startswith("no symbol named `Foo.save`")
+    assert "not_found" not in retrieval.trace(g, "api.create_order_handler", "OrderRepository.save")
+    # exact forms are exact: ids, path::symbol, Class.method, a file
+    for s, t in (("orders_api_create_order_handler", "orders/repository.py::save"),
+                 ("create_order_handler()", "OrderRepository.save")):
+        exact = retrieval.trace(g, s, t)
+        assert exact["status"] == "found" and "not_found" not in exact and "fuzzy" not in exact, (s, t)
+    # plain words may still resolve by similarity, and the result says so
+    words = retrieval.trace(g, "create order handler", "OrderRepository.save")
+    assert words["status"] == "found" and words["fuzzy"]["source"].startswith(
+        "'create order handler' has no exact match; resolved by similarity to create_order_handler()")
+
+
 def test_trace_same_endpoint_is_ambiguous(g):
     assert retrieval.trace(g, "place_order", "orders/service.py::place_order")["status"].startswith("ambiguous")
 

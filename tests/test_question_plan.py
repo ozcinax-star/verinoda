@@ -373,7 +373,7 @@ def _link(orders, text, **m):
     ("OrderRepository.save", {}, "qualified", ".save()"),
     ("compute_total", {}, "exact_label", "compute_total()"),
     ("computeTotal", {}, "label_folded", "compute_total()"),
-    ("compute_totl", {}, "fuzzy", "compute_total()"),
+    ("computetotl", {"kind": "domain_concept"}, "fuzzy", "compute_total()"),  # a word, not written as code
 ])
 def test_link_tiers(orders, text, extra, tier, label):
     lk = _link(orders, text, **extra)
@@ -424,9 +424,16 @@ def test_unlinked_required_mention_is_an_unknown_with_a_next_step(orders):
                                                    "done_when": {"kind": "claim_exists", "detail": "x"}}],
            "mentions": [{"id": "m1", "text": "FluxCapacitor", "kind": "symbol"}]}
     res = qp.check(doc, g, repo, lex)
-    assert res["links"][0]["status"] == "unlinked"
+    # a name written as code that the repository spells nowhere: not found (not merely unlinked)
+    assert res["links"][0]["status"] == "not_found"
     (u,) = res["unknowns"]
-    assert u["about"] == "m1" and "FluxCapacitor" in u["why"] and u["next_step"]
+    assert u["about"] == "m1" and u["why"] == "no symbol named `FluxCapacitor` in this repository" and u["next_step"]
+    words = {**doc, "user_message": "Where is the flux capacitor configured?",
+             "mentions": [{"id": "m1", "text": "flux capacitor", "kind": "symbol"}]}
+    res = qp.check(words, g, repo, lex)
+    assert res["links"][0]["status"] == "unlinked"  # plain words: nothing matched, no claim about existence
+    (u,) = res["unknowns"]
+    assert u["about"] == "m1" and "flux capacitor" in u["why"] and u["next_step"]
 
 
 def test_near_miss_asks_did_you_mean_with_grounded_options(orders):
@@ -436,12 +443,58 @@ def test_near_miss_asks_did_you_mean_with_grounded_options(orders):
                                                    "done_when": {"kind": "set_enumerated", "detail": "x"}}],
            "mentions": [{"id": "m1", "text": "compute_totall", "kind": "symbol"}]}
     lk = qp.link_mention(doc["mentions"][0], g, lex)
-    if lk["status"] != "unlinked":  # the fuzzy tier already links typos this close
-        assert lk["best"]["label"] == "compute_total()"
-        return
+    # a typo of a name written as code is never linked to the similar name, it is not found
+    assert lk["status"] == "not_found" and not lk["nodes"]
+    assert lk["did_you_mean"][0] == "compute_total (orders/pricing.py:6)"
+    assert lk["not_found"] == ("no symbol named `compute_totall` in this repository; nearest: compute_total "
+                               "(orders/pricing.py:6)")
     res = qp.check(doc, g, repo, lex)
     (c,) = res["clarifications"]
     assert c["kind"] == "did_you_mean" and c["options"][0]["label"].startswith("compute_total()")
+    assert res["unknowns"][0]["why"] == lk["not_found"]
+    compact = qp.compact_check(res)["links"][0]
+    assert compact["status"] == "not_found" and compact["did_you_mean"] == lk["did_you_mean"]
+    # a host candidate that differs from what the user wrote does not make the user's name exist
+    hosted = qp.link_mention({"id": "m1", "text": "compute_totall", "kind": "symbol", "candidates": ["compute_total"]},
+                             g, lex)
+    assert hosted["status"] == "not_found"
+
+
+def test_code_shaped_name_spelled_only_in_text_is_at_most_weak(orders):
+    repo, g, _lex = orders
+    # ORDERS_MAX_ITEMS is an environment variable: no symbol, but config.py spells it
+    lk = _link(orders, "ORDERS_MAX_ITEMS", kind="env_var")
+    assert lk["status"] in ("weak", "unlinked") and lk["status"] != "not_found"
+    assert lk.get("occurs_at", "").startswith("orders/config.py:")
+    if lk["status"] == "weak" and lk.get("tier") != "text_hit":
+        assert "is not a name defined in this repository" in lk["uncertainty"]
+    # a name that only an import statement spells is defined nowhere; any other use counts
+    ix = qp._index(g)
+    (repo / "orders" / "ghost.py").write_text("from orders.service import (\n    place_orders,\n)\n\n"
+                                               "x = spooky_helper()\n", encoding="utf-8")
+    try:
+        ix.sites.clear()
+        ix.repo_files = None  # list the files again: ghost.py is new
+        assert qp.name_site(g, "place_orders") is None
+        assert qp.name_site(g, "spooky_helper()") == "orders/ghost.py:5"
+        assert qp.name_site(g, "orders/ghost.py") == "orders/ghost.py"
+    finally:
+        (repo / "orders" / "ghost.py").unlink()
+        ix.sites.clear()
+        ix.repo_files = None
+
+
+def test_a_scan_that_runs_out_of_time_never_reports_not_found(orders, monkeypatch):
+    repo, g, lex = orders
+    ix = qp._index(g)
+    monkeypatch.setattr(qp, "_SITE_SECONDS", -1.0)
+    ix.sites.clear()
+    try:
+        assert qp.name_site(g, "compute_totall") == qp.UNCHECKED
+        lk = qp.link_mention({"id": "m1", "text": "compute_totall", "kind": "symbol"}, g, lex)
+        assert lk["status"] != "not_found" and "occurs_at" not in lk  # unknown existence: the old linking
+    finally:
+        ix.sites.clear()
 
 
 AMBIG = {

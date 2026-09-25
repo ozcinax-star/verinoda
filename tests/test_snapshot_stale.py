@@ -81,17 +81,22 @@ def proj(tmp_path):
         return cl.create(text, project=snap["project"], snapshot=snap, status=status,
                          evidence=[(ev, "supports")], subjects=subjects or [rel], actor="test")
 
+    def quote(rel, a, b=None):
+        """A claim that quotes the cited lines: word overlap alone never verifies (docs/DESIGN.md D31)."""
+        lines = (repo / rel).read_text(encoding="utf-8").splitlines()
+        return f"{rel}:{a}" + (f"-{b}" if b else "") + " contains: " + " ".join(" ".join(lines[a - 1:b or a]).split())
+
     a = _line(repo, "orders/pricing.py", "def compute_total")
+    svc = _line(repo, "orders/service.py", "validate_items(items)")
+    ins = _line(repo, "orders/repository.py", "INSERT INTO")
+    cfg = _line(repo, "orders/config.py", "ORDERS_DISCOUNT_THRESHOLD")
     claims = {
-        "pricing": claim("compute_total sums price*qty", "orders/pricing.py", a, a + 2),
+        "pricing": claim(quote("orders/pricing.py", a, a + 2), "orders/pricing.py", a, a + 2),
         "pricing_inference": claim("compute_total is the only pricing entry", "orders/pricing.py", a, a + 2,
                                    status="strong_inference"),
-        "service": claim("place_order calls validate_items", "orders/service.py",
-                         _line(repo, "orders/service.py", "validate_items(items)")),
-        "repository": claim("save inserts into orders", "orders/repository.py",
-                            _line(repo, "orders/repository.py", "INSERT INTO")),
-        "config": claim("the discount threshold is read from ORDERS_DISCOUNT_THRESHOLD", "orders/config.py",
-                        _line(repo, "orders/config.py", "ORDERS_DISCOUNT_THRESHOLD")),
+        "service": claim(quote("orders/service.py", svc), "orders/service.py", svc),
+        "repository": claim(quote("orders/repository.py", ins), "orders/repository.py", ins),
+        "config": claim(quote("orders/config.py", cfg), "orders/config.py", cfg),
     }
     yield repo, st, cl, claims
     st.close()
@@ -268,8 +273,8 @@ def test_claims_citing_other_checkouts_do_not_go_stale_on_local_changes(proj, tm
     snap = st.latest_snapshot()
     ev = evmod.source_evidence(ext, "orders/pricing.py", 1, 2, commit="refsha", source_type="reference_repo",
                                meta={"root": str(ext)})
-    c = cl.create("compute_total returns 0", project=snap["project"], snapshot=snap,
-                  status="statically_verified", evidence=[(ev, "supports")])
+    c = cl.create("orders/pricing.py:1-2 contains: def compute_total(items): return 0", project=snap["project"],
+                  snapshot=snap, status="statically_verified", evidence=[(ev, "supports")])
     assert c["status"] == "statically_verified"
     _edit(repo, "orders/pricing.py", "return apply_discount(subtotal)", "return subtotal")
     stale = {s["id"] for s in workflow.update(st, repo)["stale"]}
@@ -502,8 +507,8 @@ def test_cited_file_outside_the_snapshot_is_rechecked(proj):
     snap = workflow.update(st, repo)["snapshot"]
     assert "orders/local_settings.py" not in st.snapshot_files(snap["id"])
     ev = evmod.source_evidence(repo, "orders/local_settings.py", 1, commit=snap["commit_sha"])
-    c = cl.create("DEBUG is False", project=snap["project"], snapshot=snap, status="statically_verified",
-                  evidence=[(ev, "supports")], actor="test")
+    c = cl.create("orders/local_settings.py:1 contains: DEBUG = False", project=snap["project"], snapshot=snap,
+                  status="statically_verified", evidence=[(ev, "supports")], actor="test")
     assert c["status"] == "statically_verified"
     (repo / "orders" / "local_settings.py").write_text("DEBUG = True\n", encoding="utf-8")
     from verinoda import critique
@@ -528,4 +533,4 @@ def test_claim_text_and_birth_are_immutable(proj):
         st.conn.execute("UPDATE claims SET created_at = '2000-01-01' WHERE id = ?", (cid,))
     st.conn.rollback()
     st.update_claim(cid, {"uncertainties": ["other fields still change"]})
-    assert cl.get(cid)["text"] == "compute_total sums price*qty"
+    assert cl.get(cid)["text"] == claims["pricing"]["text"] and "contains: def compute_total" in cl.get(cid)["text"]
