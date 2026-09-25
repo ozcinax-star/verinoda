@@ -98,6 +98,61 @@ Verinoda's own repository). Fresh-index A/B of the first change: 0 of 333 result
 imported the indexer before Verinoda had pointed it at `.verinoda/index`, so part of the pipeline
 used another directory and did less work. The figures above are the command's own.
 
+**Update time, second round.** Four changes to what an update does around the extraction; the
+graph, the search index and the answers stay the same. (1) The AST cache's source paths are made
+absolute once per path string for a build, not once per item (about 150,000 pathlib joins per
+update of Verinoda's own repository). (2) After the build graph.json is read once and written
+once: ids made portable and the nodes of missing files pruned in one rewrite (before: five
+reads and two rewrites of the 34 MB file, and the receiver sidecar computed twice), and whether
+an edit concerns the graph is read from the JSON without building the graph. (3) When the
+pipeline builds exactly the graph of the last full rebuild, the upstream "topology unchanged"
+path now runs: graph.json is kept, clustering and two rewrites are skipped, and GRAPH_REPORT.md
+and the dated backup are written with the upstream functions as the full path writes them
+(`.verinoda/index/rebuild_record.json`). That is the case for an edit that leaves every node and
+edge as it was (a comment or a sentence changed in place, lines appended at the end of a file);
+not when lines move or symbols change, and not on the first update after a file was added or
+removed or after a scan (the upstream merge carries the previous graph's community numbers into
+the next graph, so it comes out different once more). (4) The 112 data-shaped JSON files the
+upstream extractor skips are remembered by path and bytes, and fewer than 64 files left to
+extract are extracted in the process instead of by a process pool.
+
+`verinoda update` on two identical copies of Verinoda's own repository (about 1,200 files), the
+command itself (`python -m verinoda update`, wall clock), run one after the other at the same
+path in alternating order, other agents busy on the same 6-core machine, so only the
+differences within a pair mean much (all four changes;
+`benchmarks/results/update-time-2026-09-25/4-all-four.json`, its README says how):
+
+| update after | before | after | pairs |
+|---|---|---|---|
+| an edit that leaves the graph as it was | 35.2-38.0 s | 26.7-28.2 s | 3 at the start of the run |
+| the same, later in the run (machine busier) | 38.2-43.3 s | 28.8-30.3 s | 3 |
+| an edit the graph changes with (a moved line, a file added or deleted; the first update of new code) | 35.3-38.0 s | 32.7-34.6 s | 4 |
+| `scan`, `scan --force` of an unchanged tree | 34.8-36.4 s | 32.5-32.8 s | 2 |
+| a scan with no index at all | 74.3 s | 71.3 s | 1 |
+
+One more pair, a Markdown line inserted at the busiest moment of the run, came out 7.3 s slower
+(39.5 -> 46.8 s).
+
+Measured one change at a time before that (same kind of pairs): (1) 1.3 s less on the median of
+7 updates that change the graph (-3.5 to +0.9 s); (1)+(2) 2.3 s less (9 updates); (1)-(3) 8.0 s
+less on 7 updates that keep the graph (35.2-36.3 s -> 27.5-28.1 s) and 2.3 s less on 7 that do
+not (files 1-3 in the same folder). (4) was not measured on its own; with it the updates that keep
+the graph took 26.7-28.2 s, within the noise of the run before. After every step of these runs (54 steps: in-place comments, a moved line, an added and a
+deleted file, a deleted module other files import, a data JSON edit, Markdown edits in place and
+with a line inserted, `scan`, `scan --force`, a scan from nothing) the outputs of the two copies
+were compared: graph.json byte for byte, GRAPH_REPORT.md, the labels and their signatures, the
+dated backup, the receiver sidecar (the graph's mtime aside), search.db (every table, sorted;
+the graph's mtime and the build time aside), lexicon.json (`built_at` aside), manifest.json (the
+`seen` times aside) and the snapshot's counts, then `verinoda query` for three questions.
+Identical in every step. No benchmark set was rerun: what the answers are built from did not
+change.
+
+Found on the way, not changed (the outputs had to stay the same): an id made portable whose
+plain form is taken gets `_unresolved` appended without checking that name too, and the upstream
+merge keeps the previous graph's portable ids as nodes of their own, so graph.json of Verinoda's
+own repository holds 6 duplicate node ids (`tests_upstream_fixtures_foundation_unresolved` and
+five more), and each missing import of a JavaScript fixture appears twice.
+
 **A set of Turkish user questions about Verinoda (`verinoda_user_tr`, in-sample).** 12 questions (one
 a user's own words, the rest written in that style), 30 gold facts at commit 3bd1b94: query text
 11/30, analyze 8 → 11 with this round; of 5 questions judged met, 3 have none of their gold facts

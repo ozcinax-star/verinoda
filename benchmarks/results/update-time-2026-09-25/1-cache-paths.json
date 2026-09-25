@@ -1,0 +1,84 @@
+[
+ {
+  "step": "comment:11",
+  "before_s": 38.49,
+  "after_s": 36.3,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:12",
+  "before_s": 36.22,
+  "after_s": 36.29,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "body:13",
+  "before_s": 39.07,
+  "after_s": 38.57,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "add:14",
+  "before_s": 36.75,
+  "after_s": 37.67,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "del:14",
+  "before_s": 39.67,
+  "after_s": 36.15,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "json:16",
+  "before_s": 4.1,
+  "after_s": 4.16,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "jsoncode:17",
+  "before_s": 38.21,
+  "after_s": 36.95,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "md:18",
+  "before_s": 42.96,
+  "after_s": 40.7,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "mdshift:19",
+  "before_s": 41.27,
+  "after_s": 39.27,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:20",
+  "before_s": 42.84,
+  "after_s": 41.79,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "query": "How does verinoda update decide whether to rebuild the code graph?",
+  "outputs": "identical"
+ },
+ {
+  "query": "Where are graph ids made portable after an index build?",
+  "outputs": "identical"
+ },
+ {
+  "query": "Türkçe sorulardaki ekler nasıl ayıklanıyor?",
+  "outputs": "identical"
+ }
+]
