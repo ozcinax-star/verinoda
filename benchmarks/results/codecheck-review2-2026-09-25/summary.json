@@ -1,0 +1,288 @@
+{
+ "what": "verinoda check after the second review round (docs/DESIGN.md D31, branch p1/code-check)",
+ "machine": "Windows 11, Python 3.12.0, jedi 0.20.0; the machine was shared with other runs (timings noisy)",
+ "fixture": {
+  "in_sample": true,
+  "same_verdicts_and_nearest_as_the_first_review_round": true,
+  "precision_absent": "74/74",
+  "recall_absent_closed": "74/74",
+  "decided_absent": "74/79",
+  "near_name_top3": "24/26",
+  "confusion_oracle_x_check": {
+   "exists": {
+    "exists": 62,
+    "unknown": 1,
+    "guarded": 2
+   },
+   "absent": {
+    "absent": 74,
+    "unknown": 5
+   }
+  },
+  "env_regression_violations": [],
+  "timing": {
+   "warm_s_per_100_sites": 0.323,
+   "cli_cold_diff_s": [
+    1.52,
+    1.33,
+    1.34,
+    1.3,
+    1.31
+   ],
+   "cli_cold_diff_median_s": 1.33,
+   "cli_cold_whole_dir_s": [
+    3.73,
+    3.75,
+    3.68
+   ],
+   "disk_cache_s": 0.37
+  }
+ },
+ "review_probe_sets": {
+  "tip_before_this_round": [
+   {
+    "set": "reviewer proj",
+    "summary": {
+     "sites": 352,
+     "absent": 19,
+     "not_installed": 0,
+     "unknown": 51,
+     "guarded": 5,
+     "exists": 277,
+     "files": 87
+    },
+    "false_absent": 0,
+    "invented_not_absent": "7/26"
+   },
+   {
+    "set": "reviewer sweep_std",
+    "summary": {
+     "sites": 11367,
+     "absent": 0,
+     "not_installed": 0,
+     "unknown": 18,
+     "guarded": 0,
+     "exists": 11349,
+     "files": 253
+    },
+    "false_absent": 0
+   },
+   {
+    "set": "reviewer sweep_tp",
+    "summary": {
+     "sites": 6922,
+     "absent": 0,
+     "not_installed": 0,
+     "unknown": 124,
+     "guarded": 0,
+     "exists": 6798,
+     "files": 106
+    },
+    "false_absent": 0
+   },
+   {
+    "set": "reviewer sweep_cx",
+    "summary": {
+     "sites": 1377,
+     "absent": 0,
+     "not_installed": 0,
+     "unknown": 24,
+     "guarded": 0,
+     "exists": 1353,
+     "files": 14
+    },
+    "false_absent": 0
+   },
+   {
+    "set": "reviewer proj7",
+    "summary": {
+     "sites": 9,
+     "absent": 0,
+     "not_installed": 0,
+     "unknown": 4,
+     "guarded": 0,
+     "exists": 5,
+     "files": 1
+    },
+    "false_absent": 0
+   }
+  ],
+  "after": [
+   {
+    "set": "reviewer proj",
+    "summary": {
+     "sites": 352,
+     "absent": 23,
+     "not_installed": 0,
+     "unknown": 51,
+     "guarded": 1,
+     "exists": 277,
+     "files": 87
+    },
+    "false_absent": 0,
+    "invented_not_absent": "3/26"
+   },
+   {
+    "set": "reviewer sweep_std",
+    "summary": {
+     "sites": 11367,
+     "absent": 0,
+     "not_installed": 0,
+     "unknown": 18,
+     "guarded": 0,
+     "exists": 11349,
+     "files": 253
+    },
+    "false_absent": 0
+   },
+   {
+    "set": "reviewer sweep_tp",
+    "summary": {
+     "sites": 6922,
+     "absent": 0,
+     "not_installed": 0,
+     "unknown": 124,
+     "guarded": 0,
+     "exists": 6798,
+     "files": 106
+    },
+    "false_absent": 0
+   },
+   {
+    "set": "reviewer sweep_cx",
+    "summary": {
+     "sites": 1377,
+     "absent": 0,
+     "not_installed": 0,
+     "unknown": 24,
+     "guarded": 0,
+     "exists": 1353,
+     "files": 14
+    },
+    "false_absent": 0
+   },
+   {
+    "set": "reviewer proj7",
+    "summary": {
+     "sites": 9,
+     "absent": 0,
+     "not_installed": 0,
+     "unknown": 4,
+     "guarded": 0,
+     "exists": 5,
+     "files": 1
+    },
+    "false_absent": 0
+   }
+  ]
+ },
+ "diff_timing_same_load": {
+  "what": "check --diff of the same 30 changed lines, fresh process, 7 runs each, alternating with the code this round started from",
+  "median_s_before": 1.23,
+  "median_s_after": 1.23
+ },
+ "findings_still_open_at_the_start_of_this_round": {
+  "cache after a re-export in the middle changes (proj9)": {
+   "before": "stale answer from the cache in both directions (absent kept after the fix; exists kept after the break)",
+   "after": "cache miss, fresh answer in both directions"
+  },
+  "stdlib base without a constructor first in the MRO (class Plugin(abc.ABC, Base))": {
+   "before": "Plugin(name=) absent against ABC()",
+   "after": "exists (Base.__init__)"
+  },
+  "broad handlers that raise again, constant flags (proj f08, f22, f23, f25)": {
+   "before": "guarded (exit 0)",
+   "after": "absent"
+  },
+  "module in a plain project directory off the search path (lib/helpers.py)": {
+   "before": "absent: 'module helpers not found in this project'",
+   "after": "unknown"
+  }
+ },
+ "unseen_packages": {
+  "set": "click, pluggy, h11, starlette copied from Verinoda's venv (chosen by a reviewer)",
+  "env": "Verinoda's .venv",
+  "summary": {
+   "sites": 8525,
+   "absent": 2,
+   "not_installed": 0,
+   "unknown": 813,
+   "guarded": 4,
+   "exists": 7706,
+   "files": 71
+  },
+  "absent": [
+   [
+    "starlette/middleware/sessions.py:8:8",
+    "itsdangerous"
+   ],
+   [
+    "starlette/middleware/sessions.py:9:6",
+    "itsdangerous.exc"
+   ]
+  ],
+  "seconds": 31.0
+ },
+ "clean_sets": [
+  {
+   "set": "Verinoda's own package (this branch)",
+   "env": "Verinoda's .venv (--env)",
+   "summary": {
+    "sites": 47741,
+    "absent": 0,
+    "not_installed": 1,
+    "unknown": 13954,
+    "guarded": 58,
+    "exists": 33728,
+    "files": 161
+   },
+   "elapsed_s": 368.8,
+   "absent": []
+  },
+  {
+   "set": "upstream Graphify (graphify, tests, scripts, tools)",
+   "env": "Verinoda's .venv",
+   "summary": {
+    "sites": 51943,
+    "absent": 0,
+    "not_installed": 2,
+    "unknown": 19150,
+    "guarded": 58,
+    "exists": 32733,
+    "files": 388
+   },
+   "elapsed_s": 747.9,
+   "absent": []
+  },
+  {
+   "set": "upstream Graphify (graphify, tests, scripts, tools)",
+   "env": "none (standard library)",
+   "summary": {
+    "sites": 51841,
+    "absent": 0,
+    "not_installed": 278,
+    "unknown": 22828,
+    "guarded": 121,
+    "exists": 28614,
+    "files": 388
+   },
+   "elapsed_s": 652.1,
+   "absent": []
+  },
+  {
+   "set": "stdlib json, email, http, pathlib copied as a project",
+   "env": "none",
+   "summary": {
+    "sites": 5210,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 1359,
+    "guarded": 0,
+    "exists": 3851,
+    "files": 40
+   },
+   "elapsed_s": 125.3,
+   "absent": []
+  }
+ ]
+}

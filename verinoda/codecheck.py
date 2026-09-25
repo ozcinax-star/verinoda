@@ -56,7 +56,7 @@ from verinoda import codecheck_env as cenv
 from verinoda import codecheck_facts as cf
 from verinoda.codecheck_facts import Member, Sig, dotted
 
-CHECK_VERSION = "1"
+CHECK_VERSION = "2"
 PROJECT_CONTENT = Path("<project-content>")   # a cache dependency on the content of every project file
 VERDICTS = ("absent", "not_installed", "unknown", "guarded", "exists")
 SITE_KINDS = ("import", "attribute", "kwarg", "dict_key")
@@ -76,6 +76,10 @@ _LITERAL_TYPES = {str: "builtins.str", bytes: "builtins.bytes", int: "builtins.i
                   complex: "builtins.complex", bool: "builtins.bool"}
 _GUARD_TEST = re.compile(r"\bsys\.version_info\b|\bsys\.platform\b|\bos\.name\b|\bplatform\.|\bTYPE_CHECKING\b|"
                          r"\bsys\.implementation\b|\bPY\d*\b|\b_?HAS_\w+|\w+_AVAILABLE\b|\bIS_[A-Z0-9_]+\b")
+# a feature-flag name (HAS_FORK, IS_WINDOWS, PY312, NUMPY_AVAILABLE); one the module binds once to a constant
+# (IS_PROD = True) tests nothing
+_FLAG_NAME = re.compile(r"PY\d*|_?HAS_\w+|\w+_AVAILABLE|IS_[A-Z0-9_]+")
+_BROAD = {"Exception", "BaseException"}
 _CATCH = {"import": {"ImportError", "ModuleNotFoundError"}, "attribute": {"AttributeError"},
           "kwarg": {"TypeError"}, "dict_key": {"KeyError", "LookupError"}}
 _SYNONYMS = [{"get", "fetch", "retrieve", "load", "read", "find", "lookup", "query"},
@@ -123,6 +127,8 @@ class Container:
     full: str | None = None         # dotted name
     mro: list = field(default_factory=list)   # ClassFacts | StdClass, most derived first
     stdlib_module: str | None = None
+    deps: list[Path] = field(default_factory=list)     # other files its names were read from (star imports)
+    jedi_files: set = field(default_factory=set, repr=False)   # files jedi loaded while working it out
 
 
 # -- scopes ---------------------------------------------------------------------------------------------
@@ -204,6 +210,9 @@ class FileCtx:
                 return None, f"`{n}` is rebound by a nested function (nonlocal)"
             if type(x).__name__ in ("MatchAs", "MatchStar") and getattr(x, "name", None) == n:
                 binds.append(x)
+        if not binds:
+            return None, f"`{n}` is not bound in {fn.name}(): it is a module-level or enclosing name, which other " \
+                         "code may rebind or change"
         if len(binds) != 1:
             return None, f"`{n}` is bound {len(binds)} times in {fn.name}()"
         st = self.parents.get(id(binds[0]))
@@ -287,19 +296,31 @@ class Checker:
         self._pkg_index: dict = {}
         self._search_roots: list[Path] | None = None
         self._stores: dict[str, str] | None = None
+        self._proj_modules: list[Path] | None = None   # plain (non-package) project directories
+        self._touched: dict[int, object] = {}   # jedi scripts used for the file being checked
+        self._touched_files: set[str] = set()     # ... and files jedi loaded for memoized containers it used
+        self._stack: list[tuple[dict, set]] = []  # the same two, for each container being worked out
+        self._dep_ok: dict[str, bool] = {}
         self.stats = {"jedi_calls": 0, "jedi_s": 0.0}
 
     def begin(self) -> None:
-        """A new call: forget what was derived from project files (they may have changed since); parsed
-        files stay cached by their stat, jedi and the standard-library oracle stay warm."""
+        """A new call: forget what was derived from project files (they may have changed since), including
+        the jedi scripts of other files (their inference caches the modules they import); parsed files stay
+        cached by their stat, jedi's process and the standard-library oracle stay warm."""
         self._mod_memo.clear()
         self._cls_memo.clear()
         self._universes.clear()
         self._pkg_index.clear()
+        self._scripts.clear()
+        self._touched.clear()
+        self._touched_files.clear()
+        self._stack.clear()
+        self._dep_ok.clear()
         self._defs_index = None
         self._declared = None
         self._search_roots = None
         self._stores = None
+        self._proj_modules = None
 
     # -- plumbing --------------------------------------------------------------------------------------
     def goto(self, script, line: int, col: int) -> list:
@@ -341,7 +362,56 @@ class Checker:
             self._scripts[key] = sc
             while len(self._scripts) > 24:
                 self._scripts.popitem(last=False)
+        self._note_script(sc)
         return sc
+
+    def _note_script(self, sc) -> None:
+        """``sc`` helps answer the current file (and every container being worked out): the files its
+        inference loads are dependencies of those answers."""
+        self._touched[id(sc)] = sc
+        for scripts, _files in self._stack:
+            scripts[id(sc)] = sc
+
+    def _note_files(self, files: set[str]) -> None:
+        """Files jedi loaded for a memoized container the current answers use."""
+        self._touched_files |= files
+        for _scripts, known in self._stack:
+            known |= files
+
+    def _work_out(self, compute):
+        """``compute()`` and the files jedi loaded while it ran (the scripts it used, the memoized containers
+        it reused): (result, files). Only file names are kept, not jedi's scripts."""
+        self._stack.append(({}, set()))
+        try:
+            res = compute()
+        finally:
+            scripts, files = self._stack.pop()
+        files = set(files)
+        for sc in scripts.values():
+            got = _jedi_files(sc)
+            files |= got if got is not None else {str(PROJECT_CONTENT)}
+        self._note_files(files)
+        return res, files
+
+    def jedi_deps(self, fx: FileCtx) -> None:
+        """Record every file jedi loaded to answer this file's sites - each step of a re-export chain
+        (``pkg/__init__`` -> ``pkg/api`` -> ``pkg/old``), not only the final definition - so a cached answer
+        is dropped when any of them changes. If jedi's module cache cannot be read, the answers depend on
+        every project file."""
+        scripts = list(self._touched.values())
+        files = set(self._touched_files)
+        self._touched.clear()
+        self._touched_files.clear()
+        if fx._script is not None:
+            scripts.append(fx._script)
+        for sc in scripts:
+            got = _jedi_files(sc)
+            files |= got if got is not None else {str(PROJECT_CONTENT)}
+        if str(PROJECT_CONTENT) in files:
+            fx.deps.add(PROJECT_CONTENT)
+            files.discard(str(PROJECT_CONTENT))
+        for f in files:
+            self._dep(fx, f)
 
     def builtin_modules(self) -> set[str]:
         """Modules compiled into the environment's interpreter (sys, builtins, ...)."""
@@ -382,6 +452,28 @@ class Checker:
             if d == self.repo or d.parent == d:
                 break
             d = d.parent
+        return None
+
+    def project_module(self, dotted_name: str) -> Path | None:
+        """Where the project has the module ``dotted_name`` in a plain directory - one that is not a package,
+        so it is on sys.path only if something puts it there (``lib/helpers.py``) - or None. A file inside a
+        package imports by its package path (``pkg/sub/robot.py`` is not ``robot``), so it does not count."""
+        if self._proj_modules is None:
+            walked: set[Path] = set()
+            plain: list[Path] = []
+            for p in py_files(self.repo, [self.repo])[0]:
+                d = p.parent
+                while d != self.repo and d.parent != d and d not in walked:
+                    walked.add(d)
+                    if not ((d / "__init__.py").is_file() or (d / "__init__.pyi").is_file()):
+                        plain.append(d)
+                    d = d.parent
+            self._proj_modules = plain
+        parts = dotted_name.split(".")
+        for d in self._proj_modules:
+            specs = _find_in(d, parts)
+            if specs:
+                return specs[0].file or (specs[0].dirs[0] if specs[0].dirs else d)
         return None
 
     def disp(self, path: Path | str | None) -> str | None:
@@ -438,7 +530,13 @@ class Checker:
         """Record a file an answer was read from: a project file, or one outside the project and the
         environment's site-packages (an editable sibling, a PYTHONPATH directory). Installed and
         standard-library files are covered by the environment fingerprint."""
-        if fx is not None and path and self.origin(path) is None and not cenv.is_jedi_bundled_stub(path):
+        if fx is None or not path:
+            return
+        k = str(path)
+        ok = self._dep_ok.get(k)
+        if ok is None:
+            ok = self._dep_ok[k] = self.origin(path) is None and not cenv.is_jedi_bundled_stub(path)
+        if ok:
             fx.deps.add(Path(path))
 
     def in_env_phrase(self, c: Container) -> str:
@@ -456,15 +554,18 @@ class Checker:
     def module_container(self, name: str, path: Path | str | None, fx: FileCtx | None = None) -> Container:
         key = (name, str(path) if path else None)
         hit = self._mod_memo.get(key)
-        if hit is not None:
-            for f in hit.files:
-                self._dep(fx, f)
-            return hit
-        c = self._module_container(name, Path(path) if path else None, set())
-        self._mod_memo[key] = c
-        for f in c.files:
+        if hit is None:
+            hit, files = self._work_out(lambda: self._module_container(name, Path(path) if path else None, set()))
+            hit.jedi_files = files
+            self._mod_memo[key] = hit
+        self._replay(fx, hit)
+        return hit
+
+    def _replay(self, fx: FileCtx | None, c: Container) -> None:
+        """What a (possibly memoized) container was read from becomes a dependency of the current answers."""
+        self._note_files(c.jedi_files)
+        for f in [*c.files, *c.deps]:
             self._dep(fx, f)
-        return c
 
     def _module_container(self, name: str, path: Path | None, seen: set) -> Container:
         label = f"module {name}"
@@ -494,6 +595,7 @@ class Checker:
             files.append(twin)
         names: dict[str, Member] = {}
         why: list[str] = []
+        reads: list[Path] = []   # the modules its star imports read
         if path.suffix == ".pyi" and not twin.is_file() and self.origin(path) != "stdlib":
             why.append(f"only a stub ({path.name}) describes it: the module itself is compiled or elsewhere, and "
                        "a stub need not list every name")
@@ -506,7 +608,7 @@ class Checker:
                 names.setdefault(k, m)
             why += mf.open
             for level, mod, line in mf.stars:
-                star = self._star_names(f, level, mod, seen | {str(f)})
+                star = self._star_names(f, level, mod, seen | {str(f)}, reads)
                 if isinstance(star, str):
                     why.append(f"star import from {'.' * level}{mod or ''} (line {line}): {star}")
                 else:
@@ -522,7 +624,7 @@ class Checker:
             why += self._module_changers(f, mf)
         src = self.source_of(path)
         return Container("module", label, names, not why, "; ".join(dict.fromkeys(why)) or None, src,
-                         self.disp(path), files=files, full=name)
+                         self.disp(path), files=files, full=name, deps=reads)
 
     def _module_changers(self, f: Path, mf: cf.ModFacts) -> list[str]:
         """Module-level calls (result dropped) to a function with Python source that reaches the calling
@@ -558,7 +660,11 @@ class Checker:
                     break
         return out
 
-    def _star_names(self, importer: Path, level: int, mod: str | None, seen: set) -> dict[str, Member] | str:
+    def _star_names(self, importer: Path, level: int, mod: str | None, seen: set,
+                    reads: list[Path] | None = None) -> dict[str, Member] | str:
+        """The names ``from <mod> import *`` binds in ``importer`` (or why they are not known); the files read
+        are added to ``reads``."""
+        reads = [] if reads is None else reads
         if level:
             base = importer.parent
             for _ in range(level - 1):
@@ -582,6 +688,7 @@ class Checker:
             return "a compiled module; its names are not read"
         if str(spec.file) in seen:
             return {}
+        reads.append(spec.file)
         mf = cf.module_facts(spec.file)
         if mf.tree is None:
             return mf.error or "does not parse"
@@ -593,7 +700,7 @@ class Checker:
             for s in sorted(mf.own_submodules & real):
                 names.setdefault(s, Member(s, "module", None, spec.file.parent / s))
         for lv, m2, _ln in mf.stars:
-            sub = self._star_names(spec.file, lv, m2, seen | {str(spec.file)})
+            sub = self._star_names(spec.file, lv, m2, seen | {str(spec.file)}, reads)
             if isinstance(sub, str):
                 return sub
             for k, m in sub.items():
@@ -610,9 +717,10 @@ class Checker:
         key = (str(d.module_path), d.line, d.full_name, instance)
         hit = self._cls_memo.get(key)
         if hit is None:
-            hit = self._cls_memo[key] = self._class_container(d, instance)
-        for f in hit.files:
-            self._dep(fx, f)
+            hit, files = self._work_out(lambda: self._class_container(d, instance))
+            hit.jedi_files = files
+            self._cls_memo[key] = hit
+        self._replay(fx, hit)
         return hit
 
     def _class_container(self, d, instance: bool) -> Container:
@@ -829,15 +937,18 @@ class Checker:
         key = ("escapes", str(facts.path), facts.node.lineno, cf.stat_key(facts.path))
         hit = self._cls_memo.get(key)
         if hit is None:
-            hit = []
-            script = self.script_for(facts.path) if facts.escapes else None
-            for call, ref, fname in facts.escapes:
-                why = self.callee_mutates(script, facts.path, call, ref, fname, 0) if script is not None else \
-                    f"passes self to {fname} (line {call.lineno})"
-                if why:
-                    hit.append(f"{facts.qualname} {why}")
-            self._cls_memo[key] = hit
-        return hit
+            def reasons() -> list[str]:
+                out: list[str] = []
+                script = self.script_for(facts.path) if facts.escapes else None
+                for call, ref, fname in facts.escapes:
+                    why = self.callee_mutates(script, facts.path, call, ref, fname, 0) if script is not None else \
+                        f"passes self to {fname} (line {call.lineno})"
+                    if why:
+                        out.append(f"{facts.qualname} {why}")
+                return out
+            hit = self._cls_memo[key] = self._work_out(reasons)
+        self._note_files(hit[1])   # the callees read to decide it are dependencies of the answers
+        return hit[0]
 
     def callee_mutates(self, script, path: Path, call: ast.Call, ref: tuple, fname: str, depth: int) -> str | None:
         """None when the callee provably does not set attributes on the object passed at ``ref``."""
@@ -1124,12 +1235,20 @@ class Checker:
                 next((dotted(k.value) for k in e.node.keywords if k.arg == "metaclass"), None)
             if meta and meta not in ("builtins.type", "type", "abc.ABCMeta", "ABCMeta"):
                 return None, f"the metaclass {meta} decides the constructor's arguments"
-        for e in c.mro:
+        for i, e in enumerate(c.mro):
             if isinstance(e, StdClass):
                 if e.full == "typing.Generic":   # takes no constructor arguments of its own
                     continue
                 if e.full in ("builtins.object", "object"):
                     return Sig([], [], False, "object()", None), ""
+                own, deeper = _std_ctor(e)
+                if not own and not deeper:   # abc.ABC, a mixin: the next class in the MRO answers
+                    continue
+                later = [x.full if isinstance(x, StdClass) else x.qualname for x in c.mro[i + 1:]
+                         if not (isinstance(x, StdClass) and x.full in ("builtins.object", "object", "typing.Generic"))]
+                if not own and later:   # a base of e answers; a later base may come before it in the real MRO
+                    return None, f"the constructor of {e.full} comes from one of its bases, and {later[0]} may come " \
+                                 "before that base in the MRO"
                 return self._std_sig(e.full, drop_first=False)
             if "__new__" in e.body:
                 return None, f"{e.qualname} defines __new__"
@@ -1211,6 +1330,14 @@ class Checker:
             if conftest:
                 return self._verdict(site, "unknown", why=f"{conftest} changes sys.path when pytest runs; the "
                                                           "module may come from there")
+            here = self.project_module(dotted_name)
+            if here is not None:   # never "not found in this project" for a module the project has
+                return self._verdict(site, "unknown", at_def=self.disp(here),
+                                     why=f"module {dotted_name} is in this project ({self.disp(here)}), but not in a "
+                                         "directory this check puts on sys.path (the project root, src/, the file's "
+                                         "import root, pytest's pythonpath); it imports only where something adds "
+                                         "that directory (PYTHONPATH, a launcher script, an installed package)",
+                                     next_step="check how the code is run, or import it by its package path")
             if not self.env.third_party:
                 v = self._verdict(site, "not_installed", container=f"the standard library of {self.env.label}",
                                   why=f"module {top} is not in the standard library, and "
@@ -1536,7 +1663,7 @@ class Checker:
                 return None
             if isinstance(p, (ast.If, ast.IfExp, ast.While)) and cur is not p.test:
                 t = ast.unparse(p.test)
-                if _GUARD_TEST.search(t):
+                if _GUARD_TEST.search(t) and not _constant_flags_only(fx, p.test, t):
                     return f"under `if {t[:70]}` (line {p.lineno})"
                 if name and _hasattr_test(p.test, name):
                     return f"under `if {t[:70]}` (line {p.lineno})"
@@ -1555,7 +1682,11 @@ class Checker:
             elif cf._TRY and isinstance(p, cf._TRY) and not in_function and any(cur is s for s in p.body):
                 for h in p.handlers:
                     caught = _caught(h.type)
-                    if caught is None or caught & (_CATCH.get(kind, set()) | {"Exception", "BaseException"}):
+                    specific = caught is not None and bool(caught & _CATCH.get(kind, set()))
+                    # a broad handler (bare, Exception) guards an import; for other names it guards only when it
+                    # handles the error - one that raises again (`except Exception: raise`) does not
+                    broad = caught is None or bool(caught & _BROAD)
+                    if specific or (broad and (kind == "import" or not _reraises(h))):
                         return f"inside try/except {', '.join(sorted(caught)) if caught else ''} (line {p.lineno})" \
                             .replace("except  ", "except ")
             elif isinstance(p, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
@@ -1756,6 +1887,41 @@ class Checker:
                         name.startswith(key):
                     return f"probably as {name}, {loc}"
         return None
+
+
+def _jedi_files(script) -> set[str] | None:
+    """The files a jedi Script's inference has loaded - its own file, the modules and stubs it imported - or
+    None when jedi's internals are not as expected (they are not public API). Kept on the script while its
+    module cache does not grow."""
+    try:
+        st = script._inference_state
+        caches = (st.module_cache._name_cache, st.stub_module_cache)
+        n = sum(len(c) for c in caches)
+        hit = getattr(script, "_verinoda_files", None)
+        if hit is not None and hit[0] == n:
+            return hit[1]
+        out = {str(script.path)} if getattr(script, "path", None) else set()
+        for cache in caches:
+            for values in list(cache.values()):
+                for v in values or ():
+                    getter = getattr(v, "py__file__", None)
+                    f = getter() if getter is not None else None
+                    if f:
+                        out.add(str(f))
+        script._verinoda_files = (n, out)
+        return out
+    except Exception:  # noqa: BLE001 - another jedi version
+        return None
+
+
+def _std_ctor(e: StdClass) -> tuple[bool, bool]:
+    """(the standard-library class defines __init__ or __new__ itself, one of its bases other than object
+    does). An oracle answer without that column counts as "defines it itself" (the class answers)."""
+    rows = [(list(r) + [None] * 5)[:5] for r in e.info.get("mro", [])]
+    if not rows or any(r[4] is None for r in rows):
+        return True, False
+    deeper = any(r[4] for r in rows[1:] if not (r[0] == "builtins" and r[1] == "object"))
+    return bool(rows[0][4]), deeper
 
 
 def _container_names(c: Container) -> set[str]:
@@ -2088,6 +2254,52 @@ def _probe_test(test: ast.AST, recv: str) -> bool:
         if isinstance(n, ast.Call) and dotted(n.func) in ("getattr", "hasattr") and n.args and \
                 _short(n.args[0], 200) == recv:
             return True
+    return False
+
+
+def _reraises(h: ast.ExceptHandler) -> bool:
+    """The handler raises unconditionally (a `raise` among its own statements): it does not handle the error."""
+    return any(isinstance(s, ast.Raise) for s in h.body)
+
+
+def _constant_flags_only(fx: FileCtx, test: ast.AST, text: str) -> bool:
+    """The guard pattern in ``text`` comes only from flag names the module binds once, at its top level, to a
+    constant (``IS_PROD = True`` ... ``if IS_PROD:``): such a test guards nothing."""
+    consts = {n.id for n in ast.walk(test) if isinstance(n, ast.Name) and _FLAG_NAME.fullmatch(n.id)
+              and _module_constant(fx.tree, n.id)}
+    if not consts:
+        return False
+    for f in consts:
+        text = re.sub(rf"(?<![\w.]){re.escape(f)}\b", "_", text)
+    return not _GUARD_TEST.search(text)
+
+
+def _module_constant(tree: ast.Module, name: str) -> bool:
+    """``name`` is bound exactly once in the file, by a top-level ``name = <constant>`` (no star import,
+    ``global`` or other binding could change it)."""
+    binds = 0
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, (ast.Store, ast.Del)):
+            binds += 1
+        elif isinstance(n, ast.arg) and n.arg == name:
+            binds += 1
+        elif isinstance(n, (ast.Global, ast.Nonlocal)) and name in n.names:
+            return False
+        elif isinstance(n, ast.ImportFrom) and any(al.name == "*" for al in n.names):
+            return False
+        elif isinstance(n, (ast.Import, ast.ImportFrom)) and \
+                any((al.asname or al.name.split(".")[0]) == name for al in n.names):
+            binds += 1
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.name == name:
+            binds += 1
+    if binds != 1:
+        return False
+    for st in tree.body:
+        if isinstance(st, ast.Assign) and len(st.targets) == 1 and isinstance(st.targets[0], ast.Name) and \
+                st.targets[0].id == name:
+            return isinstance(st.value, ast.Constant)
+        if isinstance(st, ast.AnnAssign) and isinstance(st.target, ast.Name) and st.target.id == name:
+            return isinstance(st.value, ast.Constant)
     return False
 
 
@@ -2482,6 +2694,7 @@ def check_source(ck: Checker | None, rel: str, abs_path: Path, source: str, only
         for s in got:
             s["_span"] = [first, last]   # the lines that select this site in a diff (a call's keywords: all of them)
         out += got
+    ck.jedi_deps(fx)
     return out, fx.deps, None
 
 
@@ -2762,6 +2975,10 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
             files.append({"path": rel, "sites": len(got), **({"cached": True} if cached else {}),
                           **({"error": err} if err else {})})
             sites += got
+    bad = [f for f in files if f.get("error")]
+    if bad:   # a requested file that could not be read or parsed was not checked: "0 absent" does not cover it
+        notes.append(f"{len(bad)} file{'s' if len(bad) > 1 else ''} not checked: " +
+                     "; ".join(f"{f['path']} ({f['error']})" for f in bad[:5]) + (" ..." if len(bad) > 5 else ""))
     sites = [{k: v for k, v in s.items() if k != "_span"} for s in sites]
     counts = {v: 0 for v in VERDICTS}
     for s in sites:

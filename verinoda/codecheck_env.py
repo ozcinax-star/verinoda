@@ -770,7 +770,9 @@ def handle(req):
             info["inst_dict"] = any("__dict__" in vars(k) for k in mro if k is not type)
             info["custom_meta"] = meta not in STD_META
             info["meta"] = meta.__module__ + "." + meta.__qualname__
-            info["mro"] = [[k.__module__, k.__qualname__, src(k), "__dict__" in vars(k)] for k in mro]
+            # per class: module, qualname, source file, has a __dict__, defines __init__ or __new__ itself
+            info["mro"] = [[k.__module__, k.__qualname__, src(k), "__dict__" in vars(k),
+                            "__init__" in vars(k) or "__new__" in vars(k)] for k in mro]
         if parent is not None and inspect.isclass(parent) and last:
             st = inspect.getattr_static(parent, last, None)
             info["static"] = isinstance(st, staticmethod)

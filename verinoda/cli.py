@@ -1327,11 +1327,8 @@ def _r_check(r: dict) -> None:
         print(f"  ! {m['package']}: installed {m['installed']}, locked {m['locked']} ({m.get('at')})")
     if r.get("exit_because"):
         print(f"exit 3: {r['exit_because']}")
-    for note in r.get("incomplete") or []:
+    for note in r.get("incomplete") or []:   # also the files that could not be read or parsed
         print(f"incomplete: {note}")
-    for f in r.get("files", []):
-        if f.get("error"):
-            print(f"{f['path']}: {f['error']}")
     unknown = 0
     for site in r["sites"]:
         v = site["verdict"]

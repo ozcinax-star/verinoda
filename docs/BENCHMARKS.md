@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d31) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d31) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,76 @@ Sections: [Name check after review](#update-2026-09-25-name-check-after-review) 
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-25: name check, second review round
+
+The first round's fixes were made from a shortened copy of the review findings. This round took the
+full list (28 findings from two reviews) and reproduced each one on the branch. 23 were already fully
+fixed. Four were still open, in full or in part, and are fixed now (docs/DESIGN.md D31: Guards,
+Constructors, Cache):
+
+- **The cache kept a stale answer after a re-export in the middle changed.** Example:
+  `pkg/__init__` -> `pkg/api` -> `pkg/old`. It kept a stale `absent`, and in the other direction a
+  stale `exists`. Now every file jedi loaded for an answer is a dependency. A long-lived process (the
+  MCP server) also gave a stale `absent` for a base class reached through a re-export. It now starts
+  other files' jedi scripts afresh on each call.
+- **A standard-library base with no constructor of its own answered for the class.** Example:
+  `class Plugin(abc.ABC, Base)`. `Plugin(name=)` was absent against `ABC()`; now `Base.__init__`
+  answers.
+- **Guards that guard nothing.** A broad `except Exception: raise`, a bare `except: raise`, and
+  `IS_PROD = True` ... `if IS_PROD:` made invented names `guarded` (exit 0). Now they are `absent`.
+  Fallback handlers, specific handlers and flags set by an import test still guard.
+- **"Not found in this project" for a module the project has.** `lib/helpers.py`, not on the assumed
+  search path, is now `unknown`.
+
+The fifth finding (low severity) is half fixed. The reason given for a module-level receiver is now
+correct. The other half is deferred: the project-wide attribute-store rule still hides `json.timeout`
+when some `self.app.timeout = 3` exists. Narrowing it needs the receiver's type, and a wrong narrowing
+would give a false absent. Also new: a file that does not parse is listed under `incomplete`.
+
+Result files are in `benchmarks/results/codecheck-review2-2026-09-25/`. Windows 11, Python 3.12.0,
+jedi 0.20.0. Other runs shared the machine, so the times are noisy.
+
+| set | environment | sites | absent (false) before | after |
+|---|---|---|---|---|
+| reviewer probes of real idioms, plus 26 invented names | none | 352 | 19 (0) | 23 (0) |
+| reviewer sweeps: stdlib, third-party, compiled stubs | none / Verinoda's `.venv` | 19,666 | 0 | 0 |
+| click, pluggy, h11, starlette (chosen by a reviewer) | Verinoda's `.venv` | 8,525 | 2 (0) | 2 (0) |
+
+- Invented names decided `absent` went from 19/26 to 23/26. The 3 left are `unknown`:
+  - a module-level receiver;
+  - a name the project stores elsewhere (the deferred finding);
+  - a C method without a signature.
+- The 2 absents in the four packages are right: `itsdangerous` is not installed.
+
+**Fixture** (144 probes, runtime oracle, in-sample): every probe gets the same verdict and the same
+nearest names as before this round.
+
+| measure | result | bar |
+|---|---|---|
+| precision of `absent` | 74/74 | |
+| recall on closed containers | 74/74 | ≥ 0.9 |
+| invented names decided | 74/79 | |
+| intended name in the nearest three | 24/26 | |
+| warm check | 0.32 s per 100 sites | |
+| `check --diff`, 30 changed lines, fresh process | median 1.33 s (1.30-1.52 s, 5 runs) | 1.5 s |
+
+In a second `--diff` run the two versions took turns under the same load, 7 runs each: the median was
+1.23 s for the code this round started from and 1.23 s for this code.
+
+**Clean sets** (every site real):
+
+| body | environment | sites | absent | not_installed | guarded | unknown | time |
+|---|---|---|---|---|---|---|---|
+| Verinoda's own package | Verinoda's `.venv` | 47,741 | 0 | 1 | 58 | 13,954 (29%) | 369 s |
+| Graphify | Verinoda's `.venv` | 51,943 | 0 | 2 | 58 | 19,150 (37%) | 748 s |
+| the same | none | 51,841 | 0 | 278 | 121 | 22,828 (44%) | 652 s |
+| stdlib `json`, `email`, `http`, `pathlib` as a project | none | 5,210 | 0 | 0 | 0 | 1,359 (26%) | 125 s |
+
+A few `unknown`/`exists` answers in the `email` package change from run to run (12-14 of 5,210
+sites). This is not new: two runs of the code this round started from differ on 12 such sites. Checked
+alone, `_header_value_parser.py` gives the same answers under three hash seeds, so jedi's inference
+seems to depend on the files read before it. None of these sites is ever `absent`.
 
 ## Update 2026-09-25: name check after review
 

@@ -672,28 +672,49 @@ catches the benchmark's wrong finding in 6 ms.
   the standard library are ignored: jedi's own process has `jedi` and `parso`
   imported, which would otherwise make them "exist" in any environment.
 - Guards: try/except ImportError (AttributeError, TypeError, KeyError for the
-  other kinds), `if TYPE_CHECKING`, version and platform tests, `hasattr`, and
-  a `getattr`/`hasattr` test of the same receiver
+  other kinds), `if TYPE_CHECKING`, version and platform tests, feature flags
+  (`HAS_X`, `IS_X`, `PY3`, `X_AVAILABLE`), `hasattr`, and a
+  `getattr`/`hasattr` test of the same receiver
   (`if getattr(sys, "frozen", False): sys._MEIPASS`) make a missing name
-  `guarded`. pytest's `pythonpath` option adds its directories to the search
-  path; a `conftest.py` above the file that changes `sys.path` makes a
-  missing top-level module `unknown`.
+  `guarded`. A broad handler (bare `except`, `Exception`) guards an import,
+  and another name only when it does not raise again (`except Exception:
+  raise` handles nothing); a flag the module binds once to a constant
+  (`IS_PROD = True`) tests nothing (second review round). pytest's
+  `pythonpath` option adds its directories to the search path; a
+  `conftest.py` above the file that changes `sys.path`, or the module in a
+  plain (non-package) directory of the project off the assumed search path
+  (`lib/helpers.py`), makes a missing top-level module `unknown`, never "not
+  found in this project"; a file inside a package does not count
+  (`pkg/extractors/robot.py` is not `robot`).
+- Constructors: a standard-library base with no `__init__`/`__new__` of its
+  own (`abc.ABC`, a mixin) does not answer for a class's keywords; the next
+  class in the MRO does (`class Plugin(abc.ABC, Base)` takes `Base`'s). When
+  such a base's constructor comes from one of its own bases and another base
+  follows it, the keywords are `unknown` (the real MRO may put that base
+  first).
 - Output: nearest real names (edit distance with transpositions, shared word
   parts, a few synonyms) and where the name is defined elsewhere. Wording:
   "not found in <container> as installed in <env> (<file>)", never "does not
   exist". Exit 3 when something is absent or an installed version differs
   from the lock; `exit_because` says which. `incomplete` lists what was not
-  checked (the file limit, or the MCP tool's 90-second budget). `api A.B.C`
+  checked (the file limit, the MCP tool's 90-second budget, files that could
+  not be read or parsed). `api A.B.C`
   looks up every part: the attributes of a function or variable are not
   listed (`decided: unknown`).
 - Cache: per file in `.verinoda/cache/check/`, keyed by the file's sha256 and
   the environment fingerprint; an answer is dropped when a file it was read
   from changes (project files, and files outside the project and its
   site-packages such as an editable sibling), or the set of project files
-  changes. A new or removed package in the environment (also an explicit
-  `--env` in a long-lived MCP server) changes the fingerprint. Past 5,000
-  project files the cache is off. A `--diff` answered from the cache selects
-  the same sites as a fresh run (a call's keywords by the call's lines).
+  changes. The files read are every file jedi loaded to answer the file's
+  sites - each step of a re-export chain (`pkg/__init__` -> `pkg/api` ->
+  `pkg/old`), not only the final definition - and the sources of star
+  imports; if jedi's module cache cannot be read, every project file. A
+  long-lived process (the MCP server) starts other files' jedi scripts afresh
+  on every call, since their inference keeps the modules they imported. A
+  new or removed package in the environment (also an explicit `--env` in a
+  long-lived MCP server) changes the fingerprint. Past 5,000 project files the
+  cache is off. A `--diff` answered from the cache selects the same sites as a
+  fresh run (a call's keywords by the call's lines).
 
 ## 5. Delivery plan
 

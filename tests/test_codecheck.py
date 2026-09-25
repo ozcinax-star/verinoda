@@ -1136,3 +1136,214 @@ def test_diff_reads_non_ascii_file_names_and_the_cache_selects_like_a_fresh_run(
         return sorted((s["path"], s["line"], s["expr"], s["verdict"]) for s in r["sites"] if s["path"] == "a.py")
     assert key(warm) == key(fresh) and key(fresh)
     codecheck.reset_caches()
+
+
+# -- round-2 settlement of the review findings -----------------------------------------------------------------
+
+MIXINS = '''\
+import abc
+import queue
+
+
+class Base:
+    def __init__(self, *, name):
+        self.name = name
+
+
+class Plugin(abc.ABC, Base):
+    pass
+
+
+class Bare(abc.ABC):
+    pass
+
+
+class Stack(abc.ABC, queue.LifoQueue):
+    pass
+
+
+class Mixed(queue.LifoQueue, Base):
+    pass
+
+
+def use():
+    Plugin(name="x")
+    Plugin(nme="x")
+    Bare(x=1)
+    Stack(maxsize=1)
+    Stack(maxsze=1)
+    Mixed(name="x")
+'''
+
+
+def test_a_standard_library_base_without_its_own_constructor_does_not_answer_for_the_class(tmp_path):
+    _write(tmp_path, "mixins.py", MIXINS)
+    res = codecheck.check(tmp_path, ["mixins.py"], env="none", include_exists=True, use_cache=False)
+    kw = {s["name"]: s for s in res["sites"] if s["kind"] == "kwarg" and not s["expr"].startswith("Mixed(")}
+    assert kw["name"]["verdict"] == "exists" and "mixins.py:6" in kw["name"]["at_def"]   # abc.ABC is skipped
+    assert kw["nme"]["verdict"] == "absent"
+    assert kw["x"]["verdict"] == "absent" and "object()" in kw["x"]["message"]           # Bare(abc.ABC)
+    assert kw["maxsize"]["verdict"] == "exists"                     # abc.ABC skipped, LifoQueue answers
+    assert kw["maxsze"]["verdict"] == "absent"
+    # LifoQueue's constructor is Queue's; Base may come before Queue in the real MRO
+    mixed = [s for s in res["sites"] if s["kind"] == "kwarg" and s["expr"].startswith("Mixed(")]
+    assert mixed and mixed[0]["verdict"] == "unknown" and "Base" in mixed[0]["why"]
+
+
+def _chain(root: Path, target: str) -> None:
+    _write(root, "pkg/__init__.py", "from .api import fetch\n")
+    _write(root, "pkg/api.py", f"from .{target} import fetch\n")
+    _write(root, "pkg/old.py", "def fetch(url):\n    return url\n")
+    _write(root, "pkg/new.py", "def fetch(url, *, timeout=10):\n    return url\n")
+
+
+def test_the_cache_follows_every_file_of_a_re_export_chain(tmp_path):
+    _chain(tmp_path, "old")
+    _write(tmp_path, "app.py", "from pkg import fetch\n\nprint(fetch('u', timeout=3))\n")
+    (tmp_path / ".verinoda").mkdir()
+
+    def kw():
+        r = codecheck.check(tmp_path, ["app.py"], env="none", include_exists=True)
+        return r["cache"], [s["verdict"] for s in r["sites"] if s["kind"] == "kwarg"]
+    assert kw() == ({"hits": 0, "misses": 1}, ["absent"])
+    assert kw() == ({"hits": 1, "misses": 0}, ["absent"])
+    _write(tmp_path, "pkg/api.py", "from .new import fetch\n")     # only the middle of the chain changes
+    assert kw() == ({"hits": 0, "misses": 1}, ["exists"])
+    _write(tmp_path, "pkg/api.py", "from .old import fetch\n")     # and back: a cached "exists" is not reused
+    assert kw() == ({"hits": 0, "misses": 1}, ["absent"])
+    # a module's names read through a star import: the star's source is a dependency too
+    _write(tmp_path, "lib/__init__.py", "from .impl import *\n")
+    _write(tmp_path, "lib/impl.py", "def helper():\n    return 1\n")
+    _write(tmp_path, "uses_lib.py", "import lib\n\nlib.helper()\n")
+    first = codecheck.check(tmp_path, ["uses_lib.py"], env="none")
+    assert first["summary"]["absent"] == 0
+    _write(tmp_path, "lib/impl.py", "def helper2():\n    return 1\n")
+    again = codecheck.check(tmp_path, ["uses_lib.py"], env="none")
+    assert again["cache"]["hits"] == 0 and again["summary"]["absent"] == 1
+    codecheck.reset_caches()
+
+
+def test_a_long_lived_process_sees_a_base_class_change_through_a_re_export(tmp_path):
+    _write(tmp_path, "base.py", "class Base:\n    def __init__(self, a):\n        self.a = a\n")
+    _write(tmp_path, "base2.py", "class Base:\n    def __init__(self, a, b=0):\n        self.a = a\n")
+    _write(tmp_path, "mid.py", "from base import Base\n")
+    _write(tmp_path, "models.py", "from mid import Base\n\n\nclass Model(Base):\n    pass\n")
+    _write(tmp_path, "app.py", "from models import Model\n\nModel(a=1, b=2)\n")
+
+    def b():
+        r = codecheck.check(tmp_path, ["app.py"], env="none", include_exists=True, use_cache=False)
+        return next(s["verdict"] for s in r["sites"] if s["name"] == "b")
+    assert b() == "absent"
+    _write(tmp_path, "mid.py", "from base2 import Base\n")     # models.py itself does not change
+    assert b() == "exists"
+    # with the disk cache: the second file reuses the class worked out for the first, and its answer
+    # depends on the same chain
+    _write(tmp_path, "mid.py", "from base import Base\n")
+    _write(tmp_path, "app2.py", "from models import Model\n\nModel(a=1, b=2)\n")
+    (tmp_path / ".verinoda").mkdir()
+
+    def both():
+        r = codecheck.check(tmp_path, ["app.py", "app2.py"], env="none", include_exists=True)
+        return r["cache"]["hits"], sorted(s["verdict"] for s in r["sites"] if s["name"] == "b")
+    assert both() == (0, ["absent", "absent"])
+    _write(tmp_path, "mid.py", "from base2 import Base\n")
+    assert both() == (0, ["exists", "exists"])
+    codecheck.reset_caches()
+
+
+GUARDS = '''\
+import json
+import os
+
+IS_PROD = True
+HAS_FAST = False
+try:
+    import fastjson_not_here
+    HAS_FAST = True
+except ImportError:
+    pass
+
+
+def reraised(path):
+    try:
+        return json.loads_file(path)
+    except Exception as exc:
+        raise exc
+
+
+def bare_reraised():
+    try:
+        return os.getcwdu()
+    except:  # noqa: E722
+        raise
+
+
+def kw_reraised():
+    try:
+        return sorted([2, 1], reversed=True)
+    except Exception:
+        raise
+
+
+def fallback():
+    try:
+        return os.getcwdu()
+    except Exception:
+        return os.getcwd()
+
+
+def specific():
+    try:
+        return json.dumps_file
+    except AttributeError:
+        raise
+
+
+def flags():
+    if IS_PROD:
+        json.loads_text("x")
+    if HAS_FAST:
+        json.fast_dumps("x")
+
+
+try:
+    import yaml_not_here_either
+except Exception:
+    raise SystemExit("pip install pyyaml")
+'''
+
+
+def test_broad_handlers_that_raise_again_and_constant_flags_are_not_guards(tmp_path):
+    _write(tmp_path, "guards.py", GUARDS)
+    res = codecheck.check(tmp_path, ["guards.py"], env="none", use_cache=False)
+    by = {s["name"]: s for s in res["sites"]}
+    for name in ("loads_file", "reversed", "loads_text"):
+        assert by[name]["verdict"] == "absent", by[name]
+    # the same invented name: absent where the handler raises again, guarded where it falls back
+    assert sorted(s["verdict"] for s in res["sites"] if s["name"] == "getcwdu") == ["absent", "guarded"]
+    assert by["dumps_file"]["verdict"] == "guarded"                    # a specific handler guards
+    assert by["fast_dumps"]["verdict"] == "guarded"                    # HAS_FAST is set by an import test
+    assert by["yaml_not_here_either"]["verdict"] == "guarded"          # an import under a broad handler
+    assert res["exit"] == 3
+
+
+def test_a_project_module_off_the_search_path_is_never_called_missing_from_the_project(tmp_path):
+    _write(tmp_path, "lib/helpers.py", "def make_user():\n    return 1\n")
+    _write(tmp_path, "pkgz/__init__.py", "")
+    _write(tmp_path, "pkgz/robot.py", "X = 1\n")          # inside a package: imported as pkgz.robot only
+    _write(tmp_path, "app/main.py", "import helpers\nimport no_such_module_xyz\nimport robot\nimport helpers.sub\n")
+    res = codecheck.check(tmp_path, ["app/main.py"], env="none", include_exists=True, use_cache=False)
+    by = {s["expr"]: s for s in res["sites"]}
+    assert by["helpers"]["verdict"] == "unknown" and "lib/helpers.py" in by["helpers"]["why"]
+    for expr in ("no_such_module_xyz", "robot", "helpers.sub"):   # helpers.py is a module: no helpers.sub
+        assert by[expr]["verdict"] == "not_installed", by[expr]
+
+
+def test_a_module_level_receiver_says_so_and_unparsed_files_are_incomplete(tmp_path):
+    _write(tmp_path, "mod.py", "class Client:\n    pass\n\n\nclient = Client()\n\n\ndef run():\n"
+                               "    return client.fetch_all()\n")
+    _write(tmp_path, "broken.py", "def f(:\n    pass\n")
+    res = codecheck.check(tmp_path, ["mod.py", "broken.py"], env="none", use_cache=False)
+    (s,) = [x for x in res["sites"] if x["name"] == "fetch_all"]
+    assert s["verdict"] == "unknown" and "module-level" in s["why"]
+    assert res["exit"] == 0 and "broken.py (does not parse" in res["incomplete"][0]
