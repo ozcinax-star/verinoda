@@ -540,6 +540,18 @@ def test_launcher_python_reads_the_interpreter_without_running_it(tmp_path):
         assert lp is None or lp.lower().endswith(("python.exe", "pythonw.exe"))
 
 
+def test_same_python_means_one_interpreter_of_one_environment(tmp_path):
+    (tmp_path / "venv" / "bin").mkdir(parents=True)
+    (tmp_path / "other" / "bin").mkdir(parents=True)
+    py = tmp_path / "venv" / "bin" / "python3.12"
+    py.write_bytes(b"interpreter")
+    os.link(py, tmp_path / "venv" / "bin" / "python3")  # a venv's second name for it
+    os.link(py, tmp_path / "other" / "bin" / "python3")  # the same base file, another environment
+    assert ins.same_python(py, py) and ins.same_python(py, tmp_path / "venv" / "bin" / "python3")
+    assert not ins.same_python(py, tmp_path / "other" / "bin" / "python3")
+    assert not ins.same_python(py, tmp_path / "venv" / "bin" / "missing") and not ins.same_python(None, py)
+
+
 def test_a_path_verinoda_of_another_build_is_not_registered(env, monkeypatch):
     """The lead's repro: setup from one build wrote .mcp.json for the older PATH build."""
     fake = FakeClaude(env.home)
@@ -561,6 +573,9 @@ def test_a_path_verinoda_of_another_build_is_not_registered(env, monkeypatch):
     skill = (env.proj / ".claude" / "skills" / "verinoda" / "SKILL.md").read_text(encoding="utf-8")
     assert f"recorded at install time is `{ins._display(want)}`." in skill
     assert "It is not the `verinoda` on PATH (another build)" in skill and "{{" not in skill
+    env.which["verinoda"] = None
+    off = agents.render_skill("codex").decode("utf-8")
+    assert "`verinoda` is not on PATH here: run this command wherever" in off and "another build" not in off
 
     r = agents.install("claude", "user", project_dir=env.proj, home=env.home)
     assert r["ok"] and fake.calls[0][0][-(len(want) + 2):] == want + ["mcp", "serve"]

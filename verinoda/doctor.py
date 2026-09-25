@@ -56,7 +56,7 @@ def _check(name: str, ok: bool, detail: str, level: str = "error") -> dict:
 
 def _path_cli(checks: list[dict]) -> None:
     """Is the ``verinoda`` on PATH this build? Read from its launcher; nothing is run."""
-    from verinoda.agents.installer import _display, _norm, launcher_python
+    from verinoda.agents.installer import _display, launcher_python, same_python
 
     exe = shutil.which("verinoda")
     if exe is None:
@@ -65,7 +65,7 @@ def _path_cli(checks: list[dict]) -> None:
     lp = launcher_python(exe)
     if lp is None:
         checks.append(_check("cli_on_path", True, f"{exe} (could not read which Python it starts)"))
-    elif _norm(lp) == _norm(sys.executable):
+    elif same_python(lp, sys.executable):
         checks.append(_check("cli_on_path", True, f"{exe} (starts this Python)"))
     else:
         checks.append(_check("cli_on_path", False, f"{exe} starts {lp}, not the Python running this command "

@@ -219,6 +219,20 @@ def _norm(p) -> str:
     return os.path.normcase(os.path.normpath(os.path.abspath(str(p))))
 
 
+def same_python(a, b) -> bool:
+    """``a`` and ``b`` name the same interpreter of the same environment: the same path, or two names in
+    one folder for the same file (a venv's ``bin/python`` and ``bin/python3`` links). Two venvs whose
+    links resolve to one base interpreter are different environments, so only one folder counts."""
+    if not a or not b:
+        return False
+    if _norm(a) == _norm(b):
+        return True
+    try:
+        return _norm(Path(a).parent) == _norm(Path(b).parent) and os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
 def launcher_python(path) -> str | None:
     """The Python interpreter a ``verinoda`` console-script launcher starts, read from the file (never run).
 
@@ -294,7 +308,7 @@ def resolve_launcher() -> dict:
     out = {"python": py or None, "package": str(PKG_DIR), "imports": loc, "path_exe": path_exe,
            "path_python": path_py, "warnings": []}
     same_env = bool(path_exe and py) and (
-        _norm(path_py) == _norm(py) if path_py else _norm(Path(path_exe).parent) == _norm(Path(py).parent))
+        same_python(path_py, py) if path_py else _norm(Path(path_exe).parent) == _norm(Path(py).parent))
     if path_exe and same_env and runs_ours:
         out.update(argv=[path_exe], how="path", cli=NAME,
                    note=f"registered `verinoda` on PATH ({path_exe}): it runs this build ({py})")
@@ -376,9 +390,14 @@ def cli_hint(launcher: dict | None = None) -> str:
 
 def render_skill(agent: str, launcher: dict | None = None) -> bytes:
     tpl = (TEMPLATES / f"{agent}_SKILL.md").read_text(encoding="utf-8")
+    launcher = launcher or resolve_launcher()
     cli = cli_hint(launcher)
-    note = "" if cli == NAME else (" It is not the `verinoda` on PATH (another build): run it wherever this "
-                                   "skill says `verinoda`.")
+    if cli == NAME:
+        note = ""
+    elif launcher.get("path_exe"):
+        note = " It is not the `verinoda` on PATH (another build): run it wherever this skill says `verinoda`."
+    else:
+        note = " `verinoda` is not on PATH here: run this command wherever this skill says `verinoda`."
     text = tpl.replace("\r\n", "\n").replace(CLI_PLACEHOLDER, cli).replace(CLI_NOTE_PLACEHOLDER, note)
     if MARKER not in text:  # pragma: no cover - template invariant, tested
         raise RuntimeError(f"template for {agent} lacks the ownership marker")
@@ -1175,7 +1194,7 @@ def server_check(entry: dict, t: Target, running: dict) -> dict:
     if py is None or not run_py:
         out["build"] = "unknown"
         out["detail"] = "could not tell which Python the registered command starts"
-    elif _norm(py) != _norm(run_py):
+    elif not same_python(py, run_py):
         out["build"] = "other"
         out["detail"] = f"starts {py}, not the Python running this command ({run_py})"
         out["problems"].append(f"the registered server starts {py}, not the Python running this command "
