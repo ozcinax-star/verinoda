@@ -1,0 +1,557 @@
+{
+ "schema": "verinoda.review_fixtures/1",
+ "split": "heldout",
+ "fixtures": [
+  {
+   "id": "HO1",
+   "project": "orders_app",
+   "title": "apply_discount reads a new environment variable directly",
+   "edits": [
+    {
+     "file": "orders/pricing.py",
+     "find": "from orders.config import DISCOUNT_THRESHOLD\n",
+     "replace": "import os\n\nfrom orders.config import DISCOUNT_THRESHOLD\n"
+    },
+    {
+     "file": "orders/pricing.py",
+     "find": "    if subtotal > DISCOUNT_THRESHOLD:\n",
+     "replace": "    if subtotal > float(os.environ.get(\"ORDERS_DISCOUNT_MIN\", \"100\")):\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/pricing.py::apply_discount",
+      "kind": "body"
+     },
+     {
+      "symbol": "orders/pricing.py::os",
+      "kind": "module_statement"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "config",
+      "at": "orders/pricing.py:15"
+     },
+     {
+      "concern": "persistence",
+      "at": "orders/service.py:22"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:17"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": [
+     "orders/pricing.py::compute_total",
+     "orders/service.py::place_order"
+    ]
+   }
+  },
+  {
+   "id": "HO2",
+   "project": "orders_app",
+   "title": "OrderRepository.save formats its INSERT with %",
+   "edits": [
+    {
+     "file": "orders/repository.py",
+     "find": "            \"INSERT INTO orders (customer, total) VALUES (?, ?)\", (customer, total)\n",
+     "replace": "            \"INSERT INTO orders (customer, total) VALUES ('%s', %s)\" % (customer, total)\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/repository.py::OrderRepository.save",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "orders/repository.py:17"
+     },
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:17"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:24"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": [
+     "orders/service.py::place_order"
+    ]
+   }
+  },
+  {
+   "id": "HO3",
+   "project": "orders_app",
+   "title": "get_order_handler loses its not-found check",
+   "edits": [
+    {
+     "file": "orders/api.py",
+     "find": "    if order is None:\n        return 404, {\"error\": \"not found\"}\n",
+     "replace": ""
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/api.py::get_order_handler",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "orders/api.py:26",
+      "note": "guard removed (base line)"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:24"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "HO4",
+   "project": "orders_app",
+   "title": "compute_total looks every price up in the database, one query per item",
+   "edits": [
+    {
+     "file": "orders/pricing.py",
+     "find": "\"\"\"Pricing rules.\"\"\"\n\nfrom orders.config import DISCOUNT_THRESHOLD\n",
+     "replace": "\"\"\"Pricing rules.\"\"\"\n\nimport sqlite3\n\nfrom orders.config import DATABASE_URL, DISCOUNT_THRESHOLD\n\n\ndef load_price(sku: str) -> float:\n    conn = sqlite3.connect(DATABASE_URL)\n    row = conn.execute(\"SELECT price FROM prices WHERE sku = ?\", (sku,)).fetchone()\n    return row[0] if row else 0.0\n"
+    },
+    {
+     "file": "orders/pricing.py",
+     "find": "    subtotal = sum(i[\"price\"] * i[\"qty\"] for i in items)\n",
+     "replace": "    subtotal = 0.0\n    for i in items:\n        subtotal += load_price(i[\"sku\"]) * i[\"qty\"]\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/pricing.py::load_price",
+      "kind": "added"
+     },
+     {
+      "symbol": "orders/pricing.py::compute_total",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "performance",
+      "at": "orders/pricing.py:16-17"
+     },
+     {
+      "concern": "persistence",
+      "at": "orders/pricing.py:10"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/pricing.py:9"
+     },
+     {
+      "concern": "config",
+      "at": "orders/pricing.py:9"
+     },
+     {
+      "concern": "persistence",
+      "at": "orders/service.py:22"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:24"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "HF1",
+   "project": "forge_mod",
+   "title": "handleStoke loses its open-menu check",
+   "edits": [
+    {
+     "file": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java",
+     "find": "        if (!(player.containerMenu instanceof EmberForgeMenu menu) || !menu.getPos().equals(payload.pos())) {\n            return;\n        }\n",
+     "replace": ""
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java::EmberNetwork.handleStoke",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:32",
+      "note": "guard removed (base line)"
+     },
+     {
+      "concern": "entry_points",
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [
+     {
+      "kind": "runtime_tests"
+     }
+    ],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "HF2",
+   "project": "forge_mod",
+   "title": "animateTick spawns 20 particles per call",
+   "edits": [
+    {
+     "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java",
+     "find": "        if (state.getValue(LIT) && random.nextInt(4) == 0) {\n            level.addParticle(ParticleTypes.LAVA, pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5, 0.0, 0.0, 0.0);\n        }\n",
+     "replace": "        if (state.getValue(LIT)) {\n            for (int i = 0; i < 20; i++) {\n                level.addParticle(ParticleTypes.LAVA, pos.getX() + random.nextDouble(), pos.getY() + 1.0, pos.getZ() + random.nextDouble(), 0.0, 0.0, 0.0);\n            }\n        }\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java::EmberForgeBlock.animateTick",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "performance",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:112"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "HF3",
+   "project": "forge_mod",
+   "title": "the stoke_heat config key is renamed",
+   "edits": [
+    {
+     "file": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java",
+     "find": "                .defineInRange(\"stoke_heat\", 15, 0, 100);",
+     "replace": "                .defineInRange(\"stoke_amount\", 15, 0, 100);"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java::EmberConfig",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "config",
+      "at": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:26"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "config",
+      "at": "config/emberforge-common.toml:17"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "persistence"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "HG1",
+   "project": "glow_mod",
+   "title": "/glow no longer requires permission level 2",
+   "edits": [
+    {
+     "file": "src/main/java/com/example/glowmod/command/GlowCommands.java",
+     "find": "                        .requires(source -> source.hasPermissionLevel(2))\n",
+     "replace": ""
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/com/example/glowmod/command/GlowCommands.java::GlowCommands.register",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:21",
+      "note": "permission check removed (base line)"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [
+     {
+      "kind": "runtime_tests"
+     }
+    ],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "HG2",
+   "project": "glow_mod",
+   "title": "natural wisps no longer check day time and chance",
+   "edits": [
+    {
+     "file": "src/main/java/com/example/glowmod/world/WispSpawner.java",
+     "find": "        if (world.isDay() || world.random.nextDouble() >= GlowConfig.get().naturalChance()) {\n            return;\n        }\n",
+     "replace": ""
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/com/example/glowmod/world/WispSpawner.java::WispSpawner.onChunkLoad",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:23",
+      "note": "guard removed (base line)"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "performance",
+      "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:23"
+     },
+     {
+      "concern": "config",
+      "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:23"
+     },
+     {
+      "concern": "entry_points",
+      "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:19"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "HV1",
+   "project": "vcopy",
+   "title": "snapshot.git runs git through the shell",
+   "edits": [
+    {
+     "file": "verinoda/snapshot.py",
+     "find": "            [\"git\", \"-C\", str(repo), *args], capture_output=True, text=True,\n",
+     "replace": "            \"git -C \" + str(repo) + \" \" + \" \".join(args), shell=True, capture_output=True, text=True,\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "verinoda/snapshot.py::git",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "verinoda/snapshot.py:52"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "persistence"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "HV2",
+   "project": "vcopy",
+   "title": "comment-only edit in retrieval.py",
+   "edits": [
+    {
+     "file": "verinoda/retrieval.py",
+     "find": "# JSON excerpt tiers (D20 skeleton-first): items 1-3 up to Budget.excerpt_lines,\n",
+     "replace": "# JSON excerpt tiers (D20, skeleton first): items 1-3 get up to Budget.excerpt_lines,\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [],
+    "must_find": [],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "performance"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "config"
+     },
+     {
+      "concern": "entry_points"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "written": "2026-09-25",
+ "note": "sha256 of the fixture files as committed before any review rule was written",
+ "files": {
+  "dev.json": "a758484e080288e2e56749c739d9505890769deddc19e7a8e7a2f07578d5c60e",
+  "heldout.json": "333776c3b61a3388472da6e5c015bf2d53422fb557ed28212b7cb46ed95cce5c"
+ },
+ "counts": {
+  "dev.json": 36,
+  "heldout.json": 11
+ }
+}
