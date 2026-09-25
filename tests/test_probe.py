@@ -323,6 +323,14 @@ def test_the_plugin_classifies_side_effect_events():
         plug._S.phase = "idle"
 
 
+def test_reprs_mask_what_differs_between_runs_of_the_same_code(monkeypatch):
+    monkeypatch.setattr(plug._S, "run_root", str(Path("C:/tmp/verinoda-exp-1")))
+    root = plug._S.run_root
+    assert plug._norm(repr(os.path.join(root, "repo", "x.txt"))).startswith("'<run>")
+    assert plug._norm(os.path.join(root, "repo")) == os.path.join("<run>", "repo")
+    assert plug._norm("<orders.X object at 0x7f00ab>") == "<orders.X object at 0x?>"
+
+
 # -- oracles ----------------------------------------------------------------------------------------------
 
 def test_difference_classes():

@@ -90,6 +90,7 @@ class _S:
     block = True
     events: list = []
     allowed_root = ""
+    run_root = ""  # the run's throw-away directory as written (masked in reprs and messages)
 
 
 def _detail(args) -> str:
@@ -226,7 +227,15 @@ def decode(v):
 
 
 def _norm(text: str) -> str:
-    return _ADDR.sub("at 0x?", text)
+    """Masks what differs between runs of the same code: memory addresses and the run's throw-away directory
+    (as written and in ``repr`` form, with doubled backslashes)."""
+    text = _ADDR.sub("at 0x?", text)
+    root = _S.run_root
+    if root:
+        for form in {root, root.replace("\\", "\\\\"), root.replace("\\", "/")}:
+            if form and form in text:
+                text = text.replace(form, "<run>")
+    return text
 
 
 def _type_name(v) -> str:
@@ -497,7 +506,8 @@ def _main() -> None:
         fh.flush()
 
     _S.block = bool(spec.get("block", True))
-    _S.allowed_root = os.path.normcase(os.path.dirname(os.path.abspath(os.getcwd()))) + os.sep
+    _S.run_root = os.path.dirname(os.path.abspath(os.getcwd()))
+    _S.allowed_root = os.path.normcase(_S.run_root) + os.sep
     write({"k": "header", "schema": SCHEMA, "python": sys.version.split()[0], "start": start,
            "side": os.environ.get("VERINODA_PROBE_SIDE", ""), "block": _S.block, "cases": len(spec["cases"])})
     for rel in reversed(spec.get("sys_path") or []):
