@@ -243,9 +243,29 @@ def _type_name(v) -> str:
     return f"{t.__module__}.{t.__qualname__}"
 
 
+def _repr(v, depth: int = 0) -> str:
+    """``repr`` with the elements of built-in sets in sorted order: the iteration order of a set is not part of
+    its value, and two equal sets built in another order would otherwise differ. Everything else (dict order
+    included, which Python guarantees) is the plain ``repr``."""
+    t = type(v)
+    if depth > 20:
+        return repr(v)
+    if t in (set, frozenset) and len(v) <= 10_000:
+        items = sorted(_repr(x, depth + 1) for x in v)
+        if t is set:
+            return "{" + ", ".join(items) + "}" if items else "set()"
+        return "frozenset({" + ", ".join(items) + "})" if items else "frozenset()"
+    if t in (list, tuple) and len(v) <= 10_000 and any(type(x) in (set, frozenset, list, tuple, dict) for x in v):
+        inner = ", ".join(_repr(x, depth + 1) for x in v)
+        return f"[{inner}]" if t is list else ("(" + inner + ("," if len(v) == 1 else "") + ")")
+    if t is dict and len(v) <= 10_000 and any(type(x) in (set, frozenset, list, tuple, dict) for x in v.values()):
+        return "{" + ", ".join(f"{_repr(k, depth + 1)}: {_repr(x, depth + 1)}" for k, x in v.items()) + "}"
+    return repr(v)
+
+
 def _result(v) -> dict:
     try:
-        text = repr(v)
+        text = _repr(v)
     except BaseException as exc:  # noqa: BLE001 - a user repr may raise anything
         text = f"<repr raised {type(exc).__name__}>"
     text = _norm(text)
@@ -280,7 +300,7 @@ def _args_digest(args: list, kwargs: dict) -> str | None:
     if not any(isinstance(a, _MUTABLE) for a in (*args, *kwargs.values())):
         return None
     try:
-        text = _norm(repr((args, sorted(kwargs.items()))))
+        text = _norm(_repr((list(args), sorted(kwargs.items()))))
     except BaseException:  # noqa: BLE001
         return None
     return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()[:16]

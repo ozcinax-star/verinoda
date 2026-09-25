@@ -1405,10 +1405,10 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
 
 
 def _simple_key(cases: list[dict], meta: list[dict], j: int) -> tuple:
-    """Simplest first: no special floats, ASCII, short; then inputs derived from the code before generated
-    ones; then small numbers."""
+    """Simplest first: no special floats, ASCII, inputs derived from the code before generated ones (they are
+    built to be readable), short, small numbers."""
     special, nonascii, length, mag = pin.complexity(cases[j])
-    return special, nonascii, length, meta[j]["src"] == "generated", mag, j
+    return special, nonascii, meta[j]["src"] == "generated", length, mag, j
 
 
 def _call_text(label: str, case: dict, full: bool = False) -> str:

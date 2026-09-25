@@ -186,7 +186,7 @@ def test_without_hypothesis_a_fixed_pseudo_random_list_fills_the_budget(monkeypa
 def test_defaults_are_exercised_by_leaving_them_out():
     params = [{"name": "amount", "kind": "pos", "ann": None, "default": None},
               {"name": "currency", "kind": "pos", "ann": None, "default": ast.Constant("EUR")}]
-    cases, meta, _ = probe.build_corpus(params, [{"k": "float"}, {"k": "str"}], pin.Bounds(), [], [], 50, 0)
+    cases, _, _ = probe.build_corpus(params, [{"k": "float"}, {"k": "str"}], pin.Bounds(), [], [], 50, 0)
     assert {"a": [1.0], "k": []} in cases  # the call with the default
     assert any(c["k"] and c["k"][0][0] == "currency" or len(c["a"]) == 2 for c in cases)
 
@@ -329,6 +329,13 @@ def test_reprs_mask_what_differs_between_runs_of_the_same_code(monkeypatch):
     assert plug._norm(repr(os.path.join(root, "repo", "x.txt"))).startswith("'<run>")
     assert plug._norm(os.path.join(root, "repo")) == os.path.join("<run>", "repo")
     assert plug._norm("<orders.X object at 0x7f00ab>") == "<orders.X object at 0x?>"
+    # the iteration order of a set is not its value; dict order is (Python guarantees it)
+    a, b = {"b", "a", "c"}, set()
+    for x in ("c", "a", "b"):
+        b.add(x)
+    assert plug._repr(a) == plug._repr(b) == "{'a', 'b', 'c'}"
+    assert plug._repr([frozenset({2, 1})]) == "[frozenset({1, 2})]" and plug._repr(set()) == "set()"
+    assert plug._repr({"k": 1, "j": 2}) == "{'k': 1, 'j': 2}"
 
 
 # -- oracles ----------------------------------------------------------------------------------------------
