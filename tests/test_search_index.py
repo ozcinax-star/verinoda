@@ -274,6 +274,56 @@ def test_caller_expansions_and_the_lexicon_are_weighted_below_the_question(mini,
     assert _query(mini, "denemeler nerede?", repo=mini.root).weights  # never breaks retrieval
 
 
+def test_a_code_word_in_a_turkish_question_keeps_only_translation_pairs_of_the_lexicon(mini, monkeypatch):
+    tok = {w: search_index.tokens(w)[0] for w in ("attempt", "environ", "command", "retries")}
+
+    class FakeLexicon:
+        def associations(self, word):
+            if word == "runner":  # the code names a class with it (Runner)
+                return [{"part": "attempt", "score": 1.0}, {"part": "environ", "score": 0.9},
+                        {"part": "command", "score": 0.8, "via": "translation"}]
+            return [{"part": "retries", "score": 0.9}] if word.startswith("deneme") else []
+
+        def seed(self, words):
+            return []
+
+    fake = types.ModuleType("verinoda.lexicon")
+    fake.load = lambda repo: FakeLexicon()
+    monkeypatch.setitem(sys.modules, "verinoda.lexicon", fake)
+    monkeypatch.setattr(verinoda, "lexicon", fake, raising=False)
+    got = {(e["from"], e["to"], e["via"]) for e in _query(mini, "runner denemeleri nasıl çalıştırıyor?",
+                                                          repo=mini.root).expansions}
+    # the names it merely occurs with are its neighbours, not its meaning; the repository's own
+    # translation pair stays, and a word the code does not use keeps its associations
+    assert ("runner", tok["command"], "lexicon") in got
+    assert not [x for x in got if x[0] == "runner" and x[1] in (tok["attempt"], tok["environ"])]
+    assert ("denemeleri", tok["retries"], "lexicon") in got
+
+
+def test_an_unconfirmed_turkish_stem_expands_only_to_its_own_inflections(tmp_path):
+    root = tmp_path / "trstem"
+    _write(root, "a/money.py", "def para_birimi(para):\n    return para\n")
+    _write(root, "a/text.py", "def split_paragraph(paragraph):\n    return paragraph\n")
+    _write(root, "a/pages.py", "def sayfa_goster(sayfa):\n    return sayfa\n")
+    g = _scan(root)
+
+    def stems(q):
+        return {e["to"] for e in _query(g, q).expansions if str(e["via"]).startswith("turkish stem")}
+
+    got = stems("Paraları kim hesaplıyor?")
+    assert {"para", "para_birimi"} <= got and "paragraph" not in got  # paragraph is another word
+    assert not stems("Kaç satır sayıyor?")  # a three-letter stem (say) is not sayfa (page)
+
+
+def test_a_term_reached_by_several_routes_keeps_the_highest_weight(mini):
+    q = _query(mini, "maximum attempts", expansions={"attempts": ["max", "maximum"]})
+    # "max": corpus prefix of maximum (0.5) first, then the question plan's gloss (0.7)
+    assert q.weights["max"] == search_index.PROVIDED_EXPANSION_WEIGHT
+    assert [e for e in q.expansions if e["to"] == "max"] == [
+        {"from": "maximum", "to": "max", "via": "corpus prefix", "weight": search_index.PROVIDED_EXPANSION_WEIGHT}]
+    assert q.weights[search_index.tokens("maximum")[0]] == 1.0  # the user's own word is never lowered
+
+
 # -- incremental updates, versions, staleness -------------------------------------------------------
 
 def test_incremental_update_equals_a_full_rebuild(tmp_path):

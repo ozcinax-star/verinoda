@@ -1203,12 +1203,15 @@ def _label_expansions(repo: Path | None, words: list[str]) -> tuple[dict[str, li
 
 
 def _lexicon_expansions(repo: Path | None, words: list[str],
-                        originals: list[str] | None = None, skip: set[int] | None = None) -> dict[str, list[str]]:
+                        originals: list[str] | None = None, skip: set[int] | None = None,
+                        named_parts: set[int] | None = None) -> dict[str, list[str]]:
     """Repo-learned associations and grounded seed glosses (docs/DESIGN.md D6) for folded words.
 
     Uses :mod:`verinoda.lexicon` when it is installed and a lexicon was built;
     otherwise returns nothing. Lexicon pairs only ever widen the search; they
-    are never evidence.
+    are never evidence. The words at ``named_parts`` are name parts of the code
+    (``update``, ``graph``): they keep only the repository's own translation
+    pairs, not the names they merely occur with (update -> issue, audit).
     """
     if repo is None or not words:
         return {}
@@ -1226,7 +1229,11 @@ def _lexicon_expansions(repo: Path | None, words: list[str],
             for k, w in enumerate(words):
                 if k in (skip or ()):
                     continue  # part of a locale label (_label_expansions)
-                parts = [str(a.get("part")) for a in (assoc(w) or [])[:3] if isinstance(a, dict) and a.get("part")]
+                pairs = [a for a in (assoc(w) or []) if isinstance(a, dict) and a.get("part")]
+                if k in (named_parts or ()):
+                    # co-occurring names are the word's neighbours, not its meaning (as in the question plan)
+                    pairs = [a for a in pairs if a.get("via") == "translation"]
+                parts = [str(a.get("part")) for a in pairs[:3]]
                 if parts:
                     out.setdefault(w, []).extend(parts)
         seed = getattr(lx, "seed", None)
@@ -1319,9 +1326,20 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
     exps: list[dict] = []
 
     def add(src: str, term: str, via: str, weight: float, *, indexed: bool = True) -> None:
-        """``term`` is an index token (``indexed``) or a plain word to tokenize first."""
+        """``term`` is an index token (``indexed``) or a plain word to tokenize first.
+
+        A term reached by several routes keeps the highest weight (graph as the corpus prefix of
+        graphify at 0.5, then as the seed gloss of graf at 0.7); the first route stays reported.
+        """
         for t in (term,) if indexed else word_tokens(term):
-            if t in weights or t == src:
+            if t == src:
+                continue
+            if t in weights:
+                if weight > weights[t]:  # the user's own words (1.0) are never lowered
+                    weights[t] = weight
+                    for e in exps:
+                        if e["to"] == t:
+                            e["weight"] = weight
                 continue
             weights[t] = weight
             exps.append({"from": src, "to": t, "via": via, "weight": weight})
@@ -1350,10 +1368,14 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
             if exact:  # an inflected form the index also knows as a word keeps the lower weight
                 add(w, exact, f"turkish stem '{exact}'", EXPANSION_WEIGHT if f in have else TR_STEM_WEIGHT)
             st = textnorm.tr_stem(f, lambda p: bool(_vocab_prefixed(conn, p, 1)))
-            if st != f and len(st) >= 3 and not f[len(st):].startswith(TR_DERIVATIONAL):
+            if st != f and len(st) >= TR_MIN_STEM and not f[len(st):].startswith(TR_DERIVATIONAL):
                 if f not in have:
+                    # only the stem inflected (degis -> degisen; for a name its first part: siparis_olustur),
+                    # not another word that starts with it (sayfa for "say", signal for "sig")
                     for term, _df in _vocab_prefixed(conn, st, 3):
-                        add(w, term, f"turkish stem '{st}'", EXPANSION_WEIGHT)
+                        rest = re.split(r"[_\W]", term, maxsplit=1)[0][len(st):]
+                        if rest == "" or (rest.isalpha() and textnorm.is_suffix_chain(rest)):
+                            add(w, term, f"turkish stem '{st}'", EXPANSION_WEIGHT)
     # Two adjacent words that the code writes as one name ("sipariş oluştur" -> siparis_olustur,
     # "retry policy" -> retry_policy, "order service" -> OrderService): that name, as if spelled
     stems_of: dict[str, set[str]] = defaultdict(set)
@@ -1401,12 +1423,18 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
         if c in known or _vocab_has(conn, [c]):
             add(prefixes[c], c, "corpus prefix", EXPANSION_WEIGHT)
     provided = dict(expansions or {})
-    labels, covered = _label_expansions(repo, [textnorm.fold_tr(w) for w in words]) if tr_question else ({}, set())
+    folded = [textnorm.fold_tr(w) for w in words]
+    labels, covered = _label_expansions(repo, folded) if tr_question else ({}, set())
     for src, targets in labels.items():
         for tgt in targets:
             add(src, tgt, "locale label", 1.0, indexed=False)
     if not provided and tr_question:
-        provided = _lexicon_expansions(repo, [textnorm.fold_tr(w) for w in words], words, skip=covered)
+        # English words of a Turkish question that the code names things with (update, graph)
+        raw_named = {c[len(RAW_PREFIX):] for (c,) in _fetch(
+            conn, "SELECT DISTINCT term FROM names WHERE term IN ({ph})",
+            sorted({RAW_PREFIX + f.lower() for w, f in zip(words, folded) if w.isascii()}))}
+        named_parts = {k for k, (w, f) in enumerate(zip(words, folded)) if w.isascii() and f.lower() in raw_named}
+        provided = _lexicon_expansions(repo, folded, words, skip=covered, named_parts=named_parts)
         via_default = "lexicon"
     else:
         via_default = "question plan"
