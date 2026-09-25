@@ -154,8 +154,9 @@ def test_an_unrelated_passing_test_run_does_not_verify(orders):
 
     with pytest.raises(ClaimRuleError):
         cl.set_status(c["id"], "experiment_verified", reason="the run passed", downgrade=False)
-    # the same run does verify the claim it is about
-    ok = cl.create("the pricing tests pass", project=snap["project"], snapshot=snap, status="unknown")
+    # the same run does verify the claim it is about (a test_run claim that names the run's tests)
+    ok = cl.create("the pricing tests pass", project=snap["project"], snapshot=snap, status="unknown",
+                   kind="test_run", spec={"command": ["tests/test_pricing.py"]})
     cl.attach(ok["id"], res["evidence_id"], "supports")
     assert cl.set_status(ok["id"], "experiment_verified", reason="ran", downgrade=False)["status"] == \
         "experiment_verified"

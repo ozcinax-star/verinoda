@@ -115,11 +115,203 @@ def test_relation_claim_whose_line_does_not_name_target_is_contradicted(proj):
     res = critique.challenge(st, repo, c["id"], graph=g)
     fail = next(f for f in res["findings"] if f["check"] == "call_site")
     assert fail["result"] == "fail" and "does not mention 'fetch_order'" in fail["detail"]
+    # the whole caller body was read too, and the finding states that scope
+    assert "no direct call to fetch_order in create_order_handler (orders/api.py:16-21); calls through other " \
+           "names are not followed" in fail["detail"]
     assert res["after"]["status"] == "contradicted" and res["refuting_evidence_added"] == 1
     shown = cl.show(c["id"])
-    assert [e["at"] for e in shown["refuting"]] == [f"orders/api.py:{at_line}"]
+    assert [e["at"] for e in shown["refuting"]] == ["orders/api.py:16-21"]  # the caller's body is the counterexample
     assert shown["history"][-1]["actor"] == "critique" and "counterexample" in shown["history"][-1]["reason"]
     assert res["after"]["confidence"] <= res["before"]["confidence"]
+
+
+def test_off_by_one_citation_of_a_real_call_is_a_warning_not_a_refutation(proj):
+    repo, st, cl, g = proj
+    u, v, d = _edge(g, "create_order_handler()", "place_order()")
+    real = int(d["source_location"][1:])
+    c = _relation_claim(cl, st, g, u, v, {**d, "source_location": f"L{real - 1}"})  # the `try:` line above
+    res = critique.challenge(st, repo, c["id"], graph=g)
+    site = next(f for f in res["findings"] if f["check"] == "call_site")
+    assert site["result"] == "warn" and f"calls place_order at orders/api.py:{real}" in site["detail"]
+    assert res["after"]["status"] != "contradicted" and res["refuting_evidence_added"] == 0
+
+
+def _written(cl, st, text, kind, sources, **spec):
+    """A claim as `claim add` records it (free text, the cited lines as support)."""
+    snap = st.latest_snapshot()
+    evs = []
+    for s in sources:
+        path, _, rng = s.rpartition(":")
+        a, _, b = rng.partition("-")
+        evs.append((evmod.source_evidence(cl.repo, path, int(a), int(b or a), commit=snap["commit_sha"]), "supports"))
+    spec = {"free_text": True, **spec}
+    if kind == "relation":
+        spec["at"] = sources[0].split("-")[0]
+    return cl.create(text, project=snap["project"], snapshot=snap, status="statically_verified", evidence=evs,
+                     subjects=[sources[0].rpartition(":")[0]], kind=kind, spec=spec, actor="user")
+
+
+def test_definitive_misses_are_contradicted_at_creation_with_their_scope(proj):
+    repo, st, cl, g = proj
+    rel = _written(cl, st, "create_order_handler calls save", "relation", ["orders/api.py:18"], target_label="save",
+                   symbol="save")
+    res = critique.check_at_creation(st, repo, rel["id"], graph=g)
+    assert res["status"] == "contradicted"
+    assert "no direct call to save in create_order_handler (orders/api.py:16-21); calls through other names are " \
+           "not followed" in res["findings"][0]
+    assert cl.show(rel["id"])["history"][-1]["reason"].startswith("checked at creation: ")
+    # the reversed direction: the text's caller is OrderRepository.save, whose body is in another file
+    rev = _written(cl, st, "OrderRepository.save calls place_order", "relation", ["orders/service.py:22"],
+                   target_label="place_order", symbol="place_order")
+    assert critique.check_at_creation(st, repo, rev["id"], graph=g)["status"] == "contradicted"
+    assert [e["at"] for e in cl.show(rev["id"])["refuting"]] == ["orders/repository.py:15-20"]
+    # a config text about another setting than the read it cites
+    cfg = _written(cl, st, "The discount threshold is read from ORDERS_MAX_ITEMS", "config", ["orders/config.py:6"],
+                   env="ORDERS_MAX_ITEMS", symbol="ORDERS_MAX_ITEMS")
+    assert cfg["status"] == "strong_inference"  # the read exists, the binding does not match: not verified
+    res = critique.check_at_creation(st, repo, cfg["id"], graph=g)
+    assert res["status"] == "contradicted" and "DISCOUNT_THRESHOLD reads ORDERS_DISCOUNT_THRESHOLD at " \
+                                               "orders/config.py:7" in res["findings"][0]
+    # an order the function's body does not have
+    order = _written(cl, st, "`place_order` calls `save` before `validate_items`", "behaviour",
+                     ["orders/service.py:19-22"], proposition="save before validate_items in place_order", holds=True,
+                     symbol="place_order")
+    res = critique.check_at_creation(st, repo, order["id"], graph=g)
+    assert res["status"] == "contradicted" and res["findings"] == [
+        "in place_order (orders/service.py:19-22), `validate_items` is first called at line 20, before `save` at line 22"]
+    # a definition the file does not have
+    loc = _written(cl, st, "`place_orders` is defined in orders/service.py", "location", ["orders/service.py:19-22"],
+                   symbol="place_orders")
+    res = critique.check_at_creation(st, repo, loc["id"], graph=g)
+    assert res["status"] == "contradicted" and res["findings"] == [
+        "no definition, assignment or import named `place_orders` in orders/service.py, and the file does not spell "
+        "`place_orders` (scope: the file's text); nearest: place_order"]
+
+
+def test_names_bound_by_assignments_are_defined_and_never_contradicted(proj):
+    repo, st, cl, g = proj
+    for text, at, sym in (("`DISCOUNT_THRESHOLD` is defined in orders/config.py", "orders/config.py:7",
+                           "DISCOUNT_THRESHOLD"),
+                          ("`_repo` is defined in orders/api.py", "orders/api.py:6", "_repo"),
+                          ("`place_order` is defined in orders/service.py", "orders/service.py:19-22",
+                           "orders/service.py::place_order")):
+        c = _written(cl, st, text, "location", [at], symbol=sym)
+        assert c["status"] == "statically_verified", text
+        assert critique.check_at_creation(st, repo, c["id"], graph=g)["findings"] == [], text
+    # spelled in the file (an SQL string) but bound nowhere: a heuristic doubt, never a contradiction
+    c = _written(cl, st, "`orders` is defined in orders/repository.py", "location", ["orders/repository.py:12"],
+                 symbol="orders")
+    assert critique.check_at_creation(st, repo, c["id"], graph=g)["status"] != "contradicted"
+    ctx = critique.ProbeContext(repo=repo, kind="location", spec={"symbol": "orders", "free_text": True},
+                                subjects=["orders/repository.py"], text=c["text"], graph=g)
+    [r] = critique.probe_location_exists(ctx)
+    assert r.strength == "heuristic" and "spells `orders` but nothing in its syntax tree binds it" in r.detail
+
+
+def test_relation_sentences_are_contradicted_only_on_roles_they_state_clearly(proj):
+    repo, st, cl, g = proj
+    true = [("validate_items and compute_total are called in place_order", "orders/service.py:21", "compute_total"),
+            ("place_order, validate_items ve compute_total'ı çağırır", "orders/service.py:21", "compute_total"),
+            ("create_order_handler, get_repo ile place_order'ı çağırır", "orders/api.py:18", "place_order"),
+            ("create_order_handler calls place_order, and get_order_handler calls fetch_order", "orders/api.py:25",
+             "fetch_order"),
+            ("validate_items'ı place_order çağırır", "orders/service.py:20", "validate_items"),
+            ("place_order calls validate_items and compute_total", "orders/service.py:21", "compute_total")]
+    for text, at, target in true:
+        c = _written(cl, st, text, "relation", [at], target_label=target, symbol=target)
+        assert c["status"] == "statically_verified", text
+        assert critique.check_at_creation(st, repo, c["id"], graph=g)["findings"] == [], text
+    # no clear form: the roles are not bound, so the text is not verified - and never contradicted
+    for text, at, target in (("place_order is what create_order_handler calls", "orders/api.py:18", "place_order"),
+                             ("place_order'ı çağıran fonksiyon create_order_handler", "orders/api.py:18",
+                              "place_order"),
+                             ("Both create_order_handler and get_order_handler call get_repo", "orders/api.py:18",
+                              "get_repo")):
+        c = _written(cl, st, text, "relation", [at], target_label=target, symbol=target)
+        assert c["status"] == "strong_inference", text
+        assert critique.check_at_creation(st, repo, c["id"], graph=g)["status"] == "strong_inference", text
+    # a caller the text names whose definition is not found: its body was not read, so no contradiction
+    c = _written(cl, st, "OrderRepository.place_order calls validate_items", "relation", ["orders/service.py:20"],
+                 target_label="validate_items", symbol="validate_items")
+    res = critique.check_at_creation(st, repo, c["id"], graph=g)
+    assert res["status"] != "contradicted" and res["findings"] == []
+
+
+def test_a_plain_word_caller_is_read_but_never_drives_a_contradiction(proj):
+    # review round 2: "checkout calls submit" citing the line above the call was contradicted at creation
+    # (the plain-word caller's body was never read), while a caller written as code only got a warning
+    repo, st, cl, g = proj
+    (repo / "orders" / "extras.py").write_text(
+        "from orders.repository import OrderRepository\nfrom orders.service import place_order as submit\n\n\n"
+        "def checkout(customer, items):\n    repo = OrderRepository(':memory:')\n"
+        "    return submit(repo, customer, items)\n\n\ndef audit(items):\n    return list(items)\n",
+        encoding="utf-8", newline="\n")
+    for text in ("checkout calls submit", "submit is called by checkout", "checkout, submit'i çağırır"):
+        c = _written(cl, st, text, "relation", ["orders/extras.py:6"], target_label="submit", symbol="submit")
+        assert critique.check_at_creation(st, repo, c["id"], graph=g)["status"] != "contradicted", text
+        cs = critique.call_site_check(repo, cl.get(c["id"]), graph=g)
+        assert cs["strength"] == "heuristic" and "but checkout calls submit at orders/extras.py:7" in cs["detail"], text
+    # a plain word that names the definition around the cited line is that caller: its whole body
+    # without the call refutes the claim, as for a caller written as code
+    c = _written(cl, st, "audit calls submit", "relation", ["orders/extras.py:11"], target_label="submit",
+                 symbol="submit")
+    res = critique.check_at_creation(st, repo, c["id"], graph=g)
+    assert res["status"] == "contradicted" and "no direct call to submit in audit (orders/extras.py:10-11)" in \
+        res["findings"][0]
+    c = _written(cl, st, "checkout calls place_orders", "relation", ["orders/extras.py:7"], target_label="place_orders",
+                 symbol="place_orders")
+    assert critique.check_at_creation(st, repo, c["id"], graph=g)["status"] == "contradicted"
+    # any other plain word is not the caller: a heuristic doubt, never a contradiction (D31)
+    c = _written(cl, st, "The handler calls submit", "relation", ["orders/extras.py:6"], target_label="submit",
+                 symbol="submit")
+    assert critique.check_at_creation(st, repo, c["id"], graph=g)["status"] != "contradicted"
+    cs = critique.call_site_check(repo, cl.get(c["id"]), graph=g)
+    assert cs["strength"] == "heuristic" and "caller `handler` is a plain word that is not a definition" in cs["detail"]
+
+
+def test_order_of_calls_made_by_nested_functions_is_never_certain(proj):
+    repo, st, cl, g = proj
+    (repo / "orders" / "flow.py").write_text(
+        "from orders.service import validate_items\n\n\n"
+        "def save_items(items):\n    return list(items)\n\n\n"
+        "def handle(items):\n    def finish():\n        return save_items(items)\n"
+        "    validate_items(items)\n    return finish()\n\n\n"
+        "def mixed(items):\n    check = lambda: validate_items(items)  # noqa: E731\n"
+        "    save_items(items)\n    validate_items(items)\n    return check()\n", encoding="utf-8", newline="\n")
+    for prop in ("validate_items before save_items", "save_items before validate_items"):
+        c = _written(cl, st, f"`handle` calls ... ({prop})", "behaviour", ["orders/flow.py:8-12"],
+                     proposition=f"{prop} in handle", holds=True, symbol="handle")
+        assert c["status"] == "strong_inference", prop  # partial: the nested call has no static place
+        assert critique.check_at_creation(st, repo, c["id"], graph=g)["status"] == "strong_inference", prop
+    # F's own calls are reversed, but a lambda also calls one of them: a heuristic doubt only
+    ctx = critique.ProbeContext(repo=repo, kind="behaviour", subjects=["orders/flow.py"], text="x", graph=g,
+                                spec={"proposition": "validate_items before save_items in mixed", "holds": True})
+    [r] = critique.probe_order(ctx)
+    assert r.strength == "heuristic" and "a nested function or lambda also calls one of them" in r.detail
+
+
+def test_true_written_claims_keep_their_status_at_creation(proj):
+    repo, st, cl, g = proj
+    cases = [
+        _written(cl, st, "create_order_handler calls place_order", "relation", ["orders/api.py:18"],
+                 target_label="place_order", symbol="place_order"),
+        _written(cl, st, "validate_items is called by place_order", "relation", ["orders/service.py:20"],
+                 target_label="validate_items", symbol="validate_items"),
+        _written(cl, st, "The discount threshold is read from ORDERS_DISCOUNT_THRESHOLD", "config",
+                 ["orders/config.py:7"], env="ORDERS_DISCOUNT_THRESHOLD", symbol="ORDERS_DISCOUNT_THRESHOLD"),
+        _written(cl, st, "`place_order` calls `validate_items` before `save`", "behaviour", ["orders/service.py:19-22"],
+                 proposition="validate_items before save in place_order", holds=True, symbol="place_order"),
+        _written(cl, st, "`place_order` is defined at orders/service.py:19-22", "location", ["orders/service.py:19-22"],
+                 symbol="place_order"),
+    ]
+    for c in cases:
+        assert c["status"] == "statically_verified", c["text"]
+        res = critique.check_at_creation(st, repo, c["id"], graph=g)
+        assert res == {"claim": c["id"], "status": "statically_verified", "findings": []}, c["text"]
+    # the off-by-one citation of a real call: not verified, never contradicted
+    off = _written(cl, st, "place_order calls compute_total", "relation", ["orders/service.py:20"],
+                   target_label="compute_total", symbol="compute_total")
+    assert critique.check_at_creation(st, repo, off["id"], graph=g)["status"] == "weak_inference"
 
 
 def test_relation_claim_with_matching_call_site_passes(proj):
@@ -249,8 +441,10 @@ def test_critique_twice_equals_critique_once(plain):
     repo, st, cl = plain
     a = _line(repo, "orders/pricing.py", "def compute_total")
     src = evmod.source_evidence(repo, "orders/pricing.py", a, a + 2, commit=None)
-    c = cl.create("compute_total sums price*qty", project="orders_app", snapshot=None,
-                  status="statically_verified", evidence=[(src, "supports")], subjects=["orders/pricing.py"])
+    c = cl.create(f'orders/pricing.py:{a}-{a + 2} contains: subtotal = sum(i["price"] * i["qty"] for i in items)',
+                  project="orders_app", snapshot=None, status="statically_verified", evidence=[(src, "supports")],
+                  subjects=["orders/pricing.py"])
+    assert c["status"] == "statically_verified"
     p = repo / "orders" / "pricing.py"
     p.write_text(p.read_text(encoding="utf-8").replace('i["price"] * i["qty"]', 'i["price"] + i["qty"]'),
                  encoding="utf-8")
@@ -267,7 +461,8 @@ def test_critique_twice_equals_critique_once(plain):
                              "confidence": pytest.approx(CONFIDENCE_CAP["weak_inference"] - 0.2)}
     assert len(st.history(c["id"])) == n_hist  # the re-runs wrote nothing
     assert cl.get(c["id"])["spec"] == spec_once
-    assert spec_once["assessed"] == "statically_verified" and spec_once["ceiling"] == "primary_source_verified"
+    # the quote no longer matches the edited line: the evidence allows strong_inference, one step below is the ceiling
+    assert spec_once["assessed"] == "statically_verified" and spec_once["ceiling"] == "weak_inference"
 
 
 def test_repeated_counterexample_is_linked_once(proj):

@@ -34,8 +34,9 @@ configure_index_env()
 CLAIM_ADD_STATUSES = (*_CLAIM_ORDER, "contradicted")
 # Claim kinds a user may give to `claim add`: each has a mechanical grader in
 # verinoda.entail (`--symbol` feeds its spec), so the claim is graded by the kind's
-# predicate instead of by term coverage.
-CLAIM_ADD_KINDS = ("general", "location", "relation", "config")
+# predicate instead of by term coverage (which never verifies written text).
+# `order` ("A before B in F") is stored as a behaviour claim with that proposition.
+CLAIM_ADD_KINDS = ("general", "location", "relation", "config", "order")
 # `verinoda analyze` / `plan check` status -> exit code.
 PLAN_EXIT = {"ready": 0, "answered": 0, "invalid": 2, "invalid_plan": 2, "needs_clarification": 3, "no_index": 1}
 TRACE_MODES = ("auto", "monitoring", "setprofile", "off")   # verinoda.runtime.trace.MODES
@@ -258,6 +259,10 @@ def _r_claims(res: dict) -> None:
 
 def _r_trace(res: dict) -> None:
     print(f"{res['source']} -> {res['target']}  [{res['status']}, mode={res['mode']}]")
+    for side, line in (res.get("not_found") or {}).items():
+        print(f" {side}: {line}")
+    for side, line in (res.get("fuzzy") or {}).items():
+        print(f" {side}: {line}")
     for i, p in enumerate(res["paths"], 1):
         print(f" path {i}:")
         for h in p:
@@ -905,8 +910,8 @@ def cmd_claim(args) -> int:
         _emit(args, res, lambda rs: [print(f"{r['id']} [{r['status']} {r['confidence']:.2f}] {r['text'][:100]}")
                                      for r in rs])
     elif args.claim_cmd == "add":
+        from verinoda import entail, workflow
         from verinoda import evidence as evmod
-        from verinoda import workflow
 
         sources = []
         for spec in args.source or []:
@@ -932,23 +937,56 @@ def cmd_claim(args) -> int:
             evs.append((ev, "refutes" if args.refutes else "supports"))
         kind = args.kind or "general"
         # The claim text is the user's own words: kind predicates (location, relation, config)
-        # check the cited code, but the text must also be about what the lines say
-        # (entail.assess caps the predicate grade by term coverage; audit 2026-09-23).
+        # check the cited code, but the text must also be about what the lines say and bind every
+        # role it states (entail.assess; audit 2026-09-23, docs/DESIGN.md D31).
         cspec: dict = {"free_text": True}
         subjects = list(dict.fromkeys(p for _, p, _, _ in sources))
-        if args.symbol:
-            cspec["symbol"] = args.symbol
+        symbol = args.symbol
+        if kind == "relation" and not symbol:
+            symbol = entail.relation_roles(args.text)[1]  # the callee the text names, in a clear form
+            if not symbol:
+                raise SystemExit("error: --kind relation needs the callee: pass --symbol <callee>, or state it as "
+                                 "\"A calls B\" / \"B is called by A\" with both written as code")
+        if kind == "order":
+            prop = entail.order_proposition(args.text, symbol)
+            if prop is None:
+                raise SystemExit("error: an order claim states two calls and their order positively in one form, "
+                                 "e.g. \"`place_order` calls `validate_items` before `save`\", \"... `save` after "
+                                 "`validate_items`\", \"... `validate_items`, then `save`\" --symbol place_order "
+                                 "(--symbol is the function whose body is checked; a negated order is not read; "
+                                 "without --symbol the text must name it: \"in `place_order`\", \"`place_order` "
+                                 "calls ...\")")
+            where = prop.rpartition(" in ")[2]
+            if not symbol and sources and entail.def_around(repo, sources[0][1], sources[0][2], sources[0][3],
+                                                            where) is False:
+                # a function read from the text must be the one the cited lines are in: a wrong role
+                # would check another body and could contradict a true sentence
+                raise SystemExit(f"error: the text makes `{where}` the function whose body is checked, but no "
+                                 f"definition `{where}` is around {sources[0][0]}; pass --symbol <function>")
+            kind = "behaviour"
+            cspec.update({"proposition": prop, "holds": True})
+        if symbol:
+            cspec["symbol"] = symbol
             if kind == "relation":
-                cspec["target_label"] = args.symbol
-                if "::" in args.symbol:  # path::symbol names the target file too
-                    subjects = subjects[:1] + [args.symbol]
+                cspec["target_label"] = symbol
+                if "::" in symbol:  # path::symbol names the target file too
+                    subjects = subjects[:1] + [symbol]
             elif kind == "config":
-                cspec["env"] = args.symbol
+                cspec["env"] = symbol
         if kind == "relation" and sources:
             cspec["at"] = f"{sources[0][1]}:{sources[0][2]}"
         c = Claims(st, repo).create(args.text, project=snap["project"], snapshot=snap, status=args.status,
                                     evidence=evs, subjects=subjects, kind=kind, spec=cspec or None,
                                     actor="user")
+        # definitive, scope-stated checks now (a relation's whole caller body, a config text's binding,
+        # an order): a definitive miss is contradicted at once, not only after `challenge`
+        from verinoda import critique, index
+        from verinoda.paths import graph_path
+
+        # the graph only helps to find a caller defined in another file, when the cited line has no call
+        g = index.load(repo) if kind == "relation" and c["status"] in ("weak_inference", "unknown") \
+            and graph_path(repo).exists() else None
+        critique.check_at_creation(st, repo, c["id"], graph=g)
         res = Claims(st, repo).show(c["id"])
         if refresh and not args.json:
             print(f"(index refreshed first: {refresh.get('mode')}"
@@ -1636,9 +1674,13 @@ def build_parser() -> argparse.ArgumentParser:
                                 "(contradicted needs --refutes sources; stale is set only by update/scan)")
             c.add_argument("--kind", choices=CLAIM_ADD_KINDS, default="general",
                            help="claim kind, graded by its own predicate: location (a definition of --symbol "
-                                "spans the source lines), relation (the source line calls --symbol), config "
-                                "(the source line reads env var --symbol); general = term coverage")
-            c.add_argument("--symbol", help="the symbol / call target / env var the claim is about")
+                                "spans the source lines), relation (the source line calls --symbol, inside the "
+                                "caller the text names first), config (the source line reads env var --symbol, "
+                                "bound to what the text says it sets), order (the text says `A` before `B`; "
+                                "--symbol is the function F whose body is checked); general = term coverage, which "
+                                "never verifies: at most weak_inference unless the text quotes the lines "
+                                "('contains: ...')")
+            c.add_argument("--symbol", help="the symbol / call target / env var / function (order) the claim is about")
 
     sp = add("verify", cmd_verify, "re-check a claim's evidence against the current tree")
     sp.add_argument("id")

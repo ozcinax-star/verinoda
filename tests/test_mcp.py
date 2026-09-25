@@ -794,7 +794,7 @@ def test_edit_makes_evidence_changed_and_claim_stale(fresh_repo):
     with _store(fresh_repo) as st:
         snap = st.latest_snapshot()
         ev = evmod.source_evidence(fresh_repo, rel, a, a + 2, commit=snap["commit_sha"])
-        c = Claims(st, fresh_repo).create("compute_total sums price*qty and applies the discount",
+        c = Claims(st, fresh_repo).create(f'{rel}:{a + 1} contains: subtotal = sum(i["price"] * i["qty"] for i in items)',
                                           project=snap["project"], snapshot=snap, status="statically_verified",
                                           evidence=[(ev, "supports")], subjects=[rel], actor="test")
     shown = t.claim_inspect(c["id"])

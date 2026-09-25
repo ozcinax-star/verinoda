@@ -373,13 +373,19 @@ def _link(orders, text, **m):
     ("OrderRepository.save", {}, "qualified", ".save()"),
     ("compute_total", {}, "exact_label", "compute_total()"),
     ("computeTotal", {}, "label_folded", "compute_total()"),
-    ("compute_totl", {}, "fuzzy", "compute_total()"),
+    ("computetotl", {"kind": "domain_concept"}, "fuzzy", "compute_total()"),  # a word, not written as code
 ])
 def test_link_tiers(orders, text, extra, tier, label):
     lk = _link(orders, text, **extra)
     assert lk["best"]["label"] == label and lk["best"]["matches"][0]["type"] == tier, lk
     assert lk["best"]["score"] == qp.TIER_SCORES[tier]
     assert lk["best"]["at"].count(":") == 1 and lk["best"]["matches"][0]["site"]
+
+
+def test_another_spelling_of_a_code_name_is_weak_and_said(orders):
+    lk = _link(orders, "placeOrder")
+    assert lk["status"] == "weak" and lk["uncertainty"].startswith("`placeOrder` is spelled `place_order` here")
+    assert _link(orders, "PLACE_ORDER")["status"] == "linked"  # letter case alone is the same name
 
 
 def test_identifier_parts_seed_and_text_tiers(orders):
@@ -424,9 +430,16 @@ def test_unlinked_required_mention_is_an_unknown_with_a_next_step(orders):
                                                    "done_when": {"kind": "claim_exists", "detail": "x"}}],
            "mentions": [{"id": "m1", "text": "FluxCapacitor", "kind": "symbol"}]}
     res = qp.check(doc, g, repo, lex)
-    assert res["links"][0]["status"] == "unlinked"
+    # a name written as code that the repository spells nowhere: not found (not merely unlinked)
+    assert res["links"][0]["status"] == "not_found"
     (u,) = res["unknowns"]
-    assert u["about"] == "m1" and "FluxCapacitor" in u["why"] and u["next_step"]
+    assert u["about"] == "m1" and u["why"] == "no symbol named `FluxCapacitor` in this repository" and u["next_step"]
+    words = {**doc, "user_message": "Where is the flux capacitor configured?",
+             "mentions": [{"id": "m1", "text": "flux capacitor", "kind": "symbol"}]}
+    res = qp.check(words, g, repo, lex)
+    assert res["links"][0]["status"] == "unlinked"  # plain words: nothing matched, no claim about existence
+    (u,) = res["unknowns"]
+    assert u["about"] == "m1" and "flux capacitor" in u["why"] and u["next_step"]
 
 
 def test_near_miss_asks_did_you_mean_with_grounded_options(orders):
@@ -436,12 +449,237 @@ def test_near_miss_asks_did_you_mean_with_grounded_options(orders):
                                                    "done_when": {"kind": "set_enumerated", "detail": "x"}}],
            "mentions": [{"id": "m1", "text": "compute_totall", "kind": "symbol"}]}
     lk = qp.link_mention(doc["mentions"][0], g, lex)
-    if lk["status"] != "unlinked":  # the fuzzy tier already links typos this close
-        assert lk["best"]["label"] == "compute_total()"
-        return
+    # a typo of a name written as code is never linked to the similar name, it is not found
+    assert lk["status"] == "not_found" and not lk["nodes"]
+    assert lk["did_you_mean"][0] == "compute_total (orders/pricing.py:6)"
+    assert lk["not_found"] == ("no symbol named `compute_totall` in this repository; nearest: compute_total "
+                               "(orders/pricing.py:6)")
     res = qp.check(doc, g, repo, lex)
     (c,) = res["clarifications"]
     assert c["kind"] == "did_you_mean" and c["options"][0]["label"].startswith("compute_total()")
+    assert res["unknowns"][0]["why"] == lk["not_found"]
+    compact = qp.compact_check(res)["links"][0]
+    assert compact["status"] == "not_found" and compact["did_you_mean"] == lk["did_you_mean"]
+    # a host candidate that differs from what the user wrote does not make the user's name exist
+    hosted = qp.link_mention({"id": "m1", "text": "compute_totall", "kind": "symbol", "candidates": ["compute_total"]},
+                             g, lex)
+    assert hosted["status"] == "not_found"
+
+
+def test_code_shaped_name_spelled_only_in_text_is_at_most_weak(orders):
+    repo, g, _lex = orders
+    # ORDERS_MAX_ITEMS is an environment variable: no symbol, but config.py spells it
+    lk = _link(orders, "ORDERS_MAX_ITEMS", kind="env_var")
+    assert lk["status"] in ("weak", "unlinked") and lk["status"] != "not_found"
+    assert lk.get("occurs_at", "").startswith("orders/config.py:")
+    if lk["status"] == "weak" and lk.get("tier") != "text_hit":
+        assert "no symbol in the index is named `ORDERS_MAX_ITEMS`" in lk["uncertainty"]
+    # a name that only an import statement spells is defined nowhere; any other use counts
+    ix = qp._index(g)
+    (repo / "orders" / "ghost.py").write_text("from orders.service import (\n    place_orders,\n)\n\n"
+                                               "x = spooky_helper()\n", encoding="utf-8")
+    try:
+        ix.sites.clear()
+        ix.repo_files = None  # list the files again: ghost.py is new
+        assert qp.name_site(g, "place_orders") is None
+        assert qp.name_site(g, "spooky_helper()") == "orders/ghost.py:5"
+        assert qp.name_site(g, "orders/ghost.py") == "orders/ghost.py"
+    finally:
+        (repo / "orders" / "ghost.py").unlink()
+        ix.sites.clear()
+        ix.repo_files = None
+
+
+def test_a_scan_that_runs_out_of_time_never_reports_not_found(orders, monkeypatch):
+    repo, g, lex = orders
+    ix = qp._index(g)
+    monkeypatch.setattr(qp, "_SITE_SECONDS", -1.0)
+    monkeypatch.setattr(qp, "_files_to_scan", lambda g, ix, names: ix.repo_files)  # no search index to ask
+    ix.sites.clear()
+    try:
+        assert qp.name_site(g, "compute_totall") == qp.UNCHECKED
+        lk = qp.link_mention({"id": "m1", "text": "compute_totall", "kind": "symbol"}, g, lex)
+        assert lk["status"] != "not_found" and "occurs_at" not in lk  # unknown existence: not "not found"
+        # ... and never linked to a similar name either: at most weak, saying the check did not run
+        # (review round 1: place_orders was linked to place_order past the cap)
+        for text in ("place_orders", "validate_item", "compute_totals"):
+            lk = qp.link_mention({"id": "m1", "text": text, "kind": "symbol"}, g, lex)
+            assert lk["status"] in ("weak", "unlinked") and lk["existence"] == "unchecked", (text, lk["status"])
+            if lk["status"] == "weak":
+                assert "was not checked" in lk["uncertainty"] and f"`{text}`" in lk["uncertainty"]
+    finally:
+        ix.sites.clear()
+
+
+def test_the_search_index_answers_for_a_name_no_file_spells(orders, monkeypatch):
+    repo, g, _lex = orders
+    ix = qp._index(g)
+    ix.sites.clear()
+    ix.repo_files = None
+    qp.name_site(g, "x_warmup")  # lists the files
+    monkeypatch.setattr(qp, "_SITE_SECONDS", -1.0)  # a scan of any file would run out of time
+    try:
+        ix.sites.clear()
+        assert qp.name_site(g, "compute_totall") is None  # no indexed file has the word: nothing to scan
+        assert "orders/pricing.py" not in qp._files_to_scan(g, ix, ["compute_totall"])
+        assert qp._files_to_scan(g, ix, ["compute_total"]) == ix.repo_files  # the index has it: scan
+        # a file changed since it was indexed is read again
+        p = repo / "orders" / "pricing.py"
+        before = p.read_bytes()
+        try:
+            p.write_bytes(before + b"\n\ndef compute_totall():\n    return 0\n")
+            ix.sites.clear()
+            assert "orders/pricing.py" in qp._files_to_scan(g, ix, ["compute_totall"])
+        finally:
+            p.write_bytes(before)
+    finally:
+        ix.sites.clear()
+        ix.repo_files = None
+
+
+@pytest.mark.parametrize("text, split", [
+    ("orders\\api.py", ("orders/api.py", "")), ("orders/repository.py::OrderRepository.save()",
+                                                ("orders/repository.py", "OrderRepository.save")),
+    ("`Wisp#spawn`", ("", "Wisp.spawn")), ("place_order()", ("", "place_order")), ("orders.api", ("", "orders.api")),
+])
+def test_names_written_as_code_are_normalised(text, split):
+    assert qp.split_code_name(text) == split
+
+
+def test_name_site_reads_paths_and_file_scoped_names(orders):
+    repo, g, _lex = orders
+    ix = qp._index(g)
+    ix.sites.clear()
+    assert qp.name_site(g, "orders\\api.py") == "orders/api.py"
+    assert qp.name_site(g, "orders.api") == "orders/api.py"
+    assert qp.name_site(g, "orders/repository.py::OrderRepository.save").startswith("orders/repository.py:")
+    assert qp.name_site(g, "orders/service.py::place_orders") is None
+    assert qp.name_site(g, "OrderRepository#save") is not None
+    # strict: a dotted name must occur as written, not only its last part
+    assert qp.name_site(g, "Foo.save") is not None and qp.name_site(g, "Foo.save", strict=True) is None
+    ix.sites.clear()
+
+
+def test_a_member_of_a_known_owner_is_looked_for_in_that_owner(orders):
+    repo, g, lex = orders
+    ix = qp._index(g)
+    ix.sites.clear()
+    # review round 1: `OrderRepository.place_order` counted as spelled because `place_order` occurs elsewhere
+    for text in ("OrderRepository.place_order", "`OrderRepository.place_order`", "orders.fetch_orders"):
+        assert qp.name_site(g, text) is None, text
+    lk = qp.link_mention({"id": "m1", "text": "`OrderRepository.place_order`", "kind": "symbol"}, g, lex)
+    assert lk["status"] == "not_found" and lk["did_you_mean"][0] == "place_order (orders/service.py:19)"
+    # members that are there (a method, an attribute, a module's name, a package's module) stay found
+    assert qp.name_site(g, "OrderRepository.conn").startswith("orders/repository.py:")
+    assert qp.name_site(g, "config.DISCOUNT_THRESHOLD") == "orders/config.py:7"
+    assert qp.name_site(g, "service.place_order") == "orders/service.py:19"
+    assert qp.name_site(g, "orders.place_order") is not None
+    # a class with a base class may inherit the member: not decided here, the lenient search runs
+    assert qp._member_site(g, ix, "ValidationError.args") == (None, False)
+    assert qp._member_site(g, ix, "OrderRepository.place_order") == (None, True)
+    # an owner the graph does not define: the last part counts, and the link says only it occurs
+    assert qp.name_site(g, "repo.save") == "orders/service.py:22"  # the whole name first
+    assert not qp.spells_whole(g, "orders/repository.py:15", "`Repository.save`")
+    assert qp.spells_whole(g, "orders/service.py:22", "repo.save")
+    ix.sites.clear()
+
+
+@pytest.mark.parametrize("path, header, bases", [
+    ("a.py", "class Cart:", False), ("a.py", "class Cart(object):", False), ("a.py", "class E(ValueError):", True),
+    ("a.py", "class P( Base, ):", True), ("a.py", "@dataclass class P:", True),
+    ("A.java", "public final class Ritual {", False), ("A.java", "public class Wisp extends PathAwareEntity {", True),
+    ("A.java", "@Data public class Order {", True), ("A.kt", "class A(val x: Int) : B() {", True),
+    ("A.kt", "data class A(val x: Int)", True), ("A.kt", "class A(val x: Int) {", False),
+])
+def test_class_headers_that_may_bring_members_from_elsewhere(path, header, bases):
+    assert qp._has_bases(path, header) is bases
+
+
+# review round 2: owners whose members live elsewhere (a Go package in several files, a config section
+# named like a module or class, dynamic attributes, a member set from another module)
+MEMBERS = {
+    "goapp/store/store.go": "package store\n\ntype Store struct {\n\tpath string\n}\n\n"
+                            "func New(path string) *Store {\n\treturn &Store{path: path}\n}\n",
+    "goapp/store/db.go": "package store\n\nfunc Open(path string) (*Store, error) {\n\treturn New(path), nil\n}\n",
+    "settings.yaml": "pricing:\n  discount_rate: 0.1\ncart:\n  max_lines: 20\n",
+    "orders/extras.py": "class Cart:\n    def __init__(self):\n        self.items = []\n\n"
+                        "    def add(self, item):\n        self._check(item)\n        self.items.append(item)\n\n"
+                        "    def _check(self, item):\n        return item\n",
+    "orders/odd.py": "class Settings:\n    MAX_RETRIES = 5\n    region = \"eu\"\n\n    def load(self):\n"
+                     "        return self.MAX_RETRIES\n",
+    "orders/odd2.py": "class Options:\n    def __init__(self, **kw):\n        self.__dict__.update(kw)\n\n\n"
+                      "def make_options():\n    return Options(timeout=5)\n",
+    "orders/patch.py": "from orders.odd import Settings\n\nSettings.patched = True\n",
+    "src/main/java/com/example/Lantern.java": "package com.example;\n\npublic final class Lantern {\n"
+                                              "    private static final int COOLDOWN = 100;\n\n"
+                                              "    public static void etkinlestir() {\n    }\n}\n",
+}
+
+
+@pytest.fixture(scope="module")
+def members(tmp_path_factory):
+    if shutil.which("git") is None:
+        pytest.skip("git not available")
+    repo = _scan_copy(tmp_path_factory.mktemp("qp_members") / "orders_app", EXAMPLE, files=MEMBERS)
+    g = index.load(repo)
+    lex = lexicon.load(repo)
+    if lex is None:
+        lexicon.build(repo, g)
+        lex = lexicon.load(repo)
+    return repo, g, lex
+
+
+@pytest.mark.parametrize("text, site", [
+    ("store.Open", "goapp/store/db.go:3"),  # a Go package: every file of its directory
+    ("pricing.discount_rate", "settings.yaml:2"),  # a module named like a config section: the key counts
+    ("cart.max_lines", "settings.yaml:4"),  # `cart` is not the class `Cart`: the lenient search runs
+    ("Options.timeout", "orders/odd2.py:7"),  # attributes set through __dict__: may exist
+    ("Settings.patched", "orders/patch.py:3"),  # set on the class from another module
+    ("Settings.MAX_RETRIES", "orders/odd.py:2"), ("Cart.items", "orders/extras.py:3"),
+])
+def test_a_member_that_exists_elsewhere_is_never_not_found(members, text, site):
+    repo, g, lex = members
+    qp._index(g).sites.clear()
+    assert qp.name_site(g, text) == site
+    lk = qp.link_mention({"id": "m1", "text": f"`{text}`", "kind": "symbol"}, g, lex)
+    assert lk["status"] != "not_found" and lk.get("occurs_at") == site
+
+
+def test_a_python_class_member_is_what_the_class_defines(members):
+    repo, g, lex = members
+    ix = qp._index(g)
+    ix.sites.clear()
+    # a call on another object inside the class (`self.conn.execute(`, `self.items.append(`) is no member
+    for text in ("OrderRepository.execute", "Cart.append", "Settings.save", "Cart.check"):
+        assert qp.name_site(g, text) is None, text
+        lk = qp.link_mention({"id": "m1", "text": f"`{text}`", "kind": "symbol"}, g, lex)
+        assert lk["status"] == "not_found", text
+    assert qp._py_class_members((repo / "orders" / "repository.py").read_text(encoding="utf-8"), 8, 26) == {
+        "__init__": 9, "conn": 10, "save": 15, "get": 22}
+    assert qp.name_site(g, "OrderRepository.conn") == "orders/repository.py:10"
+    # dunder members come from `object`: never decided absent from the class alone
+    assert qp._member_site(g, ix, "Cart.__repr__")[1] is False
+    # a Java class without a base or annotation declares its members in its body (its file is no module)
+    assert qp._member_site(g, ix, "Lantern.activate") == (None, True)
+    assert qp.name_site(g, "Lantern.etkinlestir") == "src/main/java/com/example/Lantern.java:6"
+    assert qp._member_site(g, ix, "Lantern.toString")[1] is False  # java.lang.Object's
+    ix.sites.clear()
+
+
+def test_a_member_lookup_keeps_the_time_limit(members, monkeypatch):
+    repo, g, lex = members
+    ix = qp._index(g)
+    monkeypatch.setattr(qp, "_SITE_SECONDS", -1.0)
+    monkeypatch.setattr(qp, "_files_to_scan", lambda g, ix, names: ix.repo_files)
+    ix.sites.clear()
+    try:
+        # the owner's files are read under the same limit as the scan: past it nothing is claimed
+        assert qp.name_site(g, "orders.fetch_orders") == qp.UNCHECKED
+        assert qp.name_site(g, "OrderRepository.place_orders") == qp.UNCHECKED
+        lk = qp.link_mention({"id": "m1", "text": "`orders.fetch_orders`", "kind": "symbol"}, g, lex)
+        assert lk["status"] != "not_found"
+    finally:
+        ix.sites.clear()
 
 
 AMBIG = {

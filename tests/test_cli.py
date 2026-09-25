@@ -248,11 +248,16 @@ def test_analyze_json(repo):
 
 
 def test_claim_add_show_list_verify_challenge_memory(repo):
-    add = ok_json("claim", "add", "compute_total applies the discount", "--source", "orders/pricing.py:6-8",
+    add = ok_json("claim", "add", "`compute_total` is defined at orders/pricing.py:6-8", "--source",
+                  "orders/pricing.py:6-8", "--kind", "location", "--symbol", "compute_total",
                   "--repo", str(repo), "--json", cwd=repo)
     cid = add["id"]
     assert add["status"] == "statically_verified" and add["supporting"][0]["at"] == "orders/pricing.py:6-8"
     assert [h["to_status"] for h in add["history"]] == ["unknown", "statically_verified"]
+    # written text that no typed check covers: its word overlap with the lines is at most weak_inference
+    plain = ok_json("claim", "add", "compute_total applies the discount", "--source", "orders/pricing.py:6-8",
+                    "--repo", str(repo), "--json", cwd=repo)
+    assert plain["status"] == "weak_inference" and "verbatim quote" in plain["history"][-1]["reason"]
     no_ev = ok_json("claim", "add", "pricing is fast", "--repo", str(repo), "--json", cwd=repo)
     assert no_ev["status"] == "unknown"  # requested statically_verified, no evidence at all -> unknown
 
@@ -330,8 +335,9 @@ def test_update_after_edit_marks_claim_stale_via_cli(repo, tmp_path_factory):
     dst = tmp_path_factory.mktemp("cli_edit") / "orders_app"
     shutil.copytree(repo, dst, ignore=shutil.ignore_patterns(".verinoda"))
     ok_json("scan", str(dst), "--json", cwd=dst)
-    c = ok_json("claim", "add", "compute_total applies the discount", "--source", "orders/pricing.py:6-8",
-                "--repo", str(dst), "--json", cwd=dst)
+    c = ok_json("claim", "add", "compute_total calls apply_discount", "--source", "orders/pricing.py:8",
+                "--kind", "relation", "--symbol", "apply_discount", "--repo", str(dst), "--json", cwd=dst)
+    assert c["status"] == "statically_verified"
     p = dst / "orders" / "pricing.py"
     original = p.read_bytes()
     p.write_bytes(original.replace(b"apply_discount(subtotal)", b"apply_discount(subtotal) + 0"))
@@ -903,6 +909,100 @@ def test_claim_add_binds_to_the_current_tree_and_grades_by_kind(tmp_path, capsys
         run_cli(capsys, "claim", "add", "x", "--source", "orders/pricing.py:13", "--repo", str(dst))
     r = ra("claim", "add", "x", "--kind", "nonsense", "--repo", str(dst), cwd=dst)
     assert r.returncode == 2 and "invalid choice" in r.stderr
+
+
+def test_claim_add_binds_roles_and_contradicts_definitive_misses_at_creation(repo):
+    from verinoda.claims import VERIFIED
+
+    def add(text, *args):
+        return ok_json("claim", "add", text, *args, "--repo", str(repo), "--json", cwd=repo)
+
+    # the callee comes from the text when --symbol is not given; the caller is the name before the verb
+    rel = add("validate_items is called by place_order", "--source", "orders/service.py:20", "--kind", "relation")
+    assert rel["status"] == "statically_verified" and rel["spec"]["target_label"] == "validate_items"
+    miss = add("create_order_handler calls save", "--source", "orders/api.py:18", "--kind", "relation",
+               "--symbol", "save")
+    assert miss["status"] == "contradicted" and miss["refuting"][0]["at"] == "orders/api.py:16-21"
+    assert "no direct call to save in create_order_handler" in miss["history"][-1]["reason"]
+    cfg = add("The discount threshold is read from ORDERS_MAX_ITEMS", "--source", "orders/config.py:6",
+              "--kind", "config", "--symbol", "ORDERS_MAX_ITEMS")
+    assert cfg["status"] == "contradicted" and "binds ORDERS_MAX_ITEMS to MAX_ITEMS_PER_ORDER" in \
+        cfg["history"][-1]["reason"]
+    order = add("`place_order` calls `validate_items` before `save`", "--source", "orders/service.py:19-22",
+                "--kind", "order", "--symbol", "place_order")
+    assert order["status"] == "statically_verified" and order["kind"] == "behaviour"
+    assert order["spec"]["proposition"] == "validate_items before save in place_order"
+    wrong = add("`place_order` calls `save` before `validate_items`", "--source", "orders/service.py:19-22",
+                "--kind", "order", "--symbol", "place_order")
+    assert wrong["status"] == "contradicted"
+    general = add("apply_discount returns the subtotal above the threshold", "--source", "orders/pricing.py:11-15")
+    assert general["status"] == "weak_inference" and general["status"] not in VERIFIED
+    r = ra("claim", "add", "place_order saves before it validates", "--source", "orders/service.py:19-22",
+           "--kind", "order", "--symbol", "place_order", "--repo", str(repo), cwd=repo)
+    assert r.returncode != 0 and "states two calls" in r.stderr and "Traceback" not in r.stderr
+    # a negated order is not read (a reversed proposition would contradict a true sentence)
+    r = ra("claim", "add", "`place_order` never calls `save` before `validate_items`", "--source",
+           "orders/service.py:19-22", "--kind", "order", "--symbol", "place_order", "--repo", str(repo), cwd=repo)
+    assert r.returncode != 0 and "a negated order is not read" in r.stderr
+    # "after that" keeps the order as written
+    after = add("`place_order` calls `validate_items`, and after that `save`", "--source", "orders/service.py:19-22",
+                "--kind", "order", "--symbol", "place_order")
+    assert after["status"] == "statically_verified"
+    # no callee the text states clearly and no --symbol: asked for, not guessed
+    r = ra("claim", "add", "place_order is what create_order_handler calls", "--source", "orders/api.py:18",
+           "--kind", "relation", "--repo", str(repo), cwd=repo)
+    assert r.returncode != 0 and "--kind relation needs the callee" in r.stderr
+    tr = add("validate_items'ı place_order çağırır", "--source", "orders/service.py:20", "--kind", "relation")
+    assert tr["status"] == "statically_verified" and tr["spec"]["target_label"] == "validate_items"
+    # a module constant is defined by its assignment; a negated sentence is not verified by a positive check
+    const = add("`DISCOUNT_THRESHOLD` is defined in orders/config.py", "--source", "orders/config.py:7",
+                "--kind", "location", "--symbol", "DISCOUNT_THRESHOLD")
+    assert const["status"] == "statically_verified"
+    neg = add("place_order does not call validate_items", "--source", "orders/service.py:20", "--kind", "relation",
+              "--symbol", "validate_items")
+    assert neg["status"] not in VERIFIED and neg["status"] != "contradicted"
+
+
+def test_order_claim_without_symbol_reads_the_function_from_its_role(repo):
+    # review round 2: without --symbol the first name was taken as the function, so these true sentences
+    # were checked in validate_items' body and contradicted at creation
+    def add(text):
+        return ok_json("claim", "add", text, "--source", "orders/service.py:19-22", "--kind", "order", "--repo",
+                       str(repo), "--json", cwd=repo)
+
+    for text in ("`validate_items` runs before `save` in `place_order`",
+                 "`validate_items` is called before `save` by `place_order`",
+                 "`validate_items`, `place_order` içinde `save`'den önce çağrılır",
+                 "`save` runs after `validate_items` in `place_order`"):
+        c = add(text)
+        assert c["status"] == "statically_verified", text
+        assert c["spec"]["proposition"] == "validate_items before save in place_order", text
+    # the function is not stated: refused, not guessed
+    r = ra("claim", "add", "`validate_items` runs before `save`", "--source", "orders/service.py:19-22", "--kind",
+           "order", "--repo", str(repo), cwd=repo)
+    assert r.returncode != 0 and "without --symbol the text must name it" in r.stderr
+    # a function read from the text that the cited lines are not in: refused
+    r = ra("claim", "add", "`validate_items` runs before `save` in `compute_total`", "--source",
+           "orders/service.py:19-22", "--kind", "order", "--repo", str(repo), cwd=repo)
+    assert r.returncode != 0 and "no definition `compute_total` is around orders/service.py:19-22" in r.stderr
+
+
+def test_names_written_as_code_are_never_replaced_by_similar_ones(repo):
+    res = ok_json("analyze", "Where is place_orders defined?", "--repo", str(repo), "--json", cwd=repo)
+    (sq,) = res["subquestions"]
+    assert sq["status"] == "unmet" and sq["flags"]["not_found"]
+    assert res["unknowns"][0]["why"] == ("no symbol named `place_orders` in this repository; nearest: place_order "
+                                         "(orders/service.py:19)")
+    link = res["plan_check"]["links"][0]
+    assert link["status"] == "not_found" and link["did_you_mean"] == ["place_order (orders/service.py:19)"]
+    assert not any("place_order()" in c["text"] for c in res["claims"])  # nothing about the similar name
+    r = ra("trace", "create_order_handler", "place_orders", "--repo", str(repo), cwd=repo)
+    assert r.returncode == 2 and "[unresolved" in r.stdout
+    assert "target: no symbol named `place_orders` in this repository; nearest: place_order " \
+           "(orders/service.py:19)" in r.stdout
+    r = ra("trace", "create order handler", "OrderRepository.save", "--repo", str(repo), cwd=repo)
+    assert r.returncode == 0 and "source: 'create order handler' has no exact match; resolved by similarity to " \
+                                 "create_order_handler()" in r.stdout
 
 
 def test_verify_rendering_shows_status_details_note_and_unconfirmed(capsys):

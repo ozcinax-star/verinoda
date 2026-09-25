@@ -317,6 +317,20 @@ def test_location_claim_cites_the_full_definition_span(tmp_path):
         st.close()
 
 
+def test_a_name_defined_twice_is_never_said_to_occur_nowhere(tmp_path):
+    # review round 1: an ambiguous link (two definitions) counted as "occurs nowhere"
+    repo = _mini(tmp_path / "two", {"app/api.py": "def get_repo():\n    return 1\n",
+                                    "app/extras.py": "def get_repo():\n    return 2\n"})
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+        res = analysis.analyze(st, repo, "Where is get_repo defined?")
+        assert not [u for u in res["unknowns"] if "occur nowhere" in u["why"]], res["unknowns"]
+    finally:
+        st.close()
+
+
 def test_context_budget_stops_claims_and_names_skipped_subquestions(proj, flow):
     repo, st = proj
     small = analysis.Budget(context_tokens=320)
@@ -509,6 +523,28 @@ def test_compound_question_gets_one_verdict_per_clause(proj):
     assert any("apply_discount" in by_id[c]["text"] for c in q1["claim_ids"] if c in by_id)
 
 
+def test_a_name_written_as_code_that_does_not_exist_is_unmet_not_substituted(proj):
+    repo, st = proj
+    for q in ("Where is place_orders defined?", "place_orders fonksiyonu nerede tanımlı?"):
+        res = analysis.analyze(st, repo, q)
+        (sq,) = res["subquestions"]
+        assert sq["status"] == "unmet" and sq["claim_ids"] == [], q
+        assert res["unknowns"][0]["why"] == ("no symbol named `place_orders` in this repository; nearest: "
+                                             "place_order (orders/service.py:19)"), q
+    # a member its owner does not have is not found either, even though `place_order` exists elsewhere
+    # (review round 1: it was answered 'met' from a weak text hit)
+    res = analysis.analyze(st, repo, "What does `OrderRepository.place_order` do?")
+    (sq,) = res["subquestions"]
+    assert sq["status"] == "unmet"
+    assert res["unknowns"][0]["why"] == ("no symbol named `OrderRepository.place_order` in this repository; nearest: "
+                                         "place_order (orders/service.py:19)")
+    # with another name that does exist the sub-question still runs, but it is not answered as asked
+    sq = {"id": "q1", "intent": "locate", "done_when": {"kind": "location_verified"}}
+    rows = [{"id": "c1", "kind": "location", "status": "statically_verified"}]
+    assert analysis.judge(sq, rows, {}) == "met"
+    assert analysis.judge(sq, rows, {"not_found": ["m1"]}) == "unmet"
+
+
 def test_turkish_question_is_understood_and_answered(proj):
     repo, st = proj
     res = analysis.analyze(st, repo, "İndirim nerede uygulanıyor?")
@@ -536,6 +572,25 @@ def test_host_plan_needing_clarification_writes_no_claims(proj):
     res2 = analysis.analyze(st, repo, "", plan={**p, "on_ambiguity": "answer_all"})
     assert res2["status"] == "answered" and res2["claims"]
     assert any(u.startswith("open clarification c-m1") for c in res2["claims"] for u in c["uncertainties"])
+
+
+def test_a_reused_claim_carries_only_the_current_questions_uncertainties(tmp_path):
+    # review round 2: a weak link of an earlier question was printed under a later, unrelated one
+    repo = _copy_example(tmp_path / "orders_app")
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+        first = analysis.analyze(st, repo, "What does `service.compute_total` do?")
+        said = [c for c in first["claims"] if any("service.compute_total" in u for u in c["uncertainties"])]
+        assert said  # the weak link is stated under this question's claims
+        second = analysis.analyze(st, repo, "Where is `compute_total` defined?")
+        reused = [c for c in second["claims"] if c.get("reused")]
+        assert reused and not any("service.compute_total" in u for c in second["claims"] for u in c["uncertainties"])
+        # the claim itself keeps only its own uncertainties
+        assert not any("service.compute_total" in u for c in said for u in Claims(st).get(c["id"])["uncertainties"])
+    finally:
+        st.close()
 
 
 def test_invalid_plan_is_refused_before_any_work(proj):

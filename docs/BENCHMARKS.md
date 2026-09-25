@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,225 @@ Sections: [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-25 (truth rules): word overlap never verifies, roles are bound, code names are not substituted
+
+The rules of docs/DESIGN.md D31, measured at commit `7da834b` against `d3165b8`.
+
+**False sentences recorded as `statically_verified`.** A copy of `examples/orders_app` with two
+AI-written files added (`orders/ai/export.py` imports `place_orders`, which exists nowhere;
+`orders/ai/remote.py`), made during the design pass; not in the repository. Each sentence was
+recorded with `claim add ... --status statically_verified`, then challenged. The first nine are
+the design pass's own false sentences, written after reading the code:
+
+| sentence (kind) | before: created -> challenged | after |
+|---|---|---|
+| apply_discount returns the subtotal above the threshold (general) | verified -> verified | weak -> weak |
+| The discount threshold is read from ORDERS_MAX_ITEMS (config) | verified -> verified | contradicted at creation |
+| place_order saves the order before it validates the items (general) | likely -> likely | weak -> weak |
+| `OrderRepository.save` calls `place_order` (general) | likely -> likely | weak -> weak |
+| The discount is 20% above the threshold (general) | likely -> weak | weak -> unknown |
+| create_order_handler returns 404 when the payload is invalid (general) | likely -> weak | weak -> unknown |
+| Orders are stored in PostgreSQL (general) | weak -> weak | weak -> weak |
+| create_order_handler calls save (relation) | weak -> contradicted | contradicted at creation |
+| OrderRepository.save calls place_order (relation) | weak -> contradicted | contradicted at creation |
+
+"Likely" is `strong_inference`. Before: 2 of 9 stayed verified and 2 "likely" after critique. After:
+none verified or "likely", 3 contradicted when created, with the scope in the reason ("no direct
+call to save in create_order_handler (orders/api.py:16-21); calls through other names are not
+followed"; "orders/config.py:6 binds ORDERS_MAX_ITEMS to MAX_ITEMS_PER_ORDER; DISCOUNT_THRESHOLD
+reads ORDERS_DISCOUNT_THRESHOLD at orders/config.py:7"). Nine more false sentences of the same
+kinds (three relations, a config text about another setting, `--kind order` with the order
+reversed or a call missing, `--kind location` for a name the file does not define, two texts):
+before, of the 7 that could be recorded (`--kind order` is new), 1 verified, 1 "likely", 2 weak
+and 3 contradicted after challenge; after, of all 9, none verified or "likely", 7 contradicted at
+creation, 2 weak.
+
+Seventeen true sentences of the same kinds: none is contradicted (before: one, a relation cited one
+line above its call, was contradicted by critique; it is now a warning and `unknown`). The typed
+ones end where they did before (config 4, relation 7, location 1, a quote 1; the order one could
+not be recorded before and is verified now). The two plain-text ones drop as intended:
+"compute_total applies the discount" `statically_verified` -> `weak_inference`, "apply_discount
+returns round(subtotal * 0.9, 2) above the threshold" `strong_inference` -> `weak_inference`.
+
+`analyze "Where is place_orders defined?"` (and the Turkish "place_orders fonksiyonu nerede
+tanımlı?"): before `met` on `place_order()` (the mention was linked by identifier parts at 0.75);
+after `unmet`, first unknown "no symbol named `place_orders` in this repository; nearest:
+place_order (orders/service.py:19)". `trace create_order_handler place_orders`: before a path to
+`place_order()`; after unresolved with the same line. `trace export_order save_order`: before the
+target silently became `OrderRepository` and the answer was "no directed path"; after "no symbol
+named `save_order` in this repository (the name occurs at orders/ai/export.py:19)".
+
+Not reached by these rules (they need the answer checker's typed atoms): the design's case 1 as
+written ("returns the subtotal unchanged above the threshold") and case 3 as plain text are
+`weak_inference`, not `contradicted`; case 5 (`place_order` calls `OrderRepository.save`, true but
+through a parameter) stays `strong_inference` at creation.
+
+**Benchmarks.** Fast harness on the prepared indexes (query-time change; the indexes are
+unchanged by it), the seven public sets plus `verinoda_user_tr`: gold facts per approach
+identical to the baseline `d3165b8` on every question (analyze 66, 48, 32, 32, 36, 31, 26, 11;
+query text and JSON unchanged), verdicts identical, analyze negatives matched 2 (`q04.n.empty_order`
+in both orders sets, stated as `weak_inference`) and **0 stated as verified or as findings**, before
+and after. Claim texts and
+statuses of every analysis are identical except the order of the file list in one impact claim,
+which varies between runs of the same code. Code-shaped mentions of the benchmark questions: none
+is `not_found`; `max_heat` (forge_mod) and `graph.json` (graphify_core) are now `weak` instead of
+linked/ambiguous by identifier parts, which changes no fact or verdict.
+
+**Critique evaluation**: see [Trust harnesses](#trust-harnesses) (two true plain-text claims
+`statically_verified` -> `strong_inference`, everything else unchanged).
+
+**Cost.** Checking that a code-shaped name exists reads the repository's files only when the
+graph has no such name: 43 ms on `orders_app`, 131 ms on `heldout_repoatlas` (106 files) and
+251 ms on `graphify_core` (226 files) for a name found nowhere, cached per index; a scan that runs
+over 2 s stops and claims nothing. All of this is in-sample: the rules were written after seeing
+these cases, and there is no held-out set of false sentences yet.
+
+**After the review (fixes to D31).** Two reviewers wrote an adversarial set on copies of
+`examples/orders_app` (plus `orders/extras.py` with aliases, decorators, nested functions and
+self calls, and `orders/flow.py` with calls deferred into a nested function and a lambda) and
+`examples/glow_mod`: 101 sentences, 41 false and 60 true, each recorded with `claim add ...
+--status statically_verified` and then challenged (the script and both runs are in the fixer's
+scratch directory, not in the repository). Before is the branch at `772953c`:
+
+| | before | after |
+|---|---|---|
+| false sentences verified at creation | 17 | 0 |
+| false sentences verified after `challenge` | 17 | 0 |
+| false sentences contradicted | 17 | 16 |
+| true sentences contradicted | 19 | 0 |
+| true sentences verified after `challenge` | 21 | 39 |
+| sentences `claim add` refuses (asks for a clearer one) | 2 | 5 |
+
+The 17 false ones that were verified: negations ("place_order does not call validate_items",
+"`place_order` is not defined in ...", TR "çağırmaz"), extra clauses ("... before
+validate_items", "twice", "Only ...", "defaults to 50"), a quote next to false prose, calls
+deferred into a nested function, an owner the line is not in. They are now `strong_inference` (8)
+or lower. The 19 true ones that were contradicted: module constants and variables as
+definitions, `--symbol path::name`, compound and Turkish sentences whose roles were guessed
+(`validate_items and compute_total are called in place_order`, "place_order, validate_items ve
+compute_total'ı çağırır", "validate_items'ı place_order çağırır"), "after that", nested calls in
+an order claim. The false one no longer contradicted: "`place_order` is defined in
+orders/api.py" citing the import line; an import binds the name there, so it is `weak_inference`
+now. Refused: two negated order sentences, "... and then, after computing the total, `save`" (two
+order words), and two relation sentences without `--symbol` whose callee is not in a clear form.
+True sentences that stay unverified (`strong_inference` at creation, never contradicted): clefts
+and relative clauses ("place_order is what create_order_handler calls", "... çağıran fonksiyon
+...", "...'ın çağırdığı fonksiyon ..."), "both A and B call C", a sentence that adds "first" or
+"before anything else", a Turkish config subject ("İndirim eşiği ...", its words are not the
+English name the read is bound to), a Java order claim.
+
+`trace` on the same copies: `orders\api.py orders\repository.py`, `create_order_handler
+orders/repository.py::OrderRepository.save`, `create_order_handler() OrderRepository.save()`,
+`orders.api orders.repository`, `orders/api orders/repository`, `com.example.glowmod.GlowMod
+com.example.glowmod.entity.Wisp`, `GlowMod#onInitialize Wisp` and a backslash `.java` path all
+resolve (before, each was "no symbol/file named ..."); `Foo.save`, `OrderRepository.place_order`,
+`Cart.check` and `orders/service.py::place_orders` are still not found ("no symbol named
+`place_orders` in orders/service.py").
+
+Fast harness, the seven public sets plus `verinoda_user_tr`, on the same prepared indexes
+(query-time change): facts per question and approach, and negatives, identical to `er_new`
+(`d3165b8`), in two runs. The machine was shared with other jobs, so wall times are compared
+only between interleaved runs of `772953c` and the fix (best of 3): `orders_app` 6.4 / 7.1 s,
+`glow_mod` 7.5 / 8.1 s, `heldout_repoatlas` 14.8 / 14.8 s, within the spread of repeated runs.
+Critique evaluation at the fix: every row identical to the committed `critique_eval.json`;
+interleaved with `772953c` (3 runs each) the per-claim time is p50 2.6-6.5 ms / p95 51-53 ms
+after against p50 2.4-9.4 ms / p95 51-100 ms before on the loaded machine (the committed file's
+2.4 / 21.8 ms was measured on a quieter one).
+
+`name_site` on a 2,305-file repository (CPython's standard library, 79,532 nodes) with a current
+`search.db`: a name found nowhere is answered in 340-440 ms (before: the 2 s scan ran out and the
+answer was "not checked"). Soundness of the index shortcut on that repository: 2,399 words (and
+their lower/upper case forms) taken from 150 random files, outside import lines: none was
+answered "absent" while a file spells it. With a stale `search.db` the old scan runs.
+
+**Second review round (findings the first fix did not see).** Checked again on fresh copies of
+the same apps, against the branch at `098003f`:
+
+- written text that names more code than its check binds verified: "create_order_handler calls
+  place_order and fetch_order", "place_order calls validate_items and fetch_order", "place_order
+  calls validate_items with MAX_ITEMS_PER_ORDER", "`place_order` calls `validate_items` before
+  `save` and `fetch_order`" (order) and "`place_order` is defined in orders/service.py and calls
+  `fetch_order`" (location) were `statically_verified`; they are `strong_inference` now
+  (`entail.unchecked_names`). The true "A calls B and C", its Turkish form and "A calls B, and C
+  calls D" stay verified (each name is a direct call in the caller's body);
+- `analyze "What does OrderRepository.place_order do?"` was `met` from a weak text hit (the name
+  `place_order` exists in orders/service.py); it is `unmet`, with "no symbol named
+  `OrderRepository.place_order` in this repository; nearest: place_order (orders/service.py:19)".
+  `LanternEvents.activate` (glow_mod) went from unlinked to `not_found`, `Cart.check` now offers
+  `_check`. A dotted name whose owner the graph does not define (`Repository.save`, `wisp.count`)
+  stays `weak`, and its uncertainty now says that only the last part occurs ("`save` occurs at
+  orders/repository.py:15, not the whole name");
+- past the 2 s scan cap a code-shaped name was linked to a similar one again (`place_orders` to
+  `place_order`); it is `weak` at most now, saying the existence check did not run;
+- "Where is get_repo defined?" (two definitions) no longer gets the unknown "the question's words
+  'get_repo', 'defined' occur nowhere".
+
+The 101-sentence adversarial set gives the same outcome as at `098003f` (0 false verified, 0 true
+contradicted, 39 true verified, 5 refused). Fast harness, the seven public sets plus
+`verinoda_user_tr` on the prepared indexes (query-time change): facts per question and approach,
+and negatives, identical to `er_new` (analyze 66, 48, 32, 32, 36, 31, 26, 11). Critique
+evaluation: every row identical to the committed `critique_eval.json` (true claims contradicted
+0/23). `name_site` on the 2,305-file repository: names found nowhere 340-460 ms as before; a dotted
+name whose last part occurs but not the whole name (`repo.save`, `wisp.count`) 335-360 ms against
+about 120 ms at `098003f`, since the whole name is still looked for 0.25 s after the part is found.
+In-sample, like the rest of this section.
+
+**Third review round (a second reviewer's findings).** The reviewer's probe batches (104 written
+sentences, 37 analyze questions, 25 trace endpoints on copies of `examples/orders_app` with extra
+files - a Go package in two files, `settings.yaml`, classes with dynamic attributes -,
+`glow_mod` and `forge_mod`) were run again on fresh copies with the fix, against the branch at
+`f353d95`:
+
+| | before | after |
+|---|---|---|
+| false sentences verified (at creation or after `challenge`) | 24 of 63 | 0 |
+| true sentences contradicted | 8 of 41 | 0 |
+| true sentences verified after `challenge` | 21 | 26 |
+| false sentences contradicted | 10 | 8 |
+
+The 24 false ones that were verified: a second callee after "instead of", "rather than", "via",
+"with the result of", "from inside" or in a relative clause ("..., which uses `get_repo`"); a
+file in the text other than the evidence's ("`save` is defined in orders/service.py", "orders/
+pricing.py reads ORDERS_MAX_ITEMS"); a kind the definition does not have ("`OrderRepository` is
+a function", "an async function", "a module constant" for a class attribute, TR "bir
+fonksiyondur", "a method of the Settings class" for `Other.save`); numbers as words ("ten
+seconds"), arguments ("with two arguments", TR "müşteri adıyla"), conditions and bounds
+("provided that", "for subtotals below the threshold", TR "altındaysa"), adjacency in an order
+("immediately before"). They are `strong_inference` or lower now. The 8 true ones that were
+contradicted: order sentences without `--symbol` that name the function last ("`validate_items`
+runs before `save` in `place_order`", "... by `place_order`", TR "`place_order` içinde"), which
+were checked in `validate_items`' body; and relation sentences with a plain-word caller cited
+one line above the call ("checkout calls submit", "guarded calls total_of"), whose caller's
+body was never read. The two false ones no longer contradicted ("guarded calls total_of when
+items is empty", TR "items boşsa") were contradicted for that wrong reason (the cited line one
+above the call); they are `unknown` now. "guarded calls total_of" citing the call line (an
+import alias: `from orders.pricing import compute_total as total_of`) is verified now; it was
+graded "star-imported".
+
+`analyze`: `store.Open` (Go, defined in the package's other file), `pricing.discount_rate` and
+`cart.max_lines` (keys of `settings.yaml`; `pricing` is also a module, `cart` a class in another
+letter case), `Options.timeout` (set through `self.__dict__`) and `settings.database_url` were
+"no symbol named ... in this repository"; they are `weak`/`unlinked` with the site ("`discount_rate`
+occurs at settings.yaml:2"). `OrderRepository.execute` and `Cart.append` (only calls on another
+object inside the class) were `met` from a text hit; they are `not_found` now. `trace` resolves
+`config.DISCOUNT_THRESHOLD`, `OrderRepository.conn`, `Cart.items`, `Settings.MAX_RETRIES`,
+`Options.timeout`, `service.compute_total`, `orders.service.compute_total` and `api.place_order`
+by similarity with a note ("`DISCOUNT_THRESHOLD` occurs at orders/config.py:7, not the whole
+name") instead of "no symbol named ..."; `Foo.save`, `Settings.save`, `Cart.check` and
+`OrderRepository.place_order` are still not found. A claim reused by a later analysis no longer
+carries the earlier question's weak-link uncertainty.
+
+The 101-sentence set of the first round: the same outcome as at `f353d95` (0 false verified, 0
+true contradicted, 16 false contradicted, 5 refused) except one more true sentence verified (the
+alias call above), 40 of 60. Fast harness, the seven public sets plus `verinoda_user_tr` on the
+prepared indexes (query-time change): facts per question and approach, and negatives, identical
+to `er_new` (282 of 282 set x question x approach cells). Critique evaluation: every row
+identical to the committed `critique_eval.json` (true claims contradicted 0/23). `name_site` on
+the 2,305-file repository, while the test suite ran: names found nowhere 290-560 ms; a member of
+the `test` package (611 modules) reads the package under the 2 s limit and answers in 2.0-2.1 s,
+"not checked" when the limit runs out first (before: "absent" after 1.7-7.4 s, over the limit).
+In-sample: the rules were written after seeing these sentences.
 
 ## Update 2026-09-25: analyze keeps what query found, grounded verdicts, Turkish, update time
 
@@ -1007,15 +1226,24 @@ challenged.
 
 | measure | result | Wilson 95% |
 |---|---|---|
-| presented as verified that are true | 20/20 | 0.84–1.0 |
+| presented as verified that are true | 18/18 (was 20/20) | 0.82–1.0 |
 | false claims flagged (lowered, contradicted or never verified) | 22/22 | 0.85–1.0 |
 | false claims contradicted | 17/22 | 0.57–0.90 |
 | true claims lowered (false alarm) | 0/23 | 0.0–0.14 |
 | true claims contradicted | 0/23 | 0.0–0.14 |
 | benchmark negatives stated as verified / contradicted | 0/10 / 9/10 | |
 | false claims verified at creation (gate only, before critique) | 1/22 | 0.01–0.22 |
+| true claims verified at creation | 18/23 (was 20/23) | 0.58–0.90 |
 
-Critique took 2.4 ms per claim (p50) and 19.7 ms (p95). The set is in-sample.
+Re-run on 2026-09-25 at commit `7da834b` (docs/DESIGN.md D31): the two true
+plain-text claims ("compute_total applies the discount", "the discount
+threshold is read from ORDERS_DISCOUNT_THRESHOLD") are now `strong_inference`
+instead of `statically_verified`, because word overlap no longer verifies;
+every other row is unchanged. The false claim verified at creation is still
+the "only X" claim with a planted second occurrence, which critique
+contradicts.
+
+Critique took 2.4 ms per claim (p50) and 21.8 ms (p95). The set is in-sample.
 The trust track added probes (config read, wrong start line, text conflicts)
 after seeing misses on it, there is no held-out claim set, and the confidence
 caps were not recalibrated.

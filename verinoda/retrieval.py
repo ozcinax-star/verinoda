@@ -39,6 +39,7 @@ import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 
 import networkx as nx
 
@@ -619,6 +620,131 @@ def _hints(g: Graph, text: str) -> list[dict]:
     return out
 
 
+def _stem_path(f: str) -> str:
+    return f.rpartition(".")[0] if "." in PurePosixPath(f).name else f
+
+
+def _names_symbol(g: Graph, name: str, node: str) -> bool:
+    label = fold_tr(g.label(node).strip().lstrip(".").split("(")[0])
+    if label == fold_tr(name):
+        return True
+    owner, _, last = name.rpartition(".")
+    if not owner or label != fold_tr(last):
+        return False
+    # `Owner.name`: the owner is the node's class (under an optional module or package path), or its
+    # module / package (`service.place_order`, `com.example.Wisp`), not just any `name`
+    classes = {fold_tr(g.label(c).strip().strip(".()")) for c, _ in g.in_edges(node, {"method"})}
+    pkg, _, cls = owner.rpartition(".")
+    if fold_tr(cls) in classes:
+        if not pkg:
+            return True
+        owner = pkg
+    path = fold_tr(owner.replace(".", "/"))
+    stem = fold_tr(_stem_path(g.file(node) or ""))
+    parent = stem.rpartition("/")[0]
+    return stem == path or stem.endswith("/" + path) or parent == path or parent.endswith("/" + path)
+
+
+def _names_exactly(g: Graph, query: str, node: str) -> bool:
+    """Does ``query`` name ``node`` itself, rather than something the fuzzy scorer found similar? Its id,
+    its file (a path with or without the extension, backslashes allowed, or a dotted module name), its
+    label, ``Owner.name`` (the owner being its class, module or package), ``file::Class.method``,
+    ``Class#method``, ``name()``."""
+    from verinoda import question_plan as qp
+
+    if query in g.G:
+        return query == node
+    path, name = qp.split_code_name(query)
+    f = g.file(node) or ""
+    if path:
+        if not qp._names_file(f, {path}):
+            return False
+        return g.is_file_node(node) if not name else _names_symbol(g, name, node)
+    if not name:
+        return False
+    if g.is_file_node(node):  # `orders.api` names orders/api.py
+        mod = name.replace(".", "/")
+        return _stem_path(f) == mod or _stem_path(f).endswith("/" + mod)
+    return _names_symbol(g, name, node)
+
+
+def _exact_nodes(g: Graph, text: str) -> list[str]:
+    """The nodes that ``text`` names exactly (:func:`_names_exactly`), found through the linking index."""
+    from verinoda import question_plan as qp
+
+    ix = qp._index(g)
+    path, name = qp.split_code_name(text)
+    cands: set[str] = set()
+    if path:
+        files = [f for f in ix.files if qp._names_file(f, {path})]
+        cands = {ix.files[f] for f in files} if not name else {n for f in files for n in g.symbols_in(f)}
+    elif name:
+        for form in {name, name.rpartition(".")[2]}:
+            cands |= {n for n, _s, tier in qp._match_string(g, ix, form) if tier in qp.NAME_TIERS}
+        if "." in name:
+            cands |= {ix.files[f] for f in ix.files if qp._names_file(f, {name.replace(".", "/")})}
+    return sorted(n for n in cands if _names_exactly(g, text, n))
+
+
+def _code_written(text: str) -> bool:
+    from verinoda import question_plan as qp
+
+    return bool(qp.code_shape(text)) or any(c in (text or "") for c in ("::", "#", "/", "\\"))
+
+
+def _endpoint_notes(g: Graph, text: str, nid: str | None) -> tuple[str | None, str | None, str | None]:
+    """``(not_found, fuzzy, node)`` for one endpoint and the node ``g.resolve`` gave it.
+
+    A node the text names exactly stands (or replaces a merely similar one). An endpoint written as
+    code that names nothing exactly is not replaced by a similar name when the repository spells it
+    nowhere ("no symbol named `x` in this repository; nearest: ..."); when the repository spells it
+    somewhere (an external name, a key), or the endpoint is plain words, the similar node is kept and
+    ``fuzzy`` says so."""
+    from verinoda import question_plan as qp
+
+    if nid and _names_exactly(g, text, nid):
+        return None, None, nid
+    if not _code_written(text):
+        if not nid:
+            return None, None, None
+        return None, (f"'{text}' has no exact match; resolved by similarity to {g.label(nid)} "
+                      f"({g.file(nid)}:{g.line(nid)})"), nid
+    exact = _exact_nodes(g, text)
+    if exact:
+        # a class before its constructor or its file; a top-level symbol before a member of that name
+        def rank(n: str) -> tuple:
+            return (g.is_file_node(n), any(True for _ in g.in_edges(n, {"method"})), g.label(n).endswith(")"))
+
+        best = [n for n in exact if rank(n) == min(map(rank, exact))]
+        if len(best) == 1:
+            return None, None, best[0]
+        others = ", ".join(f"{g.label(n)} ({g.file(n)}:{g.line(n)})" for n in best[1:4])
+        return None, (f"'{text}' names {len(best)} symbols; using {g.label(best[0])} "
+                      f"({g.file(best[0])}:{g.line(best[0])}), not {others}"), best[0]
+    if not nid:
+        return None, None, None
+    # the same existence check as analyze (a member of a known class or module is looked for in it);
+    # an owner the graph does not define needs the whole name spelled (`Foo.save` is not `save`)
+    path, name = qp.split_code_name(text)
+    site = qp.name_site(g, text)
+    if site not in (None, qp.UNCHECKED) and "." in name and not path and not qp.owner_known(g, text):
+        site = qp.name_site(g, text, strict=True)
+    if site is None:
+        ix = qp._index(g)
+        near = [{"label": g.label(n), "site": qp._site(g, n)} for n, _ in qp._member_near(g, ix, text)]
+        near += [{"label": g.label(n), "site": qp._site(g, n)} for n, _ in qp._near_misses(ix, text)
+                 if qp._site(g, n) not in {x["site"] for x in near}]
+        return qp.not_found_line(g, text, near), None, None
+    if site == qp.UNCHECKED:
+        where = "its existence was not checked"
+    elif qp.spells_whole(g, site, text):
+        where = f"the name occurs at {site}"
+    else:
+        where = f"`{name.rpartition('.')[2]}` occurs at {site}, not the whole name"
+    at = f" ({g.file(nid)}:{g.line(nid)})" if g.file(nid) else ""  # a package or directory node has no line
+    return None, f"no symbol is named `{text}` ({where}); resolved by similarity to {g.label(nid)}{at}", nid
+
+
 def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int = 8,
           mode: str = "flow") -> dict:
     """Directed paths between two symbols/files, each hop with its edge location.
@@ -630,15 +756,32 @@ def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int
     (``call``, ``construction``, ``containment``, ``reference``, ``import``,
     ``inheritance``) and a path with a non-call hop is reported as
     ``structural``, not as reachability. An endpoint that does not resolve
-    comes back with ``hints`` (likely symbols) and a ``next_step``.
+    comes back with ``hints`` (likely symbols) and a ``next_step``. An
+    endpoint written as code (``orders\\api.py``, ``path::Class.method``,
+    ``Class#method``, ``name()``, a dotted module or class name) resolves to
+    the node it names exactly; one that names nothing and that the repository
+    spells nowhere is not replaced by a similar one (``not_found``: "no symbol
+    named `x` in this repository; nearest: ..."); an endpoint resolved by
+    similarity is kept and reported in ``fuzzy``.
     """
     s, s_cands = g.resolve(source)
     t, t_cands = g.resolve(target)
+    not_found: dict[str, str] = {}
+    fuzzy: dict[str, str] = {}
+    ends = {}
+    for side, text, nid in (("source", source, s), ("target", target, t)):
+        nf, fz, ends[side] = _endpoint_notes(g, text, nid)
+        if nf:
+            not_found[side] = nf
+        if fz:
+            fuzzy[side] = fz
+    s, t = ends["source"], ends["target"]
     out = {"source": source, "target": target,
            "resolved": {"source": s and {"id": s, "at": f"{g.file(s)}:{g.line(s)}"},
                         "target": t and {"id": t, "at": f"{g.file(t)}:{g.line(t)}"}},
            "candidates": {"source": [c for _, c in s_cands], "target": [c for _, c in t_cands]},
-           "paths": [], "direction": "directed", "mode": mode}
+           "paths": [], "direction": "directed", "mode": mode,
+           **({"not_found": not_found} if not_found else {}), **({"fuzzy": fuzzy} if fuzzy else {})}
     if not s or not t:
         out["status"] = "unresolved"
         out["hints"] = {k: _hints(g, text) for k, text, nid in (("source", source, s), ("target", target, t))
