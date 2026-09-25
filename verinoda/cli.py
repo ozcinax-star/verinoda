@@ -10,8 +10,9 @@ model reads, docs/DESIGN.md D20).
 Exit codes: 0 done; 1 error; 2 usage error, invalid plan, unresolved trace
 endpoint or blocked upstream command; 3 "needs more": a plan that needs
 clarification, a partial reference resolution, a refused experiment, an
-incomplete observation, no precise answer, an absent name (`check`), a
-target not found (`api`; a target that could not be decided is 0), a debug attempt that says stop.
+incomplete observation, no precise answer, an absent name or a file in a
+language it does not read (`check`), a target not found (`api`; a target that could not be decided is 0),
+a debug attempt that says stop, a `decide check` that could not check something (no violation).
 """
 
 from __future__ import annotations
@@ -973,7 +974,9 @@ def _r_decision(d: dict, indent: str = "") -> None:
 
 def _r_decide(res: dict) -> None:
     if "decisions" in res:
-        print(f"decision records in {res['dir']}:" if res["decisions"] else f"no decision records in {res['dir']}")
+        where = f" ({res['dir_from']})" if res.get("dir_from") else ""
+        print(f"decision records in {res['dir']}{where}:" if res["decisions"] else
+              f"no decision records in {res['dir']}{where}")
         for d in res["decisions"]:
             _r_decision(d, "  ")
         for doc in res.get("unrecorded_docs") or []:
@@ -992,8 +995,11 @@ def _r_decide(res: dict) -> None:
 
 def _r_decide_check(r: dict) -> None:
     base = r.get("base") or {}
+    ddir = r.get("decisions_dir") or {}
     print(f"decide check: {len(r['violations'])} violated, {len(r['possible'])} possible, {len(r['reviews'])} "
-          f"review, {len(r['triggers'])} trigger ({r['decisions']} decision record(s), {r['elapsed_s']} s)"
+          f"review, {len(r['triggers'])} trigger" + (f", {len(r['unknown'])} unknown" if r.get("unknown") else "")
+          + f" ({r['decisions']} decision record(s)" + (f" in {ddir['path']}" if ddir.get("path") else "")
+          + f", {r['elapsed_s']} s)"
           + (f"; base {base['ref']} {base['commit'][:10]}, {base['changed_files']} changed file(s)" if base else ""))
     if r.get("index"):
         print(f"  index: {r['index']}")
@@ -1022,11 +1028,15 @@ def _r_decide_check(r: dict) -> None:
         for lim in o.get("limits") or []:  # all of them: an ok is only as broad as its scope and limits
             print(f"     limit: {lim}")
     for u in r.get("unknown") or []:
-        print(f"unknown {u['decision']} {u.get('guard') or ''}: {u['why']}")
+        who = " ".join(x for x in (u.get("decision"), u.get("guard")) if x)
+        print(f"unknown{' ' + who if who else ''}: {u['why']}")
     for n in r.get("not_enforced") or []:
         print(f"not enforced {n['decision']} {n.get('guard') or ''}: {n['why']}")
     if not r["decisions"]:
-        print("  no decision records (`verinoda decide record` / `decide import`; they live in decisions.dir)")
+        print(f"  no decision records in {ddir.get('path') or 'the decisions folder'} ({ddir.get('from') or '?'}; "
+              "`verinoda decide record` / `decide import` write them there)")
+    if r.get("exit_because"):
+        print(f"exit {r['exit']}: {r['exit_because']}")
     if r.get("next_step"):
         print(f"next: {r['next_step']}")
 
@@ -1084,7 +1094,8 @@ def _decide_check(args, repo: Path) -> int:
     from verinoda import guards
     from verinoda.paths import db_path, graph_path
 
-    recs = dm.load_all(repo)
+    ddir = getattr(args, "decisions_dir", None)
+    recs = dm.load_all(repo, ddir)
     graph, note = None, None
     if any(d.enforced and g.get("kind") == "no_edge" and g.get("status") == "accepted"
            for d in recs for g in d.guards):
@@ -1106,7 +1117,8 @@ def _decide_check(args, repo: Path) -> int:
 
             graph = index.load(repo)
     try:
-        res = guards.check(repo, graph=graph, base=args.base, changed_only=args.changed, records=recs)
+        res = guards.check(repo, graph=graph, base=args.base, changed_only=args.changed, records=recs,
+                           decisions_dir=ddir)
     except ValueError as exc:
         if getattr(args, "json", False):  # like every other error of decide check: JSON on stdout too
             print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
@@ -1162,7 +1174,7 @@ def cmd_decide(args) -> int:
     try:
         said = getattr(args, "said", None)
         if args.decide_cmd == "list":
-            res = dm.listing(st, repo)
+            res = dm.listing(st, repo, args.decisions_dir)
         elif args.decide_cmd == "record":
             res = dm.record(st, repo, chosen=args.chosen, rationale=args.rationale, title=args.title,
                             brief_id=args.brief_id, guards=args.guard or [], governs=args.governs or [],
@@ -1909,7 +1921,12 @@ def _r_check(r: dict) -> None:
     s, env = r["summary"], r["env"]
     print(f"verinoda check: {s['absent']} absent, {s['not_installed']} not installed, {s['unknown']} unknown, "
           f"{s['guarded']} guarded, {s['exists']} exist ({s['sites']} sites in {s['files']} "
-          f"file{'' if s['files'] == 1 else 's'}; {r['scope']})")
+          f"file{'' if s['files'] == 1 else 's'}; {r['scope']})"
+          + (f"; {s['not_checked']} file{'' if s['not_checked'] == 1 else 's'} NOT CHECKED (not Python)"
+             if s.get("not_checked") else ""))
+    if r.get("status") in ("unsupported_language", "nothing_to_check"):
+        print(f"status: {r['status']}" + ("" if r["status"] == "unsupported_language"
+                                          else f" - {next((x for x in r['limits'] if x.startswith('no Python')), '')}"))
     print(f"environment: {env.get('python')}" + (f" - {env['note']}" if env.get("note") else ""))
     for name, text in (env.get("packages_checked") or {}).items():
         print(f"  {name} {text}")
@@ -1917,7 +1934,7 @@ def _r_check(r: dict) -> None:
         print(f"  ! {m['package']}: installed {m['installed']}, locked {m['locked']} ({m.get('at')})")
     if r.get("exit_because"):
         print(f"exit 3: {r['exit_because']}")
-    for note in r.get("incomplete") or []:   # also the files that could not be read or parsed
+    for note in r.get("incomplete") or []:   # also the files that could not be read or parsed, or not Python
         print(f"incomplete: {note}")
     unknown = 0
     for site in r["sites"]:
@@ -1970,7 +1987,8 @@ def cmd_check(args) -> int:
 def _r_api(r: dict) -> None:
     env = r.get("env") or {}
     if not r.get("found"):
-        state = {"unknown": "not decided", "not_installed": "not installed"}.get(r.get("decided"), "not found")
+        state = {"unknown": "not decided", "not_installed": "not installed",
+                 "unsupported_language": "not checked (not Python)"}.get(r.get("decided"), "not found")
         print(f"{r['target']}: {state} - {r.get('why')}")
         if r.get("nearest"):
             print("  nearest: " + ", ".join(n["name"] for n in r["nearest"]))
@@ -2339,9 +2357,15 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--reason", required=True)
     c.add_argument("--until", metavar="YYYY-MM-DD")
     c.add_argument("--said", help=said_help)
-    add("list", cmd_decide, "decision records, their guards and waivers, and ADRs without a record", parent=dsub)
-    c = add("check", cmd_decide, "check the code against every accepted guard (exit 1 on VIOLATED: usable in CI)",
-            parent=dsub)
+    ddir_help = ("the folder of the decision records, relative to the repository (default: decisions.dir in "
+                 ".verinoda/config.json, else [decisions] dir in verinoda.toml or [tool.verinoda.decisions] dir in "
+                 "pyproject.toml, else .verinoda/decisions)")
+    c = add("list", cmd_decide, "decision records, their guards and waivers, and ADRs without a record", parent=dsub)
+    c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
+    c = add("check", cmd_decide, "check the code against every accepted guard (exit 1 on VIOLATED; exit 3 when "
+                                 "something could not be checked - no record while ADR-like files exist, a guard "
+                                 "that checked no file, edge or manifest: usable in CI)", parent=dsub)
+    c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
     grp = c.add_mutually_exclusive_group()
     grp.add_argument("--changed", action="store_true",
                      help="label findings new/touched since HEAD or pre-existing; only new ones fail")
@@ -2570,9 +2594,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     env_help = ("auto (the project's .venv, venv or env; else the standard library only), a virtual environment "
                 "or interpreter path, or none (standard library only)")
-    sp = add("check", cmd_check, "check that the modules, names, keyword arguments and dict keys code uses exist "
-                                 "in the project's environment (exit 3: something is absent, or an installed "
-                                 "package version differs from the lock file)")
+    sp = add("check", cmd_check, "Python only: check that the modules, names, keyword arguments and dict keys "
+                                 "Python code uses exist in the project's environment (exit 3: something is "
+                                 "absent, an installed package version differs from the lock file, or a file in "
+                                 "another language was asked for - it is listed as not checked, never passed)")
     sp.add_argument("paths", nargs="*", metavar="PATH",
                     help="files or directories to check (default: the lines changed against HEAD, as --diff)")
     sp.add_argument("--diff", nargs="?", const="HEAD", metavar="REV",
@@ -2582,8 +2607,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--env", default="auto", help=env_help)
     sp.add_argument("--all", action="store_true", help="also list the sites that exist")
     sp.add_argument("--no-cache", action="store_true", help="do not read or write .verinoda/cache/check")
-    sp = add("api", cmd_api, "the real members of a module, class or function in the project's environment, with "
-                             "signatures and locations (exit 3: not found; a name that could not be "
+    sp = add("api", cmd_api, "Python only: the real members of a Python module, class or function in the "
+                             "project's environment, with signatures and locations (exit 3: not found; a name that "
+                             "could not be "
                              "decided - an open container, an attribute of a function or variable - is "
                              "reported as not decided, exit 0)")
     sp.add_argument("target", metavar="NAME", help="dotted name, e.g. packaging.specifiers.SpecifierSet")

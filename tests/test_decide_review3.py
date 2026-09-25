@@ -285,7 +285,9 @@ def test_a_bom_file_is_checked_and_the_status_is_never_ok_when_something_was_not
     assert [v["at"] for v in res["violations"]] == ["orders/audit.py:5"] and res["exit"] == 1
     _write(repo, "orders/audit.py", "import sqlite3\ndef f(:\n    return sqlite3.connect('x')\n")
     res = guards.check(repo)
-    assert res["status"] == "unknown" and res["exit"] == 0 and "could not be completed" in res["next_step"]
+    # a file that was not checked is never a pass in CI: exit 3 (not 1: nothing is shown violated)
+    assert res["status"] == "unknown" and res["exit"] == 3 and "could not be completed" in res["next_step"]
+    assert "not completed" in res["exit_because"]
     assert cli._decision_summary(repo)["not_checked"] == 1  # `update` never says "0 violated" alone then
     _write(repo, "orders/audit.py", CALL)
     _git(repo, "add", "-A")

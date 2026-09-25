@@ -233,11 +233,13 @@ propose Python code, and after every edit:
 2. Never keep an `absent` site: fix it from `nearest` / `elsewhere`, or pick a real name from
    `verinoda api <module.or.Class> --json` (MCP `api_members`; `found: null` = not decided).
 3. `unknown` is unverified: read the definition or run the tests. `not_installed`: the checked
-   environment lacks the package. `guarded`: the code handles it.
-4. Name the environment checked (`env.python`, `env.packages_checked`, `env.lock_mismatches`). Exit 3:
-   something absent or a version differs from the lock (`exit_because`); `incomplete` lists files not
-   checked. If `env.note` says a `.venv` was not used, tell the user; never pass `--env` to run what it
-   names. A PostToolUse hook running `verinoda check --diff` only if the user agrees.
+   environment lacks the package. `guarded`: the code handles it (a broad `except Exception` never is).
+4. Python only: a Java, Kotlin, TypeScript or other file comes back in `not_checked` (status
+   `unsupported_language`, exit 3), never as checked - say so; do not report it as passing.
+5. Name the environment checked (`env.python`, `env.packages_checked`, `env.lock_mismatches`). Exit 3:
+   something absent, a version differs from the lock or a file is not Python (`exit_because`); `incomplete`
+   lists files not checked. If `env.note` says a `.venv` was not used, tell the user; never pass `--env` to
+   run what it names. A PostToolUse hook running `verinoda check --diff` only if the user agrees.
 
 ## Fixing a bug: keep a debug ledger
 
@@ -262,7 +264,8 @@ Run `verinoda update .` after you or the user change code. It re-indexes the cha
 and marks claims whose evidence changed as `stale`; `verify` them again before relying on them.
 Before you finish a code change, run `verinoda decide check --changed --json` (MCP `decision_check`
 with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be
-superseded or the site waived; never edit, supersede or waive a decision record yourself.
+superseded or the site waived; never edit, supersede or waive a decision record yourself. Exit 3
+(`unknown`): something was not checked (see `unknown`) - report that, never a pass.
 
 ## Answer format
 

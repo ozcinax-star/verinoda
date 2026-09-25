@@ -8,14 +8,16 @@ exclusivity check and by feedback's exclusive corrections. Each finding has a le
   graph edge, a receiver whose type is not resolved, ``getattr(module, "name")``); never a violation;
 * ``REVIEW`` - code a decision governs changed since the decision was recorded (never a violation);
 * ``TRIGGER`` - a revisit condition of a decision holds now: the human should look at it again;
-* ``ok`` - the guard holds, always with its scope and limits (a narrow check must not look like a
-  broad guarantee); ``unknown`` - the guard could not be checked (why, and the next step).
+* ``ok`` - the guard holds, always with its scope (what it counted) and limits (a narrow check must not look
+  like a broad guarantee); ``unknown`` - the guard could not be checked (why, and the next step). A guard
+  that checked no file, edge or manifest is ``unknown``, never ``ok``; ``check`` then exits 3.
 
 Guard kinds (spec grammar in :mod:`verinoda.decisions`):
 
 ``only_in`` - a call may appear only in the allowed files. The scope is the product code by default:
-tests, configured reference trees, detected copies of the project and the decision folder are left
-out (``scope=all`` keeps them). ``calls=mod.func``:
+tests, configured reference trees, detected copies of the project, sample/fixture/vendor folders above a
+source root (:func:`not_product_dirs`) and the decision folder are left out (``scope=all`` keeps them).
+``calls=mod.func``:
 
 * Python: a syntax-tree walk that resolves names as Python does (module, function, lambda, class and
   comprehension scopes, ``global`` / ``nonlocal``) through imports (``import m as a``, ``from m import f
@@ -44,11 +46,13 @@ sink kinds and ``pattern=REGEX`` are text matches: POSSIBLE at most.
 
 ``no_edge`` - no graph edge from files matching ``from`` to files matching ``to``. An EXTRACTED edge
 whose cited line still names the target in code is VIOLATED; an INFERRED edge, or one whose line
-changed since the index was built, is POSSIBLE.
+changed since the index was built, is POSSIBLE. A side that matches no indexed file (an external
+package is no node) is ``unknown``.
 
 ``dependency`` - ``absent=NAME``: declared in a manifest is VIOLATED (the manifest line that names it is
-cited); ``present=NAME``: missing from every manifest read is VIOLATED. Manifests are the root ones
-plus the root Gradle/Maven build and the subprojects it includes; build files under test, sample,
+cited); ``present=NAME``: missing from every manifest read is VIOLATED. Manifests are the root ones, the
+package.json of the workspace packages the root declares, plus the root Gradle/Maven build and the
+subprojects it includes (with ``gradle/*.versions.toml`` catalogs); build files under test, sample,
 fixture or vendor folders are not read, and a build the root does not include only gives POSSIBLE.
 
 Nothing here imports, runs or evaluates code of the analysed repository: files are read as text and
@@ -61,6 +65,7 @@ from __future__ import annotations
 import ast
 import fnmatch
 import io
+import json
 import re
 import time
 import tokenize
@@ -348,6 +353,9 @@ def exclusive_hits(repo: Path, spec: dict, *, include_allowed: bool = False) -> 
     return [(r, i, t) for (r, i), t in sorted(hits.items())], "; ".join(method)
 
 
+_UNREAD = "{rel} could not be read (over 2 MB, or unreadable): not checked (exclude=GLOB leaves it out of the guard)"
+
+
 def _read(p: Path) -> str | None:
     try:
         if p.stat().st_size > 2_000_000:
@@ -399,10 +407,39 @@ def is_test_file(rel: str) -> bool:
 
 
 # folders of code that is not the product's own (samples, fixtures, vendored copies): out of an only_in guard's
-# default scope, as their build files are out of a dependency guard's (_NOT_PROJECT_BUILD)
+# default scope, as their build files are out of a dependency guard's (_NOT_PROJECT_BUILD). Only folders above a
+# source root count: below src/main/java/ a folder is a package (com/example/... is the Fabric template's package)
 _NOT_PRODUCT_DIRS = {"examples", "example", "samples", "sample", "demo", "demos", "fixtures", "fixture",
                      "__fixtures__", "testdata", "test-data", "vendor", "third_party", "third-party", "node_modules"}
+# a JVM source root: src/<source set>/<language>/ (Maven, Gradle, Android, Kotlin multiplatform); below it every
+# folder is a package (not resources/: its folders are no packages)
+_SOURCE_ROOT = re.compile(r"(?:^|/)src/[^/]+/(?:java|kotlin|scala|groovy|clojure|aidl)/")
+_PACKAGE_DECL = re.compile(r"^[ \t]*package[ \t]+([A-Za-z_][\w.]*)", re.M)
+_PACKAGE_SUFFIXES = (".java", ".kt", ".kts", ".scala", ".groovy")
 _GENERATED_NAME = re.compile(r"_pb2(?:_grpc)?\.pyi?$|\.pb\.go$")
+
+
+def not_product_dirs(repo: Path, rel: str) -> set[str]:
+    """The folders of ``rel`` that mark sample, fixture or vendored code (:data:`_NOT_PRODUCT_DIRS`), counting
+    only folders that are not package directories: those above a JVM source root (``src/main/java/``), and
+    in a Java / Kotlin / Scala / Groovy file outside such a root those its ``package`` line does not name."""
+    parts = list(PurePosixPath(rel).parts[:-1])
+    if not set(parts) & _NOT_PRODUCT_DIRS:
+        return set()
+    m = _SOURCE_ROOT.search(rel)
+    if m is not None:
+        return set(PurePosixPath(rel[:m.end()]).parts) & _NOT_PRODUCT_DIRS
+    if rel.endswith(_PACKAGE_SUFFIXES):
+        try:
+            with open(Path(repo) / rel, "rb") as fh:
+                head = code_text(fh.read(4000).decode("utf-8", errors="replace"), PurePosixPath(rel).suffix)
+        except OSError:
+            head = ""
+        pm = _PACKAGE_DECL.search(head)
+        pkg = pm.group(1).split(".") if pm else []
+        if pkg and parts[len(parts) - len(pkg):] == pkg:
+            parts = parts[:len(parts) - len(pkg)]
+    return set(parts) & _NOT_PRODUCT_DIRS
 
 
 def is_generated(repo: Path, rel: str) -> bool:
@@ -418,14 +455,16 @@ def is_generated(repo: Path, rel: str) -> bool:
     return "@generated" in head or ("generated" in head and re.search(r"do not edit|don't edit", head) is not None)
 
 
-def scope_files(repo: Path, guard: dict, all_files: list[str]) -> tuple[list[str], list[str]]:
-    """(files the guard checks, what the scope leaves out - for the limits)."""
+def scope_files(repo: Path, guard: dict, all_files: list[str],
+                decisions: Path | None = None) -> tuple[list[str], list[str]]:
+    """(files the guard checks, what the scope leaves out - for the limits). ``decisions``: the decisions
+    folder in use (default :func:`verinoda.decisions.decisions_dir`)."""
     from verinoda.decisions import decisions_dir
 
     repo = Path(repo)
     left_out: list[str] = []
     try:
-        ddir = decisions_dir(repo).relative_to(repo.resolve()).as_posix()
+        ddir = (decisions or decisions_dir(repo)).relative_to(repo.resolve()).as_posix()
     except Exception:  # noqa: BLE001
         ddir = ".verinoda/decisions"
     roots = [] if guard.get("scope") == "all" else _excluded_roots(repo)
@@ -446,7 +485,7 @@ def scope_files(repo: Path, guard: dict, all_files: list[str]) -> tuple[list[str
             if any(rel == r or rel.startswith(r + "/") for r in roots):
                 n_ref += 1
                 continue
-            if set(PurePosixPath(rel).parts[:-1]) & _NOT_PRODUCT_DIRS:
+            if not_product_dirs(repo, rel):
                 samples.append(rel)
                 continue
         out.append(rel)
@@ -1153,6 +1192,7 @@ def _declared_type(code_lines: list[str], name: str) -> tuple[set[str], list[int
 def _jvm_only_in(repo: Path, rel: str, targets: dict[str, str], scan: Scan) -> list[tuple[str, int, str]]:
     text = _read(Path(repo) / rel)
     if text is None:
+        scan.unknown.append(_UNREAD.format(rel=rel))
         return []
     suffix = PurePosixPath(rel).suffix.lower()
     methods = {_jvm_target(t)[2] for t in targets}
@@ -1258,6 +1298,7 @@ def _jvm_only_in(repo: Path, rel: str, targets: dict[str, str], scan: Scan) -> l
 def _text_only_in(repo: Path, rel: str, targets: dict[str, str], scan: Scan) -> list[tuple[str, int, str]]:
     text = _read(Path(repo) / rel)
     if text is None:
+        scan.unknown.append(_UNREAD.format(rel=rel))
         return []
     scan.count("text")
     if not any(t.rpartition(".")[2] in text for t in targets):  # cheap first
@@ -1292,10 +1333,11 @@ def _targets(g: dict) -> tuple[dict[str, str], str]:
 
 
 class _Ctx:
-    def __init__(self, repo: Path, all_files: list[str], graph=None):
+    def __init__(self, repo: Path, all_files: list[str], graph=None, decisions: Path | None = None):
         self.repo = Path(repo)
         self.all_files = all_files
         self.graph = graph
+        self.decisions = decisions  # the decisions folder in use (None: decisions.decisions_dir)
         self._py: _PyIndex | None = None
         self._deps: dict | None = None
         self._code: dict[str, list[str]] = {}
@@ -1322,7 +1364,7 @@ class _Ctx:
 def check_only_in(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
     """``[(level, rel, line, why)]``, the scan, and a short description of what is guarded."""
     scan = Scan()
-    files, left_out = scope_files(ctx.repo, g, ctx.all_files)
+    files, left_out = scope_files(ctx.repo, g, ctx.all_files, ctx.decisions)
     targets, what = _targets(g)
     what += f" (allowed: {', '.join(g.get('allowed') or [])})"
     out: list[tuple[str, str, int, str]] = []
@@ -1368,6 +1410,9 @@ def check_only_in(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
                 break
         for rel in py_files:
             text = texts.get(rel)
+            if text is None:
+                scan.unknown.append(_UNREAD.format(rel=rel))
+                continue
             if not candidate(text):
                 scan.count("python")
                 continue
@@ -1393,6 +1438,7 @@ def check_only_in(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
         for rel in files:
             text = _read(ctx.repo / rel)
             if text is None:
+                scan.unknown.append(_UNREAD.format(rel=rel))
                 continue
             scan.count("text")
             code = code_text(text, PurePosixPath(rel).suffix).split("\n") if not g.get("sink") else text.split("\n")
@@ -1401,6 +1447,10 @@ def check_only_in(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
                     out.append((POSSIBLE, rel, i, f"{what} matches (text; a pattern is never a verified call)"))
         scan.limit("a pattern or a text sink is a text match: POSSIBLE at most"
                    + ("; comments and strings are removed first" if not g.get("sink") else ""))
+    if not sum(scan.files.values()) and not scan.unknown:
+        scan.unknown.append("no file was checked: the guard's scope holds no code file outside the allowed ones"
+                            + (f" ({'; '.join(left_out)})" if left_out else "")
+                            + ", so nothing shows that the decision holds")
     if g.get("scope") != "all":  # generated code (only the files with a hit are read for the marker)
         gen = sorted({rel for _lvl, rel, _i, _w in out if is_generated(ctx.repo, rel)})
         if gen:
@@ -1434,11 +1484,30 @@ def check_no_edge(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
         scan.unknown.append("no index: run `verinoda scan` (no_edge reads the graph's edges)")
         return [], scan, what
     rels = set(g.get("relations") or [])
+    # what the guard looks at: the indexed files each side matches, and the edges out of the `from` files
+    indexed = {f for _n, f in ctx.graph.G.nodes(data="source_file") if f}
+    from_files = {f for f in indexed if glob_match(f, g["from"])}
+    to_files = {f for f in indexed if glob_match(f, g["to"])}
+    scan.files.update({"from_files": len(from_files), "to_files": len(to_files), "edges_checked": 0})
+    scan.limit(*EDGE_LIMITS)
+    for side, files in (("from", from_files), ("to", to_files)):
+        if not files:
+            dotted = re.fullmatch(r"[A-Za-z_][\w]*(?:\.[\w*]+)+", g[side]) is not None
+            scan.unknown.append(f"{side}={g[side]} matches no file in the index, so no edge was checked"
+                                + (": no_edge compares the project's own files (a path glob such as src/client/**); "
+                                   "a package outside the project is not a node - for calls into it use `only_in "
+                                   "calls=Cls.method allowed=...`" if dotted else
+                                   " (a path or glob relative to the project root, such as src/client/**)"))
+    if scan.unknown:
+        return [], scan, what
     out = []
     n = 0
     for u, v, d in ctx.graph.edges(rels or None):
         fu, fv = ctx.graph.file(u), ctx.graph.file(v)
-        if not fu or not fv or not glob_match(fu, g["from"]) or not glob_match(fv, g["to"]):
+        if not fu or fu not in from_files:
+            continue
+        scan.files["edges_checked"] += 1
+        if not fv or fv not in to_files:
             continue
         n += 1
         loc = str(d.get("source_location") or "")
@@ -1459,8 +1528,11 @@ def check_no_edge(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
                                              "longer names it (the index may be older than the file)"))
         else:
             out.append((POSSIBLE, src, line, f"{rel_name} {target} in {fv} ({conf} edge: a resolver's guess)"))
-    scan.files["edges"] = n
-    scan.limit(*EDGE_LIMITS)
+    scan.files["edges_matched"] = n
+    if not scan.files["edges_checked"]:
+        scan.unknown.append(f"the index has no {'/'.join(sorted(rels)) or 'graph'} edge out of the "
+                            f"{len(from_files)} file(s) from={g['from']} matches, so no edge was checked (the index "
+                            "may not extract these relations for their language)")
     return _strongest(out), scan, what
 
 
@@ -1510,12 +1582,110 @@ def _included_builds(root: Path, files: set[str]) -> set[str]:
     return out
 
 
-def _gradle_maven(root: Path, all_files: list[str] | None = None) -> tuple[list[dict], list[str]]:
-    """(declarations in Gradle and Maven build files, build files not read).
+def _catalogs(root: Path, files: list[str]) -> tuple[dict[str, dict], list[str]]:
+    """Gradle version catalogs (``gradle/libs.versions.toml``; ``gradle/NAME.versions.toml`` is ``NAME``):
+    ``{"libs.snakeyaml": {"name", "short", "spec", "via"}, "libs.plugins.loom": ..., "libs.bundles.x": [...]}``
+    keyed by the accessor a build file writes, and the catalog files read."""
+    try:
+        import tomllib  # type: ignore[import-not-found]
+    except ImportError:  # pragma: no cover - py3.10
+        import tomli as tomllib  # type: ignore[no-redef]
+
+    out: dict = {}
+    read: list[str] = []
+    for rel in sorted(f for f in files if re.fullmatch(r"gradle/[\w-]+\.versions\.toml", f)):
+        raw = _read(Path(root) / rel)
+        try:
+            data = tomllib.loads(raw or "")
+        except Exception:  # noqa: BLE001 - an unreadable catalog: nothing from it
+            continue
+        read.append(rel)
+        acc = PurePosixPath(rel).name.split(".")[0]
+        lines = (raw or "").split("\n")
+        versions = data.get("versions") or {}
+
+        def line_of(section: str, alias: str) -> int:
+            sec = next((i for i, ln in enumerate(lines) if re.match(rf"\s*\[{section}\]", ln)), None)
+            for i in range(sec + 1 if sec is not None else 0, len(lines)):
+                if lines[i].lstrip().startswith("[") and sec is not None:
+                    break
+                if re.match(rf"\s*['\"]?{re.escape(alias)}['\"]?\s*=", lines[i]):
+                    return i + 1
+            return 1
+
+        def version(v) -> str:
+            ver = v.get("version") if isinstance(v, dict) else None
+            if isinstance(ver, dict):  # `version.ref = "x"` is the table {"ref": "x"}; or strictly / require
+                ver = versions.get(ver["ref"]) if ver.get("ref") else ver
+                if isinstance(ver, dict):
+                    ver = ver.get("strictly") or ver.get("require") or ver.get("prefer")
+            return str(ver) if ver else "*"
+
+        def key(alias: str) -> str:
+            return re.sub(r"[-_.]+", ".", alias).lower()
+
+        for alias, v in (data.get("libraries") or {}).items():
+            if isinstance(v, str):
+                g_, _, rest = v.partition(":")
+                n_, _, spec = rest.partition(":")
+            elif isinstance(v, dict):
+                if v.get("module"):
+                    g_, _, n_ = str(v["module"]).partition(":")
+                else:
+                    g_, n_ = str(v.get("group") or ""), str(v.get("name") or "")
+                spec = version(v)
+            else:
+                continue
+            if g_ and n_:
+                out[f"{acc}.{key(alias)}"] = {"name": f"{g_}:{n_}".lower(), "short": n_.lower(), "spec": spec or "*",
+                                              "via": f"{rel}:{line_of('libraries', alias)}"}
+        for alias, v in (data.get("plugins") or {}).items():
+            pid = v.get("id") if isinstance(v, dict) else str(v).partition(":")[0]
+            if pid:
+                out[f"{acc}.plugins.{key(alias)}"] = {"name": str(pid).lower(),
+                                                      "short": str(pid).rpartition(".")[2].lower(),
+                                                      "spec": version(v) if isinstance(v, dict) else
+                                                      str(v).partition(":")[2] or "*",
+                                                      "via": f"{rel}:{line_of('plugins', alias)}", "plugin": True}
+        for alias, members in (data.get("bundles") or {}).items():
+            if isinstance(members, list):
+                out[f"{acc}.bundles.{key(alias)}"] = [f"{acc}.{key(str(m))}" for m in members]
+    return out, read
+
+
+_CATALOG_REF = re.compile(r"\b(\w+)\s*\(?\s*(?:(?:platform|enforcedPlatform)\s*\(\s*)?([a-z]\w*)\.([A-Za-z][\w.]*)")
+
+
+def _catalog_items(text: str, rel: str, build: str, catalog: dict) -> list[dict]:
+    """Dependencies a build file declares through a version catalog (``implementation(libs.snakeyaml)``,
+    ``include(libs.snakeyaml)``, ``alias(libs.plugins.loom)``, ``libs.bundles.x``), cited at the build line."""
+    accessors = {k.split(".")[0] for k in catalog}
+    items = []
+    for i, ln in enumerate(text.split("\n"), 1):
+        for m in _CATALOG_REF.finditer(ln):
+            if m.group(2) not in accessors:
+                continue
+            ref = re.sub(r"\.(?:get|asProvider)(?:\(\))?$", "", f"{m.group(2)}.{m.group(3)}".rstrip("."))
+            entry = catalog.get(ref.lower())
+            refs = [catalog.get(r) for r in entry] if isinstance(entry, list) else [entry]
+            for e in refs:
+                if not isinstance(e, dict):
+                    continue
+                items.append({"name": e["name"], "short": e["short"], "spec": e["spec"],
+                              "scope": "plugin" if e.get("plugin") else m.group(1), "at": f"{rel}:{i}", "path": rel,
+                              "line": i, "ecosystem": "gradle-plugin" if e.get("plugin") else "maven", "build": build,
+                              "ref": ref, "via": e["via"]})
+    return items
+
+
+def _gradle_maven(root: Path, all_files: list[str] | None = None) -> tuple[list[dict], list[str], list[str]]:
+    """(declarations in Gradle and Maven build files, build files not read, build files and catalogs read).
 
     Build files come from the project's file list (git-ignored ones are not read). Those under test,
     sample, fixture, vendor or build-output folders, reference trees and detected copies are not read;
-    a build file the root build does not include is read, and its items say so (``build: other``)."""
+    a build file the root build does not include is read, and its items say so (``build: other``).
+    A dependency written through a version catalog (``gradle/libs.versions.toml``) is cited at the build
+    line that uses it, with the catalog line (``via``)."""
     from verinoda.architecture_map import is_test_file
     from verinoda.snapshot import list_files
 
@@ -1523,9 +1693,11 @@ def _gradle_maven(root: Path, all_files: list[str] | None = None) -> tuple[list[
     files = all_files if all_files is not None else list_files(root)
     builds = [f for f in files if PurePosixPath(f).name in (*GRADLE_FILES, "pom.xml")]
     if not builds:
-        return [], []
+        return [], [], []
     included = _included_builds(root, set(files))
     roots = _excluded_roots(root)
+    catalog, read = _catalogs(root, files)
+    read += sorted(s for s in ("settings.gradle", "settings.gradle.kts") if s in files)
     items: list[dict] = []
     skipped: list[str] = []
     for rel in sorted(builds):
@@ -1534,8 +1706,11 @@ def _gradle_maven(root: Path, all_files: list[str] | None = None) -> tuple[list[
                                     any(rel.startswith(r + "/") for r in roots)):
             skipped.append(rel)
             continue
+        read.append(rel)
         build = "project" if rel in included else "other"
         text = build_code(_read(root / rel) or "", rel)  # a commented-out dependency is not declared
+        if catalog and not rel.endswith("pom.xml"):
+            items += _catalog_items(text, rel, build, catalog)
         if rel.endswith("pom.xml"):
             managed = [(m.start(), m.end()) for m in re.finditer(r"<dependencyManagement>.*?</dependencyManagement>",
                                                                   text, re.S)]
@@ -1561,13 +1736,70 @@ def _gradle_maven(root: Path, all_files: list[str] | None = None) -> tuple[list[
                               "spec": pm.group(2) or "*", "scope": "plugin", "at": f"{rel}:{i}", "path": rel,
                               "line": i, "ecosystem": "gradle-plugin", "build": build})
                 continue
+            # include / jarJar / shadow bundle the library into the jar: cited at their own line
             m = re.search(r"\b(\w*(?:[Ii]mplementation|[Aa]pi|[Cc]ompileOnly|[Rr]untimeOnly|[Aa]nnotationProcessor"
-                          r"|[Cc]ompile))\s*\(?\s*['\"]([\w.\-]+):([\w.\-]+)(?::([^'\"]+))?['\"]", ln)
+                          r"|[Cc]ompile|[Ii]nclude|jarJar|[Ss]hadow))\s*\(?\s*['\"]([\w.\-]+):([\w.\-]+)"
+                          r"(?::([^'\"]+))?['\"]", ln)
             if m:
                 items.append({"name": f"{m.group(2)}:{m.group(3)}".lower(), "short": m.group(3).lower(),
                               "spec": m.group(4) or "*", "scope": m.group(1), "at": f"{rel}:{i}", "path": rel,
                               "line": i, "ecosystem": "maven", "build": build})
-    return items, skipped
+    return items, skipped, read
+
+
+def _workspace_packages(root: Path, files: list[str]) -> tuple[list[dict], list[str]]:
+    """Dependencies of the workspace packages a JavaScript monorepo declares (``workspaces`` in the root
+    package.json, ``packages`` in pnpm-workspace.yaml), and the package.json files read."""
+    root = Path(root)
+    globs: list[str] = []
+    try:
+        data = json.loads(_read(root / "package.json") or "{}") if "package.json" in files else {}
+    except ValueError:
+        data = {}
+    ws = data.get("workspaces") if isinstance(data, dict) else None
+    if isinstance(ws, dict):
+        ws = ws.get("packages")
+    globs += [w for w in ws or [] if isinstance(w, str)]
+    if "pnpm-workspace.yaml" in files:  # packages:\n  - "apps/*"
+        block = False
+        for ln in (_read(root / "pnpm-workspace.yaml") or "").split("\n"):
+            s = ln.split("#")[0].rstrip()
+            if re.match(r"^packages\s*:", s):
+                block = True
+                inline = re.search(r"\[(.*)\]", s)
+                if inline:
+                    globs += [x.strip().strip("'\"") for x in inline.group(1).split(",") if x.strip()]
+                    block = False
+                continue
+            if block and re.match(r"^\S", s):
+                block = False
+            m = re.match(r"^\s*-\s*['\"]?([^'\"]+?)['\"]?\s*$", s) if block else None
+            if m:
+                globs.append(m.group(1))
+    pos = [g.strip().rstrip("/") for g in globs if g.strip() and not g.startswith("!")]
+    neg = [g[1:].strip().rstrip("/") for g in globs if g.startswith("!")]
+    items: list[dict] = []
+    read: list[str] = []
+    for rel in sorted(f for f in files if PurePosixPath(f).name == "package.json" and f != "package.json"):
+        d = PurePosixPath(rel).parent.as_posix()
+        if set(PurePosixPath(d).parts) & _NOT_PROJECT_BUILD or not any(glob_match(d, g) for g in pos) or \
+                any(glob_match(d, g) for g in neg):
+            continue
+        raw = _read(root / rel) or ""
+        try:
+            pkg = json.loads(raw)
+        except ValueError:
+            continue
+        read.append(rel)
+        lines = raw.split("\n")
+        for sect, scope in (("dependencies", "runtime"), ("peerDependencies", "peer"),
+                            ("devDependencies", "dev"), ("optionalDependencies", "optional")):
+            deps = pkg.get(sect) if isinstance(pkg, dict) else None
+            for name, spec in (deps or {}).items() if isinstance(deps, dict) else ():
+                line = next((i for i, ln in enumerate(lines, 1) if f'"{name}"' in ln), 1)
+                items.append({"name": str(name).lower(), "spec": str(spec), "scope": scope, "at": f"{rel}:{line}",
+                              "path": rel, "line": line, "ecosystem": "npm", "build": "project"})
+    return items, read
 
 
 def _optional_lines(root: Path, items: list[dict]) -> None:
@@ -1596,21 +1828,35 @@ def _optional_lines(root: Path, items: list[dict]) -> None:
                 break
 
 
+_MANIFEST_NAMES = ("package.json", "pyproject.toml", "go.mod", "Cargo.toml", "requirements.txt", *GRADLE_FILES,
+                   "pom.xml")
+
+
 def declared_dependencies(root: Path, all_files: list[str] | None = None) -> dict:
-    """``research.dependencies`` (Python, npm, Go, Cargo manifests at the root) plus Gradle and Maven build
-    files (the root build and what it includes; others are marked ``build: other``)."""
+    """``research.dependencies`` (Python, npm, Go, Cargo manifests at the root), the package.json files of
+    the workspace packages the root declares, plus Gradle and Maven build files (the root build and what it
+    includes, through version catalogs too; others are marked ``build: other``). ``manifests`` lists every
+    file read, whether or not it declares anything; ``unread`` the other manifests of the project."""
     from verinoda import research
+    from verinoda.snapshot import list_files
 
     root = Path(root)
+    files = all_files if all_files is not None else list_files(root)
     try:
         base = research.dependencies(root)
     except Exception as exc:  # noqa: BLE001 - an unreadable manifest must not stop a check
         base = {"items": [], "manifests": [], "error": f"{type(exc).__name__}: {exc}"[:200]}
     items = [dict(it) for it in base.get("items") or []]
     _optional_lines(root, items)
-    extra, skipped = _gradle_maven(root, all_files)
-    manifests = list(base.get("manifests") or []) + sorted({i["path"] for i in extra})
-    return {"items": items + extra, "manifests": manifests, "skipped": skipped,
+    ws, ws_read = _workspace_packages(root, files)
+    extra, skipped, builds_read = _gradle_maven(root, files)
+    manifests = list(dict.fromkeys([*(base.get("manifests") or []), *ws_read, *builds_read]))
+    read = set(manifests) | set(skipped)
+    roots = _excluded_roots(root)
+    unread = sorted(f for f in files if PurePosixPath(f).name in _MANIFEST_NAMES and f not in read
+                    and not set(PurePosixPath(f).parts[:-1]) & _NOT_PROJECT_BUILD and not is_test_file(f)
+                    and not any(f.startswith(r + "/") for r in roots))
+    return {"items": items + ws + extra, "manifests": manifests, "skipped": skipped, "unread": unread,
             **({"error": base["error"]} if base.get("error") else {})}
 
 
@@ -1637,25 +1883,35 @@ def check_dependency(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]
         sk = deps["skipped"]
         scan.limit(f"{len(sk)} build file(s) under test, sample, fixture, vendor or output folders (or reference "
                    f"trees) are not read: {', '.join(sk[:5])}{' ...' if len(sk) > 5 else ''}")
+    if deps.get("unread"):
+        un = deps["unread"]
+        scan.limit(f"{len(un)} other manifest(s) are not read (not the root's, a workspace package or an included "
+                   f"build): {', '.join(un[:5])}{' ...' if len(un) > 5 else ''}")
     out = []
     if g.get("absent"):
         what = f"absent {g['absent']}"
+        if not deps.get("manifests"):
+            scan.unknown.append("no manifest or build file was read, so nothing shows the dependency absent")
+            return out, scan, what
         sites: dict[tuple[str, int], list[dict]] = {}
         for it in find_dependency(deps, g["absent"]):
             sites.setdefault((it["path"], it["line"]), []).append(it)
         for (path, line), its in sites.items():  # one finding per cited line
             it = its[0]
             scopes = ", ".join(dict.fromkeys(str(x.get("scope")) for x in its))
-            # the cited line must still name it outside a comment of the build file
+            via = f" through the version catalog ({it['via']})" if it.get("via") else ""
+            # the cited line must still name it (or its catalog accessor) outside a comment of the build file
             code = build_code(_read(ctx.repo / path) or "", path).split("\n")
-            shown = _dep_key(code[line - 1] if 0 < line <= len(code) else "")
+            raw_line = code[line - 1] if 0 < line <= len(code) else ""
+            shown = _dep_key(raw_line)
             if it.get("build") == "other":
-                out.append((POSSIBLE, path, line, f"{it['name']} is declared ({scopes}) in {path}, a build file the "
-                                                  "root build does not include: whether it is part of this project "
-                                                  "is not resolved"))
-            elif _dep_key(it.get("short") or it["name"]) in shown or _dep_key(g["absent"]) in shown:
+                out.append((POSSIBLE, path, line, f"{it['name']} is declared ({scopes}){via} in {path}, a build file "
+                                                  "the root build does not include: whether it is part of this "
+                                                  "project is not resolved"))
+            elif _dep_key(it.get("short") or it["name"]) in shown or _dep_key(g["absent"]) in shown or \
+                    (it.get("ref") and re.search(rf"\b{re.escape(it['ref'])}\b", raw_line, re.I)):
                 out.append((VIOLATED, path, line, f"{it['name']} {it.get('spec') or ''} is declared "
-                                                  f"({scopes})".replace("  ", " ")))
+                                                  f"({scopes}){via}".replace("  ", " ")))
             else:
                 out.append((POSSIBLE, path, line, f"{it['name']} is listed, but the cited line does not name it"))
     else:
@@ -1736,24 +1992,36 @@ def _guard_desc(g: dict) -> str:
     return g.get("spec") or g.get("kind", "?")
 
 
+def _rel_or_abs(p: Path, root: Path) -> str:
+    try:
+        return Path(p).resolve().relative_to(Path(root).resolve()).as_posix()
+    except ValueError:
+        return Path(p).as_posix()
+
+
 def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool = False,
-          records=None) -> dict:
+          records=None, decisions_dir: str | None = None) -> dict:
     """Run every accepted guard of every enforced decision on the working tree.
 
     ``base`` (a git revision) or ``changed_only`` (= base HEAD) labels each finding ``new/touched since
     <base>`` when its file, or a file its binding passes through (a re-export module, an edge's target),
     changed since then, else ``pre-existing: ... unchanged since <base>`` (what was compared: the base tree
     itself is not checked); then only new/touched violations make ``exit`` 1. Without them any violation
-    does.
+    does. ``exit`` is 3 when nothing is violated but something was not checked (``status`` unknown: a guard
+    that checked no file, edge or manifest, a record that cannot be read, or no record found while the
+    repository holds ADR-like files); ``ok`` never stands for a check that looked at nothing.
+    ``decisions_dir``: the records' folder (``--decisions-dir``) instead of the configured one.
     """
     from verinoda import decisions as dm
     from verinoda.snapshot import list_files
 
     t0 = time.monotonic()
     repo = Path(repo).resolve()
-    recs = records if records is not None else dm.load_all(repo)
+    ddir, ddir_from = dm.decisions_dir_source(repo, decisions_dir)
+    recs = records if records is not None else dm.load_all(repo, decisions_dir)
     res: dict = {"violations": [], "possible": [], "reviews": [], "triggers": [], "waived": [], "ok": [],
-                 "unknown": [], "not_enforced": [], "pre_existing": [], "decisions": len(recs)}
+                 "unknown": [], "not_enforced": [], "pre_existing": [], "decisions": len(recs),
+                 "decisions_dir": {"path": _rel_or_abs(ddir, repo), "from": ddir_from}}
     base_sha = base_label = None
     changed: set[str] | None = None
     if base or changed_only:
@@ -1761,8 +2029,19 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
         base_sha = validate_ref(repo, base_label)
         changed = changed_since(repo, base_sha)
         res["base"] = {"ref": base_label, "commit": base_sha, "changed_files": len(changed)}
-    ctx = _Ctx(repo, list_files(repo), graph)
+    ctx = _Ctx(repo, list_files(repo), graph, ddir)
     today = dm._today()
+    if not recs:
+        adrs = dm.adr_like_files(repo, ctx.all_files, skip=ddir)
+        if adrs:
+            res["unknown"].append({"decision": None, "guard": None, "kind": "records",
+                                   "why": f"no decision record in {_rel_or_abs(ddir, repo)} ({ddir_from}), but "
+                                          f"{len(adrs)} ADR-like file(s) exist: {', '.join(adrs[:4])}"
+                                          f"{' ...' if len(adrs) > 4 else ''}. Nothing was checked: set the folder "
+                                          "in a committed file (verinoda.toml `[decisions] dir = \"docs/decisions\"`"
+                                          ", or `[tool.verinoda.decisions]` in pyproject.toml) or pass "
+                                          "--decisions-dir; a hand-written ADR needs `verinoda decide import`",
+                                   "adr_like": adrs[:20]})
     for d in recs:
         if not d.enforced:
             res["not_enforced"].append({"decision": d.id, "status": d.status,
@@ -1845,23 +2124,36 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
                 res["unknown"].append({"decision": d.id, "guard": r.get("id"), "kind": "revisit_when",
                                        "why": f"the check failed: {type(exc).__name__}: {exc}"[:300]})
                 continue
+            # what the condition was checked against: the manifests read, or the project's files
+            scope = {"manifests": len(ctx.deps().get("manifests") or [])} if r["kind"] == "dependency_added" \
+                else {"files": len(ctx.all_files)}
             if where and not r.get("baseline"):
                 res["triggers"].append({"decision": d.id, "guard": r["id"], "kind": "revisit_when", "level": TRIGGER,
                                         "at": where[0], "why": f"{r['kind']}={r['value']} holds now ("
                                         f"{', '.join(where[:3])}): the user should review {d.id}"})
+            elif not where and not sum(scope.values()):
+                res["unknown"].append({"decision": d.id, "guard": r["id"], "kind": "revisit_when",
+                                       "why": f"{r['kind']}={r['value']}: no "
+                                              f"{'manifest was' if 'manifests' in scope else 'file was'} read, so "
+                                              "nothing shows that it does not hold"})
             else:
                 note = "held already when the decision was recorded" if where else "does not hold"
                 res["ok"].append({"decision": d.id, "guard": r["id"], "kind": "revisit_when",
-                                  "what": f"{r['kind']}={r['value']}", "scope": {}, "limits": [note]})
+                                  "what": f"{r['kind']}={r['value']}", "scope": scope, "limits": [note]})
     res["elapsed_s"] = round(time.monotonic() - t0, 3)
-    res["exit"] = 1 if res["violations"] else 0
+    broken = [n for n in res["not_enforced"] if n.get("problem")]
+    # 1: something is violated; 3: nothing violated, but something was not checked (unknown); 0 otherwise
+    res["exit"] = 1 if res["violations"] else 3 if res["unknown"] or broken else 0
     # "ok" only when every guard was checked and nothing was found: a guard or file that could not be checked,
     # or a record that cannot be read, is "unknown"; violations in files unchanged since the base are
     # "pre_existing" (not "ok")
-    broken = [n for n in res["not_enforced"] if n.get("problem")]
     res["status"] = ("violated" if res["violations"] else "possible" if res["possible"] else
                      "review" if res["reviews"] or res["triggers"] else "unknown" if res["unknown"] or broken else
                      "pre_existing" if res["pre_existing"] else "ok")
+    if res["exit"] == 3:
+        res["exit_because"] = ", ".join(x for x in (f"{len(res['unknown'])} check(s) not completed (unknown)"
+                                                    if res["unknown"] else "",
+                                                    f"{len(broken)} record(s) cannot be read" if broken else "") if x)
     steps = []
     if res["violations"]:
         ids = sorted({v["decision"] for v in res["violations"]})
