@@ -74,7 +74,7 @@ EXPECTED_PARAMS = {
     "debug_attempt": ({"hypothesis", "session_id", "command", "expect", "kind", "observed_output", "exit_code",
                        "trace"}, {"hypothesis"}),
     "debug_status": ({"session_id"}, set()),
-    "debug_strategy": ({"strategy", "session_id", "good", "bad", "times", "prepare"}, {"strategy"}),
+    "debug_strategy": ({"strategy", "session_id", "good", "bad", "times", "prepare", "trace"}, {"strategy"}),
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
              "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "debug_status"}

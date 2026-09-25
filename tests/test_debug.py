@@ -94,6 +94,10 @@ def test_a_looping_session_is_stopped_and_the_differential_finds_the_cause(tmp_p
         "tests/test_service.py::test_place_and_fetch_roundtrip"]
     assert obs["chain"] == ["tests/test_service.py::test_place_and_fetch_roundtrip", "orders/service.py::place_order",
                             "orders/pricing.py::compute_total"]
+    d2 = debug.differential(st, repo, trace=True)  # the failing tree is traced (observe); the base run is traced now
+    calls = d2["trace_diff"]["tests"]["tests/test_service.py::test_place_and_fetch_roundtrip"]
+    assert "orders/pricing.py::compute_total -> orders/pricing.py::apply_discount" in calls["only_when_passing"]
+    assert calls["only_when_failing"] == []
 
 
 def test_closing_needs_a_passing_attempt_on_the_current_tree(tmp_path):

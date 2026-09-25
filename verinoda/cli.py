@@ -1367,6 +1367,14 @@ def _r_debug_strategy(r: dict) -> None:
             print(f"      + {ln.strip()[:110]}")
     for run in r.get("runs") or []:
         print(f"  ran {run['commit'][:12]}: {run['outcome']} (attempt {run['attempt']})")
+    for test, d in ((r.get("trace_diff") or {}).get("tests") or {}).items():
+        print(f"  calls of {test}:")
+        for e in d.get("only_when_failing")[:5]:
+            print(f"      only when failing: {e}")
+        for e in d.get("only_when_passing")[:5]:
+            print(f"      only at the base:  {e}")
+    if (r.get("trace_diff") or {}).get("status") == "unknown":
+        print(f"  trace diff: unknown - {r['trace_diff']['why']}")
     if r.get("first_bad_commit"):
         fb = r["first_bad_commit"]
         print(f"  first failing commit: {fb['commit'][:12]} {fb.get('subject') or ''}")
@@ -1451,7 +1459,8 @@ def cmd_debug(args) -> int:
             _emit(args, res, render)
             return 0
         if sub == "differential":
-            res = debug.differential(st, repo, args.session, base=args.base, prepare=args.prepare)
+            res = debug.differential(st, repo, args.session, base=args.base, prepare=args.prepare,
+                                     trace=args.trace)
         elif sub == "bisect":
             res = debug.bisect(st, repo, args.session, good=args.good, bad=args.bad, overlay=args.overlay,
                                max_runs=args.max_runs)
@@ -1984,6 +1993,8 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--base", help="another commit to compare with")
     c.add_argument("--prepare", action="store_true", help="only write a copy of the base under .verinoda/runs "
                                                           "for a command you run yourself")
+    c.add_argument("--trace", action="store_true", help="pytest: also compare the failing tests' observed calls at "
+                                                        "the base with the failing tree")
     c = add("bisect", cmd_debug, "strategy: binary search over commits (throw-away copies) for the first failing "
                                  "one", parent=dsub)
     c.add_argument("--session")

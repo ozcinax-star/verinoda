@@ -763,15 +763,24 @@ def _latest_loop_failure(attempts: list[dict]) -> dict | None:
 
 
 def differential(store: Store, repo: Path, session_id: str | None = None, *, base: str | None = None,
-                 prepare: bool = False) -> dict:
-    """Run the repro on a copy of the base commit; if it passes there, rank the diff's hunks."""
+                 prepare: bool = False, trace: bool = False) -> dict:
+    """Run the repro on a copy of the base commit; if it passes there, rank the diff's hunks.
+
+    With ``trace`` the base run is traced too and, when the failing tree has a complete trace (from
+    the session's ``--trace`` or an ``observe`` probe, run first if missing), the failing tests' observed
+    calls are compared: calls made only in the failing run, and calls made only at the base.
+    """
     repo = Path(repo).resolve()
     sess = _session(store, session_id)
     against = treestate.resolve_commit(repo, base) if base else sess["base_commit"]
     if prepare:
         return _prepare_copy(repo, sess, against)
+    if trace and experiments._is_pytest(list(sess["command"])):
+        lf = _latest_loop_failure(_attempts(store, sess["id"]))
+        if lf is not None and not (lf.get("trace") or {}).get("complete"):
+            observe(store, repo, sess["id"], hypothesis="instrumented run of the failing tree for the differential")
     res = attempt(store, repo, sess["id"], hypothesis=f"differential: the repro at the base {against[:12]}",
-                  expect="pass", kind="differential", ref=against)
+                  expect="pass", kind="differential", ref=against, trace=trace or None)
     attempts = _attempts(store, sess["id"])
     loop_fail = _latest_loop_failure(attempts)
     out = {"session": sess["id"], "strategy": "differential", "base": against, "attempt": res["attempt"],
@@ -786,11 +795,46 @@ def differential(store: Store, repo: Path, session_id: str | None = None, *, bas
                              "tree: the cause is in the diff between them (ranked below; run-scoped, one environment)")
         out["hunks"] = ranked[:LIST_CAP]
         out["hunks_total"] = len(ranked)
+        if trace:
+            out["trace_diff"] = _trace_diff(store, attempts, loop_fail, res["attempt"])
     elif res["outcome"] == "fail":
         out["conclusion"] = (f"the repro also fails at the base {against[:12]}: the cause predates the working-tree "
                              "changes; bisect the history (`verinoda debug bisect`)")
     else:
         out["conclusion"] = f"inconclusive at the base ({res['outcome']}); the diff cannot be judged from this run"
+    return out
+
+
+def _edges_of(store: Store, run_id: str, test: str) -> set[tuple[str, str]]:
+    """In-repo (caller, callee) pairs observed in ``test``'s call phase of a traced run."""
+    out = set()
+    ctx = f"{test}|call"
+    for r in store.all("SELECT caller_path, caller_qual, callee_path, callee_qual, tests FROM runtime_calls "
+                       "WHERE run_id = ? AND callee_path != '<ext>' AND caller_path != '<ext>'", (run_id,)):
+        if ctx in (r.get("tests") or []):
+            out.add((f"{r['caller_path']}::{failsig.clean_qual(r['caller_qual'])}",
+                     f"{r['callee_path']}::{failsig.clean_qual(r['callee_qual'])}"))
+    return {e for e in out if e[0] != e[1]}
+
+
+def _trace_diff(store: Store, attempts: list[dict], failing: dict, base_n: int) -> dict:
+    """The failing tests' observed calls: only in the failing run vs only in the passing run at the base."""
+    traced = [a for a in attempts if a["kind"] in LOOP_KINDS and (a.get("trace") or {}).get("complete")
+              and a["outcome"] == "fail" and a.get("tree_hash") == failing.get("tree_hash")]
+    base_row = next((a for a in attempts if a["n"] == base_n), None) or {}
+    bt = base_row.get("trace") or {}
+    if not traced or not bt.get("complete"):
+        return {"status": "unknown", "why": "a complete trace of both the failing tree and the base is needed"}
+    ft = traced[-1]["trace"]
+    out = {"failing_run": ft.get("run_id"), "base_run": bt.get("run_id"), "tests": {},
+           "limits": ["observed calls of these two runs only; a call missing from the failing run can also be "
+                      "the effect of the failure (execution stopped), not its cause"]}
+    for test in (ft.get("failing") or [])[:3]:
+        f_edges = _edges_of(store, ft["run_id"], test)
+        b_edges = _edges_of(store, bt["run_id"], test)
+        out["tests"][test] = {
+            "only_when_failing": [f"{a} -> {b}" for a, b in sorted(f_edges - b_edges)][:LIST_CAP],
+            "only_when_passing": [f"{a} -> {b}" for a, b in sorted(b_edges - f_edges)][:LIST_CAP]}
     return out
 
 

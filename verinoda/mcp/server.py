@@ -1203,12 +1203,13 @@ class AtlasTools:
                            keep=("symptom", "attempts", "latest", "result"))
 
     def debug_strategy(self, strategy: str, session_id: str | None = None, good: str | None = None,
-                       bad: str | None = None, times: int | None = None, prepare: bool = False) -> dict:
+                       bad: str | None = None, times: int | None = None, prepare: bool = False,
+                       trace: bool = False) -> dict:
         def call(d, st):
             s = _choice(strategy, DEBUG_STRATEGIES, "strategy")
             sid = _opt_text(session_id)
             if s == "differential":
-                return d.differential(st, self.repo, sid, prepare=bool(prepare))
+                return d.differential(st, self.repo, sid, prepare=bool(prepare), trace=bool(trace))
             if s == "bisect":
                 return d.bisect(st, self.repo, sid, good=_opt_text(good), bad=_opt_text(bad))
             if s == "rerun":
@@ -1440,11 +1441,12 @@ DESCRIPTIONS: dict[str, str] = {
         "whether that passing tree is still the current one. Show it to the user when a session stops. Read-only."),
     "debug_strategy": (
         "Run a strategy the ledger proposed (each run is recorded as an attempt): differential (the repro on a copy "
-        "of the base commit; when it passes there, the diff's hunks ranked by the failure's traceback; prepare=true "
-        "only writes the copy for a command you run yourself), bisect (binary search over commits in throw-away "
-        "copies from good to bad; commits that cannot run are skipped; returns the first failing commit and its "
-        "hunks), rerun (times runs of the current tree: pass rate, flakiness), observe (one run under the call "
-        "tracer: are the edited symbols reached)."),
+        "of the base commit; when it passes there, the diff's hunks ranked by the failure's traceback; trace=true "
+        "also compares the failing tests' observed calls at the base and in the failing tree; prepare=true only "
+        "writes the copy for a command you run yourself), bisect (binary search over commits in throw-away copies "
+        "from good to bad; commits that cannot run are skipped; returns the first failing commit and its hunks), "
+        "rerun (times runs of the current tree: pass rate, flakiness), observe (one run under the call tracer: "
+        "which failing tests reached each edited function, and the call chain to the crash)."),
 }
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
@@ -1832,9 +1834,11 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None):
         times: Annotated[int | None, Field(description="rerun: how many runs (1-20, default 5).")] = None,
         prepare: Annotated[bool, Field(description="differential: only write a copy of the base for a command you "
                                                    "run yourself.")] = False,
+        trace: Annotated[bool, Field(description="differential, pytest: also compare the failing tests' observed "
+                                                 "calls at the base with the failing tree.")] = False,
     ) -> dict[str, Any]:
         return emit(t.debug_strategy(strategy, session_id=session_id, good=good, bad=bad, times=times,
-                                     prepare=prepare))
+                                     prepare=prepare, trace=trace))
 
     return srv
 
