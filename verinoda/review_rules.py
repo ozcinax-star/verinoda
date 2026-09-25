@@ -588,6 +588,107 @@ def _sql_reaches_db(fn: ast.AST | None, node: ast.AST) -> int | None:
     return None
 
 
+def _abs_module(rel: str, node: ast.ImportFrom) -> str:
+    """The absolute module name of a ``from ... import`` in the file ``rel`` (relative levels resolved)."""
+    if not node.level:
+        return node.module or ""
+    from verinoda.guards import _module_of
+
+    pkg = _module_of(rel) or ""
+    if not rel.endswith("__init__.py"):
+        pkg = pkg.rpartition(".")[0]
+    parts = pkg.split(".") if pkg else []
+    parts = parts[: len(parts) - (node.level - 1)] if node.level > 1 else parts
+    return ".".join([*parts, *([node.module] if node.module else [])])
+
+
+def _module_level(tree: ast.AST):
+    """Statements run when the module is imported: not inside a def or a class."""
+    stack = list(getattr(tree, "body", []))
+    while stack:
+        n = stack.pop()
+        yield n
+        if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            stack.extend(c for c in ast.iter_child_nodes(n) if isinstance(c, ast.stmt))
+
+
+def _exports_target(ix, mod: str, name: str, last: set[str], depth: int = 4) -> bool:
+    """Does the project module ``mod`` bind ``name`` to a function named like a security target (``from subprocess
+    import run as run_command``, ``load_blob = pickle.loads``, or a re-export of such a name from another project
+    module, ``depth`` modules deep)? The engine then decides whether it really is one."""
+    mrel = ix.modules.get(mod) if ix is not None else None
+    if mrel is None or depth <= 0:
+        return False
+    mtree = ix.tree(mrel)[0]
+    for n in _module_level(mtree) if mtree is not None else ():
+        if isinstance(n, ast.ImportFrom):
+            for a in n.names:
+                if (a.asname or a.name) != name:
+                    continue
+                src = _abs_module(mrel, n)
+                if a.name in last or _exports_target(ix, src, a.name, last, depth - 1):
+                    return True
+        elif isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in n.targets):
+            d = dotted(n.value)
+            if d and d.rpartition(".")[2] in last:
+                return True
+    return False
+
+
+def py_alias_names(tree: ast.AST, rel: str, ix, lines: set[int] | None, last: set[str]) -> set[str]:
+    """Names called on ``lines`` that may bind a security target under a name of their own: a local assignment of a
+    dotted name ending in a target's name (``run_cmd = subprocess.run``), or a name imported from - or an attribute
+    of - a project module that binds it so (``from app.compat import run_command``; the re-exported names are
+    returned too, for the engine to follow)."""
+    local: dict[str, str] = {}
+    imported: dict[str, tuple[str, str]] = {}
+    modules: dict[str, str] = {}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Assign):
+            d = dotted(n.value)
+            if d:
+                for t in n.targets:
+                    if isinstance(t, ast.Name):
+                        local[t.id] = d
+        elif isinstance(n, ast.ImportFrom):
+            src = _abs_module(rel, n)
+            for a in n.names:
+                if a.name != "*":
+                    imported[a.asname or a.name] = (src, a.name)
+        elif isinstance(n, ast.Import):
+            for a in n.names:
+                modules[a.asname or a.name.split(".")[0]] = a.name if a.asname else a.name.split(".")[0]
+    out: set[str] = set()
+    for n in _walk_lines(tree, lines):
+        if not isinstance(n, ast.Call):
+            continue
+        ln = getattr(n, "lineno", None)
+        if ln is None or (lines is not None and not (set(range(ln, (n.end_lineno or ln) + 1)) & lines)):
+            continue
+        f = n.func
+        if isinstance(f, ast.Name):
+            d = local.get(f.id)
+            if d and d.rpartition(".")[2] in last:
+                out.add(f.id)
+            if f.id in imported:
+                src, orig = imported[f.id]
+                if _exports_target(ix, src, orig, last):
+                    out |= {f.id, orig}
+        elif isinstance(f, ast.Attribute):
+            d = dotted(f.value)
+            if not d:
+                continue
+            head, _, rest = d.partition(".")
+            if head in imported:
+                src, orig = imported[head]
+                mod = ".".join(x for x in (f"{src}.{orig}" if src else orig, rest) if x)
+            else:
+                mod = ".".join(x for x in (modules.get(head, head), rest) if x)
+            if _exports_target(ix, mod, f.attr, last):
+                out.add(f.attr)
+    return out
+
+
 def py_security_ops(tree: ast.AST, rel: str, ix, lines: set[int] | None = None) -> list[tuple[int, str, str, str,
                                                                                                 str]]:
     """``(line, kind, what, derived_by, status)`` of security-sensitive operations in a Python file's text.
@@ -602,10 +703,12 @@ def py_security_ops(tree: ast.AST, rel: str, ix, lines: set[int] | None = None) 
 
     out: list[tuple[int, str, str, str, str]] = []
     imports = py_import_map(tree)
-    # the engine follows only calls whose last name is a target's (or a local alias of one): when no such name
-    # is on the lines asked about, it can find nothing there - skip its whole-file scope analysis
+    # the engine follows only calls whose last name is a target's, or a name that binds one under a name of its own
+    # (an import alias, an assignment, a project module's re-export): when no such name is called on the lines asked
+    # about, it can find nothing there - skip its whole-file scope analysis
     last = {t.rpartition(".")[2] for t in PY_SECURITY_CALLS}
-    wanted = last | {a for a, full in imports.items() if full.rpartition(".")[2] in last}
+    aliases = py_alias_names(tree, rel, ix, lines, last) if ix is not None else set()
+    wanted = last | aliases | {a for a, full in imports.items() if full.rpartition(".")[2] in last}
     if ix is not None and lines is not None and not any(
             (isinstance(n, ast.Name) and n.id in wanted) or (isinstance(n, ast.Attribute) and n.attr in wanted)
             for n in _walk_lines(tree, lines)):
@@ -613,7 +716,8 @@ def py_security_ops(tree: ast.AST, rel: str, ix, lines: set[int] | None = None) 
     if ix is not None:
         try:
             scan = guards.Scan()
-            for level, line, why in guards._py_only_in(ix, rel, {t: t for t in PY_SECURITY_CALLS}, scan):
+            for level, line, why in guards._py_only_in(ix, rel, {t: t for t in PY_SECURITY_CALLS}, scan,
+                                                       last | aliases):
                 if level == guards.VIOLATED and (lines is None or line in lines):
                     target = next((t for t in PY_SECURITY_CALLS if t in why), None)
                     out.append((line, PY_SECURITY_CALLS.get(target, "security-call"), why,
@@ -767,6 +871,19 @@ def py_conditions(fn: ast.AST | None) -> list[tuple[str, int]]:
         if isinstance(n, (ast.If, ast.While, ast.IfExp, ast.Assert)):
             out.append((_unparse(n.test), n.lineno))
     return out
+
+
+def py_branch_span(fn: ast.AST | None, line: int) -> tuple[int, int, int | None, int | None] | None:
+    """``(first line, last line, body's first line, body's last line)`` of the if / while / assert statement (or
+    conditional expression) of ``fn`` that starts on ``line``; the body is the branch taken when the condition holds
+    (None for an assert or a conditional expression)."""
+    for n in own_nodes(fn) if fn is not None else ():
+        if isinstance(n, (ast.If, ast.While)) and n.lineno == line and n.body:
+            return n.lineno, n.end_lineno or n.lineno, n.body[0].lineno, n.body[-1].end_lineno or n.body[-1].lineno
+    for n in own_nodes(fn) if fn is not None else ():
+        if isinstance(n, (ast.Assert, ast.IfExp)) and n.lineno == line:
+            return n.lineno, n.end_lineno or n.lineno, None, None
+    return None
 
 
 def py_raising_guards(fn: ast.AST | None) -> list[int]:
@@ -1063,6 +1180,19 @@ def ts_conditions(tree, lo: int, hi: int) -> list[tuple[str, int]]:
                 c = _ts_text(cond)
                 out.append((c[1:-1].strip() if c.startswith("(") and c.endswith(")") else c, line))
     return out
+
+
+def ts_branch_span(tree, line: int) -> tuple[int, int, int | None, int | None] | None:
+    """``(first line, last line, body's first line, body's last line)`` of the ``if`` / ``while`` statement that
+    starts on ``line`` (the body: the branch taken when the condition holds)."""
+    for n in ts_walk(tree.root_node) if tree is not None else ():
+        if n.start_point[0] + 1 != line or not (n.type in _TS_IF or n.type in ("while_statement", "while_expression")):
+            continue
+        body = _ts_if_parts(n)[1] if n.type in _TS_IF else n.child_by_field_name("body")
+        if body is None:
+            return line, n.end_point[0] + 1, None, None
+        return line, n.end_point[0] + 1, body.start_point[0] + 1, body.end_point[0] + 1
+    return None
 
 
 def _ts_def_at(tree, def_line: int):

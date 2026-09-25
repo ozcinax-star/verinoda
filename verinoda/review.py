@@ -35,6 +35,7 @@ caller asks for (``observe`` / ``run_tests``, isolated copies); git is read with
 from __future__ import annotations
 
 import ast
+import builtins
 import difflib
 import hashlib
 import re
@@ -199,6 +200,7 @@ class _Ctx:
         self._edge_ok: dict[tuple[str, str], bool] = {}
         self._importers: dict[str, set[str]] | None = None
         self._graph_files: set[str] = set()
+        self._drifted: list[str] | None = None
         self.reparsed: set[str] = set()
 
     # texts ------------------------------------------------------------------------------------------
@@ -326,13 +328,46 @@ class _Ctx:
 
     def py_candidates(self, rel: str, name: str) -> list[str]:
         """Python files that may name ``rel``'s ``name`` through an import or in ``rel`` itself: ``rel``, the files
-        importing it in the graph, and every file the review reads from elsewhere than the snapshot (the diff, the
-        index) - or, when the graph does not know ``rel``, every Python file whose text holds ``name``."""
+        importing it in the graph, every file the review reads from elsewhere than the snapshot (the diff, the
+        index) and every Python file the snapshot does not have as it is now (added or edited since the last
+        ``update``: the graph knows nothing of its imports) - or, when the graph does not know ``rel``, every Python
+        file whose text holds ``name``."""
         imp = self.importers(rel)
         if imp is None:
             return [f for f in self.files() if f.endswith((".py", ".pyi")) and name in (self.text(f) or "")]
         extra = [f for f in [*self.base_texts, *self.overrides] if self.text(f) is not None]
+        extra += [f for f in self.drifted() if f.endswith((".py", ".pyi")) and name in (self.text(f) or "")]
         return sorted({f for f in {rel, *imp, *extra} if f.endswith((".py", ".pyi"))})
+
+    def drifted(self) -> list[str]:
+        """Code files outside the diff that the last snapshot does not have with their current content (added or
+        edited since the last ``update``): the graph's edges from and into them are missing or old. Empty without
+        a snapshot."""
+        if self._drifted is None:
+            out: list[str] = []
+            snap = None
+            if self.store is not None:
+                try:
+                    snap = self.store.latest_snapshot()
+                except Exception:  # noqa: BLE001 - no snapshot table yet: nothing to compare with
+                    snap = None
+            if snap is not None:
+                recorded = self.store.snapshot_files(snap["id"])
+                for rel in self.files():
+                    if _suffix(rel) not in CODE_SUFFIXES or rel in self.base_texts:
+                        continue
+                    try:
+                        if rel in self.overrides:   # staged mode: the index's version is the one reviewed
+                            t = self.overrides[rel]
+                            cur = hashlib.sha256(t.encode("utf-8")).hexdigest() if t is not None else None
+                        else:
+                            cur = hashlib.sha256((self.repo / rel).read_bytes()).hexdigest()
+                    except OSError:
+                        continue
+                    if recorded.get(rel) != cur:
+                        out.append(rel)
+            self._drifted = sorted(out)
+        return self._drifted
 
     def project_root(self, rel: str) -> str:
         """The innermost directory holding its own project marker (pyproject.toml, package.json, build.gradle
@@ -1530,17 +1565,30 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
             tree = ctx.pytree(rel)
             if tree is None:
                 continue
-            had: dict[str, int] = {}
+            # the base version's operations on its changed lines, each with the call that holds it (text with the
+            # parameters renamed by position) and the names its arguments read
+            had: list[tuple[str, str, frozenset[str], str]] = []
             otree = ctx.pytree(rel, "old") if rel in ctx.base_texts and old_lines else None
-            for _l, kind, _w, _b, _s in (rr.py_security_ops(otree, rel, None, old_lines) if otree is not None else []):
-                had[kind] = had.get(kind, 0) + 1
+            for ol, kind, _w, _b, _s in (rr.py_security_ops(otree, rel, None, old_lines) if otree is not None else []):
+                had.append((kind, *_py_op_call(ctx, rel, "old", ol)[:3]))
             for line, kind, what, by, status in rr.py_security_ops(tree, rel, ctx.pyix(), lines):
                 flow = _param_flow(ctx, rel, line)
-                before = had.get(kind, 0) > 0
-                if before:
-                    had[kind] -= 1
+                call_key, names, shown, real = _py_op_call(ctx, rel, "new", line)
+                same = next((h for h in had if h[0] == kind and h[1] == call_key), None)
+                prev = same or next((h for h in had if h[0] == kind), None)
+                if prev is not None:
+                    had.remove(prev)
+                if same is not None:
                     text = f"a changed line holds {kind} that the base version had on its changed lines too: {what}"
                     status = "strong_inference" if flow and flow.get("from_entry") else "weak_inference"
+                elif prev is not None:
+                    fresh = sorted(names - prev[2])
+                    text = f"a changed line changes {kind}: `{prev[3][:80]}` is now `{shown[:80]}` ({what})"
+                    if fresh:
+                        text += f"; its arguments now read {', '.join(real.get(x, x) for x in fresh)}"
+                    else:
+                        text += "; its arguments read no name they did not read before"
+                        status = "strong_inference" if rr.rank(status) < rr.rank("strong_inference") else status
                 else:
                     text = f"a changed line adds {kind}: {what}"
                 if flow and flow.get("from_entry"):
@@ -1550,33 +1598,42 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                 out.append(_finding("security", "op-on-changed-line", text, status, f"{rel}:{line}",
                                     basis="Python syntax tree of the tree under review (calls bound through imports "
                                     "and aliases); parameter flow: def-use per hop, an inference"
-                                    + ("; the base version had this kind of operation on its changed lines"
-                                       if before else ""), derived_by=by, for_symbol=_sym_for(ctx, rel, line),
+                                    + ("; the base version had this call on its changed lines" if same is not None
+                                       else "; the base version had this kind of operation on its changed lines, in "
+                                            "another call" if prev is not None else ""),
+                                    derived_by=by, for_symbol=_sym_for(ctx, rel, line),
                                     evidence_at=[flow["entry"]] if flow and flow.get("entry") else (),
                                     param_flow=flow))
         else:
             code, ocode = ctx.code(rel), ctx.code(rel, "old")
-            had = {}
-            for ln in old_lines:
+            had_t: list[tuple[str, str]] = []
+            for ln in sorted(old_lines):
                 for rx, kind in rr.TEXT_SECURITY_OPS:
                     if ln <= len(ocode) and rx.search(ocode[ln - 1]) and (kind != "sql-built-from-strings"
                                                                           or rr.sql_line(ocode[ln - 1])):
-                        had[kind] = had.get(kind, 0) + 1
+                        had_t.append((kind, _norm_code(ocode[ln - 1])))
                         break
             for line in sorted(lines):
                 if line > len(code):
                     continue
                 for rx, kind in rr.TEXT_SECURITY_OPS:
                     if rx.search(code[line - 1]) and (kind != "sql-built-from-strings" or rr.sql_line(code[line - 1])):
-                        before = had.get(kind, 0) > 0
-                        if before:
-                            had[kind] -= 1
+                        now = _norm_code(code[line - 1])
+                        same_t = next((h for h in had_t if h == (kind, now)), None)
+                        prev_t = same_t or next((h for h in had_t if h[0] == kind), None)
+                        if prev_t is not None:
+                            had_t.remove(prev_t)
+                        if same_t is not None:
+                            head = f"a changed line holds {kind} that the base version had too: "
+                        elif prev_t is not None:
+                            head = f"a changed line changes {kind} (the base line was `{prev_t[1][:80]}`): "
+                        else:
+                            head = f"a changed line adds {kind}: "
                         out.append(_finding("security", "op-on-changed-line",
-                                            (f"a changed line holds {kind} that the base version had too: "
-                                             if before else f"a changed line adds {kind}: ")
-                                            + ctx.lines(rel)[line - 1].strip()[:100],
-                                            "weak_inference" if before else "strong_inference", f"{rel}:{line}",
-                                            basis="text rule over the code of the line (comments removed)",
+                                            head + ctx.lines(rel)[line - 1].strip()[:100],
+                                            "weak_inference" if same_t is not None else "strong_inference",
+                                            f"{rel}:{line}", basis="text rule over the code of the line (comments "
+                                            "removed); the base version's changed lines compared as text",
                                             derived_by="review.TEXT_SECURITY_OPS", for_symbol=_sym_for(ctx, rel, line)))
                         break
     out += _guard_diff(ctx, changes)
@@ -1635,6 +1692,38 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                                     for_symbol=c.symbol))
                 break
     return out
+
+
+_BUILTIN_NAMES = frozenset(dir(builtins))
+
+
+def _py_op_call(ctx: _Ctx, rel: str, side: str, line: int) -> tuple[str, frozenset[str], str, dict[str, str]]:
+    """The call holding a security operation on ``line`` of one version of a Python file (the outermost call over
+    that line): ``(key, names, text, real)`` - its source with the enclosing function's parameters renamed by
+    position, the (renamed) names its arguments read (builtins aside), its source as written, and renamed -> real
+    name. A line without a call (SQL text built with an f-string) gives its code line."""
+    tree = ctx.pytree(rel, side)
+    qual = ctx.label_at(rel, line, side)
+    s = ctx.sym(rel, qual, side) if qual else None
+    fn = rr.py_def_at(tree, s["def"]) if s else None
+    scope = fn if fn is not None and not isinstance(fn, ast.ClassDef) else tree
+    params = rr.py_param_names(fn) if scope is fn and fn is not None else []
+    best = None
+    for n in ast.walk(scope) if scope is not None else ():
+        if isinstance(n, ast.Call) and n.lineno <= line <= (n.end_lineno or n.lineno):
+            if best is None or (n.lineno, -(n.end_lineno or n.lineno)) < (best.lineno, -(best.end_lineno or best.lineno)):
+                best = n
+    if best is None:
+        code = ctx.code(rel, side)
+        text = _norm_code(code[line - 1]) if 0 < line <= len(code) else ""
+        return rr.alpha(text, params), frozenset(), text, {}
+    text = rr._unparse(best)
+    real: dict[str, str] = {}
+    for a in [*best.args, *(k.value for k in best.keywords)]:
+        for x in ast.walk(a):
+            if isinstance(x, ast.Name) and x.id not in _BUILTIN_NAMES:
+                real[rr.alpha(x.id, params)] = x.id
+    return rr.alpha(text, params), frozenset(real), text, real
 
 
 def _param_flow(ctx: _Ctx, rel: str, line: int) -> dict | None:
@@ -1753,16 +1842,115 @@ def _guard_rows(ctx: _Ctx, c: Change, side: str) -> list[dict]:
             for cond, ln in _guards(ctx, c, side)]
 
 
-def _cond_rows(ctx: _Ctx, c: Change) -> list[tuple[str, int]]:
-    """Every if / while / conditional-expression condition of the new version of ``c``."""
-    if c.lines is None:
+def _cond_rows(ctx: _Ctx, c: Change, side: str = "new") -> list[tuple[str, int]]:
+    """Every if / while / conditional-expression condition of one version of ``c``."""
+    span = c.old_lines if side == "old" else c.lines
+    def_line = c.old_def_line if side == "old" else c.def_line
+    if span is None:
         return []
     if _suffix(c.file) in (".py", ".pyi"):
-        return rr.py_conditions(rr.py_def_at(ctx.pytree(c.file), c.def_line or c.lines[0]))
-    facts = ctx.facts(c.file) or {}
+        return rr.py_conditions(rr.py_def_at(ctx.pytree(c.file, side), def_line or span[0]))
+    facts = ctx.facts(c.file, side) or {}
     own = _own_lines(facts, c.qual) if c.qual in (facts.get("symbols") or {}) else \
-        set(range(c.lines[0], c.lines[1] + 1))
-    return [r for r in rr.ts_conditions(ctx.tstree(c.file), *c.lines) if r[1] in own]
+        set(range(span[0], span[1] + 1))
+    return [r for r in rr.ts_conditions(ctx.tstree(c.file, side), *span) if r[1] in own]
+
+
+def _branch_span(ctx: _Ctx, c: Change, side: str, line: int) -> tuple[int, int, int | None, int | None] | None:
+    """``(first line, last line, body's first line, body's last line)`` of the if / while / assert of one version
+    of ``c`` that starts on ``line``."""
+    span = c.old_lines if side == "old" else c.lines
+    def_line = c.old_def_line if side == "old" else c.def_line
+    if span is None:
+        return None
+    if _suffix(c.file) in (".py", ".pyi"):
+        return rr.py_branch_span(rr.py_def_at(ctx.pytree(c.file, side), def_line or span[0]), line)
+    return rr.ts_branch_span(ctx.tstree(c.file, side), line)
+
+
+def _norm_code(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _work_before(ctx: _Ctx, c: Change, old_from: int, old_to: int, new_line: int) -> tuple[int, str, bool] | None:
+    """Work that the new version of ``c`` runs before its line ``new_line`` although the base version ran it only
+    after its lines ``old_from..old_to`` (a guard, a call to a check): a sink statement, or a call whose callee
+    reaches a sink within 2 hops. ``(line, code, direct)`` of the first such statement (``direct``: the line holds
+    the sink itself), None when there is none. Statements are compared as text - Python calls by their source,
+    other languages by code line - and a text that the base version already ran before the guard as often as the
+    new version does is not counted."""
+    if c.lines is None or c.old_lines is None or not c.qual:
+        return None
+    code = ctx.code(c.file)
+    if _suffix(c.file) in (".py", ".pyi"):
+        ofn = rr.py_def_at(ctx.pytree(c.file, "old"), c.old_def_line or -1)
+        fn = rr.py_def_at(ctx.pytree(c.file), c.def_line or -1)
+        if ofn is None or fn is None or isinstance(fn, ast.ClassDef):
+            return None
+        before: dict[str, int] = {}
+        after: set[str] = set()
+        for k in rr.py_calls_in(ofn):
+            t = rr._unparse(k)
+            if (k.end_lineno or k.lineno) < old_from:
+                before[t] = before.get(t, 0) + 1
+            elif k.lineno > old_to:
+                after.add(t)
+        seen: dict[str, int] = {}
+        for k in sorted(rr.py_calls_in(fn), key=lambda x: (x.lineno, x.col_offset)):
+            if (k.end_lineno or k.lineno) >= new_line:
+                continue
+            t = rr._unparse(k)
+            seen[t] = seen.get(t, 0) + 1
+            if t not in after or seen[t] <= before.get(t, 0):
+                continue
+            direct = bool(rr.sink_hits(code, k.lineno, k.end_lineno or k.lineno))
+            if not direct:
+                tgt = ctx.py_resolve(c.file, c.qual, fn, k)[0]
+                if tgt is None or not ctx.sink_reach(tgt):
+                    continue
+            return k.lineno, t, direct
+        return None
+    ocode = ctx.code(c.file, "old")
+    (olo, ohi), (lo, _hi) = c.old_lines, c.lines
+    before_l: dict[str, int] = {}
+    for i in range(olo, min(old_from, len(ocode) + 1)):
+        t = _norm_code(ocode[i - 1])
+        before_l[t] = before_l.get(t, 0) + 1
+    after_l = {_norm_code(ocode[i - 1]) for i in range(old_to + 1, min(ohi, len(ocode)) + 1)}
+    work = {ln: True for ln, _k, _b in rr.sink_hits(code, lo, new_line - 1)}
+    for ln, _nm, tgt, _how, _conf in ctx.callees((c.file, c.qual), set(range(lo, new_line))):
+        if ln not in work and tgt is not None and ctx.sink_reach(tgt):
+            work[ln] = False
+    seen_l: dict[str, int] = {}
+    for i in range(lo, min(new_line, len(code) + 1)):
+        t = _norm_code(code[i - 1])
+        seen_l[t] = seen_l.get(t, 0) + 1
+        if i in work and "(" in t and t in after_l and seen_l[t] > before_l.get(t, 0):
+            return i, t, work[i]
+    return None
+
+
+def _gates_old_work(ctx: _Ctx, c: Change, g: dict, line: int) -> bool:
+    """Does the branch of the new version's if / while on ``line`` hold a statement that followed the removed guard
+    ``g`` in the base version (``if not ok: raise`` turned into ``if ok: <the work>``)?"""
+    old = _branch_span(ctx, c, "old", g["line"])
+    new = _branch_span(ctx, c, "new", line)
+    if old is None or new is None or new[2] is None or c.old_lines is None:
+        return False
+    ocode, code = ctx.code(c.file, "old"), ctx.code(c.file)
+    follow = {t for i in range(old[1] + 1, min(c.old_lines[1], len(ocode)) + 1)
+              for t in [_norm_code(ocode[i - 1])] if "(" in t or "=" in t}
+    return any(_norm_code(code[i - 1]) in follow for i in range(new[2], min(new[3], len(code)) + 1)
+               if i != line)
+
+
+def _call_line(ctx: _Ctx, a: Change, b: Change) -> int | None:
+    """The first line of the new version of ``a`` that calls ``b``."""
+    if a.lines is None or not a.qual or not b.qual:
+        return None
+    hits = [ln for ln, _nm, tgt, _how, _conf in ctx.callees((a.file, a.qual), set(range(a.lines[0], a.lines[1] + 1)))
+            if tgt == (b.file, b.qual)]
+    return min(hits) if hits else None
 
 
 def _helper_return(ctx: _Ctx, c: Change, name: str, changes: list[Change]) -> tuple[list[str], str, str] | None:
@@ -1790,10 +1978,13 @@ def _helper_return(ctx: _Ctx, c: Change, name: str, changes: list[Change]) -> tu
 def _guard_diff(ctx: _Ctx, changes: list[Change]) -> list[dict]:
     """Exit guards of the base version that the new version of a definition does not have (syntax trees of both
     versions). Before a guard is reported removed, the review rules out: the same check in another changed or new
-    definition (moved), the guard split into several (``a or b`` -> ``if a`` + ``if b``), a new guard calling a
-    helper that returns the old condition (extracted), a changed guard (the closest new one), and the condition or
-    its negation inside another condition of the new version (restructured). Only then is it ``guard-removed``:
-    the mechanical fact that neither the check nor its negation is left in the definition."""
+    definition on its call path (moved: the definition calls it, or it calls the definition), the guard split into
+    several (``a or b`` -> ``if a`` + ``if b``), a new guard calling a helper that returns the old condition
+    (extracted), a changed guard (the closest new one), and the condition or its negation inside a condition the new
+    version adds whose branch holds the work the guard preceded (restructured). Only then is it ``guard-removed``:
+    the mechanical fact that neither the check nor its negation is left in a new condition of the definition. A
+    guard kept, split, extracted or moved counts as the same check only while it still runs before the work (a sink
+    statement, or a call reaching one) that the base guard preceded; otherwise it is ``guard-after-work``."""
     out: list[dict] = []
     added_all: list[tuple[Change, dict]] = []
     per_change = []
@@ -1808,21 +1999,56 @@ def _guard_diff(ctx: _Ctx, changes: list[Change]) -> list[dict]:
             continue
         old_g, new_g = _guard_rows(ctx, c, "old"), _guard_rows(ctx, c, "new")
         gone, new = _multiset_minus(old_g, new_g), _multiset_minus(new_g, old_g)
-        per_change.append((c, gone, new))
+        per_change.append((c, gone, new, _multiset_pairs(old_g, new_g)))
         added_all += [(c, g) for g in new]
-    for c, gone, new in per_change:
+    for c, gone, new, kept in per_change:
         old_params = _params_of(ctx, c, "old")
         changed_findings = []
+        # a guard kept as it was, now below work that it preceded in the base version
+        for og, ng in kept:
+            if ng["line"] not in c.new_changed and not any(x < ng["line"] for x in c.new_changed):
+                continue
+            late = _guard_late(ctx, c, og, ng["line"])
+            if late:
+                out.append(_late_guard(c, og, late, f"the exit guard `if {og['cond']}: <exit>` of {c.name} (base line "
+                                       f"{og['line']}) is now at line {ng['line']}", f"{c.file}:{ng['line']}"))
         for g in gone:
             cond, ln = g["cond"], g["line"]
-            moved = [a for a in added_all if a[1]["raw"] == g["raw"] and a[0] is not c]
+            moved = []
+            for a in added_all:
+                if a[1]["raw"] == g["raw"] and a[0] is not c:
+                    rel = _move_relation(ctx, c, a[0])
+                    if rel:
+                        moved.append((a, rel))
             if moved:
-                m = moved[0]
+                (dest, dg), (how, call_at) = moved[0]
+                if how == "callee":
+                    late = _guard_late(ctx, c, g, call_at)
+                    if late:
+                        out.append(_late_guard(c, g, late, f"the exit guard `{cond}` of {c.name} (base line {ln}) moved "
+                                               f"into {dest.name} (line {dg['line']}), which {c.name} calls at line "
+                                               f"{call_at}", f"{c.file}:{call_at}", [f"{dest.file}:{dg['line']}"]))
+                        continue
+                    where = f"which {c.name} calls at line {call_at}"
+                elif dg["line"] > call_at:   # the caller now checks after it has called the definition
+                    out.append(_finding("security", "guard-after-work",
+                                        f"the exit guard `{cond}` of {c.name} (base line {ln}) moved into its caller "
+                                        f"{dest.name}, at line {dg['line']} - after {dest.name} calls {c.name} at line "
+                                        f"{call_at}: the work of {c.name} now runs before the check",
+                                        "statically_verified", f"{dest.file}:{dg['line']}",
+                                        evidence_at=[f"{dest.file}:{call_at}", f"{c.file}:{ln}"],
+                                        basis="syntax trees of both versions: the guard's condition compared as text, "
+                                              "the positions of the guard and of the call compared by line",
+                                        derived_by="review.guard_diff", for_symbol=c.symbol))
+                    continue
+                else:
+                    where = f"which calls {c.name} at line {call_at}, after the check"
                 out.append(_finding("security", "guard-moved",
                                     f"the check `{cond}` left {c.name} (base line {ln}) and appears in "
-                                    f"{m[0].name} at line {m[1]['line']}", "weak_inference", f"{c.file}:{ln}",
-                                    evidence_at=[f"{m[0].file}:{m[1]['line']}"], basis="syntax tree diff of both "
-                                    "versions", derived_by="review.guard_diff", for_symbol=c.symbol, side="base"))
+                                    f"{dest.name} at line {dg['line']}, {where}", "weak_inference", f"{c.file}:{ln}",
+                                    evidence_at=[f"{dest.file}:{dg['line']}"], basis="syntax tree diff of both "
+                                    "versions; the call between the two definitions read from the new version",
+                                    derived_by="review.guard_diff", for_symbol=c.symbol, side="base"))
                 continue
             parts = rr.split_top(" ".join(cond.split()), (" or ", "||"))
             if len(parts) > 1:
@@ -1837,11 +2063,19 @@ def _guard_diff(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                 else:
                     for m in match:
                         new.remove(m)
+                    late_parts = [(m, w) for m in match for w in [_guard_late(ctx, c, g, m["line"])] if w]
+                    if late_parts:
+                        m, w = late_parts[0]
+                        out.append(_late_guard(c, g, w, f"the exit guard `{cond}` of {c.name} (base line {ln}) was "
+                                               f"split into {len(match)} guards and `{m['cond']}` is now at line "
+                                               f"{m['line']}", f"{c.file}:{m['line']}"))
+                        continue
                     out.append(_finding("security", "guard-split",
                                         f"the exit guard `{cond}` of {c.name} (base line {ln}) was split into "
                                         f"{len(match)} guards: " + ", ".join(f"`{m['cond']}` (line {m['line']})"
                                                                              for m in match)
-                                        + " - the same conditions; their exits were not compared", "weak_inference",
+                                        + " - the same conditions, each still before the work the base guard "
+                                          "preceded; their exits were not compared", "weak_inference",
                                         f"{c.file}:{match[0]['line']}", evidence_at=[f"{c.file}:{m['line']}" for m in
                                                                                    match[1:]] + [f"{c.file}:{ln}"],
                                         basis="syntax tree diff of both versions (conditions compared as text)",
@@ -1851,6 +2085,12 @@ def _guard_diff(ctx: _Ctx, changes: list[Change]) -> list[dict]:
             if helper:
                 ng, name, where = helper
                 new.remove(ng)
+                late = _guard_late(ctx, c, g, ng["line"])
+                if late:
+                    out.append(_late_guard(c, g, late, f"the exit guard `{cond}` of {c.name} (base line {ln}) now calls "
+                                           f"{name}(), which returns that condition (defined at {where}), at line "
+                                           f"{ng['line']}", f"{c.file}:{ng['line']}", [where]))
+                    continue
                 out.append(_finding("security", "guard-moved",
                                     f"the exit guard `{cond}` of {c.name} (base line {ln}) now calls {name}(), which "
                                     f"returns that condition (defined at {where}): `{ng['cond']}` at line "
@@ -1864,9 +2104,12 @@ def _guard_diff(ctx: _Ctx, changes: list[Change]) -> list[dict]:
             ratio = difflib.SequenceMatcher(None, g["key"], partner["key"]).ratio() if partner else 0.0
             if partner is not None and ratio >= 0.5:
                 new.remove(partner)
+                late = _guard_late(ctx, c, g, partner["line"])
                 f = _finding("security", "guard-changed",
                              f"the exit guard of {c.name} changed: `{cond}` (base line {ln}) is now "
-                             f"`{partner['cond']}` - weakened or strengthened is not decided",
+                             f"`{partner['cond']}` - weakened or strengthened is not decided"
+                             + (f"; it now runs after `{late[1][:90]}` (line {late[0]}), which the base guard "
+                                "preceded" if late else ""),
                              "statically_verified", f"{c.file}:{partner['line']}", evidence_at=[f"{c.file}:{ln}"],
                              basis="syntax tree diff of both versions", derived_by="review.guard_diff",
                              for_symbol=c.symbol, old=cond, new=partner["cond"])
@@ -1898,24 +2141,27 @@ def _guard_diff(ctx: _Ctx, changes: list[Change]) -> list[dict]:
             if held:
                 text, line, _same = held
                 out.append(_finding("security", "guard-restructured",
-                                    f"the exit guard `{cond}` of {c.name} (base line {ln}) is gone as a guard, but the "
-                                    f"condition or its negation is part of `{text[:120]}` at line {line} - the check "
-                                    "may be kept in another form (not decided)", "weak_inference", f"{c.file}:{line}",
+                                    f"the exit guard `{cond}` of {c.name} (base line {ln}) is gone as a guard, but "
+                                    f"`{text[:120]}` at line {line}, a condition the base version did not have, holds "
+                                    "its negation and its branch holds work the guard preceded - the check may be "
+                                    "kept in another form (not decided)", "weak_inference", f"{c.file}:{line}",
                                     evidence_at=[f"{c.file}:{ln}"], basis="conditions of the new version compared as "
-                                    "text with the old condition and its negation", derived_by="review.guard_diff",
+                                    "text with the old condition and its negation; the branch's statements with the "
+                                    "base statements after the guard", derived_by="review.guard_diff",
                                     for_symbol=c.symbol))
                 continue
             left = [x for x in _guard_rows(ctx, c, "new")][:3]
             out.append(_finding("security", "guard-removed",
-                                f"the exit guard `if {cond}: <exit>` of {c.name} (base line {ln}) is gone: neither "
-                                "the condition nor its negation is in a condition of the new version"
-                                + (", whose exit guards are " + ", ".join(f"`{x['cond'][:60]}` (line {x['line']})"
-                                                                          for x in left) if left else
-                                   ", which has no exit guard"),
+                                f"the exit guard `if {cond}: <exit>` of {c.name} (base line {ln}) is gone: no condition "
+                                "the new version adds holds the condition or its negation"
+                                + ("; the new version's exit guards are " + ", ".join(
+                                    f"`{x['cond'][:60]}` (line {x['line']})" for x in left) if left else
+                                   "; the new version has no exit guard"),
                                 "statically_verified", f"{c.file}:{ln}",
                                 evidence_at=[f"{c.file}:{c.lines[0]}"] if c.lines else (),
                                 basis="the base version's syntax tree has the guard; the new version's has no "
-                                      "condition holding it, its negation, a split of it or a helper returning it",
+                                      "condition of its own holding it, its negation gating the guarded work, a split "
+                                      "of it or a helper returning it",
                                 derived_by="review.guard_diff", for_symbol=c.symbol, side="base"))
         # new guards no old one was paired with: cited on the changed guards of the same definition
         for f in changed_findings:
@@ -1924,6 +2170,37 @@ def _guard_diff(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                                                                            for x in new[:3])
                 f["evidence_at"] += [f"{c.file}:{x['line']}" for x in new[:3]]
     return out
+
+
+def _guard_late(ctx: _Ctx, c: Change, g: dict, new_line: int) -> tuple[int, str, bool] | None:
+    """Work the base guard ``g`` preceded that the new version of ``c`` runs before ``new_line``."""
+    sp = _branch_span(ctx, c, "old", g["line"])
+    return _work_before(ctx, c, g["line"], sp[1] if sp else g["line"], new_line)
+
+
+def _late_guard(c: Change, g: dict, late: tuple[int, str, bool], what: str, at: str,
+                evidence: list[str] | None = None) -> dict:
+    """``guard-after-work``: the check is still made, but after work the base version made only when it passed."""
+    wl, wt, direct = late
+    return _finding("security", "guard-after-work",
+                    f"{what}: it now runs after `{wt[:90]}` (line {wl}), which the base version ran only after the "
+                    "guard passed" + ("" if direct else " (a call whose callee reaches a sink)"),
+                    "statically_verified" if direct else "strong_inference", at,
+                    evidence_at=[f"{c.file}:{wl}", *(evidence or []), f"{c.file}:{g['line']}"],
+                    basis="syntax trees of both versions: statements compared as text, their order against the guard's "
+                          "by line" + ("" if direct else "; the callee's sink found within 2 call hops"),
+                    derived_by="review.guard_diff", for_symbol=c.symbol)
+
+
+def _move_relation(ctx: _Ctx, c: Change, dest: Change) -> tuple[str, int] | None:
+    """How a guard that left ``c`` for ``dest`` can still protect ``c``'s work: ``("callee", line in c)`` when the
+    new version of ``c`` calls ``dest``, ``("caller", line in dest)`` when ``dest`` calls ``c``; None otherwise (an
+    unrelated definition gaining the same check text is no move)."""
+    at = _call_line(ctx, c, dest)
+    if at is not None:
+        return "callee", at
+    at = _call_line(ctx, dest, c)
+    return ("caller", at) if at is not None else None
 
 
 def _multiset_minus(a: list[dict], b: list[dict]) -> list[dict]:
@@ -1936,6 +2213,19 @@ def _multiset_minus(a: list[dict], b: list[dict]) -> list[dict]:
             left[x["key"]] -= 1
         else:
             out.append(x)
+    return out
+
+
+def _multiset_pairs(a: list[dict], b: list[dict]) -> list[tuple[dict, dict]]:
+    """``(x, y)`` of ``a`` and ``b`` with the same key, paired in order."""
+    pool: dict[str, list[dict]] = {}
+    for y in b:
+        pool.setdefault(y["key"], []).append(y)
+    out = []
+    for x in a:
+        ys = pool.get(x["key"])
+        if ys:
+            out.append((x, ys.pop(0)))
     return out
 
 
@@ -1959,20 +2249,34 @@ def _guard_helper(ctx: _Ctx, c: Change, g: dict, new: list[dict], changes: list[
 
 
 def _cond_holding(ctx: _Ctx, c: Change, g: dict, old_params: list[str]) -> tuple[str, int, bool] | None:
-    """A condition of the new version that holds the old guard's condition or its negation as one of its
-    ``and`` / ``or`` operands: ``(condition, line, same)`` - ``same`` when it is the old condition itself (the
-    test is still made; its branch no longer exits), not its negation (the work is now gated by it)."""
+    """A condition the new version adds (the base version's conditions, the removed guard's aside, do not count)
+    that holds the old guard's condition or its negation as one of its ``and`` / ``or`` operands: ``(condition,
+    line, same)`` - ``same`` when it is the old condition itself (the test is still made; its branch no longer
+    exits); a negation counts only when its branch holds a statement that followed the guard in the base version
+    (the work is now gated by it)."""
     new_params = _params_of(ctx, c, "new")
     neg = rr.negations(rr.alpha(g["cond"], old_params))
-    rows = _cond_rows(ctx, c)
-    for text, line in rows:
-        if rr.cond_key(rr.alpha(text, new_params)) == g["key"]:
+    budget: dict[str, int] = {}
+    for text, _line in _cond_rows(ctx, c, "old"):
+        k = rr.cond_key(rr.alpha(text, old_params))
+        budget[k] = budget.get(k, 0) + 1
+    if budget.get(g["key"], 0) > 0:
+        budget[g["key"]] -= 1
+    rows = []
+    for text, line in _cond_rows(ctx, c):
+        k = rr.cond_key(rr.alpha(text, new_params))
+        if budget.get(k, 0) > 0:
+            budget[k] -= 1
+            continue
+        rows.append((text, line, k))
+    for text, line, k in rows:
+        if k == g["key"]:
             return text, line, True
-    for text, line in rows:
+    for text, line, _k in rows:
         pieces = rr.cond_pieces(rr.alpha(text, new_params))
         if g["key"] in pieces:
             return text, line, True
-        if pieces & neg:
+        if pieces & neg and _gates_old_work(ctx, c, g, line):
             return text, line, False
     return None
 
@@ -1980,7 +2284,8 @@ def _cond_holding(ctx: _Ctx, c: Change, g: dict, old_params: list[str]) -> tuple
 def _check_calls_removed(ctx: _Ctx, changes: list[Change]) -> list[dict]:
     """Python: a call removed from a changed definition whose callee is a check - it raises on bad input (``if
     ...: raise``, ``assert``) or is named like one (``validate_*``, ``check_*``) - when the new version no longer
-    calls it at all."""
+    calls it at all (``check-call-removed``), or calls it only after work that the base version ran after the check
+    (``check-call-after-work``)."""
     out: list[dict] = []
     for c in changes:
         if c.test or c.kind not in ("body", "signature") or not c.qual or not c.old_changed or \
@@ -1990,12 +2295,47 @@ def _check_calls_removed(ctx: _Ctx, changes: list[Change]) -> list[dict]:
         fn = rr.py_def_at(ctx.pytree(c.file), c.def_line or -1)
         if ofn is None or isinstance(ofn, ast.ClassDef):
             continue
-        still = {rr.call_name(k) for k in rr.py_calls_in(fn)} if fn is not None else set()
+        new_calls = sorted(rr.py_calls_in(fn), key=lambda k: k.lineno) if fn is not None else []
+        still = {rr.call_name(k) for k in new_calls}
         seen: set[str] = set()
         for call in rr.py_calls_in(ofn):
             name = rr.call_name(call)
-            if not name or name in still or name in seen or not (set(range(call.lineno, (call.end_lineno or call.lineno)
-                                                                            + 1)) & c.old_changed):
+            if not name or name in seen:
+                continue
+            if name in still:
+                # the check is still called: does it still run before the work it preceded? The calls of that name
+                # are paired in order (one fewer or one more is a removal or an addition, not a move); calls inside a
+                # condition are the guard diff's
+                seen.add(name)
+                olds = [k for k in sorted(rr.py_calls_in(ofn), key=lambda k: k.lineno) if rr.call_name(k) == name]
+                news = [k for k in new_calls if rr.call_name(k) == name]
+                if len(olds) != len(news):
+                    continue
+                late, call, later = None, None, None
+                for ok, nk in zip(olds, news):
+                    if id(ok) in _cond_calls(ofn) or id(nk) in _cond_calls(fn) or not (
+                            set(range(ok.lineno, (ok.end_lineno or ok.lineno) + 1)) & c.old_changed
+                            or any(x <= nk.lineno for x in c.new_changed)):
+                        continue
+                    why = _check_why(ctx, _py_resolve_old(ctx, c, ok), name)
+                    late = _work_before(ctx, c, ok.lineno, ok.end_lineno or ok.lineno, nk.lineno) if why else None
+                    if late is not None:
+                        call, later = ok, nk
+                        break
+                if late is None or call is None or later is None:
+                    continue
+                wl, wt, direct = late
+                out.append(_finding("security", "check-call-after-work",
+                                    f"the call to {name}() in {c.name} (base line {call.lineno}) is now at line "
+                                    f"{later.lineno}, after `{wt[:90]}` (line {wl}), which the base version ran only "
+                                    f"after the check; {why[0]}", "strong_inference", f"{c.file}:{later.lineno}",
+                                    evidence_at=[f"{c.file}:{wl}", *why[1]],
+                                    basis="calls of both versions of the definition (syntax trees) compared as text, "
+                                          "their order by line; the callee resolved through the file's definitions and "
+                                          "imports" + ("" if direct else "; the work's sink found within 2 call hops"),
+                                    derived_by="review.check_calls", for_symbol=c.symbol))
+                continue
+            if not (set(range(call.lineno, (call.end_lineno or call.lineno) + 1)) & c.old_changed):
                 continue
             seen.add(name)
             tgt = _py_resolve_old(ctx, c, call)
@@ -2015,6 +2355,35 @@ def _check_calls_removed(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                                       "through the file's definitions and imports", derived_by="review.check_calls",
                                 for_symbol=c.symbol, side="base"))
     return out
+
+
+def _cond_calls(fn: ast.AST) -> set[int]:
+    """``id()`` of the calls inside the conditions of ``fn`` (if / while / assert tests, conditional expressions),
+    kept on the node."""
+    got = getattr(fn, "_verinoda_cond_calls", None)
+    if got is None:
+        got = {id(x) for n in rr.own_nodes(fn) if isinstance(n, (ast.If, ast.While, ast.Assert, ast.IfExp))
+               for x in ast.walk(n.test) if isinstance(x, ast.Call)}
+        try:
+            fn._verinoda_cond_calls = got
+        except AttributeError:
+            pass
+    return got
+
+
+def _check_why(ctx: _Ctx, tgt: tuple[str, str] | None, name: str) -> tuple[str, list[str]] | None:
+    """Why the callee ``tgt`` of a call to ``name`` is a check - it raises on bad input, or it is named like one -
+    with the evidence lines; None when it is neither."""
+    raising: list[int] = []
+    if tgt is not None:
+        s = ctx.sym(*tgt)
+        raising = rr.py_raising_guards(rr.py_def_at(ctx.pytree(tgt[0]), s["def"])) if s else []
+    if raising:
+        return (f"it raises on bad input at {', '.join(f'{tgt[0]}:{x}' for x in raising[:3])}",
+                [f"{tgt[0]}:{x}" for x in raising[:3]])
+    if tgt is not None and rr.CHECK_NAME.search(name):
+        return "named like a check", []
+    return None
 
 
 def _py_resolve_old(ctx: _Ctx, c: Change, call: ast.Call) -> tuple[str, str] | None:
@@ -3589,7 +3958,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     cited = {c.file for c in changes} | {d["at"].rsplit(":", 1)[0] for d in dependents} | \
         {a.rsplit(":", 1)[0] for fs in shown.values() for f in fs for a in [f["at"], *f["evidence_at"]]
          if a and ":" in a}
-    note = _graph_note(ctx, cited)
+    note = _graph_note(ctx, cited, changes)
     unknown += _graph_unknown(note)
     read_first, budget = _read_first(ctx, changes, dependents, shown, max_chars)
     n_strong = sum(1 for v in found.values() for f in v if rr.at_least_strong(f["status"]))
@@ -3991,13 +4360,19 @@ def _graph_unknown(note: dict) -> list[dict]:
     if note.get("stale_files"):
         return [{"kind": "graph_stale", "at": note["stale_files"][0],
                  "what": "edges of files that changed since the last snapshot (outside this diff)",
-                 "why": f"{len(note['stale_files'])} file(s) differ from the snapshot the graph was built from",
+                 "why": f"{len(note['stale_files'])} file(s) differ from the snapshot the graph was built from"
+                        + (f", {note['newer_naming_changed']} of them added or edited since and naming a changed "
+                           "definition: callers there are missing from the dependents (Python call sites, removed "
+                           "names and readers were searched in them by text)" if note.get("newer_naming_changed")
+                           else ""),
                  "next_step": "run `verinoda update` and review again"}]
     return []
 
 
-def _graph_note(ctx: _Ctx, cited: set[str]) -> dict:
-    """The snapshot the graph comes from, and which of the ``cited`` files (outside the diff) changed since."""
+def _graph_note(ctx: _Ctx, cited: set[str], changes: list[Change] | None = None) -> dict:
+    """The snapshot the graph comes from, and which of the ``cited`` files (outside the diff) changed since - with
+    the code files the snapshot does not have as they are now that name a changed definition (a caller added
+    since the last ``update`` has no edge)."""
     snap = None
     stale: list[str] = []
     if ctx.store is not None:
@@ -4018,12 +4393,17 @@ def _graph_note(ctx: _Ctx, cited: set[str]) -> dict:
                 cur = None
             if recorded.get(rel) not in (None, cur):
                 stale.append(rel)
+    names = {c.name for c in changes or () if c.qual and c.name}
+    rx = re.compile(r"\b(?:" + "|".join(sorted(map(re.escape, names))) + r")\b") if names else None
+    newer = [f for f in ctx.drifted() if f not in stale and rx is not None and rx.search(ctx.text(f) or "")]
     note = {"snapshot": (snap or {}).get("id"), "commit": (snap or {}).get("commit_sha"),
             "changed_files_reparsed": sorted(ctx.base_texts),
             "python_calls_read_from": sorted(ctx.reparsed)[:20],
             "note": "graph edges come from the last snapshot; the changed files are read from the tree under "
                     "review (Python calls re-parsed from its syntax tree, other languages' calls re-found by name)",
-            "stale_files": stale}
+            "stale_files": stale + newer}
+    if newer:
+        note["newer_naming_changed"] = len(newer)
     return note
 
 

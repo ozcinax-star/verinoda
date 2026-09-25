@@ -1090,9 +1090,76 @@ def test_sql_built_with_plus_and_executed_is_verified(orders):
 def test_an_existing_security_call_on_a_changed_line_is_not_added(tmp_path):
     repo = _project(tmp_path, "adds", {"app/__init__.py": "", "app/runner.py": "import subprocess\n\n\n"
                                        "def launch(cmd):\n    return subprocess.run(cmd)\n"})
-    _edit(repo, "app/runner.py", "subprocess.run(cmd)", "subprocess.run(cmd, timeout=5)")
+    _edit(repo, "app/runner.py", "    return subprocess.run(cmd)", "    out = subprocess.run(cmd)\n    return out")
     [f] = _by(_review(repo), "security", "op-on-changed-line")
     assert f["status"] == "weak_inference" and "had on its changed lines too" in f["finding"]
+    # r2-2 C26: the same call with other arguments "changes" it (a keyword with a constant: strong_inference)
+    _git(repo, "checkout", "--", "app/runner.py")
+    _edit(repo, "app/runner.py", "subprocess.run(cmd)", "subprocess.run(cmd, timeout=5)")
+    [f] = _by(_review(repo), "security", "op-on-changed-line")
+    assert f["status"] == "strong_inference" and "changes process-exec" in f["finding"] and "adds" not in f["finding"]
+
+
+def test_a_security_call_whose_constant_argument_became_a_parameter(tmp_path):
+    # r2-2 C26: subprocess.run(["git", "status"]) -> subprocess.run(cmd, shell=...) and pickle.loads(b"...") ->
+    # pickle.loads(blob) were "holds ... too" (weak_inference, exit 0): only the operation kinds were compared
+    repo = _project(tmp_path, "c26", {"app/__init__.py": "", "app/tasks.py": "import pickle\nimport subprocess\n\n\n"
+                                      "def status(cmd):\n    return subprocess.run([\"git\", \"status\"], capture_output="
+                                      "True)\n\n\ndef restore(blob):\n    return pickle.loads(b\"\\x80\\x04N.\")\n"})
+    _edit(repo, "app/tasks.py", "subprocess.run([\"git\", \"status\"], capture_output=True)",
+          "subprocess.run(cmd, capture_output=True, shell=isinstance(cmd, str))")
+    _edit(repo, "app/tasks.py", "pickle.loads(b\"\\x80\\x04N.\")", "pickle.loads(blob)")
+    res = _review(repo)
+    got = {f["at"]: f for f in _by(res, "security", "op-on-changed-line")}
+    assert {a: f["status"] for a, f in got.items()} == {"app/tasks.py:6": "statically_verified",
+                                                        "app/tasks.py:10": "statically_verified"}
+    assert "changes process-exec" in got["app/tasks.py:6"]["finding"] and "now read cmd" in got["app/tasks.py:6"]["finding"]
+    assert "now read blob" in got["app/tasks.py:10"]["finding"] and res["exit"] == 3
+
+
+def test_security_calls_through_an_assigned_alias_or_a_renamed_re_export(tmp_path):
+    # r2-2 C08: `run_cmd = subprocess.run` / `unpack = pickle.loads` called on changed lines were no longer found once
+    # the engine was skipped for lines without a target's name; C22: `from app.compat import run_command` (compat:
+    # `from subprocess import run as run_command`) was never found
+    repo = _project(tmp_path, "c08", {
+        "app/__init__.py": "",
+        "app/compat.py": "import pickle\nfrom subprocess import run as run_command\n\nload_blob = pickle.loads\n",
+        "app/tasks.py": "import pickle\nimport subprocess\n\nfrom app import compat\nfrom app.compat import load_blob, "
+                        "run_command\n\nrun_cmd = subprocess.run\nunpack = pickle.loads\n\n\ndef launch(cmd):\n"
+                        "    return cmd\n\n\ndef restore(blob):\n    return blob\n\n\ndef launch2(cmd):\n    return cmd\n\n\n"
+                        "def restore2(blob):\n    return blob\n\n\ndef launch3(cmd):\n    return cmd\n"})
+    text = (repo / "app" / "tasks.py").read_text(encoding="utf-8")
+    for fn, call in (("launch", "run_cmd(cmd)"), ("restore", "unpack(blob)"), ("launch2", "run_command(cmd)"),
+                     ("restore2", "load_blob(blob)"), ("launch3", "compat.run_command(cmd)")):
+        arg = "blob" if "blob" in call else "cmd"
+        text = text.replace(f"def {fn}({arg}):\n    return {arg}\n", f"def {fn}({arg}):\n    return {call}\n")
+    (repo / "app" / "tasks.py").write_text(text, encoding="utf-8", newline="\n")
+    got = {f["at"]: f["status"] for f in _by(_review(repo), "security", "op-on-changed-line")}
+    assert got == {"app/tasks.py:12": "statically_verified", "app/tasks.py:16": "statically_verified",
+                   "app/tasks.py:20": "statically_verified", "app/tasks.py:24": "statically_verified",
+                   "app/tasks.py:28": "statically_verified"}
+
+
+def test_a_caller_committed_after_the_last_snapshot_is_searched_and_named(tmp_path):
+    # r2-2 C05: the Python searches read only the graph's importing files: a caller added after the last scan was
+    # silently missed (arity break, removed name, binding reader), with no graph_stale unknown
+    repo = _project(tmp_path, "c05", {"pkg/__init__.py": "", "pkg/rules.py": "LIMIT = 3\n\n\ndef validate(value):\n"
+                                      "    return value > 0\n", "pkg/old_user.py": "from pkg.rules import validate\n\n\n"
+                                      "def check_old(v):\n    return validate(v)\n"})
+    (repo / "pkg" / "new_user.py").write_text("from pkg.rules import LIMIT, validate\n\n\ndef check_new(v):\n"
+                                              "    return validate(v) and v < LIMIT\n", encoding="utf-8", newline="\n")
+    _git(repo, "add", "pkg/new_user.py")
+    _git(repo, "commit", "-qm", "a new caller")
+    _edit(repo, "pkg/rules.py", "def validate(value):\n", "def validate(value, strict):\n")
+    res = _review(repo)
+    assert {f["at"] for f in _by(res, "public_api", "arity-break")} == {"pkg/old_user.py:5", "pkg/new_user.py:5"}
+    assert res["graph"]["stale_files"] == ["pkg/new_user.py"] and "graph_stale" in {u["kind"] for u in res["unknown"]}
+    _git(repo, "checkout", "--", "pkg/rules.py")
+    _edit(repo, "pkg/rules.py", "\n\ndef validate(value):\n    return value > 0\n", "\n")
+    assert {"pkg/new_user.py:1", "pkg/new_user.py:5"} <= {f["at"] for f in _by(_review(repo), "public_api")}
+    _git(repo, "checkout", "--", "pkg/rules.py")
+    _edit(repo, "pkg/rules.py", "LIMIT = 3\n", "LIMIT = 30\n")
+    assert [b["at"] for b in _review(repo)["binding_readers"]] == ["pkg/new_user.py:5"]
 
 
 def test_value_bound_on_a_changed_line_and_written_later(orders):
@@ -1271,3 +1338,108 @@ def test_planned_signature_change_lists_the_call_sites(orders):
     sites = {f["at"]: f["status"] for f in _by(res, "public_api", "call-site-of-changed-signature")}
     assert sites == {"orders/pricing.py:8": "weak_inference", "tests/test_pricing.py:5": "weak_inference",
                      "tests/test_pricing.py:9": "weak_inference"}
+
+
+# -- review round 2: the second reviewers' findings (each test reproduces one) -----------------------------------
+
+ADMIN_BASE = '''import sqlite3
+
+conn = sqlite3.connect(":memory:")
+
+
+def is_admin(user):
+    return user is not None and user.get("role") == "admin"
+
+
+def delete_order(user, order_id):
+    if user is None or user.get("role") != "admin":
+        raise PermissionError("admin only")
+    conn.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+    conn.commit()
+    if is_admin(user):
+        print("audit: admin deleted", order_id)
+
+
+def archive_order(user, order_id):
+    conn.execute("UPDATE orders SET archived = 1 WHERE id = ?", (order_id,))
+    conn.commit()
+'''
+ADMIN_GUARD = '''    if user is None or user.get("role") != "admin":
+        raise PermissionError("admin only")
+'''
+ADMIN_WRITE = '''    conn.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+    conn.commit()
+'''
+IS_ADMIN_GUARD = "    if not is_admin(user):\n        raise PermissionError(\"admin only\")\n"
+
+
+@pytest.fixture()
+def admin(tmp_path):
+    return _project(tmp_path, "admin", {"app/__init__.py": "", "app/orders.py": ADMIN_BASE,
+                                        "app/jobs.py": "from app.orders import delete_order\n\n\n"
+                                                       "def _purge(user, oid):\n    return delete_order(user, oid)\n"})
+
+
+def _guards_of(res: dict) -> list[tuple[str, str, str]]:
+    return [(f["rule"], f["status"], f["at"]) for f in _by(res, "security") if "guard" in f["rule"]
+            or f["rule"].startswith("check-call")]
+
+
+def test_a_removed_guard_is_not_restructured_by_a_condition_the_base_already_had(admin):
+    # r2-2 C25: `if not is_admin(user): raise` deleted; the unchanged `if is_admin(user): audit` after the write held
+    # its negation and made the removal a weak guard-restructured (exit 0)
+    _edit(admin, "app/orders.py", ADMIN_GUARD, IS_ADMIN_GUARD)
+    _git(admin, "commit", "-qam", "is_admin guard")
+    _edit(admin, "app/orders.py", IS_ADMIN_GUARD, "")
+    res = _review(admin)
+    assert _guards_of(res) == [("guard-removed", "statically_verified", "app/orders.py:11")] and res["exit"] == 3
+    # a new negated condition that gates only a new line (not the work the guard preceded) is no restructuring
+    _git(admin, "checkout", "--", "app/orders.py")
+    _edit(admin, "app/orders.py", IS_ADMIN_GUARD, "")
+    _edit(admin, "app/orders.py", "    conn.commit()\n    if is_admin(user):\n        print(",
+          "    conn.commit()\n    if is_admin(user):\n        print(user)\n    if is_admin(user):\n        print(")
+    assert [r for r, _s, _a in _guards_of(_review(admin))] == ["guard-removed"]
+
+
+def test_a_guard_split_extracted_or_moved_below_the_write_is_after_work(admin):
+    # r2-2 C04b: the second half of a split guard, or a guard calling an extracted helper, placed after the DELETE
+    # and commit was "the same check" (weak, exit 0)
+    _edit(admin, "app/orders.py", ADMIN_GUARD + ADMIN_WRITE, "    if user is None:\n        raise PermissionError(\"x\")\n"
+          + ADMIN_WRITE + "    if user.get(\"role\") != \"admin\":\n        raise PermissionError(\"x\")\n")
+    res = _review(admin)
+    assert _guards_of(res) == [("guard-after-work", "statically_verified", "app/orders.py:15")] and res["exit"] == 3
+    assert "conn.execute('DELETE FROM orders" in _by(res, "security")[0]["finding"]
+    _git(admin, "checkout", "--", "app/orders.py")
+    _edit(admin, "app/orders.py", ADMIN_GUARD + ADMIN_WRITE, ADMIN_WRITE + "    if not_admin(user):\n"
+          "        raise PermissionError(\"x\")\n")
+    (admin / "app" / "orders.py").write_text((admin / "app" / "orders.py").read_text(encoding="utf-8")
+                                             + "\n\ndef not_admin(user):\n    return user is None or user.get(\"role\") != "
+                                             "\"admin\"\n", encoding="utf-8", newline="\n")
+    assert _guards_of(_review(admin)) == [("guard-after-work", "statically_verified", "app/orders.py:13")]
+    # the same guard moved below the write; the split kept in front of it is still the weak guard-split
+    _git(admin, "checkout", "--", "app/orders.py")
+    _edit(admin, "app/orders.py", ADMIN_GUARD + ADMIN_WRITE, ADMIN_WRITE + ADMIN_GUARD)
+    assert _guards_of(_review(admin)) == [("guard-after-work", "statically_verified", "app/orders.py:13")]
+    _git(admin, "checkout", "--", "app/orders.py")
+    _edit(admin, "app/orders.py", ADMIN_GUARD, "    if user is None:\n        raise PermissionError(\"x\")\n"
+          "    if user.get(\"role\") != \"admin\":\n        raise PermissionError(\"x\")\n")
+    assert _guards_of(_review(admin)) == [("guard-split", "weak_inference", "app/orders.py:11")]
+
+
+def test_a_validator_call_moved_after_the_save(orders):
+    # r2-2 C15: validate_items(items) moved below repo.save(...) gave no security finding (the call still exists)
+    _edit(orders, "orders/service.py", "    validate_items(items)\n    total = compute_total(items)\n"
+          "    return repo.save(customer, total)\n", "    total = compute_total(items)\n"
+          "    oid = repo.save(customer, total)\n    validate_items(items)\n    return oid\n")
+    [f] = _by(_review(orders), "security")
+    assert (f["rule"], f["status"], f["at"]) == ("check-call-after-work", "strong_inference", "orders/service.py:22")
+    assert "orders/service.py:21" in f["evidence_at"] and "orders/service.py:13" in f["evidence_at"]
+
+
+def test_a_guard_moved_to_a_function_off_its_call_path_is_removed(admin):
+    # r2-2 C04 moved_to_unrelated: the guard deleted from delete_order and added to archive_order (which neither
+    # calls nor is called by delete_order) was a weak guard-moved
+    _edit(admin, "app/orders.py", ADMIN_GUARD + ADMIN_WRITE, ADMIN_WRITE)
+    _edit(admin, "app/orders.py", "def archive_order(user, order_id):\n", "def archive_order(user, order_id):\n"
+          + ADMIN_GUARD)
+    assert _guards_of(_review(admin)) == [("guard-removed", "statically_verified", "app/orders.py:11")]
