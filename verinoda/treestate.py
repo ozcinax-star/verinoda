@@ -36,9 +36,10 @@ relative to the project (``git rev-parse --show-prefix``), commit files are
 those under the project's directory, and a commit copy holds only them.
 
 Paths from history that name git's own directory in any spelling a file system
-may fold to ``.git`` (``.GIT``, ``.git.``, ``git~1``, ignorable Unicode) or
-``.verinoda`` are never listed or written; on Windows neither are names Windows
-cannot hold (``what?.md``, ``a:b``, ``NUL``).
+may fold to ``.git`` (``.GIT``, ``.git.``, ``git~1``, ignorable Unicode, also
+between backslashes, which Windows reads as separators) or ``.verinoda`` are
+never listed or written; on Windows neither are names Windows cannot hold
+(``what?.md``, ``a:b``, ``NUL``, any name holding a backslash).
 """
 
 from __future__ import annotations
@@ -67,6 +68,9 @@ _GIT_SAFE = ("--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.qu
 _IGNORABLE = re.compile("[​-‏‪-‮⁠-⁤⁪-⁯﻿]")
 _RESERVED_PARTS = {".git", "git~1", ".verinoda"}
 _WIN_BAD_CHARS = re.compile(r'[<>:"|?*\x00-\x1f]')
+# A backslash is part of one name for git, but Windows reads it as a directory separator: the tree entry
+# ".\.git\config" is written as .git/config. Reserved names are looked for between either separator.
+_ANY_SEP = re.compile(r"[/\\]")
 _WIN_DEVICES = re.compile(r"^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³]|conin\$|conout\$)(\..*)?$", re.I)
 # Test files by the conventions of the languages the failure parsers cover, beyond the Python/directory
 # rule of the runtime tracer: Jest/Vitest/node --test (x.test.js, x.spec.ts), Go (x_test.go), JVM (FooTest.java).
@@ -213,6 +217,8 @@ def unwritable_here(rel: str) -> str | None:
     """Why ``rel`` cannot be written as a file on this operating system, else None."""
     if os.name != "nt":
         return None
+    if "\\" in rel:
+        return "a backslash in a name (Windows reads it as a directory separator)"
     for part in rel.split("/"):
         if _WIN_BAD_CHARS.search(part):
             return "a character Windows does not allow in file names"
@@ -224,9 +230,11 @@ def unwritable_here(rel: str) -> str | None:
 
 
 def safe_path(rel: str) -> bool:
-    """A repository-relative path Verinoda may list and write: no ``..``, no git/.verinoda directory."""
+    """A repository-relative path Verinoda may list and write: no ``..``, no git/.verinoda directory (also
+    not between backslashes, which Windows reads as separators)."""
     parts = rel.split("/")
-    return bool(rel) and not any(p in ("", ".", "..") for p in parts) and not any(reserved_part(p) for p in parts)
+    return (bool(rel) and not any(p in ("", ".", "..") for p in parts)
+            and not any(reserved_part(p) for p in _ANY_SEP.split(rel)))
 
 
 def index_symlinks(repo: Path) -> set[str]:

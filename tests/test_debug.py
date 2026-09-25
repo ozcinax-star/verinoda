@@ -8,6 +8,7 @@ os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
 import hashlib  # noqa: E402
 import json  # noqa: E402
+import re  # noqa: E402
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -444,6 +445,32 @@ def test_commit_copies_never_write_a_git_directory(tmp_path):
     st = open_store(repo)
     with pytest.raises(ValueError, match="repository-relative file path"):
         experiments.run(st, repo, PT, hypothesis="x", ref="HEAD", overlay=[".GIT/config"])
+
+
+def test_commit_copies_never_write_a_git_directory_through_backslash_names(tmp_path):
+    # review finding: the tree entry ".\.git\config" is one name for git, but Windows writes it as .git/config
+    # (and git then runs the fsmonitor it names); the prepared differential copy said "no .git is written"
+    repo = _repo(tmp_path)
+    cfg = b"[core]\n\tfsmonitor = \"echo PWNED >&2; false\"\n"
+    commit = _commit_with_entries(repo, {".\\.git\\config": cfg, ".\\.git\\HEAD": b"ref: refs/heads/main\n",
+                                         "a\\GIT~1\\config": cfg, "sub\\.verinoda\\x.txt": b"y",
+                                         "venvtrick\\.venv\\y.txt": b"v"})
+    reserved = {".git", "git~1", ".verinoda"}
+    skipped: list[dict] = []
+    paths = [p for _, _, p in treestate.commit_entries(repo, commit, skipped)]
+    assert paths and not {q.lower() for p in paths for q in re.split(r"[/\\]", p)} & reserved
+    if os.name == "nt":
+        assert not any("\\" in p for p in paths)
+        assert [s["path"] for s in skipped] == ["venvtrick\\.venv\\y.txt"] and "backslash" in skipped[0]["why"]
+    dst = tmp_path / "copy"
+    dst.mkdir()
+    experiments._copy_commit(repo, commit, dst)
+    st = open_store(repo)
+    debug.start(st, repo, "x", ["gradlew", "test"], observed_output="FAILED\n", exit_code=1)
+    prep = Path(debug.differential(st, repo, base=commit, prepare=True)["prepared_copy"])
+    for copy in (dst, prep):
+        written = {q.lower() for f in copy.rglob("*") for q in f.relative_to(copy).parts}
+        assert written and not written & reserved, copy
 
 
 def test_debug_diff_does_not_rewrite_the_index(tmp_path):

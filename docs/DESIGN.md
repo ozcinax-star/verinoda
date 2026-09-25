@@ -1145,8 +1145,9 @@ records what the human chose and checks the code against it.
   rewrote `.git/index` for stat-dirty files even with `--no-optional-locks`). Refs from users or agents
   pass `rev-parse --verify --end-of-options` and are refused when they start with `-`. Paths from
   history that a file system may fold to `.git` (`.GIT`, `.git.`, `git~1`, NTFS streams, Unicode HFS+
-  ignores) or `.verinoda` are never written, and an overlay path is checked the same way and may not
-  go through a symlink; a file this OS cannot hold (`what?.md`, `NUL` on Windows) is left out of the
+  ignores, also between backslashes, which Windows reads as separators: `.\.git\config`) or `.verinoda`
+  are never written, and an overlay path is checked the same way and may not go through a symlink; a
+  file this OS cannot hold (`what?.md`, `NUL`, any name with a backslash on Windows) is left out of the
   copy and named in the run's `source.skipped` and limits. A project below its git top level works on
   its own subtree (`rev-parse --show-prefix`; commit copies hold only that subtree). A tracked
   symlink checked out as a plain file (`core.symlinks=false`) is not a change. A run of a commit copy
