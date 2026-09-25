@@ -576,3 +576,25 @@ def test_what_is_left_is_extracted_here_only_when_it_is_small(tmp_path, monkeypa
     monkeypatch.setattr(index, "IN_PROCESS_BELOW", 64)
     monkeypatch.setattr(index, "IN_PROCESS_OK", False)  # not measured there: the pool as before
     assert not index._small_batch(files)
+
+
+def test_no_code_stamp_once_the_code_changed_on_disk(tmp_path, monkeypatch):
+    pkg = tmp_path / "pkg"
+    (pkg / "project_index" / "extractors").mkdir(parents=True)
+    for rel in ("index.py", "portable_ids.py", "project_index/watch.py",
+                "project_index/extractors/json_config.py"):
+        (pkg / rel).write_text(f"# {rel}\n", encoding="utf-8")
+    monkeypatch.setattr(index, "_HERE", pkg)
+    monkeypatch.setattr(index, "_STAMP", [])
+    monkeypatch.setattr(index, "_LOADED_CODE", index._code_files())
+    assert [f[0] for f in index._LOADED_CODE] == ["index.py", "portable_ids.py",
+                                                  "project_index/extractors/json_config.py",
+                                                  "project_index/watch.py"]
+    stamp = index._code_stamp()
+    assert stamp and index._code_stamp() == stamp
+    # this process loaded the code above; then the files on disk change (an edit, an upgrade)
+    (pkg / "project_index" / "extractors" / "json_config.py").write_bytes(b"# changed\n")
+    assert index._code_stamp() is None
+    monkeypatch.setattr(index, "_LOADED_CODE", index._code_files())  # a process started now
+    monkeypatch.setattr(index, "_STAMP", [])
+    assert index._code_stamp() not in (None, stamp)

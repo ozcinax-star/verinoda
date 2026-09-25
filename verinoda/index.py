@@ -446,27 +446,68 @@ class _null:
 
 REBUILD_RECORD = "rebuild_record.json"
 REBUILD_RECORD_VERSION = 1
+_HERE = Path(__file__).resolve().parent
 _STAMP: list[str] = []
 
 
-def _code_stamp() -> str:
+def _code_files() -> tuple:
+    """``(path, size, mtime_ns)`` of each file the code stamp covers: every file of project_index,
+    this module and portable_ids (paths relative to the package, sorted)."""
+    found = []
+    stack = [_HERE / "project_index"]
+    while stack:
+        with os.scandir(stack.pop()) as entries:
+            for e in entries:
+                if e.is_dir(follow_symlinks=False):
+                    stack.append(Path(e.path))
+                elif e.name.endswith(".py"):
+                    st = e.stat()
+                    rel = Path(e.path).relative_to(_HERE).as_posix()
+                    found.append((rel, st.st_size, st.st_mtime_ns))
+    for name in ("index.py", "portable_ids.py"):
+        st = os.stat(_HERE / name)
+        found.append((name, st.st_size, st.st_mtime_ns))
+    return tuple(sorted(found))
+
+
+def _loaded_code_files():
+    try:
+        return _code_files()
+    except OSError:
+        return None
+
+
+_LOADED_CODE = _loaded_code_files()  # as this process loaded them
+
+
+def _code_stamp() -> str | None:
     """Hash of the code a rebuild runs after extraction (every file of project_index, this module,
-    portable_ids), the Python version and the graph libraries' versions."""
+    portable_ids), the Python version and the graph libraries' versions.
+
+    None when one of those files changed on disk since this module was imported (a process that
+    keeps running, such as the MCP server, while Verinoda is edited or upgraded): the code on disk
+    may not be the code that runs, so this process neither trusts nor writes a record.
+    """
+    if _LOADED_CODE is None or _loaded_code_files() != _LOADED_CODE:
+        return None
     if _STAMP:
         return _STAMP[0]
     from importlib import metadata
     import sys
 
     h = hashlib.sha256(sys.version.encode())
-    here = Path(__file__).resolve().parent
-    files = sorted((here / "project_index").rglob("*.py"))
-    for f in files + [here / "index.py", here / "portable_ids.py"]:
-        h.update(f.relative_to(here).as_posix().encode() + b"\0" + f.read_bytes() + b"\0")
+    try:
+        for rel, _, _ in _LOADED_CODE:
+            h.update(rel.encode() + b"\0" + (_HERE / rel).read_bytes() + b"\0")
+    except OSError:
+        return None
     for dist in ("networkx", "graspologic-native", "graspologic"):
         try:
             h.update(f"{dist}={metadata.version(dist)}\0".encode())
         except metadata.PackageNotFoundError:
             h.update(f"{dist}=-\0".encode())
+    if _loaded_code_files() != _LOADED_CODE:
+        return None  # changed while it was read
     _STAMP.append(h.hexdigest())
     return _STAMP[0]
 
@@ -509,14 +550,15 @@ class _keep_unchanged_graph:
 
     On the next build, ``_topology_from_graph`` (which the vendored code calls only for that
     comparison) is wrapped. When the new graph hashes the same, the commit and the code are the
-    same and the files the record fingerprints are untouched, the full path is known to produce
-    the same clustering, labels and graph.json bytes; the topology is handed over as Verinoda
-    wrote it (edge direction as ``to_json`` writes it, ids made portable, nodes of missing files
-    pruned), so a file that appeared or vanished since makes the comparison fail and the full
-    path runs. When the vendored code then takes its fast path, what the full path would still
-    have changed is done here, with the vendored functions: GRAPH_REPORT.md (it carries the date
-    and the corpus's file and word counts) and the dated backup of a labelled graph. Anything
-    else returns the topology untouched: the full path runs as before.
+    same (:func:`_code_stamp`: no record is used or written by a process whose code changed on
+    disk after it was loaded) and the files the record fingerprints are untouched, the full path
+    is known to produce the same clustering, labels and graph.json bytes; the topology is handed
+    over as Verinoda wrote it (edge direction as ``to_json`` writes it, ids made portable, nodes
+    of missing files pruned), so a file that appeared or vanished since makes the comparison fail
+    and the full path runs. When the vendored code then takes its fast path, what the full path
+    would still have changed is done here, with the vendored functions: GRAPH_REPORT.md (it
+    carries the date and the corpus's file and word counts) and the dated backup of a labelled
+    graph. Anything else returns the topology untouched: the full path runs as before.
     """
 
     def __init__(self, repo: Path, *, active: bool):
@@ -619,7 +661,8 @@ class _keep_unchanged_graph:
         out = self.out
         return (rec.get("version") == REBUILD_RECORD_VERSION and rec.get("key") == self.key
                 and rec.get("commit") == self.commit and rec.get("root") == str(self.repo)
-                and self.detected is not None and rec.get("stamp") == _code_stamp()
+                and self.detected is not None and rec.get("stamp") is not None
+                and rec.get("stamp") == _code_stamp()
                 and _viz_node_limit() <= 0 and not (out / "graph.html").exists()
                 and not (out / _HTML_STALE_MARKER).exists() and not any(out.glob("*-callflow.html"))
                 and _sha256_bytes(out / ".graphify_labels.json") == rec.get("labels")
@@ -708,7 +751,10 @@ class _keep_unchanged_graph:
                 or json.loads(sf.read_text(encoding="utf-8"))
                 != {str(k): v for k, v in community_member_sigs(communities).items()}):
             return None
-        return {"version": REBUILD_RECORD_VERSION, "stamp": _code_stamp(), "key": self.key,
+        stamp = _code_stamp()
+        if stamp is None:  # the code on disk is not the code that ran
+            return None
+        return {"version": REBUILD_RECORD_VERSION, "stamp": stamp, "key": self.key,
                 "commit": self.commit, "root": str(self.repo),
                 "graph": graph_identity(graph_path(self.repo)),
                 "labels": _sha256_bytes(lf), "sig": _sha256_bytes(sf), "rewrote": rewrote,
