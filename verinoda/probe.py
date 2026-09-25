@@ -152,7 +152,8 @@ def resolve_target(repo: Path, symbol: str, files: list[str]) -> tuple[str, str]
         rel = rel.replace("\\", "/").strip()
         while rel.startswith("./"):
             rel = rel[2:]
-        if not rel or rel.startswith("-") or experiments.path_escape(rel) or not treestate.safe_path(rel):
+        if not rel or rel.startswith("-") or any(ord(c) < 32 for c in rel) or experiments.path_escape(rel) \
+                or not treestate.safe_path(rel):
             raise ValueError(f"{rel!r} must be a file path inside the repository")
         if not qual.strip():
             raise ValueError("give the function name after ::")
@@ -707,6 +708,10 @@ def _run_side(store: Store, repo: Path, spec: dict, *, side: str, probe_id: str,
         if out["complete"]:
             return res
         last = max(out["rows"], default=start - 1)
+        if exp["outcome"] == "timeout":  # the whole run hit its timeout: no input is known to hang
+            res["error"] = (f"the run reached its {timeout:g} s timeout after input {last}; the remaining "
+                            f"{n - last - 1} input(s) were not run (raise timeout)")
+            return res
         hung = last + 1
         if hung >= n:  # every input ran; the scaling part did not finish
             res["scaling"] = res["scaling"] or {"problem": {"error": "the scaling run did not finish (a call ran "
@@ -1149,6 +1154,7 @@ def _probe(store: Store, repo: Path, symbol: str, *, base, no_base, inputs, seed
 def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, meta, info, corpus_sha, bounds, tds,
              params, sites, project, gate_res, base_sha, head_commit, base_run, head_run, differential, notes,
              scaling_note, props, record, emit_test, allow, run_timeout, t0, common, out_dir) -> dict:
+    label = _callee_label(qual, spec)
     runs = {"head": head_run["experiments"], **({"base": base_run["experiments"]} if base_run else {})}
     trees = {"head": head_run.get("tree"), **({"base": base_run.get("tree")} if base_run else {})}
     limits = list(notes) + list(head_run.get("limits") or [])
@@ -1225,7 +1231,7 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
             pid, sym, "refused", f"refused at run time: {len(blocked)} input(s) made {qual} attempt a side effect "
                                  f"the static gate did not see ({o.get('b', '?')}); it was blocked, and no "
                                  "difference is reported", limits=limits,
-            blocked={"count": len(blocked), "example": {"call": _call_text(qual, cases[i]), "event": o.get("b"),
+            blocked={"count": len(blocked), "example": {"call": _call_text(label, cases[i]), "event": o.get("b"),
                                                         "events": o.get("ev")}},
             next_step="probe a pure function it calls, or - only if the user agrees - allow_side_effects",
             **res_common), out_dir, t0)
@@ -1271,12 +1277,12 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
         if not good and bad:
             unstable.append({"class": c, "count": len(classes[c]),
                              "why": "the outputs changed between the first runs and the confirmation runs",
-                             "example": _example(qual, cases, meta, rows_b, rows_h, bad[0])})
+                             "example": _example(label, cases, meta, rows_b, rows_h, bad[0])})
             continue
         shown = good or ex
         differences.append({
             "class": c, "text": CLASS_TEXT[c], "count": len(classes[c]),
-            "examples": [_example(qual, cases, meta, rows_b, rows_h, j) for j in shown],
+            "examples": [_example(label, cases, meta, rows_b, rows_h, j) for j in shown],
             "reproduced": True if good else None,
             **({"low_priority": True} if c == "numeric_drift" else {})})
     # properties, undeclared exceptions, nondeterminism
@@ -1289,7 +1295,7 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
         if hit:
             hit.sort(key=simple)
             violations.append({"property": ptxt, "count": len(hit), "examples": [
-                {**_example(qual, cases, meta, rows_b, rows_h, j),
+                {**_example(label, cases, meta, rows_b, rows_h, j),
                  **({"holds_at_base": k not in (rows_b.get(j, {}).get("x", [{}])[0].get("pv") or [])}
                     if differential and rows_b.get(j) else {})} for j in hit[:EXAMPLES_PER_CLASS]]})
     declared = _declared(project, project.gate.checked, head_node, sites["raises"])
@@ -1307,15 +1313,15 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
         at_base = None
         if differential and rows_b.get(j):
             at_base = rows_b[j]["x"][0].get("e") == etype
-        und_out.append({"type": etype, "count": len(ix), "example": _example(qual, cases, meta, rows_b, rows_h, j),
+        und_out.append({"type": etype, "count": len(ix), "example": _example(label, cases, meta, rows_b, rows_h, j),
                         **({"also_at_base": at_base} if at_base is not None else {})})
     to_out = [{"class": c, "text": CLASS_TEXT[c], "count": len(ix),
-               "examples": [_example(qual, cases, meta, rows_b, rows_h, j) for j in sorted(ix, key=simple)[:2]]}
+               "examples": [_example(label, cases, meta, rows_b, rows_h, j) for j in sorted(ix, key=simple)[:2]]}
               for c, ix in timeouts.items()]
     nd_out = None
     if nondet:
         j = nondet[0]
-        nd_out = {"count": len(nondet), "example": {"call": _call_text(qual, cases[j]),
+        nd_out = {"count": len(nondet), "example": {"call": _call_text(label, cases[j]),
                                                      "calls": [describe(o) for o in rows_h[j]["x"]]}}
     scaling_res = None
     if spec.get("scaling"):
@@ -1373,6 +1379,9 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
     if head_run.get("hangs") or (base_run or {}).get("hangs"):
         limits.append(f"inputs that ran past the per-call timeout: working tree {len(head_run.get('hangs') or [])}"
                       + (f", base {len(base_run.get('hangs') or [])}" if base_run else ""))
+    for side_run in (base_run, head_run):
+        if side_run is not None and side_run.get("error"):
+            limits.append(f"{'working-tree' if side_run['side'] == 'head' else 'base'} run: {side_run['error']}")
     if not_run:
         limits.append(f"{len(not_run)} input(s) were not run on both sides (a hang budget or a failed run)")
     if head_run.get("import_events") and allow:
@@ -1402,14 +1411,22 @@ def _simple_key(cases: list[dict], meta: list[dict], j: int) -> tuple:
     return special, nonascii, length, meta[j]["src"] == "generated", mag, j
 
 
-def _call_text(qual: str, case: dict, full: bool = False) -> str:
-    return f"{qual.rpartition('.')[2]}({pin.call_source(case, full=full)})"
+def _call_text(label: str, case: dict, full: bool = False) -> str:
+    return f"{label}({pin.call_source(case, full=full)})"
 
 
-def _example(qual, cases, meta, rows_b, rows_h, j) -> dict:
+def _callee_label(qual: str, spec: dict) -> str:
+    """How a call is shown: ``f``, ``Cls.f`` (static/class methods), ``Recipe(...).f`` (instance methods)."""
+    kind = spec["call"]["kind"]
+    if kind == "method":
+        return f"{pin.to_source(spec['call']['recipe'])}.{qual.rpartition('.')[2]}"
+    return qual if kind in ("static", "class") else qual.rpartition(".")[2]
+
+
+def _example(label, cases, meta, rows_b, rows_h, j) -> dict:
     ob = (rows_b.get(j) or {}).get("x", [None])[0] if rows_b else None
     oh = (rows_h.get(j) or {}).get("x", [None])[0]
-    out = {"input": j, "call": _call_text(qual, cases[j]), "head": _brief(oh)}
+    out = {"input": j, "call": _call_text(label, cases[j]), "head": _brief(oh)}
     if rows_b:
         out["base"] = _brief(ob)
     if meta[j]["tags"]:

@@ -99,6 +99,16 @@ def _detail(args) -> str:
         return ""
 
 
+def _inside_run_dir(path) -> bool:
+    """Is ``path`` inside the run's throw-away directory (the copy, its HOME, its artifacts)?"""
+    if not _S.allowed_root or not isinstance(path, (str, bytes, os.PathLike)):
+        return False
+    try:
+        return os.path.normcase(os.path.abspath(os.fsdecode(path))).startswith(_S.allowed_root)
+    except (TypeError, ValueError):
+        return False
+
+
 def _classify(event: str, args) -> str | None:
     """The kind of side effect an audit event is, or None when it is not one the probe stops."""
     if event == "open":
@@ -110,15 +120,13 @@ def _classify(event: str, args) -> str | None:
             writes = any(c in mode for c in "wax+")
         if not writes:
             return None
-        if _S.phase == "import" and _S.allowed_root and isinstance(path, (str, bytes, os.PathLike)):
-            try:
-                p = os.path.abspath(os.fsdecode(path))
-                if os.path.normcase(p).startswith(_S.allowed_root):
-                    return None
-            except (TypeError, ValueError):
-                pass
+        if _S.phase == "import" and _inside_run_dir(path):  # a library cache under the run's HOME
+            return None
         return "file-write"
     if event in _FS_EVENTS:
+        if _S.phase == "import" and args and all(_inside_run_dir(a) for a in args[:2]
+                                                 if isinstance(a, (str, bytes, os.PathLike))):
+            return None
         return "file-write"
     if event in _NET_EVENTS:
         return "network"

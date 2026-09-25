@@ -263,6 +263,11 @@ and marks claims whose evidence changed as `stale`; `verify` them again before r
 Before you finish a code change, run `verinoda decide check --changed --json` (MCP `decision_check`
 with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be
 superseded or the site waived; never edit, supersede or waive a decision record yourself.
+After editing Python functions, before saying done: `verinoda probe --changed --json` (MCP `change_probe`),
+with `--property '<expr>'` for what the user asked (e.g. `'result <= subtotal'`). A difference is a behaviour
+change, not a bug: compare it with the request and ask the user when unclear, showing the example (`--emit-test`
+pins the base). Say "no difference found in N inputs", never "verified"; `refused`, `unsupported` and
+`inconclusive` are no pass. `--allow-side-effects` only after the user agreed.
 
 ## Answer format
 

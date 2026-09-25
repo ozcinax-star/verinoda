@@ -475,6 +475,59 @@ def test_a_side_effect_the_gate_cannot_see_is_blocked_at_run_time(tmp_path):
 
 @pytest.mark.experiment
 @needs_git
+def test_an_import_time_side_effect_the_gate_cannot_see_is_blocked(tmp_path):
+    outside = tmp_path / "made_at_import"
+    repo = _repo(tmp_path, {"orders/boot.py": f"__import__('os').makedirs({str(outside)!r})\n\n\n"
+                                              "def ok(x: int) -> int:\n    return x\n"})
+    st = open_store(repo)
+    res = probe.probe(st, repo, "orders/boot.py::ok", inputs=10)
+    assert res["status"] == "refused" and "importing orders.boot" in res["headline"], res["headline"]
+    assert not outside.exists()
+    st.close()
+
+
+@pytest.mark.experiment
+@needs_git
+def test_methods_with_recipes_static_methods_and_a_tree_without_git(tmp_path):
+    extra = {"orders/money.py": "class Money:\n    def __init__(self, cents: int):\n        self.cents = cents\n\n"
+                                "    def plus(self, other: int) -> int:\n        return self.cents + other\n\n"
+                                "    @staticmethod\n    def parse(text: str) -> int:\n"
+                                "        return int(text) if text.isdigit() else -1\n",
+             "tests/test_money.py": "from orders.money import Money\n\n\ndef test_plus():\n"
+                                    "    assert Money(5).plus(1) == 6\n"}
+    repo = _repo(tmp_path, extra)
+    _sub(repo, "orders/money.py", "return self.cents + other", "return self.cents + other if other else 0")
+    st = open_store(repo)
+    res = probe.probe(st, repo, "orders/money.py::Money.plus", inputs=40)
+    assert res["status"] == "differences_found", res["headline"]
+    assert res["differences"][0]["examples"][0]["call"] == "Money(5).plus(0)"
+    res = probe.probe(st, repo, "orders/money.py::Money.parse", inputs=40)
+    assert res["status"] == "no_difference_found", res["headline"]
+    st.close()
+    plain = _plain_repo(tmp_path)
+    st = open_store(plain)
+    res = probe.probe(st, plain, "orders/pricing.py::apply_discount", inputs=30)
+    assert res["status"] == "nothing_found" and res["base"]["differential"] is False
+    assert any("no base commit" in lim for lim in res["limits"])
+    st.close()
+
+
+@pytest.mark.experiment
+@needs_git
+def test_a_run_that_reaches_its_timeout_is_not_a_hang(tmp_path):
+    repo = _repo(tmp_path, {"orders/slow.py": "import time\n\n\ndef nap(n: int) -> int:\n"
+                                              "    time.sleep(0.25)\n    return n\n"})
+    _sub(repo, "orders/slow.py", "return n", "return n + 1")
+    st = open_store(repo)
+    res = probe.probe(st, repo, "orders/slow.py::nap", inputs=40, timeout=4)
+    assert res["status"] in ("inconclusive", "differences_found")
+    assert "new_timeout" not in {d["class"] for d in res["differences"]} and not res.get("timeouts")
+    assert any("reached its 4 s timeout" in lim or "not run" in lim for lim in res["limits"]), res["limits"]
+    st.close()
+
+
+@pytest.mark.experiment
+@needs_git
 def test_hangs_nondeterminism_properties_and_no_base(tmp_path):
     extra = {"orders/misc.py": "import random\n\n\ndef spin(n: int) -> int:\n    return n\n\n\n"
                                "def noisy(n: int) -> float:\n    return n + random.random()\n\n\n"
