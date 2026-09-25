@@ -331,10 +331,11 @@ def read_pyvenv(venv: Path) -> dict[str, str]:
 
 
 def base_interpreter(venv: Path) -> Path | None:
-    """The interpreter a virtual environment was made from, as its pyvenv.cfg names it (``base-executable``,
-    ``executable`` or ``home``), when that file exists."""
+    """The interpreter a virtual environment was made from, as its pyvenv.cfg names it (``home``, as Python
+    itself reads it; else ``base-executable`` or ``executable``), when that file exists. ``executable`` can
+    name the interpreter that ran ``python -m venv`` - another environment's launcher, which is skipped."""
     cfg = read_pyvenv(venv)
-    cands = [Path(cfg[k]) for k in ("base-executable", "executable") if cfg.get(k)]
+    cands: list[Path] = []
     home = cfg.get("home")
     if home:
         h = Path(home)
@@ -345,8 +346,10 @@ def base_interpreter(venv: Path) -> Path | None:
             if m:
                 cands.append(h / f"python{m.group(1)}.{m.group(2)}")
             cands += [h / "python3", h / "python"]
+    cands += [Path(cfg[k]) for k in ("base-executable", "executable") if cfg.get(k)]
     for c in cands:
-        if c.is_absolute() and c.is_file():
+        if c.is_absolute() and c.is_file() and not any((d / "pyvenv.cfg").is_file()
+                                                        for d in (c.parent, c.parent.parent)):
             return c
     return None
 

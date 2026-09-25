@@ -449,6 +449,9 @@ def test_nothing_from_the_checked_project_or_its_environment_runs(tmp_path):
     env = res["env"]
     assert env["kind"] == "project" and not Path(env["executable"]).resolve().is_relative_to(proj.resolve())
     assert "not run" in env["started"]
+    # the base interpreter (pyvenv.cfg `home`), not the launcher of the environment that ran `-m venv`
+    exe = Path(env["executable"])
+    assert not any((d / "pyvenv.cfg").is_file() for d in (exe.parent, exe.parent.parent))
     by = {s["name"]: s["verdict"] for s in res["sites"]}
     assert by["real"] == "exists" and by["fake_xyz"] == "absent"
     # the same project with Verinoda's own interpreter (stdlib only): jedi runs in this very process
