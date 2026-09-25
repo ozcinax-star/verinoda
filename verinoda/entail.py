@@ -1539,10 +1539,24 @@ def _relation(repo, spec: dict, ev: dict, text: str, subjects: list[str]) -> Gra
     if typ in evmod.FILE_TYPES and ev.get("path"):
         # the caller the claim states (a module caller has no enclosing def to check); a dotted target
         # label ("repo.save", "self._check") names the receiver as the claim writes it
-        return _call_grade(repo, ev, token, caller=claimed_caller(spec, subjects, text), target_path=b_path,
-                           target_qual=b_sym or (label if "." in label.strip(".") else None),
-                           relation=spec.get("relation"))
+        g = _call_grade(repo, ev, token, caller=claimed_caller(spec, subjects, text), target_path=b_path,
+                        target_qual=b_sym or (label if "." in label.strip(".") else None),
+                        relation=spec.get("relation"))
+        return _python_only(g, ev["path"], "which definition the call binds to and that it sits in the caller")
     return _general(repo, ev, text)
+
+
+def _python_only(g: Grade, path: str, what: str) -> Grade:
+    """A ``full`` grade of source lines outside Python is ``partial``: the binding checks (import scopes, the
+    enclosing caller, the name an environment read is assigned to) exist for Python only, so a relation or
+    config claim there is ``strong_inference`` at most (a static resolver's definitive answer still
+    verifies)."""
+    if g.grade != "full" or str(path).endswith((".py", ".pyi")):
+        return g
+    suffix = PurePosixPath(str(path)).suffix
+    return Grade("partial", f"{g.reason}; {what} is checked for Python only, not for "
+                            f"{suffix + ' files' if suffix else 'this file'} (strong_inference at most)",
+                 g.code or "not_python")
 
 
 def _location(repo, spec: dict, ev: dict, text: str, subjects: list[str]) -> Grade:
@@ -1627,7 +1641,8 @@ def _config(repo, spec: dict, ev: dict, text: str, subjects: list[str]) -> Grade
         for ln in shown.splitlines():
             for rx, _lang in ENV_PATTERNS:
                 if any(m.group(1) == var for m in rx.finditer(ln)):
-                    return Grade("full", f"environment read of {var} ({_lang} pattern)")
+                    return _python_only(Grade("full", f"environment read of {var} ({_lang} pattern)"), ev["path"],
+                                        "the name the read is assigned to")
     if re.search(rf"\b{re.escape(var)}\b", shown):
         return Grade("partial", f"{var} appears, but not as an environment read")
     return Grade("none", f"cited lines do not mention {var}")
