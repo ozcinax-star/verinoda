@@ -23,7 +23,8 @@ audit files: `{set: {questions, met, met_wrong, met_partial, met_full, unmet_but
 - `8a-user-set-head.json`: verinoda_user_tr with the code at 3bd1b94 (before this round)
 - `8b-user-set-new.json`: verinoda_user_tr with items 1-4
 - `9-before-tr-question-words.json`: the eight public sets with the code at d3165b8 (prepared indexes of that code)
-- `9-tr-question-words.json`: the same indexes; a code word in a Turkish question takes no co-occurrence pairs, an unconfirmed Turkish stem expands only to its inflections, a term keeps its highest weight
+- `9-tr-question-words.json`: the same indexes; a code word in a Turkish question takes only the lexicon pairs that carry it, an unconfirmed Turkish stem expands the more narrowly the shorter it is, a term keeps its highest weight (the first version, 8ee8ef6, gave the same facts)
+- `9-tr-review-ranks.json`: not a fact run: 44 Turkish review questions, rank of the answer in `verinoda query` with the code at d3165b8, the first version (8ee8ef6) and the final one (its own `about` field says how)
 - `x1-rejected-passive-stems.json`: REJECTED: 29 passive verb stems; 4 results up, 6 down
 - `x2-rejected-named-translation-weight.json`: REJECTED: Turkish words no code name contains weighed below their named translation; mixed
 - `audit-1-before.json`: verdict audit: analyze's sub-question verdicts against the gold facts its claims carry
