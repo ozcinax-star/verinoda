@@ -67,7 +67,7 @@ from verinoda.paths import configure_index_env
 
 configure_index_env()  # before anything imports verinoda.project_index
 
-from verinoda.paths import ATLAS_DIRNAME, atlas_dir, graph_path  # noqa: E402
+from verinoda.paths import ATLAS_DIRNAME, atlas_dir, graph_path, receiver_calls_path  # noqa: E402
 
 TOOL_NAMES: tuple[str, ...] = (
     "project_query",
@@ -492,11 +492,13 @@ class AtlasTools:
 
     # -- kept state (D21) ---------------------------------------------------------
     def _graph(self):
-        """The loaded graph, kept until graph.json changes; spans of edited files are re-derived."""
+        """The loaded graph, kept until graph.json or the receiver-call sidecar changes (an update
+        can keep graph.json and still change the receiver and Java call edges ``load`` adds from
+        the sidecar); spans of edited files are re-derived."""
         from verinoda import index
 
         gp = graph_path(self.repo)
-        key = (str(gp), *(_file_stat(gp) or (None,)))
+        key = (str(gp), *(_file_stat(gp) or (None,)), _file_stat(receiver_calls_path(self.repo)))
         if key[1] is None:
             raise FileNotFoundError(f"no graph at {gp}; run `verinoda scan {self.repo}` first")
         if self._graph_cache is None or self._graph_cache[0] != key:

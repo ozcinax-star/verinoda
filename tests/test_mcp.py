@@ -471,6 +471,30 @@ def test_graph_and_spans_are_kept_and_follow_file_edits(fresh_repo):
     assert t.cache_stats["graph_loads"] == 2  # a rewritten graph.json is loaded again
 
 
+def test_the_kept_graph_follows_the_receiver_call_sidecar_when_graph_json_stays(fresh_repo):
+    # An update can leave graph.json as it is (the pipeline built the same graph) and still
+    # rewrite receiver_calls.json: a receiver call changed on the same line.
+    from verinoda import index
+    from verinoda.paths import graph_path
+
+    def callees(res: dict) -> set[str]:
+        return {e.get("to_id") for e in res.get("out_edges") or []}
+
+    t = AtlasTools(fresh_repo)
+    assert "orders_repository_orderrepository_get" in callees(t.node_inspect("fetch_order"))
+    gp = graph_path(fresh_repo)
+    before = gp.stat().st_mtime_ns, gp.read_bytes()
+    _edit(fresh_repo / "orders" / "service.py", "    return repo.get(order_id)\n",
+          '    return repo.save("x", 0.0)\n')
+    index.refresh_receiver_sidecar(fresh_repo)
+    assert (gp.stat().st_mtime_ns, gp.read_bytes()) == before
+    after = callees(t.node_inspect("fetch_order"))
+    assert t.cache_stats["graph_loads"] == 2
+    assert "orders_repository_orderrepository_save" in after
+    assert "orders_repository_orderrepository_get" not in after
+    assert after == callees(AtlasTools(fresh_repo).node_inspect("fetch_order"))
+
+
 def test_project_query_answers_are_kept_until_an_input_changes(fresh_repo, monkeypatch):
     from verinoda import index, retrieval
 
