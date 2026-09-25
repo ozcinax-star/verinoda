@@ -1184,7 +1184,8 @@ def server_check(entry: dict, t: Target, running: dict) -> dict:
     if t.scope == "project" and "--repo" in args:
         i = args.index("--repo")
         target = args[i + 1] if i + 1 < len(args) else ""
-        if target and _norm(target) != _norm(t.project_dir):
+        # a relative --repo depends on where the agent starts the server: not judged from here
+        if target and os.path.isabs(target) and _norm(target) != _norm(t.project_dir):
             out["serves"] = target
             out["problems"].append(f"it serves {target}, not this project (moved or copied?); run `verinoda setup` "
                                    "(or `verinoda install`) here to update the entry")

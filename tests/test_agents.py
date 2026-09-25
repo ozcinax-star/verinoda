@@ -634,6 +634,9 @@ def test_status_flags_a_moved_project_and_a_server_of_another_python(env):
     srv = agents.status(env.proj, home=env.home)["claude:project"]["mcp_server"]
     assert srv["build"] == "this" and srv["serves"] == str(moved_from)
     assert "not this project (moved or copied?)" in srv["problems"][0]
+    (env.proj / ".mcp.json").write_text(json.dumps({"mcpServers": {"verinoda": {
+        "command": env.exe, "args": ["mcp", "serve", "--repo", "."]}}}), encoding="utf-8")
+    assert agents.status(env.proj, home=env.home)["claude:project"]["mcp_server"]["problems"] == []
 
     (env.proj / ".mcp.json").write_text(json.dumps({"mcpServers": {"verinoda": {
         "command": OTHER_PY, "args": ["-m", "verinoda", "mcp", "serve", "--repo-of", ".mcp.json"]}}}),
