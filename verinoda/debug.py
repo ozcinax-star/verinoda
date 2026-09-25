@@ -460,10 +460,18 @@ def _questions(cur: dict, prev: dict | None, ev: dict) -> list[dict]:
     lines = ev.get("assertion_lines") or []
     test_side = [f"{x['path']}:{x['line']}: {x['text']}" for x in lines[:3]] or \
         [c["path"] for c in cur.get("vs_prev") or [] if c.get("test")][:3]
+    from verinoda.runtime.trace import is_test_path
+
     code_side = []
     for f in ((prev or {}).get("signature") or {}).get("failures") or []:
-        if f.get("path") and f.get("line"):
-            code_side.append(f"{f['path']}:{f['line']} ({f.get('exc')} in {f.get('symbol')})")
+        # the code under test: the innermost frame outside test files, else where the test itself failed
+        code = [fr for fr in f.get("frames") or [] if fr.get("path") and not is_test_path(fr["path"])]
+        if code:
+            fr = code[-1]
+            code_side.append(f"{fr['path']}:{fr.get('line')} ({fr.get('symbol')}; {f.get('exc')} raised at "
+                             f"{f.get('path')}:{f.get('line')})")
+        elif f.get("path") and f.get("line"):
+            code_side.append(f"{f['path']}:{f['line']} (the test fails here: {f.get('exc')} in {f.get('symbol')})")
     return [{"question": "Is the test's expectation or the code's behaviour the intended one?",
              "asked_because": "an attempt changed an existing test instead of the code (test_edited)",
              "discriminates": "keep the test and fix the code, or accept the new behaviour and change the test",
@@ -586,7 +594,7 @@ def propose(store: Store, repo: Path, sess: dict, prior: list[dict], cur: dict, 
                     "suspects": suspects[:LIST_CAP]})
     failing = sorted((cur.get("signature") or {}).get("failed_tests") or [])
     if experiments._is_pytest(argv) and failing and not any("::" in a for a in argv):
-        narrow = argv + failing[:5]
+        narrow = _without_selectors(argv) + failing[:5]
         out.append({"id": "minimal_repro", "why": "narrow the repro to the failing tests (faster runs; a test that "
                                                   "passes alone but fails in the suite is order-dependent)",
                     "command": f"verinoda debug try --session {sid} --kind probe --hypothesis \"the failing tests "
@@ -595,6 +603,17 @@ def propose(store: Store, repo: Path, sess: dict, prior: list[dict], cur: dict, 
     if any(f["rule"] == "test_edited" for f in ev.get("findings") or []) or not out:
         out.append({"id": "ask_human", "why": "a test was edited, or nothing else narrows the cause: only the user "
                                               "knows the intended behaviour", "command": None, "cost_estimate_s": 0})
+    return out
+
+
+def _without_selectors(argv: list[str]) -> list[str]:
+    """A pytest command without its positional test paths (option values kept)."""
+    at = 1 if experiments._exe_name(argv[0]) == "pytest" else 3
+    out = list(argv[:at])
+    rest = argv[at:]
+    for i, a in enumerate(rest):
+        if a.startswith("-") or (i > 0 and rest[i - 1] in ("-p", "-k", "-m", "-o", "-c", "--rootdir", "-W")):
+            out.append(a)
     return out
 
 

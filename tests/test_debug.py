@@ -70,6 +70,9 @@ def test_a_looping_session_is_stopped_and_the_differential_finds_the_cause(tmp_p
     a1 = debug.attempt(st, repo, hypothesis="the pricing test data still uses the old key")
     assert _rules(a1) == ["test_edited"] and a1["stop"] and a1["progress"] == "improved"
     assert a1["questions_for_human"] and a1["strategies"][0]["id"] == "differential"
+    q = a1["questions_for_human"][0]
+    assert q["test_side"] == ['tests/test_pricing.py:13: assert compute_total([{"price": 10.0, "qty": 2}]) == 20.0']
+    assert q["code_side"][0].startswith("orders/pricing.py:7 (compute_total; KeyError raised at orders/pricing.py:7")
     _sub(repo, "orders/pricing.py", 'i["quantity"]', 'i.get("quantity", 0)')
     a2 = debug.attempt(st, repo, hypothesis="a missing quantity should default to zero")
     assert set(_rules(a2, "heuristic")) >= {"error_moved", "masking"} and not a2["stop"]
@@ -173,6 +176,8 @@ def test_trace_enables_off_path(tmp_path):
     assert any(e.startswith("reached by the failing tests") for e in sus["orders/pricing.py::compute_total"]["evidence"])
     assert sus["orders/config.py::load_settings"]["ruled_out"].startswith("not reached")
     assert narrowing["suspects"][-1]["at"] == "orders/config.py::load_settings"  # ruled-out suspects last
+    mini = next(s for s in a1["strategies"] if s["id"] == "minimal_repro")["command"]
+    assert mini.endswith("-p no:cacheprovider tests/test_pricing.py::test_compute_total")  # the file selector goes
 
 
 def test_a_test_that_passes_alone_but_fails_in_the_suite_is_flagged(tmp_path):

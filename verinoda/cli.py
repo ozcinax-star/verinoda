@@ -1316,7 +1316,7 @@ def _r_debug_attempt(r: dict) -> None:
         for t in q.get("test_side") or []:
             print(f"    test says: {t}")
         for c in q.get("code_side") or []:
-            print(f"    code fails at: {c}")
+            print(f"    code: {c}")
     if tree.get("patch"):
         print(f"  patch vs base: {tree['patch']}")
 
