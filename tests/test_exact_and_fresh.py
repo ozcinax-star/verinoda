@@ -388,7 +388,7 @@ def test_trace_never_substitutes_a_similar_name_for_one_in_a_changed_file(proj):
     assert res["status"] == "unresolved" and res["resolved"]["target"] is None and "fuzzy" not in res
     assert res["not_indexed"]["target"].startswith("`frobnicate_widget` is not in the index yet: it occurs at "
                                                    "app/cli.py:10")
-    assert "verinoda update" in res["next_step"]
+    assert "verinoda update" in res["next_step"] and "target" not in res["hints"]  # no similar names offered
 
 
 @pytest.mark.e2e

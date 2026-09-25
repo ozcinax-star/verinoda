@@ -771,8 +771,10 @@ def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int
         tied = [side for side, r in res.items() if r.status == naming.AMBIGUOUS]
         unres = [side for side, r in res.items() if not r.node and r.status != naming.AMBIGUOUS]
         out["status"] = "unresolved" if unres else "ambiguous"
+        # a name not in the index yet gets no similar names: it exists, in a changed file
         out["hints"] = {side: (r.status in (naming.AMBIGUOUS, naming.NOT_FOUND, naming.NOT_A_SYMBOL) and r.rows(g, 5)
-                               or _hints(g, r.text)) for side, r in res.items() if not r.node}
+                               or _hints(g, r.text)) for side, r in res.items()
+                        if not r.node and r.status != naming.NOT_INDEXED}
         out["next_step"] = ("pass one of the hints (a node id, 'path/file.py::symbol' or 'Class.method'), "
                             "or run `verinoda query` with the name to find it")
         if tied and not unres:
