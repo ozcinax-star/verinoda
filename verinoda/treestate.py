@@ -190,8 +190,13 @@ _PREFIXES: dict[str, str] = {}
 
 def project_prefix(repo: Path) -> str:
     """The project's directory inside its git repository (``""`` at the top level, else ``"sub/dir/"``)."""
+    raw = str(repo) if Path(repo).is_absolute() else None
+    if raw is not None and raw in _PREFIXES:   # an absolute path as given: no file-system call to resolve it
+        return _PREFIXES[raw]
     key = str(Path(repo).resolve())
     if key in _PREFIXES:
+        if raw is not None:
+            _PREFIXES[raw] = _PREFIXES[key]
         return _PREFIXES[key]
     out = _git(Path(repo), "rev-parse", "--show-prefix")
     pre = (out or "").strip().replace("\\", "/")

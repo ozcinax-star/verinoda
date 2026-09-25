@@ -12,8 +12,7 @@ description: Evidence-first answers about this codebase with Verinoda - how a fe
 - The user mentions `$verinoda` in a prompt (or picks it from `/skills`); Codex may also choose
   it by itself when a task matches the description above.
 - **There is no `/verinoda` slash command in Codex.** Do not tell the user to type one.
-- The question to work on is the rest of the user's message. If there is no question about this
-  repository, ask what they want to know.
+- The question to work on is the rest of the user's message. If there is no question about this repository, ask.
 
 Verinoda indexes the repository (AST, no LLM), answers questions as **claims with evidence**,
 critiques its own claims, and says **unknown** instead of guessing. Your job is to drive it,
@@ -25,7 +24,7 @@ read its structured output, and report exactly what the evidence supports.
 - "Why is it built this way?" (git history and design docs are searched)
 - "Should we switch to X / which one should we pick / how will this scale?" (the code's side of a
   decision; the user decides)
-- "What breaks if I change X?" (impact view)
+- "What breaks if I change X?" (`verinoda review --target`; before you finish a change: `verinoda review`)
 - Verifying, re-checking or challenging an earlier conclusion, yours or the user's.
 - Comparing a mechanism with a reference repository or an official document.
 - Writing or editing Python code: check that the names it uses exist (see below).
@@ -39,10 +38,9 @@ For pure code-writing tasks skip the question workflow; the name check, the debu
 2. No index yet: `verinoda scan .` (local, no network, no LLM).
 3. Snapshot does not match the working tree: `verinoda update .`
 
-Commands find the project root from the working directory (nearest `.verinoda` or `.git`);
-pass `--repo <dir>` otherwise. The CLI command recorded at install time is `{{VERINODA_CLI}}`.
-If that does not run here (not on PATH, sandboxed shell), use the MCP tools: their server entry
-stores the absolute path of the installed program.
+Commands find the project root from the working directory (nearest `.verinoda` or `.git`); pass `--repo <dir>`
+otherwise. The CLI command recorded at install time is `{{VERINODA_CLI}}`. If that does not run here (not on PATH,
+sandboxed shell), use the MCP tools: their server entry stores the absolute path of the installed program.
 On Windows PowerShell, put regular expressions and globs in single quotes.
 
 ## MCP tools
@@ -89,12 +87,10 @@ Rules:
   text. A `contradicted` result states its scope: correct the sentence, do not reword it.
 - A name written as code that `plan check` or `trace` reports `not_found` does not exist here:
   say so with its `did_you_mean`; never answer about the similar name instead.
-- Do not upgrade a status by wording. Change status only through Verinoda (`verify`,
-  `experiment run`, `claim add --source`, which downgrades a requested status the evidence
-  does not allow).
-- Heuristics are labelled: map views (impact included) carry `coverage.method` and
-  `coverage.limits`, and `analyze` lists the `intents` it guessed. Repeat those limits when you
-  rely on them.
+- Do not upgrade a status by wording. Change status only through Verinoda (`verify`, `experiment run`,
+  `claim add --source`, which downgrades a requested status the evidence does not allow).
+- Heuristics are labelled: map views (impact included) carry `coverage.method` and `coverage.limits`, and
+  `analyze` lists the `intents` it guessed. Repeat those limits when you rely on them.
 - If Verinoda returns `unknown`, report it with its `next_step`; do not fill the gap yourself.
 
 ## Understand the question first
@@ -142,6 +138,7 @@ user asks which option to take or what you recommend (the routing misses some ph
 ## Commands (examples; always add --json when you read the result)
 
 ```bash
+verinoda review --target src/pricing.py::apply_discount --change signature --json
 verinoda map . --view impact --target src/module.py --json
 verinoda query "where is the order total computed" --max-items 8 --json
 verinoda resolve "compare with requests 2.31 sessions.py" --json
@@ -231,6 +228,9 @@ and marks claims whose evidence changed as `stale`; `verify` them again before r
 Before you finish a code change, run `verinoda decide check --changed --json` (MCP `decision_check`
 with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be
 superseded or the site waived; never edit, supersede or waive a decision record yourself.
+Before editing a function: `verinoda review --target FILE::NAME --change body|signature|remove --json` (MCP
+`change_review`); read its `read_first` in order, not whole files. Before saying done: `verinoda review --json`
+(`--run-tests` for pytest): report every concern and `unknown`, fix or defer each; "no finding" never means safe.
 
 ## Answer format
 

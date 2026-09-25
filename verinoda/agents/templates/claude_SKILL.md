@@ -63,7 +63,7 @@ read its structured output, and report exactly what the evidence supports.
 - "Why is it built this way?" (git history and design docs are searched)
 - "Should we switch to X / which one should we pick / how will this scale?" (the code's side of a
   decision; the user decides)
-- "What breaks if I change X?" (impact view)
+- "What breaks if I change X?" (`verinoda review --target`; before you finish a change: `verinoda review`)
 - Verifying, re-checking or challenging an earlier conclusion, yours or the user's.
 - Comparing a mechanism with a reference repository or an official document.
 - Writing or editing Python code: check that the names it uses exist (see below).
@@ -174,6 +174,8 @@ user asks which option to take or what you recommend (the routing misses some ph
 ## Commands (examples; always add --json when you read the result)
 
 ```bash
+verinoda review --target src/pricing.py::apply_discount --change signature --json
+verinoda review --run-tests --json
 verinoda map . --view impact --target src/module.py --json
 verinoda query "where is the order total computed" --max-items 8 --json
 verinoda resolve "compare with requests 2.31 sessions.py" --json
@@ -263,6 +265,9 @@ and marks claims whose evidence changed as `stale`; `verify` them again before r
 Before you finish a code change, run `verinoda decide check --changed --json` (MCP `decision_check`
 with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be
 superseded or the site waived; never edit, supersede or waive a decision record yourself.
+Before editing a function: `verinoda review --target FILE::NAME --change body|signature|remove --json` (MCP
+`change_review`); read its `read_first` in order, not whole files. Before saying done: `verinoda review --json`
+(`--run-tests` for pytest): report every concern and `unknown`, fix or defer each; "no finding" never means safe.
 
 ## Answer format
 
