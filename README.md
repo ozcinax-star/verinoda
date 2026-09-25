@@ -32,6 +32,8 @@
 
 - A Turkish question about a repository whose code is English but whose UI strings and docs are Turkish (Verinoda itself) finds the Turkish text first: the `verinoda_user_tr` set scores 13/30 (query text and analyze; 11/30 before an English code word in a Turkish question stopped taking the names it merely appears next to, 2026-09-25), against 36/37 on the English `graphify_core`. Each dictionary gloss of a Turkish word still counts as its own search term, which is why adding correct dictionary entries has not helped yet. Two fixes were measured and not kept (`docs/BENCHMARKS.md`, Update 2026-09-25): weighing such words below their translation cost a mod set, where those words are how the data files are found.
 
+- On Windows with Python 3.10 or 3.11, a source file nested thousands of levels deep can crash the extractor: the upstream pipeline raises Python's recursion limit to 10,000, and before Python 3.12 that can exhaust the C stack before a `RecursionError` (found by CI, 2026-09-25; Python 3.12+ and other systems are not affected).
+
 Open findings of the second acceptance audit (2026-09-23 05:00), not yet fixed:
 
 - Under process isolation a test run can still write outside the throw-away copy through pytest `@argsfile` or `--junitxml` indirection; use `--isolation container` for untrusted code.

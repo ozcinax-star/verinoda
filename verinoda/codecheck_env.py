@@ -330,10 +330,11 @@ def read_pyvenv(venv: Path) -> dict[str, str]:
     return out
 
 
-def base_interpreter(venv: Path) -> Path | None:
+def base_interpreter(venv: Path, _depth: int = 0) -> Path | None:
     """The interpreter a virtual environment was made from, as its pyvenv.cfg names it (``home``, as Python
-    itself reads it; else ``base-executable`` or ``executable``), when that file exists. ``executable`` can
-    name the interpreter that ran ``python -m venv`` - another environment's launcher, which is skipped."""
+    itself reads it; else ``base-executable`` or ``executable``), when that file exists. A name inside another
+    virtual environment - Python 3.10 writes the ``bin`` of the environment that ran ``python -m venv`` as
+    ``home`` - is followed through that environment's own pyvenv.cfg, as the interpreter itself does."""
     cfg = read_pyvenv(venv)
     cands: list[Path] = []
     home = cfg.get("home")
@@ -348,9 +349,15 @@ def base_interpreter(venv: Path) -> Path | None:
             cands += [h / "python3", h / "python"]
     cands += [Path(cfg[k]) for k in ("base-executable", "executable") if cfg.get(k)]
     for c in cands:
-        if c.is_absolute() and c.is_file() and not any((d / "pyvenv.cfg").is_file()
-                                                        for d in (c.parent, c.parent.parent)):
+        if not (c.is_absolute() and c.is_file()):
+            continue
+        outer = next((d for d in (c.parent, c.parent.parent) if (d / "pyvenv.cfg").is_file()), None)
+        if outer is None:
             return c
+        if _depth < 3 and outer.resolve() != Path(venv).resolve():
+            found = base_interpreter(outer, _depth + 1)
+            if found is not None:
+                return found
     return None
 
 

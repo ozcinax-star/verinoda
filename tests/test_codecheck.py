@@ -1712,3 +1712,22 @@ def test_a_class_whose_base_is_a_call_and_a_failing_site_do_not_stop_the_check(t
     assert len(zz) == 2 and all(s["verdict"] == "unknown" and "check failed" in s["why"] for s in zz)
     assert any(s["name"] == "x" and s["verdict"] == "exists" for s in res["sites"])
     assert "the check failed on 2 sites" in res["incomplete"][0] and "check_error" not in zz[0]
+
+
+def test_a_venv_made_from_another_venv_is_followed_to_its_base(tmp_path):
+    """Python 3.10 writes the ``bin`` of the environment that ran ``python -m venv`` as ``home``: the base
+    interpreter is found through that environment's own pyvenv.cfg, as the interpreter itself finds it."""
+    outer = tmp_path / "outer"
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(outer)], check=True, capture_output=True)
+    inner = tmp_path / "inner"
+    inner.mkdir()
+    bindir = outer / ("Scripts" if os.name == "nt" else "bin")
+    vi = sys.version_info
+    (inner / "pyvenv.cfg").write_text(f"home = {bindir}\ninclude-system-site-packages = false\n"
+                                      f"version = {vi[0]}.{vi[1]}.{vi[2]}\n", encoding="utf-8")
+    got = cenv.base_interpreter(inner)
+    assert got is not None and got == cenv.base_interpreter(outer)
+    assert not got.resolve().is_relative_to(outer.resolve())
+    # a chain that loops back is not followed forever
+    (outer / "pyvenv.cfg").write_text(f"home = {inner}\n", encoding="utf-8")
+    assert cenv.base_interpreter(inner) is None or not cenv.base_interpreter(inner).is_relative_to(outer)
