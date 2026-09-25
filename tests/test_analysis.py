@@ -574,6 +574,25 @@ def test_host_plan_needing_clarification_writes_no_claims(proj):
     assert any(u.startswith("open clarification c-m1") for c in res2["claims"] for u in c["uncertainties"])
 
 
+def test_a_reused_claim_carries_only_the_current_questions_uncertainties(tmp_path):
+    # review round 2: a weak link of an earlier question was printed under a later, unrelated one
+    repo = _copy_example(tmp_path / "orders_app")
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+        first = analysis.analyze(st, repo, "What does `service.compute_total` do?")
+        said = [c for c in first["claims"] if any("service.compute_total" in u for u in c["uncertainties"])]
+        assert said  # the weak link is stated under this question's claims
+        second = analysis.analyze(st, repo, "Where is `compute_total` defined?")
+        reused = [c for c in second["claims"] if c.get("reused")]
+        assert reused and not any("service.compute_total" in u for c in second["claims"] for u in c["uncertainties"])
+        # the claim itself keeps only its own uncertainties
+        assert not any("service.compute_total" in u for c in said for u in Claims(st).get(c["id"])["uncertainties"])
+    finally:
+        st.close()
+
+
 def test_invalid_plan_is_refused_before_any_work(proj):
     repo, st = proj
     n_before = st.one("SELECT COUNT(*) AS n FROM claims")["n"]

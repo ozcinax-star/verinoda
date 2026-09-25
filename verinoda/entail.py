@@ -380,6 +380,20 @@ _NOT_A_NAME = frozenset(EN_STOPWORDS | TR_STOPWORDS | NEGATIONS | QUANTIFIERS | 
     "also then just first directly indirectly itself they he she we you i one someone something code each both "
     "either this that it its".split()))
 _COORD_WORD = re.compile(r"(?:\band|\bor|\bve|\bveya|\bile|,|&)\s*$", re.I)
+# The text between two names of one list ("B, C and D", TR "B ve C'yi"): a coordinator only. A name
+# after "instead of", "via", "with the result of", ", which uses" is not one of the list.
+_LIST_GAP = re.compile(r"`?(?:['’][^\W\d_]*)?`?\s*(?:,\s*(?:(?:and|or)\s+)?(?:also\s+)?|(?:and|or|ve|veya|ile|ya\s+da|"
+                       r"as\s+well\s+as)\s+(?:also\s+)?|&\s*)`?", re.I)
+
+
+def _listed_with(text: str, names: list[tuple[int, int, str]], i: int) -> list[str]:
+    """The names of the list ``names[i]`` belongs to: its neighbours joined to it by coordinators only."""
+    lo = hi = i
+    while lo > 0 and _LIST_GAP.fullmatch(text[names[lo - 1][1]:names[lo][0]]):
+        lo -= 1
+    while hi + 1 < len(names) and _LIST_GAP.fullmatch(text[names[hi][1]:names[hi + 1][0]]):
+        hi += 1
+    return [n[2] for n in names[lo:hi + 1]]
 
 
 def _plain_word(text: str, a: int, b: int, *, last: bool) -> tuple[int, str] | None:
@@ -403,7 +417,8 @@ def relation_parse(text: str, target: str | None = None) -> dict | None:
 
     ``{"caller", "caller_file", "callee", "reversed", "callees"}``: ``caller`` is the one name on the
     calling side (``caller_file`` a path there instead), ``callee`` the name on the called side
-    (``target`` when the text puts it there), ``callees`` every name on that side ("A calls B and C"),
+    (``target`` when the text puts it there), ``callees`` the list the called name belongs to ("A calls
+    B and C", "B, C ve D'yi"; a name after "instead of", "via" or ", which uses" is not in it),
     ``reversed`` when the text puts ``target`` on the calling side. The forms: "A
     calls B", "B is called by/from/in A", "A, B'yi çağırır" (the callee in the accusative) and "B, A
     tarafından çağrılır". None when the text does not say it in one of them: no relation verb, several
@@ -446,12 +461,13 @@ def relation_parse(text: str, target: str | None = None) -> dict | None:
             caller_file = paths[0] if len(paths) == 1 else None
             if caller_file is None and (w := _plain_word(text, ca, v.start(), last=True)):
                 caller_word = w[1]  # "checkout calls submit": a plain word, checked against the cited lines
-        callees = [n[2] for n in after]
+        # the called side is the list right after the verb ("B, C and D"), not a name after "instead of"
+        callees = _listed_with(text, after, 0) if after else []
     elif kind == "passive":
         caller = after[0][2] if len(after) == 1 else None
         if not after and (w := _plain_word(text, v.end(), cb, last=False)):
             caller_word = w[1]
-        callees = [n[2] for n in before]
+        callees = _listed_with(text, before, len(before) - 1) if before else []
     elif kind == "tr_agent":  # the name right before "tarafından" calls, unless it is one of a list
         if before and re.fullmatch(r"`?(?:['’]\w*)?\s*", text[before[-1][1]:v.start()]) and \
                 not (len(before) >= 2 and _TR_COORD.match(text[before[-2][1]:before[-1][0]])):
@@ -460,7 +476,10 @@ def relation_parse(text: str, target: str | None = None) -> dict | None:
             words = re.findall(r"[^\W\d][\w]*", text[(before[-1][1] if before else ca):v.start()])
             if len(words) == 1 and fold_tr(words[0]) not in _NOT_A_NAME:
                 caller_word = words[0]
-        callees = [n[2] for n in clause if caller is None or n is not before[-1]]
+        others = [n for n in clause if caller is None or n is not before[-1]]
+        pre = [n for n in others if n[1] <= v.start()]
+        post = [n for n in others if n[0] >= v.end()]
+        callees = _listed_with(text, pre, len(pre) - 1) if pre else (_listed_with(text, post, 0) if post else [])
     else:  # Turkish active, verb last: the accusative names and those joined to them are called
         if after:
             return None
@@ -531,13 +550,40 @@ _ORDER_FILLER = frozenset("calling invoking running executing it calls call the 
 _ANAPHOR = re.compile(r"\s*(?:that|this|which|these|those|doing\s+so|so)\b", re.I)  # used with match(text, pos)
 
 
+_ORDER_IN = re.compile(r"\b(?:in|inside|within|by)\s+(?:the\s+)?(?:(?:function|method|body\s+of)\s+)?$", re.I)
+_ORDER_IN_TR = re.compile(r"`?(?:['’]n?[dt][ae]|\s+(?:içinde|içerisinde|tarafından|fonksiyonunda|fonksiyonu\s+içinde|"
+                          r"metodunda|metodu\s+içinde))(?![\wçğıöşü])", re.I)
+_ORDER_CALLS = re.compile(r"`?\s*(?:(?:first|önce)\s+)?(?:calls|invokes)\b", re.I)  # "`F` calls ..."
+
+
+def _order_function(text: str, names: list[tuple[int, int, str]]) -> str | None:
+    """F of an order sentence that does not pass it: the one name the text puts as the place or the
+    caller ("in `F`", "by `F`", "`F` içinde", "`F` calls ..."; TR: the one name without a case ending
+    before "çağırır"). None when no name or several take that role - the roles are not guessed."""
+    placed = {n[2] for n in names if _ORDER_IN.search(text[:n[0]]) or _ORDER_IN_TR.match(text, n[1])}
+    if len(placed) == 1:
+        return placed.pop()
+    if placed:
+        return None
+    calling = {n[2] for n in names if _ORDER_CALLS.match(text, n[1])}
+    if len(calling) == 1:
+        return calling.pop()
+    if not calling and _TR_VERB.search(text):
+        bare = {n[2] for n in names if not re.match(r"`?['’]", text[n[1]:]) and not _TR_ACC.match(text, n[1])}
+        if len(bare) == 1:
+            return bare.pop()
+    return None
+
+
 def order_proposition(text: str, where: str | None = None) -> str | None:
     """"A before B in F" from written text, when it states the order in one explicit form.
 
     "`F` calls `A` before `B`", "In F, `B` runs after `A`", "After `A`, F calls `B`", "`A`, and after
     that `B`", "F calls `A`, then `B`", "F, `B`'den önce `A`'yı çağırır", "F, `A`'dan sonra `B`'yi
     çağırır", "F önce `A`'yı, sonra `B`'yi çağırır". ``where`` is F, the function whose body is
-    checked (default: the text's first code name). None when the text does not name two calls and
+    checked; without it F is the name the text places the calls in or makes the caller
+    (:func:`_order_function`: "`A` runs before `B` in `F`", "`A` is called before `B` by `F`"),
+    never simply the first name. None when F is not clear, the text does not name two calls and
     their order that way, names more order words than one form uses, or is negated ("never calls
     `B` before `A`"): a reversed proposition would contradict a true sentence.
     """
@@ -545,7 +591,7 @@ def order_proposition(text: str, where: str | None = None) -> str | None:
     if negated_text(text):
         return None
     names = code_names(text)
-    where = (where or "").strip().strip("`").removesuffix("()") if where else (names[0][2] if names else "")
+    where = (where or "").strip().strip("`").removesuffix("()") if where else (_order_function(text, names) or "")
     rest = [n for n in names if _token(n[2]) != _token(where)]
     cues = [m for m in _ORDER_CUE.finditer(text) if not any(a <= m.start() < b for a, b, _ in names)]
     if not where or len(rest) < 2 or not cues:
@@ -1043,6 +1089,17 @@ def _py_call_grade(text: str, rel: str, line: int, token: str, *, caller: str | 
                                             "the def", "module_assign")
                 return Grade("full", f"AST call to `{token}` at line {line}, defined in this file", "call")
             if "from" in kinds:
+                # `from m import orig as token`: the claim names the alias; its source is that import
+                alias = next(((n, a) for k, n in binds if k == "from" for a in n.names  # type: ignore[attr-defined]
+                              if a.asname == token and a.name != "*"), None)
+                if alias is not None:
+                    n, a = alias
+                    src_mod = f"{'.' * (n.level or 0)}{n.module or ''}"  # type: ignore[attr-defined]
+                    if _mod_matches(n.module or "", target_path, rel, n.level or 0):  # type: ignore[attr-defined]
+                        return Grade("full", f"AST call to `{token}` at line {line}, an import alias of `{a.name}` "
+                                             f"from `{src_mod}`", "alias_call")
+                    return Grade("partial", f"`{token}` is an import alias of `{a.name}` from `{src_mod}`, not from "
+                                            "the target's module", "other_module")
                 return Grade("partial", f"`{token}` at line {line} is star-imported; its source is not resolved",
                              "unbound")
             if "assign" in kinds:
@@ -1346,6 +1403,20 @@ def call_order(text: str, rel: str, where: str, first: str, second: str, *,
                   for n in ast.walk(fn) if n is not fn)
     return {"name": fn.name, "start": fn.lineno, "end": fn.end_lineno or fn.lineno, "lines": lines,
             "nested": nested, "branchy": branchy}
+
+
+def def_around(repo, path: str, a: int, b: int, name: str) -> bool | None:
+    """Does a Python definition named ``name`` overlap lines a-b of ``path``? None when the file is not
+    Python, cannot be read or does not parse (nothing can be said)."""
+    if repo is None or not path.endswith((".py", ".pyi")):
+        return None
+    try:
+        tree = _py_tree((Path(repo) / path).read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return None
+    if tree is None:
+        return None
+    return any(d.lineno <= b and a <= (d.end_lineno or d.lineno) for d in _defs_named(tree, name))
 
 
 def order_check(repo, ev: dict, proposition: str, holds: bool = True) -> Grade | None:
@@ -1915,16 +1986,43 @@ def cap_grade(g: Grade, ceiling: str) -> Grade:
 # What written text may state beyond a typed check: an order, a condition, a count.
 _ORDER_WORDS = re.compile(r"\b(?:before|after|afterwards|then|first|firstly|last|lastly|finally|earlier|later|önce|"
                           r"sonra|ardından|ilk)\b", re.I)
-_COND_WORDS = re.compile(r"\b(?:if|unless|when|whenever|once|until|eğer|halinde|durumunda|sürece|iken)\b", re.I)
+_COND_WORDS = re.compile(r"\b(?:if|unless|when|whenever|once|until|provided|providing|assuming|given\s+that|"
+                         r"as\s+long\s+as|in\s+case|otherwise|except|eğer|halinde|durumunda|sürece|iken)\b", re.I)
+# Turkish conditional verb and copula forms (gelirse, olmazsa, altındaysa, varsa, yoksa, açıksa), read
+# only in Turkish text: English words end the same way (parse, reverse, analyse)
+_TR_COND = re.compile(r"\b(?!(?:false|else|pulse|impulse|response|license|licence|sense|dense|tense|intense|immense|"
+                      r"expense|defense|defence|offense|rinse|parse|sparse|reverse|traverse|course|horse|worse|purse|"
+                      r"nurse|verse|universe|diverse|inverse|converse|adverse|disperse|immerse|terse|endorse|coarse|"
+                      r"rehearse|lapse|collapse|eclipse|ellipse|glimpse|analyse|dispense|suspense|condense|nonsense|"
+                      r"browse)\b)[\wçğıöşü]*(?:[bcçdfgğhjklmnprştvyz]s[ae]|ys[ae])\b", re.I)
+_TR_TEXT = re.compile(r"[çğıöşüÇĞİÖŞÜ]|\b(?:ve|bir|bu|ile|için|olarak|tarafından)\b", re.I)
+# a bound on a value ("for subtotals below the threshold"): a condition the kinds do not check
+_BOUND_WORDS = re.compile(r"\b(?:below|above|greater\s+than|less\s+than|more\s+than|fewer\s+than|exceeds?|exceeding|"
+                          r"at\s+least|at\s+most)\b", re.I)
 _COUNT_WORDS = re.compile(r"\b(?:twice|thrice|times|kez|kere|defa)\b", re.I)
 _LINE_NUMBER = re.compile(r"\b(?:lines?|satır\w*)\s*\d+(?:\s*[-–]\s*\d+)?", re.I)
+# numbers written as words ("ten seconds", "two arguments"; not "one", TR "bir"/"on"/"altı"/"yüz"/"bin",
+# which are also other words)
+_NUMBER_WORDS = re.compile(r"\b(?:zero|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|"
+                           r"fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|"
+                           r"eighty|ninety|hundred|thousand|million|billion|dozen|sıfır|iki|üç|dört|beş|yedi|sekiz|"
+                           r"dokuz|yirmi|otuz|kırk|elli|altmış|yetmiş|seksen|doksan|milyon)\b", re.I)
+# an order claim that says the two calls are adjacent: the order check proves only which comes first
+_ADJACENT = re.compile(r"\b(?:immediately|right\s+(?:before|after)|just\s+(?:before|after)|directly\s+(?:before|after)|"
+                       r"straight\s+after|hemen|doğrudan\s+(?:önce|sonra))\b", re.I)
+# the arguments or the manner of a call ("with two arguments", "passing `items`"; TR "müşteri adıyla")
+_CALL_MANNER = re.compile(r"\b(?:with|passing|using)\s+`?(?!(?:the\s+)?(?:same|its|no)\b)\w+", re.I)
+_TR_WITH = re.compile(r"\b(?!(?:böyle|şöyle|öyle)\b)[\wçğıöşü]+(?:yla|yle)\b", re.I)
 
 
 def unchecked_statements(kind: str, text: str) -> tuple[list[str], list[str]]:
     """``(problems, numbers)``: what written text states that the typed check of ``kind`` does not
     establish - a negation (the check proves the positive statement), a quantifier ("only", "all",
-    "always"), an order (except for the order kind itself), a condition, a count - and the numbers it
-    states (besides line numbers), which the caller compares where the kind can (a config default)."""
+    "always"), an order (except for the order kind itself; there: that the calls are adjacent,
+    "immediately before"), a condition or a bound ("provided that", "below the threshold", TR
+    "altındaysa"), a count, the arguments of a call ("with two arguments", relation claims) - and the
+    numbers it states, digits or words (besides line numbers), which the caller compares where the
+    kind can (a config default)."""
     prose = _LINE_NUMBER.sub(" ", _prose(text))
     out = []
     neg = negated_text(text)
@@ -1937,11 +2035,25 @@ def unchecked_statements(kind: str, text: str) -> tuple[list[str], list[str]]:
     if kind != "behaviour" and (m := _ORDER_WORDS.search(prose)):
         out.append(f"the text states an order ('{m.group(0)}'), which the {kind} check does not verify "
                    "(an order claim is `--kind order`)")
-    for rx, what in ((_COND_WORDS, "a condition"), (_COUNT_WORDS, "a count")):
-        m = rx.search(prose)
-        if m:
+    if kind == "behaviour" and (m := _ADJACENT.search(prose)):
+        out.append(f"the text states that the calls are adjacent ('{m.group(0)}'); the order check establishes "
+                   "only which comes first")
+    turkish = bool(_TR_TEXT.search(prose))
+    bare = _LOCATOR.sub(" ", _PATHLIKE.sub(" ", text or ""))  # code names kept: "with `items`" is an argument
+    checks = [(_COND_WORDS, prose, "a condition"), (_BOUND_WORDS, prose, "a bound"), (_COUNT_WORDS, prose, "a count")]
+    if turkish:
+        checks.append((_TR_COND, prose, "a condition"))
+    if kind == "relation":
+        checks.append((_CALL_MANNER, bare, "how the call is made"))
+        if turkish:
+            checks.append((_TR_WITH, prose, "how the call is made"))
+    said = set()
+    for rx, where, what in checks:
+        m = rx.search(where)
+        if m and what not in said:
+            said.add(what)
             out.append(f"the text states {what} ('{m.group(0)}'), which the {kind} check does not verify")
-    nums = re.findall(r"(?<![\w.])\d+(?:\.\d+)?(?![\w.])", prose)
+    nums = re.findall(r"(?<![\w.])\d+(?:\.\d+)?(?![\w.])", prose) + _NUMBER_WORDS.findall(prose)
     return out, nums
 
 
@@ -1988,6 +2100,19 @@ def _plain_caller_problems(repo, ev: dict, parsed: dict) -> list[str]:
     return [f"the text's caller `{word}` is not a definition around the cited lines"]
 
 
+def plain_caller_encloses(repo, path: str, line: int, word: str) -> bool:
+    """Is ``word``, a caller written text names as a plain word ("checkout calls submit"), the name of
+    a definition around ``line`` of ``path``? Then it is that definition, as if written as code."""
+    if repo is None or not word:
+        return False
+    try:
+        full = (Path(repo) / path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    names = _enclosing_names(full, path, int(line))
+    return bool(names) and fold_tr(word) in names
+
+
 def _direct_call(repo, path: str, caller: str | None, callee: str | None) -> dict | None:
     """:func:`caller_scope` of ``caller`` for ``callee`` in ``path``, when its whole body calls it directly."""
     if not (caller and callee and path):
@@ -1997,6 +2122,143 @@ def _direct_call(repo, path: str, caller: str | None, callee: str | None) -> dic
     except (OSError, ValueError, RecursionError):
         return None
     return sc if sc and sc["calls"] else None
+
+
+_OWNER_WORD = re.compile(r"\b([A-Z][\w]*)`?\s+(?:class|sınıf\w*)\b|\bclass\s+`?([A-Z][\w]*)")
+
+
+def text_paths(text: str) -> list[str]:
+    """The file paths written text names (``orders/service.py``, ``service.py``, ``pricing.py:14``)."""
+    out = [m.group(1) for m in _LOCATOR.finditer(text or "")]
+    out += _PATHLIKE.findall(_LOCATOR.sub(" ", text or ""))
+    return list(dict.fromkeys(p.replace("\\", "/").lstrip("./") for p in out))
+
+
+def other_file_problems(kind: str, spec: dict, ev: dict, text: str, subjects: list[str]) -> list[str]:
+    """A file the text names is a role: when it is not the evidence file (nor another cited file, nor
+    the file of ``--symbol path::name``), the check did not establish what the text says about it
+    ("`save` is defined in orders/service.py" with the evidence in orders/repository.py)."""
+    path = str(ev.get("path") or "")
+    known = {path, *(str(s).partition("::")[0] for s in subjects or [] if s)}
+    sym = str(spec.get("symbol") or "")
+    if "::" in sym:
+        known.add(sym.rpartition("::")[0].replace("\\", "/").strip("/"))
+    if kind == "relation":  # a caller written as a file is checked by the relation rules
+        known.add(str((relation_parse(text, spec.get("target_label")) or {}).get("caller_file") or ""))
+    known = {k for k in known if k}
+    out = []
+    for p in text_paths(text):
+        if not any(k == p or k.endswith("/" + p) or p.endswith("/" + k) for k in known):
+            out.append(f"the text names {p}, the evidence is in {path}")
+    return out
+
+
+# The kind of a definition as written text states it. Two-word forms first ("module constant",
+# "class attribute"); the words for the owner ("the `Settings` class", "class Cart") are not a kind.
+_KIND_PHRASES = (
+    ("module_level", r"module[\s-]+(?:level|constant|variable)s?|top[\s-]+level|global\s+(?:constant|variable)s?|"
+                     r"modül\s+(?:düzeyinde|seviyesinde|sabiti|değişkeni)\w*"),
+    ("class_level", r"class[\s-]+(?:level|attribute|constant|variable|field|member|property)s?|"
+                    r"sınıf\s+(?:düzeyinde|değişkeni|sabiti|özelliği|alanı)\w*"),
+    ("instance", r"instance\s+(?:attribute|variable|field)s?"),
+    ("class", r"class(?:es)?|sınıf\w*|sinif\w*"),
+    ("function", r"functions?|fonksiyon\w*"),
+    ("method", r"methods?|metot\w*|metod\w*|yöntem\w*"),
+    ("constant", r"constants?|sabit\w*"),
+    ("variable", r"variables?|değişken\w*"),
+    ("attribute", r"attributes?|fields?|özellik\w*"),
+    ("property", r"propert(?:y|ies)"),
+    ("async", r"async|asynchronous|coroutines?|asenkron\w*"),
+    ("generator", r"generators?"),
+    ("static", r"static(?:method)?"),
+    ("classmethod", r"classmethods?"),
+    ("abstract", r"abstract"),
+    ("decorator", r"decorators?"),
+    ("lambda", r"lambdas?"),
+    ("enum", r"enums?"),
+    ("interface", r"interfaces?"),
+    ("struct", r"structs?"),
+)
+_KIND_RX = re.compile("|".join(f"(?P<{k}>\\b(?:{rx})\\b)" for k, rx in _KIND_PHRASES), re.I)
+_OWNER_PHRASE = re.compile(r"(?:\b[A-Z][\w]*|`[^`]+`)\s+(?:class|sınıf\w*|module|modül\w*)\b|"
+                           r"\b(?:class|module)\s+(?:\b[A-Z][\w]*|`[^`]+`)")
+
+
+def stated_kinds(text: str) -> list[str]:
+    """The kinds of definition written text states ("a function", "an async method", "a module
+    constant"), without the words that name an owner ("in the `OrderRepository` class")."""
+    t = _BACKTICK.sub(" ", _OWNER_PHRASE.sub(" ", text or ""))
+    return list(dict.fromkeys(m.lastgroup for m in _KIND_RX.finditer(t)))
+
+
+def _py_def_kinds(full: str, name: str, line: int) -> set[str] | None:
+    """The kind words a Python definition of ``name`` starting at ``line`` allows, or None when there
+    is none there (or the file does not parse)."""
+    tree = _py_tree(full)
+    if tree is None:
+        return None
+
+    def deco_names(d: ast.AST) -> set[str]:
+        return {getattr(x, "attr", None) or getattr(x, "id", None) or "" for x in
+                (getattr(e, "func", e) for e in d.decorator_list)}
+
+    def visit(node: ast.AST, in_class: bool) -> set[str] | None:
+        for ch in ast.iter_child_nodes(node):
+            starts = {getattr(ch, "lineno", 0), *(e.lineno for e in getattr(ch, "decorator_list", []))}
+            if isinstance(ch, ast.ClassDef) and ch.name == name and line in starts:
+                return {"class", "attribute"} if in_class else {"class"}
+            if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef)) and ch.name == name and line in starts:
+                out = {"function"} | ({"method"} if in_class else set())
+                if isinstance(ch, ast.AsyncFunctionDef):
+                    out.add("async")
+                if any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(ch)):
+                    out.add("generator")
+                decos = deco_names(ch)
+                out |= {k for k, d in (("static", "staticmethod"), ("classmethod", "classmethod"),
+                                       ("property", "property"), ("abstract", "abstractmethod")) if d in decos}
+                return out
+            if isinstance(ch, (ast.Assign, ast.AnnAssign)) and ch.lineno == line:
+                targets = ch.targets if isinstance(ch, ast.Assign) else [ch.target]
+                if any(isinstance(t, ast.Name) and t.id == name for t in targets):
+                    return ({"constant", "variable", "attribute", "property", "class_level"} if in_class
+                            else {"constant", "variable", "module_level"})
+            if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                continue  # a local of a function is no definition of the module or class
+            found = visit(ch, in_class or isinstance(ch, ast.ClassDef))
+            if found is not None:
+                return found
+        return None
+
+    return visit(tree, False)
+
+
+def kind_problems(ev: dict, full: str | None, text: str, name: str, line: int | None) -> list[str]:
+    """The kind of definition written text states ("`OrderRepository` is a function", "an async
+    function", "a module constant") against the definition at the cited line: Python by its syntax
+    tree, other languages by their syntax facts (class or def). A kind that differs, or that cannot be
+    read, is something the location check did not establish."""
+    said = stated_kinds(text)
+    if not said:
+        return []
+    path = str(ev.get("path") or "")
+    bare = name.strip().strip("`").rpartition("::")[2].split("(")[0].rpartition(".")[2]
+    allowed: set[str] | None = None
+    if full and line and path.endswith((".py", ".pyi")):
+        allowed = _py_def_kinds(full, bare, int(line))
+    elif full and line:
+        facts = _facts(path, full)
+        if anchors.usable(facts):
+            hit = [(q, s) for q, s in anchors.symbols_named(facts, bare) if int(line) in (s["start"], s["def"])]
+            if hit:
+                q, s = hit[0]
+                allowed = {"class"} if s["kind"] == "class" else ({"function", "method"} if "." in q else {"function"})
+    words = {k: k.replace("_", " ") for k in said}
+    if allowed is None:
+        return [f"the text states it is a {', '.join(words.values())}, which the location check does not read here"]
+    off = [words[k] for k in said if k not in allowed]
+    if not off:
+        return []
+    return [f"the text states the kind '{', '.join(off)}', which the definition at {path}:{line} does not have"]
 
 
 def unchecked_names(repo, kind: str, spec: dict, ev: dict, text: str, subjects: list[str]) -> list[str]:
@@ -2024,7 +2286,10 @@ def unchecked_names(repo, kind: str, spec: dict, ev: dict, text: str, subjects: 
         bound |= (_enclosing_names(full, path, int(a)) if full and a else None) or set()
     except (OSError, ValueError, TypeError):
         pass
-    extra = [n for n in dict.fromkeys(n for _, _, n in code_names(text))
+    # a plain word that names a class ("a method of the Settings class", "Settings sınıfının") is a name too
+    owners = [w for w in (m.group(1) or m.group(2) for m in _OWNER_WORD.finditer(text or ""))
+              if fold_tr(w) not in _NOT_A_NAME]
+    extra = [n for n in dict.fromkeys([*(n for _, _, n in code_names(text)), *owners])
              if n.rpartition(".")[2].lower() not in FILE_EXTS and fold_tr(_token(n)) not in bound]
     if not extra or kind != "relation" or repo is None:
         return extra
@@ -2174,6 +2439,11 @@ def assess(kind: str, repo: Path | str | None, spec: dict | None, evidence_row: 
         if names:
             problems.append(f"the text also names {', '.join(f'`{n}`' for n in names[:3])}, which the {kind} "
                             "check does not establish")
+        problems += other_file_problems(kind, spec, ev, text, subjects)
+        if kind == "location":
+            name = spec.get("symbol") or next(iter(_BACKTICK.findall(text)), "")
+            if name:
+                problems += kind_problems(ev, _full, text, name, _a)
         if nums:
             read = _env_read_text(_full, spec["env"], int(_a), int(_b or _a)) \
                 if kind == "config" and spec.get("env") and _full and _a and str(ev.get("path")).endswith(".py") \

@@ -58,6 +58,7 @@ element with ``derived_by``.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import math
@@ -798,64 +799,247 @@ def _has_bases(f: str, header: str) -> bool:
                           head))
 
 
-def _owner_scopes(g, ix: _Index, owner: str) -> tuple[list[tuple[str, int, int]], bool]:
+_PY_EXTS = (".py", ".pyi")
+# A Python class body that writes attributes by name, or reads unknown ones: its members are not all
+# spelled in it (`self.__dict__.update(kw)`, `setattr(self, k, v)`, `__getattr__`).
+_DYNAMIC_MEMBERS = re.compile(r"__getattr|__setattr__|\bsetattr\s*\(|__dict__|\bvars\s*\(")
+# A module whose names may come from elsewhere or be made at runtime.
+_DYNAMIC_MODULE = re.compile(r"\bimport\s+\*|\bexport\s+\*|^def\s+__getattr__|\bglobals\s*\(\s*\)|\bsys\.modules\b|"
+                             r"\bsetattr\s*\(", re.M)
+# What every Java object has from java.lang.Object (Python's are the dunders): never absent from a class.
+_JAVA_OBJECT_MEMBERS = frozenset("toString equals hashCode getClass notify notifyAll wait clone finalize".split())
+# Data and configuration files: a key there may be what a dotted name means (`pricing.discount_rate`).
+_DATA_SUFFIXES = (".yaml", ".yml", ".toml", ".json", ".ini", ".cfg", ".conf", ".properties", ".env", ".xml")
+
+
+class _OutOfTime(Exception):
+    """A scan went past its deadline: nothing is claimed about the name (UNCHECKED)."""
+
+
+def _reader(g, deadline: float | None):
+    """A file reader for one lookup: each file read once; past ``deadline`` it raises :class:`_OutOfTime`."""
+    cache: dict[str, list[str]] = {}
+
+    def read(f: str) -> list[str]:
+        if f not in cache:
+            if deadline is not None and time.perf_counter() > deadline:
+                raise _OutOfTime
+            cache[f] = _lines_of(g, f)
+        return cache[f]
+
+    return read
+
+
+def _owner_scopes(g, ix: _Index, owner: str, read=None) -> tuple[list[tuple[str, int, int, str]], bool]:
     """Where the owner of a dotted name (``Owner.member``) is defined in the graph: ``(scopes, open)``.
 
-    ``scopes`` are ``(file, start, end)`` of the classes named ``owner`` (their lines; another letter
-    case only when no class has this one: ``cart`` for ``Cart``) and of the code modules it names
-    (``service``, ``orders.config``: the whole file, imports included - they re-export; a package:
-    every module in it). ``open`` when a member may be defined elsewhere: a class with a base class or
-    ``__getattr__``, a module with a star import or ``__getattr__``, a file that cannot be read."""
+    ``scopes`` are ``(file, start, end, kind)``: the classes named ``owner`` (``"class"``, their
+    lines; another letter case only when no class has this one: ``cart`` for ``Cart``) and the code
+    modules it names (``"module"``, the whole file, imports included - they re-export: ``service``,
+    ``orders.config``; a package: every module in it; a directory of that name, as a Go or Java
+    package: every code file in it). ``open`` when a member may be defined elsewhere, so a member
+    missing from the scopes is not absent: an owner matched only in another letter case (``cart`` is
+    a variable or a section, not the class), a class in a language other than Python and Java, or a
+    Java interface, enum or record (extension functions, methods in other files, generated members),
+    a class with a base class, a decorator or annotation, a Python class with dynamic attributes
+    (``__getattr__``, ``setattr``, ``__dict__``), a module with a star import or runtime names, a
+    non-Python module, a directory package, a file that cannot be read."""
+    read = read or _reader(g, None)
     last = owner.rpartition(".")[2]
     classes = [n for n in ix.by_bare.get(last, ()) if _is_class(g, n)]
+    is_open = False
     if not classes and _compact(last):
         classes = [n for n in ix.by_compact.get(_compact(last), ()) if _is_class(g, n)]
-    scopes: list[tuple[str, int, int]] = []
-    is_open = False
+        is_open = bool(classes)
+    scopes: list[tuple[str, int, int, str]] = []
     for n in classes:
         f, sp = g.file(n), g.span(n)
-        lines = _lines_of(g, f) if f else []
+        lines = read(f) if f else []
         if not (f and sp and lines):
             is_open = True
             continue
         a, b = sp
-        if _has_bases(f, _class_header(lines, a, b)) or "__getattr" in "\n".join(lines[a - 1:b]):
+        header = _class_header(lines, a, b)
+        if f.endswith(_PY_EXTS):
+            closed = not _DYNAMIC_MEMBERS.search("\n".join(lines[a - 1:b]))
+        else:  # a Java class (not an interface, enum or record) declares its members in its body
+            closed = f.endswith(".java") and bool(re.search(rf"\bclass\s+{re.escape(g.label(n))}\b", header))
+        if not closed or _has_bases(f, header):
             is_open = True
-        scopes.append((f, a, b))
+        scopes.append((f, a, b, "class"))
     path = owner.replace(".", "/")
     # a package holds what its modules define (`orders.place_order` for orders/service.py)
-    pkgs = {f.rpartition("/")[0] + "/" for f in ix.files if _names_file(f, {f"{path}/__init__"})}
+    pkgs = tuple({f.rpartition("/")[0] + "/" for f in ix.files if _names_file(f, {f"{path}/__init__"})})
     for f, n in ix.files.items():
-        if g.G.nodes[n].get("file_type") != "code" or not (_names_file(f, {path}) or f.startswith(tuple(pkgs))):
+        if g.G.nodes[n].get("file_type") != "code":
             continue
-        lines = _lines_of(g, f)
+        parent = f.rpartition("/")[0]
+        named = _names_file(f, {path}) or (bool(pkgs) and f.startswith(pkgs))
+        if not (named or parent == path or parent.endswith("/" + path)) or any(s[0] == f for s in scopes):
+            continue  # (a file named like a class it holds, `Wisp.java`: the class is the owner)
+        lines = read(f)
         if not lines:
             is_open = True
             continue
-        text = "\n".join(lines)
-        if re.search(r"\bimport\s+\*|\bexport\s+\*|^def\s+__getattr__", text, re.M):
+        if not (named and f.endswith(_PY_EXTS)) or _DYNAMIC_MODULE.search("\n".join(lines)):
             is_open = True
-        scopes.append((f, 1, len(lines)))
+        scopes.append((f, 1, len(lines), "module"))
     return scopes, is_open
 
 
-def _member_site(g, ix: _Index, name: str) -> tuple[str | None, bool]:
-    """``(site, decided)`` for a dotted name whose owner the graph defines: the member spelled inside
-    the owner (``file:line``), or None when it is not there - ``decided`` is False when the owner is
-    not a class or module of the graph, or a member may come from elsewhere (see :func:`_owner_scopes`)."""
+def _py_class_members(text: str, a: int, b: int) -> dict[str, int] | None:
+    """The names a Python class defines, with the line of the first binding: its defs and nested
+    classes, class-level assignments (``MAX_RETRIES = 5``, ``x: int``, ``__slots__`` entries, imports)
+    and the attributes its methods assign on their first parameter (``self.conn = ...``). A call on
+    another object (``self.conn.execute(...)``) is not a member. None when the file does not parse or
+    no class starts within lines a-b."""
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError, RecursionError):
+        return None
+    found = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and a <= n.lineno <= b]
+    if not found:
+        return None
+    out: dict[str, int] = {}
+
+    def target(t: ast.AST) -> None:
+        if isinstance(t, ast.Name):
+            out.setdefault(t.id, t.lineno)
+        elif isinstance(t, (ast.Tuple, ast.List)):
+            for e in t.elts:
+                target(e)
+        elif isinstance(t, ast.Starred):
+            target(t.value)
+
+    def method(fn: ast.AST) -> None:
+        params = [*fn.args.posonlyargs, *fn.args.args]
+        if not params:
+            return
+        me = params[0].arg
+        for n in ast.walk(fn):
+            if isinstance(n, ast.Attribute) and isinstance(n.ctx, (ast.Store, ast.Del)) and \
+                    isinstance(n.value, ast.Name) and n.value.id == me:
+                out.setdefault(n.attr, n.lineno)
+
+    def body(stmts: list) -> None:
+        for st in stmts:
+            if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                out.setdefault(st.name, st.lineno)
+                if not isinstance(st, ast.ClassDef):
+                    method(st)
+            elif isinstance(st, ast.Assign):
+                for t in st.targets:
+                    target(t)
+                    if isinstance(t, ast.Name) and t.id == "__slots__":
+                        for e in getattr(st.value, "elts", [st.value]):
+                            if isinstance(e, ast.Constant) and isinstance(e.value, str):
+                                out.setdefault(e.value, st.lineno)
+            elif isinstance(st, (ast.AnnAssign, ast.AugAssign)):
+                target(st.target)
+            elif isinstance(st, (ast.Import, ast.ImportFrom)):
+                for al in st.names:
+                    out.setdefault((al.asname or al.name).split(".")[0], st.lineno)
+            elif isinstance(st, (ast.For, ast.AsyncFor)):
+                target(st.target)
+                body(st.body)
+                body(st.orelse)
+            elif isinstance(st, (ast.With, ast.AsyncWith)):
+                for it in st.items:
+                    if it.optional_vars is not None:
+                        target(it.optional_vars)
+                body(st.body)
+            elif isinstance(st, (ast.If, ast.While)):
+                body(st.body)
+                body(st.orelse)
+            elif hasattr(st, "handlers") and hasattr(st, "finalbody"):  # try (and try/except* on 3.11+)
+                body(st.body)
+                for h in st.handlers:
+                    body(h.body)
+                body(st.orelse)
+                body(st.finalbody)
+            elif isinstance(st, ast.Match):
+                for case in st.cases:
+                    body(case.body)
+
+    body(min(found, key=lambda n: n.lineno).body)
+    return out
+
+
+def _member_site(g, ix: _Index, name: str, *, deadline: float | None = None) -> tuple[str | None, bool]:
+    """``(site, decided)`` for a dotted name whose owner the graph defines: the member inside the owner
+    (``file:line``; a Python class's member is one it defines, see :func:`_py_class_members`; other
+    owners: the word anywhere in their lines), or None when it is not there - ``decided`` is False
+    when the owner is not a class or module of the graph, a member may come from elsewhere (see
+    :func:`_owner_scopes`), or the member is a dunder every object has (``__repr__``). Past
+    ``deadline``: ``(UNCHECKED, True)``."""
     owner, _, member = name.rpartition(".")
     if not owner or not member:
         return None, False
-    scopes, is_open = _owner_scopes(g, ix, owner)
-    if not scopes:
-        return None, False
-    rx = re.compile(rf"(?<![\w]){re.escape(member)}(?![\w])", re.I)
-    for f, a, b in scopes:
-        lines = _lines_of(g, f)
-        hit = next((i for i in range(a, min(b, len(lines)) + 1) if rx.search(lines[i - 1])), None)
-        if hit is not None:
-            return f"{f}:{hit}", True
-    return None, not is_open
+    read = _reader(g, deadline)
+    try:
+        scopes, is_open = _owner_scopes(g, ix, owner, read)
+        if not scopes:
+            return None, False
+        rx = re.compile(rf"(?<![\w]){re.escape(member)}(?![\w])", re.I)
+        for f, a, b, kind in scopes:
+            if deadline is not None and time.perf_counter() > deadline:
+                raise _OutOfTime
+            lines = read(f)
+            if kind == "class" and f.endswith(_PY_EXTS):
+                members = _py_class_members("\n".join(lines), a, b)
+                if members is not None:
+                    hit = members.get(member) or next((ln for k, ln in members.items()
+                                                       if k.lower() == member.lower()), None)
+                    if hit is not None:
+                        return f"{f}:{hit}", True
+                    continue
+                is_open = True  # its members cannot be read: the word counts
+            chunk = "\n".join(lines[a - 1:b])
+            m = rx.search(chunk)  # one search per scope; the line only when it is there
+            if m is not None:
+                return f"{f}:{a + chunk.count(chr(10), 0, m.start())}", True
+    except _OutOfTime:
+        return UNCHECKED, True
+    inherited = (member.startswith("__") and member.endswith("__")) or member in _JAVA_OBJECT_MEMBERS
+    return None, not is_open and not inherited
+
+
+def _member_elsewhere(g, ix: _Index, name: str, deadline: float) -> str | None:
+    """Where the repository gives a closed owner's missing member anyway (``file:line``): the whole
+    dotted name, an attribute assignment ``x.member = ...``, ``setattr(..., "member", ...)``, or a key
+    ``member`` in a data or configuration file (``discount_rate: 0.1`` under ``pricing:``). None when
+    none of them occurs; UNCHECKED past ``deadline``."""
+    member = name.rpartition(".")[2]
+    word = re.compile(rf"(?<![\w]){re.escape(member)}(?![\w])", re.I)
+    whole = re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])", re.I)
+    code = re.compile(rf"\.\s*{re.escape(member)}\s*(?::[^=\n]*)?=(?!=)|\bsetattr\s*\([^)\n]*['\"]{re.escape(member)}"
+                      r"['\"]")
+    key = re.compile(rf"(?:^|[\s{{,\[])[\"']?{re.escape(member)}[\"']?\s*[:=]", re.I)
+    for f in _files_to_scan(g, ix, [member]):
+        if f.lower().endswith(_TEXT_SUFFIXES_SKIP):
+            continue
+        if time.perf_counter() > deadline:
+            return UNCHECKED
+        data = _read_small(Path(g.root) / f)
+        if data is None or not word.search(data):
+            continue
+        is_data = f.lower().endswith(_DATA_SUFFIXES)
+        for i, ln in _outside_imports(data.splitlines()):
+            if whole.search(ln) or (key if is_data else code).search(ln):
+                return f"{f}:{i}"
+    return None
+
+
+def owner_known(g, text: str) -> bool:
+    """Is the owner of a dotted code name (``Owner.member``) a class, module, package or directory of
+    the graph? (Past the scan's time limit: assumed so, which claims nothing.)"""
+    owner = split_code_name(text)[1].rpartition(".")[0]
+    if not owner:
+        return False
+    try:
+        return bool(_owner_scopes(g, _index(g), owner, _reader(g, time.perf_counter() + _SITE_SECONDS))[0])
+    except _OutOfTime:
+        return True
 
 
 def _member_near(g, ix: _Index, text: str) -> list[tuple[str, float]]:
@@ -897,9 +1081,11 @@ def name_site(g, text: str, *, strict: bool = False) -> str | None:
 
     Lenient on purpose: a dotted name counts when its last part occurs (unless ``strict``: then the
     whole name must occur), any letter case counts. ``path::name`` looks for the name in that file
-    only. A dotted name whose owner is a class or module of the graph (``OrderRepository.place_order``)
-    is looked for inside that owner (:func:`_member_site`) or as a whole, not by its last part alone.
-    Only a name found nowhere is reported as not found.
+    only. A dotted name whose owner is a class or module of the graph that cannot get members from
+    elsewhere (``OrderRepository.place_order``) is looked for inside that owner (:func:`_member_site`)
+    and then as a whole, an attribute assignment, ``setattr`` or a data key elsewhere
+    (:func:`_member_elsewhere`), not by its last part alone. Only a name found nowhere is reported as
+    not found; a lookup that runs past ``_SITE_SECONDS`` is UNCHECKED.
     """
     ix = _index(g)
     path, name = split_code_name(text)
@@ -929,13 +1115,16 @@ def name_site(g, text: str, *, strict: bool = False) -> str | None:
         return site
     as_paths = {name} | ({name.replace(".", "/")} if "." in name else set())
     site = next((f for f in ix.repo_files if _names_file(f, as_paths)), None)
+    spent = 0.0  # the owner's lookup and the scan share one limit (_SITE_SECONDS)
     if site is None and "." in name and not strict:
-        member, decided = _member_site(g, ix, name)
+        t0 = time.perf_counter()
+        member, decided = _member_site(g, ix, name, deadline=t0 + _SITE_SECONDS)
         if member is not None or decided:
-            # the owner is a class or module here: its member, or the whole name spelled elsewhere
-            site = member if member is not None else name_site(g, text, strict=True)
+            # the owner is a class or module here: its member, or the member given to it elsewhere
+            site = member if member is not None else _member_elsewhere(g, ix, name, t0 + _SITE_SECONDS)
             ix.sites[key] = site
             return site
+        spent = time.perf_counter() - t0
     if site is None:
         last = name.rpartition(".")[2] if "." in name and not strict else None
         whole = [re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])"),
@@ -943,7 +1132,7 @@ def name_site(g, text: str, *, strict: bool = False) -> str | None:
         part = re.compile(rf"(?<![\w]){re.escape(last)}(?![\w])") if last and len(last) >= 3 else None
         pats = whole + ([part] if part else [])
         files = _files_to_scan(g, ix, [name] if strict or not last else [name, last])
-        deadline = time.perf_counter() + _SITE_SECONDS
+        deadline = time.perf_counter() + _SITE_SECONDS - spent
         # the whole name is preferred to its last part (`repo.save` over `def save`), for a short while
         part_hit, part_deadline = None, None
         for f in files:

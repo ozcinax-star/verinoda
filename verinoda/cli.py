@@ -953,7 +953,16 @@ def cmd_claim(args) -> int:
                 raise SystemExit("error: an order claim states two calls and their order positively in one form, "
                                  "e.g. \"`place_order` calls `validate_items` before `save`\", \"... `save` after "
                                  "`validate_items`\", \"... `validate_items`, then `save`\" --symbol place_order "
-                                 "(--symbol is the function whose body is checked; a negated order is not read)")
+                                 "(--symbol is the function whose body is checked; a negated order is not read; "
+                                 "without --symbol the text must name it: \"in `place_order`\", \"`place_order` "
+                                 "calls ...\")")
+            where = prop.rpartition(" in ")[2]
+            if not symbol and sources and entail.def_around(repo, sources[0][1], sources[0][2], sources[0][3],
+                                                            where) is False:
+                # a function read from the text must be the one the cited lines are in: a wrong role
+                # would check another body and could contradict a true sentence
+                raise SystemExit(f"error: the text makes `{where}` the function whose body is checked, but no "
+                                 f"definition `{where}` is around {sources[0][0]}; pass --symbol <function>")
             kind = "behaviour"
             cspec.update({"proposition": prop, "holds": True})
         if symbol:

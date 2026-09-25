@@ -194,6 +194,28 @@ def test_trace_says_which_file_lacks_a_file_scoped_name(g):
     assert res["status"] == "unresolved"
 
 
+@pytest.mark.parametrize("source, target, side, where", [
+    ("create_order_handler", "config.DISCOUNT_THRESHOLD", "target",
+     "`DISCOUNT_THRESHOLD` occurs at orders/config.py:7"),
+    ("OrderRepository.__init__", "OrderRepository.conn", "target", "`conn` occurs at orders/repository.py:10"),
+    ("service.compute_total", "apply_discount", "source", "`compute_total` occurs at orders/service.py:4"),
+    ("api.place_order", "validate_items", "source", "`place_order` occurs at orders/api.py:4"),
+])
+def test_trace_keeps_members_constants_and_imported_names_that_exist(g, source, target, side, where):
+    # review round 2: trace said "no symbol named ..." for a module constant, an instance attribute and
+    # a name a module imports; it now checks existence as analyze does (the owner's own lines first)
+    res = retrieval.trace(g, source, target, mode="any")
+    assert "not_found" not in res, res.get("not_found")
+    assert res["status"] != "unresolved" and where in res["fuzzy"][side]
+
+
+def test_trace_does_not_find_what_a_class_does_not_define(g):
+    # `self.conn.execute(` inside OrderRepository is sqlite's method, not a member of the class
+    res = retrieval.trace(g, "create_order_handler", "OrderRepository.execute")
+    assert res["status"] == "unresolved"
+    assert res["not_found"]["target"].startswith("no symbol named `OrderRepository.execute` in this repository")
+
+
 def test_trace_same_endpoint_is_ambiguous(g):
     assert retrieval.trace(g, "place_order", "orders/service.py::place_order")["status"].startswith("ambiguous")
 

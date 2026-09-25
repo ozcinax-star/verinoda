@@ -632,7 +632,7 @@ deterministic.
     the caller the text names (`Owner.name` also needs the class `Owner`
     around the line). A caller written as a plain word ("checkout calls
     submit") or a file must be the definition around the cited lines or their
-    file, else the grade is `partial`; it never drives a contradiction. A
+    file, else the grade is `partial` and it never drives a contradiction. A
     call verb outranks "using"/"creates", and an infinitive ("to create") is
     not the relation. A call on the receiver the text writes (`repo.save`,
     `self._check`) and `self.m()` inside a class that defines `m` are `full`;
@@ -644,18 +644,43 @@ deterministic.
     (`entail.unchecked_statements`): a negation ("not", "never", "n't", TR
     "çağırmaz", "okunmaz", "değil": the check proves the positive statement),
     a quantifier ("only", "all", "always"), an order in a non-order claim
-    ("before", "after", "then", "first"), a condition ("if", "when"), a count
-    ("twice"), and a number: a config claim's number must be in the cited
-    read itself ("defaults to 50" against `os.environ.get(..., "100.0")` is
-    `partial`), other kinds do not compare numbers;
+    ("before", "after", "then", "first"), in an order claim that the calls
+    are adjacent ("immediately before", "right after", TR "hemen"), a
+    condition ("if", "when", "provided that", "as long as"; in Turkish text
+    the conditional forms "altındaysa", "gelirse", "varsa"), a bound
+    ("below", "above", "at least"), a count ("twice"), how a relation's call
+    is made ("with two arguments", "with the customer name", TR "müşteri
+    adıyla"), and a number, in digits or words ("ten seconds"): a config
+    claim's number must be in the cited read itself ("defaults to 50" against
+    `os.environ.get(..., "100.0")` is `partial`), other kinds do not compare
+    numbers;
+  - a file the text names is a role: when it is neither the evidence file nor
+    another cited file (nor the file of `--symbol path::name`), the grade is
+    `partial` ("`save` is defined in orders/service.py" citing
+    orders/repository.py: "the text names orders/service.py, the evidence is
+    in orders/repository.py"; also "orders/pricing.py reads
+    ORDERS_MAX_ITEMS" citing orders/config.py);
+  - a location text's kind of definition ("a function", "a class", "an async
+    function", "a method", "a module constant", "a class attribute", TR "bir
+    fonksiyondur") is compared with the definition at the cited line
+    (`entail.kind_problems`: Python by its syntax tree, other languages class
+    or def from their syntax facts); a kind it does not have, or one that
+    cannot be read there, is `partial`. Words that name an owner ("of the
+    `OrderRepository` class") are not a kind, and a plain word naming a class
+    ("a method of the Settings class") is a name the check must bind;
   - so does a code name the check does not bind (`entail.unchecked_names`,
     relation, location and order claims): "create_order_handler calls
     place_order and fetch_order" is `partial` ("the text also names
     `fetch_order`, which the relation check does not establish"). A
-    relation's other callee ("A calls B and C", TR "B ve C'yi çağırır") or
-    another clause ("A calls B, and C calls D") counts when the caller's whole
-    body calls it directly (`entail.caller_scope`); the definitions around the
-    cited lines (a method's class) are locators;
+    relation's other callee counts when the text lists it with the checked
+    callee, joined by coordinators only ("A calls B and C", "A calls B, C and
+    D", TR "B ve C'yi çağırır"), or it is another clause ("A calls B, and C
+    calls D"), and the caller's whole body calls it directly
+    (`entail.caller_scope`). A name after "instead of", "rather than",
+    "via", "with the result of", "from inside" or in a relative clause ("A
+    calls B, which uses C") is not listed with the callee: it stays
+    unchecked. The definitions around the cited lines (a method's class) are
+    locators;
   - a verbatim quote verifies only the quoted text: written text that says
     more than a locator (`path:line`, or the name of the definition around the
     cited lines) besides `contains: ...` is `partial` (code `quote_rest`).
@@ -669,7 +694,13 @@ deterministic.
     caller's body is the refuting evidence. A call at another line of the body
     is a heuristic warning (the citation is off), no longer a definitive
     refutation, and so is a caller read from the text whose definition is not
-    found (its body was not read);
+    found (its body was not read), or written text with no caller whose body
+    could be read. A caller written as a plain word ("checkout calls submit")
+    that names the definition around the cited line is that caller, as if
+    written as code: a call elsewhere in its body is the same warning, and a
+    body without the call refutes the claim (before, the cited line alone did,
+    so a citation one line off contradicted a true sentence). Any other plain
+    word is a heuristic doubt only;
   - config: when no read of the variable in the cited file is bound to the
     text's subject and another read's binding spells the whole subject, the
     claim is `contradicted`: "orders/config.py:6 binds ORDERS_MAX_ITEMS to
@@ -681,7 +712,13 @@ deterministic.
     the written order), "A, then B", TR "B'den önce A", "A'dan sonra B",
     "önce A, sonra B". Two order words that make no such form, or a negated
     order ("never calls B before A"), are refused with a request for a clearer
-    sentence - a guess could reverse a true sentence. The first calls of A and
+    sentence - a guess could reverse a true sentence. F is `--symbol`, or the
+    one name the text makes the place or the caller ("in `F`", "by `F`",
+    "`F` calls ...", TR "`F` içinde", "`F`'de", the one name without a case
+    ending before "çağırır"), never simply the first name ("`validate_items`
+    runs before `save` in `place_order`" was checked in validate_items'
+    body); otherwise the sentence is refused, and so is an F read from the
+    text that is not a definition around the cited lines. The first calls of A and
     B in F's own code decide it (`entail.call_order`); a missing call, or the
     reverse order in a function without branches or loops, is
     `contradicted`. A call inside a def, lambda or class nested in F runs
@@ -717,13 +754,26 @@ deterministic.
     part for 0.25 s after the part is found;
   - a dotted name whose owner is a class or module of the graph
     (`OrderRepository.place_order`, `Cart.check`, `orders.config.X`; a
-    package counts with all its modules) is looked for inside that owner (a
-    class's lines, a module's whole file) or as a whole elsewhere, not by its
-    last part (`question_plan._member_site`): absent there, it is
-    `not_found` with the owner's similar members and same-named symbols as
-    `did_you_mean`. A class with a base class, a decorator or annotation, a
-    `data`/`case`/`partial` class, `__getattr__`, or a module with a star
-    import may have the member from elsewhere: then the lenient search runs;
+    package counts with all its modules, a directory - a Go or Java package -
+    with every code file in it) is looked for inside that owner, not by its
+    last part (`question_plan._member_site`). A Python class's members are
+    what it defines (its syntax tree: defs, class-level assignments, the
+    attributes its methods assign on `self`); `self.conn.execute(...)` does
+    not make `execute` a member. Absent there, the name is `not_found` (with
+    the owner's similar members and same-named symbols as `did_you_mean`)
+    only when the owner cannot get members from elsewhere - a Python class
+    written with that exact spelling, without a base class, a decorator or
+    dynamic attributes (`__getattr__`, `setattr`, `__dict__`), a Java class
+    (not an interface, enum or record) without a base or an annotation (its
+    members are the words of its body; `Object`'s are never absent), or a
+    Python module without a star import or runtime names - and the repository gives
+    the member nowhere else: not the whole name, not an attribute assignment
+    (`Settings.patched = True`) or `setattr`, not a key in a data or
+    configuration file (`pricing.discount_rate` with `discount_rate: 0.1` in
+    settings.yaml). Otherwise (an owner in another letter case - `cart` is a
+    variable or a section, not `Cart` -, a class in another language, a
+    directory package, a dunder every object has) the lenient search runs.
+    Reading the owner's files shares the 2 s limit of the scan;
   - when the scan could not finish (over 2 s), the link is at most `weak`
     and says that existence was not checked; it is never linked to a
     similar name;
@@ -739,11 +789,17 @@ deterministic.
   (`retrieval._names_exactly`): a path with or without its extension or with
   backslashes, a dotted module name, `path::Class.method`, `Class#method`,
   `name()`, `Owner.name` with the owner a class, module or package (a Java
-  FQN). An endpoint written as code that names nothing exactly is unresolved
-  with the not-found line only when the whole name is spelled nowhere
-  (`name_site(strict=True)`: "Foo.save" is not found although `save` is);
-  otherwise the similar node is kept and `fuzzy` says so, as for plain
-  words.
+  FQN). An endpoint written as code that names nothing exactly is checked
+  for existence as analyze checks a mention (`name_site`: a member of a known
+  class or module in that owner, a module constant, a name a module imports);
+  an owner the graph does not define needs the whole name spelled ("Foo.save"
+  is not found although `save` is). Only a name found nowhere is unresolved
+  with the not-found line; otherwise the similar node is kept and `fuzzy`
+  says so ("`DISCOUNT_THRESHOLD` occurs at orders/config.py:7, not the whole
+  name"), as for plain words.
+  An analysis stores a claim with its own uncertainties; the question's
+  reading (a weak link, an open clarification) is added when the claim is
+  shown, so a claim reused by a later question does not carry it.
 
 Limits: Python only for relation scopes, config bindings and order (other
 languages keep their partial grades). Calls through other names, dynamic

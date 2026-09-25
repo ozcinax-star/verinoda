@@ -187,6 +187,62 @@ name whose last part occurs but not the whole name (`repo.save`, `wisp.count`) 3
 about 120 ms at `098003f`, since the whole name is still looked for 0.25 s after the part is found.
 In-sample, like the rest of this section.
 
+**Third review round (a second reviewer's findings).** The reviewer's probe batches (104 written
+sentences, 37 analyze questions, 25 trace endpoints on copies of `examples/orders_app` with extra
+files - a Go package in two files, `settings.yaml`, classes with dynamic attributes -,
+`glow_mod` and `forge_mod`) were run again on fresh copies with the fix, against the branch at
+`f353d95`:
+
+| | before | after |
+|---|---|---|
+| false sentences verified (at creation or after `challenge`) | 24 of 63 | 0 |
+| true sentences contradicted | 8 of 41 | 0 |
+| true sentences verified after `challenge` | 21 | 26 |
+| false sentences contradicted | 10 | 8 |
+
+The 24 false ones that were verified: a second callee after "instead of", "rather than", "via",
+"with the result of", "from inside" or in a relative clause ("..., which uses `get_repo`"); a
+file in the text other than the evidence's ("`save` is defined in orders/service.py", "orders/
+pricing.py reads ORDERS_MAX_ITEMS"); a kind the definition does not have ("`OrderRepository` is
+a function", "an async function", "a module constant" for a class attribute, TR "bir
+fonksiyondur", "a method of the Settings class" for `Other.save`); numbers as words ("ten
+seconds"), arguments ("with two arguments", TR "müşteri adıyla"), conditions and bounds
+("provided that", "for subtotals below the threshold", TR "altındaysa"), adjacency in an order
+("immediately before"). They are `strong_inference` or lower now. The 8 true ones that were
+contradicted: order sentences without `--symbol` that name the function last ("`validate_items`
+runs before `save` in `place_order`", "... by `place_order`", TR "`place_order` içinde"), which
+were checked in `validate_items`' body; and relation sentences with a plain-word caller cited
+one line above the call ("checkout calls submit", "guarded calls total_of"), whose caller's
+body was never read. The two false ones no longer contradicted ("guarded calls total_of when
+items is empty", TR "items boşsa") were contradicted for that wrong reason (the cited line one
+above the call); they are `unknown` now. "guarded calls total_of" citing the call line (an
+import alias: `from orders.pricing import compute_total as total_of`) is verified now; it was
+graded "star-imported".
+
+`analyze`: `store.Open` (Go, defined in the package's other file), `pricing.discount_rate` and
+`cart.max_lines` (keys of `settings.yaml`; `pricing` is also a module, `cart` a class in another
+letter case), `Options.timeout` (set through `self.__dict__`) and `settings.database_url` were
+"no symbol named ... in this repository"; they are `weak`/`unlinked` with the site ("`discount_rate`
+occurs at settings.yaml:2"). `OrderRepository.execute` and `Cart.append` (only calls on another
+object inside the class) were `met` from a text hit; they are `not_found` now. `trace` resolves
+`config.DISCOUNT_THRESHOLD`, `OrderRepository.conn`, `Cart.items`, `Settings.MAX_RETRIES`,
+`Options.timeout`, `service.compute_total`, `orders.service.compute_total` and `api.place_order`
+by similarity with a note ("`DISCOUNT_THRESHOLD` occurs at orders/config.py:7, not the whole
+name") instead of "no symbol named ..."; `Foo.save`, `Settings.save`, `Cart.check` and
+`OrderRepository.place_order` are still not found. A claim reused by a later analysis no longer
+carries the earlier question's weak-link uncertainty.
+
+The 101-sentence set of the first round: the same outcome as at `f353d95` (0 false verified, 0
+true contradicted, 16 false contradicted, 5 refused) except one more true sentence verified (the
+alias call above), 40 of 60. Fast harness, the seven public sets plus `verinoda_user_tr` on the
+prepared indexes (query-time change): facts per question and approach, and negatives, identical
+to `er_new` (282 of 282 set x question x approach cells). Critique evaluation: every row
+identical to the committed `critique_eval.json` (true claims contradicted 0/23). `name_site` on
+the 2,305-file repository, while the test suite ran: names found nowhere 290-560 ms; a member of
+the `test` package (611 modules) reads the package under the 2 s limit and answers in 2.0-2.1 s,
+"not checked" when the limit runs out first (before: "absent" after 1.7-7.4 s, over the limit).
+In-sample: the rules were written after seeing these sentences.
+
 ## Update 2026-09-25: analyze keeps what query found, grounded verdicts, Turkish, update time
 
 Measured with the fast harness (`benchmarks/results/fast-2026-09-25/`, its README says how): the

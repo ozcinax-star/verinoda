@@ -237,6 +237,38 @@ def test_relation_sentences_are_contradicted_only_on_roles_they_state_clearly(pr
     assert res["status"] != "contradicted" and res["findings"] == []
 
 
+def test_a_plain_word_caller_is_read_but_never_drives_a_contradiction(proj):
+    # review round 2: "checkout calls submit" citing the line above the call was contradicted at creation
+    # (the plain-word caller's body was never read), while a caller written as code only got a warning
+    repo, st, cl, g = proj
+    (repo / "orders" / "extras.py").write_text(
+        "from orders.repository import OrderRepository\nfrom orders.service import place_order as submit\n\n\n"
+        "def checkout(customer, items):\n    repo = OrderRepository(':memory:')\n"
+        "    return submit(repo, customer, items)\n\n\ndef audit(items):\n    return list(items)\n",
+        encoding="utf-8", newline="\n")
+    for text in ("checkout calls submit", "submit is called by checkout", "checkout, submit'i çağırır"):
+        c = _written(cl, st, text, "relation", ["orders/extras.py:6"], target_label="submit", symbol="submit")
+        assert critique.check_at_creation(st, repo, c["id"], graph=g)["status"] != "contradicted", text
+        cs = critique.call_site_check(repo, cl.get(c["id"]), graph=g)
+        assert cs["strength"] == "heuristic" and "but checkout calls submit at orders/extras.py:7" in cs["detail"], text
+    # a plain word that names the definition around the cited line is that caller: its whole body
+    # without the call refutes the claim, as for a caller written as code
+    c = _written(cl, st, "audit calls submit", "relation", ["orders/extras.py:11"], target_label="submit",
+                 symbol="submit")
+    res = critique.check_at_creation(st, repo, c["id"], graph=g)
+    assert res["status"] == "contradicted" and "no direct call to submit in audit (orders/extras.py:10-11)" in \
+        res["findings"][0]
+    c = _written(cl, st, "checkout calls place_orders", "relation", ["orders/extras.py:7"], target_label="place_orders",
+                 symbol="place_orders")
+    assert critique.check_at_creation(st, repo, c["id"], graph=g)["status"] == "contradicted"
+    # any other plain word is not the caller: a heuristic doubt, never a contradiction (D31)
+    c = _written(cl, st, "The handler calls submit", "relation", ["orders/extras.py:6"], target_label="submit",
+                 symbol="submit")
+    assert critique.check_at_creation(st, repo, c["id"], graph=g)["status"] != "contradicted"
+    cs = critique.call_site_check(repo, cl.get(c["id"]), graph=g)
+    assert cs["strength"] == "heuristic" and "caller `handler` is a plain word that is not a definition" in cs["detail"]
+
+
 def test_order_of_calls_made_by_nested_functions_is_never_certain(proj):
     repo, st, cl, g = proj
     (repo / "orders" / "flow.py").write_text(

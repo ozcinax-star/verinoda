@@ -963,6 +963,30 @@ def test_claim_add_binds_roles_and_contradicts_definitive_misses_at_creation(rep
     assert neg["status"] not in VERIFIED and neg["status"] != "contradicted"
 
 
+def test_order_claim_without_symbol_reads_the_function_from_its_role(repo):
+    # review round 2: without --symbol the first name was taken as the function, so these true sentences
+    # were checked in validate_items' body and contradicted at creation
+    def add(text):
+        return ok_json("claim", "add", text, "--source", "orders/service.py:19-22", "--kind", "order", "--repo",
+                       str(repo), "--json", cwd=repo)
+
+    for text in ("`validate_items` runs before `save` in `place_order`",
+                 "`validate_items` is called before `save` by `place_order`",
+                 "`validate_items`, `place_order` içinde `save`'den önce çağrılır",
+                 "`save` runs after `validate_items` in `place_order`"):
+        c = add(text)
+        assert c["status"] == "statically_verified", text
+        assert c["spec"]["proposition"] == "validate_items before save in place_order", text
+    # the function is not stated: refused, not guessed
+    r = ra("claim", "add", "`validate_items` runs before `save`", "--source", "orders/service.py:19-22", "--kind",
+           "order", "--repo", str(repo), cwd=repo)
+    assert r.returncode != 0 and "without --symbol the text must name it" in r.stderr
+    # a function read from the text that the cited lines are not in: refused
+    r = ra("claim", "add", "`validate_items` runs before `save` in `compute_total`", "--source",
+           "orders/service.py:19-22", "--kind", "order", "--repo", str(repo), cwd=repo)
+    assert r.returncode != 0 and "no definition `compute_total` is around orders/service.py:19-22" in r.stderr
+
+
 def test_names_written_as_code_are_never_replaced_by_similar_ones(repo):
     res = ok_json("analyze", "Where is place_orders defined?", "--repo", str(repo), "--json", cwd=repo)
     (sq,) = res["subquestions"]

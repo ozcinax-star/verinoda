@@ -723,14 +723,26 @@ def _endpoint_notes(g: Graph, text: str, nid: str | None) -> tuple[str | None, s
                       f"({g.file(best[0])}:{g.line(best[0])}), not {others}"), best[0]
     if not nid:
         return None, None, None
-    site = qp.name_site(g, text, strict=True)
+    # the same existence check as analyze (a member of a known class or module is looked for in it);
+    # an owner the graph does not define needs the whole name spelled (`Foo.save` is not `save`)
+    path, name = qp.split_code_name(text)
+    site = qp.name_site(g, text)
+    if site not in (None, qp.UNCHECKED) and "." in name and not path and not qp.owner_known(g, text):
+        site = qp.name_site(g, text, strict=True)
     if site is None:
         ix = qp._index(g)
-        near = [{"label": g.label(n), "site": qp._site(g, n)} for n, _ in qp._near_misses(ix, text)]
+        near = [{"label": g.label(n), "site": qp._site(g, n)} for n, _ in qp._member_near(g, ix, text)]
+        near += [{"label": g.label(n), "site": qp._site(g, n)} for n, _ in qp._near_misses(ix, text)
+                 if qp._site(g, n) not in {x["site"] for x in near}]
         return qp.not_found_line(g, text, near), None, None
-    where = "its existence was not checked" if site == qp.UNCHECKED else f"the name occurs at {site}"
-    return None, (f"no symbol is named `{text}` ({where}); resolved by similarity to {g.label(nid)} "
-                  f"({g.file(nid)}:{g.line(nid)})"), nid
+    if site == qp.UNCHECKED:
+        where = "its existence was not checked"
+    elif qp.spells_whole(g, site, text):
+        where = f"the name occurs at {site}"
+    else:
+        where = f"`{name.rpartition('.')[2]}` occurs at {site}, not the whole name"
+    at = f" ({g.file(nid)}:{g.line(nid)})" if g.file(nid) else ""  # a package or directory node has no line
+    return None, f"no symbol is named `{text}` ({where}); resolved by similarity to {g.label(nid)}{at}", nid
 
 
 def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int = 8,

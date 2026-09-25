@@ -578,6 +578,151 @@ def test_written_config_default_is_compared_with_the_read(repo):
     assert g.grade == "partial" and "negated" in g.reason
 
 
+# review round 2 (reviewer 2): what written text says that the typed checks did not verify
+
+@pytest.mark.parametrize("text, target, at, name", [
+    ("place_order calls compute_total instead of validate_items", "compute_total", "orders/service.py:21",
+     "validate_items"),
+    ("place_order calls compute_total rather than validate_items", "compute_total", "orders/service.py:21",
+     "validate_items"),
+    ("create_order_handler calls place_order, which uses get_repo", "place_order", "orders/api.py:18", "get_repo"),
+    ("place_order calls validate_items via compute_total", "validate_items", "orders/service.py:20", "compute_total"),
+    ("place_order calls validate_items with the result of compute_total", "validate_items", "orders/service.py:20",
+     "compute_total"),
+    ("place_order calls validate_items from inside compute_total", "validate_items", "orders/service.py:20",
+     "compute_total"),
+])
+def test_another_callee_counts_only_when_the_text_lists_it(repo, text, target, at, name):
+    parsed = entail.relation_parse(text, target)
+    assert name not in parsed["callees"]
+    g = _written(repo, "relation", text, at, target_label=target, symbol=target, at=at)
+    assert g.grade == "partial" and f"the text also names `{name}`" in g.reason
+
+
+def test_a_list_of_callees_is_read_with_its_coordinators():
+    for text, target, callees in (
+            ("place_order calls validate_items and compute_total", "validate_items",
+             ["validate_items", "compute_total"]),
+            ("place_order calls validate_items, compute_total and fetch_order", "validate_items",
+             ["validate_items", "compute_total", "fetch_order"]),
+            ("validate_items and compute_total are called by place_order", "compute_total",
+             ["validate_items", "compute_total"]),
+            ("apply_discount tarafından compute_total çağrılır", "compute_total", ["compute_total"]),
+            ("place_order, validate_items ve compute_total'ı çağırır", "compute_total",
+             ["validate_items", "compute_total"])):
+        assert entail.relation_parse(text, target)["callees"] == callees, text
+
+
+@pytest.mark.parametrize("text, prop", [
+    ("`validate_items` runs before `save` in `place_order`", "validate_items before save in place_order"),
+    ("`validate_items` is called before `save` by `place_order`", "validate_items before save in place_order"),
+    ("`validate_items`, `place_order` içinde `save`'den önce çağrılır", "validate_items before save in place_order"),
+    ("`save` runs after `validate_items` in `place_order`", "validate_items before save in place_order"),
+    ("In `place_order`, `validate_items` is called before `save`", "validate_items before save in place_order"),
+    ("`place_order` calls `validate_items` before `save`", "validate_items before save in place_order"),
+    ("After `validate_items`, `place_order` calls `save`", "validate_items before save in place_order"),
+    ("`place_order` önce `validate_items`'ı, sonra `save`'i çağırır", "validate_items before save in place_order"),
+    # the function is not named as the place or the caller: not guessed (it used to be the first name)
+    ("`validate_items` runs before `save`", None),
+    ("`validate_items` is called before `save` in `place_order` or in `checkout`", None),
+])
+def test_order_function_is_read_from_its_role_not_its_position(text, prop):
+    assert entail.order_proposition(text) == prop
+
+
+def test_def_around_checks_the_function_is_where_the_citation_is(repo):
+    assert entail.def_around(repo, "orders/service.py", 19, 22, "place_order") is True
+    assert entail.def_around(repo, "orders/service.py", 19, 22, "validate_items") is False
+    assert entail.def_around(repo, "README.md", 1, 2, "place_order") is None
+
+
+@pytest.mark.parametrize("text, symbol, cite, why", [
+    ("`save` is defined in orders/service.py", "save", "orders/repository.py:15-20",
+     "the text names orders/service.py, the evidence is in orders/repository.py"),
+    ("`get_repo` is defined in service.py", "get_repo", "orders/api.py:9-13",
+     "the text names service.py, the evidence is in orders/api.py"),
+    ("`OrderRepository` is a function defined in orders/repository.py", "OrderRepository", "orders/repository.py:8-26",
+     "the text states the kind 'function'"),
+    ("`place_order` is a class defined in orders/service.py", "place_order", "orders/service.py:19-22",
+     "the text states the kind 'class'"),
+    ("`place_order` is an async function", "place_order", "orders/service.py:19-22",
+     "the text states the kind 'async'"),
+    ("`OrderRepository` orders/repository.py içinde tanımlı bir fonksiyondur", "OrderRepository",
+     "orders/repository.py:8-26", "the text states the kind 'function'"),
+    ("`DISCOUNT_THRESHOLD` is a class attribute in orders/config.py", "DISCOUNT_THRESHOLD", "orders/config.py:7",
+     "the text states the kind 'class level'"),
+    ("`save` is a method of the Settings class", "save", "orders/repository.py:15-20",
+     "the text also names `Settings`"),
+    ("`DISCOUNT_THRESHOLD` is defined in orders/config.py as fifty", "DISCOUNT_THRESHOLD", "orders/config.py:7",
+     "the text states a number (fifty)"),
+])
+def test_written_location_states_only_what_the_definition_shows(repo, text, symbol, cite, why):
+    g = _written(repo, "location", text, cite, symbol=symbol)
+    assert g.grade == "partial" and why in g.reason, g.reason
+
+
+@pytest.mark.parametrize("text, symbol, cite", [
+    ("`place_order` is defined in orders/service.py", "place_order", "orders/service.py:19-22"),
+    ("The function `place_order` is defined in service.py", "place_order", "orders/service.py:19-22"),
+    ("`OrderRepository` is a class defined in orders/repository.py", "OrderRepository", "orders/repository.py:8-26"),
+    ("`save` is a method of the `OrderRepository` class", "save", "orders/repository.py:15-20"),
+    ("`DISCOUNT_THRESHOLD` is a module constant in orders/config.py", "DISCOUNT_THRESHOLD", "orders/config.py:7"),
+    ("`OrderRepository` orders/repository.py içinde tanımlı bir sınıftır", "OrderRepository",
+     "orders/repository.py:8-26"),
+])
+def test_written_location_that_matches_the_definition_is_verified(repo, text, symbol, cite):
+    assert _written(repo, "location", text, cite, symbol=symbol).grade == "full"
+
+
+def test_a_config_text_about_another_file_is_not_verified(repo):
+    g = _written(repo, "config", "orders/pricing.py reads ORDERS_MAX_ITEMS", "orders/config.py:6",
+                 env="ORDERS_MAX_ITEMS", symbol="ORDERS_MAX_ITEMS")
+    assert g.grade == "partial" and "the text names orders/pricing.py" in g.reason
+    assert _written(repo, "config", "orders/config.py reads ORDERS_MAX_ITEMS", "orders/config.py:6",
+                    env="ORDERS_MAX_ITEMS", symbol="ORDERS_MAX_ITEMS").grade == "full"
+
+
+@pytest.mark.parametrize("kind, text, what", [
+    ("relation", "place_order calls validate_items with two arguments", "how the call is made"),
+    ("relation", "place_order calls validate_items with the customer name", "how the call is made"),
+    ("relation", "place_order, validate_items'ı müşteri adıyla çağırır", "how the call is made"),
+    ("relation", "place_order calls validate_items provided that the order has items", "a condition"),
+    ("relation", "place_order calls validate_items as long as the order has items", "a condition"),
+    ("relation", "apply_discount calls round for subtotals below the threshold", "a bound"),
+    ("relation", "apply_discount, subtotal eşiğin altındaysa round'u çağırır", "a condition"),
+    ("behaviour", "`place_order` calls `validate_items` immediately before `save`", "adjacent"),
+    ("behaviour", "`place_order` calls `save` right after `validate_items`", "adjacent"),
+])
+def test_unchecked_statements_read_conditions_arguments_and_adjacency(kind, text, what):
+    problems, _nums = entail.unchecked_statements(kind, text)
+    assert any(what in p for p in problems), problems
+
+
+def test_unchecked_statements_do_not_flag_plain_sentences():
+    for kind, text in (("relation", "place_order calls validate_items"),
+                       ("relation", "place_order, validate_items'ı çağırır"),
+                       ("relation", "create_order_handler, get_repo ile place_order'ı çağırır"),
+                       ("relation", "`parse` calls `reverse` to parse the response"),
+                       ("location", "`place_order` orders/service.py içinde tanımlıdır"),
+                       ("behaviour", "`place_order` calls `validate_items` before `save`")):
+        assert entail.unchecked_statements(kind, text) == ([], []), text
+    assert entail.unchecked_statements("location", "`X` is set to ten seconds")[1] == ["ten"]
+
+
+def test_a_call_through_the_alias_the_claim_names_is_graded_as_an_alias(tmp_path):
+    shutil.copytree(EXAMPLE, tmp_path / "o", ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.db"))
+    r = tmp_path / "o"
+    (r / "orders" / "odd.py").write_text("from orders.pricing import compute_total as total_of\n\n\n"
+                                         "def guarded(items):\n    if items:\n        return total_of(items)\n"
+                                         "    return 0.0\n", encoding="utf-8", newline="\n")
+    g = entail.assess("relation", r, {"target_label": "total_of", "at": "orders/odd.py:6"}, src(r, "orders/odd.py", 6),
+                      text="guarded calls total_of", subjects=["orders/odd.py::guarded"])
+    assert (g.grade, g.code) == ("full", "alias_call") and "import alias of `compute_total`" in g.reason
+    g = entail.assess("relation", r, {"target_label": "total_of", "at": "orders/odd.py:6"}, src(r, "orders/odd.py", 6),
+                      text="guarded calls total_of", subjects=["orders/odd.py::guarded", "orders/api.py::total_of"])
+    assert g.code == "other_module" and "star-imported" not in g.reason
+
+
 def test_a_quote_verifies_only_the_quoted_text(repo):
     def gen(text, at):
         return _written(repo, "general", text, at)

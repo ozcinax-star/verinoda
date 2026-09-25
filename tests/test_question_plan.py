@@ -595,6 +595,93 @@ def test_class_headers_that_may_bring_members_from_elsewhere(path, header, bases
     assert qp._has_bases(path, header) is bases
 
 
+# review round 2: owners whose members live elsewhere (a Go package in several files, a config section
+# named like a module or class, dynamic attributes, a member set from another module)
+MEMBERS = {
+    "goapp/store/store.go": "package store\n\ntype Store struct {\n\tpath string\n}\n\n"
+                            "func New(path string) *Store {\n\treturn &Store{path: path}\n}\n",
+    "goapp/store/db.go": "package store\n\nfunc Open(path string) (*Store, error) {\n\treturn New(path), nil\n}\n",
+    "settings.yaml": "pricing:\n  discount_rate: 0.1\ncart:\n  max_lines: 20\n",
+    "orders/extras.py": "class Cart:\n    def __init__(self):\n        self.items = []\n\n"
+                        "    def add(self, item):\n        self._check(item)\n        self.items.append(item)\n\n"
+                        "    def _check(self, item):\n        return item\n",
+    "orders/odd.py": "class Settings:\n    MAX_RETRIES = 5\n    region = \"eu\"\n\n    def load(self):\n"
+                     "        return self.MAX_RETRIES\n",
+    "orders/odd2.py": "class Options:\n    def __init__(self, **kw):\n        self.__dict__.update(kw)\n\n\n"
+                      "def make_options():\n    return Options(timeout=5)\n",
+    "orders/patch.py": "from orders.odd import Settings\n\nSettings.patched = True\n",
+    "src/main/java/com/example/Lantern.java": "package com.example;\n\npublic final class Lantern {\n"
+                                              "    private static final int COOLDOWN = 100;\n\n"
+                                              "    public static void etkinlestir() {\n    }\n}\n",
+}
+
+
+@pytest.fixture(scope="module")
+def members(tmp_path_factory):
+    if shutil.which("git") is None:
+        pytest.skip("git not available")
+    repo = _scan_copy(tmp_path_factory.mktemp("qp_members") / "orders_app", EXAMPLE, files=MEMBERS)
+    g = index.load(repo)
+    lex = lexicon.load(repo)
+    if lex is None:
+        lexicon.build(repo, g)
+        lex = lexicon.load(repo)
+    return repo, g, lex
+
+
+@pytest.mark.parametrize("text, site", [
+    ("store.Open", "goapp/store/db.go:3"),  # a Go package: every file of its directory
+    ("pricing.discount_rate", "settings.yaml:2"),  # a module named like a config section: the key counts
+    ("cart.max_lines", "settings.yaml:4"),  # `cart` is not the class `Cart`: the lenient search runs
+    ("Options.timeout", "orders/odd2.py:7"),  # attributes set through __dict__: may exist
+    ("Settings.patched", "orders/patch.py:3"),  # set on the class from another module
+    ("Settings.MAX_RETRIES", "orders/odd.py:2"), ("Cart.items", "orders/extras.py:3"),
+])
+def test_a_member_that_exists_elsewhere_is_never_not_found(members, text, site):
+    repo, g, lex = members
+    qp._index(g).sites.clear()
+    assert qp.name_site(g, text) == site
+    lk = qp.link_mention({"id": "m1", "text": f"`{text}`", "kind": "symbol"}, g, lex)
+    assert lk["status"] != "not_found" and lk.get("occurs_at") == site
+
+
+def test_a_python_class_member_is_what_the_class_defines(members):
+    repo, g, lex = members
+    ix = qp._index(g)
+    ix.sites.clear()
+    # a call on another object inside the class (`self.conn.execute(`, `self.items.append(`) is no member
+    for text in ("OrderRepository.execute", "Cart.append", "Settings.save", "Cart.check"):
+        assert qp.name_site(g, text) is None, text
+        lk = qp.link_mention({"id": "m1", "text": f"`{text}`", "kind": "symbol"}, g, lex)
+        assert lk["status"] == "not_found", text
+    assert qp._py_class_members((repo / "orders" / "repository.py").read_text(encoding="utf-8"), 8, 26) == {
+        "__init__": 9, "conn": 10, "save": 15, "get": 22}
+    assert qp.name_site(g, "OrderRepository.conn") == "orders/repository.py:10"
+    # dunder members come from `object`: never decided absent from the class alone
+    assert qp._member_site(g, ix, "Cart.__repr__")[1] is False
+    # a Java class without a base or annotation declares its members in its body (its file is no module)
+    assert qp._member_site(g, ix, "Lantern.activate") == (None, True)
+    assert qp.name_site(g, "Lantern.etkinlestir") == "src/main/java/com/example/Lantern.java:6"
+    assert qp._member_site(g, ix, "Lantern.toString")[1] is False  # java.lang.Object's
+    ix.sites.clear()
+
+
+def test_a_member_lookup_keeps_the_time_limit(members, monkeypatch):
+    repo, g, lex = members
+    ix = qp._index(g)
+    monkeypatch.setattr(qp, "_SITE_SECONDS", -1.0)
+    monkeypatch.setattr(qp, "_files_to_scan", lambda g, ix, names: ix.repo_files)
+    ix.sites.clear()
+    try:
+        # the owner's files are read under the same limit as the scan: past it nothing is claimed
+        assert qp.name_site(g, "orders.fetch_orders") == qp.UNCHECKED
+        assert qp.name_site(g, "OrderRepository.place_orders") == qp.UNCHECKED
+        lk = qp.link_mention({"id": "m1", "text": "`orders.fetch_orders`", "kind": "symbol"}, g, lex)
+        assert lk["status"] != "not_found"
+    finally:
+        ix.sites.clear()
+
+
 AMBIG = {
     "billing/invoices.py": "class InvoiceStore:\n    def save(self, invoice):\n        return invoice\n",
     "orders/store.py": "class OrderStore:\n    def save(self, order):\n        return order\n",

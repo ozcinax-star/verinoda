@@ -514,22 +514,39 @@ def call_site_check(repo: Path, c: dict, *, graph=None) -> dict:
         return {**out, "result": "warn", "strength": "heuristic", "detail": f"{at}: {g.reason}"}
     detail = (f"{at} does not mention '{target}': {(text or '').strip()[:100]}"
               if g.code == "absent" else f"{at}: {g.reason}")
+    # a caller the text names by a plain word ("checkout calls submit"): its body is read too. Only when
+    # the word names the definition around the cited line is it that caller (its body can refute the
+    # claim); another plain word never drives a contradiction (docs/DESIGN.md D31)
+    word, word_is_def = None, False
+    if caller is None and spec.get("free_text"):
+        parsed = entail.relation_parse(c.get("text") or "", spec.get("target_label"))
+        word = parsed["caller_word"] if parsed and not parsed["reversed"] else None
+        word_is_def = bool(word) and entail.plain_caller_encloses(repo, path, int(line), word)
+    who = caller or word
     scope = None
-    if g.code in _SCOPE_CODES and caller and (spec.get("relation") or "calls").lower() in ("calls", "call"):
+    if g.code in _SCOPE_CODES and who and (spec.get("relation") or "calls").lower() in ("calls", "call"):
         try:
-            scope = entail.caller_scope(repo, caller, target, path=path, files=_caller_files(graph, caller))
+            scope = entail.caller_scope(repo, who, target, path=path,
+                                        files=[] if word_is_def else _caller_files(graph, who))
         except (OSError, ValueError, RecursionError):
             scope = None
     if scope is not None and scope["calls"]:
         f, ln = scope["calls"][0]
         return {**out, "result": "warn", "strength": "heuristic",
-                "detail": f"{detail}; but {caller.strip().rstrip('()')} calls {target} at {f}:{ln} (the cited line "
+                "detail": f"{detail}; but {who.strip().rstrip('()')} calls {target} at {f}:{ln} (the cited line "
                           "is not the call site)"}
-    if scope is None and g.code == "outside_caller" and entail.caller_from_text(spec, subjects):
-        # a caller read from the text whose definition was not found: its body was not read
+    if word and g.code in _SCOPE_CODES and not (word_is_def and scope is not None):
         return {**out, "result": "warn", "strength": "heuristic",
-                "detail": f"{detail}; no definition of {caller.strip().rstrip('()')} was found to read its whole "
-                          "body"}
+                "detail": f"{detail}; the text's caller `{word}` is a plain word that is not a definition around "
+                          "the cited line" + (f" ({scope['miss']})" if scope else "")}
+    if scope is None and g.code in _SCOPE_CODES and spec.get("free_text") and \
+            (caller is None or entail.caller_from_text(spec, subjects)):
+        # written text whose caller is unknown, or read from the text but its definition was not
+        # found: the caller's whole body was not read, so the line alone refutes nothing
+        return {**out, "result": "warn", "strength": "heuristic",
+                "detail": f"{detail}; " + (f"no definition of {caller.strip().rstrip('()')} was found to read its "
+                                           "whole body" if caller else "the text states no caller whose whole "
+                                                                        "body could be read")}
     ev = None
     if scope is not None:  # the caller's whole body is the counterexample
         f, _name, a, b = scope["defs"][0]

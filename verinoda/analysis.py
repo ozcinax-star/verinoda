@@ -250,9 +250,12 @@ class _Recorder:
                 spec = {**(spec or {}), "plan": self.plan_ref}
             # (evidence, relation[, group]): the group is dropped where the claims module has none
             evs = [tuple(e) if self.groups_ok else tuple(e[:2]) for e in evidence if e[0]]
+            # the claim keeps its own uncertainties; this question's reading of its mentions (a weak
+            # link, an open clarification) is added when it is shown (record), so a claim reused by a
+            # later, unrelated question does not carry them
             c = self.cl.create(text, project=self.snap["project"], snapshot=self.snap, subjects=subjects,
                                status=status, evidence=evs, kind=kind, spec=spec,
-                               uncertainties=unc, analysis_id=self.aid, supersedes=supersedes)
+                               uncertainties=list(uncertainties or []), analysis_id=self.aid, supersedes=supersedes)
         self.ids.append(c["id"])
         self._note(c["id"])
         n = _size(self.record(c["id"]))
@@ -2101,6 +2104,7 @@ def _correct_tests_claim(ctx: _Ctx, cid: str, refuted: list[str], challenge: dic
         ctx.store.update_claim(new["id"], {"uncertainties": unc + list(c.get("uncertainties") or [])})
     except Exception:  # noqa: BLE001
         pass
+    ctx.rec.context_unc[new["id"]] = list(ctx.rec.context_unc.get(cid, []))  # this question's reading, as shown
     return new["id"]
 
 
