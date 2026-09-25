@@ -43,6 +43,13 @@ failing commit and its first hunk).
   was running on the same machine: `debug try` overhead median 0.16 s, p90 0.55 s, max 0.77 s; see
   `overhead.json` for a separate measurement (without the test suite running next to it).
 
+- `run7-review-first-ranking.json` and `run8-review-fixes.json`: after a two-reviewer review of the
+  ledger (docs/DESIGN.md section 6.5). The harness changed in one place: an agent-reported run must
+  now name the command it ran, so L7's reports pass the session's command. Run 7 had a first version
+  of the differential's ranking fix (cause named 5/8: L6 and L8 lost theirs); run 8 is the committed
+  code: 11/11, 8/8, 0/4, 8/8, cause named 7/8 - the same findings and stops as run 6 on every attempt,
+  except progress after a test edit ("unknown" now) and C2's random outcomes.
+
 ## Overhead (`overhead.json`, and `overhead-before-review.json` for the code before the review changes)
 
 20 `debug try` attempts in a row (alternating two edits) per series, the overhead being the attempt's
@@ -50,7 +57,8 @@ wall time minus the command's own run time: orders_app (11 files) untraced and w
 `git clone` of this repository (2,341 files; 2,331 before the review changes) with
 `tests/test_looprules.py` as the repro. Each record
 has the median, p90 and max, and the median per step (`run_s` includes copying the tree). Other agents
-were running on the 6-core machine; single attempts can take seconds longer.
+were running on the 6-core machine; single attempts can take seconds longer. `overhead-after-review.json`
+is the same measurement on the code after the review fixes (2,342 files in the clone by then).
 
 ## Signatures (`signatures.json`)
 

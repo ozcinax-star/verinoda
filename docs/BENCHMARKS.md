@@ -38,6 +38,21 @@ was fixed before the rules ran on any session, and three fixes followed from the
 | 1, first | 10/10 | 7/8 | 0/4 | 7/8 | 6/7 |
 | 5, after three fixes | 11/11 | 8/8 | 0/4 | 8/8 | 7/8 |
 | 6, committed code (after review changes) | 11/11 | 8/8 | 0/4 | 8/8 | 7/8 |
+| 7, review fixes, first ranking change | 11/11 | 8/8 | 0/4 | 8/8 | 5/8 |
+| 8, review fixes as committed | 11/11 | 8/8 | 0/4 | 8/8 | 7/8 |
+
+Runs 7 and 8 follow a review that found 25 distinct problems (docs/DESIGN.md section 6.5): false
+stops, false "passed", unverified bisect ends, git-safety gaps. The fixes changed which findings
+fire; on these 12 sessions every attempt's definitive and heuristic findings and stops came out the
+same as in run 6 (L6's revert is now found as a code-identical revert: the tree differed from
+attempt 1's only in a docstring). Two intended differences: progress after a test edit (L1 attempt 1,
+L8 attempt 2) is now "unknown" instead of "improved", and C2, random by design, happened to pass all
+four attempts in run 8, so flakiness first showed in its rerun series (1 of 5 passed; 5 of 9 runs of
+the tree). Run 7 used the first fix of the ranking (tiers before "already
+there at attempt 0" when the failure's coarse signature changed): L6 and L8 lost their cause, the
+agent's own edits ranking first. Run 8 is the committed rule (code before test files, comment-only
+files last, "same symptom" also when the failing tests are the same), which ranks the reviewers'
+counter-example right as well. In-sample: the counter-example and the fix are known to the author.
 
 The misses of run 1: a JVM class-loader identity hash (`'knot' @1a2b3c4d`) in the message made a
 recurring Java failure look new (now normalised); the differential ranked the agent's own edit above
@@ -73,6 +88,21 @@ whole tree (per-file open/close dominates; copying with 8 threads took the copy 
 1.8 s, median of 6 alternating runs each). Reusing one copy per session, synced by content id, would
 remove most of it and is not built. Other agents were running on the machine; single attempts took up
 to seconds longer in other runs.
+
+After the review fixes (`overhead-after-review.json`, same script, 20 attempts per series):
+
+| tree | median | p90 | max | command median |
+|---|---|---|---|---|
+| orders_app (11 files) | 0.08 s | 0.11 s | 0.18 s | 0.67 s |
+| orders_app, `--trace` | 0.08 s | 0.09 s | 0.10 s | 0.63 s |
+| clone of this repository (2,342 files) | 2.4 s | 2.8 s | 3.3 s | 0.75 s |
+
+The big-tree number is lower than before because the machine was less loaded, not because of the
+fixes: the step that dominates, copying the tree for each run (`run_s` 3.1 s median here), was not
+changed. A reviewer's case the fixes did change: one 17,504-line lockfile changed vs the base made
+every attempt re-diff it (difflib without its junk heuristic): 4.7 s overhead median of 3 probes
+before, 0.13 s after (the diff is now reused while the file's content is unchanged, and files above
+2,000 lines use difflib's junk heuristic; measured with the reviewer's generator on orders_app).
 
 Not measured: a real agent with and without the protocol; container isolation; precision of the
 heuristic rules; Gradle or Maven runs.

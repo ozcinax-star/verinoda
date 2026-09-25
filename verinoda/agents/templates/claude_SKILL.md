@@ -226,16 +226,20 @@ Before the first edit of a bug fix, record the repro (for pytest, `--trace` also
 even reached): `verinoda debug start "<symptom>" --json -- <repro command>` (MCP `debug_start`).
 After every edit: `verinoda debug try --hypothesis "<what you believe and why>" --json` (MCP `debug_attempt`).
 A command Verinoda may not run (Gradle, Maven): run it yourself, save the output and record it with
-`--observed-output out.txt --exit-code N` (labelled agent-reported; it never verifies anything).
+`--observed-output out.txt --exit-code N -- <the command you ran>` (labelled agent-reported; it never verifies
+anything, and Verinoda's own runs of the same tree outweigh it).
 
 - `stop: true` (exit 3): stop editing. Run `strategies[0]` (e.g. `verinoda debug differential --json`, MCP
   `debug_strategy`), then show the user `verinoda debug status`.
-- `questions_for_human`: never change a test's expected value on your own; ask with `AskUserQuestion`, quoting
-  both sides.
-- Do not retry a hypothesis the ledger shows refuted (`hypothesis_repeated`) without new evidence.
-- `flaky`: run `verinoda debug rerun --json` first; loop findings wait until the result is stable.
+- `questions_for_human`: never change a test's expected value on your own, and never skip, xfail or deselect a
+  failing test (`failing_tests_skipped`); ask with `AskUserQuestion`, quoting both sides.
+- Do not retry a hypothesis whose attempt did not make the repro pass (`hypothesis_repeated`) without new evidence.
+- `flaky` or `possibly_flaky`: run `verinoda debug rerun --json` first; loop findings wait until the result is
+  stable.
+- A narrowed command (`debug try ... -- <other command>`) is a probe: its pass is never a pass of the repro.
 - Never say "fixed": say "the repro command passed at tree T in run R" and list `not_run`. Close with
-  `verinoda debug close --resolved-by N` only when attempt N passed on the current tree.
+  `verinoda debug close --resolved-by N` only when attempt N is a pass of the repro command on the current tree;
+  add `--accept-test-edit` only after the user decided that a test change made since attempt 0 is right.
 - Verinoda never edits or reverts code; strategies run in throw-away copies.
 
 ## After editing code
