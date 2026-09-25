@@ -24,7 +24,10 @@ run only on request (:func:`differential`, :func:`bisect`, :func:`rerun`,
 
 Honesty: Verinoda never says "fixed". A pass is reported as "the repro command
 passed at tree T in run R", with what was not run. Closing a session as
-resolved needs a passing attempt whose tree hash equals the current tree.
+resolved needs a passing attempt whose tree hash equals the current tree, and
+an earlier run of the repro in the session that failed (the baseline itself
+never resolves anything). The repro is compared without pytest's output-only
+options (``-vv``, ``--tb=short``, ...).
 Verinoda never edits or reverts the user's code; the only files it writes are
 under ``.verinoda/``.
 """
@@ -35,6 +38,7 @@ import hashlib
 import json
 import math
 import re
+import sqlite3
 import time
 from pathlib import Path
 
@@ -48,6 +52,8 @@ LIST_CAP = 20
 LOOP_KINDS = looprules.LOOP_KINDS
 TRY_KINDS = ("fix", "probe", "rerun", "differential")
 CALLTRACE_MODULE = "verinoda_calltrace"
+SYMPTOM_OUTCOMES = ("fail", "timeout")   # a run of the repro that showed the symptom (a hang is one too)
+INSERT_RETRIES = 8                        # another ledger command took the attempt number: evaluate again
 
 
 class DebugError(ValueError):
@@ -133,8 +139,18 @@ def start(store: Store, repo: Path, symptom: str, command, *, base: str | None =
                                              "close_note": f"the baseline could not be recorded: "
                                                            f"{type(exc).__name__}: {exc}"[:500]})
         raise
-    return {"session": sid, "symptom": symptom, "command": argv, "base": {"ref": ref, "commit": base_sha},
-            "settings": settings, **res}
+    out = {"session": sid, "symptom": symptom, "command": argv, "base": {"ref": ref, "commit": base_sha},
+           "settings": settings, **res}
+    if res["outcome"] not in SYMPTOM_OUTCOMES:
+        # the symptom was not seen: a session whose repro never failed has nothing a later pass could resolve
+        out["reproduced"] = False
+        out["warning"] = (f"the repro command did not fail at the baseline ({res['outcome']}): the symptom did not "
+                          "reproduce, and this session cannot be closed as resolved until a run of it fails")
+        out["next_step"] = ("start a session with a command that fails with the symptom (the failing test, or the "
+                            f"test file it is in); close this one with `verinoda debug close {sid} --abandoned`")
+    else:
+        out["reproduced"] = True
+    return out
 
 
 def _check_observed(observed_output, exit_code) -> None:
@@ -211,15 +227,30 @@ SPAWN_RE = re.compile(r"^(subprocess\.|multiprocessing\.|concurrent\.futures\.pr
                       r"_posixsubprocess\.|_winapi\.CreateProcess|pexpect\.)")
 
 
-def _reached_anywhere(trace_info: dict, paths: set[str]) -> None:
-    """Keep, of every function the traced run called, those in the files this session touched."""
-    anywhere = trace_info.pop("_anywhere", None)
-    if anywhere is None:
-        return
+def _reached_anywhere(trace_info: dict, paths: set[str], anywhere: set[str]) -> None:
+    """Keep, of every function the traced run called (``anywhere``), those in the files this session touched."""
     keep = sorted(k for k in anywhere if k.split("::", 1)[0] in paths)
     trace_info["reached_any"] = keep[:5000]
+    trace_info.pop("reached_any_truncated", None)
     if len(keep) > 5000:
         trace_info["reached_any_truncated"] = True
+
+
+def _renumber(store: Store, exp: dict | None, evidence_id: str | None, sid: str, was: int, now_n: int) -> None:
+    """The records made before the attempt number was known say the number it became."""
+    try:
+        if exp:
+            row = store.get("experiments", exp["id"]) or {}
+            hyp = str(row.get("hypothesis") or "")
+            store.update("experiments", exp["id"], {"hypothesis": hyp.replace(f"[{sid} attempt {was}]",
+                                                                              f"[{sid} attempt {now_n}]", 1)})
+        if evidence_id:
+            ev = store.evidence(evidence_id) or {}
+            meta = dict(ev.get("meta") or {})
+            meta["attempt"] = now_n
+            store.update_evidence_meta(evidence_id, meta)
+    except Exception:  # noqa: BLE001 - labels only; the attempt itself is recorded
+        pass
 
 
 def _reader(repo: Path, base: str | None, ids: dict[str, str], tree_files: dict, commit: str | None,
@@ -345,11 +376,22 @@ def _not_run(argv: list[str], run_by: str, signature: dict | None = None) -> lis
                          "--failed-first", "--nf", "--new-first"):
                 out.append(f"{opt} changes which tests run or where the run stops")
         tests = (signature or {}).get("tests")
+        counts = (signature or {}).get("reported_counts")
         if isinstance(tests, dict) and tests:
             off = sorted(t for t, o in tests.items() if o in ("skipped", "xfailed"))
             if off:
                 out.append(f"{len(off)} test(s) were skipped or xfailed in this run: {', '.join(off[:5])}"
                            + (" ..." if len(off) > 5 else ""))
+        elif isinstance(counts, dict):
+            off = {k: v for k, v in counts.items() if k in ("skipped", "xfailed", "deselected") and v}
+            if not counts:
+                out.append("the reported output says no tests ran")
+            elif off:
+                out.append("the reported summary counts " + ", ".join(f"{v} {k}" for k, v in off.items())
+                           + ": which tests is not known from it (per-test outcomes were not recorded)")
+            else:
+                out.append("per-test outcomes were not recorded (an agent-reported run); its summary counts no "
+                           "skipped, xfailed or deselected test")
         elif signature is not None:
             out.append("per-test outcomes were not recorded: which tests were skipped or deselected (also by "
                        "the project's pytest configuration) is unknown")
@@ -361,8 +403,60 @@ def _not_run(argv: list[str], run_by: str, signature: dict | None = None) -> lis
     return out
 
 
+def cmd_text(argv) -> str:
+    """A command as the user's shell takes it back (arguments quoted: ``-k "a or b"`` stays one argument)."""
+    import os
+    import shlex
+    import subprocess
+
+    argv = [str(a) for a in argv or []]
+    return subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
+
+
+# pytest options that change what is printed, not which tests run or how: a repro run with -vv or --tb=short
+# is the same repro
+_OUTPUT_FLAGS = {"-v", "-vv", "-vvv", "-vvvv", "-q", "-qq", "-qqq", "--verbose", "--quiet", "-s", "-l",
+                 "--showlocals", "--no-header", "--no-summary", "--disable-warnings", "--disable-pytest-warnings",
+                 "--full-trace"}
+_OUTPUT_VALUE_OPTS = {"--tb", "--color", "--capture", "--durations", "--durations-min", "-r", "--code-highlight"}
+
+
+def canonical_command(argv) -> list[str]:
+    """The command with pytest's output-only options (-v/-q, --tb, -r, --color, --capture/-s, --durations,
+    ``-p no:cacheprovider``) left out, for comparing a run with the session's repro."""
+    argv = [str(a) for a in argv or []]
+    if not experiments._is_pytest(argv):
+        return argv
+    at = 1 if experiments._exe_name(argv[0]) == "pytest" else 3
+    out = argv[:at]
+    rest = argv[at:]
+    i = 0
+    while i < len(rest):
+        a = rest[i]
+        opt = a.split("=", 1)[0]
+        if a in _OUTPUT_FLAGS or re.fullmatch(r"-r[a-zA-Z]+", a) or ("=" in a and opt in _OUTPUT_VALUE_OPTS):
+            i += 1
+            continue
+        if a in _OUTPUT_VALUE_OPTS and i + 1 < len(rest):
+            i += 2
+            continue
+        if a == "-p" and i + 1 < len(rest) and rest[i + 1] == "no:cacheprovider":
+            i += 2
+            continue
+        if a == "-pno:cacheprovider":
+            i += 1
+            continue
+        out.append(a)
+        i += 1
+    return out
+
+
+def _same_command(a, b) -> bool:
+    return canonical_command(a) == canonical_command(b)
+
+
 def _is_repro(a: dict, sess: dict) -> bool:
-    return list(a.get("command") or []) == list(sess["command"])
+    return _same_command(a.get("command") or [], sess["command"])
 
 
 def _passed_text(a: dict, sess: dict) -> str:
@@ -370,8 +464,10 @@ def _passed_text(a: dict, sess: dict) -> str:
     tree = (a.get("tree_hash") or "?")[:12]
     skipped = next((f for f in a.get("findings") or [] if f.get("rule") == "failing_tests_skipped"), None)
     if not _is_repro(a, sess):
-        return (f"`{' '.join(a.get('command') or [])}` passed at tree {tree} in {run} (attempt {a['n']}); that is not "
+        return (f"`{cmd_text(a.get('command') or [])}` passed at tree {tree} in {run} (attempt {a['n']}); that is not "
                 "the session's repro command, so it says nothing about the repro")
+    if list(a.get("command") or []) != list(sess["command"]):
+        run += f", run as `{cmd_text(a.get('command') or [])}` (output options differ)"
     if skipped:
         return (f"the repro command exited 0 at tree {tree} in {run} (attempt {a['n']}), but "
                 f"{len(skipped.get('tests') or {})} test(s) that failed before did not pass (skipped, xfailed or not "
@@ -494,55 +590,91 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
     t_step = time.perf_counter()
     sig = failsig.extract(stdout, stderr, outcome=outcome, files=ids.keys(), reader=reader, plugin_data=plugin_data,
                           roots=[str(repo)])
+    notes: list[str] = []
+    if outcome == "inconclusive" and code == 2 and experiments._is_pytest(argv) and \
+            any(f.get("phase") == "collect" for f in sig.get("failures") or []):
+        # pytest stopped at a collection error (an import or syntax error): for the repro that is a failing run
+        # (the signature above was read as a failure already: only a pass is read differently)
+        outcome = "fail"
+        notes.append("pytest stopped at a collection error (exit 2): recorded as a failing run of the repro")
+    if agent and experiments._is_pytest(argv):
+        counts = failsig.pytest_counts(stdout)
+        if counts is not None:
+            sig["reported_counts"] = counts
     sig_exact, sig_coarse = failsig.keys(sig)
-    loop_prior = [a for a in prior if a["kind"] in LOOP_KINDS and (a.get("copy_source") or {}).get("kind",
-                                                                                                    "worktree")
-                  == "worktree" and a["command"] == argv]
     is_loop = kind in LOOP_KINDS and source.get("kind") == "worktree"
-    prev = loop_prior[-1] if loop_prior else None
-    vs_prev = treestate.diff_trees(repo, base, prev["tree_files"] or {}, ch["tree_files"],
-                                   base_map=treestate.base_ids(repo, base)) if (prev and is_loop) else []
-    if trace_info:
-        touched = set(ch["tree_files"]) | {c["path"] for c in vs_prev}
-        for a in prior:
-            touched |= set(a.get("tree_files") or {})
-        _reached_anywhere(trace_info, touched)
-    cur = {"n": n, "kind": kind, "outcome": outcome, "run_by": "agent" if agent else "verinoda",
-           "experiment_id": exp["id"] if exp else None, "tree_hash": tree_hash, "code_hash": ch["code_hash"],
-           "tree_files": ch["tree_files"],
-           "signature": sig, "sig_exact": sig_exact, "sig_coarse": sig_coarse, "hypothesis": hypothesis,
-           "hypothesis_terms": looprules.terms(hypothesis), "expect": expect, "vs_prev": vs_prev,
-           "trace": trace_info, "command": argv, "vs_base": ch["vs_base"]}
+    anywhere = trace_info.pop("_anywhere", None) if trace_info else None
     steps["signature_s"] = round(time.perf_counter() - t_step, 3)
-    t_step = time.perf_counter()
-    hist = [_as_rule_input(a) for a in loop_prior]
-    if is_loop:
-        ev = looprules.evaluate(hist, cur, max_no_progress=int(settings.get("max_no_progress", 3)))
-    else:
-        ev = {"progress": None, "findings": [], "stop": False, "stop_reason": None, "flaky": None,
-              "no_progress_streak": None, "assertion_lines": []}
-    ev["findings"] = ev["findings"] + _order_dependent(prior, sess, argv, tree_hash, sig, n)
-    questions = _questions(cur, prev, ev, loop_prior)
-    maybe_flaky = any(f["rule"] == "possibly_flaky" for f in ev["findings"])
-    strategies = propose(store, repo, sess, prior, cur, ev) if (ev["stop"] or ev["flaky"] or maybe_flaky) else []
-    row = {"id": aid, "session_id": sess["id"], "n": n, "kind": kind, "hypothesis": hypothesis,
-           "hypothesis_terms": cur["hypothesis_terms"], "command": argv, "expect": expect,
-           "run_by": cur["run_by"], "copy_source": source, "tree_hash": tree_hash, "tree_files": ch["tree_files"],
-           "patch_path": patch_path, "touched": {"vs_base": ch["vs_base"], "vs_prev": vs_prev,
-                                                 "code_hash": ch["code_hash"]},
-           "experiment_id": cur["experiment_id"], "evidence_id": evidence_id,
-           "runtime_run_id": trace_info.get("run_id"), "outcome": outcome, "exit_code": code, "duration_s": duration,
-           "output_sha256": output_sha, "signature": sig, "sig_exact": sig_exact, "sig_coarse": sig_coarse,
-           "trace": trace_info, "progress": ev["progress"],
-           "findings": ev["findings"] + ([{"rule": "flaky", "strength": "flaky", **ev["flaky"]}] if ev["flaky"] else []),
-           "stop": int(bool(ev["stop"])), "stop_reason": ev["stop_reason"], "strategies": strategies,
-           "created_at": now()}
-    steps["rules_s"] = round(time.perf_counter() - t_step, 3)
-    t_step = time.perf_counter()
-    store.insert("debug_attempts", row)
-    steps["store_s"] = round(time.perf_counter() - t_step, 3)
+    run_n = n
+    for attempt_try in range(INSERT_RETRIES):
+        # Another ledger command (a parallel tool call) may have recorded an attempt since this one started:
+        # the attempt number and the loop rules are taken from the attempts as they are at the insert.
+        t_step = time.perf_counter()
+        if attempt_try:
+            prior = _attempts(store, sess["id"])
+            n = max((a["n"] for a in prior), default=-1) + 1
+        loop_prior = [a for a in prior if a["kind"] in LOOP_KINDS and (a.get("copy_source") or {}).get(
+            "kind", "worktree") == "worktree" and _same_command(a["command"], argv)]
+        prev = loop_prior[-1] if loop_prior else None
+        vs_prev = treestate.diff_trees(repo, base, prev["tree_files"] or {}, ch["tree_files"],
+                                       base_map=treestate.base_ids(repo, base)) if (prev and is_loop) else []
+        if anywhere is not None:
+            touched = set(ch["tree_files"]) | {c["path"] for c in vs_prev}
+            for a in prior:
+                touched |= set(a.get("tree_files") or {})
+            _reached_anywhere(trace_info, touched, anywhere)
+        cur = {"n": n, "kind": kind, "outcome": outcome, "run_by": "agent" if agent else "verinoda",
+               "experiment_id": exp["id"] if exp else None, "tree_hash": tree_hash, "code_hash": ch["code_hash"],
+               "tree_files": ch["tree_files"],
+               "signature": sig, "sig_exact": sig_exact, "sig_coarse": sig_coarse, "hypothesis": hypothesis,
+               "hypothesis_terms": looprules.terms(hypothesis), "expect": expect, "vs_prev": vs_prev,
+               "trace": trace_info, "command": argv, "vs_base": ch["vs_base"]}
+        hist = [_as_rule_input(a) for a in loop_prior]
+        if is_loop:
+            ev = looprules.evaluate(hist, cur, max_no_progress=int(settings.get("max_no_progress", 3)))
+        else:
+            ev = {"progress": None, "findings": [], "stop": False, "stop_reason": None, "flaky": None,
+                  "no_progress_streak": None, "assertion_lines": []}
+        ev["findings"] = ev["findings"] + _order_dependent(prior, sess, argv, tree_hash, sig, n)
+        questions = _questions(cur, prev, ev, loop_prior)
+        maybe_flaky = any(f["rule"] == "possibly_flaky" for f in ev["findings"])
+        strategies = propose(store, repo, sess, prior, cur, ev) if (ev["stop"] or ev["flaky"] or maybe_flaky) \
+            else []
+        steps["rules_s"] = round(time.perf_counter() - t_step, 3)
+        overhead = round(time.perf_counter() - t_start - (exp["duration_s"] if exp else 0.0), 3)
+        row = {"id": aid, "session_id": sess["id"], "n": n, "kind": kind, "hypothesis": hypothesis,
+               "hypothesis_terms": cur["hypothesis_terms"], "command": argv, "expect": expect,
+               "run_by": cur["run_by"], "copy_source": source, "tree_hash": tree_hash, "tree_files": ch["tree_files"],
+               "patch_path": patch_path, "touched": {"vs_base": ch["vs_base"], "vs_prev": vs_prev,
+                                                     "code_hash": ch["code_hash"],
+                                                     "cost": {"overhead_s": overhead}},
+               "experiment_id": cur["experiment_id"], "evidence_id": evidence_id,
+               "runtime_run_id": trace_info.get("run_id"), "outcome": outcome, "exit_code": code,
+               "duration_s": duration, "output_sha256": output_sha, "signature": sig, "sig_exact": sig_exact,
+               "sig_coarse": sig_coarse, "trace": trace_info, "progress": ev["progress"],
+               "findings": ev["findings"] + ([{"rule": "flaky", "strength": "flaky", **ev["flaky"]}] if ev["flaky"]
+                                             else []),
+               "stop": int(bool(ev["stop"])), "stop_reason": ev["stop_reason"], "strategies": strategies,
+               "created_at": now()}
+        t_step = time.perf_counter()
+        try:
+            store.insert("debug_attempts", row)
+        except sqlite3.IntegrityError:
+            if attempt_try + 1 >= INSERT_RETRIES:
+                raise
+            continue
+        steps["store_s"] = round(time.perf_counter() - t_step, 3)
+        break
+    if n != run_n:
+        _renumber(store, exp, evidence_id if agent else None, sess["id"], run_n, n)
     out = _attempt_view(row, ch.get("drift") or [], questions)
     out["session"] = sess["id"]
+    if notes:
+        out["notes"] = notes
+    if exp and exp.get("limits"):
+        left = [x for x in exp["limits"] if "left running" in x or "could not be deleted" in x]
+        if left:
+            out.setdefault("notes", []).extend(left)
     if ev.get("no_progress_streak") is not None:
         out["no_progress_streak"] = ev["no_progress_streak"]
     if outcome == "pass":
@@ -647,12 +779,74 @@ def _attempt_view(row: dict, drift: list[str], questions: list[dict]) -> dict:
 
 # -- strategies ----------------------------------------------------------------------------------------
 
+def _symptom(sess: dict, attempts: list[dict], before: int | None = None, latest: bool = False) -> dict:
+    """What the symptom looks like: the failing tests and coarse signature of attempt 0 when it failed on the
+    working tree with the repro, else (or with ``latest``) of the latest failing loop attempt before ``before``."""
+    cands = [a for a in attempts if (before is None or a["n"] < before) and a["kind"] in LOOP_KINDS and
+             a["outcome"] == "fail" and _is_repro(a, sess) and
+             (a.get("copy_source") or {}).get("kind", "worktree") == "worktree"]
+    first = None if latest else next((a for a in cands if a["kind"] == "baseline"), None)
+    a = first or (cands[-1] if cands else None)
+    if a is None:
+        return {"tests": set(), "coarse": None, "attempt": None}
+    return {"tests": set((a.get("signature") or {}).get("failed_tests") or []), "coarse": a.get("sig_coarse"),
+            "attempt": a["n"]}
+
+
+def judge_at(row: dict, symptom: dict) -> tuple[str, str]:
+    """A run of another tree (the base, a commit) judged against the symptom, not by its exit status alone:
+
+    ``fail`` - the symptom's tests failed there (or, without per-test outcomes, the same coarse signature);
+    ``part`` - some of the symptom's tests failed there and the others passed;
+    ``pass`` - the run passed, or only other tests failed while every test of the symptom passed;
+    ``other`` - it failed, but the symptom's tests did not run there or it failed differently: it cannot say;
+    ``fail?`` - it failed and there is nothing to compare with (no per-test outcomes, no signature);
+    anything else is the run's own outcome (inconclusive, timeout). Returns (verdict, why)."""
+    out = row.get("outcome")
+    if out == "pass":
+        return "pass", "passed"
+    if out != "fail":
+        return str(out), f"the command could not tell ({out})"
+    sig = row.get("signature") or {}
+    tests = sig.get("tests") if isinstance(sig.get("tests"), dict) else {}
+    want = sorted(symptom.get("tests") or [])
+    failed = set(sig.get("failed_tests") or [])
+    if want and tests:
+        outcomes = {t: looprules._outcome_of(t, tests) for t in want}
+        hit = [t for t, o in outcomes.items() if o in ("failed", "error")]
+        passed = [t for t, o in outcomes.items() if o == "passed"]
+        if hit and passed and len(hit) + len(passed) == len(want):
+            return "part", (f"{len(passed)} of the symptom's {len(want)} failing test(s) passed there and "
+                            f"{', '.join(hit[:3])}" + (" ..." if len(hit) > 3 else "") + " failed there too")
+        if hit:
+            return "fail", f"the symptom's test(s) {', '.join(hit[:3])} failed there"
+        others = sorted(failed - set(want))
+        if all(o == "passed" for o in outcomes.values()):
+            return "pass", ("every test of the symptom passed there; it failed only other tests: "
+                            + ", ".join(others[:3]) + (" ..." if len(others) > 3 else ""))
+        off = [f"{t} ({o})" for t, o in outcomes.items() if o != "passed"]
+        return "other", f"it failed, but the symptom's test(s) did not run there: {', '.join(off[:3])}"
+    if want and failed & set(want):
+        return "fail", f"the symptom's test(s) {', '.join(sorted(failed & set(want))[:3])} failed there"
+    coarse = row.get("sig_coarse")
+    if coarse and symptom.get("coarse"):
+        if coarse == symptom["coarse"]:
+            return "fail", "the same failure as the symptom's (exception and crash symbol)"
+        return "other", f"it failed differently ({looprules._summ(row)})"
+    return "fail?", "it failed; whether with the symptom's failure is unknown (no per-test outcomes or signature)"
+
+
 def _base_outcome(sess: dict, attempts: list[dict]) -> tuple[str | None, int | None]:
-    """How the repro did on the base tree: a differential run, or a baseline on a clean tree (the base itself)."""
+    """How the repro did on the base tree for the symptom: a differential run (judged against the symptom:
+    'fail' only when the symptom's failure is there), or a baseline on a clean tree (the base itself)."""
     for a in reversed(attempts):
         src = a.get("copy_source") or {}
         if a["kind"] == "differential" and (src.get("commit") == sess["base_commit"] or src.get("kind") == "agent_base"):
-            return a["outcome"], a["n"]
+            # judged as the differential judged it: against the latest failure on the working tree before it
+            verdict, _ = judge_at(a, _symptom(sess, attempts, before=a["n"], latest=True))
+            if verdict in ("fail", "fail?", "part"):  # (part: some of the symptom predates the diff)
+                return "fail", a["n"]
+            return (verdict if verdict == "pass" else None), a["n"]
     for a in attempts:
         if a["kind"] == "baseline" and not (a.get("tree_files") or {}) and \
                 (a.get("copy_source") or {}).get("kind", "worktree") == "worktree":
@@ -669,8 +863,13 @@ def _known_good(attempts: list[dict]) -> str | None:
 
 
 def _duration(attempts: list[dict], cur: dict | None = None) -> float:
-    ds = [a.get("duration_s") for a in attempts if a.get("duration_s")]
-    return float(ds[-1]) if ds else 5.0
+    """What one more run costs: the last run's command time plus Verinoda's own overhead around it (the copy of
+    the tree, mostly - on a big tree that is most of the cost)."""
+    for a in reversed(attempts):
+        if a.get("duration_s"):
+            over = ((a.get("touched") or {}).get("cost") or {}).get("overhead_s") or 0.0
+            return float(a["duration_s"]) + max(0.0, float(over))
+    return 5.0
 
 
 def propose(store: Store, repo: Path, sess: dict, prior: list[dict], cur: dict, ev: dict) -> list[dict]:
@@ -719,13 +918,16 @@ def propose(store: Store, repo: Path, sess: dict, prior: list[dict], cur: dict, 
                                               "reached it; only a complete trace that did not reach a suspect rules "
                                               "it out", "command": None, "cost_estimate_s": 0,
                     "suspects": suspects[:LIST_CAP]})
-    failing = sorted((cur.get("signature") or {}).get("failed_tests") or [])
+    # a test parametrised over a path has a new id in every copy: select its function instead
+    failing = list(dict.fromkeys(
+        t.split("[", 1)[0] if ("[" in t and re.search(r"[\\/]", t.split("[", 1)[1])) else t
+        for t in sorted((cur.get("signature") or {}).get("failed_tests") or [])))
     if experiments._is_pytest(argv) and failing and not any("::" in a for a in argv):
         narrow = _without_selectors(argv) + failing[:5]
         out.append({"id": "minimal_repro", "why": "narrow the repro to the failing tests (faster runs; a test that "
                                                   "passes alone but fails in the suite is order-dependent)",
                     "command": f"verinoda debug try --session {sid} --kind probe --hypothesis \"the failing tests "
-                               f"alone\" -- " + " ".join(narrow),
+                               f"alone\" -- " + cmd_text(narrow),
                     "cost_estimate_s": round(run_s, 1), "runnable_by_verinoda": runnable})
     if any(f["rule"] in looprules.TEST_RULES for f in ev.get("findings") or []) or not out:
         out.append({"id": "ask_human", "why": "a test was edited or skipped, or nothing else narrows the cause: only "
@@ -806,13 +1008,13 @@ def _suspects(repo: Path, sess: dict, prior: list[dict], cur: dict) -> list[dict
 def _order_dependent(prior: list[dict], sess: dict, argv: list[str], tree_hash: str | None, sig: dict,
                      n: int) -> list[dict]:
     """A narrowed pytest command passed tests the session's full repro failed on the same tree."""
-    if argv == list(sess["command"]) or not experiments._is_pytest(argv):
+    if _same_command(argv, sess["command"]) or not experiments._is_pytest(argv):
         return []
     passed = {t for t, o in (sig.get("tests") or {}).items() if o == "passed"}
     if not passed:
         return []
     for a in reversed(prior):
-        if a["command"] == list(sess["command"]) and a.get("tree_hash") == tree_hash and a["outcome"] == "fail":
+        if _is_repro(a, sess) and a.get("tree_hash") == tree_hash and a["outcome"] == "fail":
             both = sorted(passed & set((a.get("signature") or {}).get("failed_tests") or []))
             if both:
                 return [{"rule": "order_dependent", "strength": "heuristic",
@@ -988,14 +1190,22 @@ def differential(store: Store, repo: Path, session_id: str | None = None, *, bas
         out["overlay_why"] = ("given with --overlay" if overlay is not None else
                               "the failing tests' files differ at the base: the base ran with the test the symptom "
                               "was recorded with (the working tree's version)")
-    if res["outcome"] == "pass" and loop_fail is not None:
+    verdict, verdict_why = res["outcome"], ""
+    if res["outcome"] == "fail" and loop_fail is not None:
+        # the base fails - with the symptom, or only other tests (a long-red test is not the symptom's cause)?
+        verdict, verdict_why = judge_at(base_row, {"tests": set((loop_fail.get("signature") or {}).get("failed_tests")
+                                                                or []), "coarse": loop_fail.get("sig_coarse")})
+        out["at_base"] = {"verdict": verdict, "why": verdict_why}
+    if verdict in ("pass", "part") and loop_fail is not None:
         base_tests = (base_row.get("signature") or {}).get("tests")
         wanted = sorted((loop_fail.get("signature") or {}).get("failed_tests") or [])
-        absent = [t for t in wanted if isinstance(base_tests, dict) and base_tests and base_tests.get(t) != "passed"]
+        absent = [t for t in wanted if isinstance(base_tests, dict) and base_tests and
+                  looprules._outcome_of(t, base_tests) not in ("passed", "failed", "error")]
         if absent:
             files = sorted({t.split("::", 1)[0] for t in absent if "::" in t})
             out["status"] = "inconclusive"
-            out["conclusion"] = (f"the repro exits 0 at the base {against[:12]}{with_tests}, but the failing test(s) "
+            out["conclusion"] = (f"the repro {'exits 0' if res['outcome'] == 'pass' else 'ran'} at the base "
+                                 f"{against[:12]}{with_tests}, but the failing test(s) "
                                  f"{', '.join(absent[:3])} did not pass there ("
                                  + ", ".join(f"{base_tests.get(t, 'not run')}" for t in absent[:3])
                                  + "): they are new or changed, so the base run cannot judge them")
@@ -1011,10 +1221,23 @@ def differential(store: Store, repo: Path, session_id: str | None = None, *, bas
         ranked = [h for h in ranked if h["path"] not in lay]  # the overlaid files ran on both sides
         for i, h in enumerate(ranked, 1):
             h["rank"] = i
-        out["status"] = "cause_in_diff"
-        out["conclusion"] = (f"the repro passes at the base {against[:12]}{with_tests} and fails at attempt "
-                             f"{loop_fail['n']}'s tree: the cause is in the diff between them (ranked below; "
-                             "run-scoped, one environment)")
+        out["status"] = "cause_in_diff" if verdict == "pass" else "partly_in_diff"
+        if res["outcome"] == "pass":
+            out["conclusion"] = (f"the repro passes at the base {against[:12]}{with_tests} and fails at attempt "
+                                 f"{loop_fail['n']}'s tree: the cause is in the diff between them (ranked below; "
+                                 "run-scoped, one environment)")
+        elif verdict == "part":
+            out["conclusion"] = (f"at the base {against[:12]}{with_tests}, {verdict_why}: the cause of the failures "
+                                 "that pass at the base is in the diff (ranked below; run-scoped, one environment); "
+                                 "the others predate the working-tree changes (`verinoda debug bisect` searches the "
+                                 "history for them)")
+            out["fails_at_base_too"] = sorted(t for t in wanted if isinstance(base_tests, dict) and
+                                              looprules._outcome_of(t, base_tests) in ("failed", "error"))
+        else:
+            out["conclusion"] = (f"the failing tests of attempt {loop_fail['n']} pass at the base {against[:12]}"
+                                 f"{with_tests} and fail in its tree: the cause is in the diff between them (ranked "
+                                 "below; run-scoped, one environment); the repro still exits non-zero at the base "
+                                 f"because {verdict_why.split('; ', 1)[-1]}")
         if not isinstance(base_tests, dict) or not base_tests:
             out["limits"] = ["per-test outcomes were not recorded at the base: whether the failing tests exist and "
                              "ran there is not checked"]
@@ -1026,9 +1249,16 @@ def differential(store: Store, repo: Path, session_id: str | None = None, *, bas
         out["status"] = "inconclusive"
         out["conclusion"] = (f"the repro passes at the base {against[:12]}{with_tests}, and no failing attempt on the "
                              "working tree is recorded to compare it with")
+    elif verdict == "other":
+        out["status"] = "inconclusive"
+        out["conclusion"] = (f"the repro fails at the base {against[:12]}{with_tests}, but not with the symptom: "
+                             f"{verdict_why}; whether the symptom's cause predates the working-tree changes is "
+                             "unknown from this run")
+        out["next_step"] = "narrow the repro to the symptom's failing tests (a new session), then run the differential"
     elif res["outcome"] == "fail":
         out["status"] = "fails_at_base"
-        out["conclusion"] = (f"the repro also fails at the base {against[:12]}{with_tests}: the cause predates the "
+        out["conclusion"] = (f"the repro also fails at the base {against[:12]}{with_tests}"
+                             + (f" ({verdict_why})" if verdict_why else "") + ": the cause predates the "
                              "working-tree changes; bisect the history (`verinoda debug bisect"
                              + "".join(f" --overlay {p}" for p in lay) + "`)")
     else:
@@ -1077,7 +1307,7 @@ def _prepare_copy(repo: Path, sess: dict, commit: str) -> dict:
     if not d.exists():
         d.mkdir(parents=True)
         experiments._copy_commit(repo, commit, d, skipped=skipped)
-    cmd = " ".join(sess["command"])
+    cmd = cmd_text(sess["command"])
     limits = ["Verinoda does not run this command (not allowlisted); the copy is a plain file copy of the commit "
               "under .verinoda/, without git's directory (no path spelled like .git is written)"]
     if skipped:
@@ -1147,17 +1377,34 @@ def bisect(store: Store, repo: Path, session_id: str | None = None, *, good: str
     notes: list[str] = []
     attempts = _attempts(store, sess["id"])
     head = {"session": sess["id"], "strategy": "bisect"}
+    symptom = _symptom(sess, attempts)
+    unconfirmed: list[str] = []
+    partly: dict[str, str] = {}   # commits where only some of the symptom's failing tests fail
 
     def outcome_at(commit: str, why: str) -> tuple[str | None, int | None]:
+        """pass / fail for the symptom at ``commit`` (a run that fails only other tests while the symptom's
+        tests pass is a pass for the symptom; one that fails differently is 'other' and skipped)."""
         rec = _recorded_at(_attempts(store, sess["id"]), sess, commit, overlay)
-        if rec is not None:
-            runs.append({"commit": commit, "outcome": rec["outcome"], "attempt": rec["n"], "recorded": True})
-            return rec["outcome"], rec["n"]
-        if sum(1 for r in runs if not r.get("recorded")) >= budget:
-            return None, None
-        r = _run_at(store, repo, sess, commit, why, overlay)
-        runs.append({"commit": commit, "outcome": r["outcome"], "attempt": r["attempt"]})
-        return r["outcome"], r["attempt"]
+        if rec is None:
+            if sum(1 for r in runs if not r.get("recorded")) >= budget:
+                return None, None
+            got = _run_at(store, repo, sess, commit, why, overlay)
+            rec = _attempts_by_n(store, sess["id"]).get(got["attempt"]) or {"outcome": got["outcome"],
+                                                                            "n": got["attempt"]}
+            entry = {"commit": commit, "outcome": rec["outcome"], "attempt": rec["n"]}
+        else:
+            entry = {"commit": commit, "outcome": rec["outcome"], "attempt": rec["n"], "recorded": True}
+        verdict, vwhy = judge_at(rec, symptom)
+        if rec["outcome"] == "fail" and verdict != "fail":
+            entry["for_the_symptom"] = f"{verdict}: {vwhy}"
+        runs.append(entry)
+        if verdict == "fail?":
+            unconfirmed.append(commit)
+            verdict = "fail"
+        elif verdict == "part":  # some of the symptom's tests fail there: the search is for the first such commit
+            partly[commit] = vwhy
+            verdict = "fail"
+        return verdict, rec["n"]
 
     def ran() -> int:
         return sum(1 for r in runs if not r.get("recorded"))
@@ -1175,6 +1422,10 @@ def bisect(store: Store, repo: Path, session_id: str | None = None, *, good: str
                                     "changes, not from history" if not bad else ""),
                     "compare the working tree with that commit: `verinoda debug differential`" if not bad else
                     "give --bad <a commit where the repro fails>")
+    if o_bad == "other":
+        return stop(f"the repro fails at the bad end {bad_sha[:12]} (attempt {n_bad}), but not with the symptom: "
+                    f"{runs[-1].get('for_the_symptom', '')}; there is nothing of the symptom's to search for there",
+                    "give --bad <a commit where the symptom's tests fail>")
     if o_bad != "fail":
         return stop(f"the repro could not run at the bad end {bad_sha[:12]} ({o_bad}, attempt {n_bad})",
                     "give --bad <a commit where the repro runs and fails>")
@@ -1280,10 +1531,25 @@ def bisect(store: Store, repo: Path, session_id: str | None = None, *, good: str
         out["hunks"] = hunks[:LIST_CAP]
         out["conclusion"] = (f"the repro passes at {parent[:12]} (attempt {n_parent}) and fails at {first_bad[:12]} "
                              f"({subject}; attempt {n_first}): that commit's change is where to look")
+        if first_bad in partly:
+            out["conclusion"] += (f" - for part of the symptom only: at {first_bad[:12]} {partly[first_bad]}; the "
+                                  "other failing tests may start at a later commit (bisect again with the repro "
+                                  "narrowed to them)")
     else:
         out["conclusion"] = (f"the first failing commit is between {commits[lo][:12] if lo >= 0 else good_sha[:12]} "
                              f"(passes, attempt {seen_at.get(lo)}) and {first_bad[:12]} (fails, attempt "
                              f"{seen_at.get(hi)}); the run budget or skipped commits left it open")
+    judged = [r for r in runs if r.get("for_the_symptom")]
+    if judged:
+        out["limits"].append("pass and fail are judged on the symptom's tests (attempt "
+                             f"{symptom.get('attempt')}): " + "; ".join(f"{r['commit'][:12]} {r['for_the_symptom']}"
+                                                                         for r in judged[:3]))
+        other = [r["commit"][:12] for r in judged if r["for_the_symptom"].startswith("other")]
+        if other:
+            notes.append(f"skipped, failing differently from the symptom: {', '.join(other[:5])}")
+    if unconfirmed:
+        out["limits"].append("whether the failure at " + ", ".join(c[:12] for c in unconfirmed[:3]) + " is the "
+                             "symptom's is unknown (no per-test outcomes or signature to compare): counted as failing")
     if notes:
         out["notes"] = notes
     return out
@@ -1522,17 +1788,19 @@ def diff(store: Store, repo: Path, session_id: str | None = None, *, attempt_n: 
                                                                     "attempt's change.patch)"}
 
 
-def _test_changes_since_baseline(repo: Path, sess: dict, attempts: list[dict], a: dict) -> list[dict]:
-    """The test_edited finding (if any) between attempt 0's tree and ``a``'s: tests changed on the way."""
+def _test_changes_since_baseline(repo: Path, sess: dict, attempts: list[dict], a: dict) -> tuple[list[dict], set[str]]:
+    """The test_edited finding (if any) between attempt 0's tree and ``a``'s: tests changed on the way; and the
+    test files that changed (or went) between them."""
     first = next((x for x in attempts if x["kind"] == "baseline"), None)
     if first is None or first["n"] == a["n"]:
-        return []
+        return [], set()
     changes = treestate.diff_trees(repo, sess["base_commit"], first.get("tree_files") or {}, a.get("tree_files") or {},
                                    base_map=treestate.base_ids(repo, sess["base_commit"]))
-    found, _ = looprules._test_edited([_as_rule_input(first)], {"n": a["n"], "vs_prev": changes,
-                                                                 "run_by": a["run_by"],
-                                                                 "experiment_id": a.get("experiment_id")})
-    return found
+    hist = [_as_rule_input(first)]
+    found, _ = looprules._test_edited(hist, {"n": a["n"], "vs_prev": changes, "run_by": a["run_by"],
+                                             "experiment_id": a.get("experiment_id"), "command": a.get("command")})
+    tests = looprules.test_files_of(hist)
+    return found, {c["path"] for c in changes if c.get("test") or c["path"] in tests}
 
 
 def close(store: Store, repo: Path, session_id: str | None = None, *, resolved_by: int | None = None,
@@ -1557,37 +1825,70 @@ def close(store: Store, repo: Path, session_id: str | None = None, *, resolved_b
             (a.get("copy_source") or {}).get("kind", "worktree") != "worktree":
         raise DebugError(f"attempt {resolved_by} is not a passing run of the repro on the working tree "
                          f"({a['kind']}, {a['outcome']}); it cannot resolve the session")
+    if a["kind"] == "baseline":
+        raise DebugError(f"attempt {resolved_by} is the baseline: the repro passed before anything was changed, so "
+                         "the symptom never reproduced and there is nothing it resolved; close with --abandoned and "
+                         "start a session with a repro that fails")
     if not _is_repro(a, sess):
-        raise DebugError(f"attempt {resolved_by} ran `{' '.join(a['command'])}`, not the session's repro command "
-                         f"`{' '.join(sess['command'])}`; only a pass of the repro resolves the session (`verinoda "
+        raise DebugError(f"attempt {resolved_by} ran `{cmd_text(a['command'])}`, not the session's repro command "
+                         f"`{cmd_text(sess['command'])}`; only a pass of the repro resolves the session (`verinoda "
                          "debug try` without a command runs it)")
-    skipped = next((f for f in a.get("findings") or [] if f.get("rule") == "failing_tests_skipped"), None)
-    if skipped:
-        raise DebugError(f"attempt {resolved_by} exited 0, but tests that failed before did not pass in it: "
-                         + ", ".join(f"{t} ({o})" for t, o in list((skipped.get("tests") or {}).items())[:5]))
+    shown = [x for x in attempts if x["n"] < a["n"] and x["kind"] in LOOP_KINDS and x["outcome"] in SYMPTOM_OUTCOMES
+             and _is_repro(x, sess) and (x.get("copy_source") or {}).get("kind", "worktree") == "worktree"]
+    if not shown:
+        raise DebugError(f"no run of the repro failed in this session before attempt {resolved_by}: the symptom was "
+                         "never observed, so a pass resolves nothing; close with --abandoned")
     cur = treestate.current(repo, store=store)
     if cur["hash"] != a.get("tree_hash"):
         raise DebugError(f"the working tree changed since attempt {resolved_by} passed (tree "
                          f"{(a.get('tree_hash') or '')[:12]} then, {cur['hash'][:12]} now); run `verinoda debug try` "
                          "on the current tree first")
     runs = _tree_runs(attempts, sess, a.get("tree_hash"))
-    if runs["verinoda"]["not_passed"]:
-        raise DebugError(f"the same tree did not pass in every run Verinoda made ({runs['text']}): the result is "
-                         "flaky; `verinoda debug rerun` measures the pass rate, and `--abandoned --note ...` closes "
-                         "the session without claiming a resolution")
-    edits = _test_changes_since_baseline(repo, sess, attempts, a)
+    if runs["disagree"]:
+        by = "Verinoda made" if runs["verinoda"]["not_passed"] else "recorded (agent-reported)"
+        raise DebugError(f"the same tree did not pass in every run {by} ({runs['text']}): the result is flaky; "
+                         "`verinoda debug rerun` measures the pass rate (or report more runs), and `--abandoned "
+                         "--note ...` closes the session without claiming a resolution")
+    if a["run_by"] == "agent" and _runnable(repo, list(sess["command"]))[0]:
+        own = [x["n"] for x in attempts if x["run_by"] == "verinoda" and x["outcome"] == "pass" and
+               x.get("tree_hash") == a.get("tree_hash") and x["kind"] in LOOP_KINDS and _is_repro(x, sess)]
+        raise DebugError(f"attempt {resolved_by} is a run the agent reported, and Verinoda can run this repro itself: "
+                         + (f"close with attempt {own[-1]}, Verinoda's passing run of the same tree" if own else
+                            "confirm the pass with a run Verinoda makes (`verinoda debug try`), then close with that "
+                            "attempt"))
+    edits, edited_tests = _test_changes_since_baseline(repo, sess, attempts, a)
+    skipped = next((f for f in a.get("findings") or [] if f.get("rule") == "failing_tests_skipped"), None)
+    gone: list[str] = []
+    if skipped:
+        missing = skipped.get("tests") or {}
+        # failing tests the accepted test change removed or renamed: the user's decision covers them
+        gone = [t for t, o in missing.items() if o == "not run" and t.split("::", 1)[0] in edited_tests]
+        if not (accept_test_edit and edits and len(gone) == len(missing)):
+            raise DebugError(f"attempt {resolved_by} exited 0, but tests that failed before did not pass in it: "
+                             + ", ".join(f"{t} ({o})" for t, o in list(missing.items())[:5])
+                             + ("" if accept_test_edit else
+                                "; if the user decided that a test change removed or renamed them, close with "
+                                "--accept-test-edit (recorded)")
+                             + ("; --accept-test-edit covers failing tests an accepted test change removed or "
+                                "renamed, not skipped or xfailed ones" if accept_test_edit else ""))
     if edits and not accept_test_edit:
         raise DebugError(f"tests changed since attempt 0 in the tree that passed: {edits[0]['text']}. Whether the "
                          "test or the code is right is the user's decision: after the user decided for the test "
                          "change, close with --accept-test-edit (recorded); otherwise restore the test")
     close_note = note
     if edits:
-        at = ", ".join(f"{x['path']}:{x['line']}" for x in (edits[0].get("lines") or [])[:3]) or edits[0]["text"][:120]
+        at = ", ".join(f"{x['path']}:{x['line']}" if x.get("line") else x["path"]
+                       for x in (edits[0].get("lines") or [])[:3]) or edits[0]["text"][:120]
         close_note = ((note + " ") if note else "") + f"[closed with a test change the user accepted: {at}]"
+        if gone:
+            close_note += f" [earlier failing tests the accepted change removed or renamed: {', '.join(gone[:5])}]"
     store.update("debug_sessions", sess["id"], {"status": "resolved", "resolved_by": int(resolved_by),
                                                 "closed_at": now(), "close_note": close_note})
-    out = {"session": sess["id"], "status": "resolved",
-           "result": _passed_text(a, sess) + "; that is the current tree",
+    result = _passed_text({k: v for k, v in a.items() if k != "findings"} if gone else a, sess)
+    if gone:
+        result += (f"; the earlier failing test(s) {', '.join(gone[:3])} did not run in it: the test change the "
+                   "user accepted removed or renamed them")
+    out = {"session": sess["id"], "status": "resolved", "result": result + "; that is the current tree",
            "not_run": _not_run(list(a["command"]), a["run_by"], a.get("signature")), "note": close_note,
            "tree_runs": runs["text"]}
     if edits:

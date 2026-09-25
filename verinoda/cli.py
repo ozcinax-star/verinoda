@@ -1607,7 +1607,13 @@ def _r_debug_attempt(r: dict) -> None:
     elif r.get("flaky"):
         head += "  - FLAKY: the same tree gave different results; loop rules are suspended"
     print(head)
+    if r.get("warning"):
+        print(f"  WARNING: {r['warning']}")
+        if r.get("next_step"):
+            print(f"  next: {r['next_step']}")
     print(f"  run: {run}; tree {str(tree.get('hash') or '?')[:12]} ({where})")
+    for ln in r.get("notes") or []:
+        print(f"  note: {ln}")
     if r.get("result"):
         print(f"  {r['result']}")
         for ln in r.get("not_run") or []:
@@ -1663,7 +1669,9 @@ def _r_debug_status(r: dict) -> None:
     if latest.get("stop"):
         head += f"  - STOP at attempt {latest['attempt']}: {latest.get('stop_reason')}"
     print(head)
-    print(f"  repro: {' '.join(r['command'])}; base {r['base']['commit'][:12]} ({r['base'].get('ref')})")
+    from verinoda.debug import cmd_text
+
+    print(f"  repro: {cmd_text(r['command'])}; base {r['base']['commit'][:12]} ({r['base'].get('ref')})")
     if r.get("result"):
         print(f"  {r['result']}")
     if r.get("flaky"):
@@ -1700,9 +1708,13 @@ def _r_debug_strategy(r: dict) -> None:
             print(f"      - {ln.strip()[:110]}")
         for ln in (h.get("added") or [])[:2]:
             print(f"      + {ln.strip()[:110]}")
-    for run in r.get("runs") or []:
+    runs = r.get("runs")
+    for run in runs if isinstance(runs, list) else []:  # bisect's runs; rerun's "runs" is a count
         print(f"  {'recorded' if run.get('recorded') else 'ran'} {run['commit'][:12]}: {run['outcome']} "
-              f"(attempt {run['attempt']})")
+              f"(attempt {run['attempt']})" + (f" - for the symptom: {run['for_the_symptom']}"
+                                                if run.get("for_the_symptom") else ""))
+    for ln in r.get("notes") or []:
+        print(f"  note: {ln}")
     for test, d in ((r.get("trace_diff") or {}).get("tests") or {}).items():
         print(f"  calls of {test}:")
         for e in d.get("only_when_failing")[:5]:
@@ -1762,7 +1774,7 @@ def cmd_debug(args) -> int:
             res = debug.start(st, repo, args.symptom, argv, base=args.base, trace=args.trace, timeout=args.timeout,
                               observed_output=obs, exit_code=code)
             _emit(args, res, _r_debug_attempt)
-            return 3 if res.get("stop") else 0
+            return 3 if (res.get("stop") or res.get("reproduced") is False) else 0
         if sub == "try":
             obs, code = _observed(args)
             res = debug.attempt(st, repo, args.session, hypothesis=args.hypothesis, expect=args.expect,

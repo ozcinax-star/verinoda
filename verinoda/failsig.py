@@ -71,6 +71,39 @@ def norm_msg(msg: str | None) -> str:
     return s.strip()[:300]
 
 
+_PATH_NORM = _NORM[:4]  # the copy / temp directory rules: a run's throw-away paths
+
+
+def norm_test_id(test: str | None) -> str | None:
+    """A test id with the run's throw-away paths taken out of its parametrisation (``test_case[C:\\...\\verinoda-exp-x
+    \\repo\\tests\\cases\\big.json]`` -> ``test_case[tests\\cases\\big.json]``), so a test parametrised over absolute
+    paths keeps one id from run to run. The part before ``[`` is a repository path and is left as it is."""
+    if not test or "[" not in test:
+        return test
+    head, _, params = test.partition("[")
+    for rx, rep in _PATH_NORM:
+        params = rx.sub(rep, params)
+    return f"{head}[{params}"
+
+
+def _norm_ids(sig: dict) -> dict:
+    """:func:`norm_test_id` over every test id of a signature (failures, failed tests, per-test outcomes)."""
+    for f in sig.get("failures") or []:
+        if f.get("test"):
+            f["test"] = norm_test_id(f["test"])
+    if sig.get("failed_tests"):
+        sig["failed_tests"] = sorted({norm_test_id(t) for t in sig["failed_tests"]})
+    if isinstance(sig.get("tests"), dict):
+        out: dict[str, str] = {}
+        for t, o in sig["tests"].items():
+            k = norm_test_id(str(t))
+            # two runs' ids collapsing into one keep the worse outcome
+            if k not in out or o in ("failed", "error"):
+                out[k] = o
+        sig["tests"] = out
+    return sig
+
+
 # -- paths and symbols ---------------------------------------------------------------------------
 
 _FOREIGN = ("site-packages/", "dist-packages/", "node_modules/", "/lib/python", "<frozen", "node:internal",
@@ -270,6 +303,21 @@ def _finish(parser: str, failures: list[dict], extra: dict | None = None) -> dic
     return out
 
 
+_PT_FINAL = re.compile(r"^=*\s*(?:(?:\d+ \w+(?:, )?)+|no tests ran)(?: in [\d.]+s(?: \([^)]*\))?)?\s*=*$")
+_PT_COUNT = re.compile(r"(\d+) (passed|failed|skipped|xfailed|xpassed|deselected|errors?)\b")
+
+
+def pytest_counts(text: str) -> dict[str, int] | None:
+    """The counts of pytest's final summary line (``3 passed, 2 skipped in 0.21s``), or None when the text has
+    none. ``no tests ran`` is ``{}``."""
+    for ln in reversed((text or "").splitlines()[-200:]):
+        s = ln.strip()
+        if not s or not _PT_FINAL.match(s) or (" in " not in s and "no tests ran" not in s):
+            continue
+        return {("error" if w.startswith("error") else w): int(n) for n, w in _PT_COUNT.findall(s)}
+    return None
+
+
 def summary(sig: dict) -> list[str]:
     """One line per failure: ``Exc@path::symbol (test)``."""
     out = []
@@ -317,7 +365,13 @@ def from_plugin(data: bytes, resolver: PathResolver, mapper: SymbolMapper | None
     failures = []
     for r in recs:
         if r.get("phase") == "collect":
-            inner = parse_text(r.get("longrepr") or "", resolver, mapper, prefer="pytest")
+            longrepr = r.get("longrepr") or ""
+            inner = parse_text(longrepr, resolver, mapper, prefer="pytest")
+            if not inner.get("failures"):
+                # the collect report's text alone has no section title: give it the one pytest prints
+                bar = "_" * 20
+                inner = parse_text(f"{'=' * 20} ERRORS {'=' * 20}\n{bar} ERROR collecting {r.get('test') or '?'} {bar}\n"
+                                   f"{longrepr}\n", resolver, mapper, prefer="pytest")
             got = inner.get("failures") or []
             if got:
                 for f in got:
@@ -325,8 +379,7 @@ def from_plugin(data: bytes, resolver: PathResolver, mapper: SymbolMapper | None
                     f["phase"] = "collect"
                 failures.extend(got)
             else:
-                failures.append(_failure(r.get("test"), "collect", None, (r.get("longrepr") or "")[-300:], None, [],
-                                         mapper))
+                failures.append(_failure(r.get("test"), "collect", None, longrepr[-300:], None, [], mapper))
             continue
         frames = []
         for fr in r.get("frames") or []:
@@ -335,10 +388,19 @@ def from_plugin(data: bytes, resolver: PathResolver, mapper: SymbolMapper | None
                 frames.append((p, int(fr.get("line") or 0), fr.get("qual")))
         loc = (frames[-1][0], frames[-1][1]) if frames else None
         hint = frames[-1][2] if frames else None
+        crash = r.get("crash") or {}
+        if loc is None and crash.get("path") and crash.get("line"):
+            # no in-repo traceback entry (a doctest, a failure raised by pytest itself): pytest's crash location
+            p = resolver.resolve(crash["path"])
+            if p:
+                loc = (p, int(crash["line"]))
         failures.append(_failure(r.get("test"), r.get("phase"), r.get("exc"), r.get("msg"), loc, frames, mapper, hint))
     out = _finish("pytest_plugin", failures, {"tests": outcomes, "exitstatus": header.get("exitstatus")})
+    if "stopped_early" in header:
+        out["stopped_early"] = bool(header.get("stopped_early"))
     if outcomes:
-        out["failed_tests"] = sorted(t for t, o in outcomes.items() if o in ("failed", "error"))
+        out["failed_tests"] = sorted({t for t, o in outcomes.items() if o in ("failed", "error")}
+                                     | {f["test"] for f in failures if f.get("phase") == "collect" and f.get("test")})
     return out
 
 
@@ -910,11 +972,21 @@ def extract(stdout: str, stderr: str, *, outcome: str, files: Iterable[str],
         tests = plugin_outcomes(plugin_data) if plugin_data else None
         if tests:
             out["tests"] = tests
-        return out
+        return _norm_ids(out)
     resolver = PathResolver(files, roots)
     mapper = SymbolMapper(reader)
     if plugin_data:
         got = from_plugin(plugin_data, resolver, mapper)
         if got is not None and got.get("failures"):
-            return got
-    return parse_text((stdout or "") + "\n" + (stderr or ""), resolver, mapper)
+            partial = [i for i, f in enumerate(got["failures"]) if not complete(f) and f.get("test")]
+            if partial:  # the log may have what the plugin's record lacks (a collection error's text)
+                text = parse_text((stdout or "") + "\n" + (stderr or ""), resolver, mapper)
+                by_test = {f.get("test"): f for f in text.get("failures") or [] if complete(f)}
+                for i in partial:
+                    f = got["failures"][i]
+                    better = by_test.get(f["test"])
+                    if better is not None:
+                        got["failures"][i] = {**better, "test": f["test"], "phase": f.get("phase") or better.get("phase")}
+                got["status"] = _finish("pytest_plugin", got["failures"])["status"]
+            return _norm_ids(got)
+    return _norm_ids(parse_text((stdout or "") + "\n" + (stderr or ""), resolver, mapper))

@@ -298,6 +298,43 @@ def test_python_edits_of_comments_docstrings_and_formatting_keep_the_code_identi
     assert treestate.code_tree_id(ch2) != treestate.tree_id({})
 
 
+def test_a_docstring_with_doctest_examples_is_code_and_its_hunks_are_marked():
+    # review finding: a doctest's expected output changed to what the bug returns was "the same code"
+    # (possibly_flaky) and no test edit
+    old = b'def f(x):\n    """Twice.\n\n    >>> f(2)\n    4\n    """\n    return x * 2\n'
+    new = old.replace(b"    4\n", b"    5\n")
+    plain = b'def f(x):\n    """Twice."""\n    return x * 2\n'
+    assert treestate.code_fingerprint("m.py", old) != treestate.code_fingerprint("m.py", new)
+    assert treestate.code_fingerprint("m.py", plain) == treestate.code_fingerprint("m.py", plain.replace(b"Twice",
+                                                                                                          b"Double"))
+    d = treestate.diff_file("m.py", old, new)
+    assert "no_code_change" not in d and d["hunks"][0]["doctest"] == {"removed": [0], "added": [0]}
+    code = treestate.diff_file("m.py", old, old.replace(b"x * 2", b"x * 3"))
+    assert "doctest" not in code["hunks"][0]
+
+
+def test_config_hunks_carry_the_section_of_each_added_line():
+    old = b'[project]\nname = "x"\n\n[tool.pytest.ini_options]\nminversion = "7"\n'
+    new = old + b'addopts = "-k not slow"\n\n[tool.setuptools.packages.find]\nexclude = ["tests*"]\n'
+    sec = {x.strip(): s for h in treestate.diff_file("pyproject.toml", old, new)["hunks"]
+           for x, s in zip(h["added"], h["added_sections"])}
+    assert sec['addopts = "-k not slow"'] == "tool.pytest.ini_options"
+    assert sec['exclude = ["tests*"]'] == "tool.setuptools.packages.find"
+
+
+def test_commit_content_ids_are_read_in_batches(tmp_path, monkeypatch):
+    # review finding: computing the base's content ids held every blob of the commit in memory at once
+    repo = _repo(tmp_path)
+    head = _git(repo, "rev-parse", "HEAD").strip()
+    whole = treestate.commit_files(repo, head)
+    sizes: list[int] = []
+    real = treestate.read_blobs
+    monkeypatch.setattr(treestate, "read_blobs", lambda r, specs, **k: sizes.append(len(specs)) or real(r, specs, **k))
+    monkeypatch.setattr(treestate, "COMMIT_IDS_BATCH", 3)
+    assert treestate.commit_files(repo, head) == whole and len(whole) > 3
+    assert max(sizes) <= 3 and len(sizes) == -(-len(whole) // 3)
+
+
 def test_the_ledgers_test_files_cover_the_parsed_languages():
     for p in ("src/cart.test.js", "src/cart.spec.ts", "src/components/Cart.test.tsx", "pricing_test.go",
               "src/test/java/a/WispTest.java", "tests/test_x.py", "pkg/x_test.py", "conftest.py"):

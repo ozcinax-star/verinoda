@@ -1334,6 +1334,50 @@ changed) cost two causes on debugloops_v1 (run 7: cause named 5/8); the rule tha
 before tests, comment-only files last, and "same symptom" also when the failing tests are the same)
 restored 7/8 (run 8). Both runs are in-sample.
 
+### 7.6 Review round 3 (2026-09-25) and what changed
+
+A third review (20 findings, scripted sessions on orders_app / node / glow_mod copies) found false
+resolutions, false stops and wrong strategy conclusions; each was reproduced and changed as follows
+(regression tests in tests/test_debug.py, test_looprules.py, test_failsig.py, test_treestate.py,
+test_experiments.py):
+
+- **Closing as resolved** also needs a run of the repro in the session that failed (or timed out) before
+  the passing attempt - never the baseline itself; `debug start` says when the baseline did not fail
+  (`reproduced: false`, exit 3). An agent report closes only a repro Verinoda cannot run itself (else:
+  confirm with a Verinoda run), and agent reports of one tree that disagree are flaky for close too.
+  `--accept-test-edit` also covers earlier failing tests that the accepted test change removed or
+  renamed (named in the close note); skipped and xfailed ones still block.
+- **test_edited** holds whatever else the attempt changed: a changed literal (an expected value in a
+  parametrize table, a golden file under `tests/`), a removed test file, `if ...: return` / JavaScript
+  `return;` / `t.skip()` / `.only(` inside a test. With doctests (`--doctest-*`, or a failing doctest
+  id `path::module.func`) a changed example line of a docstring is a test edit; the rest of that module
+  is code (a fix there is not a test edit), and a docstring holding `>>>` examples counts as code in
+  the code identity. In `pyproject.toml`, `setup.cfg` and `tox.ini` only pytest's own section (and
+  tox's commands) selects tests; a packaging `exclude` does not.
+- **failing_tests_skipped**: a module that failed to collect is satisfied when its tests ran; after an
+  early stop (`-x`, `--maxfail`, `--stepwise`; the plugin records it) tests that were not reached are
+  not skipped ones. A pytest collection error (exit 2) is a failing run of the repro in the ledger.
+- **Test ids** lose the run's throw-away paths (tests parametrised over absolute paths kept a new id in
+  every copy: "flaky", and every pass "skipped" the failing test). Collection errors and doctests get a
+  complete signature (pytest's section text; the crash location when no in-repo frame exists).
+- **Differential and bisect judge a run on the symptom's tests**, not its exit status: the base failing
+  only other tests is "the cause is in the diff" (with them named), some of the symptom failing there
+  is `partly_in_diff`, a different failure is inconclusive; bisect counts a commit where every test of
+  the symptom passes as good, skips one that fails differently, and says when its first bad commit
+  shows only part of the symptom.
+- **Runs**: processes a command leaves running are stopped when it exits (Windows: a job object the
+  child joins while suspended - a venv launcher starts the interpreter within milliseconds; POSIX: its
+  session), the throw-away copy is removed with retries, and a leftover is named. A runner that exits 0
+  having run no test (node `tests 0`, `No tests found`, `Ran 0 tests`, cargo/go) is inconclusive.
+- **Ledger**: output-only pytest options (`-v`, `-q`, `--tb`, `-r`, `--color`, `-s`, `-p
+  no:cacheprovider`, ...) do not make another command; attempt numbers are taken at the insert (two
+  ledger commands at once no longer lose one); printed commands are quoted; strategy costs include the
+  measured overhead (the copy), and a commit's content ids are read in batches.
+
+Not changed: per-test outcomes (so `failing_tests_skipped` and the symptom judgement by test) exist for
+pytest only; other runners fall back to the coarse signature. A per-session reusable copy (7.4) is
+still not built.
+
 ## Sources
 
 - **Retrieval:**

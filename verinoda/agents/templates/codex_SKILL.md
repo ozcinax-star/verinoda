@@ -212,6 +212,7 @@ pytest `--trace` also checks that your edits are reached). After every edit: `ve
 it, then record `--observed-output out.txt --exit-code N -- <command>` (agent-reported: it never verifies).
 
 - `stop: true` (exit 3): stop editing, run `strategies[0]` (MCP `debug_strategy`), show `verinoda debug status`.
+- `reproduced: false` from `debug start` (exit 3): the repro did not fail; start again with one that does.
 - `questions_for_human`: never change a test's expected value, and never skip, xfail or deselect a failing
   test, on your own; ask the user (with `request_user_input` when it is available, otherwise as plain text, and wait), quoting both sides.
 - Do not retry a hypothesis that did not make the repro pass (`hypothesis_repeated`) without new evidence.

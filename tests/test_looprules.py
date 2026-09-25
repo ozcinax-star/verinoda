@@ -358,3 +358,125 @@ def test_max_no_progress_is_a_budget_stop_not_a_finding():
          _att(2, exact="C", sig=A, progress="same")]
     res = lr.evaluate(h, _att(3, exact="D", sig=B), max_no_progress=3)
     assert res["stop"] and res["stop_reason"].startswith("max_no_progress") and not _rules(res)
+
+
+# -- review round 3 --------------------------------------------------------------------------------------
+
+def _pass(tests):
+    return {"status": "none", "failures": [], "failed_tests": [], "tests": tests}
+
+
+def test_a_module_that_failed_to_collect_is_satisfied_when_its_tests_run():
+    # review finding: a collection error's module id never appears among per-test outcomes, so the real fix was
+    # "failing_tests_skipped", a stop and a question, and the session could never close
+    base = _att(0, kind="baseline", exact="A", sig=dict(_sig(("tests/test_p.py", "ImportError", "tests/test_p.py",
+                                                              "<module>")), tests={}))
+    fixed = lr.evaluate([base], _att(1, outcome="pass", sig=_pass({"tests/test_p.py::test_a": "passed",
+                                                                    "tests/test_p.py::test_b": "passed"})))
+    assert _rules(fixed) == [] and not fixed["stop"] and fixed["progress"] == "improved"
+    skipped = lr.evaluate([base], _att(1, outcome="pass", sig=_pass({"tests/test_p.py::test_a": "skipped"})))
+    assert _rules(skipped) == ["failing_tests_skipped"]
+    gone = lr.evaluate([base], _att(1, outcome="pass", sig=_pass({"tests/test_q.py::test_a": "passed"})))
+    assert gone["findings"][0]["tests"] == {"tests/test_p.py": "not run"}
+
+
+def test_tests_after_an_early_stop_were_not_reached_not_skipped():
+    # review finding: with -x an earlier failure stopped the run; the later failing test was called "skipped,
+    # xfailed or deselected" with a definitive stop and the test-vs-code question
+    base = _att(0, kind="baseline", exact="A", sig=dict(_sig(("t::b", "E", "m.py", "f")), tests={"t::a": "passed",
+                                                                                              "t::b": "failed"}))
+    sig = dict(_sig(("t::a", "E", "m.py", "g")), tests={"t::a": "failed"}, stopped_early=True)
+    assert _rules(lr.evaluate([base], _att(1, exact="B", sig=sig))) == []
+    # without the plugin's flag, the command's -x says the same for a failing run
+    sig2 = dict(_sig(("t::a", "E", "m.py", "g")), tests={"t::a": "failed"})
+    cur = dict(_att(1, exact="B", sig=sig2), command=["python", "-m", "pytest", "-x"])
+    assert _rules(lr.evaluate([base], cur)) == []
+    sig3 = dict(sig, tests={"t::a": "failed", "t::b": "skipped"})  # a skip is still a skip
+    assert _rules(lr.evaluate([base], _att(1, exact="B", sig=sig3))) == ["failing_tests_skipped"]
+
+
+def _diff(path, old: str, new: str):
+    from verinoda import treestate
+
+    return treestate.diff_file(path, old.encode(), new.encode())
+
+
+TABLE = ('import pytest\nfrom orders.pricing import total_of\n\n@pytest.mark.parametrize("items,total", [\n'
+         '    ([{"price": 10.0, "qty": 2}], 20.0),\n'
+         '    ([{"price": 60.0, "qty": 2}], 108.0),\n], ids=["small", "big"])\ndef test_table(items, total):\n'
+         '    assert total_of(items) == total\n')
+CODE = 'def total_of(items):\n    return sum(i["price"] * i["qty"] for i in items) * 0.8\n'
+
+
+def test_an_expected_value_changed_next_to_a_code_edit_is_a_test_edit():
+    # review finding: a parametrize row's or a golden file's expected value changed together with any code
+    # line was no test edit; the failing test passed and the session closed with the bug in place
+    h = [_att(0, kind="baseline", exact="A")]
+    code = _diff("orders/pricing.py", CODE, CODE.replace('i["price"]', 'float(i["price"])'))
+    row = _diff("tests/test_table.py", TABLE, TABLE.replace("108.0),", "96.0),"))
+    res = lr.evaluate(h, _att(1, outcome="pass", vs_prev=[code, row]))
+    assert _rules(res) == ["test_edited"] and res["stop"]
+    assert res["assertion_lines"][0]["change"] == "value" and res["assertion_lines"][0]["line"] == 6
+    golden = _diff("tests/data/golden.json", '{\n  "total": 108.0\n}\n', '{\n  "total": 96.0\n}\n')
+    assert _rules(lr.evaluate(h, _att(1, outcome="pass", vs_prev=[code, golden]))) == ["test_edited"]
+    # a rename carried into the test, and a new case added, are no value change
+    renamed = _diff("tests/test_table.py", TABLE, TABLE.replace("import total_of", "import order_total as total_of"))
+    added = _diff("tests/test_table.py", TABLE, TABLE.replace("108.0),\n", '108.0),\n    ([], 0.0),\n'))
+    for c in (renamed, added):
+        assert _rules(lr.evaluate(h, _att(1, outcome="pass", vs_prev=[code, c]))) == []
+
+
+def test_more_ways_of_switching_a_test_off():
+    # review finding: `if True: return`, JavaScript `return;` and `t.skip()` were missed
+    h = [_att(0, kind="baseline", exact="A")]
+    code = _change("m.py")
+    py = _diff("tests/test_table.py", TABLE, TABLE.replace("def test_table(items, total):\n",
+                                                          "def test_table(items, total):\n    if True: return\n"))
+    assert _rules(lr.evaluate(h, _att(1, outcome="pass", vs_prev=[code, py]))) == ["test_edited"]
+    js = "import test from 'node:test';\n\ntest('adds', (t) => {\n  assert.equal(total([1, 2]), 3);\n});\n"
+    for line in ("  return;\n", "  t.skip('flaky on CI');\n  return;\n", "  if (process.env.CI) return;\n"):
+        edit = _diff("src/cart.test.js", js, js.replace("(t) => {\n", "(t) => {\n" + line))
+        res = lr.evaluate(h, _att(1, outcome="pass", vs_prev=[code, edit]))
+        assert _rules(res) == ["test_edited"], line
+    gone = dict(_change("src/cart.test.js", ("<module>",), test=True, status="removed"), hunks=[])
+    moved = dict(_change("src/cart.checks.js", ("<module>",), status="added"))
+    res = lr.evaluate(h, _att(1, outcome="pass", vs_prev=[code, gone, moved]))
+    assert _rules(res) == ["test_edited"] and res["assertion_lines"][0]["change"] == "removed"
+    helper = _diff("tests/test_table.py", TABLE + "\n\ndef make(x):\n    return x\n",
+                   TABLE + "\n\ndef make(x):\n    if not x: return\n    return x\n")
+    assert _rules(lr.evaluate(h, _att(1, vs_prev=[helper]))) == []  # a helper's early return
+
+
+def test_a_doctest_edit_is_a_test_edit_and_the_code_beside_it_is_not():
+    # review finding: changing a doctest's expected output to what the bug returns passed and closed
+    src = ('def apply_discount(subtotal):\n    """Ten percent off.\n\n    >>> apply_discount(200.0)\n    180.0\n'
+           '    """\n    return round(subtotal * 0.8, 2)\n')
+    sig = _sig(("orders/pricing.py::orders.pricing.apply_discount", "DocTestFailure", "orders/pricing.py",
+                "apply_discount"))
+    h = [_att(0, kind="baseline", exact="A", sig=sig)]
+    doc = _diff("orders/pricing.py", src, src.replace("    180.0\n", "    160.0\n"))
+    res = lr.evaluate(h, _att(1, outcome="pass", vs_prev=[doc]))
+    assert _rules(res) == ["test_edited"] and res["assertion_lines"][0]["change"] == "doctest"
+    fix = _diff("orders/pricing.py", src, src.replace("0.8", "0.9"))
+    assert _rules(lr.evaluate(h, _att(1, outcome="pass", vs_prev=[fix]))) == []  # the code under the doctest
+    assert lr.test_files_of(h) == set() and lr.doctest_hosts(h) == {"orders/pricing.py"}
+    # --doctest-modules in the command: any doctest example is a test, also before one failed
+    other = _diff("orders/other.py", src, src.replace("    180.0\n", "    170.0\n"))
+    cur = dict(_att(1, outcome="pass", vs_prev=[other, _change("m.py")]),
+               command=["python", "-m", "pytest", "--doctest-modules"])
+    assert _rules(lr.evaluate([_att(0, kind="baseline", exact="A")], cur)) == ["test_edited"]
+
+
+def test_only_pytests_own_settings_select_tests():
+    # review finding: a packaging `exclude` in pyproject.toml was read as a change of test selection
+    h = [_att(0, kind="baseline", exact="A")]
+    old = '[project]\nname = "x"\n\n[tool.pytest.ini_options]\nminversion = "7"\n'
+    pack = _diff("pyproject.toml", old, old + '\n[tool.setuptools.packages.find]\nexclude = ["tests*"]\n')
+    assert _rules(lr.evaluate(h, _att(1, outcome="pass", vs_prev=[_change("m.py"), pack]))) == []
+    sel = _diff("pyproject.toml", old, old + 'addopts = "--deselect tests/test_x.py::test_a"\n')
+    assert _rules(lr.evaluate(h, _att(1, outcome="pass", vs_prev=[_change("m.py"), sel]))) == ["test_edited"]
+    tox_old = "[tox]\nskipsdist = true\n\n[testenv]\ncommands = pytest\n"
+    tox = _diff("tox.ini", tox_old, tox_old.replace("commands = pytest", "commands = pytest -k 'not slow'"))
+    assert _rules(lr.evaluate(h, _att(1, outcome="pass", vs_prev=[_change("m.py"), tox]))) == ["test_edited"]
+    cfg = _diff("setup.cfg", "[flake8]\nmax-line-length = 100\n", "[flake8]\nmax-line-length = 100\nexclude = tests\n")
+    assert _rules(lr.evaluate(h, _att(1, outcome="pass", vs_prev=[_change("m.py"), cfg]))) == []

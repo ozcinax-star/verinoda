@@ -185,3 +185,74 @@ def test_the_plugin_reports_exception_frames_and_outcomes(tmp_path):
                                                   "tests/test_service.py::test_empty_order_rejected"],
                          hypothesis="plugin on a pass", plugins={f"{failsig.PLUGIN_MODULE}.py": failsig.plugin_source()})
     assert ok["outcome"] == "pass"
+
+
+def _plugin_run(repo: Path, *args: str) -> tuple[dict, dict]:
+    ids: dict[str, str] = {}
+    res = experiments.run(open_store(repo), repo, ["python", "-m", "pytest", "-q", "-p", failsig.PLUGIN_MODULE,
+                                                   "-p", "no:cacheprovider", *args], hypothesis="plugin",
+                          plugins={f"{failsig.PLUGIN_MODULE}.py": failsig.plugin_source()}, file_ids=ids)
+    data = Path(res["artifacts"][failsig.PLUGIN_FILE]).read_bytes()
+    out = Path(res["logs"]["stdout"]).read_text(encoding="utf-8")
+    sig = failsig.extract(out, "", outcome="pass" if res["outcome"] == "pass" else "fail", files=ids,
+                          reader=_reader(repo), plugin_data=data)
+    return res, sig
+
+
+@pytest.mark.experiment
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
+def test_collection_errors_doctests_early_stops_and_path_ids(tmp_path):
+    # review findings: a collection error and a doctest failure had no location ('? at ?'); -x left later tests
+    # "not run" as if deselected; a test parametrised over absolute paths got a new id in every copy
+    repo = tmp_path / "oa"
+    shutil.copytree(EXAMPLE, repo, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.db"))
+    (repo / "tests" / "cases").mkdir()
+    (repo / "tests" / "cases" / "big.json").write_text('{"total": 1}', encoding="utf-8")
+    (repo / "tests" / "test_cases.py").write_text(
+        "import glob, os\nimport pytest\n\nHERE = os.path.dirname(os.path.abspath(__file__))\n\n\n"
+        "@pytest.mark.parametrize('path', sorted(glob.glob(os.path.join(HERE, 'cases', '*.json'))))\n"
+        "def test_case(path):\n    assert path.endswith('small.json')\n", encoding="utf-8")
+    p = repo / "orders" / "pricing.py"
+    text = p.read_text(encoding="utf-8")
+    assert "def apply_discount(subtotal: float) -> float:\n" in text
+    p.write_text(text.replace("def apply_discount(subtotal: float) -> float:\n",
+                              "def apply_discount(subtotal: float) -> float:\n"
+                              "    \"\"\"\n    >>> apply_discount(200.0)\n    170.0\n    \"\"\"\n"),
+                 encoding="utf-8")
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "init")
+    res, sig = _plugin_run(repo, "--doctest-modules", "orders")
+    assert res["outcome"] == "fail" and sig["status"] == "parsed"
+    f = sig["failures"][0]
+    assert f["exc"] == "DocTestFailure" and f["at"] == "orders/pricing.py::apply_discount"
+    _, a = _plugin_run(repo, "tests/test_cases.py")
+    _, b = _plugin_run(repo, "tests/test_cases.py")
+    assert a["failed_tests"] == b["failed_tests"] and len(a["failed_tests"]) == 1
+    assert "verinoda-exp" not in json.dumps(a["failed_tests"] + list(a["tests"]))
+    assert failsig.keys(a) == failsig.keys(b)
+    _, x = _plugin_run(repo, "-x", "tests/test_cases.py", "tests/test_pricing.py")
+    assert x["stopped_early"] is True
+    p.write_text(text.replace("def compute_total(", "def compute_order_total("), encoding="utf-8")
+    res, sig = _plugin_run(repo, "tests/test_pricing.py")
+    assert res["outcome"] == "inconclusive" and sig["status"] == "parsed"  # pytest exit 2: a collection error
+    f = sig["failures"][0]
+    assert f["exc"] == "ImportError" and f["phase"] == "collect" and f["test"] == "tests/test_pricing.py"
+    assert sig["failed_tests"] == ["tests/test_pricing.py"]
+
+
+def test_pytest_summary_counts():
+    assert failsig.pytest_counts("..ss. [100%]\n3 passed, 2 skipped in 0.21s\n") == {"passed": 3, "skipped": 2}
+    assert failsig.pytest_counts("=== 1 failed, 1 error, 4 deselected in 1.02s ===") == {
+        "failed": 1, "error": 1, "deselected": 4}
+    assert failsig.pytest_counts("no tests ran in 0.01s") == {}
+    assert failsig.pytest_counts("BUILD SUCCESSFUL in 3s") is None
+
+
+def test_test_ids_lose_the_runs_throw_away_paths():
+    raw = ("tests/test_cases.py::test_case[C:\\\\Users\\\\u\\\\AppData\\\\Local\\\\Temp\\\\verinoda-exp-b84geob5\\\\repo"
+           "\\\\tests\\\\cases\\\\big.json]")
+    assert failsig.norm_test_id(raw) == "tests/test_cases.py::test_case[tests\\\\cases\\\\big.json]"
+    assert failsig.norm_test_id("tests/t.py::test_x[/tmp/verinoda-exp-1a2b/repo/tests/c/x.json]") == \
+        "tests/t.py::test_x[tests/c/x.json]"
+    assert failsig.norm_test_id("tests/t.py::test_x[1-2]") == "tests/t.py::test_x[1-2]"

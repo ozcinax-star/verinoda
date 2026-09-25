@@ -5,6 +5,9 @@ Two isolation levels exist, and the one used is recorded on every run:
 ``process`` (always available)
     * separate process in its own process group/session;
     * wall-clock timeout that kills the whole process tree;
+    * processes the command leaves running (a server a test started) are
+      stopped when it exits (Windows: a job object; POSIX: its session), so
+      they cannot answer the next run; the run's limits say so;
     * working directory is a throw-away *copy* of the repository
       (tracked + untracked-not-ignored files), so the user's tree is never
       written to;
@@ -57,7 +60,9 @@ before the throw-away copy is deleted.
 Outcomes: ``pass`` (exit 0), ``fail`` (exit 1, or any non-zero exit of a
 non-pytest runner), ``timeout``, and ``inconclusive`` - pytest could not tell
 (exit 2 interrupted/collection error, 3 internal error, 4 usage error, 5 no
-tests collected, or pytest is not installed for that interpreter). An
+tests collected, or pytest is not installed for that interpreter), or a
+runner exited 0 having run no test (node ``tests 0``, ``No tests found``,
+unittest ``Ran 0 tests``, cargo/go with zero tests). An
 inconclusive run is recorded, but its evidence only *qualifies* a claim: it
 never supports or refutes it.
 """
@@ -95,6 +100,8 @@ SUMMARY_RE = re.compile(
     r"|^\d+ (passed|failed|errors?|skipped|xfailed|xpassed|deselected)\b.*\bin [\d.]+s.*$"
     r"|^(ok|FAIL|PASS)\b.*|test result:.*|Tests?:\s+\d+.*)", re.I | re.M)
 KILL_DRAIN_TIMEOUT = 15  # seconds to collect output after killing a timed-out tree
+ORPHAN_GRACE_S = 2.0     # the command exited but a process it started holds its output: stopped after this
+CREATE_SUSPENDED = 0x00000004  # Windows process creation flag
 RELEVANT_RE = re.compile(r"(FAILED|ERROR|Error|Traceback|assert|panic|exception)", re.I)
 MAX_LOG_BYTES = 5 * 1024 * 1024
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024  # per collected artifact file
@@ -418,12 +425,41 @@ def _container_argv(argv: list[str]) -> list[str]:
     return argv
 
 
+# Test runners that exit 0 having run no test at all (a test file renamed out of the runner's pattern, a
+# filter that matches nothing): that is no pass.
+_ZERO_TESTS = (
+    (re.compile(r"^\s*(?:ℹ|#)\s*tests 0\s*$", re.M), "node --test ran 0 tests"),
+    (re.compile(r"^\s*No tests? (?:files )?found, exiting with code 0", re.M), "the runner found no tests"),
+    (re.compile(r"^Ran 0 tests in ", re.M), "unittest ran 0 tests"),
+)
+_GO_RESULT = re.compile(r"^(ok|\?|FAIL|---)\s", re.M)
+_CARGO_RESULT = re.compile(r"^test result: \w+\. (\d+) passed; (\d+) failed", re.M)
+
+
+def _ran_no_tests(stdout: str, stderr: str) -> str | None:
+    """Why a run that exited 0 ran no test, or None."""
+    text = (stdout or "")[-200_000:] + "\n" + (stderr or "")[-50_000:]
+    for rx, why in _ZERO_TESTS:
+        if rx.search(text):
+            return why
+    cargo = _CARGO_RESULT.findall(text)
+    if cargo and sum(int(p) + int(f) for p, f in cargo) == 0:
+        return "cargo test ran 0 tests"
+    go = [ln for ln in text.splitlines() if _GO_RESULT.match(ln)]
+    if go and all(ln.startswith(("ok", "?")) and ("[no test files]" in ln or "[no tests to run]" in ln) for ln in go):
+        return "go test ran no tests"
+    return None
+
+
 def _classify_outcome(argv: list[str], code: int | None, timed_out: bool, stdout: str,
                       stderr: str) -> tuple[str, str | None]:
     """(outcome, why) - see the module docstring for the outcome rules."""
     if timed_out:
         return "timeout", None
     if code == 0:
+        none_ran = _ran_no_tests(stdout, stderr)
+        if none_ran:
+            return "inconclusive", f"exit 0, but {none_ran}: a run without tests is no pass"
         return "pass", None
     if _is_pytest(argv):
         if NO_PYTEST_RE.search(stderr) or NO_PYTEST_RE.search(stdout[-2000:]):
@@ -431,6 +467,196 @@ def _classify_outcome(argv: list[str], code: int | None, timed_out: bool, stdout
         if code in PYTEST_INCONCLUSIVE:
             return "inconclusive", f"pytest exit code {code}: {PYTEST_INCONCLUSIVE[code]}"
     return "fail", None
+
+
+class _ProcessTree:
+    """Every process the command starts, stopped when the run ends - not only on timeout: a server a test
+    leaves running would otherwise outlive the run, keep its throw-away directory and answer the next run.
+
+    Windows: a job object (kill-on-close); the child is started suspended (``CREATE_SUSPENDED``), put in the
+    job and only then resumed - a Python venv launcher starts the real interpreter within milliseconds, and a
+    process started before the child was in the job would escape it. POSIX: the child's own session
+    (``os.setsid`` in ``_posix_limits``). Best effort: when the job cannot be made, the run goes on as before."""
+
+    def __init__(self, proc: subprocess.Popen, suspended: bool = False):
+        self.proc = proc
+        self.job = None
+        if os.name == "nt":
+            try:
+                self.job = self._make_job(proc)
+            except (OSError, AttributeError, ValueError):
+                self.job = None
+            finally:
+                if suspended and not self._resume(proc.pid):
+                    proc.kill()
+                    raise OSError("the command was started suspended and could not be resumed")
+
+    @staticmethod
+    def _k32():
+        import ctypes
+        from ctypes import wintypes
+
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.CreateJobObjectW.restype = wintypes.HANDLE
+        k.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+        k.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+        k.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+        k.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
+        k.QueryInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+                                                ctypes.c_void_p]
+        k.CloseHandle.argtypes = [wintypes.HANDLE]
+        k.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+        k.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+        k.Thread32First.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+        k.Thread32Next.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+        k.OpenThread.restype = wintypes.HANDLE
+        k.OpenThread.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        k.ResumeThread.restype = wintypes.DWORD
+        k.ResumeThread.argtypes = [wintypes.HANDLE]
+        return k
+
+    def _resume(self, pid: int) -> bool:
+        """Resume the threads of a process started with ``CREATE_SUSPENDED`` (Popen keeps no thread handle)."""
+        import ctypes
+        from ctypes import wintypes
+
+        class ThreadEntry(ctypes.Structure):
+            _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ThreadID", wintypes.DWORD),
+                        ("th32OwnerProcessID", wintypes.DWORD), ("tpBasePri", ctypes.c_long),
+                        ("tpDeltaPri", ctypes.c_long), ("dwFlags", wintypes.DWORD)]
+
+        try:
+            k = self._k32()
+            snap = k.CreateToolhelp32Snapshot(0x4, 0)  # TH32CS_SNAPTHREAD
+            if not snap or snap == ctypes.c_void_p(-1).value:
+                return False
+            resumed = 0
+            try:
+                te = ThreadEntry()
+                te.dwSize = ctypes.sizeof(te)
+                ok = k.Thread32First(snap, ctypes.byref(te))
+                while ok:
+                    if te.th32OwnerProcessID == pid:
+                        h = k.OpenThread(0x0002, False, te.th32ThreadID)  # THREAD_SUSPEND_RESUME
+                        if h:
+                            if k.ResumeThread(h) != 0xFFFFFFFF:
+                                resumed += 1
+                            k.CloseHandle(h)
+                    ok = k.Thread32Next(snap, ctypes.byref(te))
+            finally:
+                k.CloseHandle(snap)
+            return resumed > 0
+        except (OSError, AttributeError, ValueError):
+            return False
+
+    def _make_job(self, proc: subprocess.Popen):
+        import ctypes
+        from ctypes import wintypes
+
+        class Basic(ctypes.Structure):
+            _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                        ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                        ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                        ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                        ("SchedulingClass", wintypes.DWORD)]
+
+        class Extended(ctypes.Structure):
+            _fields_ = [("BasicLimitInformation", Basic), ("IoInfo", ctypes.c_uint64 * 6),
+                        ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                        ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+        k = self._k32()
+        job = k.CreateJobObjectW(None, None)
+        if not job:
+            return None
+        info = Extended()
+        info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        ok = k.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)) and \
+            k.AssignProcessToJobObject(job, int(proc._handle))  # type: ignore[attr-defined]
+        if not ok:
+            k.CloseHandle(job)
+            return None
+        return job
+
+    def _active(self) -> int | None:
+        """Processes of the job still running (Windows), or None when unknown."""
+        if self.job is None:
+            return None
+        import ctypes
+
+        class Accounting(ctypes.Structure):
+            _fields_ = [("TotalUserTime", ctypes.c_int64), ("TotalKernelTime", ctypes.c_int64),
+                        ("ThisPeriodTotalUserTime", ctypes.c_int64), ("ThisPeriodTotalKernelTime", ctypes.c_int64),
+                        ("TotalPageFaultCount", ctypes.c_uint32), ("TotalProcesses", ctypes.c_uint32),
+                        ("ActiveProcesses", ctypes.c_uint32), ("TotalTerminatedProcesses", ctypes.c_uint32)]
+
+        acc = Accounting()
+        try:
+            if self._k32().QueryInformationJobObject(self.job, 1, ctypes.byref(acc), ctypes.sizeof(acc), None):
+                return int(acc.ActiveProcesses)
+        except OSError:
+            pass
+        return None
+
+    def stop(self) -> int | None:
+        """Stop every process of the tree that is still running: the number stopped, -1 for some (how many is
+        not known), None when this cannot be told (no job object)."""
+        if os.name == "nt":
+            if self.job is None:
+                return None
+            n = self._active()
+            try:
+                k = self._k32()
+                k.TerminateJobObject(self.job, 1)
+                k.CloseHandle(self.job)
+            except OSError:
+                pass
+            self.job = None
+            return n
+        try:  # pragma: no cover - POSIX
+            os.killpg(self.proc.pid, 0)
+        except (ProcessLookupError, PermissionError, OSError):
+            return 0
+        try:  # pragma: no cover - POSIX
+            os.killpg(self.proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            return 0
+        return -1  # pragma: no cover - some were running; how many is not known here
+
+
+def _communicate(proc: subprocess.Popen, tree: _ProcessTree, deadline: float) -> tuple[bytes, bytes, bool, int | None]:
+    """``proc.communicate`` until ``deadline``: (stdout, stderr, timed out, processes stopped). Waits in slices:
+    when the command has exited but a process it started still holds its output pipes, that process is stopped
+    after ``ORPHAN_GRACE_S`` instead of the run waiting for the timeout."""
+    exited_at = None
+    while True:
+        left = deadline - time.monotonic()
+        try:
+            so, se = proc.communicate(timeout=max(0.01, min(left, 1.0)))
+            return so, se, False, None
+        except subprocess.TimeoutExpired:
+            if proc.poll() is not None:
+                exited_at = exited_at or time.monotonic()
+                if time.monotonic() - exited_at >= ORPHAN_GRACE_S:
+                    n = tree.stop()
+                    try:
+                        so, se = proc.communicate(timeout=KILL_DRAIN_TIMEOUT)
+                    except subprocess.TimeoutExpired:
+                        so, se = b"", (b"[verinoda] output unavailable: a process the command started kept the pipes "
+                                       b"open after the command exited")
+                    return so, se, False, n if n is not None else -1
+            if time.monotonic() >= deadline:
+                return b"", b"", True, None
+
+
+def _remove_tree(path: Path, tries: int = 5) -> bool:
+    """Delete a throw-away directory, retrying while stopped processes release their files; False if it stays."""
+    for i in range(tries):
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            return True
+        time.sleep(0.2 * (i + 1))
+    return not path.exists()
 
 
 def _kill_tree(proc: subprocess.Popen) -> None:
@@ -633,39 +859,51 @@ def run(
     kwargs: dict = {"cwd": str(copy), "env": env, "stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
                     "stdin": subprocess.DEVNULL}
     if os.name == "nt":
-        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        # suspended until it is in the job object (_ProcessTree): nothing it starts can escape the job
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | CREATE_SUSPENDED
     else:  # pragma: no cover
         kwargs["preexec_fn"] = _posix_limits(int(timeout) + 5, 2048)
     timed_out = False
     try:
         proc = subprocess.Popen(cmd, **kwargs)
+        tree_procs = _ProcessTree(proc, suspended=os.name == "nt")
     except OSError as exc:
-        shutil.rmtree(work, ignore_errors=True)
+        _remove_tree(work)
         store.insert("experiments", {**base, "cwd": str(copy), "isolation": level, "status": "error",
                                      "summary": f"could not start: {exc}",
                                      "environment": {**guarantees, "source": source, "tree_hash": tree["hash"]}})
         raise
+    left_running: int | None = None  # processes the command left running when it exited, stopped by Verinoda
     try:
-        so, se = proc.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        if level == "container":
-            _kill_container(runtime, container_name)
-        _kill_tree(proc)
-        try:
-            so, se = proc.communicate(timeout=KILL_DRAIN_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            # A descendant escaped the tree kill and still holds the pipes;
-            # do not let it turn the timeout into a hang.
-            so, se = b"", b"[verinoda] output unavailable: a descendant process kept the pipes open after kill"
+        so, se, timed_out, left_running = _communicate(proc, tree_procs, t0 + timeout)
+        if timed_out:
+            if level == "container":
+                _kill_container(runtime, container_name)
+            _kill_tree(proc)
+            tree_procs.stop()
+            try:
+                so, se = proc.communicate(timeout=KILL_DRAIN_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                # A descendant escaped the tree kill and still holds the pipes;
+                # do not let it turn the timeout into a hang.
+                so, se = b"", b"[verinoda] output unavailable: a descendant process kept the pipes open after kill"
+    finally:
+        stopped_now = tree_procs.stop()   # whatever the command left running (also closes the job)
     duration = time.monotonic() - t0
+    if not timed_out and stopped_now:
+        left_running = stopped_now if not left_running else left_running + max(0, stopped_now)
     stdout = so[:MAX_LOG_BYTES].decode("utf-8", "replace")
     stderr = se[:MAX_LOG_BYTES].decode("utf-8", "replace")
     # Bytes, not write_text: on Windows the child's "\r\n" would become "\r\r\n".
     (out_dir / "stdout.txt").write_bytes(stdout.encode("utf-8"))
     (out_dir / "stderr.txt").write_bytes(stderr.encode("utf-8"))
     artifacts = _collect_artifacts(artifacts_dir, out_dir / "artifacts")
-    shutil.rmtree(work, ignore_errors=True)
+    removed = _remove_tree(work)
+    if left_running and not timed_out:
+        limits.append(("some process(es)" if left_running < 0 else f"{left_running} process(es)") + " the command "
+                      "left running were stopped when it exited")
+    if not removed:
+        limits.append(f"the throw-away copy {work} could not be deleted (a file in it is still in use)")
     code = None if timed_out else proc.returncode
     summ = _summarize(stdout, stderr, code, timed_out)
     outcome, why = _classify_outcome(argv, code, timed_out, stdout, stderr)
