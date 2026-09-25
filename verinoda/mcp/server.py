@@ -168,6 +168,17 @@ def _str_list(value: Any, name: str) -> list[str]:
     return list(dict.fromkeys(str(v).strip() for v in value if str(v).strip()))
 
 
+def _argv_list(value: Any, name: str) -> list[str]:
+    """A command as given: a list of strings, in order, with repeats and empty strings kept (``-p a -p b``
+    and ``-k ''`` mean something); None -> []."""
+    if value is None:
+        return []
+    if not isinstance(value, (list, tuple)) or not all(isinstance(v, str) for v in value):
+        raise ToolFailure("invalid_argument", f"{name} must be a list of strings (one per argument)",
+                          f"pass {name} as a list of strings, e.g. ['python', '-m', 'pytest', '-q']")
+    return list(value)
+
+
 def _choice(value: Any, valid: tuple[str, ...], name: str) -> str:
     if value not in valid:
         raise ToolFailure("invalid_argument", f"unknown {name} {value!r}", "choose one of: " + ", ".join(valid),
@@ -1144,7 +1155,7 @@ class AtlasTools:
         def go():
             from verinoda import experiments
 
-            argv = _str_list(command, "command")
+            argv = _argv_list(command, "command")
             if not argv:
                 raise ToolFailure("invalid_argument", "command is empty", "pass the command as a list of arguments, "
                                   "e.g. ['python', '-m', 'pytest', '-q', 'tests/test_x.py']")
@@ -1169,7 +1180,8 @@ class AtlasTools:
                 except experiments.ExperimentRefused as exc:
                     out = experiments.refusal(self.repo, exc)
                     out["next_step"] = ("run the command yourself and record it with debug_attempt(observed_output="
-                                        "..., exit_code=...) (agent-reported, lower trust)")
+                                        "..., exit_code=..., command=[the command you ran]) (agent-reported, lower "
+                                        "trust), or debug_start(..., observed_output=..., exit_code=...)")
                     return out
         return self._run(tool, go, keep=("session", "attempt", "outcome", "stop", "stop_reason", "strategies",
                                          "questions_for_human", "loop", "status", "reason", *keep),
@@ -1178,7 +1190,7 @@ class AtlasTools:
     def debug_start(self, symptom: str, command: list[str], base: str | None = None, trace: bool = False,
                     observed_output: str | None = None, exit_code: int | None = None) -> dict:
         def call(d, st):
-            argv = _str_list(command, "command")
+            argv = _argv_list(command, "command")
             code = None if exit_code is None else _clamp(exit_code, -2 ** 31, 2 ** 31, "exit_code")
             return d.start(st, self.repo, _text(symptom, "symptom"), argv, base=_opt_text(base), trace=bool(trace),
                            observed_output=None if observed_output is None else str(observed_output), exit_code=code)
@@ -1188,7 +1200,7 @@ class AtlasTools:
                       expect: str = "pass", kind: str = "fix", observed_output: str | None = None,
                       exit_code: int | None = None, trace: bool | None = None) -> dict:
         def call(d, st):
-            argv = _str_list(command, "command") or None
+            argv = _argv_list(command, "command") or None
             exp = _choice(expect, ("pass", "fail"), "expect")
             k = _choice(kind, DEBUG_KINDS, "kind")
             code = None if exit_code is None else _clamp(exit_code, -2 ** 31, 2 ** 31, "exit_code")
@@ -1204,19 +1216,20 @@ class AtlasTools:
 
     def debug_strategy(self, strategy: str, session_id: str | None = None, good: str | None = None,
                        bad: str | None = None, times: int | None = None, prepare: bool = False,
-                       trace: bool = False) -> dict:
+                       trace: bool = False, overlay: list[str] | None = None) -> dict:
         def call(d, st):
             s = _choice(strategy, DEBUG_STRATEGIES, "strategy")
             sid = _opt_text(session_id)
+            lay = _str_list(overlay, "overlay") or None
             if s == "differential":
-                return d.differential(st, self.repo, sid, prepare=bool(prepare), trace=bool(trace))
+                return d.differential(st, self.repo, sid, prepare=bool(prepare), trace=bool(trace), overlay=lay)
             if s == "bisect":
-                return d.bisect(st, self.repo, sid, good=_opt_text(good), bad=_opt_text(bad))
+                return d.bisect(st, self.repo, sid, good=_opt_text(good), bad=_opt_text(bad), overlay=lay)
             if s == "rerun":
                 return d.rerun(st, self.repo, sid, times=None if times is None else _clamp(times, 1, 20, "times"))
             return d.observe(st, self.repo, sid)
         return self._debug("debug_strategy", call, keep=("strategy", "conclusion", "hunks", "first_bad_commit",
-                                                         "pass_rate"))
+                                                         "pass_rate", "next_step"))
 
 
 def _error_code(exc: BaseException) -> str:
@@ -1804,7 +1817,9 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None):
         hypothesis: Annotated[str, Field(description="What you believe and why (repeats of refuted hypotheses are "
                                                      "flagged).")],
         session_id: SessionId = None,
-        command: Annotated[list[str] | None, Field(description="A command instead of the session's repro.")] = None,
+        command: Annotated[list[str] | None, Field(description="A command instead of the session's repro (its pass "
+                                                               "is never a pass of the repro); required with "
+                                                               "observed_output: the command you ran.")] = None,
         expect: Annotated[Literal["pass", "fail"], Field(description="The outcome the hypothesis predicts.")] = "pass",
         kind: Annotated[Literal["fix", "probe", "rerun", "differential"],
                         Field(description="fix (default), probe (no fix intended), rerun, differential (with "
@@ -1836,9 +1851,12 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None):
                                                    "run yourself.")] = False,
         trace: Annotated[bool, Field(description="differential, pytest: also compare the failing tests' observed "
                                                  "calls at the base with the failing tree.")] = False,
+        overlay: Annotated[list[str] | None, Field(description="differential, bisect: working-tree files (e.g. a new "
+                                                               "test) laid over the old commit copies; recorded.")]
+        = None,
     ) -> dict[str, Any]:
         return emit(t.debug_strategy(strategy, session_id=session_id, good=good, bad=bad, times=times,
-                                     prepare=prepare, trace=trace))
+                                     prepare=prepare, trace=trace, overlay=overlay))
 
     return srv
 

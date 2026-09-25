@@ -22,18 +22,31 @@ untracked-not-ignored files, ``.verinoda`` excluded; see
   with :func:`verinoda.anchors.enclosing` (old side for removed lines, new
   side for added ones).
 
-Git is read with plumbing only: ``diff --name-status`` (external diff drivers
-and textconv off), ``ls-files``, ``ls-tree`` and ``cat-file --batch`` (raw
-blobs: no smudge/clean filters and no line-ending conversion run). A ref given
-by a user or an agent is resolved with ``rev-parse --verify --end-of-options``
-and refused when it starts with ``-``; only the resulting full commit id is
-passed on.
+Git is read with plumbing only: ``diff-index`` / ``diff-tree --name-only``
+(the porcelain ``git diff`` would refresh and rewrite ``.git/index``),
+``ls-files``, ``ls-tree`` and ``cat-file --batch`` (raw blobs: no smudge/clean
+filters and no line-ending conversion run), always with
+``--no-optional-locks``, so a read never writes ``.git/index``. A ref
+given by a user or an agent is resolved with ``rev-parse --verify
+--end-of-options`` and refused when it starts with ``-``; only the resulting
+full commit id is passed on.
+
+A project may sit in a subdirectory of its git repository: paths are then
+relative to the project (``git rev-parse --show-prefix``), commit files are
+those under the project's directory, and a commit copy holds only them.
+
+Paths from history that name git's own directory in any spelling a file system
+may fold to ``.git`` (``.GIT``, ``.git.``, ``git~1``, ignorable Unicode) or
+``.verinoda`` are never listed or written; on Windows neither are names Windows
+cannot hold (``what?.md``, ``a:b``, ``NUL``).
 """
 
 from __future__ import annotations
 
+import ast
 import difflib
 import hashlib
+import os
 import re
 import subprocess
 import threading
@@ -44,11 +57,21 @@ from verinoda.snapshot import _GIT_SKIP_DIRS, _SKIP_DIRS, git, hash_files, list_
 LF_SCHEME = "lf1"          # file_facts scheme of the raw sha256 -> content id memo
 TREE_PREFIX = b"verinoda-tree/1\n"
 MAX_DIFF_LINES = 20_000    # per side; bigger files are reported changed without a line diff
+EXACT_DIFF_LINES = 2_000   # up to this many lines per side the line diff is exact (no junk heuristic)
 MAX_HUNK_LINES = 40        # added/removed lines kept per hunk in the recorded diff summary
 MAX_HUNKS = 60             # hunks kept per file in the recorded diff summary
 _SHA_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 _REGULAR_MODES = ("100644", "100755")
-_GIT_SAFE = ("-c", "core.fsmonitor=false", "-c", "core.quotepath=off")
+_GIT_SAFE = ("--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.quotepath=off")
+# Characters file systems ignore when comparing names (HFS+), which git itself refuses around ".git".
+_IGNORABLE = re.compile("[​-‏‪-‮⁠-⁤⁪-⁯﻿]")
+_RESERVED_PARTS = {".git", "git~1", ".verinoda"}
+_WIN_BAD_CHARS = re.compile(r'[<>:"|?*\x00-\x1f]')
+_WIN_DEVICES = re.compile(r"^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³]|conin\$|conout\$)(\..*)?$", re.I)
+# Test files by the conventions of the languages the failure parsers cover, beyond the Python/directory
+# rule of the runtime tracer: Jest/Vitest/node --test (x.test.js, x.spec.ts), Go (x_test.go), JVM (FooTest.java).
+_TEST_FILE_RE = re.compile(r"(^|/)[^/]+\.(test|spec)\.[cm]?[jt]sx?$|(^|/)[^/]+_test\.go$|"
+                           r"(^|/)[^/]*(Test|Tests|IT|Spec)\.(java|kt|scala|groovy)$|(^|/)[^/]+_(spec|test)\.rb$")
 
 
 class NotAGitTree(RuntimeError):
@@ -158,6 +181,65 @@ def _git(repo: Path, *args: str, timeout: float = 120) -> str | None:
     return git(repo, *_GIT_SAFE, *args, timeout=timeout)
 
 
+_PREFIXES: dict[str, str] = {}
+
+
+def project_prefix(repo: Path) -> str:
+    """The project's directory inside its git repository (``""`` at the top level, else ``"sub/dir/"``)."""
+    key = str(Path(repo).resolve())
+    if key in _PREFIXES:
+        return _PREFIXES[key]
+    out = _git(Path(repo), "rev-parse", "--show-prefix")
+    pre = (out or "").strip().replace("\\", "/")
+    pre = pre if (not pre or pre.endswith("/")) else pre + "/"
+    if out is not None:  # not remembered when git could not answer (not a work tree yet)
+        _PREFIXES[key] = pre
+    return pre
+
+
+def blob_spec(repo: Path, commit: str, rel: str) -> str:
+    """``<commit>:<path>`` for a project-relative path (the git path carries the project's prefix)."""
+    return f"{commit}:{project_prefix(repo)}{rel}"
+
+
+def reserved_part(part: str) -> bool:
+    """A path component a file system may treat as ``.git`` (or that is ``.verinoda``), in any spelling:
+    case, trailing dots/spaces, NTFS short names and streams, Unicode that HFS+ ignores."""
+    p = _IGNORABLE.sub("", part).split(":", 1)[0].rstrip(" .").lower()
+    return p in _RESERVED_PARTS
+
+
+def unwritable_here(rel: str) -> str | None:
+    """Why ``rel`` cannot be written as a file on this operating system, else None."""
+    if os.name != "nt":
+        return None
+    for part in rel.split("/"):
+        if _WIN_BAD_CHARS.search(part):
+            return "a character Windows does not allow in file names"
+        if _WIN_DEVICES.match(part):
+            return "a Windows device name"
+        if part != part.rstrip(" ."):
+            return "a name ending in a dot or space (Windows drops it)"
+    return None
+
+
+def safe_path(rel: str) -> bool:
+    """A repository-relative path Verinoda may list and write: no ``..``, no git/.verinoda directory."""
+    parts = rel.split("/")
+    return bool(rel) and not any(p in ("", ".", "..") for p in parts) and not any(reserved_part(p) for p in parts)
+
+
+def index_symlinks(repo: Path) -> set[str]:
+    """Project-relative paths the index records as symlinks (mode 120000); with ``core.symlinks=false`` (the
+    Git for Windows default) such a path is checked out as a plain file holding the link target."""
+    out = _git(Path(repo), "ls-files", "-s", "-z") or ""
+    links = set()
+    for rec in out.split("\0"):
+        if rec.startswith("120000 ") and "\t" in rec:
+            links.add(rec.split("\t", 1)[1])
+    return links
+
+
 def check_ref(ref: str) -> str:
     """``ref`` stripped, or ValueError when it could be read as an option or holds control characters."""
     r = (ref or "").strip()
@@ -238,21 +320,37 @@ def read_blobs(repo: Path, specs: list[str], *, timeout: float = 300) -> dict[st
     return out
 
 
-def commit_entries(repo: Path, commit: str) -> list[tuple[str, str, str]]:
-    """``(mode, blob id, path)`` of the regular files of ``commit`` (symlinks and submodules left out)."""
+def commit_entries(repo: Path, commit: str, skipped: list[dict] | None = None) -> list[tuple[str, str, str]]:
+    """``(mode, blob id, path)`` of the regular files of ``commit`` under the project's directory, paths
+    relative to the project (symlinks and submodules left out). Paths naming git's directory in any
+    spelling, or ``.verinoda``, are never listed; names this OS cannot hold are left out and, when
+    ``skipped`` is given, appended to it as ``{"path", "why"}``."""
     if not _SHA_RE.match(commit or ""):
         raise ValueError("commit_entries needs a full commit id (resolve it with resolve_commit)")
     out = _git(Path(repo), "ls-tree", "-r", "-z", "--full-tree", commit, timeout=300)
     if out is None:
         raise NotAGitTree(f"cannot list the files of commit {commit[:12]}")
+    prefix = project_prefix(repo)
     ents = []
     for rec in out.split("\0"):
         if not rec or "\t" not in rec:
             continue
         meta, path = rec.split("\t", 1)
         mode, typ, oid = (meta.split(" ") + ["", "", ""])[:3]
-        if typ == "blob" and mode in _REGULAR_MODES and not set(Path(path).parts) & _GIT_SKIP_DIRS:
-            ents.append((mode, oid, path))
+        if typ != "blob" or mode not in _REGULAR_MODES:
+            continue
+        if prefix:
+            if not path.startswith(prefix):
+                continue
+            path = path[len(prefix):]
+        if not safe_path(path) or set(path.split("/")) & _GIT_SKIP_DIRS:
+            continue
+        why = unwritable_here(path)
+        if why:
+            if skipped is not None:
+                skipped.append({"path": path, "why": why})
+            continue
+        ents.append((mode, oid, path))
     return ents
 
 
@@ -312,19 +410,22 @@ def changes_vs_base(repo: Path, base: str, files: dict[str, str] | None = None) 
     repo = Path(repo).resolve()
     if not _SHA_RE.match(base or ""):
         raise NotAGitTree("no base commit")
-    out = _git(repo, "diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", "--no-textconv", base, "--")
+    # Plumbing diff-index, not `git diff`: the porcelain refreshes and rewrites .git/index for stat-dirty files
+    # even with --no-optional-locks (git 2.53). A stat-dirty candidate is compared by content below.
+    # --relative: paths relative to the project directory, and only the files under it.
+    out = _git(repo, "diff-index", "--name-only", "-z", "--relative", "--no-renames", base, "--")
     if out is None:
         raise NotAGitTree(f"git diff against {base[:12]} failed")
     others = _git(repo, "ls-files", "-z", "--others", "--exclude-standard") or ""
-    cands = {p for p in out.split("\0") if p and not _skipped(p, True)}
-    cands |= {p for p in others.split("\0") if p and not _skipped(p, False)}
-    base_raw = read_blobs(repo, [f"{base}:{p}" for p in sorted(cands)])
+    cands = {p for p in out.split("\0") if p and not _skipped(p, True) and safe_path(p)}
+    cands |= {p for p in others.split("\0") if p and not _skipped(p, False) and safe_path(p)}
+    base_raw = read_blobs(repo, [blob_spec(repo, base, p) for p in sorted(cands)])
     tree_files: dict[str, str | None] = {}
     contents: dict[str, bytes] = {}
     base_contents: dict[str, bytes] = {}
     drift: list[str] = []
     for p in sorted(cands):
-        b = base_raw.get(f"{base}:{p}")
+        b = base_raw.get(blob_spec(repo, base, p))
         bnorm = normalise(b) if b is not None else None
         try:
             now_data = (repo / p).read_bytes() if (repo / p).is_file() else None
@@ -358,16 +459,19 @@ def base_ids(repo: Path, base: str) -> dict[str, str]:
     if not _SHA_RE.match(base or ""):
         raise NotAGitTree("no base commit")
     p = runs_dir(repo) / "base-ids" / f"{base}.json"
+    prefix = project_prefix(repo)
     try:
         got = json.loads(p.read_text(encoding="utf-8"))
-        if isinstance(got, dict) and got.get("commit") == base and isinstance(got.get("files"), dict):
+        if isinstance(got, dict) and got.get("commit") == base and got.get("v") == 2 and \
+                got.get("prefix") == prefix and isinstance(got.get("files"), dict):
             return got["files"]
     except (OSError, ValueError):
         pass
     files = commit_files(repo, base)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"commit": base, "files": files}, sort_keys=True), encoding="utf-8")
+    tmp.write_text(json.dumps({"v": 2, "commit": base, "prefix": prefix, "files": files}, sort_keys=True),
+                   encoding="utf-8")
     tmp.replace(p)
     return files
 
@@ -376,9 +480,20 @@ def changes_from_ids(repo: Path, base: str, ids: dict[str, str], base_map: dict[
     """:func:`changes_vs_base` from content ids alone: no ``git diff``; base contents of the changed
     paths come from the blob store (or one ``git cat-file``, then stored)."""
     repo = Path(repo).resolve()
-    # a symlink is copied as its target's content but is not a regular file of the commit: not a change
+    # A symlink is copied as its target's content but is not a regular file of the commit: not a change.
+    # With core.symlinks=false it is a plain file on disk, so the index mode is what tells.
+    links: set[str] | None = None
+
+    def symlink(p: str) -> bool:
+        nonlocal links
+        if (repo / p).is_symlink():
+            return True
+        if links is None:
+            links = index_symlinks(repo)
+        return p in links
+
     changed = sorted(p for p in set(ids) | set(base_map) if ids.get(p) != base_map.get(p)
-                     and not (p not in base_map and (repo / p).is_symlink()))
+                     and not (p not in base_map and symlink(p)))
     tree_files: dict[str, str | None] = {p: ids.get(p) for p in changed}
     base_contents: dict[str, bytes] = {}
     missing = []
@@ -390,9 +505,9 @@ def changes_from_ids(repo: Path, base: str, ids: dict[str, str], base_map: dict[
             else:
                 base_contents[p] = data
     if missing:
-        raw = read_blobs(repo, [f"{base}:{p}" for p in missing])
+        raw = read_blobs(repo, [blob_spec(repo, base, p) for p in missing])
         for p in missing:
-            b = raw.get(f"{base}:{p}")
+            b = raw.get(blob_spec(repo, base, p))
             if b is not None:
                 base_contents[p] = normalise(b)
                 put_blob(repo, b)
@@ -421,17 +536,17 @@ def changes_between_commits(repo: Path, base: str, commit: str) -> dict:
     repo = Path(repo).resolve()
     if base == commit:
         return {"tree_files": {}, "contents": {}, "base": {}, "drift": []}
-    out = _git(repo, "diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", "--no-textconv", base, commit,
-               "--")
+    out = _git(repo, "diff-tree", "-r", "--name-only", "-z", "--relative", "--no-renames", base, commit, "--")
     if out is None:
         raise NotAGitTree(f"git diff {base[:12]} {commit[:12]} failed")
-    cands = sorted({p for p in out.split("\0") if p and not _skipped(p, True)})
-    raw = read_blobs(repo, [f"{base}:{p}" for p in cands] + [f"{commit}:{p}" for p in cands])
+    cands = sorted({p for p in out.split("\0") if p and not _skipped(p, True) and safe_path(p)
+                    and not unwritable_here(p)})
+    raw = read_blobs(repo, [blob_spec(repo, base, p) for p in cands] + [blob_spec(repo, commit, p) for p in cands])
     tree_files: dict[str, str | None] = {}
     contents: dict[str, bytes] = {}
     base_contents: dict[str, bytes] = {}
     for p in cands:
-        b, n = raw.get(f"{base}:{p}"), raw.get(f"{commit}:{p}")
+        b, n = raw.get(blob_spec(repo, base, p)), raw.get(blob_spec(repo, commit, p))
         bn = normalise(b) if b is not None else None
         nn = normalise(n) if n is not None else None
         if bn == nn:
@@ -480,21 +595,95 @@ def _symbols_for(facts, start: int, end: int) -> list[str]:
     return out
 
 
-def diff_file(rel: str, old: bytes | None, new: bytes | None) -> dict:
-    """One file's change: status, hunks (with the definitions each touches) and the symbols in total."""
+def is_test_file(path: str | None) -> bool:
+    """A test file by the runtime tracer's rule (Python names, ``tests/``-style directories) or by the
+    conventions of the other languages the failure parsers cover (``x.test.js``, ``x.spec.ts``,
+    ``x_test.go``, ``FooTest.java``)."""
     from verinoda.runtime.trace import is_test_path
 
+    if not path:
+        return False
+    p = path.replace("\\", "/")
+    return is_test_path(p) or bool(_TEST_FILE_RE.search(p))
+
+
+def _strip_docstrings(tree: ast.AST) -> ast.AST:
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and body and \
+                isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant) and \
+                isinstance(body[0].value.value, str):
+            node.body = body[1:]
+    return tree
+
+
+_FP_CACHE: dict[str, str | None] = {}
+
+
+def code_fingerprint(rel: str, data: bytes | None) -> str | None:
+    """A hash of what a Python file *does*: its syntax tree without comments, docstrings and formatting.
+    None for other files, for content that does not parse, and for a missing file."""
+    if data is None or not rel.endswith((".py", ".pyi")) or len(data) > 2_000_000:
+        return None
+    key = hashlib.sha256(data).hexdigest()
+    if key in _FP_CACHE:
+        return _FP_CACHE[key]
+    try:
+        tree = ast.parse(data.decode("utf-8"))
+        dump = ast.dump(_strip_docstrings(tree), include_attributes=False)
+        fp: str | None = hashlib.sha256(dump.encode("utf-8")).hexdigest()
+    except (SyntaxError, ValueError, UnicodeDecodeError, RecursionError, MemoryError):
+        fp = None
+    if len(_FP_CACHE) > 4096:
+        _FP_CACHE.clear()
+    _FP_CACHE[key] = fp
+    return fp
+
+
+def code_tree_id(ch: dict, repo: Path | None = None) -> str:
+    """Like :func:`tree_id`, but a Python file counts by its :func:`code_fingerprint`: two trees that
+    differ only in comments, docstrings or formatting of Python files get the same id. ``ch`` is a
+    ``changes_*`` record (``tree_files``, ``contents``, ``base``)."""
+    entries: dict[str, str] = {}
+    for p, cid in ch["tree_files"].items():
+        if cid is None:
+            entries[p] = "absent"
+            continue
+        new = ch["contents"].get(p)
+        if new is None and repo is not None:
+            new = get_blob(repo, cid)
+        fp_new = code_fingerprint(p, new)
+        base = ch["base"].get(p)
+        if fp_new is not None and base is not None and fp_new == code_fingerprint(p, base):
+            continue  # the same code as the base
+        entries[p] = f"code:{fp_new}" if fp_new is not None else cid
+    return tree_id(entries)
+
+
+def diff_file(rel: str, old: bytes | None, new: bytes | None) -> dict:
+    """One file's change: status, hunks (with the definitions each touches) and the symbols in total.
+
+    ``no_code_change``: a Python file whose syntax tree is unchanged (only comments, docstrings or
+    formatting differ). Up to ``EXACT_DIFF_LINES`` lines per side the line diff is exact; bigger files
+    use difflib's junk heuristic (still a correct diff, possibly with larger hunks) so that a big
+    generated file costs milliseconds, not seconds.
+    """
     status = "added" if old is None else ("removed" if new is None else "modified")
-    rec: dict = {"path": rel, "status": status, "test": is_test_path(rel), "symbols": [], "hunks": []}
+    rec: dict = {"path": rel, "status": status, "test": is_test_file(rel), "symbols": [], "hunks": []}
     if (old is not None and is_binary(old)) or (new is not None and is_binary(new)):
         rec["binary"] = True
         return rec
+    if status == "modified":
+        fp_old = code_fingerprint(rel, old)
+        if fp_old is not None and fp_old == code_fingerprint(rel, new):
+            rec["no_code_change"] = True
     a, b = _lines(old), _lines(new)
     if len(a) > MAX_DIFF_LINES or len(b) > MAX_DIFF_LINES:
         rec["too_large"] = True
         return rec
     fa, fb = _facts(rel, old), _facts(rel, new)
-    sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
+    exact = len(a) <= EXACT_DIFF_LINES and len(b) <= EXACT_DIFF_LINES
+    sm = difflib.SequenceMatcher(None, a, b, autojunk=not exact)
     for group in sm.get_grouped_opcodes(0):
         i1, i2, j1, j2 = group[0][1], group[-1][2], group[0][3], group[-1][4]
         syms: list[str] = []
@@ -552,7 +741,8 @@ def content_reader(repo: Path, base: str | None, tree_files: dict[str, str | Non
             cid = tree_files[rel]
             data = get_blob(repo, cid) if cid else None
         elif base:
-            raw = read_blobs(repo, [f"{base}:{rel}"]).get(f"{base}:{rel}")
+            spec = blob_spec(repo, base, rel)
+            raw = read_blobs(repo, [spec]).get(spec)
             data = normalise(raw) if raw is not None else None
         else:
             data = None
@@ -578,10 +768,11 @@ def diff_trees(repo: Path, base: str | None, old_files: dict[str, str | None],
         cid = (base_map or {}).get(p)
         data = get_blob(repo, cid) if cid else None
         if data is not None:
-            base_raw[f"{base}:{p}"] = data
+            base_raw[p] = data
             base_needed.remove(p)
     if base and base_needed:
-        base_raw.update(read_blobs(repo, [f"{base}:{p}" for p in base_needed]))
+        got = read_blobs(repo, [blob_spec(repo, base, p) for p in base_needed])
+        base_raw.update({p: got.get(blob_spec(repo, base, p)) for p in base_needed})
 
     def side(files: dict[str, str | None], p: str) -> tuple[bytes | None, bool]:
         if p in files:
@@ -590,7 +781,7 @@ def diff_trees(repo: Path, base: str | None, old_files: dict[str, str | None],
                 return None, True
             data = get_blob(repo, cid)
             return data, data is not None
-        raw = base_raw.get(f"{base}:{p}")
+        raw = base_raw.get(p)
         return (normalise(raw) if raw is not None else None), True
 
     out = []
@@ -598,9 +789,7 @@ def diff_trees(repo: Path, base: str | None, old_files: dict[str, str | None],
         old, ok_old = side(old_files, p)
         new, ok_new = side(new_files, p)
         if not (ok_old and ok_new):
-            from verinoda.runtime.trace import is_test_path
-
-            out.append({"path": p, "status": "modified", "test": is_test_path(p), "symbols": [], "hunks": [],
+            out.append({"path": p, "status": "modified", "test": is_test_file(p), "symbols": [], "hunks": [],
                         "content_unknown": True})
             continue
         out.append(diff_file(p, old, new))

@@ -39,14 +39,25 @@ MAX_LINE = 8000  # characters of one log line the parsers look at
 
 # -- message normalisation ----------------------------------------------------------------------
 
+# Path separators may be doubled: repr() of a Windows path in an exception message prints "C:\\Users\\...".
+_SEP = r"[\\/]+"
 _NORM = [
-    (re.compile(r"(?:[A-Za-z]:)?[\\/](?:[^\s'\"<>|]*[\\/])?verinoda-exp-[^\\/\s'\"]+[\\/]repo[\\/]"), ""),
-    (re.compile(r"(?:[A-Za-z]:)?[\\/](?:[^\s'\"<>|]*[\\/])?pytest-of-[^\\/\s'\"]+[\\/]pytest-\d+[\\/][^\\/\s'\"]+"),
-     "<tmp>"),
-    (re.compile(r"(?:[A-Za-z]:)?[\\/](?:[^\s'\"<>|]*[\\/])?(?:Temp|tmp)[\\/]tmp[\w-]+"), "<tmp>"),
+    (re.compile(rf"(?:[A-Za-z]:)?{_SEP}(?:[^\s'\"<>|]*?{_SEP})?verinoda-exp-[^\\/\s'\"]+{_SEP}repo{_SEP}"), ""),
+    (re.compile(rf"(?:[A-Za-z]:)?{_SEP}(?:[^\s'\"<>|]*?{_SEP})?pytest-of-[^\\/\s'\"]+{_SEP}pytest-\d+{_SEP}"
+                rf"[^\\/\s'\"]+"), "<tmp>"),
+    # anything else under the run's throw-away directory (its HOME/TEMP is <verinoda-exp-*>/_home)
+    (re.compile(rf"(?:[A-Za-z]:)?{_SEP}(?:[^\s'\"<>|]*?{_SEP})?verinoda-exp-[^\\/\s'\"]+(?:{_SEP}_home)?"
+                rf"(?:{_SEP}tmp[\w-]+)?"), "<tmp>"),
+    (re.compile(rf"(?:[A-Za-z]:)?{_SEP}(?:[^\s'\"<>|]*?{_SEP})?(?:Temp|tmp){_SEP}tmp[\w-]+"), "<tmp>"),
+    (re.compile(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?\b"), "<ts>"),
+    (re.compile(r"(?<![\d.:])\d{1,2}:\d{2}:\d{2}(?:[.,]\d+)?\b"), "<time>"),
+    (re.compile(r"\b((?:\d{1,3}\.){3}\d{1,3}|localhost|\[[0-9A-Fa-f:]+\]):\d{1,5}\b"), r"\1:<port>"),
+    (re.compile(r"\b(pid|PID|process|thread|port)([\s=:#]+)\d+\b"), r"\1\2<n>"),
     (re.compile(r"0x[0-9a-fA-F]+"), "0x?"),
     (re.compile(r"(?<=[\w'\"\]>)])\s?@[0-9a-fA-F]{5,16}\b"), "@?"),  # JVM identity hashes: Obj@1b6d3586, 'app' @5e2d
     (re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"), "<uuid>"),
+    # hex ids and hashes: 8+ hex digits with at least one digit and one letter (not a plain word or number)
+    (re.compile(r"\b(?=[0-9a-fA-F]*[a-fA-F])(?=[0-9a-fA-F]*\d)[0-9a-fA-F]{8,}\b"), "<hex>"),
     (re.compile(r"\b\d{7,}\b"), "<n>"),
     (re.compile(r"\b\d+(?:\.\d+)?\s?(?:ms|s)\b"), "<t>"),
     (re.compile(r"\s+"), " "),

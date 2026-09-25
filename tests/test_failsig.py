@@ -101,6 +101,26 @@ def test_messages_are_normalised_for_addresses_ids_and_copy_paths():
     assert m1 == m2 == r"bad <Obj at 0x?> in orders\x.py id <n>"
 
 
+def test_messages_are_normalised_for_repr_paths_times_hex_ids_and_ports():
+    # review finding: these made a deterministic failure look different on every run ("flaky")
+    tmp1 = ("[Errno 2] No such file or directory: 'C:\\\\Users\\\\u\\\\AppData\\\\Local\\\\Temp\\\\verinoda-exp-9dvnogvv"
+            "\\\\_home\\\\pytest-of-unknown\\\\pytest-0\\\\test_export0\\\\out\\\\orders.csv'")
+    tmp2 = tmp1.replace("9dvnogvv", "jvxpxqjd")
+    assert failsig.norm_msg(tmp1) == failsig.norm_msg(tmp2) and "verinoda-exp" not in failsig.norm_msg(tmp1)
+    mk1 = "cannot write 'C:\\\\T\\\\verinoda-exp-ab12\\\\_home\\\\tmpk3j4x\\\\out.csv'"
+    assert failsig.norm_msg(mk1) == failsig.norm_msg(mk1.replace("ab12", "zz99").replace("k3j4x", "q8w7e"))
+    pairs = [("item without qty at 2026-09-25T15:18:29.776745", "item without qty at 2026-09-25T15:19:02.001"),
+             ("request e3b0c44298fc1c149afbf4c8996fb924 rejected", "request 9f86d081884c7d659a2feaa0c55ad015 rejected"),
+             ("token 9f86d081884c7d65", "token 1b4f0e9851971998"),
+             ("connect to 127.0.0.1:54321 refused", "connect to 127.0.0.1:61234 refused"),
+             ("pid 18234 exited", "pid 2231 exited"), ("at 10:01:02.5", "at 11:59:59.25")]
+    for a, b in pairs:
+        assert failsig.norm_msg(a) == failsig.norm_msg(b), (a, failsig.norm_msg(a), failsig.norm_msg(b))
+    # what a failure is about stays: numbers in assertions, plain words
+    assert failsig.norm_msg("assert 45.0 == 50.0") != failsig.norm_msg("assert 18.0 == 20.0")
+    assert failsig.norm_msg("KeyError: 'deadbeef'") == "KeyError: 'deadbeef'"
+
+
 def test_path_resolution_needs_a_whole_suffix():
     r = failsig.PathResolver(["orders/__init__.py", "orders/pricing.py", "pricing.go", "src/test/java/a/B.java"],
                              roots=["C:/Users/me/proj"])

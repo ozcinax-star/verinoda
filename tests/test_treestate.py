@@ -247,3 +247,107 @@ def test_a_v4_database_migrates_to_v6(tmp_path):
     assert st.one("SELECT value FROM meta WHERE key='schema_version'")["value"] == "6"
     _session(st, "dbg_x")
     assert st.get("debug_sessions", "dbg_x")["command"] == ["pytest"]
+
+
+# -- review findings ---------------------------------------------------------------------------
+
+def test_paths_that_a_file_system_may_fold_to_the_git_directory_are_reserved():
+    for part in (".git", ".GIT", ".Git", ".git.", ".git ", "git~1", "GIT~1", ".git::$INDEX_ALLOCATION",
+                 ".g‌it", "﻿.git", ".verinoda", ".VERINODA"):
+        assert treestate.reserved_part(part), repr(part)
+    for part in (".github", "git", ".gitignore", "digit", "gitx"):
+        assert not treestate.reserved_part(part), part
+    assert not treestate.safe_path(".GIT/config") and not treestate.safe_path("a/../b")
+    assert treestate.safe_path("src/.github/x.yml")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows file names")
+def test_names_windows_cannot_hold_are_named():
+    for rel in ("docs/what?.md", "a:b", "x/NUL", "com1.txt", "trailing./x", "q\"x"):
+        assert treestate.unwritable_here(rel), rel
+    assert treestate.unwritable_here("docs/normal.md") is None
+
+
+def test_a_symlink_checked_out_as_a_plain_file_is_no_change(tmp_path):
+    # review finding: with core.symlinks=false (the Git for Windows default) a tracked symlink is a plain file
+    repo = _repo(tmp_path)
+    blob = subprocess.run(["git", "hash-object", "-w", "--stdin"], cwd=repo, input=b"docs/adr", capture_output=True,
+                          check=True).stdout.decode().strip()
+    _git(repo, "update-index", "--add", "--cacheinfo", f"120000,{blob},LINK.md")
+    _git(repo, "commit", "-q", "-m", "a symlink")
+    (repo / "LINK.md").write_bytes(b"docs/adr")   # what a core.symlinks=false checkout writes
+    base = treestate.head_commit(repo)
+    ids = treestate.current(repo)["files"]
+    assert "LINK.md" in ids and "LINK.md" in treestate.index_symlinks(repo)
+    ch = treestate.changes_from_ids(repo, base, ids, treestate.base_ids(repo, base))
+    assert ch["tree_files"] == {}
+
+
+def test_python_edits_of_comments_docstrings_and_formatting_keep_the_code_identity():
+    old = b'"""Doc."""\n\n\ndef f(x):\n    """Say."""\n    return x["a"]  # key\n'
+    new = b'"""Other doc."""\n\n\ndef f(x):\n    return x[\'a\']\n'
+    changed = b'"""Doc."""\n\n\ndef f(x):\n    return x["b"]\n'
+    assert treestate.code_fingerprint("m.py", old) == treestate.code_fingerprint("m.py", new)
+    assert treestate.code_fingerprint("m.py", old) != treestate.code_fingerprint("m.py", changed)
+    assert treestate.code_fingerprint("m.js", old) is None and treestate.code_fingerprint("m.py", b"def (") is None
+    assert treestate.diff_file("m.py", old, new).get("no_code_change") is True
+    assert "no_code_change" not in treestate.diff_file("m.py", old, changed)
+    ch = {"tree_files": {"m.py": treestate.content_id(new)}, "contents": {"m.py": new}, "base": {"m.py": old}}
+    assert treestate.code_tree_id(ch) == treestate.tree_id({})  # the same code as the base
+    ch2 = {"tree_files": {"m.py": treestate.content_id(changed)}, "contents": {"m.py": changed}, "base": {"m.py": old}}
+    assert treestate.code_tree_id(ch2) != treestate.tree_id({})
+
+
+def test_the_ledgers_test_files_cover_the_parsed_languages():
+    for p in ("src/cart.test.js", "src/cart.spec.ts", "src/components/Cart.test.tsx", "pricing_test.go",
+              "src/test/java/a/WispTest.java", "tests/test_x.py", "pkg/x_test.py", "conftest.py"):
+        assert treestate.is_test_file(p), p
+    for p in ("src/cart.js", "orders/pricing.py", "latest.go", "src/main/java/a/Contest.java"):
+        assert not treestate.is_test_file(p), p
+
+
+def test_a_big_changed_file_is_diffed_fast_and_once_per_session(tmp_path, monkeypatch):
+    # review finding: a 17k-line lockfile changed vs the base cost 4.8 s per `debug try`
+    import time
+
+    from verinoda import debug
+
+    lines = [f'    "node_modules/pkg{i}": {{ "version": "1.0.{i % 10}" }},' for i in range(17_000)]
+    old = ("\n".join(lines) + "\n").encode()
+    lines[500] = lines[500].replace("1.0.", "2.0.")
+    lines[9000] = lines[9000].replace("1.0.", "2.0.")
+    new = ("\n".join(lines) + "\n").encode()
+    t = time.perf_counter()
+    d = treestate.diff_file("package-lock.json", old, new)
+    assert time.perf_counter() - t < 2.0 and len(d["hunks"]) == 2
+    repo = _repo(tmp_path)
+    (repo / "package-lock.json").write_bytes(old)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "lock")
+    (repo / "package-lock.json").write_bytes(new)
+    base = treestate.head_commit(repo)
+    ids = treestate.current(repo)["files"]
+    first = debug._tree_record(repo, base, ids, {"kind": "worktree"})
+    calls = []
+    real = treestate.diff_file
+    monkeypatch.setattr(treestate, "diff_file", lambda *a, **k: calls.append(a[0]) or real(*a, **k))
+    prior = [{"tree_files": first["tree_files"], "touched": {"vs_base": first["vs_base"]}}]
+    again = debug._tree_record(repo, base, ids, {"kind": "worktree"}, prior)
+    assert calls == [] and again["vs_base"] == first["vs_base"]
+
+
+def test_a_project_below_the_git_top_level_lists_its_own_files(tmp_path):
+    root = tmp_path / "mono"
+    shutil.copytree(EXAMPLE, root / "pkg", ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc", "*.db"))
+    (root / "other.py").write_text("X = 1\n", encoding="utf-8")
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "init")
+    pkg = root / "pkg"
+    base = treestate.head_commit(pkg)
+    assert treestate.project_prefix(pkg) == "pkg/"
+    files = treestate.commit_files(pkg, base)
+    assert "orders/pricing.py" in files and "other.py" not in files and not any(p.startswith("pkg/") for p in files)
+    (pkg / "orders" / "pricing.py").write_text("X = 2\n", encoding="utf-8")
+    ch = treestate.changes_vs_base(pkg, base)
+    assert list(ch["tree_files"]) == ["orders/pricing.py"] and ch["base"]["orders/pricing.py"].startswith(b'"""')

@@ -3,43 +3,68 @@
 Every finding names the attempts (and runs) it rests on. Two strengths:
 
 * **definitive** - a fact about the recorded attempts that means the session is
-  going round in circles; any one of them sets ``stop``:
+  going round in circles; any one of them sets ``stop`` (on a *passing*
+  attempt only the two test rules do):
 
   - ``tree_reverted``: the whole tree is identical (content, line endings
-    aside) to an earlier attempt's after being different in between, or one
-    file is back to a content an *earlier fix attempt introduced* after having
-    another content in between (a file going back to its starting content is
-    an undo, not a loop, and is not reported);
+    aside) to an earlier attempt's after being different in between, or the
+    *code* is: the trees differ only in comments, docstrings or formatting of
+    Python files (:func:`verinoda.treestate.code_tree_id`);
   - ``signature_recurred``: failure signature A, then a different known
     failing signature B, then A again on another tree (``sig_exact``);
   - ``no_progress``: the same ``sig_exact`` on 3 or more fix attempts with
-    different trees;
+    different trees since the last passing attempt;
   - ``test_edited``: an attempt changed only existing test files (replaced or
-    removed lines; a line only added, such as a print, does not count), or
-    changed an assertion / expected-value line of an existing test;
-  - ``off_path``: the symbols a fix attempt edited were not reached by the
-    failing tests in a *complete* call trace taken with or after that edit
-    (run-scoped; it says nothing about other tests or other runs).
+    removed lines, or lines that switch a test off: a skip/xfail marker, an
+    early ``return``; a line only added, such as a print, does not count), or
+    changed what an assertion / expected-value line of an existing test says
+    (a change of formatting or quotes alone does not count), or changed the
+    test selection in the test configuration (``addopts``, ``-k``,
+    ``--deselect``, ``collect_ignore``, ...). A test file is one by name or
+    one a failing test of the session lives in;
+  - ``failing_tests_skipped``: tests that failed at the baseline (or at the
+    previous attempt) did not pass here: skipped, xfailed, deselected or not
+    collected (pytest's per-test outcomes; unknown without them);
+  - ``off_path``: the functions a fix attempt edited were not called *at all*
+    (by no test, not at import time) in a *complete* call trace taken with or
+    after that edit, and the run started no child process the tracer saw
+    (run-scoped; it says nothing about other runs).
 
 * **heuristic** - a pattern worth a look; it never sets ``stop`` on its own:
 
+  - ``file_reverted``: one file is back to a content an *earlier fix attempt
+    introduced* after having another content in between, while the rest of
+    the code differs from that attempt's (a file going back to its starting
+    content is an undo and is not reported);
   - ``error_moved``: the same failing tests, a different coarse signature;
   - ``masking``: the attempt added ``.get(k, default)``, ``try/except``,
     ``or 0``, an early return (or the language's equivalent) inside the
     previous crash symbol;
-  - ``hypothesis_repeated``: term Jaccard >= 0.6 with a refuted earlier
-    hypothesis, or the same touched symbol and the same resulting exception
-    type as a refuted earlier attempt.
+  - ``hypothesis_repeated``: term Jaccard >= 0.6 with an earlier hypothesis
+    whose attempt did not make the repro pass (and did not improve it), or the
+    same touched symbol and the same resulting exception type as such an
+    attempt;
+  - ``possibly_flaky``: two attempts ran the same code (only comments,
+    docstrings or formatting differ) and got different results.
 
-``flaky``: the same tree and command gave different outcomes (or different
-known signatures). It suspends every rule - and ``stop`` - until a rerun
-series (3 or more runs) of a tree whose recorded runs all agree; a series on
-the tree that disagreed never clears it. An unknown signature never counts as
-"the same" as anything.
+``flaky``: the same tree and command gave different outcomes, a different set
+of failing tests, or different coarse signatures (exception and crash symbol;
+the message is not compared). Runs Verinoda made outweigh agent-reported runs:
+an agent report never makes a tree that Verinoda ran flaky. It suspends every
+rule except the two test rules - and their ``stop`` - until a rerun series (3
+or more runs) of a tree whose recorded runs all agree; a series on the tree
+that disagreed never clears it. An unknown signature never counts as "the
+same" as anything.
 
 Separately, ``stop`` is also set after ``debug.max_no_progress`` fix attempts
 in a row (default 3) without measured progress; that is a budget, reported as
-``stop_reason: max_no_progress``, not a loop finding.
+``stop_reason: max_no_progress``, not a loop finding, and it holds while the
+session is flaky too.
+
+Progress between two runs of the same tree, or of the same code, that got
+different results is ``unknown`` (the edit did not cause it), and so is a run
+in which earlier failing tests were skipped or not run, or after an attempt that
+changed a test (``test_edited``).
 
 Only attempts on the working tree with the session's repro command take part
 (baseline, fix, probe, rerun); differential and bisect runs are strategies.
@@ -52,8 +77,10 @@ import re
 from verinoda import textnorm
 
 LOOP_KINDS = ("baseline", "fix", "probe", "rerun")
-DEFINITIVE = ("tree_reverted", "signature_recurred", "no_progress", "test_edited", "off_path")
-HEURISTIC = ("error_moved", "masking", "hypothesis_repeated")
+DEFINITIVE = ("tree_reverted", "signature_recurred", "no_progress", "test_edited", "failing_tests_skipped",
+              "off_path")
+HEURISTIC = ("file_reverted", "error_moved", "masking", "hypothesis_repeated", "possibly_flaky")
+TEST_RULES = ("test_edited", "failing_tests_skipped")  # facts about the edit: they stop a pass, flaky or not
 JACCARD = 0.6
 NO_PROGRESS_MIN = 3
 STABLE_RERUNS = 3
@@ -63,6 +90,19 @@ _ASSERT_LINE = re.compile(
     r"^\s*(assert\b|self\.(assert|fail)\w*\(|assert\w*\(|expect\(|.*\bassert(Equals|That|True|False|Null|Raises)\b|"
     r"assert(_eq|_ne)?!\(|t\.(Error|Errorf|Fatal|Fatalf)\(|.*\bpytest\.(raises|approx)\(|.*\.should\b|"
     r"(expected|want|expect)\w*\s*(:?=|==))", re.I)
+# A line that switches a test off (added to an existing test, it changes what the test checks).
+_DISABLE_LINE = re.compile(
+    r"^\s*(@pytest\.mark\.(skip|skipif|xfail)\b|@(unittest\.)?(skip|skipIf|skipUnless|expectedFailure)\b|"
+    r"(pytest\.(skip|xfail)|self\.skipTest|unittest\.skip)\(|return\b\s*(None)?\s*(#.*)?$|"
+    r"(it|test|describe)\.(skip|todo)\(|x(it|describe|test)\(|t\.Skip(Now|f)?\(|#\[ignore\]|"
+    r"@(Disabled|Ignore)\b)")
+# Test configuration files and the settings in them that select, skip or ignore tests.
+_TEST_CONFIG_FILE = re.compile(r"(^|/)(pyproject\.toml|pytest\.ini|setup\.cfg|tox\.ini|conftest\.py|package\.json|"
+                               r"(jest|vitest)\.config\.[cm]?[jt]s)$")
+_TEST_CONFIG_LINE = re.compile(r"(addopts|--deselect|--ignore|(^|[\s\"'=\[])-k\b|(^|[\s\"'=\[])-m\b|"
+                               r"collect_ignore|norecursedirs|testpaths|python_files|python_functions|"
+                               r"testPathIgnorePatterns|testMatch|testRegex|modulePathIgnorePatterns|"
+                               r"\bexclude\b|\bskip\b)")
 _MASKING = [
     (re.compile(r"\.get\(\s*[^,()]+,\s*[^)]+\)"), ".get(key, default)"),
     (re.compile(r"^\s*try\s*:"), "try/except"),
@@ -138,9 +178,30 @@ def _summ(a: dict) -> str:
 
 # -- progress ------------------------------------------------------------------------------------
 
+def same_result(a: dict, b: dict) -> bool:
+    """The same outcome and, for two failures, the same failing tests and coarse signature (when known)."""
+    if a.get("outcome") != b.get("outcome"):
+        return False
+    fa, fb = _failed_set(a), _failed_set(b)
+    if fa is not None and fb is not None and fa != fb:
+        return False
+    return not (_known(a) and _known(b) and a.get("sig_coarse") != b.get("sig_coarse"))
+
+
+def _same_code(a: dict, b: dict) -> bool:
+    if a.get("tree_hash") and a.get("tree_hash") == b.get("tree_hash"):
+        return True
+    return bool(a.get("code_hash")) and a.get("code_hash") == b.get("code_hash")
+
+
 def progress(prev: dict | None, cur: dict) -> str:
-    """improved | same | regressed | unknown - the current attempt against the previous one."""
+    """improved | same | regressed | unknown - the current attempt against the previous one.
+
+    Two runs of the same tree (or of the same code, comments and docstrings aside) that got different
+    results are ``unknown``: the edit did not make the difference."""
     if prev is None:
+        return "unknown"
+    if _same_code(prev, cur) and not same_result(prev, cur):
         return "unknown"
     po, co = prev.get("outcome"), cur.get("outcome")
     if co == "pass":
@@ -165,20 +226,29 @@ def progress(prev: dict | None, cur: dict) -> str:
 
 # -- flakiness -------------------------------------------------------------------------------------
 
+def _counted(attempts: list[dict]) -> list[dict]:
+    """The attempts that count for flakiness: an agent-reported run of a tree Verinoda also ran is left out
+    (Verinoda's own runs outweigh a report)."""
+    ran = {a.get("tree_hash") for a in attempts if a.get("run_by") != "agent" and a.get("tree_hash")}
+    return [a for a in attempts if not (a.get("run_by") == "agent" and a.get("tree_hash") in ran)]
+
+
 def flaky_state(attempts: list[dict]) -> dict | None:
     """``{"tree", "attempts", "text"}`` when one tree gave different results; None when there is no such
     evidence, or when a rerun series (3 or more) after it ran a tree whose recorded runs all agree - a series
-    on a tree that already disagreed can never clear it."""
+    on a tree that already disagreed can never clear it.
+
+    Different results: another outcome, another set of failing tests, or another coarse signature. The
+    message is not compared (a temp path or a time in it would make every run look different)."""
     by_tree: dict[str, list[dict]] = {}
     last_flaky = None
     flaky_trees: set[str] = set()
-    for a in attempts:
+    for a in _counted(attempts):
         if not a.get("tree_hash"):
             continue
         group = by_tree.setdefault(a["tree_hash"], [])
         for b in group:
-            differs = (a.get("outcome") != b.get("outcome")) or \
-                (_known(a) and _known(b) and a["sig_exact"] != b["sig_exact"])
+            differs = not same_result(a, b)
             if differs and {a.get("outcome"), b.get("outcome")} <= {"pass", "fail"}:
                 flaky_trees.add(a["tree_hash"])
                 last_flaky = {"tree": a["tree_hash"], "attempts": [b["n"], a["n"]],
@@ -200,15 +270,38 @@ def flaky_state(attempts: list[dict]) -> dict | None:
 
 # -- the rules -------------------------------------------------------------------------------------
 
+def _earlier_run(hist: list[dict], match) -> dict | None:
+    """The latest earlier attempt (before the previous one) that ``match``es, preferring a run Verinoda made."""
+    cands = [a for a in hist[:-1] if match(a)]
+    own = [a for a in cands if a.get("run_by") != "agent"]
+    return (own or cands or [None])[-1]
+
+
 def _tree_reverted(hist: list[dict], cur: dict) -> list[dict]:
     prev = hist[-1] if hist else None
     if prev is None or not cur.get("tree_hash") or prev.get("tree_hash") == cur.get("tree_hash"):
         return []
-    for a in reversed(hist[:-1]):
-        if a.get("tree_hash") == cur["tree_hash"]:
+    a = _earlier_run(hist, lambda x: x.get("tree_hash") == cur["tree_hash"])
+    if a is not None:
+        return [_finding("tree_reverted",
+                         f"the tree is identical to attempt {a['n']}'s (content, line endings aside); that state "
+                         f"was already run: {a.get('outcome')} ({_summ(a)})", [_ref(a), _ref(prev), _ref(cur)])]
+    code = cur.get("code_hash")
+    if code and prev.get("code_hash") and prev.get("code_hash") != code:
+        a = _earlier_run(hist, lambda x: x.get("code_hash") == code)
+        if a is not None:
             return [_finding("tree_reverted",
-                             f"the tree is identical to attempt {a['n']}'s (content, line endings aside); that state "
-                             f"was already run: {a.get('outcome')} ({_summ(a)})", [_ref(a), _ref(prev), _ref(cur)])]
+                             f"the code is identical to attempt {a['n']}'s: the trees differ only in comments, "
+                             f"docstrings or formatting of Python files; that code was already run: "
+                             f"{a.get('outcome')} ({_summ(a)})", [_ref(a), _ref(prev), _ref(cur)], same="code")]
+    return []
+
+
+def _file_reverted(hist: list[dict], cur: dict) -> list[dict]:
+    """Heuristic: one file back to the content an earlier fix attempt gave it, the rest of the code new."""
+    prev = hist[-1] if hist else None
+    if prev is None or len(hist) < 2:
+        return []
     out = []
     baseline = hist[0]
     for ch in cur.get("vs_prev") or []:
@@ -218,10 +311,11 @@ def _tree_reverted(hist: list[dict], cur: dict) -> list[dict]:
             continue
         for a in reversed(hist[1:-1]):
             if _file_id(a, path) == now and _file_id(prev, path) != now:
-                out.append(_finding("tree_reverted",
-                                    f"{path} is back to the content attempt {a['n']} gave it (and attempt "
-                                    f"{prev['n']} changed); that version was already run: {a.get('outcome')} "
-                                    f"({_summ(a)})", [_ref(a), _ref(prev), _ref(cur)], path=path))
+                out.append(_finding("file_reverted",
+                                    f"{path} is back to the content attempt {a['n']} gave it (attempt {prev['n']} had "
+                                    f"changed it); the rest of the tree differs from attempt {a['n']}'s, whose run "
+                                    f"was: {a.get('outcome')} ({_summ(a)})", [_ref(a), _ref(prev), _ref(cur)],
+                                    path=path))
                 break
     return out
 
@@ -241,7 +335,9 @@ def _signature_recurred(hist: list[dict], cur: dict) -> list[dict]:
 def _no_progress(hist: list[dict], cur: dict) -> list[dict]:
     if cur.get("kind") != "fix" or not _known(cur):
         return []
-    same = [a for a in hist + [cur] if a.get("kind") == "fix" and _known(a) and a["sig_exact"] == cur["sig_exact"]]
+    last_pass = max((i for i, a in enumerate(hist) if a.get("outcome") == "pass"), default=-1)
+    since = hist[last_pass + 1:]  # a pass in between breaks the series (a flaky test is not a loop)
+    same = [a for a in since + [cur] if a.get("kind") == "fix" and _known(a) and a["sig_exact"] == cur["sig_exact"]]
     trees = {a.get("tree_hash") for a in same}
     if len(same) >= NO_PROGRESS_MIN and len(trees) >= NO_PROGRESS_MIN:
         ns = [a["n"] for a in same]
@@ -251,33 +347,114 @@ def _no_progress(hist: list[dict], cur: dict) -> list[dict]:
     return []
 
 
+def test_files_of(attempts: list[dict]) -> set[str]:
+    """The files the failing tests of these attempts live in (``path::name`` test ids)."""
+    out = set()
+    for a in attempts:
+        sig = a.get("signature") or {}
+        for t in list(sig.get("failed_tests") or []) + [f.get("test") for f in sig.get("failures") or []]:
+            if t and "::" in t:
+                out.add(t.split("::", 1)[0])
+    return out
+
+
+def _stmt_key(text: str) -> str:
+    """What a line says, formatting aside: a Python statement by its syntax tree, anything else with
+    whitespace collapsed and one quote style."""
+    import ast
+
+    s = text.strip()
+    try:
+        return "ast:" + ast.dump(ast.parse(s))
+    except (SyntaxError, ValueError, RecursionError):
+        return "txt:" + re.sub(r"\s+", "", s.replace("'", '"'))
+
+
+def _is_test_change(c: dict, test_paths: set[str]) -> bool:
+    return bool(c.get("test")) or c["path"] in test_paths
+
+
 def _test_edited(hist: list[dict], cur: dict) -> tuple[list[dict], list[dict]]:
-    """(findings, the changed assertion lines as {path, line, text})."""
+    """(findings, the changed assertion / disabling / selection lines as {path, line, text})."""
     changes = [c for c in cur.get("vs_prev") or [] if not c.get("content_unknown")]
     if not changes:
         return [], []
     prev = hist[-1] if hist else None
-    # an existing test whose lines were replaced or removed (a print or a comment added to a test is not an edit
-    # of what it checks)
-    existing_tests = [c for c in changes if c.get("test") and (c.get("status") == "removed" or (
-        c.get("status") == "modified" and any(h.get("removed") for h in c.get("hunks") or [])))]
+    test_paths = test_files_of(hist)
     lines = []
-    for c in existing_tests:
+    existing_tests = []
+    for c in changes:
+        if not _is_test_change(c, test_paths) or c.get("no_code_change"):
+            continue  # not a test file, or only comments / docstrings / formatting changed
+        if c.get("status") == "removed":
+            existing_tests.append(c)
+            continue
+        if c.get("status") != "modified":
+            continue  # a new test file is not an edit of an existing test
+        edited = False
         for h in c.get("hunks") or []:
+            added = h.get("added") or []
+            added_keys = {_stmt_key(x) for x in added}
+            if h.get("removed"):
+                edited = True
             for i, text in enumerate(h.get("removed") or []):
-                if _ASSERT_LINE.match(text):
-                    lines.append({"path": c["path"], "line": h["old"][0] + i, "text": text.strip()[:200]})
+                if _ASSERT_LINE.match(text) and _stmt_key(text) not in added_keys:
+                    lines.append({"path": c["path"], "line": h["old"][0] + i, "text": text.strip()[:200],
+                                  "change": "assertion"})
+            in_test_fn = any(s.rsplit(".", 1)[-1].startswith("test") for s in h.get("symbols") or [])
+            for i, text in enumerate(added):
+                # an early return only counts inside a test function (a helper or fixture may return early)
+                if _DISABLE_LINE.match(text) and (in_test_fn or not _RETURN.match(text)):
+                    edited = True
+                    lines.append({"path": c["path"], "line": h["new"][0] + i, "text": text.strip()[:200],
+                                  "change": "switched off"})
+        if edited:
+            existing_tests.append(c)
+    config = []
+    for c in changes:
+        if _TEST_CONFIG_FILE.search(c["path"]) and not c.get("no_code_change"):
+            for h in c.get("hunks") or []:
+                for i, text in enumerate(h.get("added") or []):
+                    if _TEST_CONFIG_LINE.search(text):
+                        config.append({"path": c["path"], "line": h["new"][0] + i, "text": text.strip()[:200],
+                                       "change": "test selection"})
+    lines += config
     refs = [_ref(prev), _ref(cur)] if prev else [_ref(cur)]
-    if existing_tests and all(c.get("test") for c in changes):
+    if existing_tests and all(_is_test_change(c, test_paths) for c in changes):
         paths = ", ".join(c["path"] for c in changes)
         return [_finding("test_edited", f"attempt {cur['n']} changed only test files ({paths}); whether the test "
                                         "or the code is right is the user's call", refs, lines=lines[:5])], lines
     if lines:
         at = ", ".join(f"{x['path']}:{x['line']}" for x in lines[:3])
-        return [_finding("test_edited", f"attempt {cur['n']} changed an assertion or expected value of an existing "
-                                        f"test ({at}); whether the test or the code is right is the user's call",
+        what = sorted({x["change"] for x in lines})
+        kinds = {"assertion": "an assertion or expected value of an existing test",
+                 "switched off": "switched an existing test off (skip, xfail or an early return)",
+                 "test selection": "the tests the configuration selects"}
+        return [_finding("test_edited", f"attempt {cur['n']} changed {' and '.join(kinds[w] for w in what)} ({at}); "
+                                        "whether the test or the code is right is the user's call",
                          refs, lines=lines[:5])], lines
     return [], []
+
+
+def _skipped_failing(hist: list[dict], cur: dict) -> list[dict]:
+    """Tests that failed at the baseline (or at the previous attempt, if they existed at the baseline) and
+    did not pass now: skipped, xfailed, deselected or not collected. Needs per-test outcomes (pytest)."""
+    tests = (cur.get("signature") or {}).get("tests")
+    if not hist or not isinstance(tests, dict) or not tests:
+        return []
+    baseline, prev = hist[0], hist[-1]
+    base_tests = (baseline.get("signature") or {}).get("tests") or {}
+    required = set(_failed_set(baseline) or ())
+    required |= {t for t in (_failed_set(prev) or ()) if not base_tests or t in base_tests}
+    missing = {t: tests.get(t, "not run") for t in sorted(required) if tests.get(t) not in ("passed", "failed", "error")}
+    if not missing:
+        return []
+    shown = ", ".join(f"{t} ({o})" for t, o in list(missing.items())[:5])
+    refs = [_ref(baseline)] + ([_ref(prev)] if prev is not baseline else []) + [_ref(cur)]
+    return [_finding("failing_tests_skipped",
+                     f"{len(missing)} test(s) that failed before did not pass in attempt {cur['n']}: {shown}; a "
+                     "skipped, xfailed or deselected test is not a passing one (not run = deselected, renamed or not "
+                     "collected)", refs, tests=missing)]
 
 
 def _edited_symbols(ch_list: list[dict]) -> tuple[list[tuple[str, str]], bool]:
@@ -297,9 +474,16 @@ def _edited_symbols(ch_list: list[dict]) -> tuple[list[tuple[str, str]], bool]:
     return out, bool(out)
 
 
+def trace_can_rule_out(tr: dict) -> bool:
+    """A trace that can say a function was not called: complete, with the set of every in-repo function it
+    saw called (``reached_any``), and no child process started (those run untraced)."""
+    return bool(tr.get("complete")) and isinstance(tr.get("reached_any"), list) and not tr.get("spawns") \
+        and not tr.get("reached_any_truncated")
+
+
 def _off_path(hist: list[dict], cur: dict) -> list[dict]:
     tr = cur.get("trace") or {}
-    if not tr.get("complete") or not _failing(cur):
+    if not trace_can_rule_out(tr) or not _failing(cur):
         return []
     fixes = [a for a in hist + [cur] if a.get("kind") == "fix"]
     if not fixes:
@@ -314,16 +498,18 @@ def _off_path(hist: list[dict], cur: dict) -> list[dict]:
     failing = [t for t in tr.get("failing") or [] if t in (tr.get("called") or [])]
     if not failing:
         return []
-    reached = tr.get("reached") or {}
-    for t in failing:
-        got = set(reached.get(t) or [])
-        if any(f"{p}::{s}" in got for p, s in edited):
-            return []
+    # Reached anywhere in the run - by any test, at import/collection time, between tests - is enough to keep
+    # the edit: module state set at import reaches every test.
+    got = set(tr.get("reached_any") or [])
+    if any(f"{p}::{s}" in got for p, s in edited):
+        return []
     names = ", ".join(f"{p}::{s}" for p, s in edited)
     refs = [_ref(j)] + ([_ref(cur)] if cur is not j else [])
-    return [_finding("off_path", f"the symbols attempt {j['n']} edited ({names}) were not reached by the failing "
-                                 f"test(s) {', '.join(failing[:3])} in the complete call trace of run "
-                                 f"{tr.get('run_id')} (that run only)", refs, trace_run=tr.get("run_id"))]
+    return [_finding("off_path", f"the functions attempt {j['n']} edited ({names}) were not called at all in the "
+                                 f"complete call trace of run {tr.get('run_id')} - not by the failing test(s) "
+                                 f"{', '.join(failing[:3])}, not by any other test, not at import time - and the run "
+                                 "started no child process the tracer saw (that run only)", refs,
+                     trace_run=tr.get("run_id"))]
 
 
 def _error_moved(prev: dict | None, cur: dict) -> list[dict]:
@@ -362,8 +548,10 @@ def _masking(prev: dict | None, cur: dict) -> list[dict]:
 
 
 def _refuted(a: dict) -> bool:
+    """A fix attempt whose run did not give what it expected, and did not improve on the attempt before."""
     exp = a.get("expect") or "pass"
-    return a.get("kind") == "fix" and a.get("outcome") in ("pass", "fail") and a.get("outcome") != exp
+    return a.get("kind") == "fix" and a.get("outcome") in ("pass", "fail") and a.get("outcome") != exp \
+        and a.get("progress") != "improved"
 
 
 def _hypothesis_repeated(hist: list[dict], cur: dict) -> list[dict]:
@@ -374,18 +562,36 @@ def _hypothesis_repeated(hist: list[dict], cur: dict) -> list[dict]:
     for a in reversed(hist):
         if not _refuted(a):
             continue
+        what = f"its run did not make the repro pass ({a.get('outcome')}, progress {a.get('progress') or 'unknown'})"
         at = a.get("hypothesis_terms") or terms(a.get("hypothesis"))
         j = _jaccard(ct, at)
         if j >= JACCARD:
             return [_finding("hypothesis_repeated", f"this hypothesis shares {j:.0%} of its terms with attempt "
-                                                    f"{a['n']}'s, which the run refuted", [_ref(a), _ref(cur)])]
+                                                    f"{a['n']}'s; {what}", [_ref(a), _ref(cur)])]
         a_syms = {(c["path"], s) for c in a.get("vs_prev") or [] for s in c.get("symbols") or []}
         both = cur_syms & a_syms
         if both and _failing(cur) and _exc_types(cur) & _exc_types(a):
             s = sorted(both)[0]
             return [_finding("hypothesis_repeated", f"attempt {a['n']} also edited {s[0]}::{s[1]} and ended with the "
                                                     f"same exception type ({', '.join(sorted(_exc_types(cur) & _exc_types(a)))}); "
-                                                    "it was refuted", [_ref(a), _ref(cur)])]
+                                                    f"{what}", [_ref(a), _ref(cur)])]
+    return []
+
+
+def _possibly_flaky(hist: list[dict], cur: dict) -> list[dict]:
+    """Two attempts ran the same code (only comments, docstrings or formatting of Python files differ) and got
+    different results. The same *tree* is ``flaky`` proper; this is the weaker, heuristic case."""
+    code = cur.get("code_hash")
+    if not code or cur.get("outcome") not in ("pass", "fail"):
+        return []
+    for a in reversed(hist):
+        if a.get("code_hash") == code and a.get("tree_hash") != cur.get("tree_hash") and \
+                a.get("outcome") in ("pass", "fail") and not same_result(a, cur):
+            return [_finding("possibly_flaky", f"attempts {a['n']} and {cur['n']} ran the same code (the trees differ "
+                                               f"only in comments, docstrings or formatting) and got {a.get('outcome')}"
+                                               f" ({_summ(a)}) vs {cur.get('outcome')} ({_summ(cur)}): the edit did "
+                                               "not make the difference; rerun before editing further",
+                             [_ref(a), _ref(cur)])]
     return []
 
 
@@ -400,38 +606,50 @@ def evaluate(history: list[dict], cur: dict, *, max_no_progress: int = 3) -> dic
     findings: list[dict] = []
     assertion_lines: list[dict] = []
     if hist and cur.get("kind") in LOOP_KINDS:
-        findings += _tree_reverted(hist, cur)
+        reverted = _tree_reverted(hist, cur)
+        findings += reverted or _file_reverted(hist, cur)
         findings += _signature_recurred(hist, cur)
         findings += _no_progress(hist, cur)
         te, assertion_lines = _test_edited(hist, cur)
         findings += te
+        findings += _skipped_failing(hist, cur)
         findings += _off_path(hist, cur)
         findings += _error_moved(prev, cur)
         findings += _masking(prev, cur)
         findings += _hypothesis_repeated(hist, cur)
+        findings += _possibly_flaky(hist, cur)
     elif cur.get("trace"):
         findings += _off_path(hist, cur)
-    # budget: fix attempts in a row without measured progress
+    suspect = ("failing_tests_skipped", "possibly_flaky", "test_edited")
+    if any(f["rule"] in suspect for f in findings):
+        # a skipped failure is no improvement, a flip on the same code is not the edit's doing, and fewer failures
+        # after a test was changed say nothing about the code
+        prog = "unknown"
+    # budget: fix attempts in a row without measured progress (a pass counts unless it was a suspect one)
     streak = 0
     for a in hist + [cur]:
         if a.get("kind") != "fix":
             continue
         p = a.get("progress") if a is not cur else prog
-        if a.get("outcome") == "pass" or p == "improved":
+        rules = {f["rule"] for f in findings} if a is cur else set(a.get("rules") or [])
+        if (a.get("outcome") == "pass" and not rules & set(suspect)) or p == "improved":
             streak = 0
         else:
             streak += 1
     suspended = flaky is not None
-    definitive = [f for f in findings if f["strength"] == "definitive"]
+    definitive = [f for f in findings if f["strength"] == "definitive" and (not suspended or f["rule"] in TEST_RULES)]
+    if cur.get("outcome") == "pass":
+        # on a passing attempt only a test edited (or skipped) until it passes is a reason to stop
+        definitive = [f for f in definitive if f["rule"] in TEST_RULES]
     stop, reason = False, None
-    if not suspended:
-        # a definitive finding stops even a passing attempt: a test edited until it passes is the case to ask about
-        if definitive:
-            stop, reason = True, "definitive: " + ", ".join(dict.fromkeys(f["rule"] for f in definitive))
-        elif streak >= max_no_progress and cur.get("outcome") != "pass":
-            stop, reason = True, f"max_no_progress: {streak} fix attempts in a row without measured progress"
+    if definitive:
+        stop, reason = True, "definitive: " + ", ".join(dict.fromkeys(f["rule"] for f in definitive))
+    elif streak >= max_no_progress and cur.get("outcome") != "pass":
+        stop, reason = True, (f"max_no_progress: {streak} fix attempts in a row without measured progress"
+                              + ("; the results are also flaky - rerun first" if suspended else ""))
     if suspended:
         for f in findings:
-            f["suspended"] = "flaky"
+            if f["rule"] not in TEST_RULES:
+                f["suspended"] = "flaky"
     return {"progress": prog, "findings": findings, "stop": stop, "stop_reason": reason, "flaky": flaky,
             "no_progress_streak": streak, "assertion_lines": assertion_lines}

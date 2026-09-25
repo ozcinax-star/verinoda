@@ -317,13 +317,16 @@ def _copy_repo(repo: Path, dst: Path, ids: dict[str, str] | None = None) -> int:
     return n
 
 
-def _copy_commit(repo: Path, commit: str, dst: Path, ids: dict[str, str] | None = None) -> int:
+def _copy_commit(repo: Path, commit: str, dst: Path, ids: dict[str, str] | None = None,
+                 skipped: list[dict] | None = None) -> int:
     """Write the regular files of ``commit`` (raw blobs: no filters, no line-ending conversion) into ``dst``.
 
     The user's work tree, index and ``.git`` are only read. Symlinks and
-    submodules are not written (see :func:`verinoda.treestate.commit_entries`).
+    submodules are not written, nor is any path naming git's directory in any
+    spelling (see :func:`verinoda.treestate.commit_entries`). A file this OS
+    cannot hold (``what?.md`` on Windows) is left out and listed in ``skipped``.
     """
-    ents = treestate.commit_entries(repo, commit)
+    ents = treestate.commit_entries(repo, commit, skipped)
     n = 0
     for i in range(0, len(ents), COMMIT_COPY_BATCH):
         batch = ents[i:i + COMMIT_COPY_BATCH]
@@ -333,8 +336,13 @@ def _copy_commit(repo: Path, commit: str, dst: Path, ids: dict[str, str] | None 
             if blob is None or path_escape(rel):
                 continue
             out = dst / rel
-            out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_bytes(blob)
+            try:
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_bytes(blob)
+            except OSError as exc:
+                if skipped is not None:
+                    skipped.append({"path": rel, "why": f"could not be written here: {exc.strerror or exc}"})
+                continue
             if mode == "100755" and os.name != "nt":  # pragma: no cover - POSIX
                 os.chmod(out, 0o755)
             n += 1
@@ -346,11 +354,22 @@ def _copy_commit(repo: Path, commit: str, dst: Path, ids: dict[str, str] | None 
 def _overlay(repo: Path, dst: Path, paths: list[str], ids: dict[str, str] | None) -> list[str]:
     """Copy working-tree files over a commit copy (labelled in the run's ``source``)."""
     done = []
+    root = repo.resolve()
     for rel in paths:
         rel = rel.replace("\\", "/").strip()
-        if not rel or path_escape(rel) or set(PurePosixPath(rel).parts) & {".git", ".verinoda"}:
-            raise ValueError(f"overlay path {rel!r} must be a repository-relative file path")
+        if not rel or path_escape(rel) or not treestate.safe_path(rel.strip("/")) or rel.startswith("/"):
+            raise ValueError(f"overlay path {rel!r} must be a repository-relative file path (not in .git or "
+                             ".verinoda, in any spelling)")
         src = repo / rel
+        cur = repo
+        for part in rel.split("/"):
+            cur = cur / part
+            if cur.is_symlink():
+                raise ValueError(f"overlay path {rel!r} goes through a symlink ({cur.relative_to(repo).as_posix()})")
+        try:
+            src.resolve().relative_to(root)
+        except ValueError:
+            raise ValueError(f"overlay path {rel!r} resolves outside the repository") from None
         if not src.is_file():
             raise ValueError(f"overlay path {rel!r} is not a file in the working tree")
         out = dst / rel
@@ -550,7 +569,11 @@ def run(
     try:
         if source["kind"] == "commit":
             copy.mkdir()
-            copied = _copy_commit(repo, source["commit"], copy, ids)
+            not_written: list[dict] = []
+            copied = _copy_commit(repo, source["commit"], copy, ids, not_written)
+            if not_written:
+                source["skipped"] = not_written[:50]
+                source["skipped_total"] = len(not_written)
             if overlay:
                 source["overlay"] = _overlay(repo, copy, list(overlay), ids)
             where = f"copy of commit {source['commit'][:12]} of {repo}"
@@ -583,6 +606,9 @@ def run(
     limits = (["the network is not isolated",
                "the tests run as the user: they can read and write files outside the copy"]
               if level == "process" else [])
+    if source.get("skipped"):
+        limits.append(f"{source['skipped_total']} file(s) of the commit are missing from the copy (this OS cannot "
+                      "hold their names): " + ", ".join(s["path"] for s in source["skipped"][:5]))
     container_name = f"verinoda-{eid}"
     if level == "container":
         extra: list[str] = []
@@ -646,9 +672,13 @@ def run(
     inconclusive = outcome == "inconclusive"
     matches = (expect == "pass" and outcome == "pass") or (expect == "fail" and outcome == "fail")
     is_test = kind == "allowlisted"
+    on = ""
+    if source["kind"] == "commit":
+        on = f" (on commit {source['commit'][:12]}" + (f" + working-tree {', '.join(source['overlay'])}"
+                                                       if source.get("overlay") else "") + ")"
     ev = {
         "source_type": "test_result" if is_test else "experiment",
-        "locator": f"run {eid}: {' '.join(argv)}",
+        "locator": f"run {eid}{on}: {' '.join(argv)}",
         "path": None, "commit_sha": commit,
         "content_hash": "sha256:" + hashlib.sha256((stdout + stderr).encode()).hexdigest(),
         "excerpt": " | ".join(([why] if why else []) + (summ["summary_lines"] or summ["tail"][-2:]))[:400],
@@ -674,10 +704,15 @@ def run(
         from verinoda.claims import Claims
 
         # An inconclusive run says nothing about the hypothesis: traceable, never support or refutation.
-        relation = "qualifies" if inconclusive else ("supports" if matches else "refutes")
+        # A run of another commit (a commit copy) says nothing about the code the claim describes either.
+        claim_commit = (store.claim(claim_id) or {}).get("commit_sha")
+        other_code = source["kind"] == "commit" and (source.get("overlay") or source["commit"] != claim_commit)
+        relation = "qualifies" if (inconclusive or other_code) else ("supports" if matches else "refutes")
         Claims(store, repo).attach(claim_id, ev_id, relation,
-                                   note=f"experiment {eid}: expected {expect}, got {outcome}"
-                                        + (f" ({why})" if why else ""))
+                                   note=f"experiment {eid}{on}: expected {expect}, got {outcome}"
+                                        + (f" ({why})" if why else "")
+                                        + ("; it ran other code than the claim's commit, so it only qualifies the "
+                                           "claim" if other_code else ""))
     res = {"id": eid, "isolation": level, "guarantees": guarantees, "outcome": outcome,
            "matches_expectation": matches, "duration_s": round(duration, 3), "evidence_id": ev_id,
            "summary": summ, "logs": {"stdout": str(out_dir / "stdout.txt"), "stderr": str(out_dir / "stderr.txt")},
