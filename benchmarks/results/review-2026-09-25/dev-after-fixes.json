@@ -1,0 +1,6485 @@
+{
+ "note": "dev split after the HO4 fix and the fixes found by reviewing Verinoda's own branch",
+ "split": "dev",
+ "fixtures_sha256": "c3192037a485a78cb90f4c0d93bb9edfbcb45480e30fa866b53ac76595d3f6c3",
+ "summary": {
+  "fixtures": 36,
+  "ran": 36,
+  "skipped": [],
+  "per_concern": {
+   "persistence": {
+    "tp": 9,
+    "fp": 0,
+    "must": 8,
+    "found": 8,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "config": {
+    "tp": 5,
+    "fp": 0,
+    "must": 5,
+    "found": 5,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "entry_points": {
+    "tp": 15,
+    "fp": 6,
+    "must": 13,
+    "found": 13,
+    "precision": 0.714,
+    "recall": 1.0
+   },
+   "security": {
+    "tp": 12,
+    "fp": 0,
+    "must": 12,
+    "found": 12,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "performance": {
+    "tp": 3,
+    "fp": 0,
+    "must": 3,
+    "found": 3,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "public_api": {
+    "tp": 21,
+    "fp": 0,
+    "must": 21,
+    "found": 21,
+    "precision": 1.0,
+    "recall": 1.0
+   }
+  },
+  "overall": {
+   "precision": 0.915,
+   "recall": 1.0,
+   "tp": 65,
+   "fp": 6,
+   "must": 62,
+   "found": 62
+  },
+  "must_say_unknown": {
+   "reported": 9,
+   "total": 9
+  },
+  "changes_exact": {
+   "fixtures": 36,
+   "of": 36
+  },
+  "tests": {
+   "static_reach": [
+    22,
+    22
+   ],
+   "no_test_reaches": [
+    4,
+    4
+   ]
+  },
+  "affected": [
+   19,
+   19
+  ],
+  "read_first_gold_inside": [
+   62,
+   62
+  ],
+  "silent_truncation": 0,
+  "seconds_with_graph_load": {
+   "orders_app": {
+    "median": 0.186,
+    "max": 0.232,
+    "n": 16
+   },
+   "forge_mod": {
+    "median": 0.209,
+    "max": 0.227,
+    "n": 10
+   },
+   "glow_mod": {
+    "median": 0.205,
+    "max": 0.255,
+    "n": 7
+   },
+   "vcopy": {
+    "median": 1.725,
+    "max": 5.711,
+    "n": 3
+   }
+  },
+  "blast_radius": [
+   {
+    "id": "O01",
+    "review": 3,
+    "impact_view": 11,
+    "capped": false
+   },
+   {
+    "id": "O02",
+    "review": 2,
+    "impact_view": 11,
+    "capped": false
+   },
+   {
+    "id": "O03",
+    "review": 1,
+    "impact_view": 6,
+    "capped": false
+   },
+   {
+    "id": "O04",
+    "review": 3,
+    "impact_view": 11,
+    "capped": false
+   },
+   {
+    "id": "O05",
+    "review": 0,
+    "impact_view": 6,
+    "capped": false
+   },
+   {
+    "id": "O06",
+    "review": 2,
+    "impact_view": 6,
+    "capped": false
+   },
+   {
+    "id": "O07",
+    "review": 0,
+    "impact_view": 6,
+    "capped": false
+   },
+   {
+    "id": "O08",
+    "review": 2,
+    "impact_view": 11,
+    "capped": false
+   },
+   {
+    "id": "O10",
+    "review": 1,
+    "impact_view": 6,
+    "capped": false
+   },
+   {
+    "id": "O11",
+    "review": 2,
+    "impact_view": 11,
+    "capped": false
+   },
+   {
+    "id": "O12",
+    "review": 1,
+    "impact_view": 6,
+    "capped": false
+   },
+   {
+    "id": "O13",
+    "review": 3,
+    "impact_view": 11,
+    "capped": false
+   },
+   {
+    "id": "O14",
+    "review": 0,
+    "impact_view": 11,
+    "capped": false
+   },
+   {
+    "id": "O15",
+    "review": 1,
+    "impact_view": 6,
+    "capped": false
+   },
+   {
+    "id": "F02",
+    "review": 0,
+    "impact_view": 28,
+    "capped": false
+   },
+   {
+    "id": "F03",
+    "review": 0,
+    "impact_view": 14,
+    "capped": false
+   },
+   {
+    "id": "F04",
+    "review": 1,
+    "impact_view": 24,
+    "capped": false
+   },
+   {
+    "id": "F05",
+    "review": 1,
+    "impact_view": 3,
+    "capped": false
+   },
+   {
+    "id": "F06",
+    "review": 0,
+    "impact_view": 28,
+    "capped": false
+   },
+   {
+    "id": "F07",
+    "review": 0,
+    "impact_view": 15,
+    "capped": false
+   },
+   {
+    "id": "F08",
+    "review": 0,
+    "impact_view": 28,
+    "capped": false
+   },
+   {
+    "id": "F09",
+    "review": 1,
+    "impact_view": 24,
+    "capped": false
+   },
+   {
+    "id": "F10",
+    "review": 0,
+    "impact_view": 17,
+    "capped": false
+   },
+   {
+    "id": "G01",
+    "review": 0,
+    "impact_view": 15,
+    "capped": false
+   },
+   {
+    "id": "G02",
+    "review": 0,
+    "impact_view": 21,
+    "capped": false
+   },
+   {
+    "id": "G03",
+    "review": 3,
+    "impact_view": 29,
+    "capped": false
+   },
+   {
+    "id": "G04",
+    "review": 0,
+    "impact_view": 14,
+    "capped": false
+   },
+   {
+    "id": "G05",
+    "review": 8,
+    "impact_view": 31,
+    "capped": false
+   },
+   {
+    "id": "G06",
+    "review": 6,
+    "impact_view": 19,
+    "capped": false
+   },
+   {
+    "id": "G07",
+    "review": 0,
+    "impact_view": 31,
+    "capped": false
+   },
+   {
+    "id": "V01",
+    "review": 7,
+    "impact_view": 80,
+    "capped": true
+   },
+   {
+    "id": "V02",
+    "review": 9,
+    "impact_view": 80,
+    "capped": true
+   },
+   {
+    "id": "V03",
+    "review": 15,
+    "impact_view": 80,
+    "capped": true
+   }
+  ]
+ },
+ "rows": [
+  {
+   "id": "O01",
+   "project": "orders_app",
+   "title": "apply_discount: > becomes >= and round() becomes int truncation (design A1)",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "config": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "reach_found": 5,
+     "reach_total": 5,
+     "reach_missing": [],
+     "observed_found": 4,
+     "observed_total": 4,
+     "observed_not_reached_ok": true
+    },
+    "affected": {
+     "found": 3,
+     "total": 3,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 3,
+     "total": 3,
+     "chars": 878
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.159,
+   "seconds_with_graph_load": 0.187,
+   "dependents_total": 3,
+   "impact_view_symbols": 11,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 3,
+    "strong_or_verified": 3,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 body). Findings - persistence: 1, config: 1, entry_points: 1. No finding from the rules for: security, performance, public_api.",
+    "changes": [
+     {
+      "file": "orders/pricing.py",
+      "symbol": "orders/pricing.py::apply_discount",
+      "kind": "body",
+      "lines": "11-15"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "value-carried-to-sink",
+       "finding": "a value computed from apply_discount() is passed to save() in place_order at line 22; save() writes it (total) in a sql-write at orders/repository.py:17 (value path apply_discount -> compute_total -> place_order)",
+       "status": "strong_inference",
+       "at": "orders/service.py:22",
+       "evidence_at": [
+        "orders/repository.py:17"
+       ],
+       "chain": [
+        {
+         "from": "place_order",
+         "to": "compute_total",
+         "relation": "calls",
+         "at": "orders/service.py:21",
+         "confidence": "EXTRACTED",
+         "carries": "passes it on"
+        },
+        {
+         "from": "compute_total",
+         "to": "apply_discount",
+         "relation": "calls",
+         "at": "orders/pricing.py:8",
+         "confidence": "EXTRACTED",
+         "carries": "returns it"
+        }
+       ],
+       "basis": "Python def-use within each function on the path, the last one into the sink's statement (straight-line; branches not told apart); the call to save() resolved by: Python: repo is OrderRepository (annotation or constructor) (INFERRED)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/pricing.py::apply_discount"
+      }
+     ],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [
+      {
+       "concern": "config",
+       "rule": "config-name-on-changed-line",
+       "finding": "a changed line reads DISCOUNT_THRESHOLD, bound to environment variable ORDERS_DISCOUNT_THRESHOLD (orders/config.py:7)",
+       "status": "strong_inference",
+       "at": "orders/pricing.py:13",
+       "evidence_at": [
+        "orders/config.py:7"
+       ],
+       "basis": "the name's binding followed through the file's imports (syntax tree); the binding line read by the environment pattern",
+       "derived_by": "architecture_map.ENV_PATTERNS",
+       "for": "orders/pricing.py::apply_discount",
+       "key": "ORDERS_DISCOUNT_THRESHOLD"
+      }
+     ],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "create_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed apply_discount in 3 call(s): create_order_handler -> place_order -> compute_total -> apply_discount",
+       "status": "strong_inference",
+       "at": "orders/api.py:16",
+       "evidence_at": [
+        "orders/api.py:18"
+       ],
+       "chain": [
+        {
+         "from": "create_order_handler",
+         "to": "place_order",
+         "relation": "calls",
+         "at": "orders/api.py:18",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "place_order",
+         "to": "compute_total",
+         "relation": "calls",
+         "at": "orders/service.py:21",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "compute_total",
+         "to": "apply_discount",
+         "relation": "calls",
+         "at": "orders/pricing.py:8",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/pricing.py::apply_discount",
+       "entry_kind": "entry",
+       "distance": 3
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_pricing.py::test_discount_applies_above_threshold",
+       "distance": 1,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ],
+       "observed": "reached"
+      },
+      {
+       "test": "tests/test_pricing.py::test_no_discount_below_threshold",
+       "distance": 1,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ],
+       "observed": "reached"
+      },
+      {
+       "test": "tests/test_pricing.py::test_compute_total",
+       "distance": 2,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ],
+       "observed": "reached"
+      },
+      {
+       "test": "tests/test_service.py::test_empty_order_rejected",
+       "distance": 3,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ],
+       "observed": "not reached"
+      },
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 3,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ],
+       "observed": "reached"
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [],
+     "observe": {
+      "run": "rtr_3f74f0b6b47b",
+      "complete": true,
+      "outcome": "pass",
+      "reached": {
+       "orders/pricing.py::apply_discount": [
+        "tests/test_pricing.py::test_compute_total",
+        "tests/test_pricing.py::test_discount_applies_above_threshold",
+        "tests/test_pricing.py::test_no_discount_below_threshold",
+        "tests/test_service.py::test_place_and_fetch_roundtrip"
+       ]
+      },
+      "selected_not_reaching": [
+       "tests/test_service.py::test_empty_order_rejected"
+      ],
+      "limits": [
+       "observation is run-scoped: it shows what these tests executed at this commit, never what always happens",
+       "child processes started by tests are not traced",
+       "boundary (library/C) calls are recorded once per call site, with the first test that made them",
+       "events on non-main threads are attributed to the test the main thread was running (flag 'thread')",
+       "files changed since the snapshot: orders/pricing.py"
+      ],
+      "error": null
+     }
+    },
+    "dependents_total": 3,
+    "read_first": [
+     {
+      "at": "orders/pricing.py:5-15",
+      "why": "changed (body)",
+      "chars": 341
+     },
+     {
+      "at": "orders/service.py:21-23",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 72
+     },
+     {
+      "at": "orders/repository.py:16-18",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 127
+     },
+     {
+      "at": "orders/config.py:6-8",
+      "why": "config: config-name-on-changed-line",
+      "chars": 150
+     },
+     {
+      "at": "orders/api.py:15-19",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 188
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 878,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O02",
+   "project": "orders_app",
+   "title": "OrderRepository.get builds its SQL with an f-string (design A2)",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "reach_found": 1,
+     "reach_total": 1,
+     "reach_missing": []
+    },
+    "affected": {
+     "found": 2,
+     "total": 2,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 3,
+     "total": 3,
+     "chars": 471
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.137,
+   "seconds_with_graph_load": 0.193,
+   "dependents_total": 2,
+   "impact_view_symbols": 11,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 3,
+    "strong_or_verified": 3,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 body). Findings - persistence: 1, security: 1, entry_points: 1. No finding from the rules for: performance, public_api, config.",
+    "changes": [
+     {
+      "file": "orders/repository.py",
+      "symbol": "orders/repository.py::OrderRepository.get",
+      "kind": "body",
+      "lines": "22-26"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "sink-on-changed-line",
+       "finding": "a changed line holds a sql-read: f\"SELECT id, customer, total FROM orders WHERE id = {order_id}\"",
+       "status": "strong_inference",
+       "at": "orders/repository.py:24",
+       "evidence_at": [],
+       "basis": "pattern over the code of the line (comments removed)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/repository.py::OrderRepository.get"
+      }
+     ],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "op-on-changed-line",
+       "finding": "a changed line adds sql-built-from-strings: SQL text built with an f-string; an entry point's parameter reaches it: get_order_handler(order_id) -> fetch_order(order_id) -> get(order_id)",
+       "status": "statically_verified",
+       "at": "orders/repository.py:24",
+       "evidence_at": [
+        "orders/api.py:24"
+       ],
+       "basis": "Python syntax tree of the working tree (calls bound through imports and aliases); parameter flow: def-use per hop, an inference",
+       "derived_by": "review.SQL_TEXT",
+       "for": "orders/repository.py::OrderRepository.get",
+       "param_flow": {
+        "params": [
+         "order_id"
+        ],
+        "from_entry": "get_order_handler(order_id) -> fetch_order(order_id) -> get(order_id)",
+        "entry": "orders/api.py:24"
+       }
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "get_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed get in 2 call(s): get_order_handler -> fetch_order -> get",
+       "status": "strong_inference",
+       "at": "orders/api.py:24",
+       "evidence_at": [
+        "orders/api.py:25"
+       ],
+       "chain": [
+        {
+         "from": "get_order_handler",
+         "to": "fetch_order",
+         "relation": "calls",
+         "at": "orders/api.py:25",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "fetch_order",
+         "to": "get",
+         "relation": "calls",
+         "at": "orders/service.py:26",
+         "confidence": "INFERRED",
+         "derived_by": "verinoda.receiver"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/repository.py::OrderRepository.get",
+       "entry_kind": "entry",
+       "distance": 2
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 2,
+       "reaches": [
+        "orders/repository.py::OrderRepository.get"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 2,
+    "read_first": [
+     {
+      "at": "orders/repository.py:22-26",
+      "why": "changed (body)",
+      "chars": 256
+     },
+     {
+      "at": "orders/service.py:23-27",
+      "why": "call site of get",
+      "chars": 88
+     },
+     {
+      "at": "orders/api.py:23-26",
+      "why": "security: op-on-changed-line",
+      "chars": 127
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 471,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O03",
+   "project": "orders_app",
+   "title": "place_order saves once per item in a loop (design A3)",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "performance": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [
+     {
+      "kind": "loop_bound",
+      "at": "orders/service.py:22",
+      "reported": true
+     }
+    ],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "reach_found": 2,
+     "reach_total": 2,
+     "reach_missing": []
+    },
+    "affected": {
+     "found": 1,
+     "total": 1,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 3,
+     "total": 3,
+     "chars": 637
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.145,
+   "seconds_with_graph_load": 0.196,
+   "dependents_total": 1,
+   "impact_view_symbols": 6,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 3,
+    "strong_or_verified": 3,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 body). Findings - persistence: 1, performance: 1, entry_points: 1. No finding from the rules for: security, public_api, config.",
+    "changes": [
+     {
+      "file": "orders/service.py",
+      "symbol": "orders/service.py::place_order",
+      "kind": "body",
+      "lines": "19-24",
+      "base_lines": "19-22"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "changed-call-reaches-sink",
+       "finding": "the changed call to save() at line 23 reaches a sql-write at orders/repository.py:17 (via save)",
+       "status": "strong_inference",
+       "at": "orders/service.py:23",
+       "evidence_at": [
+        "orders/repository.py:17"
+       ],
+       "basis": "call resolved: Python: repo is OrderRepository (annotation or constructor), edge INFERRED",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/service.py::place_order"
+      }
+     ],
+     "security": [],
+     "performance": [
+      {
+       "concern": "performance",
+       "rule": "io-in-loop",
+       "finding": "save() runs once per iteration of the loop at line 22 and reaches a sql-write at orders/repository.py:17 (N+1); the function is on a hot path (called from create_order_handler, request/command handler (entry-like name; public callable in entry module with no in-project callers)); the loop is bounded by `if len(items) > MAX_ITEMS_PER_ORDER:` at orders/service.py:15",
+       "status": "strong_inference",
+       "at": "orders/service.py:22",
+       "evidence_at": [
+        "orders/service.py:23",
+        "orders/repository.py:17",
+        "orders/api.py:16",
+        "orders/service.py:15"
+       ],
+       "basis": "syntax tree loop; call resolved by: Python: repo is OrderRepository (annotation or constructor) (INFERRED)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/service.py::place_order",
+       "bound": {
+        "at": "orders/service.py:15",
+        "cond": "if len(items) > MAX_ITEMS_PER_ORDER:"
+       }
+      }
+     ],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "create_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed place_order in 1 call(s): create_order_handler -> place_order",
+       "status": "strong_inference",
+       "at": "orders/api.py:16",
+       "evidence_at": [
+        "orders/api.py:18"
+       ],
+       "chain": [
+        {
+         "from": "create_order_handler",
+         "to": "place_order",
+         "relation": "calls",
+         "at": "orders/api.py:18",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/service.py::place_order",
+       "entry_kind": "entry",
+       "distance": 1
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_service.py::test_empty_order_rejected",
+       "distance": 1,
+       "reaches": [
+        "orders/service.py::place_order"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 1,
+       "reaches": [
+        "orders/service.py::place_order"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 1,
+    "read_first": [
+     {
+      "at": "orders/service.py:19-24",
+      "why": "changed (body)",
+      "chars": 249
+     },
+     {
+      "at": "orders/api.py:15-21",
+      "why": "call site of place_order",
+      "chars": 261
+     },
+     {
+      "at": "orders/repository.py:16-18",
+      "why": "persistence: changed-call-reaches-sink",
+      "chars": 127
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 637,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O04",
+   "project": "orders_app",
+   "title": "apply_discount gains a required parameter rate (design A4)",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 1,
+      "fp": 0,
+      "must": 0,
+      "found": 0,
+      "fp_items": [],
+      "missed": []
+     },
+     "public_api": {
+      "tp": 3,
+      "fp": 0,
+      "must": 3,
+      "found": 3,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 0,
+      "found": 0,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 1,
+     "total": 1,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 3,
+     "total": 3,
+     "chars": 912
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.136,
+   "seconds_with_graph_load": 0.189,
+   "dependents_total": 3,
+   "impact_view_symbols": 11,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 5,
+    "strong_or_verified": 5,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 signature). Findings - persistence: 1, public_api: 3, entry_points: 1. No finding from the rules for: security, performance, config.",
+    "changes": [
+     {
+      "file": "orders/pricing.py",
+      "symbol": "orders/pricing.py::apply_discount",
+      "kind": "signature",
+      "lines": "11-15"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "value-carried-to-sink",
+       "finding": "a value computed from apply_discount() is passed to save() in place_order at line 22; save() writes it (total) in a sql-write at orders/repository.py:17 (value path apply_discount -> compute_total -> place_order)",
+       "status": "strong_inference",
+       "at": "orders/service.py:22",
+       "evidence_at": [
+        "orders/repository.py:17"
+       ],
+       "chain": [
+        {
+         "from": "place_order",
+         "to": "compute_total",
+         "relation": "calls",
+         "at": "orders/service.py:21",
+         "confidence": "EXTRACTED",
+         "carries": "passes it on"
+        },
+        {
+         "from": "compute_total",
+         "to": "apply_discount",
+         "relation": "calls",
+         "at": "orders/pricing.py:8",
+         "confidence": "EXTRACTED",
+         "carries": "returns it"
+        }
+       ],
+       "basis": "Python def-use within each function on the path, the last one into the sink's statement (straight-line; branches not told apart); the call to save() resolved by: Python: repo is OrderRepository (annotation or constructor) (INFERRED)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/pricing.py::apply_discount"
+      }
+     ],
+     "security": [],
+     "performance": [],
+     "public_api": [
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to apply_discount() at orders/pricing.py:8 no longer fits the new signature: missing required argument(s): rate",
+       "status": "statically_verified",
+       "at": "orders/pricing.py:8",
+       "evidence_at": [
+        "orders/pricing.py:11"
+       ],
+       "basis": "call bound by: same module; arguments counted against the new parameters (syntax tree)",
+       "derived_by": "review.arity",
+       "for": "orders/pricing.py::apply_discount"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to apply_discount() at tests/test_pricing.py:5 no longer fits the new signature: missing required argument(s): rate",
+       "status": "statically_verified",
+       "at": "tests/test_pricing.py:5",
+       "evidence_at": [
+        "orders/pricing.py:11"
+       ],
+       "basis": "call bound by: name bound by an import of the changed module; arguments counted against the new parameters (syntax tree)",
+       "derived_by": "review.arity",
+       "for": "orders/pricing.py::apply_discount"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to apply_discount() at tests/test_pricing.py:9 no longer fits the new signature: missing required argument(s): rate",
+       "status": "statically_verified",
+       "at": "tests/test_pricing.py:9",
+       "evidence_at": [
+        "orders/pricing.py:11"
+       ],
+       "basis": "call bound by: name bound by an import of the changed module; arguments counted against the new parameters (syntax tree)",
+       "derived_by": "review.arity",
+       "for": "orders/pricing.py::apply_discount"
+      }
+     ],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "create_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed apply_discount in 3 call(s): create_order_handler -> place_order -> compute_total -> apply_discount",
+       "status": "strong_inference",
+       "at": "orders/api.py:16",
+       "evidence_at": [
+        "orders/api.py:18"
+       ],
+       "chain": [
+        {
+         "from": "create_order_handler",
+         "to": "place_order",
+         "relation": "calls",
+         "at": "orders/api.py:18",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "place_order",
+         "to": "compute_total",
+         "relation": "calls",
+         "at": "orders/service.py:21",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "compute_total",
+         "to": "apply_discount",
+         "relation": "calls",
+         "at": "orders/pricing.py:8",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/pricing.py::apply_discount",
+       "entry_kind": "entry",
+       "distance": 3
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_pricing.py::test_discount_applies_above_threshold",
+       "distance": 1,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ]
+      },
+      {
+       "test": "tests/test_pricing.py::test_no_discount_below_threshold",
+       "distance": 1,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ]
+      },
+      {
+       "test": "tests/test_pricing.py::test_compute_total",
+       "distance": 2,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_empty_order_rejected",
+       "distance": 3,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 3,
+       "reaches": [
+        "orders/pricing.py::apply_discount"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 3,
+    "read_first": [
+     {
+      "at": "orders/pricing.py:5-15",
+      "why": "changed (signature)",
+      "chars": 356
+     },
+     {
+      "at": "tests/test_pricing.py:4-6",
+      "why": "public_api: arity-break",
+      "chars": 88
+     },
+     {
+      "at": "tests/test_pricing.py:8-10",
+      "why": "public_api: arity-break",
+      "chars": 81
+     },
+     {
+      "at": "orders/service.py:21-23",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 72
+     },
+     {
+      "at": "orders/repository.py:16-18",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 127
+     },
+     {
+      "at": "orders/api.py:15-19",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 188
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 912,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O05",
+   "project": "orders_app",
+   "title": "comments and blank lines only in service.py (design A5)",
+   "score": {
+    "per_concern": {},
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 0,
+     "total": 0,
+     "chars": 0
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.129,
+   "seconds_with_graph_load": 0.162,
+   "dependents_total": 0,
+   "impact_view_symbols": 6,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 0,
+    "findings": 0,
+    "strong_or_verified": 0,
+    "unknown": 0
+   },
+   "exit": 0,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): no changed definition (comments, whitespace and docstrings are not changes).",
+    "changes": [],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 0,
+    "read_first": [],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 0,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O06",
+   "project": "orders_app",
+   "title": "validate_items loses its item-count cap",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "reach_found": 2,
+     "reach_total": 2,
+     "reach_missing": []
+    },
+    "affected": {
+     "found": 2,
+     "total": 2,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 2,
+     "total": 2,
+     "chars": 628
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.132,
+   "seconds_with_graph_load": 0.191,
+   "dependents_total": 2,
+   "impact_view_symbols": 6,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 body). Findings - security: 1, entry_points: 1. No finding from the rules for: persistence, performance, public_api, config.",
+    "changes": [
+     {
+      "file": "orders/service.py",
+      "symbol": "orders/service.py::validate_items",
+      "kind": "body",
+      "lines": "12-14",
+      "base_lines": "12-16"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "guard-removed",
+       "finding": "the exit guard `if len(items) > MAX_ITEMS_PER_ORDER: <exit>` of validate_items (base line 15) is gone",
+       "status": "statically_verified",
+       "at": "orders/service.py:15",
+       "evidence_at": [
+        "orders/service.py:12"
+       ],
+       "basis": "the base version's syntax tree has it, the working tree's does not",
+       "derived_by": "review.guard_diff",
+       "for": "orders/service.py::validate_items",
+       "side": "base"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "create_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed validate_items in 2 call(s): create_order_handler -> place_order -> validate_items",
+       "status": "strong_inference",
+       "at": "orders/api.py:16",
+       "evidence_at": [
+        "orders/api.py:18"
+       ],
+       "chain": [
+        {
+         "from": "create_order_handler",
+         "to": "place_order",
+         "relation": "calls",
+         "at": "orders/api.py:18",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "place_order",
+         "to": "validate_items",
+         "relation": "calls",
+         "at": "orders/service.py:18",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/service.py::validate_items",
+       "entry_kind": "entry",
+       "distance": 2
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_service.py::test_empty_order_rejected",
+       "distance": 2,
+       "reaches": [
+        "orders/service.py::validate_items"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 2,
+       "reaches": [
+        "orders/service.py::validate_items"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 2,
+    "read_first": [
+     {
+      "at": "orders/service.py:11-21",
+      "why": "changed (body)",
+      "chars": 299
+     },
+     {
+      "at": "orders/service.py:14-16 (base)",
+      "why": "security: guard-removed",
+      "chars": 141
+     },
+     {
+      "at": "orders/api.py:15-19",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 188
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 628,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O07",
+   "project": "orders_app",
+   "title": "DISCOUNT_THRESHOLD default 100.0 -> 150.0 (module-level statement)",
+   "score": {
+    "per_concern": {
+     "config": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 2,
+     "total": 2,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 150
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.587,
+   "seconds_with_graph_load": 0.178,
+   "dependents_total": 0,
+   "impact_view_symbols": 6,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 1,
+    "strong_or_verified": 1,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 module_statement). Findings - config: 1. No finding from the rules for: persistence, security, performance, public_api, entry_points.",
+    "changes": [
+     {
+      "file": "orders/config.py",
+      "symbol": "orders/config.py::DISCOUNT_THRESHOLD",
+      "kind": "module_statement",
+      "lines": "7"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [
+      {
+       "concern": "config",
+       "rule": "env-read-on-changed-line",
+       "finding": "a changed line reads environment variable ORDERS_DISCOUNT_THRESHOLD",
+       "status": "strong_inference",
+       "at": "orders/config.py:7",
+       "evidence_at": [],
+       "basis": "environment-read pattern on the line",
+       "derived_by": "architecture_map.ENV_PATTERNS",
+       "for": "orders/config.py::DISCOUNT_THRESHOLD",
+       "key": "ORDERS_DISCOUNT_THRESHOLD"
+      }
+     ],
+     "entry_points": []
+    },
+    "unknown": [],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "orders/config.py:6-8",
+      "why": "changed (module_statement)",
+      "chars": 150
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 150,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O08",
+   "project": "orders_app",
+   "title": "OrderRepository.save also appends to a log file",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "reach_found": 2,
+     "reach_total": 2,
+     "reach_missing": []
+    },
+    "affected": {
+     "found": 1,
+     "total": 1,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 2,
+     "total": 2,
+     "chars": 754
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.139,
+   "seconds_with_graph_load": 0.193,
+   "dependents_total": 2,
+   "impact_view_symbols": 11,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 body). Findings - persistence: 1, entry_points: 1. No finding from the rules for: security, performance, public_api, config.",
+    "changes": [
+     {
+      "file": "orders/repository.py",
+      "symbol": "orders/repository.py::OrderRepository.save",
+      "kind": "body",
+      "lines": "15-22",
+      "base_lines": "15-20"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "sink-on-changed-line",
+       "finding": "a changed line holds a file-write: with open(\"orders.log\", \"a\") as log:",
+       "status": "strong_inference",
+       "at": "orders/repository.py:20",
+       "evidence_at": [],
+       "basis": "pattern over the code of the line (comments removed)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/repository.py::OrderRepository.save"
+      }
+     ],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "create_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed save in 2 call(s): create_order_handler -> place_order -> save",
+       "status": "strong_inference",
+       "at": "orders/api.py:16",
+       "evidence_at": [
+        "orders/api.py:18"
+       ],
+       "chain": [
+        {
+         "from": "create_order_handler",
+         "to": "place_order",
+         "relation": "calls",
+         "at": "orders/api.py:18",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "place_order",
+         "to": "save",
+         "relation": "calls",
+         "at": "orders/service.py:22",
+         "confidence": "INFERRED",
+         "derived_by": "verinoda.receiver"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/repository.py::OrderRepository.save",
+       "entry_kind": "entry",
+       "distance": 2
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_service.py::test_empty_order_rejected",
+       "distance": 2,
+       "reaches": [
+        "orders/repository.py::OrderRepository.save"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 2,
+       "reaches": [
+        "orders/repository.py::OrderRepository.save"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 2,
+    "read_first": [
+     {
+      "at": "orders/repository.py:15-22",
+      "why": "changed (body)",
+      "chars": 331
+     },
+     {
+      "at": "orders/service.py:19-25",
+      "why": "call site of save",
+      "chars": 235
+     },
+     {
+      "at": "orders/api.py:15-19",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 188
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 754,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O09",
+   "project": "orders_app",
+   "title": "get_order_handler shells out with the order id (shell=True)",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 2,
+     "total": 2,
+     "chars": 281
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.764,
+   "seconds_with_graph_load": 0.185,
+   "dependents_total": 0,
+   "impact_view_symbols": 0,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 2,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 1
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 2 change(s) (1 body, 1 module_statement). Findings - security: 1, entry_points: 1. No finding from the rules for: persistence, performance, public_api, config. 1 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "orders/api.py",
+      "symbol": "orders/api.py::get_order_handler",
+      "kind": "body",
+      "lines": "26-31",
+      "base_lines": "24-28"
+     },
+     {
+      "file": "orders/api.py",
+      "symbol": "orders/api.py::subprocess",
+      "kind": "module_statement",
+      "lines": "3"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "op-on-changed-line",
+       "finding": "a changed line adds process-exec: call to subprocess.run; an entry point's parameter reaches it: get_order_handler(order_id)",
+       "status": "statically_verified",
+       "at": "orders/api.py:27",
+       "evidence_at": [
+        "orders/api.py:26"
+       ],
+       "basis": "Python syntax tree of the working tree (calls bound through imports and aliases); parameter flow: def-use per hop, an inference",
+       "derived_by": "review.PY_SECURITY_CALLS via the guards import/alias engine",
+       "for": "orders/api.py::get_order_handler",
+       "param_flow": {
+        "params": [
+         "order_id"
+        ],
+        "from_entry": "get_order_handler(order_id)",
+        "entry": "orders/api.py:26"
+       }
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "changed-entry",
+       "finding": "get_order_handler is itself an entry point (entry): entry-like name; public callable in entry module with no in-project callers",
+       "status": "strong_inference",
+       "at": "orders/api.py:26",
+       "evidence_at": [],
+       "basis": "entry heuristics",
+       "derived_by": "architecture_map.entry_reasons + review.REGISTRATIONS",
+       "for": "orders/api.py::get_order_handler",
+       "entry_kind": "entry"
+      }
+     ]
+    },
+    "unknown": [
+     {
+      "kind": "no_callers",
+      "at": "orders/api.py:26",
+      "what": "who calls get_order_handler",
+      "why": "no call edge in the graph and no registration found: a framework callback, reflection, dynamic dispatch, or unused",
+      "next_step": "search for `get_order_handler` (or run `verinoda observe --for get_order_handler` for Python)"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "orders/api.py::get_order_handler"
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "orders/api.py:25-31",
+      "why": "changed (body)",
+      "chars": 263
+     },
+     {
+      "at": "orders/api.py:3",
+      "why": "changed (module_statement)",
+      "chars": 18
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 281,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O10",
+   "project": "orders_app",
+   "title": "fetch_order unpickles a cached value",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 2,
+     "total": 2,
+     "chars": 407
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.141,
+   "seconds_with_graph_load": 0.216,
+   "dependents_total": 1,
+   "impact_view_symbols": 6,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 3,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 3 change(s) (1 body, 2 module_statement). Findings - security: 1, entry_points: 1. No finding from the rules for: persistence, performance, public_api, config.",
+    "changes": [
+     {
+      "file": "orders/service.py",
+      "symbol": "orders/service.py::fetch_order",
+      "kind": "body",
+      "lines": "30-34",
+      "base_lines": "25-26"
+     },
+     {
+      "file": "orders/service.py",
+      "symbol": "orders/service.py::pickle",
+      "kind": "module_statement",
+      "lines": "3"
+     },
+     {
+      "file": "orders/service.py",
+      "symbol": "orders/service.py::_CACHE",
+      "kind": "module_statement",
+      "lines": "10"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "op-on-changed-line",
+       "finding": "a changed line adds deserialization: call to pickle.loads",
+       "status": "statically_verified",
+       "at": "orders/service.py:33",
+       "evidence_at": [],
+       "basis": "Python syntax tree of the working tree (calls bound through imports and aliases); parameter flow: def-use per hop, an inference",
+       "derived_by": "review.PY_SECURITY_CALLS via the guards import/alias engine",
+       "for": "orders/service.py::fetch_order"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "get_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed fetch_order in 1 call(s): get_order_handler -> fetch_order",
+       "status": "strong_inference",
+       "at": "orders/api.py:24",
+       "evidence_at": [
+        "orders/api.py:25"
+       ],
+       "chain": [
+        {
+         "from": "get_order_handler",
+         "to": "fetch_order",
+         "relation": "calls",
+         "at": "orders/api.py:25",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/service.py::fetch_order",
+       "entry_kind": "entry",
+       "distance": 1
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 1,
+       "reaches": [
+        "orders/service.py::fetch_order"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 1,
+    "read_first": [
+     {
+      "at": "orders/service.py:30-34",
+      "why": "changed (body)",
+      "chars": 182
+     },
+     {
+      "at": "orders/service.py:3",
+      "why": "changed (module_statement)",
+      "chars": 14
+     },
+     {
+      "at": "orders/service.py:10",
+      "why": "changed (module_statement)",
+      "chars": 18
+     },
+     {
+      "at": "orders/api.py:22-28",
+      "why": "call site of fetch_order",
+      "chars": 193
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 407,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O11",
+   "project": "orders_app",
+   "title": "compute_total rounds the discounted total",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "reach_found": 3,
+     "reach_total": 3,
+     "reach_missing": []
+    },
+    "affected": {
+     "found": 2,
+     "total": 2,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 2,
+     "total": 2,
+     "chars": 646
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.15,
+   "seconds_with_graph_load": 0.183,
+   "dependents_total": 2,
+   "impact_view_symbols": 11,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 body). Findings - persistence: 1, entry_points: 1. No finding from the rules for: security, performance, public_api, config.",
+    "changes": [
+     {
+      "file": "orders/pricing.py",
+      "symbol": "orders/pricing.py::compute_total",
+      "kind": "body",
+      "lines": "6-8"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "value-carried-to-sink",
+       "finding": "a value computed from compute_total() is passed to save() in place_order at line 22; save() writes it (total) in a sql-write at orders/repository.py:17 (value path compute_total -> place_order)",
+       "status": "strong_inference",
+       "at": "orders/service.py:22",
+       "evidence_at": [
+        "orders/repository.py:17"
+       ],
+       "chain": [
+        {
+         "from": "place_order",
+         "to": "compute_total",
+         "relation": "calls",
+         "at": "orders/service.py:21",
+         "confidence": "EXTRACTED",
+         "carries": "passes it on"
+        }
+       ],
+       "basis": "Python def-use within each function on the path, the last one into the sink's statement (straight-line; branches not told apart); the call to save() resolved by: Python: repo is OrderRepository (annotation or constructor) (INFERRED)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/pricing.py::compute_total"
+      }
+     ],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "create_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed compute_total in 2 call(s): create_order_handler -> place_order -> compute_total",
+       "status": "strong_inference",
+       "at": "orders/api.py:16",
+       "evidence_at": [
+        "orders/api.py:18"
+       ],
+       "chain": [
+        {
+         "from": "create_order_handler",
+         "to": "place_order",
+         "relation": "calls",
+         "at": "orders/api.py:18",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "place_order",
+         "to": "compute_total",
+         "relation": "calls",
+         "at": "orders/service.py:21",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/pricing.py::compute_total",
+       "entry_kind": "entry",
+       "distance": 2
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_pricing.py::test_compute_total",
+       "distance": 1,
+       "reaches": [
+        "orders/pricing.py::compute_total"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_empty_order_rejected",
+       "distance": 2,
+       "reaches": [
+        "orders/pricing.py::compute_total"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 2,
+       "reaches": [
+        "orders/pricing.py::compute_total"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 2,
+    "read_first": [
+     {
+      "at": "orders/pricing.py:6-8",
+      "why": "changed (body)",
+      "chars": 150
+     },
+     {
+      "at": "orders/service.py:18-24",
+      "why": "call site of compute_total",
+      "chars": 181
+     },
+     {
+      "at": "orders/repository.py:16-18",
+      "why": "persistence: value-carried-to-sink",
+      "chars": 127
+     },
+     {
+      "at": "orders/api.py:15-19",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 188
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 646,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O12",
+   "project": "orders_app",
+   "title": "fetch_order is deleted while api.py and a test still use it",
+   "score": {
+    "per_concern": {
+     "public_api": {
+      "tp": 4,
+      "fp": 0,
+      "must": 4,
+      "found": 4,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 0,
+      "found": 0,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 1,
+     "total": 1,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 4,
+     "total": 4,
+     "chars": 624
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.139,
+   "seconds_with_graph_load": 0.232,
+   "dependents_total": 1,
+   "impact_view_symbols": 6,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 5,
+    "strong_or_verified": 5,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 removed). Findings - public_api: 4, entry_points: 1. No finding from the rules for: persistence, security, performance, config.",
+    "changes": [
+     {
+      "file": "orders/service.py",
+      "symbol": "orders/service.py::fetch_order",
+      "kind": "removed",
+      "base_lines": "25-26"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [
+      {
+       "concern": "public_api",
+       "rule": "removed-still-used",
+       "finding": "fetch_order was removed but orders/api.py:25 still uses it",
+       "status": "statically_verified",
+       "at": "orders/api.py:25",
+       "evidence_at": [],
+       "basis": "name bound by an import of the removed name",
+       "derived_by": "review.removed_refs",
+       "for": "orders/service.py::fetch_order"
+      },
+      {
+       "concern": "public_api",
+       "rule": "removed-still-used",
+       "finding": "fetch_order was removed but orders/api.py:4 still imports it",
+       "status": "statically_verified",
+       "at": "orders/api.py:4",
+       "evidence_at": [],
+       "basis": "import of the removed name from its module (syntax tree)",
+       "derived_by": "review.removed_refs",
+       "for": "orders/service.py::fetch_order"
+      },
+      {
+       "concern": "public_api",
+       "rule": "removed-still-used",
+       "finding": "fetch_order was removed but tests/test_service.py:10 still uses it",
+       "status": "statically_verified",
+       "at": "tests/test_service.py:10",
+       "evidence_at": [],
+       "basis": "name bound by an import of the removed name",
+       "derived_by": "review.removed_refs",
+       "for": "orders/service.py::fetch_order"
+      },
+      {
+       "concern": "public_api",
+       "rule": "removed-still-used",
+       "finding": "fetch_order was removed but tests/test_service.py:4 still imports it",
+       "status": "statically_verified",
+       "at": "tests/test_service.py:4",
+       "evidence_at": [],
+       "basis": "import of the removed name from its module (syntax tree)",
+       "derived_by": "review.removed_refs",
+       "for": "orders/service.py::fetch_order"
+      }
+     ],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "get_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed fetch_order in 1 call(s): get_order_handler -> fetch_order",
+       "status": "strong_inference",
+       "at": "orders/api.py:24",
+       "evidence_at": [
+        "orders/api.py:25"
+       ],
+       "chain": [
+        {
+         "from": "get_order_handler",
+         "to": "fetch_order",
+         "relation": "calls",
+         "at": "orders/api.py:25",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/service.py::fetch_order",
+       "entry_kind": "entry",
+       "distance": 1
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 1,
+    "read_first": [
+     {
+      "at": "orders/service.py:25-26 (base)",
+      "why": "removed (base version)",
+      "chars": 85
+     },
+     {
+      "at": "orders/api.py:22-28",
+      "why": "call site of fetch_order",
+      "chars": 193
+     },
+     {
+      "at": "orders/api.py:3-5",
+      "why": "public_api: removed-still-used",
+      "chars": 116
+     },
+     {
+      "at": "tests/test_service.py:9-11",
+      "why": "public_api: removed-still-used",
+      "chars": 114
+     },
+     {
+      "at": "tests/test_service.py:3-5",
+      "why": "public_api: removed-still-used",
+      "chars": 116
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 624,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O13",
+   "project": "orders_app",
+   "title": "the orders table gains columns (CREATE TABLE text in __init__)",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 2,
+      "fp": 0,
+      "must": 2,
+      "found": 2,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "reach_found": 2,
+     "reach_total": 2,
+     "reach_missing": []
+    },
+    "affected": {
+     "found": 1,
+     "total": 1,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 3,
+     "total": 3,
+     "chars": 688
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.152,
+   "seconds_with_graph_load": 0.182,
+   "dependents_total": 3,
+   "impact_view_symbols": 11,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 3,
+    "strong_or_verified": 3,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 body). Findings - persistence: 1, entry_points: 2. No finding from the rules for: security, performance, public_api, config.",
+    "changes": [
+     {
+      "file": "orders/repository.py",
+      "symbol": "orders/repository.py::OrderRepository.__init__",
+      "kind": "body",
+      "lines": "9-13"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "sink-on-changed-line",
+       "finding": "a changed line holds a sql-write: \"CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT NOT NULL, total REAL, note",
+       "status": "strong_inference",
+       "at": "orders/repository.py:12",
+       "evidence_at": [],
+       "basis": "pattern over the code of the line (comments removed)",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/repository.py::OrderRepository.__init__"
+      }
+     ],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "create_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed __init__ in 2 call(s): create_order_handler -> get_repo -> __init__",
+       "status": "strong_inference",
+       "at": "orders/api.py:16",
+       "evidence_at": [
+        "orders/api.py:18"
+       ],
+       "chain": [
+        {
+         "from": "create_order_handler",
+         "to": "get_repo",
+         "relation": "calls",
+         "at": "orders/api.py:18",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "get_repo",
+         "to": "__init__",
+         "relation": "calls (construction)",
+         "at": "orders/api.py:12",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/repository.py::OrderRepository.__init__",
+       "entry_kind": "entry",
+       "distance": 2
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "get_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed __init__ in 2 call(s): get_order_handler -> get_repo -> __init__",
+       "status": "strong_inference",
+       "at": "orders/api.py:24",
+       "evidence_at": [
+        "orders/api.py:25"
+       ],
+       "chain": [
+        {
+         "from": "get_order_handler",
+         "to": "get_repo",
+         "relation": "calls",
+         "at": "orders/api.py:25",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "get_repo",
+         "to": "__init__",
+         "relation": "calls (construction)",
+         "at": "orders/api.py:12",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/repository.py::OrderRepository.__init__",
+       "entry_kind": "entry",
+       "distance": 2
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_service.py::test_empty_order_rejected",
+       "distance": 1,
+       "reaches": [
+        "orders/repository.py::OrderRepository.__init__"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 1,
+       "reaches": [
+        "orders/repository.py::OrderRepository.__init__"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 3,
+    "read_first": [
+     {
+      "at": "orders/repository.py:9-13",
+      "why": "changed (body)",
+      "chars": 247
+     },
+     {
+      "at": "orders/api.py:9-19",
+      "why": "call site of __init__",
+      "chars": 314
+     },
+     {
+      "at": "orders/api.py:23-26",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 127
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 688,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O14",
+   "project": "orders_app",
+   "title": "a new, unused bulk_discount function",
+   "score": {
+    "per_concern": {},
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "no_test_found": 1,
+     "no_test_total": 1
+    },
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 0,
+     "total": 0,
+     "chars": 112
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.148,
+   "seconds_with_graph_load": 0.17,
+   "dependents_total": 0,
+   "impact_view_symbols": 11,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 0,
+    "strong_or_verified": 0,
+    "unknown": 0
+   },
+   "exit": 0,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 added). No finding from the rules.",
+    "changes": [
+     {
+      "file": "orders/pricing.py",
+      "symbol": "orders/pricing.py::bulk_discount",
+      "kind": "added",
+      "lines": "18-19"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "orders/pricing.py::bulk_discount"
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "orders/pricing.py:18-19",
+      "why": "changed (added)",
+      "chars": 112
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 112,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O15",
+   "project": "orders_app",
+   "title": "place_order normalises the customer name before saving",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "reach_found": 2,
+     "reach_total": 2,
+     "reach_missing": []
+    },
+    "affected": {
+     "found": 1,
+     "total": 1,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 2,
+     "total": 2,
+     "chars": 583
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.148,
+   "seconds_with_graph_load": 0.183,
+   "dependents_total": 1,
+   "impact_view_symbols": 6,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 body). Findings - persistence: 1, entry_points: 1. No finding from the rules for: security, performance, public_api, config.",
+    "changes": [
+     {
+      "file": "orders/service.py",
+      "symbol": "orders/service.py::place_order",
+      "kind": "body",
+      "lines": "19-22"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "changed-call-reaches-sink",
+       "finding": "the changed call to save() at line 22 reaches a sql-write at orders/repository.py:17 (via save)",
+       "status": "strong_inference",
+       "at": "orders/service.py:22",
+       "evidence_at": [
+        "orders/repository.py:17"
+       ],
+       "basis": "call resolved: Python: repo is OrderRepository (annotation or constructor), edge INFERRED",
+       "derived_by": "architecture_map.SINK_PATTERNS",
+       "for": "orders/service.py::place_order"
+      }
+     ],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "create_order_handler (entry: entry-like name; public callable in entry module with no in-project callers) reaches the changed place_order in 1 call(s): create_order_handler -> place_order",
+       "status": "strong_inference",
+       "at": "orders/api.py:16",
+       "evidence_at": [
+        "orders/api.py:18"
+       ],
+       "chain": [
+        {
+         "from": "create_order_handler",
+         "to": "place_order",
+         "relation": "calls",
+         "at": "orders/api.py:18",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "orders/service.py::place_order",
+       "entry_kind": "entry",
+       "distance": 1
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_service.py::test_empty_order_rejected",
+       "distance": 1,
+       "reaches": [
+        "orders/service.py::place_order"
+       ]
+      },
+      {
+       "test": "tests/test_service.py::test_place_and_fetch_roundtrip",
+       "distance": 1,
+       "reaches": [
+        "orders/service.py::place_order"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 1,
+    "read_first": [
+     {
+      "at": "orders/service.py:19-23",
+      "why": "changed (body)",
+      "chars": 195
+     },
+     {
+      "at": "orders/api.py:15-21",
+      "why": "call site of place_order",
+      "chars": 261
+     },
+     {
+      "at": "orders/repository.py:16-18",
+      "why": "persistence: changed-call-reaches-sink",
+      "chars": 127
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 583,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "O16",
+   "project": "orders_app",
+   "title": "a test's expected value changes (test code only)",
+   "score": {
+    "per_concern": {},
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 0,
+     "total": 0,
+     "chars": 87
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.148,
+   "seconds_with_graph_load": 0.174,
+   "dependents_total": 0,
+   "impact_view_symbols": 0,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 0,
+    "strong_or_verified": 0,
+    "unknown": 0
+   },
+   "exit": 0,
+   "result": {
+    "summary": "Review of the working tree against HEAD (10bc56d103): 1 change(s) (1 body). No finding from the rules.",
+    "changes": [
+     {
+      "file": "tests/test_pricing.py",
+      "symbol": "tests/test_pricing.py::test_discount_applies_above_threshold",
+      "kind": "body",
+      "lines": "4-5",
+      "test": true
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [],
+    "tests": {
+     "static": [],
+     "changed_tests": [
+      "tests/test_pricing.py::test_discount_applies_above_threshold"
+     ],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "tests/test_pricing.py:4-5",
+      "why": "changed (body)",
+      "chars": 87
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 87,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "F01",
+   "project": "forge_mod",
+   "title": "EmberNetwork.handleStoke loses its distance check (design A6)",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "at": null,
+      "reported": true
+     }
+    ],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "no_test_found": 1,
+     "no_test_total": 1
+    },
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 2,
+     "total": 2,
+     "chars": 867
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.155,
+   "seconds_with_graph_load": 0.197,
+   "dependents_total": 0,
+   "impact_view_symbols": 0,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 2
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (54d12e3b0d): 1 change(s) (1 body). Findings - security: 1, entry_points: 1. No finding from the rules for: persistence, performance, public_api, config. 2 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java",
+      "symbol": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java::EmberNetwork.handleStoke",
+      "kind": "body",
+      "lines": "28-38",
+      "base_lines": "28-41"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "guard-removed",
+       "finding": "the exit guard `if player.distanceToSqr(payload.pos().getCenter()) > MAX_DISTANCE_SQR: <exit>` of handleStoke (base line 35) is gone",
+       "status": "statically_verified",
+       "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:35",
+       "evidence_at": [
+        "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28"
+       ],
+       "basis": "the base version's syntax tree has it, the working tree's does not",
+       "derived_by": "review.guard_diff",
+       "for": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java::EmberNetwork.handleStoke",
+       "side": "base"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "changed-entry",
+       "finding": "handleStoke is itself an entry point (client->server packet): client->server packet handler registered at src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24 (text, inference)",
+       "status": "strong_inference",
+       "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28",
+       "evidence_at": [
+        "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24"
+       ],
+       "basis": "entry heuristics",
+       "derived_by": "architecture_map.entry_reasons + review.REGISTRATIONS",
+       "for": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java::EmberNetwork.handleStoke",
+       "entry_kind": "client->server packet"
+      }
+     ]
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     },
+     {
+      "kind": "method_reference",
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24",
+      "what": "the callers of EmberNetwork.handleStoke",
+      "why": "it has no call edge in the graph; it is registered by method reference at src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24 (client->server packet handler): found by text search",
+      "next_step": "read the registration; runtime calls of framework callbacks are not traced"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java::EmberNetwork.handleStoke"
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:27-38",
+      "why": "changed (body)",
+      "chars": 570
+     },
+     {
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:34-36 (base)",
+      "why": "security: guard-removed",
+      "chars": 112
+     },
+     {
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:23-25",
+      "why": "entry_points: changed-entry",
+      "chars": 185
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 867,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "F02",
+   "project": "forge_mod",
+   "title": "serverTick walks every player each tick (design A7)",
+   "score": {
+    "per_concern": {
+     "performance": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "at": null,
+      "reported": true
+     }
+    ],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "no_test_found": 1,
+     "no_test_total": 1
+    },
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 2312
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.174,
+   "seconds_with_graph_load": 0.208,
+   "dependents_total": 0,
+   "impact_view_symbols": 28,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 1,
+    "strong_or_verified": 1,
+    "unknown": 2
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (54d12e3b0d): 1 change(s) (1 body). Findings - performance: 1. No finding from the rules for: persistence, security, public_api, config, entry_points. 2 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+      "symbol": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java::EmberForgeBlockEntity.serverTick",
+      "kind": "body",
+      "lines": "75-125",
+      "base_lines": "75-120"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [
+      {
+       "concern": "performance",
+       "rule": "loop-added-hot-path",
+       "finding": "a loop (`for (Player nearby : level.players())`) was added at line 112 in serverTick, which runs on a hot path (block entity ticker registered at src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72)",
+       "status": "strong_inference",
+       "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:112",
+       "evidence_at": [
+        "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72"
+       ],
+       "basis": "syntax tree loop on a changed line; hot path: registration by method reference (text search, inference)",
+       "derived_by": "review.hot_path",
+       "for": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java::EmberForgeBlockEntity.serverTick"
+      }
+     ],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     },
+     {
+      "kind": "method_reference",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72",
+      "what": "the callers of EmberForgeBlockEntity.serverTick",
+      "why": "it has no call edge in the graph; it is registered by method reference at src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72 (block entity ticker): found by text search",
+      "next_step": "read the registration; runtime calls of framework callbacks are not traced"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java::EmberForgeBlockEntity.serverTick"
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-125",
+      "why": "changed (body)",
+      "chars": 2150
+     },
+     {
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:71-73",
+      "why": "performance: loop-added-hot-path",
+      "chars": 162
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 2312,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "F03",
+   "project": "forge_mod",
+   "title": "stoke_heat default 15 -> 50, maximum 100 -> 500",
+   "score": {
+    "per_concern": {
+     "config": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 1,
+     "total": 1,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 1455
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.154,
+   "seconds_with_graph_load": 0.198,
+   "dependents_total": 0,
+   "impact_view_symbols": 14,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 1,
+    "strong_or_verified": 1,
+    "unknown": 2
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (54d12e3b0d): 1 change(s) (1 body). Findings - config: 1. No finding from the rules for: persistence, security, performance, public_api, entry_points. 2 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java",
+      "symbol": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java::EmberConfig",
+      "kind": "body",
+      "lines": "9-41"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [
+      {
+       "concern": "config",
+       "rule": "config-key-on-changed-line",
+       "finding": "config key `stoke_heat` on a changed line; the key is in config/emberforge-common.toml:17",
+       "status": "strong_inference",
+       "at": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:26",
+       "evidence_at": [
+        "config/emberforge-common.toml:17"
+       ],
+       "basis": "quoted key in a config call or present in a config file of the repository",
+       "derived_by": "review.CONFIG_CALL/QUOTED_KEY",
+       "for": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java::EmberConfig",
+       "key": "stoke_heat"
+      }
+     ],
+     "entry_points": []
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     },
+     {
+      "kind": "no_callers",
+      "at": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9",
+      "what": "who calls EmberConfig",
+      "why": "no call edge in the graph and no registration found: a framework callback, reflection, dynamic dispatch, or unused",
+      "next_step": "search for `EmberConfig` (or run `verinoda observe --for EmberConfig` for Python)"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "src/main/java/net/ashvale/emberforge/config/EmberConfig.java::EmberConfig"
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9-41",
+      "why": "changed (body)",
+      "chars": 1383
+     },
+     {
+      "at": "config/emberforge-common.toml:16-18",
+      "why": "config: config-key-on-changed-line",
+      "chars": 72
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 1455,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "F04",
+   "project": "forge_mod",
+   "title": "HeatMath.heatForFuel gains a multiplier parameter (Kotlin)",
+   "score": {
+    "per_concern": {
+     "public_api": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "no_test_found": 1,
+     "no_test_total": 1
+    },
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 741
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.16,
+   "seconds_with_graph_load": 0.22,
+   "dependents_total": 1,
+   "impact_view_symbols": 24,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 1,
+    "strong_or_verified": 1,
+    "unknown": 1
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (54d12e3b0d): 1 change(s) (1 signature). Findings - public_api: 1. No finding from the rules for: persistence, security, performance, config, entry_points. 1 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt",
+      "symbol": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt::HeatMath.heatForFuel",
+      "kind": "signature",
+      "lines": "14-19"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to HeatMath.heatForFuel() at src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:79 no longer fits the new signature: 1 argument(s) given, the new signature takes 2",
+       "status": "strong_inference",
+       "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:79",
+       "evidence_at": [
+        "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:14"
+       ],
+       "basis": "call site by: graph call edge; arguments counted by the syntax tree (overloads in other classes and default arguments through annotations are not checked)",
+       "derived_by": "review.arity",
+       "for": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt::HeatMath.heatForFuel"
+      }
+     ],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt::HeatMath.heatForFuel"
+     ]
+    },
+    "dependents_total": 1,
+    "read_first": [
+     {
+      "at": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:13-19",
+      "why": "changed (signature)",
+      "chars": 386
+     },
+     {
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:76-82",
+      "why": "call site of heatForFuel",
+      "chars": 355
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 741,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "F05",
+   "project": "forge_mod",
+   "title": "the /emberforge reset permission requirement is removed (Kotlin)",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "at": null,
+      "reported": true
+     }
+    ],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 1164
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.167,
+   "seconds_with_graph_load": 0.207,
+   "dependents_total": 1,
+   "impact_view_symbols": 3,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 1,
+    "strong_or_verified": 1,
+    "unknown": 1
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (54d12e3b0d): 1 change(s) (1 body). Findings - security: 1. No finding from the rules for: persistence, performance, public_api, config, entry_points. 1 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt",
+      "symbol": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt::ForgeCommands.register",
+      "kind": "body",
+      "lines": "15-31",
+      "base_lines": "15-32"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "permission-removed",
+       "finding": "a permission check was removed (base line 21): `.requires { it.hasPermission(2) && EmberConfig.ALLOW_RESET_COMMAND.get() }`",
+       "status": "strong_inference",
+       "at": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:21",
+       "evidence_at": [],
+       "basis": "permission call on a removed line (text rule; the working tree no longer has that call on a changed line)",
+       "derived_by": "review.PERMISSION_CALL",
+       "for": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt::ForgeCommands.register",
+       "side": "base"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt::ForgeCommands.register"
+     ]
+    },
+    "dependents_total": 1,
+    "read_first": [
+     {
+      "at": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:15-31",
+      "why": "changed (body)",
+      "chars": 707
+     },
+     {
+      "at": "src/main/java/net/ashvale/emberforge/event/ModEvents.java:19-25",
+      "why": "call site of register",
+      "chars": 214
+     },
+     {
+      "at": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:20-22 (base)",
+      "why": "security: permission-removed",
+      "chars": 243
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 1164,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "F06",
+   "project": "forge_mod",
+   "title": "saveAdditional writes the heat under a new NBT key",
+   "score": {
+    "per_concern": {
+     "persistence": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "at": null,
+      "reported": true
+     }
+    ],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 293
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.157,
+   "seconds_with_graph_load": 0.224,
+   "dependents_total": 0,
+   "impact_view_symbols": 28,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 1,
+    "strong_or_verified": 1,
+    "unknown": 2
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (54d12e3b0d): 1 change(s) (1 body). Findings - persistence: 1. No finding from the rules for: security, performance, public_api, config, entry_points. 2 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+      "symbol": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java::EmberForgeBlockEntity.saveAdditional",
+      "kind": "body",
+      "lines": "154-160"
+     }
+    ],
+    "concerns": {
+     "persistence": [
+      {
+       "concern": "persistence",
+       "rule": "sink-on-changed-line",
+       "finding": "a changed line holds a saved-data-write (NBT): tag.putInt(\"HeatLevel\", heat);",
+       "status": "strong_inference",
+       "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:158",
+       "evidence_at": [],
+       "basis": "pattern over the code of the line (comments removed)",
+       "derived_by": "review.EXTRA_SINK_PATTERNS",
+       "for": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java::EmberForgeBlockEntity.saveAdditional"
+      }
+     ],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     },
+     {
+      "kind": "no_callers",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:154",
+      "what": "who calls EmberForgeBlockEntity.saveAdditional",
+      "why": "no call edge in the graph and no registration found: a framework callback, reflection, dynamic dispatch, or unused",
+      "next_step": "search for `saveAdditional` (or run `verinoda observe --for saveAdditional` for Python)"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java::EmberForgeBlockEntity.saveAdditional"
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:154-160",
+      "why": "changed (body)",
+      "chars": 293
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 293,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "F07",
+   "project": "forge_mod",
+   "title": "useItemOn no longer checks for the Forge Hammer",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "at": null,
+      "reported": true
+     }
+    ],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 854
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.15,
+   "seconds_with_graph_load": 0.211,
+   "dependents_total": 0,
+   "impact_view_symbols": 15,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 1,
+    "unknown": 2
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (54d12e3b0d): 1 change(s) (1 body). Findings - security: 1, entry_points: 1. No finding from the rules for: persistence, performance, public_api, config. 2 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java",
+      "symbol": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java::EmberForgeBlock.useItemOn",
+      "kind": "body",
+      "lines": "76-84",
+      "base_lines": "76-87"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "guard-removed",
+       "finding": "the exit guard `if !stack.is(ModItems.FORGE_HAMMER.get()): <exit>` of useItemOn (base line 79) is gone",
+       "status": "statically_verified",
+       "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:79",
+       "evidence_at": [
+        "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:76"
+       ],
+       "basis": "the base version's syntax tree has it, the working tree's does not",
+       "derived_by": "review.guard_diff",
+       "for": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java::EmberForgeBlock.useItemOn",
+       "side": "base"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "changed-entry",
+       "finding": "useItemOn is itself an entry point (player input): a game callback on player input, by name (inference)",
+       "status": "weak_inference",
+       "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:76",
+       "evidence_at": [],
+       "basis": "entry heuristics",
+       "derived_by": "architecture_map.entry_reasons + review.REGISTRATIONS",
+       "for": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java::EmberForgeBlock.useItemOn",
+       "entry_kind": "player input"
+      }
+     ]
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     },
+     {
+      "kind": "no_callers",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:76",
+      "what": "who calls EmberForgeBlock.useItemOn",
+      "why": "no call edge in the graph and no registration found: a framework callback, reflection, dynamic dispatch, or unused",
+      "next_step": "search for `useItemOn` (or run `verinoda observe --for useItemOn` for Python)"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java::EmberForgeBlock.useItemOn"
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:75-84",
+      "why": "changed (body)",
+      "chars": 619
+     },
+     {
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:78-80 (base)",
+      "why": "security: guard-removed",
+      "chars": 235
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 854,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "F08",
+   "project": "forge_mod",
+   "title": "comment-only edits in EmberForgeBlockEntity.java",
+   "score": {
+    "per_concern": {},
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 0,
+     "total": 0,
+     "chars": 0
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.143,
+   "seconds_with_graph_load": 0.193,
+   "dependents_total": 0,
+   "impact_view_symbols": 28,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 0,
+    "findings": 0,
+    "strong_or_verified": 0,
+    "unknown": 0
+   },
+   "exit": 0,
+   "result": {
+    "summary": "Review of the working tree against HEAD (54d12e3b0d): no changed definition (comments, whitespace and docstrings are not changes).",
+    "changes": [],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 0,
+    "read_first": [],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 0,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "F09",
+   "project": "forge_mod",
+   "title": "progressPerTick's cap is doubled (Kotlin body change)",
+   "score": {
+    "per_concern": {},
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "at": null,
+      "reported": true
+     }
+    ],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "reach_found": 2,
+     "reach_total": 2,
+     "reach_missing": []
+    },
+    "affected": {
+     "found": 1,
+     "total": 1,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 0,
+     "total": 0,
+     "chars": 584
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.14,
+   "seconds_with_graph_load": 0.227,
+   "dependents_total": 1,
+   "impact_view_symbols": 24,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 0,
+    "strong_or_verified": 0,
+    "unknown": 1
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (54d12e3b0d): 1 change(s) (1 body). No finding from the rules. 1 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt",
+      "symbol": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt::HeatMath.progressPerTick",
+      "kind": "body",
+      "lines": "31-35"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     }
+    ],
+    "tests": {
+     "static": [
+      {
+       "test": "src/test/java/net/ashvale/emberforge/HeatMathTest.java::noProgressBelowTheRecipesMinimumHeat",
+       "distance": 1,
+       "reaches": [
+        "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt::HeatMath.progressPerTick"
+       ]
+      },
+      {
+       "test": "src/test/java/net/ashvale/emberforge/HeatMathTest.java::progressGrowsWithHeatButIsCapped",
+       "distance": 1,
+       "reaches": [
+        "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt::HeatMath.progressPerTick"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 1,
+    "read_first": [
+     {
+      "at": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:31-35",
+      "why": "changed (body)",
+      "chars": 202
+     },
+     {
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:94-100",
+      "why": "call site of progressPerTick",
+      "chars": 382
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 584,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "F10",
+   "project": "forge_mod",
+   "title": "EmberForgeMenu.stillValid always answers true",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 88
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.145,
+   "seconds_with_graph_load": 0.22,
+   "dependents_total": 0,
+   "impact_view_symbols": 17,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 1,
+    "strong_or_verified": 1,
+    "unknown": 1
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (54d12e3b0d): 1 change(s) (1 body). Findings - security: 1. No finding from the rules for: persistence, performance, public_api, config, entry_points. 1 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java",
+      "symbol": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java::EmberForgeMenu.stillValid",
+      "kind": "body",
+      "lines": "89-92"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "check-made-constant",
+       "finding": "the check stillValid() now always returns true",
+       "status": "strong_inference",
+       "at": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:91",
+       "evidence_at": [],
+       "basis": "its body is one constant return in the working tree and was not in the base",
+       "derived_by": "review.CHECK_NAME",
+       "for": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java::EmberForgeMenu.stillValid"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java::EmberForgeMenu.stillValid"
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:89-92",
+      "why": "changed (body)",
+      "chars": 88
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 88,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "G01",
+   "project": "glow_mod",
+   "title": "onSummonWisp loses its distance check",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "at": null,
+      "reported": true
+     }
+    ],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 2,
+     "total": 2,
+     "chars": 776
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.147,
+   "seconds_with_graph_load": 0.217,
+   "dependents_total": 0,
+   "impact_view_symbols": 15,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 2
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (939bb84cae): 1 change(s) (1 body). Findings - security: 1, entry_points: 1. No finding from the rules for: persistence, performance, public_api, config. 2 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/com/example/glowmod/network/ServerNetworking.java",
+      "symbol": "src/main/java/com/example/glowmod/network/ServerNetworking.java::ServerNetworking.onSummonWisp",
+      "kind": "body",
+      "lines": "20-26",
+      "base_lines": "20-30"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "guard-removed",
+       "finding": "the exit guard `if !player.getBlockPos().isWithinDistance(payload.pos(), GlowConfig.get().maxSummonDistance()): <exit>` of onSummonWisp (base line 25) is gone",
+       "status": "statically_verified",
+       "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:25",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/network/ServerNetworking.java:20"
+       ],
+       "basis": "the base version's syntax tree has it, the working tree's does not",
+       "derived_by": "review.guard_diff",
+       "for": "src/main/java/com/example/glowmod/network/ServerNetworking.java::ServerNetworking.onSummonWisp",
+       "side": "base"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "changed-entry",
+       "finding": "onSummonWisp is itself an entry point (client->server packet): client->server packet receiver registered at src/main/java/com/example/glowmod/network/ServerNetworking.java:17 (text, inference)",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:20",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/network/ServerNetworking.java:17"
+       ],
+       "basis": "entry heuristics",
+       "derived_by": "architecture_map.entry_reasons + review.REGISTRATIONS",
+       "for": "src/main/java/com/example/glowmod/network/ServerNetworking.java::ServerNetworking.onSummonWisp",
+       "entry_kind": "client->server packet"
+      }
+     ]
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     },
+     {
+      "kind": "method_reference",
+      "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:17",
+      "what": "the callers of ServerNetworking.onSummonWisp",
+      "why": "it has no call edge in the graph; it is registered by method reference at src/main/java/com/example/glowmod/network/ServerNetworking.java:17 (client->server packet receiver): found by text search",
+      "next_step": "read the registration; runtime calls of framework callbacks are not traced"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "src/main/java/com/example/glowmod/network/ServerNetworking.java::ServerNetworking.onSummonWisp"
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:16-26",
+      "why": "changed (body)",
+      "chars": 539
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:24-26 (base)",
+      "why": "security: guard-removed",
+      "chars": 237
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 776,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "G02",
+   "project": "glow_mod",
+   "title": "RepairScheduler.tick drops its per-tick budget",
+   "score": {
+    "per_concern": {
+     "performance": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "at": null,
+      "reported": true
+     }
+    ],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 505
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.165,
+   "seconds_with_graph_load": 0.189,
+   "dependents_total": 0,
+   "impact_view_symbols": 21,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 1,
+    "strong_or_verified": 1,
+    "unknown": 2
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (939bb84cae): 1 change(s) (1 body). Findings - performance: 1. No finding from the rules for: persistence, security, public_api, config, entry_points. 2 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/com/example/glowmod/repair/RepairScheduler.java",
+      "symbol": "src/main/java/com/example/glowmod/repair/RepairScheduler.java::RepairScheduler.tick",
+      "kind": "body",
+      "lines": "33-39"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [
+      {
+       "concern": "performance",
+       "rule": "hot-loop-changed",
+       "finding": "the loop condition at line 35 changed on a hot path (tick event registered at src/main/java/com/example/glowmod/repair/RepairScheduler.java:24): `while (budget-- > 0 && !QUEUE.isEmpty() && QUEUE.peekFirst().dueTick() <= server.getTicks())` -> `while (!QUEUE.isEmpty() && QUEUE.peekFirst().dueTick() <= server.getTicks())`; the bound `budget-- > 0` was removed",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:35",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/repair/RepairScheduler.java:24"
+       ],
+       "basis": "tree-sitter loop headers of both versions; hot path: registration by method reference (text search, inference)",
+       "derived_by": "review.hot_path",
+       "for": "src/main/java/com/example/glowmod/repair/RepairScheduler.java::RepairScheduler.tick"
+      }
+     ],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     },
+     {
+      "kind": "method_reference",
+      "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:24",
+      "what": "the callers of RepairScheduler.tick",
+      "why": "it has no call edge in the graph; it is registered by method reference at src/main/java/com/example/glowmod/repair/RepairScheduler.java:24 (tick event): found by text search",
+      "next_step": "read the registration; runtime calls of framework callbacks are not traced"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "src/main/java/com/example/glowmod/repair/RepairScheduler.java::RepairScheduler.tick"
+     ]
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:33-39",
+      "why": "changed (body)",
+      "chars": 313
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:23-25",
+      "why": "performance: hot-loop-changed",
+      "chars": 192
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 505,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "G03",
+   "project": "glow_mod",
+   "title": "the max_summon_distance key is read under a new name",
+   "score": {
+    "per_concern": {
+     "config": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 0,
+      "fp": 1,
+      "must": 0,
+      "found": 0,
+      "fp_items": [
+       {
+        "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:44",
+        "rule": "entry-reaches-change",
+        "status": "strong_inference",
+        "finding": "reload (command: command handler registered at src/main/java/com/example/glowmod/command/GlowCommands.java:24 (text, inference)) reaches the changed parse in 2 ",
+        "must_not": false
+       }
+      ],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 1484
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.188,
+   "seconds_with_graph_load": 0.255,
+   "dependents_total": 3,
+   "impact_view_symbols": 29,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 1
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (939bb84cae): 1 change(s) (1 body). Findings - config: 1, entry_points: 1. No finding from the rules for: persistence, security, performance, public_api. 1 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/com/example/glowmod/config/GlowConfig.java",
+      "symbol": "src/main/java/com/example/glowmod/config/GlowConfig.java::GlowConfig.parse",
+      "kind": "body",
+      "lines": "44-54"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [
+      {
+       "concern": "config",
+       "rule": "config-key-on-changed-line",
+       "finding": "config key `max_distance` on a changed line",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:53",
+       "evidence_at": [],
+       "basis": "quoted key in a config call or present in a config file of the repository",
+       "derived_by": "review.CONFIG_CALL/QUOTED_KEY",
+       "for": "src/main/java/com/example/glowmod/config/GlowConfig.java::GlowConfig.parse",
+       "key": "max_distance"
+      }
+     ],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "reload (command: command handler registered at src/main/java/com/example/glowmod/command/GlowCommands.java:24 (text, inference)) reaches the changed parse in 2 call(s): reload -> load -> parse",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:44",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/command/GlowCommands.java:24",
+        "src/main/java/com/example/glowmod/command/GlowCommands.java:45"
+       ],
+       "chain": [
+        {
+         "from": "reload",
+         "to": "load",
+         "relation": "calls",
+         "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:45",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "load",
+         "to": "parse",
+         "relation": "calls",
+         "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:36",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "src/main/java/com/example/glowmod/config/GlowConfig.java::GlowConfig.parse",
+       "entry_kind": "command",
+       "distance": 2
+      }
+     ]
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "src/main/java/com/example/glowmod/config/GlowConfig.java::GlowConfig.parse"
+     ]
+    },
+    "dependents_total": 3,
+    "read_first": [
+     {
+      "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:44-54",
+      "why": "changed (body)",
+      "chars": 724
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:33-39",
+      "why": "call site of parse",
+      "chars": 360
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:43-46",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 201
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:23-25",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 199
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 1484,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "G04",
+   "project": "glow_mod",
+   "title": "glowmod.yml: blocks_per_tick 8 -> 500 (config file)",
+   "score": {
+    "per_concern": {
+     "config": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 436
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.143,
+   "seconds_with_graph_load": 0.185,
+   "dependents_total": 0,
+   "impact_view_symbols": 14,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 1,
+    "strong_or_verified": 1,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (939bb84cae): 1 change(s) (1 config_key). Findings - config: 1. No finding from the rules for: persistence, security, performance, public_api, entry_points.",
+    "changes": [
+     {
+      "file": "src/main/resources/glowmod.yml",
+      "symbol": "src/main/resources/glowmod.yml::repair.blocks_per_tick",
+      "kind": "config_key",
+      "lines": "12"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [
+      {
+       "concern": "config",
+       "rule": "config-file-key",
+       "finding": "config key repair.blocks_per_tick changed: `blocks_per_tick: 8` -> `blocks_per_tick: 500`",
+       "status": "strong_inference",
+       "at": "src/main/resources/glowmod.yml:12",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/config/GlowConfig.java:51"
+       ],
+       "basis": "line diff of the config file; readers by literal key search in code",
+       "derived_by": "review.config_keys",
+       "for": "src/main/resources/glowmod.yml::repair.blocks_per_tick",
+       "readers": [
+        "src/main/java/com/example/glowmod/config/GlowConfig.java:51"
+       ]
+      }
+     ],
+     "entry_points": []
+    },
+    "unknown": [],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 0,
+    "read_first": [
+     {
+      "at": "src/main/resources/glowmod.yml:11-13",
+      "why": "changed (config_key)",
+      "chars": 173
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:50-52",
+      "why": "config: config-file-key",
+      "chars": 263
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 436,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "G05",
+   "project": "glow_mod",
+   "title": "Wisp.spawn gains a third parameter",
+   "score": {
+    "per_concern": {
+     "public_api": {
+      "tp": 6,
+      "fp": 0,
+      "must": 6,
+      "found": 6,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 0,
+      "fp": 4,
+      "must": 0,
+      "found": 0,
+      "fp_items": [
+       {
+        "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:27",
+        "rule": "entry-reaches-change",
+        "status": "strong_inference",
+        "finding": "wisp (command: command handler registered at src/main/java/com/example/glowmod/command/GlowCommands.java:22 (text, inference)) reaches the changed spawn in 1 ca",
+        "must_not": false
+       },
+       {
+        "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:38",
+        "rule": "entry-reaches-change",
+        "status": "strong_inference",
+        "finding": "ritual (command: command handler registered at src/main/java/com/example/glowmod/command/GlowCommands.java:23 (text, inference)) reaches the changed spawn in 2 ",
+        "must_not": false
+       },
+       {
+        "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:20",
+        "rule": "entry-reaches-change",
+        "status": "strong_inference",
+        "finding": "onSummonWisp (client->server packet: client->server packet receiver registered at src/main/java/com/example/glowmod/network/ServerNetworking.java:17 (text, infe",
+        "must_not": false
+       },
+       {
+        "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:22",
+        "rule": "entry-reaches-change",
+        "status": "strong_inference",
+        "finding": "onChunkLoad (world event: chunk load event registered at src/main/java/com/example/glowmod/world/WispSpawner.java:19 (text, inference)) reaches the changed spaw",
+        "must_not": false
+       }
+      ],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 6,
+     "total": 6,
+     "chars": 3400
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.15,
+   "seconds_with_graph_load": 0.219,
+   "dependents_total": 8,
+   "impact_view_symbols": 31,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 10,
+    "strong_or_verified": 10,
+    "unknown": 1
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (939bb84cae): 1 change(s) (1 signature). Findings - public_api: 6, entry_points: 4. No finding from the rules for: persistence, security, performance, config. 1 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/com/example/glowmod/entity/Wisp.java",
+      "symbol": "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn",
+      "kind": "signature",
+      "lines": "28-36"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to Wisp.spawn() at src/gametest/java/com/example/glowmod/test/WispTests.java:16 no longer fits the new signature: 2 argument(s) given, the new signature takes 3",
+       "status": "strong_inference",
+       "at": "src/gametest/java/com/example/glowmod/test/WispTests.java:16",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/entity/Wisp.java:28"
+       ],
+       "basis": "call site by: graph call edge; arguments counted by the syntax tree (overloads in other classes and default arguments through annotations are not checked)",
+       "derived_by": "review.arity",
+       "for": "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to Wisp.spawn() at src/main/java/com/example/glowmod/command/GlowCommands.java:29 no longer fits the new signature: 2 argument(s) given, the new signature takes 3",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:29",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/entity/Wisp.java:28"
+       ],
+       "basis": "call site by: graph call edge; arguments counted by the syntax tree (overloads in other classes and default arguments through annotations are not checked)",
+       "derived_by": "review.arity",
+       "for": "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to Wisp.spawn() at src/main/java/com/example/glowmod/event/LanternEvents.java:30 no longer fits the new signature: 2 argument(s) given, the new signature takes 3",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/event/LanternEvents.java:30",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/entity/Wisp.java:28"
+       ],
+       "basis": "call site by: graph call edge; arguments counted by the syntax tree (overloads in other classes and default arguments through annotations are not checked)",
+       "derived_by": "review.arity",
+       "for": "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to Wisp.spawn() at src/main/java/com/example/glowmod/network/ServerNetworking.java:29 no longer fits the new signature: 2 argument(s) given, the new signature takes 3",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:29",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/entity/Wisp.java:28"
+       ],
+       "basis": "call site by: graph call edge; arguments counted by the syntax tree (overloads in other classes and default arguments through annotations are not checked)",
+       "derived_by": "review.arity",
+       "for": "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to Wisp.spawn() at src/main/java/com/example/glowmod/ritual/Ritual.java:29 no longer fits the new signature: 2 argument(s) given, the new signature takes 3",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/ritual/Ritual.java:29",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/entity/Wisp.java:28"
+       ],
+       "basis": "call site by: graph call edge; arguments counted by the syntax tree (overloads in other classes and default arguments through annotations are not checked)",
+       "derived_by": "review.arity",
+       "for": "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to Wisp.spawn() at src/main/java/com/example/glowmod/world/WispSpawner.java:31 no longer fits the new signature: 2 argument(s) given, the new signature takes 3",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:31",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/entity/Wisp.java:28"
+       ],
+       "basis": "call site by: graph call edge; arguments counted by the syntax tree (overloads in other classes and default arguments through annotations are not checked)",
+       "derived_by": "review.arity",
+       "for": "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn"
+      }
+     ],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "wisp (command: command handler registered at src/main/java/com/example/glowmod/command/GlowCommands.java:22 (text, inference)) reaches the changed spawn in 1 call(s): wisp -> spawn",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:27",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/command/GlowCommands.java:22",
+        "src/main/java/com/example/glowmod/command/GlowCommands.java:29"
+       ],
+       "chain": [
+        {
+         "from": "wisp",
+         "to": "spawn",
+         "relation": "calls",
+         "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:29",
+         "confidence": "INFERRED",
+         "derived_by": "verinoda.java_calls"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn",
+       "entry_kind": "command",
+       "distance": 1
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "ritual (command: command handler registered at src/main/java/com/example/glowmod/command/GlowCommands.java:23 (text, inference)) reaches the changed spawn in 2 call(s): ritual -> baslat -> spawn",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:38",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/command/GlowCommands.java:23",
+        "src/main/java/com/example/glowmod/command/GlowCommands.java:40"
+       ],
+       "chain": [
+        {
+         "from": "ritual",
+         "to": "baslat",
+         "relation": "calls",
+         "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:40",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "baslat",
+         "to": "spawn",
+         "relation": "calls",
+         "at": "src/main/java/com/example/glowmod/ritual/Ritual.java:29",
+         "confidence": "INFERRED",
+         "derived_by": "verinoda.java_calls"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn",
+       "entry_kind": "command",
+       "distance": 2
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "onSummonWisp (client->server packet: client->server packet receiver registered at src/main/java/com/example/glowmod/network/ServerNetworking.java:17 (text, inference)) reaches the changed spawn in 1 call(s): onSummonWisp -> spawn",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:20",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/network/ServerNetworking.java:17",
+        "src/main/java/com/example/glowmod/network/ServerNetworking.java:29"
+       ],
+       "chain": [
+        {
+         "from": "onSummonWisp",
+         "to": "spawn",
+         "relation": "calls",
+         "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:29",
+         "confidence": "INFERRED",
+         "derived_by": "verinoda.java_calls"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn",
+       "entry_kind": "client->server packet",
+       "distance": 1
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "onChunkLoad (world event: chunk load event registered at src/main/java/com/example/glowmod/world/WispSpawner.java:19 (text, inference)) reaches the changed spawn in 1 call(s): onChunkLoad -> spawn",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:22",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/world/WispSpawner.java:19",
+        "src/main/java/com/example/glowmod/world/WispSpawner.java:31"
+       ],
+       "chain": [
+        {
+         "from": "onChunkLoad",
+         "to": "spawn",
+         "relation": "calls",
+         "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:31",
+         "confidence": "INFERRED",
+         "derived_by": "verinoda.java_calls"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn",
+       "entry_kind": "world event",
+       "distance": 1
+      }
+     ]
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     }
+    ],
+    "tests": {
+     "static": [
+      {
+       "test": "src/gametest/java/com/example/glowmod/test/WispTests.java::wispAppearsWhereAsked",
+       "distance": 1,
+       "reaches": [
+        "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 8,
+    "read_first": [
+     {
+      "at": "src/main/java/com/example/glowmod/entity/Wisp.java:27-36",
+      "why": "changed (signature)",
+      "chars": 467
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:26-32",
+      "why": "call site of spawn",
+      "chars": 349
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/event/LanternEvents.java:27-33",
+      "why": "call site of spawn",
+      "chars": 348
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:26-32",
+      "why": "call site of spawn",
+      "chars": 224
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/ritual/Ritual.java:26-32",
+      "why": "call site of spawn",
+      "chars": 252
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:28-34",
+      "why": "call site of spawn",
+      "chars": 313
+     },
+     {
+      "at": "src/gametest/java/com/example/glowmod/test/WispTests.java:15-17",
+      "why": "public_api: arity-break",
+      "chars": 207
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:21-24",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 358
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:37-41",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 230
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:16-21",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 367
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:18-23",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 285
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 3400,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "G06",
+   "project": "glow_mod",
+   "title": "data-pack functions run at permission level 4 instead of 2",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     },
+     "entry_points": {
+      "tp": 0,
+      "fp": 1,
+      "must": 0,
+      "found": 0,
+      "fp_items": [
+       {
+        "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:38",
+        "rule": "entry-reaches-change",
+        "status": "strong_inference",
+        "finding": "ritual (command: command handler registered at src/main/java/com/example/glowmod/command/GlowCommands.java:23 (text, inference)) reaches the changed execute in ",
+        "must_not": false
+       }
+      ],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 1590
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.153,
+   "seconds_with_graph_load": 0.205,
+   "dependents_total": 6,
+   "impact_view_symbols": 19,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 2,
+    "unknown": 1
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (939bb84cae): 1 change(s) (1 body). Findings - security: 1, entry_points: 1. No finding from the rules for: persistence, performance, public_api, config. 1 unknown(s) to report.",
+    "changes": [
+     {
+      "file": "src/main/java/com/example/glowmod/util/Datapack.java",
+      "symbol": "src/main/java/com/example/glowmod/util/Datapack.java::Datapack.execute",
+      "kind": "body",
+      "lines": "25-35"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "permission-changed",
+       "finding": "a permission check changed: `.withLevel(2);` -> `.withLevel(4);`",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/util/Datapack.java:31",
+       "evidence_at": [],
+       "basis": "permission call on a changed line (text rule)",
+       "derived_by": "review.PERMISSION_CALL",
+       "for": "src/main/java/com/example/glowmod/util/Datapack.java::Datapack.execute"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "ritual (command: command handler registered at src/main/java/com/example/glowmod/command/GlowCommands.java:23 (text, inference)) reaches the changed execute in 3 call(s): ritual -> baslat -> runQualified -> execute",
+       "status": "strong_inference",
+       "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:38",
+       "evidence_at": [
+        "src/main/java/com/example/glowmod/command/GlowCommands.java:23",
+        "src/main/java/com/example/glowmod/command/GlowCommands.java:40"
+       ],
+       "chain": [
+        {
+         "from": "ritual",
+         "to": "baslat",
+         "relation": "calls",
+         "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:40",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "baslat",
+         "to": "runQualified",
+         "relation": "calls",
+         "at": "src/main/java/com/example/glowmod/ritual/Ritual.java:22",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "runQualified",
+         "to": "execute",
+         "relation": "calls",
+         "at": "src/main/java/com/example/glowmod/util/Datapack.java:22",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "src/main/java/com/example/glowmod/util/Datapack.java::Datapack.execute",
+       "entry_kind": "command",
+       "distance": 3
+      }
+     ]
+    },
+    "unknown": [
+     {
+      "kind": "runtime_tests",
+      "what": "what the tests of the Java/Kotlin code do at run time",
+      "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not allowlisted",
+      "next_step": "run the project's tests yourself (e.g. ./gradlew test) and report the result"
+     }
+    ],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": [
+      "src/main/java/com/example/glowmod/util/Datapack.java::Datapack.execute"
+     ]
+    },
+    "dependents_total": 6,
+    "read_first": [
+     {
+      "at": "src/main/java/com/example/glowmod/util/Datapack.java:19-35",
+      "why": "changed (body)",
+      "chars": 777
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/util/Datapack.java:14-20",
+      "why": "call site of execute",
+      "chars": 299
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:37-41",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 230
+     },
+     {
+      "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:22-24",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 284
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 1590,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "G07",
+   "project": "glow_mod",
+   "title": "javadoc-only edit in Wisp.java",
+   "score": {
+    "per_concern": {},
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 0,
+     "total": 0,
+     "chars": 0
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.131,
+   "seconds_with_graph_load": 0.174,
+   "dependents_total": 0,
+   "impact_view_symbols": 31,
+   "impact_view_capped": false,
+   "counts": {
+    "changes": 0,
+    "findings": 0,
+    "strong_or_verified": 0,
+    "unknown": 0
+   },
+   "exit": 0,
+   "result": {
+    "summary": "Review of the working tree against HEAD (939bb84cae): no changed definition (comments, whitespace and docstrings are not changes).",
+    "changes": [],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [],
+    "tests": {
+     "static": [],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 0,
+    "read_first": [],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 0,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "V01",
+   "project": "vcopy",
+   "title": "path_escape loses its '..' guard (design A8)",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": {
+     "reach_found": 1,
+     "reach_total": 1,
+     "reach_missing": []
+    },
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 1567
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.75,
+   "seconds_with_graph_load": 1.592,
+   "dependents_total": 7,
+   "impact_view_symbols": 80,
+   "impact_view_capped": true,
+   "counts": {
+    "changes": 1,
+    "findings": 2,
+    "strong_or_verified": 1,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (184b0dbb25): 1 change(s) (1 body). Findings - security: 1, entry_points: 1. No finding from the rules for: persistence, performance, public_api, config.",
+    "changes": [
+     {
+      "file": "verinoda/experiments.py",
+      "symbol": "verinoda/experiments.py::path_escape",
+      "kind": "body",
+      "lines": "165-188",
+      "base_lines": "165-190"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "guard-removed",
+       "finding": "the exit guard `if depth < 0: <exit>` of path_escape (base line 186) is gone",
+       "status": "statically_verified",
+       "at": "verinoda/experiments.py:186",
+       "evidence_at": [
+        "verinoda/experiments.py:165"
+       ],
+       "basis": "the base version's syntax tree has it, the working tree's does not",
+       "derived_by": "review.guard_diff",
+       "for": "verinoda/experiments.py::path_escape",
+       "side": "base"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "cmd_experiment (entry: public callable in entry module with no in-project callers) reaches the changed path_escape in 3 call(s): cmd_experiment -> run -> policy -> path_escape",
+       "status": "weak_inference",
+       "at": "verinoda/cli.py:1078",
+       "evidence_at": [
+        "verinoda/cli.py:1089"
+       ],
+       "chain": [
+        {
+         "from": "cmd_experiment",
+         "to": "run",
+         "relation": "calls",
+         "at": "verinoda/cli.py:1089",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "run",
+         "to": "policy",
+         "relation": "calls",
+         "at": "verinoda/experiments.py:390",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "policy",
+         "to": "path_escape",
+         "relation": "calls",
+         "at": "verinoda/experiments.py:240",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/experiments.py::path_escape",
+       "entry_kind": "entry",
+       "distance": 3
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_experiments.py::test_path_escape_is_lexical_and_os_independent",
+       "distance": 1,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_policy_keeps_paths_inside_the_copy_allowlisted",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_policy_rejects_arguments_that_leave_the_copy",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_allowlisted_pytest_passes_in_a_copy_with_process_isolation",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_audit_absolute_test_path_outside_the_project_is_refused",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_classify",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_classify_accepts_absolute_interpreter_paths_for_pytest_only",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_container_run_is_named_and_killed_by_name_on_timeout",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_experiment_attached_to_a_claim_supports_or_refutes_it",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_guarantees_say_writes_are_not_confined_under_process_isolation",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_inconclusive_run_only_qualifies_the_claim",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_logs_stay_on_disk_and_only_a_summary_is_returned",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_non_allowlisted_command_is_refused_without_container",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_parent_secrets_are_not_visible_to_the_child",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_plugins_env_extra_and_artifacts",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_project_config_controls_the_allowlist",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_project_venv_without_pytest_is_inconclusive_not_failed",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_timeout_kills_the_process_tree_and_is_recorded",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      },
+      {
+       "test": "tests/test_safety.py::test_an_unrelated_passing_test_run_does_not_verify",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::path_escape"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 7,
+    "read_first": [
+     {
+      "at": "verinoda/experiments.py:164-188",
+      "why": "changed (body)",
+      "chars": 853
+     },
+     {
+      "at": "verinoda/experiments.py:237-243",
+      "why": "call site of path_escape",
+      "chars": 293
+     },
+     {
+      "at": "verinoda/experiments.py:185-187 (base)",
+      "why": "security: guard-removed",
+      "chars": 125
+     },
+     {
+      "at": "verinoda/cli.py:1077-1079",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 71
+     },
+     {
+      "at": "verinoda/cli.py:1088-1090",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 225
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 1567,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "V02",
+   "project": "vcopy",
+   "title": "policy() no longer refuses shell metacharacters",
+   "score": {
+    "per_concern": {
+     "security": {
+      "tp": 1,
+      "fp": 0,
+      "must": 1,
+      "found": 1,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 1,
+     "total": 1,
+     "chars": 2774
+    },
+    "silent_truncation": false
+   },
+   "seconds": 1.065,
+   "seconds_with_graph_load": 1.725,
+   "dependents_total": 9,
+   "impact_view_symbols": 80,
+   "impact_view_capped": true,
+   "counts": {
+    "changes": 1,
+    "findings": 4,
+    "strong_or_verified": 1,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (184b0dbb25): 1 change(s) (1 body). Findings - security: 1, entry_points: 3. No finding from the rules for: persistence, performance, public_api, config.",
+    "changes": [
+     {
+      "file": "verinoda/experiments.py",
+      "symbol": "verinoda/experiments.py::policy",
+      "kind": "body",
+      "lines": "215-243",
+      "base_lines": "215-245"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [
+      {
+       "concern": "security",
+       "rule": "guard-removed",
+       "finding": "the exit guard `if SHELL_META.search(joined): <exit>` of policy (base line 225) is gone",
+       "status": "statically_verified",
+       "at": "verinoda/experiments.py:225",
+       "evidence_at": [
+        "verinoda/experiments.py:215"
+       ],
+       "basis": "the base version's syntax tree has it, the working tree's does not",
+       "derived_by": "review.guard_diff",
+       "for": "verinoda/experiments.py::policy",
+       "side": "base"
+      }
+     ],
+     "performance": [],
+     "public_api": [],
+     "config": [],
+     "entry_points": [
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "cmd_experiment (entry: public callable in entry module with no in-project callers) reaches the changed policy in 2 call(s): cmd_experiment -> run -> policy",
+       "status": "weak_inference",
+       "at": "verinoda/cli.py:1078",
+       "evidence_at": [
+        "verinoda/cli.py:1089"
+       ],
+       "chain": [
+        {
+         "from": "cmd_experiment",
+         "to": "run",
+         "relation": "calls",
+         "at": "verinoda/cli.py:1089",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "run",
+         "to": "policy",
+         "relation": "calls",
+         "at": "verinoda/experiments.py:390",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/experiments.py::policy",
+       "entry_kind": "entry",
+       "distance": 2
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "cmd_observe (entry: public callable in entry module with no in-project callers) reaches the changed policy in 3 call(s): cmd_observe -> observe -> run -> policy",
+       "status": "weak_inference",
+       "at": "verinoda/cli.py:1218",
+       "evidence_at": [
+        "verinoda/cli.py:1241"
+       ],
+       "chain": [
+        {
+         "from": "cmd_observe",
+         "to": "observe",
+         "relation": "calls",
+         "at": "verinoda/cli.py:1241",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "observe",
+         "to": "run",
+         "relation": "calls",
+         "at": "verinoda/runtime/trace.py:559",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "run",
+         "to": "policy",
+         "relation": "calls",
+         "at": "verinoda/experiments.py:390",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/experiments.py::policy",
+       "entry_kind": "entry",
+       "distance": 3
+      },
+      {
+       "concern": "entry_points",
+       "rule": "entry-reaches-change",
+       "finding": "cmd_verify (entry: public callable in entry module with no in-project callers) reaches the changed policy in 3 call(s): cmd_verify -> verify -> run -> policy",
+       "status": "weak_inference",
+       "at": "verinoda/cli.py:942",
+       "evidence_at": [
+        "verinoda/cli.py:946"
+       ],
+       "chain": [
+        {
+         "from": "cmd_verify",
+         "to": "verify",
+         "relation": "calls",
+         "at": "verinoda/cli.py:946",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "verify",
+         "to": "run",
+         "relation": "calls",
+         "at": "verinoda/workflow.py:360",
+         "confidence": "EXTRACTED"
+        },
+        {
+         "from": "run",
+         "to": "policy",
+         "relation": "calls",
+         "at": "verinoda/experiments.py:390",
+         "confidence": "EXTRACTED"
+        }
+       ],
+       "basis": "reverse call graph from the change (depth 3) + entry heuristics",
+       "derived_by": "architecture_map.entry_reasons",
+       "for": "verinoda/experiments.py::policy",
+       "entry_kind": "entry",
+       "distance": 3
+      }
+     ]
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_experiments.py::test_policy_keeps_paths_inside_the_copy_allowlisted",
+       "distance": 1,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_policy_rejects_arguments_that_leave_the_copy",
+       "distance": 1,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_allowlisted_pytest_passes_in_a_copy_with_process_isolation",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_audit_absolute_test_path_outside_the_project_is_refused",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_classify",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_classify_accepts_absolute_interpreter_paths_for_pytest_only",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_container_run_is_named_and_killed_by_name_on_timeout",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_experiment_attached_to_a_claim_supports_or_refutes_it",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_guarantees_say_writes_are_not_confined_under_process_isolation",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_inconclusive_run_only_qualifies_the_claim",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_logs_stay_on_disk_and_only_a_summary_is_returned",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_non_allowlisted_command_is_refused_without_container",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_parent_secrets_are_not_visible_to_the_child",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_plugins_env_extra_and_artifacts",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_project_config_controls_the_allowlist",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_project_venv_without_pytest_is_inconclusive_not_failed",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_timeout_kills_the_process_tree_and_is_recorded",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_safety.py::test_an_unrelated_passing_test_run_does_not_verify",
+       "distance": 2,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_analysis.py::test_test_run_claim_goes_stale_and_is_only_restored_by_a_fresh_run",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_inferred_edge_only_claim_is_capped_and_loses_confidence",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_critique.py::test_verify_does_not_undo_the_critique_penalty",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_experiments.py::test_verify_rerun_that_is_inconclusive_does_not_contradict",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_mcp.py::test_claim_verify_and_challenge_use_core",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_callbacks_from_c_decorators_threads_and_doubles",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_deadline_writes_a_partial_trace_before_the_hard_kill",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_edge_budget_breach_marks_the_trace_incomplete",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_more_than_fifty_ids_are_truncated_and_reported",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_off_mode_records_outcomes_only",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_refused_test_ids_return_an_error_not_a_crash",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_runtime_trace.py::test_selected_run_scopes_absence_to_tests_that_ran",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_stale.py::test_deleting_a_cited_file_marks_its_claims_stale",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_stale.py::test_refused_index_rebuild_records_no_snapshot_and_says_what_to_do",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_stale.py::test_revert_then_verify_restores_up_to_ceiling_and_rebinds",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_stale.py::test_verify_does_not_restore_when_a_subject_file_changed_without_recheckable_evidence",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_snapshot_stale.py::test_watch_tests_claims_go_stale_when_a_test_file_is_added_changed_or_removed",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      },
+      {
+       "test": "tests/test_workflow_index.py::test_verify_judges_changes_by_the_facets_the_claim_depends_on",
+       "distance": 3,
+       "reaches": [
+        "verinoda/experiments.py::policy"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 9,
+    "read_first": [
+     {
+      "at": "verinoda/experiments.py:214-243",
+      "why": "changed (body)",
+      "chars": 1295
+     },
+     {
+      "at": "verinoda/experiments.py:387-393",
+      "why": "call site of policy",
+      "chars": 408
+     },
+     {
+      "at": "verinoda/experiments.py:245-251",
+      "why": "call site of policy",
+      "chars": 222
+     },
+     {
+      "at": "verinoda/experiments.py:224-226 (base)",
+      "why": "security: guard-removed",
+      "chars": 130
+     },
+     {
+      "at": "verinoda/cli.py:1077-1079",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 71
+     },
+     {
+      "at": "verinoda/cli.py:1088-1090",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 225
+     },
+     {
+      "at": "verinoda/cli.py:1217-1219",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 62
+     },
+     {
+      "at": "verinoda/cli.py:1240-1242",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 173
+     },
+     {
+      "at": "verinoda/cli.py:941-943",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 64
+     },
+     {
+      "at": "verinoda/cli.py:945-947",
+      "why": "entry_points: entry-reaches-change",
+      "chars": 124
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 2774,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  },
+  {
+   "id": "V03",
+   "project": "vcopy",
+   "title": "anchors.norm_line gains a required parameter",
+   "score": {
+    "per_concern": {
+     "public_api": {
+      "tp": 7,
+      "fp": 0,
+      "must": 7,
+      "found": 7,
+      "fp_items": [],
+      "missed": []
+     }
+    },
+    "unknown": [],
+    "changes": {
+     "exact": true,
+     "missing": [],
+     "extra": []
+    },
+    "tests": null,
+    "affected": {
+     "found": 0,
+     "total": 0,
+     "missing": []
+    },
+    "read_first": {
+     "inside": 7,
+     "total": 7,
+     "chars": 2088
+    },
+    "silent_truncation": false
+   },
+   "seconds": 0.812,
+   "seconds_with_graph_load": 5.711,
+   "dependents_total": 15,
+   "impact_view_symbols": 80,
+   "impact_view_capped": true,
+   "counts": {
+    "changes": 1,
+    "findings": 7,
+    "strong_or_verified": 7,
+    "unknown": 0
+   },
+   "exit": 3,
+   "result": {
+    "summary": "Review of the working tree against HEAD (184b0dbb25): 1 change(s) (1 signature). Findings - public_api: 7. No finding from the rules for: persistence, security, performance, config, entry_points.",
+    "changes": [
+     {
+      "file": "verinoda/anchors.py",
+      "symbol": "verinoda/anchors.py::norm_line",
+      "kind": "signature",
+      "lines": "116-118"
+     }
+    ],
+    "concerns": {
+     "persistence": [],
+     "security": [],
+     "performance": [],
+     "public_api": [
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to norm_line() at verinoda/anchors.py:342 no longer fits the new signature: missing required argument(s): keep_case",
+       "status": "statically_verified",
+       "at": "verinoda/anchors.py:342",
+       "evidence_at": [
+        "verinoda/anchors.py:116"
+       ],
+       "basis": "call bound by: same module; arguments counted against the new parameters (syntax tree)",
+       "derived_by": "review.arity",
+       "for": "verinoda/anchors.py::norm_line"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to norm_line() at verinoda/anchors.py:350 no longer fits the new signature: missing required argument(s): keep_case",
+       "status": "statically_verified",
+       "at": "verinoda/anchors.py:350",
+       "evidence_at": [
+        "verinoda/anchors.py:116"
+       ],
+       "basis": "call bound by: same module; arguments counted against the new parameters (syntax tree)",
+       "derived_by": "review.arity",
+       "for": "verinoda/anchors.py::norm_line"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to norm_line() at verinoda/anchors.py:353 no longer fits the new signature: missing required argument(s): keep_case",
+       "status": "statically_verified",
+       "at": "verinoda/anchors.py:353",
+       "evidence_at": [
+        "verinoda/anchors.py:116"
+       ],
+       "basis": "call bound by: same module; arguments counted against the new parameters (syntax tree)",
+       "derived_by": "review.arity",
+       "for": "verinoda/anchors.py::norm_line"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to norm_line() at verinoda/anchors.py:780 no longer fits the new signature: missing required argument(s): keep_case",
+       "status": "statically_verified",
+       "at": "verinoda/anchors.py:780",
+       "evidence_at": [
+        "verinoda/anchors.py:116"
+       ],
+       "basis": "call bound by: same module; arguments counted against the new parameters (syntax tree)",
+       "derived_by": "review.arity",
+       "for": "verinoda/anchors.py::norm_line"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to norm_line() at verinoda/anchors.py:781 no longer fits the new signature: missing required argument(s): keep_case",
+       "status": "statically_verified",
+       "at": "verinoda/anchors.py:781",
+       "evidence_at": [
+        "verinoda/anchors.py:116"
+       ],
+       "basis": "call bound by: same module; arguments counted against the new parameters (syntax tree)",
+       "derived_by": "review.arity",
+       "for": "verinoda/anchors.py::norm_line"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to norm_line() at verinoda/anchors.py:793 no longer fits the new signature: missing required argument(s): keep_case",
+       "status": "statically_verified",
+       "at": "verinoda/anchors.py:793",
+       "evidence_at": [
+        "verinoda/anchors.py:116"
+       ],
+       "basis": "call bound by: same module; arguments counted against the new parameters (syntax tree)",
+       "derived_by": "review.arity",
+       "for": "verinoda/anchors.py::norm_line"
+      },
+      {
+       "concern": "public_api",
+       "rule": "arity-break",
+       "finding": "the call to norm_line() at verinoda/anchors.py:862 no longer fits the new signature: missing required argument(s): keep_case",
+       "status": "statically_verified",
+       "at": "verinoda/anchors.py:862",
+       "evidence_at": [
+        "verinoda/anchors.py:116"
+       ],
+       "basis": "call bound by: same module; arguments counted against the new parameters (syntax tree)",
+       "derived_by": "review.arity",
+       "for": "verinoda/anchors.py::norm_line"
+      }
+     ],
+     "config": [],
+     "entry_points": []
+    },
+    "unknown": [],
+    "tests": {
+     "static": [
+      {
+       "test": "tests/test_anchors.py::test_relocate_whole_definitions_module_statements_and_sections",
+       "distance": 2,
+       "reaches": [
+        "verinoda/anchors.py::norm_line"
+       ]
+      },
+      {
+       "test": "tests/test_anchors.py::test_relocation_time_for_a_large_file",
+       "distance": 3,
+       "reaches": [
+        "verinoda/anchors.py::norm_line"
+       ]
+      },
+      {
+       "test": "tests/test_anchors.py::test_syntax_error_and_unsupported_files_have_no_usable_facts",
+       "distance": 3,
+       "reaches": [
+        "verinoda/anchors.py::norm_line"
+       ]
+      },
+      {
+       "test": "tests/test_scip_reader.py::test_decode_documents_occurrences_symbols_and_metadata",
+       "distance": 3,
+       "reaches": [
+        "verinoda/anchors.py::norm_line"
+       ]
+      },
+      {
+       "test": "tests/test_scip_reader.py::test_embedded_document_text_is_compared_directly",
+       "distance": 3,
+       "reaches": [
+        "verinoda/anchors.py::norm_line"
+       ]
+      },
+      {
+       "test": "tests/test_scip_reader.py::test_malformed_input_raises_value_error",
+       "distance": 3,
+       "reaches": [
+        "verinoda/anchors.py::norm_line"
+       ]
+      }
+     ],
+     "changed_tests": [],
+     "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)",
+     "no_test_reaches": []
+    },
+    "dependents_total": 15,
+    "read_first": [
+     {
+      "at": "verinoda/anchors.py:115-118",
+      "why": "changed (signature)",
+      "chars": 171
+     },
+     {
+      "at": "verinoda/anchors.py:339-345",
+      "why": "call site of norm_line",
+      "chars": 478
+     },
+     {
+      "at": "verinoda/anchors.py:777-783",
+      "why": "call site of norm_line",
+      "chars": 342
+     },
+     {
+      "at": "verinoda/anchors.py:790-796",
+      "why": "call site of norm_line",
+      "chars": 331
+     },
+     {
+      "at": "verinoda/anchors.py:859-865",
+      "why": "call site of norm_line",
+      "chars": 287
+     },
+     {
+      "at": "verinoda/anchors.py:349-354",
+      "why": "public_api: arity-break",
+      "chars": 479
+     }
+    ],
+    "budget": {
+     "max_chars": 6000,
+     "used_chars": 2088,
+     "truncated": false,
+     "more": [],
+     "more_total": 0
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,2060 @@
+{
+ "schema": "verinoda.review_fixtures/1",
+ "split": "dev",
+ "fixtures": [
+  {
+   "id": "O01",
+   "project": "orders_app",
+   "title": "apply_discount: > becomes >= and round() becomes int truncation (design A1)",
+   "edits": [
+    {
+     "file": "orders/pricing.py",
+     "find": "    if subtotal > DISCOUNT_THRESHOLD:\n        return round(subtotal * 0.9, 2)\n",
+     "replace": "    if subtotal >= DISCOUNT_THRESHOLD:\n        return int(subtotal * 0.9 * 100) / 100\n"
+    }
+   ],
+   "options": {
+    "observe": true
+   },
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/pricing.py::apply_discount",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/service.py:22",
+      "note": "the discounted value reaches repo.save -> INSERT"
+     },
+     {
+      "concern": "config",
+      "at": "orders/pricing.py:13",
+      "note": "DISCOUNT_THRESHOLD <- ORDERS_DISCOUNT_THRESHOLD (config.py:7)"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16",
+      "note": "create_order_handler"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:17"
+     },
+     {
+      "concern": "config",
+      "at": "orders/config.py:7"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:24"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": {
+     "reach": [
+      "tests/test_pricing.py::test_discount_applies_above_threshold",
+      "tests/test_pricing.py::test_no_discount_below_threshold",
+      "tests/test_pricing.py::test_compute_total",
+      "tests/test_service.py::test_place_and_fetch_roundtrip",
+      "tests/test_service.py::test_empty_order_rejected"
+     ],
+     "observed_reach": [
+      "tests/test_pricing.py::test_discount_applies_above_threshold",
+      "tests/test_pricing.py::test_no_discount_below_threshold",
+      "tests/test_pricing.py::test_compute_total",
+      "tests/test_service.py::test_place_and_fetch_roundtrip"
+     ],
+     "observed_not_reached": [
+      "tests/test_service.py::test_empty_order_rejected"
+     ]
+    },
+    "affected": [
+     "orders/pricing.py::compute_total",
+     "orders/service.py::place_order",
+     "orders/api.py::create_order_handler"
+    ]
+   }
+  },
+  {
+   "id": "O02",
+   "project": "orders_app",
+   "title": "OrderRepository.get builds its SQL with an f-string (design A2)",
+   "edits": [
+    {
+     "file": "orders/repository.py",
+     "find": "        row = self.conn.execute(\n            \"SELECT id, customer, total FROM orders WHERE id = ?\", (order_id,)\n        ).fetchone()\n",
+     "replace": "        row = self.conn.execute(\n            f\"SELECT id, customer, total FROM orders WHERE id = {order_id}\"\n        ).fetchone()\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/repository.py::OrderRepository.get",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "orders/repository.py:24",
+      "note": "SQL text built from an f-string"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:24",
+      "note": "get_order_handler, order_id flows to the query"
+     },
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:24",
+      "note": "sql-read on a changed line"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": {
+     "reach": [
+      "tests/test_service.py::test_place_and_fetch_roundtrip"
+     ]
+    },
+    "affected": [
+     "orders/service.py::fetch_order",
+     "orders/api.py::get_order_handler"
+    ]
+   }
+  },
+  {
+   "id": "O03",
+   "project": "orders_app",
+   "title": "place_order saves once per item in a loop (design A3)",
+   "edits": [
+    {
+     "file": "orders/service.py",
+     "find": "    total = compute_total(items)\n    return repo.save(customer, total)\n",
+     "replace": "    total = compute_total(items)\n    for item in items:\n        last_id = repo.save(customer, item[\"price\"] * item[\"qty\"])\n    return last_id\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/service.py::place_order",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "performance",
+      "at": "orders/service.py:22-23",
+      "note": "a save (INSERT) per loop iteration"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     },
+     {
+      "concern": "persistence",
+      "at": "orders/service.py:23"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "config",
+      "at": "orders/service.py:15"
+     },
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:17"
+     },
+     {
+      "concern": "config",
+      "at": "orders/config.py:6"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:24"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "security"
+     }
+    ],
+    "must_say_unknown": [
+     {
+      "kind": "loop_bound",
+      "at": "orders/service.py:22",
+      "or_bound_at": "orders/service.py:15",
+      "note": "unknown unless the len(items) > MAX_ITEMS_PER_ORDER cap is found"
+     }
+    ],
+    "tests": {
+     "reach": [
+      "tests/test_service.py::test_place_and_fetch_roundtrip",
+      "tests/test_service.py::test_empty_order_rejected"
+     ]
+    },
+    "affected": [
+     "orders/api.py::create_order_handler"
+    ]
+   }
+  },
+  {
+   "id": "O04",
+   "project": "orders_app",
+   "title": "apply_discount gains a required parameter rate (design A4)",
+   "edits": [
+    {
+     "file": "orders/pricing.py",
+     "find": "def apply_discount(subtotal: float) -> float:\n    # 10% off above the configured threshold.\n    if subtotal > DISCOUNT_THRESHOLD:\n        return round(subtotal * 0.9, 2)\n",
+     "replace": "def apply_discount(subtotal: float, rate: float) -> float:\n    # `rate` off above the configured threshold.\n    if subtotal > DISCOUNT_THRESHOLD:\n        return round(subtotal * (1 - rate), 2)\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/pricing.py::apply_discount",
+      "kind": "signature"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "public_api",
+      "at": "orders/pricing.py:8"
+     },
+     {
+      "concern": "public_api",
+      "at": "tests/test_pricing.py:5"
+     },
+     {
+      "concern": "public_api",
+      "at": "tests/test_pricing.py:9"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/service.py:22"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     },
+     {
+      "concern": "config",
+      "at": "orders/pricing.py:13"
+     },
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:17"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": [
+     "orders/pricing.py::compute_total"
+    ]
+   }
+  },
+  {
+   "id": "O05",
+   "project": "orders_app",
+   "title": "comments and blank lines only in service.py (design A5)",
+   "edits": [
+    {
+     "file": "orders/service.py",
+     "find": "def validate_items(items: list[dict]) -> None:\n    if not items:\n",
+     "replace": "def validate_items(items: list[dict]) -> None:\n    # an order needs at least one item\n    if not items:  # empty list or None\n"
+    },
+    {
+     "file": "orders/service.py",
+     "find": "    return repo.get(order_id)\n",
+     "replace": "    return repo.get(order_id)   # None when absent\n"
+    },
+    {
+     "file": "orders/service.py",
+     "find": "\n\ndef fetch_order(",
+     "replace": "\n\n\ndef fetch_order("
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [],
+    "must_find": [],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "performance"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "config"
+     },
+     {
+      "concern": "entry_points"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "O06",
+   "project": "orders_app",
+   "title": "validate_items loses its item-count cap",
+   "edits": [
+    {
+     "file": "orders/service.py",
+     "find": "    if len(items) > MAX_ITEMS_PER_ORDER:\n        raise ValidationError(\"too many items\")\n",
+     "replace": ""
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/service.py::validate_items",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "orders/service.py:15",
+      "note": "input-validation guard removed (base line)"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "performance",
+      "at": "orders/pricing.py:7"
+     },
+     {
+      "concern": "config",
+      "at": "orders/service.py:3"
+     },
+     {
+      "concern": "config",
+      "at": "orders/config.py:6"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": {
+     "reach": [
+      "tests/test_service.py::test_place_and_fetch_roundtrip",
+      "tests/test_service.py::test_empty_order_rejected"
+     ]
+    },
+    "affected": [
+     "orders/service.py::place_order",
+     "orders/api.py::create_order_handler"
+    ]
+   }
+  },
+  {
+   "id": "O07",
+   "project": "orders_app",
+   "title": "DISCOUNT_THRESHOLD default 100.0 -> 150.0 (module-level statement)",
+   "edits": [
+    {
+     "file": "orders/config.py",
+     "find": "DISCOUNT_THRESHOLD = float(os.environ.get(\"ORDERS_DISCOUNT_THRESHOLD\", \"100.0\"))",
+     "replace": "DISCOUNT_THRESHOLD = float(os.environ.get(\"ORDERS_DISCOUNT_THRESHOLD\", \"150.0\"))"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/config.py::DISCOUNT_THRESHOLD",
+      "kind": "module_statement"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "config",
+      "at": "orders/config.py:7"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/service.py:22"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     },
+     {
+      "concern": "config",
+      "at": "orders/pricing.py:13"
+     },
+     {
+      "concern": "config",
+      "at": "orders/config.py:14"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": [
+     "orders/pricing.py::apply_discount",
+     "orders/config.py::load_settings"
+    ]
+   }
+  },
+  {
+   "id": "O08",
+   "project": "orders_app",
+   "title": "OrderRepository.save also appends to a log file",
+   "edits": [
+    {
+     "file": "orders/repository.py",
+     "find": "        self.conn.commit()\n        return cur.lastrowid\n",
+     "replace": "        self.conn.commit()\n        with open(\"orders.log\", \"a\") as log:\n            log.write(f\"{customer} {total}\\n\")\n        return cur.lastrowid\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/repository.py::OrderRepository.save",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:20",
+      "note": "file write on a changed line"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:21"
+     },
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:17"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:24"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "security"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": {
+     "reach": [
+      "tests/test_service.py::test_place_and_fetch_roundtrip",
+      "tests/test_service.py::test_empty_order_rejected"
+     ]
+    },
+    "affected": [
+     "orders/service.py::place_order"
+    ]
+   }
+  },
+  {
+   "id": "O09",
+   "project": "orders_app",
+   "title": "get_order_handler shells out with the order id (shell=True)",
+   "edits": [
+    {
+     "file": "orders/api.py",
+     "find": "\"\"\"HTTP-style entry points (framework-free handlers).\"\"\"\n\n",
+     "replace": "\"\"\"HTTP-style entry points (framework-free handlers).\"\"\"\n\nimport subprocess\n\n"
+    },
+    {
+     "file": "orders/api.py",
+     "find": "def get_order_handler(order_id: int) -> tuple[int, dict]:\n    order = fetch_order(get_repo(), order_id)\n",
+     "replace": "def get_order_handler(order_id: int) -> tuple[int, dict]:\n    subprocess.run(f\"echo lookup {order_id} >> audit.log\", shell=True)\n    order = fetch_order(get_repo(), order_id)\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/api.py::get_order_handler",
+      "kind": "body"
+     },
+     {
+      "symbol": "orders/api.py::subprocess",
+      "kind": "module_statement"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "orders/api.py:27",
+      "note": "subprocess with shell=True and the entry parameter"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:26"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/api.py:27"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:18"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "O10",
+   "project": "orders_app",
+   "title": "fetch_order unpickles a cached value",
+   "edits": [
+    {
+     "file": "orders/service.py",
+     "find": "\"\"\"Business logic between the HTTP layer and the repository.\"\"\"\n\n",
+     "replace": "\"\"\"Business logic between the HTTP layer and the repository.\"\"\"\n\nimport pickle\n\n"
+    },
+    {
+     "file": "orders/service.py",
+     "find": "class ValidationError(ValueError):",
+     "replace": "_CACHE: dict = {}\n\n\nclass ValidationError(ValueError):"
+    },
+    {
+     "file": "orders/service.py",
+     "find": "def fetch_order(repo: OrderRepository, order_id: int):\n    return repo.get(order_id)\n",
+     "replace": "def fetch_order(repo: OrderRepository, order_id: int):\n    cached = _CACHE.get(order_id)\n    if cached is not None:\n        return pickle.loads(cached)\n    return repo.get(order_id)\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/service.py::fetch_order",
+      "kind": "body"
+     },
+     {
+      "symbol": "orders/service.py::pickle",
+      "kind": "module_statement"
+     },
+     {
+      "symbol": "orders/service.py::_CACHE",
+      "kind": "module_statement"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "orders/service.py:33",
+      "note": "pickle.loads"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:24"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/service.py:34"
+     },
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:24"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "O11",
+   "project": "orders_app",
+   "title": "compute_total rounds the discounted total",
+   "edits": [
+    {
+     "file": "orders/pricing.py",
+     "find": "    return apply_discount(subtotal)\n",
+     "replace": "    return round(apply_discount(subtotal), 2)\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/pricing.py::compute_total",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/service.py:22"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:17"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:24"
+     },
+     {
+      "concern": "config"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": {
+     "reach": [
+      "tests/test_pricing.py::test_compute_total",
+      "tests/test_service.py::test_place_and_fetch_roundtrip",
+      "tests/test_service.py::test_empty_order_rejected"
+     ]
+    },
+    "affected": [
+     "orders/service.py::place_order",
+     "orders/api.py::create_order_handler"
+    ]
+   }
+  },
+  {
+   "id": "O12",
+   "project": "orders_app",
+   "title": "fetch_order is deleted while api.py and a test still use it",
+   "edits": [
+    {
+     "file": "orders/service.py",
+     "find": "\n\ndef fetch_order(repo: OrderRepository, order_id: int):\n    return repo.get(order_id)\n",
+     "replace": "\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/service.py::fetch_order",
+      "kind": "removed"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "public_api",
+      "at": "orders/api.py:4"
+     },
+     {
+      "concern": "public_api",
+      "at": "orders/api.py:25"
+     },
+     {
+      "concern": "public_api",
+      "at": "tests/test_service.py:4"
+     },
+     {
+      "concern": "public_api",
+      "at": "tests/test_service.py:10"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:24"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": [
+     "orders/api.py::get_order_handler"
+    ]
+   }
+  },
+  {
+   "id": "O13",
+   "project": "orders_app",
+   "title": "the orders table gains columns (CREATE TABLE text in __init__)",
+   "edits": [
+    {
+     "file": "orders/repository.py",
+     "find": "\"CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)\"",
+     "replace": "\"CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT NOT NULL, total REAL, note TEXT)\""
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/repository.py::OrderRepository.__init__",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:12"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:24"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": {
+     "reach": [
+      "tests/test_service.py::test_place_and_fetch_roundtrip",
+      "tests/test_service.py::test_empty_order_rejected"
+     ]
+    },
+    "affected": [
+     "orders/api.py::get_repo"
+    ]
+   }
+  },
+  {
+   "id": "O14",
+   "project": "orders_app",
+   "title": "a new, unused bulk_discount function",
+   "edits": [
+    {
+     "file": "orders/pricing.py",
+     "find": "    return subtotal\n",
+     "replace": "    return subtotal\n\n\ndef bulk_discount(subtotal: float, count: int) -> float:\n    return subtotal * 0.8 if count >= 10 else subtotal\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/pricing.py::bulk_discount",
+      "kind": "added"
+     }
+    ],
+    "must_find": [],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "performance"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "config"
+     },
+     {
+      "concern": "entry_points"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": {
+     "no_test_reaches": [
+      "orders/pricing.py::bulk_discount"
+     ]
+    },
+    "affected": []
+   }
+  },
+  {
+   "id": "O15",
+   "project": "orders_app",
+   "title": "place_order normalises the customer name before saving",
+   "edits": [
+    {
+     "file": "orders/service.py",
+     "find": "    return repo.save(customer, total)\n",
+     "replace": "    return repo.save(customer.strip().lower(), total)\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "orders/service.py::place_order",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/service.py:22"
+     },
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:16"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "persistence",
+      "at": "orders/repository.py:17"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "entry_points",
+      "at": "orders/api.py:24"
+     },
+     {
+      "concern": "config"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": {
+     "reach": [
+      "tests/test_service.py::test_place_and_fetch_roundtrip",
+      "tests/test_service.py::test_empty_order_rejected"
+     ]
+    },
+    "affected": [
+     "orders/api.py::create_order_handler"
+    ]
+   }
+  },
+  {
+   "id": "O16",
+   "project": "orders_app",
+   "title": "a test's expected value changes (test code only)",
+   "edits": [
+    {
+     "file": "tests/test_pricing.py",
+     "find": "    assert apply_discount(200.0) == 180.0\n",
+     "replace": "    assert apply_discount(200.0) == 170.0\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "tests/test_pricing.py::test_discount_applies_above_threshold",
+      "kind": "body"
+     }
+    ],
+    "must_find": [],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "performance"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "config"
+     },
+     {
+      "concern": "entry_points"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "F01",
+   "project": "forge_mod",
+   "title": "EmberNetwork.handleStoke loses its distance check (design A6)",
+   "edits": [
+    {
+     "file": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java",
+     "find": "        if (player.distanceToSqr(payload.pos().getCenter()) > MAX_DISTANCE_SQR) {\n            return;\n        }\n",
+     "replace": ""
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java::EmberNetwork.handleStoke",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:35",
+      "note": "guard removed (base line)"
+     },
+     {
+      "concern": "entry_points",
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24",
+      "note": "client->server packet handler registration"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "entry_points",
+      "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [
+     {
+      "kind": "runtime_tests"
+     }
+    ],
+    "tests": {
+     "no_test_reaches": [
+      "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java::EmberNetwork.handleStoke"
+     ]
+    },
+    "affected": []
+   }
+  },
+  {
+   "id": "F02",
+   "project": "forge_mod",
+   "title": "serverTick walks every player each tick (design A7)",
+   "edits": [
+    {
+     "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+     "find": "        if (cooled != forge.heat) {\n            forge.heat = cooled;\n            changed = true;\n        }\n",
+     "replace": "        if (cooled != forge.heat) {\n            forge.heat = cooled;\n            changed = true;\n        }\n        for (Player nearby : level.players()) {\n            if (nearby.distanceToSqr(pos.getCenter()) < 16.0 && forge.heat > 100) {\n                nearby.igniteForSeconds(1);\n            }\n        }\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java::EmberForgeBlockEntity.serverTick",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "performance",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:112",
+      "note": "loop added in a tick handler"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "performance",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72"
+     },
+     {
+      "concern": "entry_points",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [
+     {
+      "kind": "runtime_tests"
+     }
+    ],
+    "tests": {
+     "no_test_reaches": [
+      "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java::EmberForgeBlockEntity.serverTick"
+     ]
+    },
+    "affected": []
+   }
+  },
+  {
+   "id": "F03",
+   "project": "forge_mod",
+   "title": "stoke_heat default 15 -> 50, maximum 100 -> 500",
+   "edits": [
+    {
+     "file": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java",
+     "find": "                .defineInRange(\"stoke_heat\", 15, 0, 100);",
+     "replace": "                .defineInRange(\"stoke_heat\", 50, 0, 500);"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java::EmberConfig",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "config",
+      "at": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:26"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "config",
+      "at": "config/emberforge-common.toml:17"
+     },
+     {
+      "concern": "config",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:141"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": [
+     "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java::EmberForgeBlockEntity.stoke"
+    ]
+   }
+  },
+  {
+   "id": "F04",
+   "project": "forge_mod",
+   "title": "HeatMath.heatForFuel gains a multiplier parameter (Kotlin)",
+   "edits": [
+    {
+     "file": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt",
+     "find": "    fun heatForFuel(stack: ItemStack): Int {",
+     "replace": "    fun heatForFuel(stack: ItemStack, multiplier: Int): Int {"
+    },
+    {
+     "file": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt",
+     "find": "        return if (stack.`is`(Items.BLAZE_ROD)) base * 2 else base\n",
+     "replace": "        return (if (stack.`is`(Items.BLAZE_ROD)) base * 2 else base) * multiplier\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt::HeatMath.heatForFuel",
+      "kind": "signature"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "public_api",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:79"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "persistence"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": {
+     "no_test_reaches": [
+      "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt::HeatMath.heatForFuel"
+     ]
+    },
+    "affected": []
+   }
+  },
+  {
+   "id": "F05",
+   "project": "forge_mod",
+   "title": "the /emberforge reset permission requirement is removed (Kotlin)",
+   "edits": [
+    {
+     "file": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt",
+     "find": "                        .requires { it.hasPermission(2) && EmberConfig.ALLOW_RESET_COMMAND.get() }\n",
+     "replace": ""
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt::ForgeCommands.register",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:21",
+      "note": "permission check removed (base line)"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "config",
+      "at": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:21"
+     },
+     {
+      "concern": "entry_points",
+      "at": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:16"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [
+     {
+      "kind": "runtime_tests"
+     }
+    ],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "F06",
+   "project": "forge_mod",
+   "title": "saveAdditional writes the heat under a new NBT key",
+   "edits": [
+    {
+     "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+     "find": "        tag.putInt(\"Heat\", heat);\n",
+     "replace": "        tag.putInt(\"HeatLevel\", heat);\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java::EmberForgeBlockEntity.saveAdditional",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "persistence",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:158",
+      "note": "saved-data key changed"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "persistence",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:150"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [
+     {
+      "kind": "runtime_tests"
+     }
+    ],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "F07",
+   "project": "forge_mod",
+   "title": "useItemOn no longer checks for the Forge Hammer",
+   "edits": [
+    {
+     "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java",
+     "find": "        if (!stack.is(ModItems.FORGE_HAMMER.get())) {\n            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;\n        }\n",
+     "replace": ""
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java::EmberForgeBlock.useItemOn",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:79",
+      "note": "guard removed (base line)"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "entry_points",
+      "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:77"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [
+     {
+      "kind": "runtime_tests"
+     }
+    ],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "F08",
+   "project": "forge_mod",
+   "title": "comment-only edits in EmberForgeBlockEntity.java",
+   "edits": [
+    {
+     "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+     "find": "    /** Heat after cooling: one less on every decayInterval-th game tick, never below 0. */\n",
+     "replace": "    /** Heat after cooling: one less on every decayInterval-th tick (never below 0). */\n"
+    },
+    {
+     "file": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java",
+     "find": "        boolean changed = false;\n",
+     "replace": "        boolean changed = false; // set when anything below changes\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [],
+    "must_find": [],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "performance"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "config"
+     },
+     {
+      "concern": "entry_points"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "F09",
+   "project": "forge_mod",
+   "title": "progressPerTick's cap is doubled (Kotlin body change)",
+   "edits": [
+    {
+     "file": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt",
+     "find": "        return (1 + (heat - minHeat) / HEAT_PER_EXTRA_STEP).coerceAtMost(MAX_STEPS)\n",
+     "replace": "        return (1 + (heat - minHeat) / HEAT_PER_EXTRA_STEP).coerceAtMost(MAX_STEPS * 2)\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt::HeatMath.progressPerTick",
+      "kind": "body"
+     }
+    ],
+    "must_find": [],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "performance"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [
+     {
+      "kind": "runtime_tests"
+     }
+    ],
+    "tests": {
+     "reach": [
+      "src/test/java/net/ashvale/emberforge/HeatMathTest.java::noProgressBelowTheRecipesMinimumHeat",
+      "src/test/java/net/ashvale/emberforge/HeatMathTest.java::progressGrowsWithHeatButIsCapped"
+     ]
+    },
+    "affected": [
+     "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java::EmberForgeBlockEntity.serverTick"
+    ]
+   }
+  },
+  {
+   "id": "F10",
+   "project": "forge_mod",
+   "title": "EmberForgeMenu.stillValid always answers true",
+   "edits": [
+    {
+     "file": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java",
+     "find": "        return stillValid(access, player, ModBlocks.EMBER_FORGE.get());\n",
+     "replace": "        return true;\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java::EmberForgeMenu.stillValid",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:91",
+      "note": "the server-side validity check is gone"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "performance"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "G01",
+   "project": "glow_mod",
+   "title": "onSummonWisp loses its distance check",
+   "edits": [
+    {
+     "file": "src/main/java/com/example/glowmod/network/ServerNetworking.java",
+     "find": "        if (!player.getBlockPos().isWithinDistance(payload.pos(), GlowConfig.get().maxSummonDistance())) {\n            GlowMod.LOGGER.warn(\"{} asked for a wisp too far away at {}\", player.getName().getString(), payload.pos());\n            return;\n        }\n",
+     "replace": ""
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/com/example/glowmod/network/ServerNetworking.java::ServerNetworking.onSummonWisp",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:25",
+      "note": "guard removed (base line)"
+     },
+     {
+      "concern": "entry_points",
+      "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:17",
+      "note": "client->server packet receiver"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "config",
+      "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:25"
+     },
+     {
+      "concern": "entry_points",
+      "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:20"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [
+     {
+      "kind": "runtime_tests"
+     }
+    ],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "G02",
+   "project": "glow_mod",
+   "title": "RepairScheduler.tick drops its per-tick budget",
+   "edits": [
+    {
+     "file": "src/main/java/com/example/glowmod/repair/RepairScheduler.java",
+     "find": "        while (budget-- > 0 && !QUEUE.isEmpty() && QUEUE.peekFirst().dueTick() <= server.getTicks()) {",
+     "replace": "        while (!QUEUE.isEmpty() && QUEUE.peekFirst().dueTick() <= server.getTicks()) {"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/com/example/glowmod/repair/RepairScheduler.java::RepairScheduler.tick",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "performance",
+      "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:35",
+      "note": "unbounded loop in a server tick handler"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "performance",
+      "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:24"
+     },
+     {
+      "concern": "config",
+      "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:34"
+     },
+     {
+      "concern": "entry_points",
+      "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:24"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "security"
+     }
+    ],
+    "must_say_unknown": [
+     {
+      "kind": "runtime_tests"
+     }
+    ],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "G03",
+   "project": "glow_mod",
+   "title": "the max_summon_distance key is read under a new name",
+   "edits": [
+    {
+     "file": "src/main/java/com/example/glowmod/config/GlowConfig.java",
+     "find": "                number(network, \"max_summon_distance\", DEFAULTS.maxSummonDistance()).intValue());",
+     "replace": "                number(network, \"max_distance\", DEFAULTS.maxSummonDistance()).intValue());"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/com/example/glowmod/config/GlowConfig.java::GlowConfig.parse",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "config",
+      "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:53"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "config",
+      "at": "src/main/resources/glowmod.yml:18"
+     },
+     {
+      "concern": "security",
+      "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:25"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "performance"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "G04",
+   "project": "glow_mod",
+   "title": "glowmod.yml: blocks_per_tick 8 -> 500 (config file)",
+   "edits": [
+    {
+     "file": "src/main/resources/glowmod.yml",
+     "find": "  blocks_per_tick: 8\n",
+     "replace": "  blocks_per_tick: 500\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/resources/glowmod.yml::repair.blocks_per_tick",
+      "kind": "config_key"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "config",
+      "at": "src/main/resources/glowmod.yml:12",
+      "note": "reader GlowConfig.java:51"
+     }
+    ],
+    "may_find": [
+     {
+      "concern": "config",
+      "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:51"
+     },
+     {
+      "concern": "performance",
+      "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:34"
+     },
+     {
+      "concern": "performance",
+      "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:35"
+     }
+    ],
+    "must_not_flag": [
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "G05",
+   "project": "glow_mod",
+   "title": "Wisp.spawn gains a third parameter",
+   "edits": [
+    {
+     "file": "src/main/java/com/example/glowmod/entity/Wisp.java",
+     "find": "    public static Wisp spawn(ServerWorld world, BlockPos pos) {",
+     "replace": "    public static Wisp spawn(ServerWorld world, BlockPos pos, boolean natural) {"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn",
+      "kind": "signature"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "public_api",
+      "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:29"
+     },
+     {
+      "concern": "public_api",
+      "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:31"
+     },
+     {
+      "concern": "public_api",
+      "at": "src/main/java/com/example/glowmod/event/LanternEvents.java:30"
+     },
+     {
+      "concern": "public_api",
+      "at": "src/main/java/com/example/glowmod/ritual/Ritual.java:29"
+     },
+     {
+      "concern": "public_api",
+      "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:29"
+     },
+     {
+      "concern": "public_api",
+      "at": "src/gametest/java/com/example/glowmod/test/WispTests.java:16",
+      "note": "amended before the first run: the game test's call site was left out"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "public_api",
+      "at": "reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:25",
+      "note": "amended before the first run: a different class named Wisp (reference copy)"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "persistence"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "G06",
+   "project": "glow_mod",
+   "title": "data-pack functions run at permission level 4 instead of 2",
+   "edits": [
+    {
+     "file": "src/main/java/com/example/glowmod/util/Datapack.java",
+     "find": "                .withLevel(2);",
+     "replace": "                .withLevel(4);"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "src/main/java/com/example/glowmod/util/Datapack.java::Datapack.execute",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "src/main/java/com/example/glowmod/util/Datapack.java:31",
+      "note": "command permission level raised"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "performance"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "G07",
+   "project": "glow_mod",
+   "title": "javadoc-only edit in Wisp.java",
+   "edits": [
+    {
+     "file": "src/main/java/com/example/glowmod/entity/Wisp.java",
+     "find": "    /** Puts a new wisp in the middle of the block at {@code pos}; null when the type refuses to create one. */\n",
+     "replace": "    /** Spawns a wisp centred on the block at {@code pos}; returns null when the entity type refuses. */\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [],
+    "must_find": [],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "performance"
+     },
+     {
+      "concern": "public_api"
+     },
+     {
+      "concern": "config"
+     },
+     {
+      "concern": "entry_points"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "V01",
+   "project": "vcopy",
+   "title": "path_escape loses its '..' guard (design A8)",
+   "edits": [
+    {
+     "file": "verinoda/experiments.py",
+     "find": "            depth -= 1\n            if depth < 0:\n                return f\"{value!r} leaves the repository copy through '..'\"\n",
+     "replace": "            depth -= 1\n"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "verinoda/experiments.py::path_escape",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "verinoda/experiments.py:186",
+      "note": "guard removed (base line)"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": {
+     "reach": [
+      "tests/test_experiments.py::test_policy_rejects_arguments_that_leave_the_copy"
+     ]
+    },
+    "affected": []
+   }
+  },
+  {
+   "id": "V02",
+   "project": "vcopy",
+   "title": "policy() no longer refuses shell metacharacters",
+   "edits": [
+    {
+     "file": "verinoda/experiments.py",
+     "find": "    if SHELL_META.search(joined):\n        return \"risky\", \"the command contains shell metacharacters\"\n",
+     "replace": ""
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "verinoda/experiments.py::policy",
+      "kind": "body"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "security",
+      "at": "verinoda/experiments.py:225",
+      "note": "guard removed (base line)"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "persistence"
+     },
+     {
+      "concern": "public_api"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  },
+  {
+   "id": "V03",
+   "project": "vcopy",
+   "title": "anchors.norm_line gains a required parameter",
+   "edits": [
+    {
+     "file": "verinoda/anchors.py",
+     "find": "def norm_line(text: str) -> str:",
+     "replace": "def norm_line(text: str, keep_case: bool) -> str:"
+    }
+   ],
+   "options": {},
+   "gold": {
+    "changes": [
+     {
+      "symbol": "verinoda/anchors.py::norm_line",
+      "kind": "signature"
+     }
+    ],
+    "must_find": [
+     {
+      "concern": "public_api",
+      "at": "verinoda/anchors.py:342"
+     },
+     {
+      "concern": "public_api",
+      "at": "verinoda/anchors.py:350"
+     },
+     {
+      "concern": "public_api",
+      "at": "verinoda/anchors.py:353"
+     },
+     {
+      "concern": "public_api",
+      "at": "verinoda/anchors.py:780"
+     },
+     {
+      "concern": "public_api",
+      "at": "verinoda/anchors.py:781"
+     },
+     {
+      "concern": "public_api",
+      "at": "verinoda/anchors.py:793"
+     },
+     {
+      "concern": "public_api",
+      "at": "verinoda/anchors.py:862"
+     }
+    ],
+    "may_find": [],
+    "must_not_flag": [
+     {
+      "concern": "security"
+     },
+     {
+      "concern": "persistence"
+     }
+    ],
+    "must_say_unknown": [],
+    "tests": null,
+    "affected": []
+   }
+  }
+ ]
+}

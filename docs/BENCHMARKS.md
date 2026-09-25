@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,147 @@ Sections: [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debu
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-26: change review, second review round (D35)
+
+A second reviewer reported 20 findings on commit 42d9b41 (7 high, 8 medium, 5 low; 11 regressions of the first
+round's relaxations and cost cuts): checks that now run after the write they protected were "the same check"
+(split, extracted, moved to an unrelated function, a pre-existing negated `if` read as a restructuring), a
+constant `subprocess.run` / `pickle.loads` argument turned into a parameter was "held ... too" (weak), calls
+through an assigned alias or a renamed re-export were not found, callers added after the last `update` were
+silently missed, every cross-package edge of a monorepo or a Gradle multi-module mod was dropped, and
+`--staged --observe` traced the working tree. Each was reproduced on 42d9b41 and fixed with a regression test
+(17 new tests and 2 extended ones in `tests/test_review.py`, all 19 failing on 42d9b41); docs/DESIGN.md section
+8.6 has the list. The held-out run after the fixes found one duplicate the fixes had introduced (HV1: the changed
+`subprocess.run(...)` call and the `shell=True` added to it were two findings); fixed, and both splits run again:
+
+| split | precision (>= strong_inference) | recall | must-say-unknown | changed symbols exact | gold dependents | gold lines in `read_first` |
+|---|---|---|---|---|---|---|
+| dev after the round (in-sample) | 67/73 = 0.92 | 62/62 | 9/9 | 36/36 | 19/19 | 62/62 |
+| held-out after the round (no longer clean) | 22/27 = 0.81 | 18/18 | 2/2 | 10/11 | 3/3 | 18/18 |
+
+The same numbers as after the first round: the fixtures hold none of the reviewer's cases, so they show that the
+fixes did not cost precision or recall there, not that they help. Result files:
+`benchmarks/results/review-2026-09-25/dev-review-round2.json` and `heldout-review-round2.json` (base copies indexed
+in this session; fixtures and gold unchanged). The reviewer's scripted repros (C01-C27) were re-run on the fixed
+branch; their outputs are in the fixer's scratch, not in the result files.
+
+**Time.** The run above shared the machine with other agents' test suites; with the graph loaded it measured
+0.27-0.62 s median on the examples and 7.8 s (dev) / 6.7 s (held-out) median on the 380-file copy, most of it
+graph loading under load (the result files hold this run; two earlier runs of the same code gave 0.23-0.27 s
+and 4.8-5.2 s on dev). The fair comparison is an interleaved A/B on the same base copies (three rounds of old
+and new code, each fixture reviewed three times after a warm-up, graph loaded each time): V01-V03 1.19 / 1.25 /
+1.21 s at 42d9b41 and 1.33 / 1.41 / 1.32 s after the round (+9 to +13 %), orders_app O03 0.159 -> 0.160 s, forge_mod
+F02 0.154 -> 0.169 s, glow_mod G05 0.165 -> 0.182 s. The added cost is mostly the check of files newer than the
+snapshot (the copy's files were written by the clone, shortly before the snapshot, so every one of them is hashed
+again; in a checkout whose files are older than an hour before the last `update` only newer files are read).
+
+## Update 2026-09-25: change review, first review round (D35)
+
+Two reviewers reported 41 findings on the change review (11 high, 20 medium, 10 low): silent misses (a value
+changed on one line and saved on the next, a commit removed while the INSERT stays, a removed method still
+called through an object, call sites through `from pkg import mod` / `import pkg.mod`, `from yaml import load`,
+a removed call to a validator, a changed mod manifest), false alarms stated as verified (an error message
+"Select ... from ..." read as SQL built from strings, behaviour-preserving guard refactors read as removed
+guards, a parameter named like the changed function read as a call to it), a `--staged` review that read the
+working tree for files outside the diff and ran the working tree's tests, 900 staged files read as deleted, and
+"no test reaches" said of functions whose callers the static graph cannot see. Each was reproduced on commit
+8e2cc3b and fixed with a regression test (39 new tests in `tests/test_review.py`, each failing on 8e2cc3b); the
+time finding was partly fixed. docs/DESIGN.md section 8.5 has the list.
+
+| split | precision (>= strong_inference) | recall | must-say-unknown | changed symbols exact | gold dependents | gold lines in `read_first` |
+|---|---|---|---|---|---|---|
+| dev after the round (in-sample) | 67/73 = 0.92 | 62/62 | 9/9 | 36/36 | 19/19 | 62/62 |
+| held-out after the round (no longer clean) | 22/27 = 0.81 | 18/18 | 2/2 | 10/11 | 3/3 | 18/18 |
+
+Result files: `benchmarks/results/review-2026-09-25/dev-review-round1.json` and `heldout-review-round1.json` (fresh
+indexed base copies; fixtures and gold unchanged). The false positives are the ones the builder's fixes left.
+One gold count went down on purpose: 3 of the 4 dev "no test reaches" items are symbols without any static
+caller (a new unused function, a packet handler, a ticker-registered method); they are now reported under
+`tests.reach_unknown`, since tests may reach such a symbol through dispatch, as `tests/test_cli.py` reaches
+`cmd_map` through a subprocess. The 47 changes the second reviewer labelled were re-run after the fixes; their
+outputs are in the reviewers' scratch, not in the result files.
+
+**Time** with the graph loaded (median / max, other agents' test suites running on the machine): orders_app
+0.19 / 0.33 s, forge_mod 0.24 / 0.41 s, glow_mod 0.24 / 0.27 s, the 380-file copy 1.71 / 1.87 s on dev (V03, a
+signature change of a widely imported function, 5.0 s before this round: the Python call-site search read every
+file, it now reads the files that import the module in the graph plus the changed ones) and 3.7 / 6.0 s on
+held-out; graph in memory 0.63 s median on the copy. A 40-definition diff on the copy (the reviewer's time
+finding): 8.7 s (13.4 s in the reviewer's run, 10.7 s on this machine before the caches); under cProfile a
+repeated review of it 9.1 s instead of 22.9 s. Not brought to 6 s: the new versions' facts, value flow over
+many callers and the entry heuristics' source reads remain.
+
+## Update 2026-09-25: change review (`verinoda review`, D35)
+
+Result files: `benchmarks/results/review-2026-09-25/` (its README lists the runs made while the rules were
+written and what each changed). Fixtures: `benchmarks/review_fixtures/` - 36 dev and 11 held-out changes on git
+copies of `orders_app`, `glow_mod`, `forge_mod` and a clone of a 380-file copy of Verinoda's repository, each with
+must-find, may-find and must-not-flag concerns (file:line), must-say-unknown items, test reach and the
+dependents a reviewer must see. The fixtures, the gold and the rules have one author (the builder); the gold was
+hashed before any rule existed. The dev numbers are in-sample; the held-out set was run once, with the rules
+frozen (commit 3b73872), and only guards against tuning on its answers.
+
+| split | precision (>= strong_inference) | recall (must-find) | must-say-unknown | changed symbols exact | gold dependents listed | gold lines in `read_first` |
+|---|---|---|---|---|---|---|
+| dev, frozen rules (in-sample) | 66/72 = 0.92 | 62/62 | 9/9 | 36/36 | 19/19 | 62/62 |
+| held-out, frozen rules (only run) | 23/29 = 0.79 | 18/18 | 2/2 | 10/11 | 3/3 | 18/18 |
+| held-out after the later fixes (no longer clean) | 22/27 = 0.81 | 18/18 | 2/2 | 10/11 | 3/3 | 18/18 |
+| dev after the later fixes (in-sample) | 65/71 = 0.92 | 62/62 | 9/9 | 36/36 | 19/19 | 62/62 |
+
+The later fixes: the HO4 bug below, and six found by running the review on Verinoda's own branch against
+main (a 321-definition diff): JSON data files were read as config files key by key (1,395 "changes"),
+persistence through a callee now counts writes only, one changed function's findings are grouped per sink
+kind, a guard moved into a new helper is `guard-moved` (weak) instead of removed, functions nested in
+functions are no entry points, and "signature" is no longer a security word. That branch review took 85 s
+before and 48 s after these fixes (with the test suite running on the same machine).
+
+Per concern (dev, frozen): persistence 10/10 precision, 8/8 recall; security 12/12, 12/12; performance 3/3, 3/3;
+public API 21/21, 21/21; config 5/5, 5/5; entry points 15/21, 13/13. Held-out (frozen): persistence 6/10, 3/3;
+security 6/6, 6/6; performance 2/2, 2/2; config 3/3, 2/2; entry points 6/7, 5/5; public API 0/1 (no must-find).
+Unknowns are 22% of the reported items on both splits (22 of 99 on dev, 11 of 49 on held-out); 5 dev and 9
+held-out findings are below strong_inference (word hits, moved guards, name-only entries).
+
+The false positives: on dev, six entry points that do reach the change (commands, a packet handler, a chunk
+event) on three glow_mod fixtures whose gold lists no entry points; on held-out, the output of `snapshot.git`
+carried into four stored records and one entry point on HV1 (its gold says "no persistence"), and an import
+statement rewritten to import more names read as a removed name on HO4 - a bug, fixed after that run. HO4's
+changed symbols also list two import statements the gold left out.
+
+**Time per review** (without `--run-tests` and without `update`; the copy's git index refreshed as `git
+status` would; median / max):
+
+| project | graph loaded (the CLI's case) | graph kept in memory (MCP) | cold CLI process |
+|---|---|---|---|
+| orders_app | 0.19 / 0.19 s | 0.13 / 0.15 s | 0.66-0.75 s |
+| forge_mod | 0.21 / 0.24 s | 0.16 / 0.18 s | 0.74-0.77 s |
+| glow_mod | 0.20 / 0.27 s | 0.14 / 0.19 s | 0.95 s |
+| 380-file Verinoda copy | 1.85 / 5.4 s | 0.78 / 1.3 s | 2.2-2.4 s |
+
+(dev, frozen rules; the cold CLI column from separate runs on the same copies.) The design's bars, 2 s on the
+examples and 6 s on the copy, hold. With a stale git index (a freshly copied checkout) git reports every file
+as changed and the review reads each one: 11 s on the copy; the review does not refresh the index itself, since
+that writes `.git/index`.
+
+**Blast radius** against `verinoda map --view impact` on the same diff: fewer items on every fixture with
+dependents - A1 (O01) 3 vs 11, A7 (F02) 0 vs 28 (the tick handler's caller is a method-reference registration,
+reported as an unknown), A8 (V01) 7 vs the view's capped 80 - with every gold dependent listed (19/19, 3/3).
+The review counts non-test dependents; the view also counts tests and files. One held-out fixture keeps more:
+HV1 (`snapshot.git`) has 61 dependents against the view's capped 80.
+
+**What to read**: every gold location lies inside the review's `read_first` (62/62 dev, 18/18 held-out) at a
+median of 642 characters per dev fixture (max 3,400; the budget is 6,000). The design's baseline, `map --view
+impact` plus reading the changed and affected files, also covers every gold file (62/62) but at a median of
+11,530 characters; 18 of the 36 dev fixtures exceed 6,000 characters that way, and on the Verinoda copy it is
+1.4-1.5 million characters (scratch measurement on the dev copies, not in the result files).
+
+**A8 with `--run-tests`** (`a8-run-tests.json`): 19 tests selected statically, among them
+`tests/test_experiments.py::test_policy_rejects_arguments_that_leave_the_copy`; the run failed (8 failed, 66
+passed, 30 s); the failures in the log are the `..` cases that the removed guard handled. A1 with `--observe`:
+the four tests that reach `apply_discount` at run time were reported as reached, and
+`test_empty_order_rejected` (statically selected) as selected but not reaching it.
+
+Not measured: an agent session with and without the review step; repositories of 2,000+ files; the precision of
+the word heuristics on their own; Java/Kotlin test runs (Gradle is not allowlisted).
 
 ## Update 2026-09-25: debug ledger (debugloops_v1)
 

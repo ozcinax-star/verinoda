@@ -175,25 +175,31 @@ def _sinks(g: Graph) -> dict[str, list[dict]]:
     return out
 
 
+def entry_reasons(g: Graph, n: str) -> list[str]:
+    """Why symbol ``n`` looks like an entry point (heuristics: decorator, name, entry module); [] if not."""
+    if not g.is_symbol(n):
+        return []
+    f = g.file(n) or ""
+    if is_test_file(f):
+        return []
+    reasons = []
+    name = g.label(n).strip(".()")
+    src = g.source(n, max_lines=4)
+    if src and ENTRY_DECORATOR_RE.search(src[2]):
+        reasons.append("route/command decorator")
+    if ENTRY_NAME_RE.search(name):
+        reasons.append("entry-like name")
+    if ENTRY_FILE_RE.search(f):
+        prod_callers = [u for u, _ in g.in_edges(n, {"calls"}) if not is_test_file(g.file(u))]
+        if not prod_callers and not name.startswith("_") and not g.G.nodes[n].get("_callable_class"):
+            reasons.append("public callable in entry module with no in-project callers")
+    return reasons
+
+
 def entry_points(g: Graph) -> list[dict]:
     found = []
     for n in g.G.nodes:
-        if not g.is_symbol(n):
-            continue
-        f = g.file(n) or ""
-        if is_test_file(f):
-            continue
-        reasons = []
-        name = g.label(n).strip(".()")
-        src = g.source(n, max_lines=4)
-        if src and ENTRY_DECORATOR_RE.search(src[2]):
-            reasons.append("route/command decorator")
-        if ENTRY_NAME_RE.search(name):
-            reasons.append("entry-like name")
-        if ENTRY_FILE_RE.search(f):
-            prod_callers = [u for u, _ in g.in_edges(n, {"calls"}) if not is_test_file(g.file(u))]
-            if not prod_callers and not name.startswith("_") and not g.G.nodes[n].get("_callable_class"):
-                reasons.append("public callable in entry module with no in-project callers")
+        reasons = entry_reasons(g, n)
         if reasons:
             found.append({"id": n, "symbol": g.label(n), "at": _loc(g, n), "why": reasons})
     return sorted(found, key=lambda e: e["at"])

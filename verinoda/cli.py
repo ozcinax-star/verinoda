@@ -11,7 +11,8 @@ Exit codes: 0 done; 1 error; 2 usage error, invalid plan, unresolved trace
 endpoint or blocked upstream command; 3 "needs more": a plan that needs
 clarification, a partial reference resolution, a refused experiment, an
 incomplete observation, no precise answer, an absent name (`check`), a
-target not found (`api`; a target that could not be decided is 0), a debug attempt that says stop.
+target not found (`api`; a target that could not be decided is 0), a debug attempt that says stop, a
+review with findings or unknowns to report.
 """
 
 from __future__ import annotations
@@ -747,6 +748,42 @@ def cmd_map(args) -> int:
         if len(lines) > args.max_lines:
             print(f"   ... {len(lines) - args.max_lines} more lines (use --json or --view)")
     return 0
+
+
+def cmd_review(args) -> int:
+    from verinoda import review as rv
+
+    given = getattr(args, "repo", None) or args.path
+    # like the other commands: the project root is found from the working directory when no path is given
+    repo = Path(given).resolve() if given else find_repo_root()
+    if args.base and args.staged:
+        print("error: give --base or --staged, not both", file=sys.stderr)
+        return 2
+    if args.change and not args.target:
+        print("error: --change needs --target FILE[::Qual.name] (a planned change)", file=sys.stderr)
+        return 2
+    if args.target and (args.base or args.staged):
+        print("error: a planned change (--target) is reviewed on the current code: give no --base / --staged",
+              file=sys.stderr)
+        return 2
+    if args.max_chars < 1:
+        print("error: --max-chars must be a positive number of characters", file=sys.stderr)
+        return 2
+    concerns = [c.strip() for c in args.concerns.split(",") if c.strip()] if args.concerns else None
+    bad = [c for c in concerns or () if c not in rv.CONCERNS]
+    if bad:
+        print(f"error: unknown concern(s) {', '.join(bad)}; choose from {', '.join(rv.CONCERNS)}", file=sys.stderr)
+        return 2
+    _need_graph(repo)
+    st = _store(repo)
+    try:
+        res = rv.review(repo, store=st, base=args.base, staged=args.staged, targets=args.target,
+                        change=args.change or ("body" if args.target else None), concerns=concerns,
+                        run_tests=args.run_tests, observe=args.observe, max_chars=args.max_chars)
+    finally:
+        st.close()
+    _emit(args, res, lambda r: _write(rv.render_text(r)))
+    return int(res["exit"])
 
 
 def cmd_query(args) -> int:
@@ -2172,6 +2209,22 @@ def cmd_benchmark(args) -> int:
               lambda r: (print(f"staleness {args.stale_cmd}" + (f" (full result: {args.out})" if args.out else "")),
                          _render_flat(r)))
         return 0 if res.get("recall_ok", res.get("all_ok", True)) and res.get("silent_wrong_ok", True) else 1
+    if args.bench_cmd == "review-eval":
+        from verinoda.benchmark import review_eval
+
+        def progress(row: dict) -> None:
+            state = row.get("error") or row.get("skipped") or f"{row.get('seconds_with_graph_load')} s"
+            print(f"[review-eval] {row['id']}: {state}", file=sys.stderr, flush=True)
+
+        res = review_eval.evaluate(args.split, work=Path(args.work).resolve() if args.work else None,
+                                   vcopy=Path(args.vcopy).resolve() if args.vcopy else None,
+                                   only=[s.strip() for s in args.only.split(",")] if args.only else None,
+                                   progress=progress)
+        _bench_out(args.out, res)
+        _emit(args, _bench_compact(res["summary"], args.out),
+              lambda r: (print(f"review fixtures, split {args.split}" + (f" (full result: {args.out})" if args.out
+                                                                         else "")), _render_flat(r)))
+        return 0 if not any("error" in r for r in res["rows"]) else 1
     if args.bench_cmd == "critique-eval":
         from verinoda.benchmark import critique_eval
 
@@ -2265,6 +2318,23 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--target", action="append", help="impact view: file or symbol (repeatable); default: git changes")
     sp.add_argument("--base", help="impact view: diff base (default HEAD + untracked)")
     sp.add_argument("--max-lines", type=int, default=60)
+    sp = add("review", cmd_review, "what a change touches, by concern: changed symbols, dependents, persistence, "
+                                   "security, performance, public API, config, entry points, tests, unknowns "
+                                   "(exit 3 = findings or unknowns to report)", repo=False)
+    sp.add_argument("path", nargs="?", default=None, help="project root (default: found from the working directory)")
+    sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
+    sp.add_argument("--base", help="compare the working tree with this commit (default HEAD)")
+    sp.add_argument("--staged", action="store_true", help="review the staged changes against HEAD")
+    sp.add_argument("--target", action="append", metavar="FILE[::Qual.name]",
+                    help="a planned change, before editing (repeatable): what changing it would touch")
+    sp.add_argument("--change", choices=["body", "signature", "remove"], help="with --target: the kind of change")
+    sp.add_argument("--concerns", help="comma list of persistence,security,performance,public_api,config,"
+                                       "entry_points (default: all)")
+    sp.add_argument("--run-tests", action="store_true",
+                    help="run the pytest tests that reach the change (isolated copy, recorded experiment)")
+    sp.add_argument("--observe", action="store_true",
+                    help="run those tests under the call tracer: which of them reach the changed functions")
+    sp.add_argument("--max-chars", type=int, default=6000, help="budget of the read_first list")
     sp = add("query", cmd_query, "bounded, justified retrieval for a question (plain text; --json for programs)")
     sp.add_argument("question")
     sp.add_argument("--max-items", type=int, default=10)
@@ -2662,6 +2732,15 @@ def build_parser() -> argparse.ArgumentParser:
     r.set_defaults(fn=cmd_benchmark)
     r.add_argument("--out", help="write the full result JSON here")
     r.add_argument("--json", action="store_true")
+    c = bsub.add_parser("review-eval", help="`verinoda review` on the labelled change fixtures "
+                                            "(benchmarks/review_fixtures): precision/recall per concern, unknowns, time")
+    c.set_defaults(fn=cmd_benchmark)
+    c.add_argument("--split", choices=["dev", "heldout"], default="dev")
+    c.add_argument("--work", help="work directory for the copies (default: a temporary one, removed afterwards)")
+    c.add_argument("--vcopy", help="a git repository of Verinoda to clone for the vcopy fixtures (else skipped)")
+    c.add_argument("--only", help="comma list of fixture ids")
+    c.add_argument("--out", help="write the full result JSON here")
+    c.add_argument("--json", action="store_true")
     c = bsub.add_parser("critique-eval", help="critique precision/recall on the labelled claim set")
     c.set_defaults(fn=cmd_benchmark)
     c.add_argument("--out", help="write the full result JSON here")

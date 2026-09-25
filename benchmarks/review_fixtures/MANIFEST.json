@@ -1,0 +1,21 @@
+{
+ "written": "2026-09-25",
+ "note": "sha256 of the fixture files as committed before any review rule was written",
+ "files": {
+  "dev.json": "a758484e080288e2e56749c739d9505890769deddc19e7a8e7a2f07578d5c60e",
+  "heldout.json": "333776c3b61a3388472da6e5c015bf2d53422fb557ed28212b7cb46ed95cce5c"
+ },
+ "counts": {
+  "dev.json": 36,
+  "heldout.json": 11
+ },
+ "amendments": [
+  {
+   "file": "dev.json",
+   "sha256": "c3192037a485a78cb90f4c0d93bb9edfbcb45480e30fa866b53ac76595d3f6c3",
+   "when": "before the first run of any review rule on the fixtures",
+   "what": "G05: must_find public_api at src/gametest/java/com/example/glowmod/test/WispTests.java:16 (the game test's call site of Wisp.spawn was left out) and must_not_flag public_api at reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:25 (another class named Wisp, in the reference copy)",
+   "why": "found while reading the code to write the Java call-site rule, not from a review output"
+  }
+ ]
+}

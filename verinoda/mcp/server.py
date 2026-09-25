@@ -75,6 +75,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "node_inspect",
     "relation_trace",
     "map_view",
+    "change_review",
     "question_plan_draft",
     "question_plan_check",
     "analyze",
@@ -768,6 +769,42 @@ class AtlasTools:
         return self._run("map_view", go, need="graph")
 
     # -- question understanding -----------------------------------------------------
+    def change_review(self, base: str | None = None, staged: bool = False, targets: list[str] | None = None,
+                      change: str | None = None, concerns: list[str] | None = None, run_tests: bool = False,
+                      observe: bool = False, max_chars: int = 6000) -> dict:
+        def go():
+            from verinoda import review as rv
+
+            b = _opt_text(base)
+            tg = _str_list(targets, "targets")
+            ch = _choice(change, rv.PLANNED_KINDS, "change") if change is not None else None
+            cs = _str_list(concerns, "concerns") or None
+            for c in cs or []:
+                _choice(c, rv.CONCERNS, "concerns")
+            if b and staged:
+                raise ToolFailure("invalid_argument", "give base or staged, not both", "staged compares the index "
+                                                                                     "with HEAD")
+            if ch and not tg:
+                raise ToolFailure("invalid_argument", "change needs targets", "targets: ['path/file.py::Qual.name']")
+            if tg and (b or staged):
+                raise ToolFailure("invalid_argument", "targets (a planned change) take no base or staged",
+                                  "review the planned change on the current code, or drop targets")
+            with self._store() as st:
+                try:
+                    res = rv.review(self.repo, store=st, graph=self._graph(), base=b, staged=bool(staged),
+                                    targets=tg or None, change=ch or ("body" if tg else None), concerns=cs,
+                                    run_tests=bool(run_tests), observe=bool(observe),
+                                    max_chars=_clamp(max_chars, 500, 50_000, "max_chars"))
+                except ValueError as exc:
+                    raise ToolFailure("invalid_argument", str(exc)[:600], "base is a git revision such as HEAD~1; "
+                                      "targets are 'path/file.py' or 'path/file.py::Qual.name'") from None
+            res.pop("files", None)
+            return res
+        return self._run("change_review", go, need="graph",
+                         keep=("summary", "exit", "counts", "concerns", "unknown", "read_first", "tests",
+                               "concerns_checked", "changes"),
+                         first=("dependents", "binding_readers", "skipped"))
+
     def question_plan_draft(self, question: str) -> dict:
         def go():
             from verinoda import question_plan as qp
@@ -1431,6 +1468,8 @@ Tools:
 - project_query: where is X / what handles Y - plain text, skeleton first (format='json' for programs).
 - node_inspect / relation_trace: one symbol's definition and edges; call paths between two symbols.
 - map_view: architecture views (hierarchy, dependencies, dataflow, config, tests, history, impact).
+- change_review: before editing (targets + change) and before saying done (no arguments: the working tree against
+  HEAD): what the change touches by concern, tests, unknowns; read read_first in order, report every concern.
 - analyze / plan_audit: answer as recorded claims with evidence, critique and unknowns; re-judge it later.
 - lexicon_show: which code words the repository associates with a natural-language word.
 - claim_inspect / claim_list / evidence_inspect / claim_verify / claim_challenge: audit claims.
@@ -1491,6 +1530,18 @@ DESCRIPTIONS: dict[str, str] = {
         "impact (reverse dependents of targets). 'coverage' states the method and its limits; heuristics "
         "are labelled. For impact pass targets (files or symbols); without targets the git working-tree "
         "changes are used. Large views are truncated."),
+    "change_review": (
+        "What a change touches, by concern (the same as `verinoda review`). Default: the working tree against HEAD; "
+        "base = another commit; staged = the index; targets ('path/file.py' or 'path/file.py::Qual.name') + change "
+        "(body | signature | remove) = a planned change, before editing. Returns changes (changed definitions: body, "
+        "signature, added, removed, module_statement, config_key; comments and whitespace do not count), dependents "
+        "with via-chains (possibly affected; truncation stated), concerns - persistence, security (incl. exit guards "
+        "and permission checks removed), performance (IO in loops, loops on hot paths), public_api (call sites whose "
+        "arguments no longer fit, removed names still used), config, entry_points - each finding with status, at, "
+        "evidence_at and derived_by; concerns_checked says which rules ran ('no finding' is never 'safe'); tests "
+        "(static reach, observed reach from the tracer's latest run; observe=true / run_tests=true run the pytest "
+        "tests that reach the change in an isolated copy); unknown with next steps; read_first: the lines to read, "
+        "packed to max_chars. exit 3 = findings or unknowns to report. Never edits code."),
     "question_plan_draft": (
         "Draft a question plan (verinoda.question_plan/1) from the user's message with deterministic "
         "Turkish/English rules: sub-questions with intent and a checkable done_when, mentions (the user's "
@@ -1814,6 +1865,26 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None):
                                                                "default = git working-tree changes.")] = None,
     ) -> dict[str, Any]:
         return emit(t.map_view(view, targets=targets))
+
+    @register("change_review")
+    def change_review(
+        base: Annotated[OptStr, Field(description="Compare the working tree with this commit (default HEAD).")] = None,
+        staged: Annotated[bool, Field(description="Review the staged changes (the index) against HEAD.")] = False,
+        targets: Annotated[list[str] | None, Field(description="A planned change, before editing: 'path/file.py' or "
+                                                               "'path/file.py::Qual.name' items.")] = None,
+        change: Annotated[Literal["body", "signature", "remove"] | None,
+                          Field(description="With targets: the kind of planned change (default body).")] = None,
+        concerns: Annotated[list[str] | None, Field(description="Subset of persistence, security, performance, "
+                                                                "public_api, config, entry_points (default all).")]
+        = None,
+        run_tests: Annotated[bool, Field(description="Run the pytest tests that reach the change (isolated copy).")]
+        = False,
+        observe: Annotated[bool, Field(description="Run them under the call tracer: which reach the changed "
+                                                   "functions.")] = False,
+        max_chars: Annotated[int, Field(description="Budget of read_first in characters (500-50000).")] = 6000,
+    ) -> dict[str, Any]:
+        return emit(t.change_review(base=base, staged=staged, targets=targets, change=change, concerns=concerns,
+                                    run_tests=run_tests, observe=observe, max_chars=max_chars))
 
     @register("question_plan_draft")
     def question_plan_draft(
