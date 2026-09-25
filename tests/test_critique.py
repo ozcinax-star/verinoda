@@ -184,7 +184,78 @@ def test_definitive_misses_are_contradicted_at_creation_with_their_scope(proj):
                    symbol="place_orders")
     res = critique.check_at_creation(st, repo, loc["id"], graph=g)
     assert res["status"] == "contradicted" and res["findings"] == [
-        "no definition named `place_orders` in orders/service.py (scope: its syntax tree); nearest: place_order"]
+        "no definition, assignment or import named `place_orders` in orders/service.py, and the file does not spell "
+        "`place_orders` (scope: the file's text); nearest: place_order"]
+
+
+def test_names_bound_by_assignments_are_defined_and_never_contradicted(proj):
+    repo, st, cl, g = proj
+    for text, at, sym in (("`DISCOUNT_THRESHOLD` is defined in orders/config.py", "orders/config.py:7",
+                           "DISCOUNT_THRESHOLD"),
+                          ("`_repo` is defined in orders/api.py", "orders/api.py:6", "_repo"),
+                          ("`place_order` is defined in orders/service.py", "orders/service.py:19-22",
+                           "orders/service.py::place_order")):
+        c = _written(cl, st, text, "location", [at], symbol=sym)
+        assert c["status"] == "statically_verified", text
+        assert critique.check_at_creation(st, repo, c["id"], graph=g)["findings"] == [], text
+    # spelled in the file (an SQL string) but bound nowhere: a heuristic doubt, never a contradiction
+    c = _written(cl, st, "`orders` is defined in orders/repository.py", "location", ["orders/repository.py:12"],
+                 symbol="orders")
+    assert critique.check_at_creation(st, repo, c["id"], graph=g)["status"] != "contradicted"
+    ctx = critique.ProbeContext(repo=repo, kind="location", spec={"symbol": "orders", "free_text": True},
+                                subjects=["orders/repository.py"], text=c["text"], graph=g)
+    [r] = critique.probe_location_exists(ctx)
+    assert r.strength == "heuristic" and "spells `orders` but nothing in its syntax tree binds it" in r.detail
+
+
+def test_relation_sentences_are_contradicted_only_on_roles_they_state_clearly(proj):
+    repo, st, cl, g = proj
+    true = [("validate_items and compute_total are called in place_order", "orders/service.py:21", "compute_total"),
+            ("place_order, validate_items ve compute_total'ı çağırır", "orders/service.py:21", "compute_total"),
+            ("create_order_handler, get_repo ile place_order'ı çağırır", "orders/api.py:18", "place_order"),
+            ("create_order_handler calls place_order, and get_order_handler calls fetch_order", "orders/api.py:25",
+             "fetch_order"),
+            ("validate_items'ı place_order çağırır", "orders/service.py:20", "validate_items"),
+            ("place_order calls validate_items and compute_total", "orders/service.py:21", "compute_total")]
+    for text, at, target in true:
+        c = _written(cl, st, text, "relation", [at], target_label=target, symbol=target)
+        assert c["status"] == "statically_verified", text
+        assert critique.check_at_creation(st, repo, c["id"], graph=g)["findings"] == [], text
+    # no clear form: the roles are not bound, so the text is not verified - and never contradicted
+    for text, at, target in (("place_order is what create_order_handler calls", "orders/api.py:18", "place_order"),
+                             ("place_order'ı çağıran fonksiyon create_order_handler", "orders/api.py:18",
+                              "place_order"),
+                             ("Both create_order_handler and get_order_handler call get_repo", "orders/api.py:18",
+                              "get_repo")):
+        c = _written(cl, st, text, "relation", [at], target_label=target, symbol=target)
+        assert c["status"] == "strong_inference", text
+        assert critique.check_at_creation(st, repo, c["id"], graph=g)["status"] == "strong_inference", text
+    # a caller the text names whose definition is not found: its body was not read, so no contradiction
+    c = _written(cl, st, "OrderRepository.place_order calls validate_items", "relation", ["orders/service.py:20"],
+                 target_label="validate_items", symbol="validate_items")
+    res = critique.check_at_creation(st, repo, c["id"], graph=g)
+    assert res["status"] != "contradicted" and res["findings"] == []
+
+
+def test_order_of_calls_made_by_nested_functions_is_never_certain(proj):
+    repo, st, cl, g = proj
+    (repo / "orders" / "flow.py").write_text(
+        "from orders.service import validate_items\n\n\n"
+        "def save_items(items):\n    return list(items)\n\n\n"
+        "def handle(items):\n    def finish():\n        return save_items(items)\n"
+        "    validate_items(items)\n    return finish()\n\n\n"
+        "def mixed(items):\n    check = lambda: validate_items(items)  # noqa: E731\n"
+        "    save_items(items)\n    validate_items(items)\n    return check()\n", encoding="utf-8", newline="\n")
+    for prop in ("validate_items before save_items", "save_items before validate_items"):
+        c = _written(cl, st, f"`handle` calls ... ({prop})", "behaviour", ["orders/flow.py:8-12"],
+                     proposition=f"{prop} in handle", holds=True, symbol="handle")
+        assert c["status"] == "strong_inference", prop  # partial: the nested call has no static place
+        assert critique.check_at_creation(st, repo, c["id"], graph=g)["status"] == "strong_inference", prop
+    # F's own calls are reversed, but a lambda also calls one of them: a heuristic doubt only
+    ctx = critique.ProbeContext(repo=repo, kind="behaviour", subjects=["orders/flow.py"], text="x", graph=g,
+                                spec={"proposition": "validate_items before save_items in mixed", "holds": True})
+    [r] = critique.probe_order(ctx)
+    assert r.strength == "heuristic" and "a nested function or lambda also calls one of them" in r.detail
 
 
 def test_true_written_claims_keep_their_status_at_creation(proj):

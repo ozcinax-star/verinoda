@@ -943,13 +943,17 @@ def cmd_claim(args) -> int:
         subjects = list(dict.fromkeys(p for _, p, _, _ in sources))
         symbol = args.symbol
         if kind == "relation" and not symbol:
-            symbol = entail.relation_roles(args.text)[1]  # the callee the text names
+            symbol = entail.relation_roles(args.text)[1]  # the callee the text names, in a clear form
+            if not symbol:
+                raise SystemExit("error: --kind relation needs the callee: pass --symbol <callee>, or state it as "
+                                 "\"A calls B\" / \"B is called by A\" with both written as code")
         if kind == "order":
             prop = entail.order_proposition(args.text, symbol)
             if prop is None:
-                raise SystemExit("error: an order claim names two calls and their order in the text, e.g. "
-                                 "\"`place_order` calls `validate_items` before `save`\" --symbol place_order "
-                                 "(--symbol is the function whose body is checked)")
+                raise SystemExit("error: an order claim states two calls and their order positively in one form, "
+                                 "e.g. \"`place_order` calls `validate_items` before `save`\", \"... `save` after "
+                                 "`validate_items`\", \"... `validate_items`, then `save`\" --symbol place_order "
+                                 "(--symbol is the function whose body is checked; a negated order is not read)")
             kind = "behaviour"
             cspec.update({"proposition": prop, "holds": True})
         if symbol:

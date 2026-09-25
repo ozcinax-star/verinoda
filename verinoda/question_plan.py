@@ -62,6 +62,7 @@ import hashlib
 import json
 import math
 import re
+import sqlite3
 import time
 from collections import defaultdict
 from functools import lru_cache
@@ -727,20 +728,51 @@ def _outside_imports(lines: list[str]) -> list[tuple[int, str]]:
     return out
 
 
-def name_site(g, text: str) -> str | None:
+def split_code_name(text: str) -> tuple[str, str]:
+    """``(path, name)`` of a name written as code: ``orders/api.py::Cls.meth`` gives both, a path gives
+    ``(path, "")``, ``Cls#meth`` gives ``("", "Cls.meth")``. Backticks, quotes, an apostrophe suffix, a
+    trailing ``()`` and backslashes (Windows paths) are normalised away."""
+    t = tn.split_apostrophe((text or "").strip())[0].strip().strip("`'\"").strip().replace("\\", "/")
+    path, sep, name = t.rpartition("::")
+    if not sep:
+        path, name = "", t
+    name = name.strip().replace("#", ".")
+    name = name[:-2] if name.endswith("()") else name
+    if not path and ("/" in name or PurePosixPath(name).suffix[1:].lower() in _CODE_EXTS):
+        path, name = name, ""
+    return path.strip().lstrip("./").strip("/"), name.strip().strip(".")
+
+
+def _names_file(f: str, paths: set[str]) -> bool:
+    """Is repository file ``f`` one of ``paths`` (a path suffix, with or without its extension)?"""
+    stem = f.rpartition(".")[0] if "." in PurePosixPath(f).name else f
+    return any(f == q or f.endswith("/" + q) or stem == q or stem.endswith("/" + q) for q in paths)
+
+
+def _read_small(p: Path) -> str | None:
+    try:
+        if p.stat().st_size > _SITE_MAX_BYTES:
+            return None
+        return p.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def name_site(g, text: str, *, strict: bool = False) -> str | None:
     """Where the repository spells a code-shaped name outside import statements (``file:line``), or a
     file with that path; None when it spells it nowhere (then the name does not exist here).
 
-    Lenient on purpose: a dotted name counts when its last part occurs, any letter case counts. Only
-    a name found nowhere is reported as not found.
+    Lenient on purpose: a dotted name counts when its last part occurs (unless ``strict``: then the
+    whole name must occur), any letter case counts. ``path::name`` looks for the name in that file
+    only. Only a name found nowhere is reported as not found.
     """
     ix = _index(g)
-    name = tn.split_apostrophe((text or "").strip())[0].strip().strip("`").strip()
-    name = name[:-2] if name.endswith("()") else name
-    if not name:
+    path, name = split_code_name(text)
+    if not (path or name):
         return None
-    if name in ix.sites:
-        return ix.sites[name]
+    key = f"{path}::{name}::{int(strict)}"
+    if key in ix.sites:
+        return ix.sites[key]
     if ix.repo_files is None:
         from verinoda.snapshot import list_files
 
@@ -748,43 +780,90 @@ def name_site(g, text: str) -> str | None:
             ix.repo_files = list_files(Path(g.root))
         except (OSError, ValueError):
             ix.repo_files = sorted(ix.files)
-    posix = name.replace("\\", "/").lstrip("./")
-    as_paths = {posix} | ({posix.replace(".", "/")} if "/" not in posix and "." in posix else set())
-
-    def names_file(f: str) -> bool:
-        stem = f.rpartition(".")[0] if "." in PurePosixPath(f).name else f
-        return any(f == q or f.endswith("/" + q) or stem == q or stem.endswith("/" + q) for q in as_paths)
-
-    site = next((f for f in ix.repo_files if names_file(f)), None)
+    site: str | None = None
+    if path:  # a file, or a name in that file
+        f = next((f for f in ix.repo_files if _names_file(f, {path})), None)
+        if f is not None and not name:
+            site = f
+        elif f is not None:
+            rx = re.compile(rf"(?<![\w]){re.escape(name.rpartition('.')[2])}(?![\w])")
+            data = _read_small(Path(g.root) / f) or ""
+            hit = next((i for i, ln in _outside_imports(data.splitlines()) if rx.search(ln)), None)
+            site = f"{f}:{hit}" if hit is not None else None
+        ix.sites[key] = site
+        return site
+    as_paths = {name} | ({name.replace(".", "/")} if "." in name else set())
+    site = next((f for f in ix.repo_files if _names_file(f, as_paths)), None)
     if site is None:
-        last = re.split(r"[./]", posix)[-1] if "/" not in posix and "." in posix and \
-            posix.rpartition(".")[2].lower() not in _CODE_EXTS else None
-        pats = [re.compile(rf"(?<![\w]){re.escape(posix)}(?![\w])")]
+        last = name.rpartition(".")[2] if "." in name and not strict else None
+        pats = [re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])")]
         if last and len(last) >= 3:
             pats.append(re.compile(rf"(?<![\w]){re.escape(last)}(?![\w])"))
-        pats.append(re.compile(rf"(?<![\w]){re.escape(posix)}(?![\w])", re.I))
+        pats.append(re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])", re.I))
+        files = _files_to_scan(g, ix, [name] if strict or not last else [name, last])
         deadline = time.perf_counter() + _SITE_SECONDS
-        for f in ix.repo_files:
+        for f in files:
             if f.lower().endswith(_TEXT_SUFFIXES_SKIP):
                 continue
             if time.perf_counter() > deadline:
                 site = UNCHECKED
                 break
-            p = Path(g.root) / f
-            try:
-                if p.stat().st_size > _SITE_MAX_BYTES:
-                    continue
-                data = p.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            if not any(rx.search(data) for rx in pats):
+            data = _read_small(Path(g.root) / f)
+            if data is None or not any(rx.search(data) for rx in pats):
                 continue
             hit = next((i for i, ln in _outside_imports(data.splitlines()) if any(rx.search(ln) for rx in pats)), None)
             if hit is not None:
                 site = f"{f}:{hit}"
                 break
-    ix.sites[name] = site
+    ix.sites[key] = site
     return site
+
+
+def _files_to_scan(g, ix: _Index, names: list[str]) -> list[str]:
+    """The repository files that may spell one of ``names``: every file, unless the search index
+    (``search.db`` of this graph) shows that no indexed file has every word of any of the names - then
+    only the files it does not index and those changed since it indexed them. (Import lines are not
+    indexed; name_site ignores them anyway.)"""
+    files = ix.repo_files or []
+    try:
+        from verinoda import search_index as si
+        from verinoda.index import same_graph
+
+        db = si.db_path_for(g)
+        if not db.exists():
+            return files
+        conn = sqlite3.connect(str(db), timeout=5)
+        try:
+            m = si._meta(conn)
+            if not (m.get("schema_version") == si.SCHEMA_VERSION and m.get("tokenizer_version") == si.TOKENIZER_VERSION
+                    and same_graph(g.path, m.get("graph"))):
+                return files
+            def indexed_word(w: str) -> bool:  # a file word the name_site patterns match has one of these tokens
+                toks = si.word_tokens(w)
+                forms = {toks[0], tn.fold_tr(w.strip("_"))} if toks else set()
+                return not forms or any(conn.execute("SELECT 1 FROM df WHERE term = ?", (t,)).fetchone()
+                                        for t in forms)
+
+            for name in names:
+                if all(indexed_word(w) for w in re.findall(r"\w+", name)):
+                    return files  # an indexed file may spell it: scan them all
+            indexed = {r[0]: (r[1], r[2]) for r in
+                       conn.execute("SELECT file, size, mtime_ns FROM files WHERE skipped IS NULL")}
+        finally:
+            conn.close()
+    except (OSError, sqlite3.Error, ImportError, ValueError):
+        return files
+    out = []
+    for f in files:
+        if f in indexed:
+            try:
+                st = (Path(g.root) / f).stat()
+            except OSError:
+                continue
+            if (st.st_size, st.st_mtime_ns) == indexed[f]:
+                continue  # indexed as it is now: its words are in the index
+        out.append(f)
+    return out
 
 
 def _exact_name(scored: dict[str, dict]) -> bool:
@@ -798,6 +877,10 @@ def not_found_line(g, text: str, near: list[dict]) -> str:
     shape = code_shape(text) or "name"
     name = tn.split_apostrophe((text or "").strip())[0].strip().strip("`")
     line = f"no {'file' if shape == 'file' else 'symbol'} named `{name}` in this repository"
+    path, sym = split_code_name(text)
+    if path and sym:  # `path::name`: the file, or the name in it
+        known = [f for f in _index(g).files if _names_file(f, {path})]
+        line = f"no symbol named `{sym}` in {known[0]}" if known else f"no file named `{path}` in this repository"
     if near:
         line += "; nearest: " + ", ".join(f"{_bare(n['label'])} ({n['site']})" for n in near[:2])
     return line
@@ -1041,13 +1124,19 @@ def link_mention(mention: dict, graph, lexicon=None, *, with_hash: bool = True) 
         link["status"] = "weak"
         link["uncertainty"] = f"'{mention.get('text')}' linked only by {link['tier']} (score {best['score']:.2f})"
         if link.get("occurs_at"):
-            link["uncertainty"] = (f"`{mention.get('text')}` is not a name defined in this repository (it occurs at "
+            link["uncertainty"] = (f"no symbol in the index is named `{mention.get('text')}` (the name occurs at "
                                    f"{link['occurs_at']}); linked by {link['tier']} to {g.label(best['best'])}, "
                                    "not by its name")
         link["nodes"] = [f["best"] for f in fams if best["score"] - f["score"] < THRESHOLDS["margin"]][:5]
     elif len(close) == 1:
         link["status"] = "linked"
         link["nodes"] = [best["best"]]
+        written, label = split_code_name(mention.get("text") or "")[1], _bare(g.label(best["best"]))
+        if shape and link["tier"] == "label_folded" and tn.fold_tr(written) != tn.fold_tr(label):
+            # `placeOrder` for place_order: the same letters in another spelling - said, never silent
+            link["status"] = "weak"
+            link["uncertainty"] = (f"`{written}` is spelled `{label}` here: linked by its letters (label_folded), "
+                                   "not by its name")
     else:
         link["status"] = "ambiguous"
         link["nodes"] = [f["best"] for f in close][:5]

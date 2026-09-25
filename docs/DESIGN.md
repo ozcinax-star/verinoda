@@ -617,14 +617,39 @@ deterministic.
   by it.
 - **Every role is bound** (`entail.assess`, free text only; generated claims
   state the roles by construction):
-  - a relation's text states a caller and a callee (`entail.relation_roles`:
-    "A calls B", "B is called by A", "A, B'yi çağırır", "B, A tarafından
-    çağrılır"). The callee must be the claim's target, and the call-site grade
-    checks the cited line against the caller the text names;
+  - a relation's text states one caller and the callee in one clear form
+    (`entail.relation_parse`): "A calls B", "B is called by/from/in A", "A, B'yi
+    çağırır" (the accusative marks the callee, in any word order:
+    "B'yi A çağırır", "B fonksiyonunu A çağırır") and "B, A tarafından
+    çağrılır". In a sentence with several clauses the clause that names the
+    target is read ("A calls B, and C calls D"); several names on the calling
+    side ("both A and B call C"), a cleft ("B is what A calls") or a relative
+    clause ("B'yi çağıran A") is no clear form. Then no role is guessed: the
+    grade is `partial` ("the text does not state one caller and the callee in
+    a form that is checked"), and nothing is contradicted. The callee must be
+    the claim's target, and the call-site grade checks the cited line against
+    the caller the text names (`Owner.name` also needs the class `Owner`
+    around the line). A caller written as a plain word ("checkout calls
+    submit") or a file must be the definition around the cited lines or their
+    file, else the grade is `partial`; it never drives a contradiction. A
+    call verb outranks "using"/"creates", and an infinitive ("to create") is
+    not the relation. A call on the receiver the text writes (`repo.save`,
+    `self._check`) and `self.m()` inside a class that defines `m` are `full`;
   - a config text's subject ("the discount threshold") must be spelled by the
     name the cited read of the variable is bound to (`entail.env_bindings`:
     assignment target, dict key, keyword, enclosing definitions), at least
-    half of its words, else the grade is `partial`.
+    half of its words, else the grade is `partial`;
+  - what the text states beyond the kind's typed check keeps it `partial`
+    (`entail.unchecked_statements`): a negation ("not", "never", "n't", TR
+    "çağırmaz", "okunmaz", "değil": the check proves the positive statement),
+    a quantifier ("only", "all", "always"), an order in a non-order claim
+    ("before", "after", "then", "first"), a condition ("if", "when"), a count
+    ("twice"), and a number: a config claim's number must be in the cited
+    read itself ("defaults to 50" against `os.environ.get(..., "100.0")` is
+    `partial`), other kinds do not compare numbers;
+  - a verbatim quote verifies only the quoted text: written text that says
+    more than a locator (`path:line`, or the name of the definition around the
+    cited lines) besides `contains: ...` is `partial` (code `quote_rest`).
 - **Scope-exhaustive checks at creation** (`critique.check_at_creation`, run by
   `claim add`; the same checks run in `challenge`):
   - relation: a cited line without the call is checked against the caller's
@@ -634,21 +659,37 @@ deterministic.
     (orders/api.py:16-21); calls through other names are not followed". The
     caller's body is the refuting evidence. A call at another line of the body
     is a heuristic warning (the citation is off), no longer a definitive
-    refutation;
+    refutation, and so is a caller read from the text whose definition is not
+    found (its body was not read);
   - config: when no read of the variable in the cited file is bound to the
     text's subject and another read's binding spells the whole subject, the
     claim is `contradicted`: "orders/config.py:6 binds ORDERS_MAX_ITEMS to
     MAX_ITEMS_PER_ORDER; DISCOUNT_THRESHOLD reads ORDERS_DISCOUNT_THRESHOLD at
     orders/config.py:7 (scope: environment reads in orders/config.py)";
   - order: `claim add --kind order` records "A before B in F" (a behaviour
-    claim, `entail.order_proposition`). The first calls of A and B in F's whole
-    body decide it (`entail.call_order`); a missing call, or the reverse order
-    in a function without branches or loops, is `contradicted`. The analysis'
+    claim, `entail.order_proposition`) from explicit forms only: "A before
+    B", "B after A", "after A, B", "A, and after that B" (the anaphor keeps
+    the written order), "A, then B", TR "B'den önce A", "A'dan sonra B",
+    "önce A, sonra B". Two order words that make no such form, or a negated
+    order ("never calls B before A"), are refused with a request for a clearer
+    sentence - a guess could reverse a true sentence. The first calls of A and
+    B in F's own code decide it (`entail.call_order`); a missing call, or the
+    reverse order in a function without branches or loops, is
+    `contradicted`. A call inside a def, lambda or class nested in F runs
+    when that is called, so it has no static place in F's order: the grade is
+    `partial` (code `nested`) and a reversal is only heuristic. The analysis'
     own order claims are graded the same way (they used to verify by word
     overlap);
-  - location: a written claim that a Python file defines a name it does not
-    define is `contradicted` ("no definition named `place_orders` in
-    orders/service.py (scope: its syntax tree); nearest: place_order").
+  - location: a written claim that a Python file defines a name is
+    `contradicted` only when nothing in the file binds the name (def, class,
+    assignment, import or its alias, parameter, `global`, ...) and the file
+    does not spell it at all ("no definition, assignment or import named
+    `place_orders` in orders/service.py, and the file does not spell
+    `place_orders` (scope: the file's text); nearest: place_order"). A name
+    the file spells without a binding is a heuristic doubt. A module or
+    class constant is defined by its assignment (`entail.assignment_spans`:
+    "`DISCOUNT_THRESHOLD` is defined in orders/config.py" citing line 7 is
+    `full`), and `--symbol path::name` names the file.
 - **Code-shaped mentions are not substituted** (`question_plan.link_mention`).
   A mention in backticks, a path, snake_case, camelCase, dotted or ending in
   `()` needs a name tier (exact id, path, `Class.method`, label, folded
@@ -661,10 +702,25 @@ deterministic.
     (orders/service.py:19)", and the sub-question is `unmet`;
   - if it is spelled somewhere (an environment variable, a data key, an
     external name), the link is at most `weak`, with the site in the
-    uncertainty.
-  `trace` does the same for its endpoints: a code-shaped endpoint without an
-  exact name is unresolved with the same line, and a plain-words endpoint
-  resolved by similarity is kept and reported in `fuzzy`.
+    uncertainty ("no symbol in the index is named `X` (the name occurs at
+    ...)");
+  - a folded label that differs by more than letter case (`placeOrder` for
+    `place_order`) is `weak` with "`placeOrder` is spelled `place_order`
+    here".
+  `name_site` reads `path::name` in that file only and normalises
+  backslashes, `Class#method` and `name()`. When the graph's search index is
+  current and no indexed file has every word of the name, only the files it
+  does not index (or that changed since) are read, so a large repository
+  answers "not found" without the 2 s scan.
+  `trace` resolves an endpoint to the node it names exactly
+  (`retrieval._names_exactly`): a path with or without its extension or with
+  backslashes, a dotted module name, `path::Class.method`, `Class#method`,
+  `name()`, `Owner.name` with the owner a class, module or package (a Java
+  FQN). An endpoint written as code that names nothing exactly is unresolved
+  with the not-found line only when the whole name is spelled nowhere
+  (`name_site(strict=True)`: "Foo.save" is not found although `save` is);
+  otherwise the similar node is kept and `fuzzy` says so, as for plain
+  words.
 
 Limits: Python only for relation scopes, config bindings and order (other
 languages keep their partial grades). Calls through other names, dynamic

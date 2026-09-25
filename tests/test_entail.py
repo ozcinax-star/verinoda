@@ -35,6 +35,24 @@ def repo(tmp_path_factory) -> Path:
         b"    return sorted(values, key=apply_discount)\n\n\n"
         b"def in_text():\n"
         b"    return 'apply_discount'  # apply_discount\n")
+    (r / "orders" / "flow.py").write_bytes(
+        b"from orders.service import validate_items\n\n\n"
+        b"def save_items(items):\n"
+        b"    return list(items)\n\n\n"
+        b"def handle(items):\n"
+        b"    def finish():\n"
+        b"        return save_items(items)\n"
+        b"    validate_items(items)\n"
+        b"    return finish()\n\n\n"
+        b"def handle_lambda(items):\n"
+        b"    done = lambda: save_items(items)  # noqa: E731\n"
+        b"    validate_items(items)\n"
+        b"    return done()\n\n\n"
+        b"class Cart:\n"
+        b"    def add(self, item):\n"
+        b"        self._check(item)\n\n"
+        b"    def _check(self, item):\n"
+        b"        return item\n")
     return r
 
 
@@ -289,10 +307,65 @@ def test_java_dotted_qualifiers_are_packages_only_when_written_like_one(qualifie
     ("validate_items is called by place_order", "validate_items", ("place_order", "validate_items")),
     ("place_order validate_items'ı çağırır", None, ("place_order", "validate_items")),
     ("validate_items, place_order tarafından çağrılır", None, ("place_order", "validate_items")),
-    ("orders/api.py calls place_order", "place_order", (None, None)),  # a file is not a caller name
+    ("orders/api.py calls place_order", "place_order", (None, "place_order")),  # a file is not a caller name
+    # compound sentences: the clause and the side that hold the target
+    ("validate_items and compute_total are called in place_order", "compute_total", ("place_order", "compute_total")),
+    ("place_order calls validate_items and compute_total", "compute_total", ("place_order", "compute_total")),
+    ("create_order_handler calls place_order, and get_order_handler calls fetch_order", "fetch_order",
+     ("get_order_handler", "fetch_order")),
+    # Turkish: the accusative marks the callee, whatever the word order
+    ("place_order, validate_items ve compute_total'ı çağırır", "compute_total", ("place_order", "compute_total")),
+    ("create_order_handler, get_repo ile place_order'ı çağırır", "place_order", ("create_order_handler", "place_order")),
+    ("validate_items'ı place_order çağırır", None, ("place_order", "validate_items")),
+    ("validate_items fonksiyonunu place_order çağırır", None, ("place_order", "validate_items")),
+    # no clear form: no roles (never a guess that could be reversed)
+    ("place_order is what create_order_handler calls", None, (None, None)),
+    ("place_order'ı çağıran fonksiyon create_order_handler", None, (None, None)),
+    ("create_order_handler'ın çağırdığı fonksiyon place_order", "place_order", (None, None)),
+    ("Both create_order_handler and get_order_handler call get_repo", "get_repo", (None, None)),
+    ("place_order ve validate_items save'i çağırır", "save", (None, None)),
+    ("create_order_handler calls place_order, which calls save", None, (None, None)),
+    # a call verb outranks "using"/"create", and an infinitive is not the relation
+    ("create_order_handler calls place_order using get_repo", "place_order", ("create_order_handler", "place_order")),
+    ("create_order_handler calls place_order to create the order", "place_order",
+     ("create_order_handler", "place_order")),
+    ("get_repo creates `OrderRepository`", "OrderRepository", ("get_repo", "OrderRepository")),
 ])
 def test_relation_roles_read_the_direction_the_text_states(text, target, roles):
     assert entail.relation_roles(text, target) == roles
+
+
+def test_relation_parse_reports_a_target_on_the_calling_side():
+    assert entail.relation_parse("place_order calls save", "place_order") == {
+        "caller": "place_order", "caller_file": None, "caller_word": None, "callee": None, "reversed": True}
+    assert entail.relation_parse("orders/api.py calls place_order", "place_order")["caller_file"] == "orders/api.py"
+
+
+@pytest.mark.parametrize("text, target, word", [
+    ("checkout calls submit", "submit", "checkout"), ("The function checkout calls submit", "submit", "checkout"),
+    ("save is called by checkout", "save", "checkout"), ("save, checkout tarafından çağrılır", "save", "checkout"),
+    ("checkout, submit'i çağırır", "submit", "checkout"),
+])
+def test_a_plain_word_caller_is_kept_apart_from_code_names(text, target, word):
+    p = entail.relation_parse(text, target)
+    assert p["caller"] is None and p["caller_word"] == word and p["callee"] == target
+
+
+@pytest.mark.parametrize("text, target", [
+    ("checkout and quote call submit", "submit"), ("It calls save", "save"), ("save is called by it", "save"),
+])
+def test_no_plain_word_caller_from_lists_or_pronouns(text, target):
+    assert entail.relation_parse(text, target) is None
+
+
+@pytest.mark.parametrize("text, neg", [
+    ("place_order does not call validate_items", "not"), ("compute_total never calls apply_discount", "never"),
+    ("place_order doesn't call save", "doesn't"), ("place_order, validate_items'ı çağırmaz", "çağırmaz"),
+    ("İndirim eşiği ORDERS_DISCOUNT_THRESHOLD değişkeninden okunmaz", "okunmaz"),
+    ("place_order calls validate_items", None), ("`not_found` is read by analyze", None),
+])
+def test_negation_is_read_from_the_words_around_the_code(text, neg):
+    assert entail.negated_text(text) == neg
 
 
 def test_code_names_skip_files_prose_and_abbreviations():
@@ -309,6 +382,21 @@ def test_code_names_skip_files_prose_and_abbreviations():
      "save before validate_items in place_order"),
     ("place_order, `validate_items`'dan sonra `save`'i çağırır", None, "validate_items before save in place_order"),
     ("place_order saves the order before it validates the items", "place_order", None),  # no two calls named
+    # "after that" refers back: the order stays as written
+    ("`place_order` calls `validate_items`, and after that `save`", "place_order",
+     "validate_items before save in place_order"),
+    ("`place_order` checks the items with `validate_items` and only after that calls `save`", "place_order",
+     "validate_items before save in place_order"),
+    ("`place_order` first calls `validate_items`, then `save`", "place_order", "validate_items before save in place_order"),
+    ("After `validate_items`, `place_order` calls `save`", "place_order", "validate_items before save in place_order"),
+    ("`checkout` creates the `OrderRepository` before it calls `submit`", "checkout",
+     "OrderRepository before submit in checkout"),
+    ("`place_order` önce `validate_items`'ı, sonra `save`'i çağırır", "place_order",
+     "validate_items before save in place_order"),
+    # unsure or negated: no proposition, never a reversed one
+    ("`place_order` calls `validate_items` and then, after computing the total, `save`", "place_order", None),
+    ("`place_order` never calls `save` before `validate_items`", "place_order", None),
+    ("`place_order` does not call `validate_items` before `save`", "place_order", None),
 ])
 def test_order_proposition_from_written_text(text, where, prop):
     assert entail.order_proposition(text, where) == prop
@@ -399,3 +487,125 @@ def test_typed_kinds_are_the_ones_with_a_mechanical_check():
     assert entail.typed("config", {"env": "X"}) and entail.typed("location", {}, "`f` is defined at a.py:1-2")
     assert entail.typed("behaviour", {"proposition": "a before b in f", "holds": True})
     assert not entail.typed("general", {}) and not entail.typed("behaviour", {"proposition": "a before b in f"})
+
+
+def _written(repo, kind, text, cite, **spec):
+    path, _, rng = cite.rpartition(":")
+    a, _, b = rng.partition("-")
+    return entail.assess(kind, repo, {"free_text": True, **spec}, src(repo, path, int(a), int(b or a)), text=text,
+                         subjects=[path])
+
+
+def test_written_text_beyond_the_typed_check_is_not_verified(repo):
+    def rel(text, target, at):
+        return _written(repo, "relation", text, at, target_label=target, symbol=target, at=at)
+
+    assert rel("place_order calls validate_items", "validate_items", "orders/service.py:20").grade == "full"
+    # a negation: the check proves the positive statement, so the negated text is never verified
+    for text in ("place_order does not call validate_items", "place_order, validate_items'ı çağırmaz"):
+        g = rel(text, "validate_items", "orders/service.py:20")
+        assert g.grade == "partial" and "the text is negated" in g.reason, text
+    g = _written(repo, "location", "`place_order` is not defined in orders/service.py", "orders/service.py:19-22",
+                 symbol="place_order")
+    assert g.grade == "partial" and "negated ('not')" in g.reason
+    # an order, a count or 'only' that a relation check does not look at
+    for text, why in (("place_order calls compute_total before validate_items", "an order ('before')"),
+                      ("place_order calls compute_total twice", "a count ('twice')"),
+                      ("Only place_order calls compute_total", "states 'only'")):
+        g = rel(text, "compute_total", "orders/service.py:21")
+        assert g.grade == "partial" and why in g.reason, text
+    # roles the text does not state in one clear form cannot be bound
+    g = rel("Both create_order_handler and get_order_handler call get_repo", "get_repo", "orders/api.py:18")
+    assert g.grade == "partial" and "does not state one caller" in g.reason
+    assert rel("validate_items and compute_total are called in place_order", "compute_total",
+               "orders/service.py:21").grade == "full"
+    # a plain-word caller must be the definition around the cited line (or its file)
+    assert rel("handle calls validate_items", "validate_items", "orders/flow.py:11").grade == "full"
+    g = rel("The handler calls validate_items", "validate_items", "orders/flow.py:11")
+    assert g.grade == "partial" and "caller `handler` is not a definition around the cited lines" in g.reason
+    assert rel("orders/flow.py calls validate_items", "validate_items", "orders/flow.py:11").grade == "full"
+    assert rel("orders/api.py calls validate_items", "validate_items", "orders/flow.py:11").grade == "partial"
+
+
+def test_written_config_default_is_compared_with_the_read(repo):
+    def cfg(text):
+        return _written(repo, "config", text, "orders/config.py:7", env="ORDERS_DISCOUNT_THRESHOLD",
+                        symbol="ORDERS_DISCOUNT_THRESHOLD")
+
+    assert cfg("The discount threshold is read from ORDERS_DISCOUNT_THRESHOLD and defaults to 100.0").grade == "full"
+    assert cfg("The discount threshold, 100 by default, is read from ORDERS_DISCOUNT_THRESHOLD").grade == "full"
+    g = cfg("The discount threshold is read from ORDERS_DISCOUNT_THRESHOLD and defaults to 50")
+    assert g.grade == "partial" and "the text states 50; the read at orders/config.py:7 is `os.environ.get(" in g.reason
+    g = cfg("The discount threshold is not read from ORDERS_DISCOUNT_THRESHOLD")
+    assert g.grade == "partial" and "negated" in g.reason
+
+
+def test_a_quote_verifies_only_the_quoted_text(repo):
+    def gen(text, at):
+        return _written(repo, "general", text, at)
+
+    assert gen("orders/pricing.py:15 contains: return subtotal", "orders/pricing.py:15").grade == "full"
+    # the name of the definition around the cited lines is a locator too, and framing words add nothing
+    assert gen("apply_discount at orders/pricing.py:15 contains: return subtotal", "orders/pricing.py:15").grade \
+        == "full"
+    assert gen("The cited line orders/pricing.py:15 contains: return subtotal", "orders/pricing.py:15").grade \
+        == "full"
+    g = gen("apply_discount returns the subtotal unchanged above the threshold; orders/pricing.py:15 contains: "
+            "return subtotal", "orders/pricing.py:15")
+    assert (g.grade, g.code) == ("partial", "quote_rest") and "the quote verifies only the quoted text" in g.reason
+    g = gen("apply_discount never applies a discount; orders/pricing.py:14 contains: return round(subtotal * 0.9, 2)",
+            "orders/pricing.py:14")
+    assert g.grade == "partial"
+    # generated text (the analysis' own claims) is not written text: its quote stands
+    assert entail.grade("general", repo, {}, src(repo, "orders/pricing.py", 15),
+                        text="`apply_discount` returns it; orders/pricing.py:15 contains: return subtotal") == "full"
+
+
+def test_calls_in_nested_functions_and_lambdas_have_no_static_order(repo):
+    def order(prop, where):
+        a, b = {"handle": (8, 12), "handle_lambda": (15, 18)}[where]
+        return entail.assess("behaviour", repo, {"proposition": f"{prop} in {where}", "holds": True},
+                             src(repo, "orders/flow.py", a, b), text="x")
+
+    for where in ("handle", "handle_lambda"):
+        for prop in ("validate_items before save_items", "save_items before validate_items"):
+            g = order(prop, where)
+            assert (g.grade, g.code) == ("partial", "nested") and "nested in" in g.reason, (where, prop)
+    tree = entail._py_tree((repo / "orders" / "flow.py").read_text(encoding="utf-8"))
+    fn = entail._defs_named(tree, "handle")[0]
+    assert entail.calls_in(tree, fn, "save_items") == [10]
+    assert entail.calls_in(tree, fn, "save_items", nested=False) == []
+    assert entail.calls_in(tree, fn, "save_items", nested=True) == [10]
+
+
+def test_module_constants_are_defined_by_their_assignment(repo):
+    def loc(sym, at):
+        return _written(repo, "location", f"`{sym.rpartition('::')[2]}` is defined in orders/config.py", at,
+                        symbol=sym)
+
+    assert loc("DISCOUNT_THRESHOLD", "orders/config.py:7").grade == "full"
+    assert loc("MAX_ITEMS_PER_ORDER", "orders/config.py:7").grade == "partial"  # assigned at 6, not 7
+    assert loc("orders/config.py::DISCOUNT_THRESHOLD", "orders/config.py:7").grade == "full"
+    g = entail.assess("location", repo, {"symbol": "orders/api.py::place_order"},
+                      src(repo, "orders/service.py", 19, 22), text="`place_order`")
+    assert g.grade == "none" and "orders/api.py" in g.reason
+    tree = entail._py_tree("import os as o\nX: int = 1\nclass C:\n    Y = 2\n    def m(self):\n        self.z = 3\n")
+    assert entail.assignment_spans(tree, "X") == [(2, 2)] and entail.assignment_spans(tree, "C.Y") == [(4, 4)]
+    assert entail.assignment_spans(tree, "z") == []  # a method's attribute is not a definition of the module
+    assert all(entail.binds_name(tree, n) for n in ("o", "X", "Y", "m", "z", "self"))
+    assert not entail.binds_name(tree, "os_path")
+
+
+def test_calls_on_the_receiver_the_claim_writes(repo):
+    def rel(text, target, at):
+        return _written(repo, "relation", text, at, target_label=target, symbol=target, at=at)
+
+    g = rel("Cart.add calls self._check", "self._check", "orders/flow.py:23")
+    assert (g.grade, g.code) == ("full", "receiver_call")
+    g = rel("Cart.add calls _check", "_check", "orders/flow.py:23")
+    assert (g.grade, g.code) == ("full", "self_call") and "which defines `_check`" in g.reason
+    assert rel("place_order calls repo.save", "repo.save", "orders/service.py:22").code == "receiver_call"
+    assert rel("place_order calls other.save", "other.save", "orders/service.py:22").grade == "partial"
+    # an owner that is not the line's class: the text names a method that is not there
+    g = rel("OrderRepository.place_order calls validate_items", "validate_items", "orders/service.py:20")
+    assert (g.grade, g.code) == ("none", "outside_caller") and "not inside a class `OrderRepository`" in g.reason

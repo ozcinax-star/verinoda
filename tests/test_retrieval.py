@@ -155,6 +155,45 @@ def test_trace_never_replaces_a_name_written_as_code(g):
         "'create order handler' has no exact match; resolved by similarity to create_order_handler()")
 
 
+@pytest.mark.parametrize("source, target, mode", [
+    ("orders\\api.py", "orders\\repository.py", "any"),  # Windows paths
+    ("create_order_handler", "orders/repository.py::OrderRepository.save", "flow"),  # trace's own hint form
+    ("create_order_handler()", "OrderRepository.save()", "any"),
+    ("orders.api", "orders.repository", "any"),  # dotted module names
+    ("orders/api", "orders/repository", "any"),  # paths without the extension
+    ("api.create_order_handler", "orders.repository.OrderRepository.save", "flow"),  # module-qualified
+    ("create_order_handler", "OrderRepository#save", "flow"),  # Java-style member
+])
+def test_trace_resolves_every_form_of_an_existing_name(g, source, target, mode):
+    res = retrieval.trace(g, source, target, mode=mode)
+    assert "not_found" not in res and "fuzzy" not in res, res.get("not_found") or res.get("fuzzy")
+    assert res["status"] == "found" and res["paths"], (source, target, res["status"])
+
+
+def test_names_exactly_reads_java_packages_and_members(tmp_path):
+    import networkx as nx
+
+    G = nx.MultiDiGraph()
+    f = "src/main/java/com/example/glowmod/entity/Wisp.java"
+    G.add_node("wisp", label="Wisp", source_file=f, file_type="code", source_location="L5")
+    G.add_node("spawn", label=".spawn()", source_file=f, file_type="code", source_location="L9")
+    G.add_edge("wisp", "spawn", relation="method")
+    gr = index.Graph(G=G, path=tmp_path / "graph.json", root=tmp_path)
+    for text, node in (("com.example.glowmod.entity.Wisp", "wisp"), ("Wisp#spawn", "spawn"),
+                       ("com.example.glowmod.entity.Wisp.spawn", "spawn"), ("entity.Wisp", "wisp")):
+        assert retrieval._names_exactly(gr, text, node), text
+    for text, node in (("com.example.other.Wisp", "wisp"), ("Spirit#spawn", "spawn")):
+        assert not retrieval._names_exactly(gr, text, node), text
+
+
+def test_trace_says_which_file_lacks_a_file_scoped_name(g):
+    res = retrieval.trace(g, "create_order_handler", "orders/service.py::place_orders")
+    assert res["status"] == "unresolved" and res["not_found"]["target"].startswith(
+        "no symbol named `place_orders` in orders/service.py")
+    res = retrieval.trace(g, "create_order_handler", "orders/servce.py::place_order")
+    assert res["status"] == "unresolved"
+
+
 def test_trace_same_endpoint_is_ambiguous(g):
     assert retrieval.trace(g, "place_order", "orders/service.py::place_order")["status"].startswith("ambiguous")
 

@@ -939,7 +939,28 @@ def test_claim_add_binds_roles_and_contradicts_definitive_misses_at_creation(rep
     assert general["status"] == "weak_inference" and general["status"] not in VERIFIED
     r = ra("claim", "add", "place_order saves before it validates", "--source", "orders/service.py:19-22",
            "--kind", "order", "--symbol", "place_order", "--repo", str(repo), cwd=repo)
-    assert r.returncode != 0 and "names two calls" in r.stderr and "Traceback" not in r.stderr
+    assert r.returncode != 0 and "states two calls" in r.stderr and "Traceback" not in r.stderr
+    # a negated order is not read (a reversed proposition would contradict a true sentence)
+    r = ra("claim", "add", "`place_order` never calls `save` before `validate_items`", "--source",
+           "orders/service.py:19-22", "--kind", "order", "--symbol", "place_order", "--repo", str(repo), cwd=repo)
+    assert r.returncode != 0 and "a negated order is not read" in r.stderr
+    # "after that" keeps the order as written
+    after = add("`place_order` calls `validate_items`, and after that `save`", "--source", "orders/service.py:19-22",
+                "--kind", "order", "--symbol", "place_order")
+    assert after["status"] == "statically_verified"
+    # no callee the text states clearly and no --symbol: asked for, not guessed
+    r = ra("claim", "add", "place_order is what create_order_handler calls", "--source", "orders/api.py:18",
+           "--kind", "relation", "--repo", str(repo), cwd=repo)
+    assert r.returncode != 0 and "--kind relation needs the callee" in r.stderr
+    tr = add("validate_items'ı place_order çağırır", "--source", "orders/service.py:20", "--kind", "relation")
+    assert tr["status"] == "statically_verified" and tr["spec"]["target_label"] == "validate_items"
+    # a module constant is defined by its assignment; a negated sentence is not verified by a positive check
+    const = add("`DISCOUNT_THRESHOLD` is defined in orders/config.py", "--source", "orders/config.py:7",
+                "--kind", "location", "--symbol", "DISCOUNT_THRESHOLD")
+    assert const["status"] == "statically_verified"
+    neg = add("place_order does not call validate_items", "--source", "orders/service.py:20", "--kind", "relation",
+              "--symbol", "validate_items")
+    assert neg["status"] not in VERIFIED and neg["status"] != "contradicted"
 
 
 def test_names_written_as_code_are_never_replaced_by_similar_ones(repo):

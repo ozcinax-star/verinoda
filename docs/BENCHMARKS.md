@@ -97,6 +97,60 @@ graph has no such name: 43 ms on `orders_app`, 131 ms on `heldout_repoatlas` (10
 over 2 s stops and claims nothing. All of this is in-sample: the rules were written after seeing
 these cases, and there is no held-out set of false sentences yet.
 
+**After the review (fixes to D31).** Two reviewers wrote an adversarial set on copies of
+`examples/orders_app` (plus `orders/extras.py` with aliases, decorators, nested functions and
+self calls, and `orders/flow.py` with calls deferred into a nested function and a lambda) and
+`examples/glow_mod`: 101 sentences, 41 false and 60 true, each recorded with `claim add ...
+--status statically_verified` and then challenged (the script and both runs are in the fixer's
+scratch directory, not in the repository). Before is the branch at `772953c`:
+
+| | before | after |
+|---|---|---|
+| false sentences verified at creation | 17 | 0 |
+| false sentences verified after `challenge` | 17 | 0 |
+| false sentences contradicted | 17 | 16 |
+| true sentences contradicted | 19 | 0 |
+| true sentences verified after `challenge` | 21 | 39 |
+| sentences `claim add` refuses (asks for a clearer one) | 2 | 5 |
+
+The 17 false ones that were verified: negations ("place_order does not call validate_items",
+"`place_order` is not defined in ...", TR "çağırmaz"), extra clauses ("... before
+validate_items", "twice", "Only ...", "defaults to 50"), a quote next to false prose, calls
+deferred into a nested function, an owner the line is not in. They are now `strong_inference` (8)
+or lower. The 19 true ones that were contradicted: module constants and variables as
+definitions, `--symbol path::name`, compound and Turkish sentences whose roles were guessed
+(`validate_items and compute_total are called in place_order`, "place_order, validate_items ve
+compute_total'ı çağırır", "validate_items'ı place_order çağırır"), "after that", nested calls in
+an order claim. The false one no longer contradicted: "`place_order` is defined in
+orders/api.py" citing the import line; an import binds the name there, so it is `weak_inference`
+now. Refused: two negated order sentences, "... and then, after computing the total, `save`" (two
+order words), and two relation sentences without `--symbol` whose callee is not in a clear form.
+True sentences that stay unverified (`strong_inference` at creation, never contradicted): clefts
+and relative clauses ("place_order is what create_order_handler calls", "... çağıran fonksiyon
+...", "...'ın çağırdığı fonksiyon ..."), "both A and B call C", a sentence that adds "first" or
+"before anything else", a Turkish config subject ("İndirim eşiği ...", its words are not the
+English name the read is bound to), a Java order claim.
+
+`trace` on the same copies: `orders\api.py orders\repository.py`, `create_order_handler
+orders/repository.py::OrderRepository.save`, `create_order_handler() OrderRepository.save()`,
+`orders.api orders.repository`, `orders/api orders/repository`, `com.example.glowmod.GlowMod
+com.example.glowmod.entity.Wisp`, `GlowMod#onInitialize Wisp` and a backslash `.java` path all
+resolve (before, each was "no symbol/file named ..."); `Foo.save`, `OrderRepository.place_order`,
+`Cart.check` and `orders/service.py::place_orders` are still not found ("no symbol named
+`place_orders` in orders/service.py").
+
+Fast harness, the seven public sets plus `verinoda_user_tr`, on the same prepared indexes
+(query-time change): facts per question and approach, and negatives, identical to `er_new`
+(`d3165b8`); only the wall time differs, and that run shared the machine with the adversarial
+run. Critique evaluation at the fixed code: every row identical to the committed
+`critique_eval.json` (timings not comparable, same reason).
+
+`name_site` on a 2,305-file repository (CPython's standard library, 79,532 nodes) with a current
+`search.db`: a name found nowhere is answered in 340-440 ms (before: the 2 s scan ran out and the
+answer was "not checked"). Soundness of the index shortcut on that repository: 2,399 words (and
+their lower/upper case forms) taken from 150 random files, outside import lines: none was
+answered "absent" while a file spells it. With a stale `search.db` the old scan runs.
+
 ## Update 2026-09-25: analyze keeps what query found, grounded verdicts, Turkish, update time
 
 Measured with the fast harness (`benchmarks/results/fast-2026-09-25/`, its README says how): the

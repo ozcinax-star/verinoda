@@ -382,6 +382,12 @@ def test_link_tiers(orders, text, extra, tier, label):
     assert lk["best"]["at"].count(":") == 1 and lk["best"]["matches"][0]["site"]
 
 
+def test_another_spelling_of_a_code_name_is_weak_and_said(orders):
+    lk = _link(orders, "placeOrder")
+    assert lk["status"] == "weak" and lk["uncertainty"].startswith("`placeOrder` is spelled `place_order` here")
+    assert _link(orders, "PLACE_ORDER")["status"] == "linked"  # letter case alone is the same name
+
+
 def test_identifier_parts_seed_and_text_tiers(orders):
     lk = _link(orders, "discount", kind="domain_concept")
     assert lk["tier"] == "identifier_parts" and lk["best"]["label"] == "apply_discount()"
@@ -467,7 +473,7 @@ def test_code_shaped_name_spelled_only_in_text_is_at_most_weak(orders):
     assert lk["status"] in ("weak", "unlinked") and lk["status"] != "not_found"
     assert lk.get("occurs_at", "").startswith("orders/config.py:")
     if lk["status"] == "weak" and lk.get("tier") != "text_hit":
-        assert "is not a name defined in this repository" in lk["uncertainty"]
+        assert "no symbol in the index is named `ORDERS_MAX_ITEMS`" in lk["uncertainty"]
     # a name that only an import statement spells is defined nowhere; any other use counts
     ix = qp._index(g)
     (repo / "orders" / "ghost.py").write_text("from orders.service import (\n    place_orders,\n)\n\n"
@@ -488,6 +494,7 @@ def test_a_scan_that_runs_out_of_time_never_reports_not_found(orders, monkeypatc
     repo, g, lex = orders
     ix = qp._index(g)
     monkeypatch.setattr(qp, "_SITE_SECONDS", -1.0)
+    monkeypatch.setattr(qp, "_files_to_scan", lambda g, ix, names: ix.repo_files)  # no search index to ask
     ix.sites.clear()
     try:
         assert qp.name_site(g, "compute_totall") == qp.UNCHECKED
@@ -495,6 +502,55 @@ def test_a_scan_that_runs_out_of_time_never_reports_not_found(orders, monkeypatc
         assert lk["status"] != "not_found" and "occurs_at" not in lk  # unknown existence: the old linking
     finally:
         ix.sites.clear()
+
+
+def test_the_search_index_answers_for_a_name_no_file_spells(orders, monkeypatch):
+    repo, g, _lex = orders
+    ix = qp._index(g)
+    ix.sites.clear()
+    ix.repo_files = None
+    qp.name_site(g, "x_warmup")  # lists the files
+    monkeypatch.setattr(qp, "_SITE_SECONDS", -1.0)  # a scan of any file would run out of time
+    try:
+        ix.sites.clear()
+        assert qp.name_site(g, "compute_totall") is None  # no indexed file has the word: nothing to scan
+        assert "orders/pricing.py" not in qp._files_to_scan(g, ix, ["compute_totall"])
+        assert qp._files_to_scan(g, ix, ["compute_total"]) == ix.repo_files  # the index has it: scan
+        # a file changed since it was indexed is read again
+        p = repo / "orders" / "pricing.py"
+        before = p.read_bytes()
+        try:
+            p.write_bytes(before + b"\n\ndef compute_totall():\n    return 0\n")
+            ix.sites.clear()
+            assert "orders/pricing.py" in qp._files_to_scan(g, ix, ["compute_totall"])
+        finally:
+            p.write_bytes(before)
+    finally:
+        ix.sites.clear()
+        ix.repo_files = None
+
+
+@pytest.mark.parametrize("text, split", [
+    ("orders\\api.py", ("orders/api.py", "")), ("orders/repository.py::OrderRepository.save()",
+                                                ("orders/repository.py", "OrderRepository.save")),
+    ("`Wisp#spawn`", ("", "Wisp.spawn")), ("place_order()", ("", "place_order")), ("orders.api", ("", "orders.api")),
+])
+def test_names_written_as_code_are_normalised(text, split):
+    assert qp.split_code_name(text) == split
+
+
+def test_name_site_reads_paths_and_file_scoped_names(orders):
+    repo, g, _lex = orders
+    ix = qp._index(g)
+    ix.sites.clear()
+    assert qp.name_site(g, "orders\\api.py") == "orders/api.py"
+    assert qp.name_site(g, "orders.api") == "orders/api.py"
+    assert qp.name_site(g, "orders/repository.py::OrderRepository.save").startswith("orders/repository.py:")
+    assert qp.name_site(g, "orders/service.py::place_orders") is None
+    assert qp.name_site(g, "OrderRepository#save") is not None
+    # strict: a dotted name must occur as written, not only its last part
+    assert qp.name_site(g, "Foo.save") is not None and qp.name_site(g, "Foo.save", strict=True) is None
+    ix.sites.clear()
 
 
 AMBIG = {

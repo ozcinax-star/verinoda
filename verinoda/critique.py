@@ -336,22 +336,41 @@ def _subject_py_files(ctx: ProbeContext) -> list[tuple[str, str]]:
 
 
 def probe_location_exists(ctx: ProbeContext) -> list[ProbeResult]:
-    """L0: written text that places a definition in a file ("`place_orders` is defined in service.py"):
-    no definition of that name in the Python file refutes it (definitive within its syntax tree)."""
+    """L0: written text that places a name in a file ("`place_orders` is defined in service.py").
+
+    A name that nothing in the Python file binds (def, class, assignment, import, parameter, ...) and
+    that the file does not spell at all refutes it (definitive within the file's text). A name the
+    file spells without a binding the tree shows is only a heuristic doubt; a bound name passes. A
+    ``path::`` prefix on the symbol names the file."""
     sym = str(ctx.spec.get("symbol") or "").strip().strip("`")
     if not sym or not ctx.spec.get("free_text"):
         return []
+    want, _, sym = sym.rpartition("::")
+    want = want.replace("\\", "/").strip("/")
+    bare = sym.split("(")[0].rpartition(".")[2].strip()
     out = []
     for p, text in _subject_py_files(ctx):
+        if want and not (p == want or p.endswith("/" + want)):
+            continue
         facts = anchors.facts_for(None, ctx.repo, p)
-        if not anchors.usable(facts) or facts.get("lang") != "python" or anchors.symbols_named(facts, sym):
+        if not bare or not anchors.usable(facts) or facts.get("lang") != "python" or \
+                anchors.symbols_named(facts, sym):
+            continue
+        tree = entail._py_tree(text)
+        if tree is None or entail.binds_name(tree, bare):
+            continue
+        whole = f"{p}:1-{max(1, len(text.splitlines()))}"
+        if re.search(rf"(?<![\w]){re.escape(bare)}(?![\w])", text):
+            out.append(ProbeResult("location_exists", f"`{sym}` is not bound in {p}", "refutes", "heuristic",
+                                   f"{p} spells `{bare}` but nothing in its syntax tree binds it (a def, class, "
+                                   "assignment or import)", at=whole))
             continue
         names = sorted({q.split("#")[0].rpartition(".")[2] for q in facts.get("symbols", {})})
-        near = difflib.get_close_matches(sym.split("(")[0].rpartition(".")[2], names, n=2, cutoff=0.8)
+        near = difflib.get_close_matches(bare, names, n=2, cutoff=0.8)
         out.append(ProbeResult("location_exists", f"`{sym}` is not defined in {p}", "refutes", "definitive",
-                               f"no definition named `{sym}` in {p} (scope: its syntax tree)"
-                               + (f"; nearest: {', '.join(near)}" if near else ""),
-                               at=f"{p}:1-{max(1, len(text.splitlines()))}"))
+                               f"no definition, assignment or import named `{sym}` in {p}, and the file does not "
+                               f"spell `{bare}` (scope: the file's text)"
+                               + (f"; nearest: {', '.join(near)}" if near else ""), at=whole))
     return out
 
 
@@ -377,7 +396,8 @@ def probe_config_binding(ctx: ProbeContext) -> list[ProbeResult]:
 def probe_order(ctx: ProbeContext) -> list[ProbeResult]:
     """O1: "A before B in F" against the first calls of A and B in F's whole body. A missing call is
     definitive (within F; calls through other names are not followed); a reversed order is definitive
-    when F has no branches or loops, else heuristic."""
+    when F has no branches or loops and no nested function or lambda calls A or B, else heuristic; a
+    call made only inside a nested function or lambda proves no order."""
     if "holds" not in ctx.spec:
         return []
     m = entail._ORDER_PROP.match(str(ctx.spec.get("proposition") or ""))
@@ -390,19 +410,21 @@ def probe_order(ctx: ProbeContext) -> list[ProbeResult]:
         if info is None:
             continue
         scope = f"{info['name']} ({p}:{info['start']}-{info['end']})"
-        lines = info["lines"]
-        missing = [x for x in (first, second) if x not in lines]
+        lines, nested = info["lines"], info.get("nested") or {}
+        missing = [x for x in (first, second) if x not in lines and x not in nested]
         if missing:
             return [ProbeResult("order", f"{scope} does not call {', '.join(missing)}", "refutes", "definitive",
                                 f"no direct call to {', '.join(missing)} in {scope}; calls through other names are "
                                 "not followed", at=f"{p}:{info['start']}-{info['end']}")]
-        if lines[first] > lines[second]:
+        if first in lines and second in lines and lines[first] > lines[second]:
             lo, hi = lines[second], lines[first]
+            doubt = "; branches or loops may change the order at runtime" if info["branchy"] else ""
+            if nested:
+                doubt += "; a nested function or lambda also calls one of them, and runs when it is called"
             return [ProbeResult("order", f"{second} comes before {first} in {info['name']}", "refutes",
-                                "heuristic" if info["branchy"] else "definitive",
+                                "heuristic" if doubt else "definitive",
                                 f"in {scope}, `{second}` is first called at line {lo}, before `{first}` at line {hi}"
-                                + ("; branches or loops may change the order at runtime" if info["branchy"] else ""),
-                                at=f"{p}:{lo}-{hi}")]
+                                + doubt, at=f"{p}:{lo}-{hi}")]
         return []
     return []
 
@@ -503,6 +525,11 @@ def call_site_check(repo: Path, c: dict, *, graph=None) -> dict:
         return {**out, "result": "warn", "strength": "heuristic",
                 "detail": f"{detail}; but {caller.strip().rstrip('()')} calls {target} at {f}:{ln} (the cited line "
                           "is not the call site)"}
+    if scope is None and g.code == "outside_caller" and entail.caller_from_text(spec, subjects):
+        # a caller read from the text whose definition was not found: its body was not read
+        return {**out, "result": "warn", "strength": "heuristic",
+                "detail": f"{detail}; no definition of {caller.strip().rstrip('()')} was found to read its whole "
+                          "body"}
     ev = None
     if scope is not None:  # the caller's whole body is the counterexample
         f, _name, a, b = scope["defs"][0]
