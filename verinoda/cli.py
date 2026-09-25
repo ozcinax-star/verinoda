@@ -753,12 +753,21 @@ def cmd_map(args) -> int:
 def cmd_review(args) -> int:
     from verinoda import review as rv
 
-    repo = Path(getattr(args, "repo", None) or args.path).resolve()
+    given = getattr(args, "repo", None) or args.path
+    # like the other commands: the project root is found from the working directory when no path is given
+    repo = Path(given).resolve() if given else find_repo_root()
     if args.base and args.staged:
         print("error: give --base or --staged, not both", file=sys.stderr)
         return 2
     if args.change and not args.target:
         print("error: --change needs --target FILE[::Qual.name] (a planned change)", file=sys.stderr)
+        return 2
+    if args.target and (args.base or args.staged):
+        print("error: a planned change (--target) is reviewed on the current code: give no --base / --staged",
+              file=sys.stderr)
+        return 2
+    if args.max_chars < 1:
+        print("error: --max-chars must be a positive number of characters", file=sys.stderr)
         return 2
     _need_graph(repo)
     concerns = [c.strip() for c in args.concerns.split(",") if c.strip()] if args.concerns else None
@@ -2308,7 +2317,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("review", cmd_review, "what a change touches, by concern: changed symbols, dependents, persistence, "
                                    "security, performance, public API, config, entry points, tests, unknowns "
                                    "(exit 3 = findings or unknowns to report)", repo=False)
-    sp.add_argument("path", nargs="?", default=".")
+    sp.add_argument("path", nargs="?", default=None, help="project root (default: found from the working directory)")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--base", help="compare the working tree with this commit (default HEAD)")
     sp.add_argument("--staged", action="store_true", help="review the staged changes against HEAD")

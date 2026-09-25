@@ -58,6 +58,10 @@ CODE_SUFFIXES = tuple(sorted({".py", ".pyi", *anchors.TS_LANGS}))
 REVIEWABLE_SUFFIXES = tuple(sorted({*CODE_SUFFIXES, *rr.CONFIG_SUFFIXES, *anchors.MD_SUFFIXES, ".gradle", ".xml",
                                     ".mcfunction", ".sql", ".sh", ".ps1", ".cfg", ".txt"}))
 DATA_SUFFIXES = (".json", ".mcfunction", ".mcmeta", ".txt", ".csv", ".lang", ".svg", ".html", ".css", ".rst")
+DOC_SUFFIXES = (*anchors.MD_SUFFIXES, ".rst", ".txt", ".adoc")
+# files that make their directory a project of its own (a vendored copy, a sub-project)
+_PROJECT_MARKERS = {"pyproject.toml", "setup.py", "setup.cfg", "package.json", "build.gradle", "build.gradle.kts",
+                    "pom.xml", "Cargo.toml", "go.mod"}
 RULES = {
     "persistence": ["sink pattern on a changed line (architecture_map.SINK_PATTERNS + review NBT rows)",
                     "a call on a changed line whose callee reaches a write sink (depth <= 2)",
@@ -107,7 +111,8 @@ class Change:
     file: str
     qual: str | None
     kind: str
-    lines: tuple[int, int] | None = None        # span in the new version
+    lines: tuple[int, int] | None = None \
+        # span in the new version
     old_lines: tuple[int, int] | None = None    # span in the base version
     new_changed: set[int] = field(default_factory=set)
     old_changed: set[int] = field(default_factory=set)
@@ -115,6 +120,7 @@ class Change:
     node: str | None = None
     def_line: int | None = None
     old_def_line: int | None = None
+    renamed_from: str | None = None   # an added definition whose body equals a removed one's in the same file
 
     @property
     def symbol(self) -> str:
@@ -132,6 +138,8 @@ class Change:
             d["base_lines"] = _span_text(self.old_lines)
         if self.test:
             d["test"] = True
+        if self.renamed_from:
+            d["renamed_from"] = self.renamed_from
         return d
 
 
@@ -170,6 +178,10 @@ class _Ctx:
         self.g = g
         self.store = store
         self.base_texts = base_texts
+        # the staged tree: files whose working-tree copy may differ from the index are served from the index
+        self.overrides: dict[str, str | None] = {}
+        self.index_files: list[str] | None = None
+        self.staged: dict | None = None   # staged mode: the base commit and the staged paths (for test runs)
         self._text: dict[str, str | None] = {}
         self._code: dict[tuple[str, str], list[str]] = {}
         self._facts: dict[tuple[str, str], dict | None] = {}
@@ -182,6 +194,9 @@ class _Ctx:
         self._node_units: dict[str, tuple[str, str] | None] = {}
         self._imports_cache: dict[str, dict] = {}
         self._callees_cache: dict[tuple, list] = {}
+        self._shadow: dict[tuple[str, str], dict] = {}
+        self._roots: list[str] | None = None
+        self._edge_ok: dict[tuple[str, str], bool] = {}
         self.reparsed: set[str] = set()
 
     # texts ------------------------------------------------------------------------------------------
@@ -189,12 +204,18 @@ class _Ctx:
         if side == "old":   # the base version of a file in the diff; any other file is the same in both
             return self.base_texts[rel] if rel in self.base_texts else self.text(rel)
         if rel not in self._text:
-            try:
-                data = (self.repo / rel).read_bytes()
-                self._text[rel] = data.decode("utf-8", "replace").replace("\r\n", "\n")
-            except OSError:
-                self._text[rel] = None
+            if rel in self.overrides:
+                self._text[rel] = self.overrides[rel]
+            else:
+                try:
+                    self._text[rel] = _decode((self.repo / rel).read_bytes())
+                except OSError:
+                    self._text[rel] = None
         return self._text[rel]
+
+    def served(self, rel: str) -> bool:
+        """Is ``rel`` read from somewhere else than its working-tree file (the diff, the index)?"""
+        return rel in self.base_texts or rel in self.overrides
 
     def lines(self, rel: str, side: str = "new") -> list[str]:
         t = self.text(rel, side)
@@ -213,7 +234,7 @@ class _Ctx:
     def facts(self, rel: str, side: str = "new") -> dict | None:
         key = (rel, side)
         if key not in self._facts:
-            if side == "new" and rel not in self.base_texts and self.store is not None:
+            if side == "new" and not self.served(rel) and self.store is not None:
                 # a file outside the diff: the store's facts cache (keyed by the file's sha256) serves it
                 f = anchors.facts_for(self.store, self.repo, rel)
             else:
@@ -238,17 +259,40 @@ class _Ctx:
 
     def files(self) -> list[str]:
         if self._files is None:
-            from verinoda.snapshot import list_files
+            if self.index_files is not None:   # the staged tree: what the index holds
+                self._files = list(self.index_files)
+            else:
+                from verinoda.snapshot import list_files
 
-            self._files = list_files(self.repo)
+                self._files = list_files(self.repo)
         return self._files
 
     def pyix(self):
         if self._pyix is None:
             from verinoda.guards import _PyIndex
 
-            self._pyix = _PyIndex(self.repo, self.files())
+            ix = _PyIndex(self.repo, self.files())
+            # the import/alias engine reads the tree under review, not the working-tree files
+            for rel in [*self.base_texts, *self.overrides]:
+                if _suffix(rel) in (".py", ".pyi"):
+                    ix._trees[rel] = (self.pytree(rel), self.text(rel))
+            self._pyix = ix
         return self._pyix
+
+    def shadow(self, rel: str, side: str = "new") -> dict:
+        """id(ast.Name) -> names bound by the functions around it (:func:`review_rules.py_shadowing`)."""
+        key = (rel, side)
+        if key not in self._shadow:
+            self._shadow[key] = rr.py_shadowing(self.pytree(rel, side))
+        return self._shadow[key]
+
+    def project_root(self, rel: str) -> str:
+        """The innermost directory holding its own project marker (pyproject.toml, package.json, build.gradle
+        ...) that contains ``rel``; "" for the repository's own."""
+        if self._roots is None:
+            roots = {str(PurePosixPath(f).parent) for f in self.files() if PurePosixPath(f).name in _PROJECT_MARKERS}
+            self._roots = sorted((r for r in roots if r not in ("", ".")), key=len, reverse=True)
+        return next((r for r in self._roots if rel.startswith(r + "/")), "")
 
     # symbols and nodes ------------------------------------------------------------------------------
     def span(self, rel: str, qual: str, side: str = "new") -> tuple[int, int] | None:
@@ -259,28 +303,37 @@ class _Ctx:
         return ((self.facts(rel, side) or {}).get("symbols") or {}).get(qual)
 
     def node_of(self, rel: str, qual: str) -> str | None:
+        """The graph node of ``rel::qual``: a node of that name whose line is the definition's line in either
+        version, else the only one whose class (or its absence) matches. None when no node fits - a new
+        function named like an existing method of the same file is not that method."""
         g = self.g
         if g is None or not qual:
             return None
         name = _last(qual)
         cands = [n for n in g.symbols_in(rel) if _clean_label(g.label(n)) == name]
-        if len(cands) <= 1:
-            return cands[0] if cands else None
+        if not cands:
+            return None
         want: set[int] = set()
         for side in ("new", "old"):
             s = self.sym(rel, qual, side)
             if s:
                 want |= {s["start"], s["def"]}
+        owner_q = qual.split("#")[0].rpartition(".")[0]
+        owner = _last(owner_q) if owner_q else ""
+        owner_is_class = bool(owner) and any((self.sym(rel, owner_q, side) or {}).get("kind") == "class"
+                                             for side in ("new", "old"))
+
+        def owner_fits(n: str) -> bool:
+            owners = {_clean_label(g.label(u)) for u, _ in g.in_edges(n, {"method"})}
+            return owner in owners if owner_is_class else not owners
+
         by_line = [n for n in cands if g.line(n) in want]
         if len(by_line) == 1:
             return by_line[0]
-        owner = _last(qual.split("#")[0].rpartition(".")[0]) if "." in qual else ""
-        if owner:
-            own = [n for n in (by_line or cands) if any(_clean_label(g.label(u)) == owner
-                                                         for u, _ in g.in_edges(n, {"method"}))]
-            if own:
-                return own[0]
-        return (by_line or cands)[0]
+        fit = [n for n in (by_line or cands) if owner_fits(n)]
+        if by_line:
+            return (fit or by_line)[0]
+        return fit[0] if len(fit) == 1 else None
 
     def unit_of(self, node: str) -> tuple[str, str] | None:
         """(file, qualified name in the current facts) of a graph node."""
@@ -343,7 +396,12 @@ class _Ctx:
         sp = self.span(rel, qual)
         out = []
         if sp and not _is_test(rel):
+            # a class (a constructor call resolved to it) holds its own lines only - field initialisers, not the
+            # bodies of its methods
+            own = _own_lines(self.facts(rel), qual) if (self.sym(rel, qual) or {}).get("kind") == "class" else None
             for line, kind, by in rr.sink_hits(self.code(rel), sp[0], sp[1]):
+                if own is not None and line not in own:
+                    continue
                 out.append({"at": f"{rel}:{line}", "kind": kind, "derived_by": by,
                             "text": self.lines(rel)[line - 1].strip()[:120]})
         self._sinks[unit] = out
@@ -394,21 +452,43 @@ class _Ctx:
                 continue
             out.append((line, name, tgt, "graph call edge" + (f" ({d['_origin']})" if d.get("_origin") else ""),
                         d.get("confidence")))
-        # calls on the given lines that the graph does not know (the change added them): by name, same class/file
+        # calls on the given lines that the graph does not know (the change added them): by name in the same
+        # file, or `Owner.name(` to a class of that name the file can see (same package or imported)
         if lines is not None:
             known = {(ln, nm) for ln, nm, *_ in out}
             syms = (self.facts(rel) or {}).get("symbols") or {}
             for ln in sorted(lines):
                 if not (s["start"] <= ln <= s["end"]) or ln > len(code):
                     continue
-                for m in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", code[ln - 1]):
-                    nm = m.group(1)
-                    if (ln, nm) in known or nm in ("if", "for", "while", "switch", "catch", "return", "new"):
+                for m in re.finditer(r"(?:\b([A-Z]\w*)\s*\.\s*)?\b([A-Za-z_]\w*)\s*\(", code[ln - 1]):
+                    owner, nm = m.group(1), m.group(2)
+                    if (ln, nm) in known or nm in _NOT_CALLS:
                         continue
-                    local = [q for q in syms if _last(q) == nm]
+                    local = [q for q in syms if _last(q) == nm and (not owner or q.startswith(owner + ".")
+                                                                    or f".{owner}." in q)]
                     if len(local) == 1:
                         out.append((ln, nm, (rel, local[0]), "same file, by name", "INFERRED"))
+                        known.add((ln, nm))
+                    elif owner:
+                        tgt = self._class_member(rel, owner, nm)
+                        if tgt:
+                            out.append((ln, nm, tgt, f"`{owner}.{nm}(` to the class {owner} (text)", "INFERRED"))
+                            known.add((ln, nm))
         return out
+
+    def _class_member(self, rel: str, owner: str, name: str) -> tuple[str, str] | None:
+        """``(file, qual)`` of ``owner.name`` in a JVM source file named after the class ``owner`` that ``rel``
+        sees (same package or an import)."""
+        text = self.text(rel) or ""
+        for f in self.files():
+            if PurePosixPath(f).stem != owner or _suffix(f) not in (".java", ".kt", ".kts"):
+                continue
+            if not _jvm_sees(text, _jvm_package(self.text(f) or ""), owner):
+                continue
+            quals = [q for q in ((self.facts(f) or {}).get("symbols") or {}) if q.split("#")[0] == f"{owner}.{name}"]
+            if quals:
+                return f, quals[0]
+        return None
 
     @staticmethod
     def _find_call_line(code: list[str], s: dict, name: str, hint: int | None) -> int | None:
@@ -446,21 +526,22 @@ class _Ctx:
             return None
 
         if isinstance(f, ast.Name):
-            u = resolve_name(f.id)
+            u = resolve_name(f.id) if f.id not in self.shadow(rel).get(id(f), ()) else None
             if u:
                 return u, "Python: name bound in the file or by an import", "EXTRACTED"
         elif isinstance(f, ast.Attribute):
             base = f.value
+            mod = self.py_module_of_expr(rel, base)
+            if mod:   # a module attribute: import m / from pkg import m / import pkg.m
+                mrel = self.pyix().modules.get(mod)
+                if mrel and f.attr in ((self.facts(mrel) or {}).get("symbols") or {}):
+                    return (mrel, f.attr), "Python: module attribute", "EXTRACTED"
             if isinstance(base, ast.Name):
                 owner = qual.rpartition(".")[0]
                 if base.id in ("self", "cls") and owner:
                     u = cls_method(rel, owner, f.attr)
                     if u:
                         return u, "Python: self/cls method", "EXTRACTED"
-                if base.id in imports and imports[base.id][1] is None:  # import module as x
-                    mrel = self.pyix().modules.get(imports[base.id][0])
-                    if mrel and f.attr in ((self.facts(mrel) or {}).get("symbols") or {}):
-                        return (mrel, f.attr), "Python: module attribute", "EXTRACTED"
                 cls = self._py_receiver_class(fn, base.id)
                 if cls:
                     cu = resolve_name(cls)
@@ -489,8 +570,27 @@ class _Ctx:
         return cache[rel]
 
     def _py_imports_uncached(self, rel: str) -> dict[str, tuple[str | None, str | None]]:
-        tree = self.pytree(rel)
         out: dict[str, tuple[str | None, str | None]] = {}
+        for alias, mod, name in self._py_import_rows(rel):
+            out[alias] = (mod, name)
+        return out
+
+    def py_imported(self, rel: str) -> list[tuple[str, str | None]]:
+        """``(module, name or None)`` of every import in a Python file, dotted module names in full."""
+        key = f"\0full:{rel}"
+        if key not in self._imports_cache:
+            rows = []
+            tree = self.pytree(rel)
+            for n in ast.walk(tree) if tree is not None else ():
+                if isinstance(n, ast.Import):
+                    rows += [(a.name, None) for a in n.names]
+            rows += [(mod, name) for _a, mod, name in self._py_import_rows(rel) if name is not None and mod]
+            self._imports_cache[key] = rows
+        return self._imports_cache[key]
+
+    def _py_import_rows(self, rel: str) -> list[tuple[str, str | None, str | None]]:
+        tree = self.pytree(rel)
+        out: list[tuple[str, str | None, str | None]] = []
         if tree is None:
             return out
         from verinoda.guards import _module_of
@@ -501,7 +601,7 @@ class _Ctx:
         for n in ast.walk(tree):
             if isinstance(n, ast.Import):
                 for a in n.names:
-                    out[a.asname or a.name.split(".")[0]] = (a.name if a.asname else a.name.split(".")[0], None)
+                    out.append((a.asname or a.name.split(".")[0], a.name if a.asname else a.name.split(".")[0], None))
             elif isinstance(n, ast.ImportFrom):
                 mod = n.module or ""
                 if n.level:
@@ -510,8 +610,22 @@ class _Ctx:
                     mod = ".".join([*parts, *([mod] if mod else [])])
                 for a in n.names:
                     if a.name != "*":
-                        out[a.asname or a.name] = (mod, a.name)
+                        out.append((a.asname or a.name, mod, a.name))
         return out
+
+    def py_module_of_expr(self, rel: str, expr: ast.AST) -> str | None:
+        """The module an expression names through the file's imports: ``m`` for ``import pkg.m as m`` or
+        ``from pkg import m``, ``pkg.m`` for ``import pkg.m`` - only when that module is a file of the project."""
+        d = rr.dotted(expr)
+        if not d:
+            return None
+        head, _, rest = d.partition(".")
+        imp = self._py_imports(rel).get(head)
+        if imp is None:
+            return None
+        m, orig = imp
+        full = (f"{m}.{orig}" if orig else (m or "")) + (f".{rest}" if rest else "")
+        return full if full in self.pyix().modules else None
 
     @staticmethod
     def _py_receiver_class(fn: ast.AST, var: str) -> str | None:
@@ -548,6 +662,15 @@ class _Ctx:
 
 # -- 1. the diff ------------------------------------------------------------------------------------------
 
+def _decode(data: bytes | None) -> str | None:
+    """Text of a file as the review reads it: UTF-8, LF line ends, without a leading byte-order mark (Python
+    runs such files; ``ast`` refuses the mark in a str)."""
+    if data is None:
+        return None
+    t = data.decode("utf-8", "replace").replace("\r\n", "\n")
+    return t[1:] if t.startswith("﻿") else t
+
+
 def _diff_worktree(repo: Path, base_sha: str) -> tuple[list[FileDiff], list[dict]]:
     from verinoda import treestate
 
@@ -568,42 +691,97 @@ def _diff_worktree(repo: Path, base_sha: str) -> tuple[list[FileDiff], list[dict
         if (old_b is not None and treestate.is_binary(old_b)) or (new_b is not None and treestate.is_binary(new_b)):
             skipped.append({"file": rel, "why": "binary"})
             continue
-        diffs.append(FileDiff(rel, old_b.decode("utf-8", "replace") if old_b is not None else None,
-                              new_b.decode("utf-8", "replace") if new_b is not None else None, in_git))
+        diffs.append(FileDiff(rel, _decode(old_b), _decode(new_b), in_git))
     return diffs, skipped
+
+
+_ZERO_SHA = re.compile(r"^0+$")
+
+
+def _raw_records(out: str) -> list[tuple[str, str, str, str, str, str]]:
+    """``(old mode, new mode, old blob, new blob, status, path)`` of ``git diff-* --raw -z`` output."""
+    recs = []
+    toks = out.split("\0")
+    i = 0
+    while i + 1 < len(toks):
+        meta, path = toks[i], toks[i + 1]
+        i += 2
+        parts = meta.lstrip(":").split(" ")
+        if len(parts) >= 5 and path:
+            recs.append((parts[0], parts[1], parts[2], parts[3], parts[4][:1], path))
+    return recs
 
 
 def _diff_staged(repo: Path, base_sha: str) -> tuple[list[FileDiff], list[dict]]:
-    """The index (staged changes) against ``base_sha``; blob contents read with ``cat-file``."""
+    """The index (staged changes) against ``base_sha``. ``git diff-index --cached --raw`` names both blobs of
+    every changed path (no path goes on a command line, so any number of staged files works); the blobs are
+    read with one ``cat-file --batch``. A git failure is an error, never "every file deleted"."""
     from verinoda import treestate
 
-    out = treestate._git(repo, "diff-index", "--cached", "--name-only", "-z", "--relative", "--no-renames",
+    out = treestate._git(repo, "diff-index", "--cached", "--raw", "-z", "--no-abbrev", "--relative", "--no-renames",
                          base_sha, "--")
     if out is None:
         raise treestate.NotAGitTree(f"git diff-index --cached against {base_sha[:12]} failed")
-    paths = sorted(p for p in out.split("\0") if p and treestate.safe_path(p))
-    staged = {}
-    if paths:
-        ls = treestate._git(repo, "ls-files", "-s", "-z", "--", *paths) or ""
-        for rec in ls.split("\0"):
-            if "\t" in rec:
-                meta, p = rec.split("\t", 1)
-                parts = meta.split(" ")
-                if len(parts) >= 3 and parts[2] == "0":
-                    staged[p] = parts[1]
-    blobs = treestate.read_blobs(repo, [treestate.blob_spec(repo, base_sha, p) for p in paths] + list(staged.values()))
     diffs, skipped = [], []
-    for p in paths:
-        old_b = blobs.get(treestate.blob_spec(repo, base_sha, p))
-        new_b = blobs.get(staged[p]) if p in staged else None
+    recs = []
+    for om, nm, ob, nb, status, p in _raw_records(out):
+        if not treestate.safe_path(p):
+            continue
+        if status == "U":
+            skipped.append({"file": p, "why": "unmerged in the index"})
+            continue
+        if "160000" in (om, nm):
+            skipped.append({"file": p, "why": "a submodule"})
+            continue
+        if "120000" in (om, nm):
+            skipped.append({"file": p, "why": "a symbolic link"})
+            continue
+        recs.append((None if _ZERO_SHA.match(ob) else ob, None if _ZERO_SHA.match(nb) else nb, p))
+    want = [b for ob, nb, _ in recs for b in (ob, nb) if b]
+    blobs = treestate.read_blobs(repo, want) if want else {}
+    missing = [b for b in want if blobs.get(b) is None]
+    if missing:
+        raise treestate.NotAGitTree(f"could not read {len(missing)} staged or base blob(s) (e.g. {missing[0][:12]})")
+    for ob, nb, p in recs:
+        old_b = blobs.get(ob) if ob else None
+        new_b = blobs.get(nb) if nb else None
         if (old_b is not None and treestate.is_binary(old_b)) or (new_b is not None and treestate.is_binary(new_b)):
             skipped.append({"file": p, "why": "binary"})
             continue
-        norm = (lambda b: None if b is None else treestate.normalise(b).decode("utf-8", "replace"))
-        if norm(old_b) == norm(new_b):
+        old_t, new_t = _decode(old_b), _decode(new_b)
+        if old_t == new_t:
             continue
-        diffs.append(FileDiff(p, norm(old_b), norm(new_b), True))
+        diffs.append(FileDiff(p, old_t, new_t, True))
     return diffs, skipped
+
+
+def _staged_tree(repo: Path) -> tuple[list[str], dict[str, str | None]]:
+    """The staged tree for the files outside the diff: (the paths the index holds, {path: staged text} for the
+    paths whose working-tree file may differ from the index - ``diff-files`` lists them, stat-dirty ones
+    included; their staged blob is read whatever the working tree holds)."""
+    from verinoda import treestate
+    from verinoda.snapshot import _GIT_SKIP_DIRS
+
+    ls = treestate._git(repo, "ls-files", "-s", "-z")
+    dirty = treestate._git(repo, "diff-files", "--name-only", "-z", "--relative")
+    if ls is None or dirty is None:
+        raise treestate.NotAGitTree("git ls-files / diff-files failed")
+    index: dict[str, str] = {}
+    for rec in ls.split("\0"):
+        if "\t" not in rec:
+            continue
+        meta, p = rec.split("\t", 1)
+        parts = meta.split(" ")
+        if len(parts) >= 3 and parts[2] == "0" and parts[0] not in ("160000", "120000") and treestate.safe_path(p) \
+                and not set(PurePosixPath(p).parts) & _GIT_SKIP_DIRS:
+            index[p] = parts[1]
+    changed = [p for p in dict.fromkeys(dirty.split("\0")) if p in index]
+    blobs = treestate.read_blobs(repo, [index[p] for p in changed]) if changed else {}
+    over: dict[str, str | None] = {}
+    for p in changed:
+        b = blobs.get(index[p])
+        over[p] = None if b is None or treestate.is_binary(b) else _decode(b)
+    return sorted(index), over
 
 
 def _changed_lines(old: str | None, new: str | None) -> tuple[set[int], set[int]]:
@@ -640,6 +818,9 @@ def _classify(ctx: _Ctx, fd: FileDiff) -> tuple[list[Change], dict]:
     fn = ctx.facts(rel, "new") if fd.new is not None else None
     suffix = _suffix(rel)
     info: dict = {"file": rel, "status": "added" if fd.old is None else ("removed" if fd.new is None else "modified")}
+    if _manifest_kind(rel) and fd.old is not None and fd.new is not None:
+        # a registration manifest (entry points, mixins, services): its changed keys, reviewed as entry points
+        return _config_changes(ctx, fd, new_l, old_l), {**info, "kind": "manifest", "manifest": _manifest_kind(rel)}
     if suffix not in CODE_SUFFIXES and (CONFIG_FILE_RE.search(rel) or suffix in (".properties", ".conf")):
         if fd.old is None or fd.new is None:   # a config file added or removed: one change, not one per key
             n = len((fd.new or fd.old or "").split("\n"))
@@ -689,9 +870,11 @@ def _classify(ctx: _Ctx, fd: FileDiff) -> tuple[list[Change], dict]:
         out.append(Change(rel, q, kind, lines=(b["start"], b["end"]) if b else None,
                           old_lines=(a["start"], a["end"]) if a else None, new_changed=nc, old_changed=oc,
                           test=test, def_line=b["def"] if b else None, old_def_line=a["def"] if a else None))
-    # module-level statements
+    # module-level statements (the lines of definitions they wrap - `export function f` - belong to those)
     mo = (fo or {}).get("module") or {}
     mn = (fn or {}).get("module") or {}
+    in_defs_new = {ln for s in sn.values() for ln in range(s["start"], s["end"] + 1)}
+    in_defs_old = {ln for s in so.values() for ln in range(s["start"], s["end"] + 1)}
     for key in sorted(set(mo) | set(mn), key=lambda k: ((mn.get(k) or mo.get(k))["start"], k)):
         if key == "DOC" or key.split("#")[0] == "DOC":
             continue
@@ -700,8 +883,8 @@ def _classify(ctx: _Ctx, fd: FileDiff) -> tuple[list[Change], dict]:
             continue
         if key.startswith("STMT:") and a is not None and b is not None:
             continue
-        nc = {ln for ln in new_l if b and b["start"] <= ln <= b["end"]}
-        oc = {ln for ln in old_l if a and a["start"] <= ln <= a["end"]}
+        nc = {ln for ln in new_l if b and b["start"] <= ln <= b["end"]} - in_defs_new
+        oc = {ln for ln in old_l if a and a["start"] <= ln <= a["end"]} - in_defs_old
         if not nc and not oc:
             continue
         name = key.split(":", 1)[1].split("#")[0] if key.startswith(("IMPORT:", "ASSIGN:")) else None
@@ -732,7 +915,15 @@ def _config_changes(ctx: _Ctx, fd: FileDiff, new_l: set[int], old_l: set[int]) -
     if not out and (new_l or old_l):
         return [Change(rel, None, "file_only", lines=(min(new_l), max(new_l)) if new_l else None,
                        old_lines=(min(old_l), max(old_l)) if old_l else None, new_changed=new_l, old_changed=old_l)]
-    return list(out.values())
+    # a key whose line only gained or lost a trailing comma (a JSON entry removed after it) did not change
+    nl, ol = fd.new.split("\n") if fd.new is not None else [], fd.old.split("\n") if fd.old is not None else []
+
+    def same(c: Change) -> bool:
+        if not c.lines or not c.old_lines:
+            return False
+        return nl[c.lines[0] - 1].strip().rstrip(",").rstrip() == ol[c.old_lines[0] - 1].strip().rstrip(",").rstrip()
+
+    return [c for c in out.values() if not same(c)]
 
 
 # -- 2. dependents -------------------------------------------------------------------------------------------
@@ -757,7 +948,48 @@ def _in_edges(ctx: _Ctx, node: str, rels: set[str]) -> list[tuple[str, dict]]:
     for cls in owners:
         if name in ("__init__", _clean_label(g.label(cls))):
             out += [(u, dict(d, _construction=True)) for u, d in g.in_edges(cls, {"calls"})]
-    return out
+    return [(u, d) for u, d in out if _edge_kept(ctx, u, node, d)]
+
+
+def _edge_kept(ctx: _Ctx, caller: str, callee: str, d: dict) -> bool:
+    """An incoming edge the review follows. Documentation never calls code; an INFERRED edge (a receiver's type
+    guessed by name) is dropped when it crosses into another project of the repository (a directory with its own
+    pyproject.toml / package.json ..., a vendored copy) or when the Python caller imports a module or class of the
+    callee's name from elsewhere (a vendored copy importing its own ``store``)."""
+    g = ctx.g
+    uf, vf = g.file(caller) or "", g.file(callee) or ""
+    if uf.lower().endswith(DOC_SUFFIXES):
+        return False
+    if d.get("confidence") == "EXTRACTED" or not uf or not vf or uf == vf:
+        return True
+    key = (uf, vf)
+    if key not in ctx._edge_ok:
+        ok = ctx.project_root(uf) == ctx.project_root(vf)
+        if ok and uf.endswith((".py", ".pyi")) and vf.endswith((".py", ".pyi")):
+            ok = not _imports_namesake(ctx, uf, vf)
+        ctx._edge_ok[key] = ok
+    return ctx._edge_ok[key]
+
+
+def _imports_namesake(ctx: _Ctx, caller_file: str, callee_file: str) -> bool:
+    """Does the Python file ``caller_file`` import a module named like ``callee_file``'s module (or a name
+    defined there) from another module, and nothing from ``callee_file``'s module itself?"""
+    from verinoda.guards import _module_of
+
+    mod = _module_of(callee_file) or ""
+    last = mod.rpartition(".")[2]
+    if not mod:
+        return False
+    classes = {q for q, s in ((ctx.facts(callee_file) or {}).get("symbols") or {}).items()
+               if s.get("kind") == "class" and "." not in q}
+    same, other = False, False
+    for m, orig in ctx.py_imported(caller_file):
+        full = f"{m}.{orig}" if orig else m
+        if full == mod or m == mod or full.startswith(mod + "."):
+            same = True
+        elif full.rpartition(".")[2] == last or (orig in classes and m != mod):
+            other = True
+    return other and not same
 
 
 def _walk_back(ctx: _Ctx, seeds: list[tuple[str, Change]], rels: set[str], depth: int = DEPTH) -> dict:
@@ -852,27 +1084,23 @@ def _persistence(ctx: _Ctx, changes: list[Change], walk: dict) -> list[dict]:
             continue
         code = ctx.code(c.file)
         for line, kind, by in rr.sink_hits(code, min(c.new_changed or {0}), max(c.new_changed or {0})):
-            if line not in c.new_changed or f"{c.file}:{line}" in seen_at:
+            if line not in c.new_changed or f"{c.file}:{line}" in seen_at or kind in rr.IO_ONLY_SINKS:
                 continue
             seen_at.add(f"{c.file}:{line}")
             out.append(_finding("persistence", "sink-on-changed-line",
                                 f"a changed line holds a {kind}: {ctx.lines(c.file)[line - 1].strip()[:100]}",
                                 "strong_inference", f"{c.file}:{line}", basis="pattern over the code of the line "
                                 "(comments removed)", derived_by=by, for_symbol=c.symbol))
-        if c.old_changed and not any(True for _ in rr.sink_hits(code, *(c.lines or (0, -1)))):
-            ocode = ctx.code(c.file, "old")
-            for line, kind, by in rr.sink_hits(ocode, min(c.old_changed), max(c.old_changed)):
-                if line in c.old_changed:
-                    out.append(_finding("persistence", "sink-line-removed",
-                                        f"a {kind} line was removed or changed (base line {line})", "strong_inference",
-                                        f"{c.file}:{line}", basis="pattern over the base version's code",
-                                        derived_by=by, for_symbol=c.symbol, side="base"))
-    # changed calls that reach a sink
+        out += _removed_sinks(ctx, c)
+    # changed calls that reach a sink (a call whose text the base version of the definition has too did not change)
     for c in _code_units(changes):
         unit = (c.file, c.qual)
+        new_calls = _new_calls(ctx, c)
         grouped: dict[str, dict] = {}   # one finding per sink kind and changed definition; more calls as evidence
         for line, name, tgt, how, conf in ctx.callees(unit, c.new_changed):
             if tgt is None or f"{c.file}:{line}" in seen_at:
+                continue
+            if new_calls is not None and (line, name) not in new_calls:
                 continue
             hits = [h for h in ctx.sink_reach(tgt, depth=2) if h["kind"] in rr.WRITE_SINKS]
             if not hits:
@@ -896,11 +1124,247 @@ def _persistence(ctx: _Ctx, changes: list[Change], walk: dict) -> list[dict]:
             if f.get("calls", 1) > 1:
                 f["finding"] += f"; {f['calls'] - 1} more changed call(s) of {c.name} reach one (see evidence_at)"
             out.append(f)
+    # a value bound on a changed line and written later in the same function (Python, def-use)
+    for c in _code_units(changes):
+        if _suffix(c.file) in (".py", ".pyi") and c.kind in ("body", "signature"):
+            out += _py_local_flow(ctx, c, seen_at)
     # the changed function's value carried by its callers into a sink call (Python, def-use per hop)
     for c in _code_units(changes):
         if _suffix(c.file) not in (".py", ".pyi") or ((ctx.sym(c.file, c.qual) or {}).get("kind") == "class"):
             continue
         out += _value_flow(ctx, c, seen_at)
+    out += _nbt_keys(ctx, changes)
+    return out
+
+
+def _removed_sinks(ctx: _Ctx, c: Change) -> list[dict]:
+    """Sink lines of the base version that the new version of the definition no longer has: compared as a
+    multiset of their code text (a moved line is not removed; another write left in the definition does not hide
+    a removed commit)."""
+    if not c.old_changed or c.old_lines is None:
+        return []
+    ocode = ctx.code(c.file, "old")
+    base = rr.sink_hits(ocode, *c.old_lines)
+    if not base:
+        return []
+    code = ctx.code(c.file)
+
+    def norm(t: str) -> str:   # a line moved into a list gains a trailing comma: the same sink
+        return re.sub(r"[\s,;]+$", "", " ".join(t.split()))
+
+    now: dict[str, int] = {}
+    new_hits = rr.sink_hits(code, *c.lines) if c.lines else []
+    for line, _k, _b in new_hits:
+        t = norm(code[line - 1])
+        now[t] = now.get(t, 0) + 1
+    gone = []
+    for line, kind, by in base:
+        t = norm(ocode[line - 1])
+        if now.get(t, 0) > 0:
+            now[t] -= 1
+            continue
+        gone.append((line, kind, by))
+    # a sink line whose text changed is still there: as many new sink lines of that kind as removed ones
+    left: dict[str, int] = {}
+    for line, kind, _b in new_hits:
+        t = norm(code[line - 1])
+        if now.get(t, 0) > 0:
+            now[t] -= 1
+            left[kind] = left.get(kind, 0) + 1
+    out = []
+    for line, kind, by in gone:
+        if left.get(kind, 0) > 0:
+            left[kind] -= 1
+            continue
+        if line in c.old_changed and kind not in rr.IO_ONLY_SINKS:
+            out.append(_finding("persistence", "sink-line-removed",
+                                f"a {kind} line was removed or changed (base line {line}): "
+                                f"`{ctx.lines(c.file, 'old')[line - 1].strip()[:90]}`", "strong_inference",
+                                f"{c.file}:{line}", basis="sink pattern over the base version's code; the new version "
+                                "of the definition has no line with that code", derived_by=by, for_symbol=c.symbol,
+                                side="base"))
+    return out
+
+
+_NOT_CALLS = {"if", "for", "while", "switch", "catch", "return", "new", "synchronized", "super", "this", "when",
+              "elif", "not", "and", "or", "print"}
+
+
+def _jvm_call_keys(text: str, params: list[str]) -> list[tuple[int, str, str]]:
+    """``(offset, name, key)`` of the calls in a text (the key: name and argument texts, parameters renamed)."""
+    out = []
+    for m in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", text):
+        if m.group(1) in _NOT_CALLS:
+            continue
+        args = rr.call_args(text[m.start():], m.group(1)) or []
+        out.append((m.start(), m.group(1), m.group(1) + "(" + ",".join(rr.cond_key(rr.alpha(a, params))
+                                                                       for a in args) + ")"))
+    return out
+
+
+def _new_calls(ctx: _Ctx, c: Change) -> set[tuple[int, str]] | None:
+    """``(line, name)`` of the calls on changed lines that the base version of the definition does not make (its
+    calls compared as text, parameters renamed by position); None when there is no base version to compare."""
+    if c.old_lines is None or c.lines is None or c.old_def_line is None:
+        return None
+    if _suffix(c.file) in (".py", ".pyi"):
+        fn = rr.py_def_at(ctx.pytree(c.file), c.def_line or -1)
+        ofn = rr.py_def_at(ctx.pytree(c.file, "old"), c.old_def_line)
+        if fn is None or ofn is None:
+            return None
+        np_, op_ = rr.py_param_names(fn), rr.py_param_names(ofn)
+        old: dict[str, int] = {}
+        for k in rr.py_calls_in(ofn):
+            t = rr.alpha(rr._unparse(k), op_)
+            old[t] = old.get(t, 0) + 1
+        out = set()
+        for k in sorted(rr.py_calls_in(fn), key=lambda k: (k.lineno, k.col_offset)):
+            t = rr.alpha(rr._unparse(k), np_)
+            if old.get(t, 0) > 0:
+                old[t] -= 1
+                continue
+            out.add((k.lineno, rr.call_name(k) or "?"))
+        return out
+    np_ = rr.ts_param_names(ctx.tstree(c.file), c.def_line or -1)
+    op_ = rr.ts_param_names(ctx.tstree(c.file, "old"), c.old_def_line)
+    ocode = ctx.code(c.file, "old")
+    old = {}
+    for _o, _n, key in _jvm_call_keys("\n".join(ocode[c.old_lines[0] - 1: c.old_lines[1]]), op_):
+        old[key] = old.get(key, 0) + 1
+    code = ctx.code(c.file)
+    out = set()
+    for ln in sorted(c.new_changed):
+        if ln > len(code):
+            continue
+        for _o, name, key in _jvm_call_keys(code[ln - 1], np_):
+            if old.get(key, 0) > 0:
+                old[key] -= 1
+                continue
+            out.add((ln, name))
+    return out
+
+
+def _py_local_flow(ctx: _Ctx, c: Change, seen_at: set[str]) -> list[dict]:
+    """Python: a value bound on a changed line of ``c`` and written later in the same function - by a sink
+    statement on an unchanged line, or by a call on an unchanged line whose callee writes the parameter that
+    receives it (def-use within each function, straight-line; the rules on changed lines cover the rest)."""
+    s = ctx.sym(c.file, c.qual)
+    fn = rr.py_def_at(ctx.pytree(c.file), s["def"]) if s else None
+    if fn is None or isinstance(fn, ast.ClassDef) or not c.new_changed:
+        return []
+    seeds: set[str] = set()
+    first = None
+    for n in rr.own_nodes(fn):
+        if isinstance(n, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            span = set(range(n.lineno, (n.end_lineno or n.lineno) + 1))
+            targets = n.targets if isinstance(n, ast.Assign) else [n.target]
+        elif isinstance(n, (ast.For, ast.AsyncFor)):
+            span, targets = {n.lineno}, [n.target]
+        else:
+            continue
+        if not span & c.new_changed:
+            continue
+        names = {x.id for t in targets for x in ast.walk(t) if isinstance(x, ast.Name)}
+        if names:
+            seeds |= names
+            first = n.lineno if first is None else min(first, n.lineno)
+    if not seeds:
+        return []
+    tainted = rr.py_taint(fn, seeds)
+    out = []
+    code = ctx.code(c.file)
+    for line, kind, by in rr.sink_hits(code, first + 1, fn.end_lineno or fn.lineno):
+        at = f"{c.file}:{line}"
+        if kind not in rr.WRITE_SINKS or line in c.new_changed or at in seen_at:
+            continue
+        if rr.py_flows_to_line(fn, seeds, line):
+            seen_at.add(at)
+            used = sorted(tainted & {x.id for x in ast.walk(_stmt_at(fn, line) or fn) if isinstance(x, ast.Name)})
+            out.append(_finding("persistence", "changed-value-to-sink",
+                                f"a value bound on a changed line ({', '.join(used) or ', '.join(sorted(seeds))}) is "
+                                f"written by the {kind} at line {line}", "strong_inference", at,
+                                evidence_at=[f"{c.file}:{first}"], basis="Python def-use within the function "
+                                "(straight-line; branches not told apart)", derived_by=by, for_symbol=c.symbol))
+    for call in sorted(rr.py_calls_in(fn), key=lambda k: (k.lineno, k.col_offset)):
+        lines = set(range(call.lineno, (call.end_lineno or call.lineno) + 1))
+        at = f"{c.file}:{call.lineno}"
+        if call.lineno <= first or lines & c.new_changed or at in seen_at:
+            continue
+        args = list(call.args) + [k.value for k in call.keywords]
+        if not any(rr._expr_carries(a, tainted, "\0") for a in args):
+            continue
+        tgt, how, conf = ctx.py_resolve(c.file, c.qual, fn, call)
+        if tgt is None or not tgt[0].endswith((".py", ".pyi")):
+            continue
+        ts = ctx.sym(*tgt)
+        tfn = rr.py_def_at(ctx.pytree(tgt[0]), ts["def"]) if ts else None
+        if tfn is None or isinstance(tfn, ast.ClassDef):
+            continue
+        bound = isinstance(call.func, ast.Attribute) and "." in tgt[1] and \
+            (ctx.sym(tgt[0], tgt[1].rpartition(".")[0]) or {}).get("kind") == "class"
+        params = rr.py_carrying_params(call, tfn, tainted, "\0", bound=bound)
+        hits = [h for h in ctx.unit_sinks(tgt) if h["kind"] in rr.WRITE_SINKS and params
+                and rr.py_flows_to_line(tfn, params, int(h["at"].rsplit(":", 1)[1]))]
+        if not hits:
+            continue
+        seen_at.add(at)
+        name = rr.call_name(call) or "?"
+        out.append(_finding("persistence", "changed-value-to-sink",
+                            f"a value bound on a changed line is passed to {name}() at line {call.lineno}; {name}() "
+                            f"writes it ({', '.join(sorted(params))}) in a {hits[0]['kind']} at {hits[0]['at']}",
+                            "strong_inference", at, evidence_at=[hits[0]["at"], f"{c.file}:{first}"],
+                            basis="Python def-use within the function and in the callee, the callee's parameter into "
+                                  f"the sink's statement (straight-line); the call resolved by: {how}"
+                                  + (f" ({conf})" if conf else ""), derived_by=hits[0]["derived_by"],
+                            for_symbol=c.symbol))
+    return out
+
+
+def _stmt_at(fn: ast.AST, line: int) -> ast.AST | None:
+    best = None
+    for n in rr.own_nodes(fn):
+        if isinstance(n, ast.stmt) and n.lineno <= line <= (n.end_lineno or n.lineno) and not isinstance(
+                n, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.With, ast.AsyncWith, ast.Try)):
+            if best is None or (n.end_lineno or n.lineno) - n.lineno < (best.end_lineno or best.lineno) - best.lineno:
+                best = n
+    return best
+
+
+def _nbt_keys(ctx: _Ctx, changes: list[Change]) -> list[dict]:
+    """Saved data (NBT): a key read on a changed line that the class never writes, or written on a changed line
+    and never read back - a renamed key loses the stored value on reload (Java / Kotlin, text rule)."""
+    out: list[dict] = []
+    done: set[tuple[str, str]] = set()
+    for c in changes:
+        if c.test or _suffix(c.file) not in (".java", ".kt", ".kts") or not c.new_changed:
+            continue
+        code = ctx.code(c.file)
+        writes: dict[str, list[int]] = {}
+        reads: dict[str, list[int]] = {}
+        for i, ln in enumerate(code, 1):
+            for m in rr.NBT_KEY.finditer(ln):
+                (writes if m.group(1) == "put" else reads).setdefault(m.group(2), []).append(i)
+        if not writes or not reads:
+            continue
+        for ln in sorted(c.new_changed):
+            if ln > len(code):
+                continue
+            for m in rr.NBT_KEY.finditer(code[ln - 1]):
+                op, key = m.group(1), m.group(2)
+                at = f"{c.file}:{ln}"
+                other = writes if op == "get" else reads
+                if key in other or (at, key) in done:
+                    continue
+                done.add((at, key))
+                near = [k for k in other if k.lower() == key.lower()] or sorted(other)[:3]
+                ev = [f"{c.file}:{other[k][0]}" for k in near][:3]
+                text = (f"saved-data key \"{key}\" is read here but the class writes no such key (it writes "
+                        if op == "get" else
+                        f"saved-data key \"{key}\" is written here but the class reads no such key back (it reads ")
+                out.append(_finding("persistence", "saved-data-key-mismatch",
+                                    text + ", ".join(f'"{k}"' for k in near) + ")", "strong_inference", at,
+                                    evidence_at=ev, basis="NBT put/get keys of the class compared (text rule)",
+                                    derived_by="review.NBT_KEY", for_symbol=c.symbol, key=key))
     return out
 
 
@@ -971,90 +1435,71 @@ def _value_flow(ctx: _Ctx, c: Change, seen_at: set[str]) -> list[dict]:
 def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
     out: list[dict] = []
     by_file: dict[str, set[int]] = {}
+    old_by_file: dict[str, set[int]] = {}
     for c in changes:
         if not c.test and _suffix(c.file) in CODE_SUFFIXES:
             by_file.setdefault(c.file, set()).update(c.new_changed)
-    # operations on changed lines
+            old_by_file.setdefault(c.file, set()).update(c.old_changed)
+    # operations on changed lines; one the base version had on its changed lines too is not "added"
     for rel, lines in sorted(by_file.items()):
         if not lines:
             continue
+        old_lines = old_by_file.get(rel) or set()
         if _suffix(rel) in (".py", ".pyi"):
             tree = ctx.pytree(rel)
             if tree is None:
                 continue
-            for line, kind, what, by in rr.py_security_ops(tree, rel, ctx.pyix(), lines):
+            had: dict[str, int] = {}
+            otree = ctx.pytree(rel, "old") if rel in ctx.base_texts and old_lines else None
+            for _l, kind, _w, _b, _s in (rr.py_security_ops(otree, rel, None, old_lines) if otree is not None else []):
+                had[kind] = had.get(kind, 0) + 1
+            for line, kind, what, by, status in rr.py_security_ops(tree, rel, ctx.pyix(), lines):
                 flow = _param_flow(ctx, rel, line)
-                text = f"a changed line adds {kind}: {what}"
+                before = had.get(kind, 0) > 0
+                if before:
+                    had[kind] -= 1
+                    text = f"a changed line holds {kind} that the base version had on its changed lines too: {what}"
+                    status = "strong_inference" if flow and flow.get("from_entry") else "weak_inference"
+                else:
+                    text = f"a changed line adds {kind}: {what}"
                 if flow and flow.get("from_entry"):
                     text += f"; an entry point's parameter reaches it: {flow['from_entry']}"
                 elif flow:
                     text += f"; it uses the parameter(s) {', '.join(flow['params'])}"
-                out.append(_finding("security", "op-on-changed-line", text,
-                                    "statically_verified", f"{rel}:{line}", basis="Python syntax tree of the working "
-                                    "tree (calls bound through imports and aliases); parameter flow: def-use per hop, "
-                                    "an inference", derived_by=by, for_symbol=_sym_for(ctx, rel, line),
+                out.append(_finding("security", "op-on-changed-line", text, status, f"{rel}:{line}",
+                                    basis="Python syntax tree of the tree under review (calls bound through imports "
+                                    "and aliases); parameter flow: def-use per hop, an inference"
+                                    + ("; the base version had this kind of operation on its changed lines"
+                                       if before else ""), derived_by=by, for_symbol=_sym_for(ctx, rel, line),
                                     evidence_at=[flow["entry"]] if flow and flow.get("entry") else (),
                                     param_flow=flow))
         else:
-            code = ctx.code(rel)
+            code, ocode = ctx.code(rel), ctx.code(rel, "old")
+            had = {}
+            for ln in old_lines:
+                for rx, kind in rr.TEXT_SECURITY_OPS:
+                    if ln <= len(ocode) and rx.search(ocode[ln - 1]) and (kind != "sql-built-from-strings"
+                                                                          or rr.sql_line(ocode[ln - 1])):
+                        had[kind] = had.get(kind, 0) + 1
+                        break
             for line in sorted(lines):
                 if line > len(code):
                     continue
                 for rx, kind in rr.TEXT_SECURITY_OPS:
-                    if rx.search(code[line - 1]):
+                    if rx.search(code[line - 1]) and (kind != "sql-built-from-strings" or rr.sql_line(code[line - 1])):
+                        before = had.get(kind, 0) > 0
+                        if before:
+                            had[kind] -= 1
                         out.append(_finding("security", "op-on-changed-line",
-                                            f"a changed line adds {kind}: {ctx.lines(rel)[line - 1].strip()[:100]}",
-                                            "strong_inference", f"{rel}:{line}", basis="text rule over the code of the "
-                                            "line (comments removed)", derived_by="review.TEXT_SECURITY_OPS",
-                                            for_symbol=_sym_for(ctx, rel, line)))
+                                            (f"a changed line holds {kind} that the base version had too: "
+                                             if before else f"a changed line adds {kind}: ")
+                                            + ctx.lines(rel)[line - 1].strip()[:100],
+                                            "weak_inference" if before else "strong_inference", f"{rel}:{line}",
+                                            basis="text rule over the code of the line (comments removed)",
+                                            derived_by="review.TEXT_SECURITY_OPS", for_symbol=_sym_for(ctx, rel, line)))
                         break
-    # exit guards removed or changed (syntax tree diff), moved guards told apart
-    added_all = []
-    per_change = []
-    for c in changes:
-        if not c.test and c.kind == "added" and c.qual and c.lines is not None:
-            # a guard can move into a new helper (an extracted function): its guards count as added ones
-            added_all += [(c, cond, ln) for cond, ln in _guards(ctx, c, "new")]
-            continue
-        if c.test or c.kind not in ("body", "signature") or not c.qual or c.old_lines is None or c.lines is None:
-            continue
-        old_g, new_g = _guards(ctx, c, "old"), _guards(ctx, c, "new")
-        per_change.append((c, old_g, new_g))
-        o_conds = [g[0] for g in old_g]
-        n_conds = [g[0] for g in new_g]
-        added_all += [(c, cond, ln) for cond, ln in new_g if n_conds.count(cond) > o_conds.count(cond)]
-    for c, old_g, new_g in per_change:
-        o_conds = [g[0] for g in old_g]
-        n_conds = [g[0] for g in new_g]
-        # the syntax trees decide, not the line diff (which pairs a moved line with its old place)
-        gone = [(cond, ln) for cond, ln in old_g if o_conds.count(cond) > n_conds.count(cond)]
-        new = [(cond, ln) for cond, ln in new_g if n_conds.count(cond) > o_conds.count(cond)]
-        for cond, ln in gone:
-            moved = [a for a in added_all if a[1] == cond and a[0] is not c]
-            partner = max(new, key=lambda x: difflib.SequenceMatcher(None, cond, x[0]).ratio(), default=None)
-            ratio = difflib.SequenceMatcher(None, cond, partner[0]).ratio() if partner else 0.0
-            if moved:
-                m = moved[0]
-                out.append(_finding("security", "guard-moved",
-                                    f"the check `{cond}` left {c.name} (base line {ln}) and appears in "
-                                    f"{m[0].name} at line {m[2]}", "weak_inference", f"{c.file}:{ln}",
-                                    evidence_at=[f"{m[0].file}:{m[2]}"], basis="syntax tree diff of both versions",
-                                    derived_by="review.guard_diff", for_symbol=c.symbol, side="base"))
-            elif partner is not None and ratio >= 0.5:
-                new.remove(partner)
-                out.append(_finding("security", "guard-changed",
-                                    f"the exit guard of {c.name} changed: `{cond}` (base line {ln}) is now "
-                                    f"`{partner[0]}` - weakened or strengthened is not decided",
-                                    "statically_verified", f"{c.file}:{partner[1]}", evidence_at=[f"{c.file}:{ln}"],
-                                    basis="syntax tree diff of both versions", derived_by="review.guard_diff",
-                                    for_symbol=c.symbol, old=cond, new=partner[0]))
-            else:
-                out.append(_finding("security", "guard-removed",
-                                    f"the exit guard `if {cond}: <exit>` of {c.name} (base line {ln}) is gone",
-                                    "statically_verified", f"{c.file}:{ln}",
-                                    evidence_at=[f"{c.file}:{c.lines[0]}"] if c.lines else (),
-                                    basis="the base version's syntax tree has it, the working tree's does not",
-                                    derived_by="review.guard_diff", for_symbol=c.symbol, side="base"))
+    out += _guard_diff(ctx, changes)
+    out += _check_calls_removed(ctx, changes)
     # permission checks written as calls, removed or changed
     for c in changes:
         if c.test or _suffix(c.file) not in CODE_SUFFIXES or c.kind == "added":
@@ -1113,53 +1558,81 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
 
 def _param_flow(ctx: _Ctx, rel: str, line: int) -> dict | None:
     """Python: which parameter of the function holding ``line`` reaches its statement, and a caller path (up to
-    3 hops, def-use per hop) that feeds it from an entry point's parameter."""
+    3 hops, def-use per hop) that feeds it from an entry point's parameter. Callers come from the graph and, for
+    functions the snapshot does not know (added by the change), from the changed files' syntax trees."""
     qual = ctx.label_at(rel, line)
     s = ctx.sym(rel, qual) if qual else None
     fn = rr.py_def_at(ctx.pytree(rel), s["def"]) if s else None
-    if fn is None or isinstance(fn, ast.ClassDef) or ctx.g is None:
+    if fn is None or isinstance(fn, ast.ClassDef):
         return None
     wanted = rr.py_params_on_line(fn, line)
     if not wanted:
         return None
     start = ctx.node_of(rel, qual)
     path = [f"{_last(qual)}({', '.join(sorted(wanted))})"]
-    if start is not None and (entry_reasons(ctx.g, start) or _entry_info(ctx, start, (rel, qual))):
+    if _entry_info(ctx, start, (rel, qual)):
         return {"params": sorted(wanted), "from_entry": path[0], "entry": f"{rel}:{s['def']}"}
-    frontier = [(start, fn, wanted, path, qual)]
-    seen = {start}
+    frontier = [((rel, qual), start, fn, wanted, path)]
+    seen = {(rel, qual)}
     for _ in range(DEPTH):
         nxt = []
-        for node, cfn, want, p, cqual in frontier:
-            if node is None:
-                continue
-            for u, _d in _in_edges(ctx, node, {"calls"}):
-                if u in seen or _is_test(ctx.g.file(u) or ""):
+        for cunit, node, cfn, want, p in frontier:
+            bound = "." in cunit[1] and (ctx.sym(cunit[0], cunit[1].rpartition(".")[0]) or {}).get("kind") == "class"
+            for unit, u, ufn, calls in _py_callers(ctx, cunit, node):
+                if unit in seen:
                     continue
-                unit = ctx.unit_of(u)
-                if unit is None or not unit[0].endswith((".py", ".pyi")):
-                    continue
-                us = ctx.sym(*unit)
-                ufn = rr.py_def_at(ctx.pytree(unit[0]), us["def"]) if us else None
-                if ufn is None or isinstance(ufn, ast.ClassDef):
-                    continue
-                seen.add(u)
+                seen.add(unit)
                 got: set[str] = set()
-                bound = "." in cqual and (ctx.sym(ctx.g.file(node), cqual.rpartition(".")[0]) or {}).get("kind") == \
-                    "class"
-                for call in rr.py_calls_in(ufn):
-                    if rr.call_name(call) == _last(cqual):
-                        got |= rr.py_args_from_params(ufn, call, cfn, want,
-                                                      bound=bound and isinstance(call.func, ast.Attribute))
+                for call in calls:
+                    got |= rr.py_args_from_params(ufn, call, cfn, want,
+                                                  bound=bound and isinstance(call.func, ast.Attribute))
                 if not got:
                     continue
+                us = ctx.sym(*unit)
                 p2 = [f"{_last(unit[1])}({', '.join(sorted(got))})"] + p
-                if entry_reasons(ctx.g, u) or _entry_info(ctx, u, unit):
+                if _entry_info(ctx, u, unit):
                     return {"params": sorted(wanted), "from_entry": " -> ".join(p2),
                             "entry": f"{unit[0]}:{us['def']}"}
-                nxt.append((u, ufn, got, p2, unit[1]))
+                nxt.append((unit, u, ufn, got, p2))
         frontier = nxt
     return {"params": sorted(wanted), "from_entry": None}
+
+
+def _py_callers(ctx: _Ctx, unit: tuple[str, str], node: str | None) -> list[tuple[tuple[str, str], str | None,
+                                                                                    ast.AST, list[ast.Call]]]:
+    """``(caller unit, caller node, caller def, calls to unit)`` of the Python functions (not tests) that call
+    ``unit``: over the graph's call edges, and by re-reading the changed files (calls bound through imports and
+    module attributes) - a function the change added has no edge yet."""
+    out: dict[tuple[str, str], tuple] = {}
+    name = _last(unit[1])
+    if node is not None and ctx.g is not None:
+        for u, _d in _in_edges(ctx, node, {"calls"}):
+            cu = ctx.unit_of(u)
+            if cu is None or cu in out or _is_test(cu[0]) or not cu[0].endswith((".py", ".pyi")):
+                continue
+            us = ctx.sym(*cu)
+            ufn = rr.py_def_at(ctx.pytree(cu[0]), us["def"]) if us else None
+            if ufn is None or isinstance(ufn, ast.ClassDef):
+                continue
+            calls = [k for k in rr.py_calls_in(ufn) if rr.call_name(k) == name]
+            if calls:
+                out[cu] = (cu, u, ufn, calls)
+    probe = Change(unit[0], unit[1], "added")
+    for srel, call, _how, _status in _py_call_sites(ctx, probe, files=[f for f in ctx.base_texts
+                                                                        if f.endswith((".py", ".pyi"))]):
+        q = ctx.label_at(srel, call.lineno)
+        if not q or _is_test(srel) or (srel, q) == unit:
+            continue
+        us = ctx.sym(srel, q)
+        ufn = rr.py_def_at(ctx.pytree(srel), us["def"]) if us else None
+        if ufn is None or isinstance(ufn, ast.ClassDef):
+            continue
+        if (srel, q) in out:
+            if call not in out[(srel, q)][3]:
+                out[(srel, q)][3].append(call)
+            continue
+        out[(srel, q)] = ((srel, q), ctx.node_of(srel, q), ufn, [call])
+    return list(out.values())
 
 
 def _sym_for(ctx: _Ctx, rel: str, line: int) -> str | None:
@@ -1182,6 +1655,311 @@ def _guards(ctx: _Ctx, c: Change, side: str) -> list[tuple[str, int]]:
     return [g for g in rr.ts_guards(tree, span[0], span[1]) if g[1] in own]
 
 
+def _params_of(ctx: _Ctx, c: Change, side: str) -> list[str]:
+    def_line = c.old_def_line if side == "old" else c.def_line
+    if def_line is None:
+        return []
+    if _suffix(c.file) in (".py", ".pyi"):
+        return rr.py_param_names(rr.py_def_at(ctx.pytree(c.file, side), def_line))
+    return rr.ts_param_names(ctx.tstree(c.file, side), def_line)
+
+
+def _guard_rows(ctx: _Ctx, c: Change, side: str) -> list[dict]:
+    """The exit guards of one version of a definition, each with its comparison keys: ``raw`` (the condition's
+    text) and ``key`` (parameters renamed by position, so renaming a parameter changes no guard)."""
+    params = _params_of(ctx, c, side)
+    return [{"cond": cond, "line": ln, "raw": rr.cond_key(cond), "key": rr.cond_key(rr.alpha(cond, params))}
+            for cond, ln in _guards(ctx, c, side)]
+
+
+def _cond_rows(ctx: _Ctx, c: Change) -> list[tuple[str, int]]:
+    """Every if / while / conditional-expression condition of the new version of ``c``."""
+    if c.lines is None:
+        return []
+    if _suffix(c.file) in (".py", ".pyi"):
+        return rr.py_conditions(rr.py_def_at(ctx.pytree(c.file), c.def_line or c.lines[0]))
+    facts = ctx.facts(c.file) or {}
+    own = _own_lines(facts, c.qual) if c.qual in (facts.get("symbols") or {}) else set(range(c.lines[0], c.lines[1] + 1))
+    return [r for r in rr.ts_conditions(ctx.tstree(c.file), *c.lines) if r[1] in own]
+
+
+def _helper_return(ctx: _Ctx, c: Change, name: str, changes: list[Change]) -> tuple[list[str], str, str] | None:
+    """``(parameters, returned expression, "file:line")`` of a function named ``name`` - in the file of ``c`` or
+    among the changed definitions - whose body is one return statement."""
+    cands = [(c.file, q) for q in ((ctx.facts(c.file) or {}).get("symbols") or {}) if _last(q) == name]
+    cands += [(o.file, o.qual) for o in changes if o.qual and o.name == name and o.lines and (o.file, o.qual)
+              not in cands]
+    for rel, qual in cands:
+        s = ctx.sym(rel, qual)
+        if s is None:
+            continue
+        if _suffix(rel) in (".py", ".pyi"):
+            r = rr.py_single_return(rr.py_def_at(ctx.pytree(rel), s["def"]))
+            if r:
+                params = [p for p in r[0] if p not in ("self", "cls")]
+                return params, rr._unparse(r[1]), f"{rel}:{s['def']}"
+        elif _suffix(rel) in anchors.TS_LANGS:
+            r2 = rr.ts_single_return(ctx.tstree(rel), s["def"])
+            if r2:
+                return r2[0], r2[1], f"{rel}:{s['def']}"
+    return None
+
+
+def _guard_diff(ctx: _Ctx, changes: list[Change]) -> list[dict]:
+    """Exit guards of the base version that the new version of a definition does not have (syntax trees of both
+    versions). Before a guard is reported removed, the review rules out: the same check in another changed or new
+    definition (moved), the guard split into several (``a or b`` -> ``if a`` + ``if b``), a new guard calling a
+    helper that returns the old condition (extracted), a changed guard (the closest new one), and the condition or
+    its negation inside another condition of the new version (restructured). Only then is it ``guard-removed``:
+    the mechanical fact that neither the check nor its negation is left in the definition."""
+    out: list[dict] = []
+    added_all: list[tuple[Change, dict]] = []
+    per_change = []
+    for c in changes:
+        if c.test or not c.qual or c.lines is None:
+            continue
+        if c.kind == "added":
+            # a guard can move into a new helper (an extracted function): its guards count as added ones
+            added_all += [(c, g) for g in _guard_rows(ctx, c, "new")]
+            continue
+        if c.kind not in ("body", "signature") or c.old_lines is None:
+            continue
+        old_g, new_g = _guard_rows(ctx, c, "old"), _guard_rows(ctx, c, "new")
+        gone, new = _multiset_minus(old_g, new_g), _multiset_minus(new_g, old_g)
+        per_change.append((c, gone, new))
+        added_all += [(c, g) for g in new]
+    for c, gone, new in per_change:
+        old_params = _params_of(ctx, c, "old")
+        changed_findings = []
+        for g in gone:
+            cond, ln = g["cond"], g["line"]
+            moved = [a for a in added_all if a[1]["raw"] == g["raw"] and a[0] is not c]
+            if moved:
+                m = moved[0]
+                out.append(_finding("security", "guard-moved",
+                                    f"the check `{cond}` left {c.name} (base line {ln}) and appears in "
+                                    f"{m[0].name} at line {m[1]['line']}", "weak_inference", f"{c.file}:{ln}",
+                                    evidence_at=[f"{m[0].file}:{m[1]['line']}"], basis="syntax tree diff of both "
+                                    "versions", derived_by="review.guard_diff", for_symbol=c.symbol, side="base"))
+                continue
+            parts = rr.split_top(" ".join(cond.split()), (" or ", "||"))
+            if len(parts) > 1:
+                pool, match = list(new), []
+                for p in parts:
+                    k = rr.cond_key(rr.alpha(p, old_params))
+                    hit = next((x for x in pool if x["key"] == k), None)
+                    if hit is None:
+                        break
+                    match.append(hit)
+                    pool.remove(hit)
+                else:
+                    for m in match:
+                        new.remove(m)
+                    out.append(_finding("security", "guard-split",
+                                        f"the exit guard `{cond}` of {c.name} (base line {ln}) was split into "
+                                        f"{len(match)} guards: " + ", ".join(f"`{m['cond']}` (line {m['line']})"
+                                                                             for m in match)
+                                        + " - the same conditions; their exits were not compared", "weak_inference",
+                                        f"{c.file}:{match[0]['line']}", evidence_at=[f"{c.file}:{m['line']}" for m in
+                                                                                   match[1:]] + [f"{c.file}:{ln}"],
+                                        basis="syntax tree diff of both versions (conditions compared as text)",
+                                        derived_by="review.guard_diff", for_symbol=c.symbol))
+                    continue
+            helper = _guard_helper(ctx, c, g, new, changes, old_params)
+            if helper:
+                ng, name, where = helper
+                new.remove(ng)
+                out.append(_finding("security", "guard-moved",
+                                    f"the exit guard `{cond}` of {c.name} (base line {ln}) now calls {name}(), which "
+                                    f"returns that condition (defined at {where}): `{ng['cond']}` at line "
+                                    f"{ng['line']} - extracted, the same check by its text", "weak_inference",
+                                    f"{c.file}:{ng['line']}", evidence_at=[where, f"{c.file}:{ln}"],
+                                    basis="syntax tree diff; the helper's single return expression with the call's "
+                                          "arguments put in for its parameters, compared as text",
+                                    derived_by="review.guard_diff", for_symbol=c.symbol))
+                continue
+            partner = max(new, key=lambda x: difflib.SequenceMatcher(None, g["key"], x["key"]).ratio(), default=None)
+            ratio = difflib.SequenceMatcher(None, g["key"], partner["key"]).ratio() if partner else 0.0
+            if partner is not None and ratio >= 0.5:
+                new.remove(partner)
+                f = _finding("security", "guard-changed",
+                             f"the exit guard of {c.name} changed: `{cond}` (base line {ln}) is now "
+                             f"`{partner['cond']}` - weakened or strengthened is not decided",
+                             "statically_verified", f"{c.file}:{partner['line']}", evidence_at=[f"{c.file}:{ln}"],
+                             basis="syntax tree diff of both versions", derived_by="review.guard_diff",
+                             for_symbol=c.symbol, old=cond, new=partner["cond"])
+                changed_findings.append(f)
+                out.append(f)
+                continue
+            held = _cond_holding(ctx, c, g, old_params)
+            exit_lines = {x["line"] for x in _guard_rows(ctx, c, "new")}
+            if held and held[2] and held[1] in exit_lines:   # now one operand of a wider exit guard
+                text, line, _same = held
+                out.append(_finding("security", "guard-changed",
+                                    f"the exit guard of {c.name} changed: `{cond}` (base line {ln}) is now one operand "
+                                    f"of `{text[:100]}` (line {line}) - weakened or strengthened is not decided",
+                                    "statically_verified", f"{c.file}:{line}", evidence_at=[f"{c.file}:{ln}"],
+                                    basis="syntax tree diff of both versions", derived_by="review.guard_diff",
+                                    for_symbol=c.symbol, old=cond, new=text))
+                continue
+            if held and held[2]:   # the same test is still made, but its body no longer exits
+                text, line, _same = held
+                out.append(_finding("security", "guard-removed",
+                                    f"the exit guard `if {cond}: <exit>` of {c.name} (base line {ln}) no longer exits: "
+                                    f"the condition is still tested at line {line} (`{text[:100]}`) but that branch "
+                                    "does not raise, return, break or continue any more", "statically_verified",
+                                    f"{c.file}:{ln}", evidence_at=[f"{c.file}:{line}"],
+                                    basis="syntax trees of both versions: the base version's if-statement ends in an "
+                                          "exit, the new version's if-statement on the same condition does not",
+                                    derived_by="review.guard_diff", for_symbol=c.symbol, side="base"))
+                continue
+            if held:
+                text, line, _same = held
+                out.append(_finding("security", "guard-restructured",
+                                    f"the exit guard `{cond}` of {c.name} (base line {ln}) is gone as a guard, but the "
+                                    f"condition or its negation is part of `{text[:120]}` at line {line} - the check "
+                                    "may be kept in another form (not decided)", "weak_inference", f"{c.file}:{line}",
+                                    evidence_at=[f"{c.file}:{ln}"], basis="conditions of the new version compared as "
+                                    "text with the old condition and its negation", derived_by="review.guard_diff",
+                                    for_symbol=c.symbol))
+                continue
+            left = [x for x in _guard_rows(ctx, c, "new")][:3]
+            out.append(_finding("security", "guard-removed",
+                                f"the exit guard `if {cond}: <exit>` of {c.name} (base line {ln}) is gone: neither "
+                                "the condition nor its negation is in a condition of the new version"
+                                + (", whose exit guards are " + ", ".join(f"`{x['cond'][:60]}` (line {x['line']})"
+                                                                          for x in left) if left else
+                                   ", which has no exit guard"),
+                                "statically_verified", f"{c.file}:{ln}",
+                                evidence_at=[f"{c.file}:{c.lines[0]}"] if c.lines else (),
+                                basis="the base version's syntax tree has the guard; the new version's has no condition "
+                                      "holding it, its negation, a split of it or a helper returning it",
+                                derived_by="review.guard_diff", for_symbol=c.symbol, side="base"))
+        # new guards no old one was paired with: cited on the changed guards of the same definition
+        for f in changed_findings:
+            if new:
+                f["finding"] += "; the new version also adds " + ", ".join(f"`{x['cond'][:60]}` (line {x['line']})"
+                                                                           for x in new[:3])
+                f["evidence_at"] += [f"{c.file}:{x['line']}" for x in new[:3]]
+    return out
+
+
+def _multiset_minus(a: list[dict], b: list[dict]) -> list[dict]:
+    left: dict[str, int] = {}
+    for x in b:
+        left[x["key"]] = left.get(x["key"], 0) + 1
+    out = []
+    for x in a:
+        if left.get(x["key"], 0) > 0:
+            left[x["key"]] -= 1
+        else:
+            out.append(x)
+    return out
+
+
+def _guard_helper(ctx: _Ctx, c: Change, g: dict, new: list[dict], changes: list[Change],
+                  old_params: list[str]) -> tuple[dict, str, str] | None:
+    """A new guard that calls a helper whose single return expression, with the call's arguments put in, is the
+    old condition (or its negation): ``(new guard, helper name, where)``."""
+    want = {g["raw"], g["key"]} | rr.negations(g["cond"]) | rr.negations(rr.alpha(g["cond"], old_params))
+    for ng in new:
+        for name in dict.fromkeys(re.findall(r"\b([A-Za-z_]\w*)\s*\(", ng["cond"])):
+            h = _helper_return(ctx, c, name, changes)
+            if h is None:
+                continue
+            params, expr, where = h
+            args = rr.call_args(ng["cond"], name) or []
+            got = rr.substitute(expr, params, args)
+            pieces = rr.cond_pieces(got)
+            if pieces & want or rr.cond_pieces(rr.alpha(got, _params_of(ctx, c, "new"))) & want:
+                return ng, name, where
+    return None
+
+
+def _cond_holding(ctx: _Ctx, c: Change, g: dict, old_params: list[str]) -> tuple[str, int, bool] | None:
+    """A condition of the new version that holds the old guard's condition or its negation as one of its
+    ``and`` / ``or`` operands: ``(condition, line, same)`` - ``same`` when it is the old condition itself (the
+    test is still made; its branch no longer exits), not its negation (the work is now gated by it)."""
+    new_params = _params_of(ctx, c, "new")
+    neg = rr.negations(rr.alpha(g["cond"], old_params))
+    rows = _cond_rows(ctx, c)
+    for text, line in rows:
+        if rr.cond_key(rr.alpha(text, new_params)) == g["key"]:
+            return text, line, True
+    for text, line in rows:
+        pieces = rr.cond_pieces(rr.alpha(text, new_params))
+        if g["key"] in pieces:
+            return text, line, True
+        if pieces & neg:
+            return text, line, False
+    return None
+
+
+def _check_calls_removed(ctx: _Ctx, changes: list[Change]) -> list[dict]:
+    """Python: a call removed from a changed definition whose callee is a check - it raises on bad input (``if
+    ...: raise``, ``assert``) or is named like one (``validate_*``, ``check_*``) - when the new version no longer
+    calls it at all."""
+    out: list[dict] = []
+    for c in changes:
+        if c.test or c.kind not in ("body", "signature") or not c.qual or not c.old_changed or \
+                _suffix(c.file) not in (".py", ".pyi") or c.old_def_line is None:
+            continue
+        ofn = rr.py_def_at(ctx.pytree(c.file, "old"), c.old_def_line)
+        fn = rr.py_def_at(ctx.pytree(c.file), c.def_line or -1)
+        if ofn is None or isinstance(ofn, ast.ClassDef):
+            continue
+        still = {rr.call_name(k) for k in rr.py_calls_in(fn)} if fn is not None else set()
+        seen: set[str] = set()
+        for call in rr.py_calls_in(ofn):
+            name = rr.call_name(call)
+            if not name or name in still or name in seen or not (set(range(call.lineno, (call.end_lineno or call.lineno)
+                                                                            + 1)) & c.old_changed):
+                continue
+            seen.add(name)
+            tgt = _py_resolve_old(ctx, c, call)
+            raising: list[int] = []
+            if tgt is not None:
+                s = ctx.sym(*tgt)
+                raising = rr.py_raising_guards(rr.py_def_at(ctx.pytree(tgt[0]), s["def"])) if s else []
+            if not raising and not (tgt is not None and rr.CHECK_NAME.search(name)):
+                continue
+            why = (f"it raises on bad input at {', '.join(f'{tgt[0]}:{x}' for x in raising[:3])}" if raising else
+                   "named like a check")
+            out.append(_finding("security", "check-call-removed",
+                                f"the call to {name}() (base line {call.lineno}) was removed from {c.name}; {why}",
+                                "strong_inference", f"{c.file}:{call.lineno}",
+                                evidence_at=[f"{tgt[0]}:{x}" for x in raising[:3]] if tgt else [],
+                                basis="calls of both versions of the definition (syntax trees); the callee resolved "
+                                      "through the file's definitions and imports", derived_by="review.check_calls",
+                                for_symbol=c.symbol, side="base"))
+    return out
+
+
+def _py_resolve_old(ctx: _Ctx, c: Change, call: ast.Call) -> tuple[str, str] | None:
+    """The unit a call of the base version binds to: a definition of the same file, an imported name, a module
+    attribute or a ``self`` method (the callee itself read in the current tree)."""
+    f = call.func
+    syms = (ctx.facts(c.file) or {}).get("symbols") or {}
+    osyms = (ctx.facts(c.file, "old") or {}).get("symbols") or {}
+    if isinstance(f, ast.Name):
+        if f.id in syms or f.id in osyms:
+            return (c.file, f.id) if f.id in syms else None
+        imp = ctx._py_imports(c.file).get(f.id)
+        if imp and imp[0] and imp[1]:
+            mrel = ctx.pyix().modules.get(imp[0])
+            if mrel and imp[1] in ((ctx.facts(mrel) or {}).get("symbols") or {}):
+                return mrel, imp[1]
+    elif isinstance(f, ast.Attribute):
+        if isinstance(f.value, ast.Name) and f.value.id in ("self", "cls") and "." in c.qual:
+            q = f"{c.qual.rpartition('.')[0]}.{f.attr}"
+            return (c.file, q) if q in syms else None
+        mod = ctx.py_module_of_expr(c.file, f.value)
+        mrel = ctx.pyix().modules.get(mod) if mod else None
+        if mrel and f.attr in ((ctx.facts(mrel) or {}).get("symbols") or {}):
+            return mrel, f.attr
+    return None
+
+
 def _single_constant_return(ctx: _Ctx, c: Change, side: str) -> tuple[str, int] | None:
     span = c.old_lines if side == "old" else c.lines
     if span is None:
@@ -1199,6 +1977,10 @@ def _single_constant_return(ctx: _Ctx, c: Change, side: str) -> tuple[str, int] 
 
 
 def _performance(ctx: _Ctx, changes: list[Change], hot: dict[str, dict], unknown: list[dict]) -> list[dict]:
+    """IO in loops and loops on hot paths. A loop and an IO call inside it that the base version already had
+    are not presented as introduced by the change (weak_inference, "was there before"); a loop over a literal
+    of N items states that bound; a loop added on a hot path without IO in it is weak_inference unless a
+    registration makes the path hot."""
     out: list[dict] = []
     for c in _code_units(changes):
         unit = (c.file, c.qual)
@@ -1211,27 +1993,37 @@ def _performance(ctx: _Ctx, changes: list[Change], hot: dict[str, dict], unknown
             if fn is None:
                 continue
             old_fn = rr.py_def_at(ctx.pytree(c.file, "old"), c.old_def_line) if c.old_def_line else None
-            old_heads = {_loop_head_py(n) for n, *_ in (rr.py_loops(old_fn) if old_fn is not None else [])}
+            old_params, new_params = rr.py_param_names(old_fn), rr.py_param_names(fn)
+            old_loops = {rr.alpha(_loop_head_py(n), old_params): (n, lo_, hi_)
+                         for n, lo_, hi_, _it in (rr.py_loops(old_fn) if old_fn is not None else [])}
+            ocode = ctx.code(c.file, "old")
             for loop, lo, hi, it in rr.py_loops(fn):
-                body_lines = set(range(lo, hi + 1))
-                if not (body_lines & c.new_changed):
+                if not (set(range(lo, hi + 1)) & c.new_changed):
                     continue
+                twin = old_loops.get(rr.alpha(_loop_head_py(loop), new_params))
+                head_new = twin is None
+                # what the same loop of the base version already did inside it
+                twin_calls = {rr.call_name(k) for k in rr.py_calls_in(twin[0])} if twin else set()
+                twin_kinds = {k for _l, k, _b in rr.sink_hits(ocode, _py_loop_body_start(twin[0], twin[1]),
+                                                              twin[2])} if twin else set()
+                body_lo = _py_loop_body_start(loop, lo)
                 found = None
                 for call in rr.py_calls_in(loop):
-                    if call.lineno == lo and not isinstance(loop, (ast.ListComp, ast.SetComp, ast.GeneratorExp,
-                                                                   ast.DictComp)):
-                        continue   # the iterable of a for-loop runs once
+                    if call.lineno < body_lo and not isinstance(loop, (ast.ListComp, ast.SetComp, ast.GeneratorExp,
+                                                                       ast.DictComp)):
+                        continue   # the iterable of a for-loop is evaluated once
                     tgt, how, conf = ctx.py_resolve(c.file, c.qual, fn, call)
                     hits = ctx.sink_reach(tgt, depth=2) if tgt else []
                     if hits:
                         found = (call, hits[0], how, conf)
                         break
-                direct = [h for h in rr.sink_hits(ctx.code(c.file), lo + 1, hi)] if not found else []
+                direct = [h for h in rr.sink_hits(ctx.code(c.file), body_lo, hi)] if not found else []
+                literal = _literal_size(loop)
                 if not found and not direct:
-                    if hot_why and _loop_head_py(loop) not in old_heads and lo in c.new_changed:
-                        out.append(_hot_loop(c, lo, hot_why, "a loop"))
+                    if hot_why and head_new and lo in c.new_changed:
+                        out.append(_hot_loop(c, lo, hot_why, "a loop", literal=literal))
                     continue
-                bound = _py_loop_bound(ctx, c, fn, it, lo) if it else None
+                bound = None if literal is not None else (_py_loop_bound(ctx, c, fn, it, lo) if it else None)
                 if found:
                     call, sink, how, conf = found
                     text = (f"{rr.call_name(call)}() runs once per iteration of the loop at line {lo} and reaches a "
@@ -1239,14 +2031,20 @@ def _performance(ctx: _Ctx, changes: list[Change], hot: dict[str, dict], unknown
                     ev = [f"{c.file}:{call.lineno}", sink["at"]]
                     basis = f"syntax tree loop; call resolved by: {how}" + (f" ({conf})" if conf else "")
                     by = sink["derived_by"]
+                    io_new = head_new or rr.call_name(call) not in twin_calls
                 else:
                     line, kind, by = direct[0]
                     text = f"a {kind} at line {line} runs once per iteration of the loop at line {lo}"
                     ev, basis = [f"{c.file}:{line}"], "syntax tree loop; sink pattern in its body"
+                    io_new = head_new or kind not in twin_kinds
                 if hot_why:
                     text += f"; the function is on a hot path ({hot_why['why']})"
                     ev += [hot_why["at"]] if hot_why.get("at") else []
-                if bound:
+                status = "strong_inference"
+                if literal is not None:
+                    text += f"; the loop runs over a literal of {literal} item(s)"
+                    status = "weak_inference"
+                elif bound:
                     text += f"; the loop is bounded by `{bound['cond']}` at {bound['at']}"
                     ev.append(bound["at"])
                 elif it:
@@ -1256,7 +2054,10 @@ def _performance(ctx: _Ctx, changes: list[Change], hot: dict[str, dict], unknown
                                            "before the loop",
                                     "next_step": f"look for a limit on {it} in the callers, or measure with the "
                                                  "largest expected input"})
-                out.append(_finding("performance", "io-in-loop", text, "strong_inference", f"{c.file}:{lo}",
+                if not io_new:
+                    text += " - the loop and this call were there before the change"
+                    status = "weak_inference"
+                out.append(_finding("performance", "io-in-loop", text, status, f"{c.file}:{lo}",
                                     evidence_at=ev, basis=basis, derived_by=by, for_symbol=c.symbol,
                                     **({"bound": bound} if bound else {})))
         else:
@@ -1270,12 +2071,22 @@ def _performance(ctx: _Ctx, changes: list[Change], hot: dict[str, dict], unknown
                 calls = _loop_calls_sinks(ctx, c, lo, hi)
                 if calls:
                     call_line, name, sink = calls
+                    twin = next(((a, b) for a, b, h in old_loops if h == head), None)
+                    ocode = ctx.code(c.file, "old")
+                    io_new = twin is None or not any(re.search(rf"\b{re.escape(name)}\s*\(", ocode[i - 1])
+                                                     for i in range(twin[0], min(twin[1], len(ocode)) + 1))
                     text = (f"{name}() runs once per iteration of the loop at line {lo} and reaches a "
                             f"{sink['kind']} at {sink['at']} (N+1)")
-                    out.append(_finding("performance", "io-in-loop", text, "strong_inference", f"{c.file}:{lo}",
-                                        evidence_at=[f"{c.file}:{call_line}", sink["at"]],
-                                        basis="tree-sitter loop; call matched to the graph's edges by name",
-                                        derived_by=sink["derived_by"], for_symbol=c.symbol))
+                    ev = [f"{c.file}:{call_line}", sink["at"]]
+                    if hot_why:
+                        text += f"; the function is on a hot path ({hot_why['why']})"
+                        ev += [hot_why["at"]] if hot_why.get("at") else []
+                    if not io_new:
+                        text += " - the loop and this call were there before the change"
+                    out.append(_finding("performance", "io-in-loop", text,
+                                        "strong_inference" if io_new else "weak_inference", f"{c.file}:{lo}",
+                                        evidence_at=ev, basis="tree-sitter loop; call matched to the graph's edges or "
+                                        "to a class of that name", derived_by=sink["derived_by"], for_symbol=c.symbol))
                     continue
                 if not hot_why:
                     continue
@@ -1286,8 +2097,9 @@ def _performance(ctx: _Ctx, changes: list[Change], hot: dict[str, dict], unknown
                     removed = _removed_bound(old_head, head)
                     text = (f"the loop condition at line {lo} changed on a hot path ({hot_why['why']}): "
                             f"`{old_head}` -> `{head}`" + (f"; the bound `{removed}` was removed" if removed else ""))
-                    out.append(_finding("performance", "hot-loop-changed", text, "strong_inference", f"{c.file}:{lo}",
-                                        evidence_at=[hot_why["at"]] if hot_why.get("at") else [],
+                    out.append(_finding("performance", "hot-loop-changed", text, hot_why.get("status",
+                                                                                          "strong_inference"),
+                                        f"{c.file}:{lo}", evidence_at=[hot_why["at"]] if hot_why.get("at") else [],
                                         basis="tree-sitter loop headers of both versions; hot path: "
                                               + hot_why["basis"], derived_by="review.hot_path", for_symbol=c.symbol))
                     continue
@@ -1295,10 +2107,33 @@ def _performance(ctx: _Ctx, changes: list[Change], hot: dict[str, dict], unknown
     return out
 
 
-def _hot_loop(c: Change, lo: int, hot_why: dict, what: str) -> dict:
+def _py_loop_body_start(loop: ast.AST, lo: int) -> int:
+    """First line of a loop's body (a multi-line iterable or condition is not part of it)."""
+    body = getattr(loop, "body", None)
+    if isinstance(body, list) and body:
+        return min(getattr(b, "lineno", lo) for b in body)
+    return lo
+
+
+def _literal_size(loop: ast.AST) -> int | None:
+    """The number of items when a for-loop (or comprehension) iterates over a literal tuple / list / set."""
+    it = getattr(loop, "iter", None)
+    if it is None and getattr(loop, "generators", None):
+        it = loop.generators[0].iter
+    if isinstance(it, (ast.Tuple, ast.List, ast.Set)) and not any(isinstance(e, ast.Starred) for e in it.elts):
+        return len(it.elts)
+    return None
+
+
+def _hot_loop(c: Change, lo: int, hot_why: dict, what: str, literal: int | None = None) -> dict:
+    status = hot_why.get("status", "strong_inference")
+    if literal is not None:
+        status = "weak_inference"
     return _finding("performance", "loop-added-hot-path",
-                    f"{what} was added at line {lo} in {c.name}, which runs on a hot path ({hot_why['why']})",
-                    "strong_inference", f"{c.file}:{lo}", evidence_at=[hot_why["at"]] if hot_why.get("at") else [],
+                    f"{what} was added at line {lo} in {c.name}, which runs on a hot path ({hot_why['why']})"
+                    + (f"; it runs over a literal of {literal} item(s)" if literal is not None else "")
+                    + ("; no IO or query was found in it" if status == "weak_inference" else ""),
+                    status, f"{c.file}:{lo}", evidence_at=[hot_why["at"]] if hot_why.get("at") else [],
                     basis="syntax tree loop on a changed line; hot path: " + hot_why["basis"],
                     derived_by="review.hot_path", for_symbol=c.symbol)
 
@@ -1392,59 +2227,73 @@ def _public_api(ctx: _Ctx, changes: list[Change], unknown: list[dict]) -> list[d
     return out
 
 
-def _py_call_sites(ctx: _Ctx, c: Change) -> list[tuple[str, ast.Call, str, str]]:
-    """``(file, call, how, status)`` of the calls that bind to ``c`` (Python): names imported from its module
-    or defined in its file, module attributes, ``self.m()`` in its class, and the graph's call edges."""
-    mod = None
+def _py_call_sites(ctx: _Ctx, c: Change, files: list[str] | None = None) -> list[tuple[str, ast.Call, str, str]]:
+    """``(file, call, how, status)`` of the calls that bind to ``c`` (Python): names imported from its module or
+    defined in its file (not where a local of that name hides it), module attributes (``import pkg.m``, ``from pkg
+    import m``, ``import pkg.m as x``), ``self.m()`` in its class, the class's own name, receivers annotated or
+    constructed as its class, and calls of a nested function inside its enclosing one. ``files`` limits the
+    files read (default: the graph's callers and the files that name it)."""
     from verinoda.guards import _module_of
 
     mod = _module_of(c.file)
     name = c.name
     owner = c.qual.rpartition(".")[0] if "." in c.qual else ""
+    owner_kind = ((ctx.sym(c.file, owner) or ctx.sym(c.file, owner, "old") or {}).get("kind")) if owner else None
+    owner_last = owner.rpartition(".")[2]
     sites = []
-    cand_files = {c.file}
-    if c.node is not None:
-        cand_files |= {ctx.g.file(u) for u, _ in _in_edges(ctx, c.node, {"calls", "imports_from", "imports"})
-                       if ctx.g.file(u)}
-    if not owner:
+    if files is not None:
+        cand_files = set(files)
+    else:
+        cand_files = {c.file}
+        if c.node is not None:
+            cand_files |= {ctx.g.file(u) for u, _ in _in_edges(ctx, c.node, {"calls", "imports_from", "imports"})
+                           if ctx.g.file(u)}
+        probe = (mod or "").rpartition(".")[2] if not owner else owner_last
         for rel in ctx.files():
             if rel.endswith((".py", ".pyi")) and rel not in cand_files:
                 t = ctx.text(rel)
-                if t and name in t and (mod or "") .rpartition(".")[2] in t:
+                if t and name in t and probe in t:
                     cand_files.add(rel)
     for rel in sorted(f for f in cand_files if f and f.endswith((".py", ".pyi"))):
         tree = ctx.pytree(rel)
         if tree is None:
             continue
         imports = ctx._py_imports(rel)
+        shadow = ctx.shadow(rel)
         local_names = {a for a, (m, orig) in imports.items() if orig == name and m == mod}
-        mod_aliases = {a for a, (m, orig) in imports.items() if orig is None and m == mod}
         for call in ast.walk(tree):
             if not isinstance(call, ast.Call):
                 continue
             f = call.func
             how = None
+            status = "statically_verified"
             if not owner:
-                if isinstance(f, ast.Name) and (f.id in local_names or (rel == c.file and f.id == name)):
+                if isinstance(f, ast.Name) and f.id not in shadow.get(id(f), ()) and \
+                        (f.id in local_names or (rel == c.file and f.id == name)):
                     how = "name bound by an import of the changed module" if f.id in local_names else "same module"
-                elif isinstance(f, ast.Attribute) and f.attr == name and isinstance(f.value, ast.Name) and \
-                        f.value.id in mod_aliases:
+                elif isinstance(f, ast.Attribute) and f.attr == name and mod and \
+                        ctx.py_module_of_expr(rel, f.value) == mod:
                     how = "module attribute"
-                if how:
-                    sites.append((rel, call, how, "statically_verified"))
+            elif owner_kind != "class":   # a function nested in another one: called inside it
+                osym = ctx.sym(c.file, owner)
+                if rel == c.file and isinstance(f, ast.Name) and f.id == name and osym and \
+                        osym["start"] <= call.lineno <= osym["end"]:
+                    how = f"inside {owner_last}, where it is defined"
             elif isinstance(f, ast.Attribute) and f.attr == name:
                 enc = ctx.label_at(rel, call.lineno)
                 if isinstance(f.value, ast.Name) and f.value.id in ("self", "cls") and rel == c.file and enc and \
                         enc.startswith(owner + "."):
-                    sites.append((rel, call, "self/cls in the same class", "statically_verified"))
-                elif isinstance(f.value, ast.Name) and f.value.id == owner.rpartition(".")[2]:
-                    sites.append((rel, call, "class attribute", "strong_inference"))
+                    how = "self/cls in the same class"
+                elif isinstance(f.value, ast.Name) and f.value.id == owner_last:
+                    how, status = "class attribute", "strong_inference"
                 else:
                     efn = rr.py_def_at(tree, (ctx.sym(rel, enc) or {}).get("def", -1)) if enc else None
-                    cls = ctx._py_receiver_class(efn, f.value.id) if efn is not None and isinstance(f.value, ast.Name) \
-                        else None
-                    if cls and _last(cls) == owner.rpartition(".")[2]:
-                        sites.append((rel, call, f"receiver annotated or constructed as {cls}", "strong_inference"))
+                    cls = ctx._py_receiver_class(efn, f.value.id) if efn is not None and \
+                        isinstance(f.value, ast.Name) else None
+                    if cls and _last(cls) == owner_last:
+                        how, status = f"receiver annotated or constructed as {cls}", "strong_inference"
+            if how:
+                sites.append((rel, call, how, status))
     return sites
 
 
@@ -1458,24 +2307,63 @@ def _py_arity(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
     bound = "." in c.qual and ctx.sym(c.file, c.qual.rpartition(".")[0]) is not None and \
         (ctx.sym(c.file, c.qual.rpartition(".")[0]) or {}).get("kind") == "class"
     sites = _py_call_sites(ctx, c)
-    for rel, call, how, status in sites:
-        if params["decorated"] and status == "statically_verified":
-            status = "strong_inference"   # a decorator may change the signature
-        problem = rr.py_arity_problem(params, call, bound=bound and how != "class attribute")
-        if problem:
-            out.append(_finding("public_api", "arity-break",
-                                f"the call to {c.name}() at {rel}:{call.lineno} no longer fits the new signature: "
-                                f"{problem}", status, f"{rel}:{call.lineno}", evidence_at=[f"{c.file}:{s['def']}"],
-                                basis=f"call bound by: {how}; arguments counted against the new parameters (syntax "
-                                      "tree)" + ("; decorated definition" if params["decorated"] else ""),
-                                derived_by="review.arity", for_symbol=c.symbol))
+    planned = c.file in ctx.base_texts and ctx.base_texts.get(c.file) == ctx.text(c.file)
+    if planned:
+        # a planned signature change: there is no new signature to check the calls against - list them
+        for rel, call, how, _status in sites[:MAX_PER_CONCERN]:
+            out.append(_finding("public_api", "call-site-of-changed-signature",
+                                f"{rel}:{call.lineno} calls {c.name}(), whose signature the planned change alters "
+                                "(arguments not checked: there is no new signature yet)", "weak_inference",
+                                f"{rel}:{call.lineno}", evidence_at=[f"{c.file}:{s['def']}"],
+                                basis=f"call bound by: {how}", derived_by="review.call_sites", for_symbol=c.symbol))
+    else:
+        ofn = rr.py_def_at(ctx.pytree(c.file, "old"), c.old_def_line) if c.old_def_line else None
+        old_pos = rr.py_params(ofn)["pos"] if ofn is not None and not isinstance(ofn, ast.ClassDef) else None
+        for rel, call, how, status in sites:
+            if params["decorated"] and status == "statically_verified":
+                status = "strong_inference"   # a decorator may change the signature
+            b = bound and how != "class attribute"
+            problem = rr.py_arity_problem(params, call, bound=b)
+            if problem:
+                out.append(_finding("public_api", "arity-break",
+                                    f"the call to {c.name}() at {rel}:{call.lineno} no longer fits the new signature: "
+                                    f"{problem}", status, f"{rel}:{call.lineno}", evidence_at=[f"{c.file}:{s['def']}"],
+                                    basis=f"call bound by: {how}; arguments counted against the new parameters (syntax "
+                                          "tree)" + ("; decorated definition" if params["decorated"] else ""),
+                                    derived_by="review.arity", for_symbol=c.symbol))
+                continue
+            moved = _moved_positional(old_pos, params["pos"], call, b)
+            if moved:
+                out.append(_finding("public_api", "positional-order-changed",
+                                    f"the call to {c.name}() at {rel}:{call.lineno} passes positional arguments that "
+                                    f"now bind to other parameters: {moved}", "strong_inference",
+                                    f"{rel}:{call.lineno}", evidence_at=[f"{c.file}:{s['def']}"],
+                                    basis=f"call bound by: {how}; the parameter names of both versions compared by "
+                                          "position (syntax trees)", derived_by="review.arity", for_symbol=c.symbol))
     if not sites:
         unknown.append({"kind": "dynamic_callers", "at": f"{c.file}:{s['def']}",
                         "what": f"who calls {c.qual} with the old signature",
-                        "why": "no call site binds to it by import, module attribute or class in the working tree",
+                        "why": "no call site binds to it by import, module attribute or class in the tree under review",
                         "next_step": f"search for `{c.name}(`; callers through objects are not resolved statically "
                                      "(verinoda resolve-call on a site)"})
     return out
+
+
+def _moved_positional(old_pos: list[str] | None, new_pos: list[str], call: ast.Call, bound: bool) -> str | None:
+    """How the positional arguments of ``call`` bind differently: ``customer -> total, total -> customer`` when a
+    parameter the call fills by position has another name at that position now (and the old name still exists,
+    so the call is not merely out of date)."""
+    if old_pos is None or any(isinstance(a, ast.Starred) for a in call.args):
+        return None
+    op_, np_ = list(old_pos), list(new_pos)
+    if bound:
+        op_ = op_[1:] if op_ and op_[0] in ("self", "cls") else op_
+        np_ = np_[1:] if np_ and np_[0] in ("self", "cls") else np_
+    moved = []
+    for i in range(min(len(call.args), len(op_), len(np_))):
+        if op_[i] != np_[i] and op_[i] in np_:
+            moved.append(f"argument {i + 1} was {op_[i]}, is now {np_[i]}")
+    return "; ".join(moved) if moved else None
 
 
 def _jvm_arity(ctx: _Ctx, c: Change) -> list[dict]:
@@ -1562,11 +2450,15 @@ def _removed_refs(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
     name = c.name
     if not name or name.startswith("<module>"):
         return out
+    owner_q = c.qual.split("#")[0].rpartition(".")[0] if "." in c.qual else ""
+    owner_kind = (ctx.sym(c.file, owner_q, "old") or ctx.sym(c.file, owner_q) or {}).get("kind") if owner_q else None
     if _suffix(c.file) in (".py", ".pyi"):
         from verinoda.guards import _module_of
 
         mod = _module_of(c.file)
-        for rel in ctx.files():
+        if owner_kind == "class":
+            out += _removed_method_py(ctx, c, unknown)
+        for rel in ctx.files() if not owner_q else ():
             if not rel.endswith((".py", ".pyi")):
                 continue
             t = ctx.text(rel)
@@ -1576,8 +2468,8 @@ def _removed_refs(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
             if tree is None:
                 continue
             imports = ctx._py_imports(rel)
+            shadow = ctx.shadow(rel)
             local = {a for a, (m, orig) in imports.items() if orig == name and m == mod}
-            aliases = {a for a, (m, orig) in imports.items() if orig is None and m == mod}
             for n in ast.walk(tree):
                 if isinstance(n, ast.ImportFrom) and any(a.name == name for a in n.names) and \
                         imports.get(next(a.asname or a.name for a in n.names if a.name == name), (None,))[0] == mod:
@@ -1585,42 +2477,30 @@ def _removed_refs(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
                                         f"{c.qual} was removed but {rel}:{n.lineno} still imports it", "statically_verified",
                                         f"{rel}:{n.lineno}", basis="import of the removed name from its module (syntax "
                                         "tree)", derived_by="review.removed_refs", for_symbol=c.symbol))
-                elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id in local:
+                elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id in local and \
+                        n.id not in shadow.get(id(n), ()):
                     out.append(_finding("public_api", "removed-still-used",
                                         f"{c.qual} was removed but {rel}:{n.lineno} still uses it", "statically_verified",
                                         f"{rel}:{n.lineno}", basis="name bound by an import of the removed name",
                                         derived_by="review.removed_refs", for_symbol=c.symbol))
-                elif isinstance(n, ast.Attribute) and n.attr == name and isinstance(n.value, ast.Name) and \
-                        n.value.id in aliases:
+                elif isinstance(n, ast.Attribute) and n.attr == name and mod and \
+                        ctx.py_module_of_expr(rel, n.value) == mod:
                     out.append(_finding("public_api", "removed-still-used",
                                         f"{c.qual} was removed but {rel}:{n.lineno} still uses it", "statically_verified",
-                                        f"{rel}:{n.lineno}", basis="module attribute of the removed name",
-                                        derived_by="review.removed_refs", for_symbol=c.symbol))
+                                        f"{rel}:{n.lineno}", basis="module attribute of the removed name (import m, "
+                                        "from pkg import m, import pkg.m)", derived_by="review.removed_refs",
+                                        for_symbol=c.symbol))
             if rel == c.file:
                 for n in ast.walk(tree):
                     if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id == name and \
+                            n.id not in shadow.get(id(n), ()) and \
                             name not in ((ctx.facts(rel) or {}).get("symbols") or {}):
                         out.append(_finding("public_api", "removed-still-used",
                                             f"{c.qual} was removed but its own module still uses it at line {n.lineno}",
                                             "strong_inference", f"{rel}:{n.lineno}", basis="name in the same module",
                                             derived_by="review.removed_refs", for_symbol=c.symbol))
     else:
-        owner = _last(c.qual.rpartition(".")[0]) if "." in c.qual else ""
-        rx = re.compile(rf"(?:\b{re.escape(owner)}\s*\.\s*|\.\s*)?\b{re.escape(name)}\s*\(" if owner else
-                        rf"\b{re.escape(name)}\b")
-        pkg = _jvm_package(ctx.text(c.file, "old") or "") if _suffix(c.file) in (".java", ".kt", ".kts") else None
-        for rel in ctx.files():
-            if _suffix(rel) not in CODE_SUFFIXES or rel == c.file:
-                continue
-            t = ctx.text(rel)
-            if not t or name not in t or (owner and owner not in t) or (owner and not _jvm_sees(t, pkg, owner)):
-                continue
-            for i, ln in enumerate(ctx.code(rel), 1):
-                if rx.search(ln):
-                    out.append(_finding("public_api", "removed-still-used",
-                                        f"{c.qual} was removed but {rel}:{i} names it", "strong_inference", f"{rel}:{i}",
-                                        basis="text match in code (comments removed)", derived_by="review.removed_refs",
-                                        for_symbol=c.symbol))
+        out += _removed_refs_jvm(ctx, c, owner_q)
     # the name in strings: possible dynamic use
     strings = []
     for rel in ctx.files():
@@ -1640,12 +2520,191 @@ def _removed_refs(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
     return out
 
 
+def _removed_method_py(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
+    """A removed Python method still called: ``self.m()`` in its class, ``Cls.m()``, receivers annotated or
+    constructed as the class, and the snapshot graph's call edges into the removed method whose call is still on
+    the caller's line. When nothing binds, calls of ``.m(`` through receivers of unknown type are an unknown."""
+    out: list[dict] = []
+    owner_q = c.qual.rpartition(".")[0]
+    owner = owner_q.rpartition(".")[2]
+    tree = ctx.pytree(c.file)
+    cls = rr.py_def_at(tree, (ctx.sym(c.file, owner_q) or {}).get("def", -1)) if ctx.sym(c.file, owner_q) else None
+    bases = [rr.dotted(b) or "?" for b in getattr(cls, "bases", [])] if isinstance(cls, ast.ClassDef) else []
+    bases = [b for b in bases if b not in ("object", "Protocol", "ABC", "Generic")]
+    syms = (ctx.facts(c.file) or {}).get("symbols") or {}
+    if any(f"{_last(b)}.{c.name}" in syms for b in bases):
+        return out   # a base class of the same file still defines it: calls reach the inherited method
+    cap = "weak_inference" if bases else None
+    seen: set[str] = set()
+    for rel, call, how, status in _py_call_sites(ctx, c):
+        at = f"{rel}:{call.lineno}"
+        if at in seen:
+            continue
+        seen.add(at)
+        out.append(_finding("public_api", "removed-still-used",
+                            f"{c.qual} was removed but {at} still calls it ({how})",
+                            cap or ("strong_inference" if status == "statically_verified" else status), at,
+                            basis=f"call bound by: {how}" + (f"; the class has base classes ({', '.join(bases)}) that "
+                                                            "may still provide it" if bases else ""),
+                            derived_by="review.removed_refs", for_symbol=c.symbol))
+    if c.node is not None and ctx.g is not None:
+        for u, d in _in_edges(ctx, c.node, {"calls"}):
+            at = _relocated_at(ctx, u, c.node, d)
+            if not at or not at.rsplit(":", 1)[-1].isdigit() or at in seen:
+                continue
+            rel, ln = at.rsplit(":", 1)[0], int(at.rsplit(":", 1)[1])
+            code = ctx.code(rel)
+            if ln > len(code) or not re.search(rf"\.\s*{re.escape(c.name)}\s*\(|\b{re.escape(c.name)}\s*\(",
+                                               code[ln - 1]):
+                continue   # the caller no longer makes that call
+            seen.add(at)
+            out.append(_finding("public_api", "removed-still-used",
+                                f"{c.qual} was removed but {at} still calls it (the snapshot graph's call edge from "
+                                f"{_clean_label(ctx.g.label(u))}, {d.get('confidence') or 'no confidence'})",
+                                cap or "strong_inference", at, basis="call edge of the last snapshot's graph; the call "
+                                "is still on that line", derived_by="review.removed_refs", for_symbol=c.symbol))
+    if not out:
+        rx = re.compile(rf"\.\s*{re.escape(c.name)}\s*\(")
+        loose = []
+        for rel in ctx.files():
+            if not rel.endswith((".py", ".pyi")):
+                continue
+            t = ctx.text(rel)
+            if not t or f"{c.name}(" not in t.replace(" ", ""):
+                continue
+            loose += [f"{rel}:{i}" for i, ln in enumerate(ctx.code(rel), 1) if rx.search(ln)]
+        if loose:
+            unknown.append({"kind": "unresolved_callers", "at": loose[0],
+                            "what": f"whether the {len(loose)} call(s) of .{c.name}( through objects reach the removed "
+                                    f"{c.qual}",
+                            "why": "their receivers' types are not resolved statically",
+                            "next_step": "read " + ", ".join(loose[:3])})
+    return out
+
+
+def _removed_refs_jvm(ctx: _Ctx, c: Change, owner_q: str) -> list[dict]:
+    """A removed Java / Kotlin / other member still named: the graph's call edges into it, ``Owner.name(`` and
+    ``Owner::name`` (method references) in files that see the owner's class, ``this::name`` and unqualified calls
+    in its own file (strong_inference); ``x.name(`` on a receiver of unknown type is weak_inference."""
+    out: list[dict] = []
+    name = c.name
+    owner = _last(owner_q) if owner_q else ""
+    pkg = _jvm_package(ctx.text(c.file, "old") or "") if _suffix(c.file) in (".java", ".kt", ".kts") else None
+    left = {q for q in ((ctx.facts(c.file) or {}).get("symbols") or {}) if _last(q) == name}
+    seen: set[str] = set()
+    if c.node is not None and ctx.g is not None:
+        for u, d in _in_edges(ctx, c.node, {"calls"}):
+            at = _relocated_at(ctx, u, c.node, d)
+            if not at or not at.rsplit(":", 1)[-1].isdigit():
+                continue
+            rel, ln = at.rsplit(":", 1)[0], int(at.rsplit(":", 1)[1])
+            code = ctx.code(rel)
+            if at in seen or ln > len(code) or not re.search(rf"\b{re.escape(name)}\b", code[ln - 1]):
+                continue
+            seen.add(at)
+            out.append(_finding("public_api", "removed-still-used", f"{c.qual} was removed but {at} still calls it "
+                                f"(graph call edge, {d.get('confidence') or 'no confidence'})", "strong_inference", at,
+                                basis="call edge of the last snapshot's graph; the name is still on that line",
+                                derived_by="review.removed_refs", for_symbol=c.symbol))
+    if owner:
+        strong = re.compile(rf"\b{re.escape(owner)}\s*(?:\.\s*{re.escape(name)}\s*\(|::\s*{re.escape(name)}\b)")
+        own = re.compile(rf"\bthis\s*::\s*{re.escape(name)}\b|\bthis\s*\.\s*{re.escape(name)}\s*\(|"
+                         rf"(?<![\w.:]){re.escape(name)}\s*\(")
+        weak = re.compile(rf"\.\s*{re.escape(name)}\s*\(|::\s*{re.escape(name)}\b")
+    else:
+        strong, own, weak = re.compile(rf"\b{re.escape(name)}\b"), None, None
+    n_weak = 0
+    for rel in ctx.files():
+        if _suffix(rel) not in CODE_SUFFIXES:
+            continue
+        t = ctx.text(rel)
+        if not t or name not in t:
+            continue
+        mine = rel == c.file
+        if not mine and owner and not _jvm_sees(t, pkg, owner):
+            continue
+        for i, ln in enumerate(ctx.code(rel), 1):
+            at = f"{rel}:{i}"
+            if at in seen:
+                continue
+            if strong.search(ln) and (owner or not mine):
+                how, status = f"`{owner + '.' if owner else ''}{name}` named in code (text)", "strong_inference"
+            elif mine and own is not None and not left and own.search(ln):
+                how, status = "called in its own class (text)", "strong_inference"
+            elif not mine and weak is not None and owner in t and weak.search(ln) and n_weak < 5:
+                n_weak += 1
+                how, status = f"`.{name}(` on a receiver whose type is not resolved (text)", "weak_inference"
+            else:
+                continue
+            seen.add(at)
+            out.append(_finding("public_api", "removed-still-used", f"{c.qual} was removed but {at} names it: {how}",
+                                status, at, basis="text match in code (comments removed)",
+                                derived_by="review.removed_refs", for_symbol=c.symbol))
+    return out
+
+
+def _dedupe(findings: list[dict]) -> list[dict]:
+    """One finding per rule, place and text; of duplicates (a class and its method both cover a changed line)
+    the one for the innermost symbol is kept."""
+    best: dict[tuple, dict] = {}
+    for f in findings:
+        k = (f["rule"], f["at"], f["finding"])
+        if k not in best or len(f.get("for") or "") > len(best[k].get("for") or ""):
+            best[k] = f
+    return list(best.values())
+
+
+# registration manifests: (path pattern, what it is, key prefixes that register code)
+_MANIFESTS = [
+    (re.compile(r"(^|/)(fabric|quilt)\.mod\.json$"), "mod manifest (Fabric / Quilt)",
+     ("entrypoints", "mixins", "accessWidener", "quilt_loader.entrypoints", "quilt_loader.mixin")),
+    (re.compile(r"(^|/)META-INF/(neoforge\.)?mods\.toml$"), "mod manifest (Forge / NeoForge)",
+     ("mods", "mixins", "dependencies", "modLoader", "loaderVersion")),
+    (re.compile(r"(^|/)(paper-)?plugin\.yml$"), "plugin manifest (Bukkit / Paper)",
+     ("main", "commands", "permissions", "depend", "softdepend")),
+    (re.compile(r"(^|/)[\w.-]+\.mixins\.json$"), "Mixin configuration", ("",)),
+    (re.compile(r"(^|/)package\.json$"), "npm package manifest", ("main", "bin", "exports", "module", "scripts",
+                                                                   "type")),
+]
+
+
+def _manifest_kind(rel: str) -> str | None:
+    return next((what for rx, what, _p in _MANIFESTS if rx.search(rel)), None)
+
+
+def _manifest_findings(ctx: _Ctx, changes: list[Change]) -> list[dict]:
+    """Changed keys of a registration manifest that say what the runtime loads (entry points, mixins, commands,
+    main classes): an entry-point change, not configuration."""
+    out = []
+    for c in changes:
+        if c.kind != "config_key" or not c.qual:
+            continue
+        row = next(((what, prefixes) for rx, what, prefixes in _MANIFESTS if rx.search(c.file)), None)
+        if row is None or not any(c.qual == p or c.qual.startswith(p + ".") or not p for p in row[1]):
+            continue
+        if c.lines is None:
+            ln, side, what = c.old_lines[0], "base", "removed: `" + ctx.lines(c.file, "old")[c.old_lines[0] - 1].strip()[
+                :100] + "`"
+        else:
+            ln, side = c.lines[0], None
+            new = ctx.lines(c.file)[ln - 1].strip()[:100]
+            what = (f"changed: `{ctx.lines(c.file, 'old')[c.old_lines[0] - 1].strip()[:80]}` -> `{new}`"
+                    if c.old_lines else f"added: `{new}`")
+        out.append(_finding("entry_points", "registration-manifest-changed",
+                            f"{c.file} ({row[0]}): {c.qual} {what} - what the runtime loads or registers at start "
+                            "changed", "strong_inference", f"{c.file}:{ln}", basis="changed key of a registration "
+                            "manifest (line diff; manifest table)", derived_by="review.MANIFESTS", for_symbol=c.symbol,
+                            **({"side": side} if side else {})))
+    return out
+
+
 def _config(ctx: _Ctx, changes: list[Change]) -> list[dict]:
     out: list[dict] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple] = set()
 
     def add(f: dict) -> None:
-        key = (f["at"], f["rule"])
+        # one finding per place, rule and key: a renamed key is two findings (the old key and the new one)
+        key = (f["at"], f["rule"], f.get("key") or f.get("for"), f.get("side"))
         if key not in seen:
             seen.add(key)
             out.append(f)
@@ -1662,20 +2721,32 @@ def _config(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                          **({"side": "base"} if c.kind == "removed" else {})))
             continue
         if c.kind == "config_key":
+            if _manifest_kind(rel):
+                continue   # a registration manifest: reported under entry_points
             ln = (c.lines or c.old_lines)[0]
             side = "new" if c.lines else "old"
             text = ctx.lines(rel, side)[ln - 1].strip()
             old = ctx.lines(rel, "old")[c.old_lines[0] - 1].strip() if c.old_lines else None
             readers = _key_readers(ctx, c.qual)
-            add(_finding("config", "config-file-key", f"config key {c.qual} changed: "
-                         + (f"`{old}` -> `{text}`" if old and c.lines else ("removed" if not c.lines else "added")),
+            if not c.lines:
+                what = "removed" + (f"; still read at {', '.join(readers[:3])}" if readers else "")
+            else:
+                what = f"`{old}` -> `{text}`" if old else "added"
+            add(_finding("config", "config-file-key", f"config key {c.qual} changed: {what}",
                          "strong_inference", f"{rel}:{ln}", evidence_at=readers[:5],
                          basis="line diff of the config file; readers by literal key search in code",
-                         derived_by="review.config_keys", for_symbol=c.symbol, readers=readers[:10] or None))
+                         derived_by="review.config_keys", for_symbol=c.symbol, readers=readers[:10] or None,
+                         key=c.qual, **({"side": "base"} if side == "old" else {})))
             continue
         if _suffix(rel) not in CODE_SUFFIXES:
             continue
-        code = ctx.code(rel)
+        code, ocode = ctx.code(rel), ctx.code(rel, "old")
+        old_env: dict[str, int] = {}
+        for ln in c.old_changed:
+            for rx, _lang in ENV_PATTERNS:
+                for m in rx.finditer(ocode[ln - 1] if ln <= len(ocode) else ""):
+                    k = _call_text(ocode[ln - 1], m.start(), m.end())
+                    old_env[k] = old_env.get(k, 0) + 1
         for ln in sorted(c.new_changed):
             if ln > len(code):
                 continue
@@ -1683,9 +2754,14 @@ def _config(ctx: _Ctx, changes: list[Change]) -> list[dict]:
             for rx, _lang in ENV_PATTERNS:
                 m = rx.search(line)
                 if m:
+                    k = _call_text(line, m.start(), m.end())
+                    if old_env.get(k, 0) > 0:   # the same read, unchanged, on a line that changed elsewhere
+                        old_env[k] -= 1
+                        break
                     add(_finding("config", "env-read-on-changed-line",
                                  f"a changed line reads environment variable {m.group(1)}", "strong_inference",
-                                 f"{rel}:{ln}", basis="environment-read pattern on the line",
+                                 f"{rel}:{ln}", basis="environment-read pattern on the line (the read itself differs "
+                                 "from the base version's changed lines)",
                                  derived_by="architecture_map.ENV_PATTERNS", for_symbol=c.symbol, key=m.group(1)))
                     break
         if _suffix(rel) in (".py", ".pyi"):
@@ -1697,17 +2773,81 @@ def _config(ctx: _Ctx, changes: list[Change]) -> list[dict]:
     return out
 
 
+def _call_text(text: str, a: int, b: int) -> str:
+    """The whole call a match at ``text[a:b]`` belongs to (its arguments included, so a changed default of
+    ``os.environ.get("X", "100")`` differs), compared without whitespace."""
+    open_at = text.find("(", a, b + 1) if "(" in text[a:b] else (b if text[b:b + 1] == "(" else -1)
+    if open_at < 0:
+        return rr.cond_key(text[a:b])
+    depth, j = 0, open_at
+    while j < len(text):
+        depth += {"(": 1, ")": -1}.get(text[j], 0)
+        j += 1
+        if depth == 0:
+            break
+    return rr.cond_key(text[a:j])
+
+
+def _segment(text: str, a: int, b: int) -> str:
+    """The operand of ``text[a:b]`` compared between versions: the text around it up to the enclosing
+    bracket or a top-level ``&&`` / ``||`` / ``,`` / ``;`` / ``?`` / assignment - so ``x > LIMIT`` changed to
+    ``x >= LIMIT`` differs while ``LIMIT`` beside a changed ``&&`` operand does not."""
+    def stop(i: int) -> bool:
+        two = text[i:i + 2]
+        if two in ("&&", "||"):
+            return True
+        ch = text[i]
+        if ch in ",;?":
+            return True
+        return ch == "=" and text[i - 1:i] not in ("=", "!", "<", ">") and text[i + 1:i + 2] != "="
+
+    i, depth = a, 0
+    while i > 0:
+        ch = text[i - 1]
+        if ch in ")]}":
+            depth += 1
+        elif ch in "([{":
+            if depth == 0:
+                break
+            depth -= 1
+        elif depth == 0 and (stop(i - 1) or (i >= 2 and text[i - 2:i] in ("&&", "||"))):
+            break
+        i -= 1
+    j, depth = b, 0
+    while j < len(text):
+        ch = text[j]
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            if depth == 0:
+                break
+            depth -= 1
+        elif depth == 0 and stop(j):
+            break
+        j += 1
+    return rr.cond_key(text[i:j])
+
+
 def _py_config_names(ctx: _Ctx, c: Change) -> list[dict]:
-    """Names read on changed lines that are bound to an environment read or live in a config module."""
+    """Names read on changed lines that are bound to an environment read or live in a config module, where the
+    expression reading them changed (a parameter renamed, or another operand changed beside them, is not)."""
     out = []
     tree = ctx.pytree(c.file)
-    if tree is None or not c.new_changed:
+    if tree is None or not c.new_changed or c.kind == "module_statement":
         return out
     imports = ctx._py_imports(c.file)
-    for n in ast.walk(tree):
-        if not (isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.lineno in c.new_changed):
-            continue
-        if c.kind == "module_statement":
+    code, ocode = ctx.code(c.file), ctx.code(c.file, "old")
+    np_, op_ = _params_of(ctx, c, "new"), _params_of(ctx, c, "old")
+    old_ctx: dict[str, int] = {}
+    otree = ctx.pytree(c.file, "old") if c.old_changed else None
+    for n in ast.walk(otree) if otree is not None else ():
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.lineno in c.old_changed and \
+                n.lineno <= len(ocode):
+            k = n.id + "@" + rr.alpha(_segment(ocode[n.lineno - 1], n.col_offset, n.end_col_offset or n.col_offset),
+                                      op_)
+            old_ctx[k] = old_ctx.get(k, 0) + 1
+    for n in sorted((n for n in ast.walk(tree) if isinstance(n, ast.Name)), key=lambda n: (n.lineno, n.col_offset)):
+        if not (isinstance(n.ctx, ast.Load) and n.lineno in c.new_changed) or n.lineno > len(code):
             continue
         where = None
         if n.id in imports and imports[n.id][1]:
@@ -1724,6 +2864,10 @@ def _py_config_names(ctx: _Ctx, c: Change) -> list[dict]:
         m = ((ctx.facts(mrel) or {}).get("module") or {}).get(f"ASSIGN:{name}")
         if m is None:
             continue
+        k = n.id + "@" + rr.alpha(_segment(code[n.lineno - 1], n.col_offset, n.end_col_offset or n.col_offset), np_)
+        if old_ctx.get(k, 0) > 0:
+            old_ctx[k] -= 1
+            continue
         def_line = m["start"]
         text = " ".join(ctx.code(mrel)[def_line - 1: m["end"]])
         env = next((mm.group(1) for rx, _ in ENV_PATTERNS for mm in [rx.search(text)] if mm), None)
@@ -1733,7 +2877,8 @@ def _py_config_names(ctx: _Ctx, c: Change) -> list[dict]:
                                                                   f", a value of the config module {mrel}")
                                 + f" ({mrel}:{def_line})", "strong_inference", f"{c.file}:{n.lineno}",
                                 evidence_at=[f"{mrel}:{def_line}"], basis="the name's binding followed through the "
-                                "file's imports (syntax tree); the binding line read by the environment pattern",
+                                "file's imports (syntax tree); the binding line read by the environment pattern; the "
+                                "expression around the name differs from the base version's",
                                 derived_by="architecture_map.ENV_PATTERNS" if env else "architecture_map.CONFIG_FILE_RE",
                                 for_symbol=c.symbol, key=env or name))
     return out
@@ -1770,9 +2915,28 @@ def _key_readers(ctx: _Ctx, key: str) -> list[str]:
     return out
 
 
+_JVM_FIELD = re.compile(r"^\s*(?:@\w+\s+)*(?:(?:public|private|protected|static|final|const|val|var|internal)\s+)+"
+                        r"(?:[\w<>\[\],.?]+\s+)?([A-Za-z_]\w*)\s*(?::\s*[\w<>?.]+\s*)?=(?!=)")
+_CONFIG_CLASS = re.compile(r"(Config|Configuration|Settings|Defaults|Options)$")
+
+
 def _jvm_config(ctx: _Ctx, c: Change, cfg_keys: dict[str, list[str]]) -> list[dict]:
     out = []
     code, ocode = ctx.code(c.file), ctx.code(c.file, "old")
+    old_segs: dict[str, int] = {}
+    for ln in c.old_changed:
+        if ln <= len(ocode):
+            for m in list(rr.QUOTED_KEY.finditer(ocode[ln - 1])) + list(rr.CONFIG_READ_JVM.finditer(ocode[ln - 1])):
+                k = _segment(ocode[ln - 1], m.start(), m.end())
+                old_segs[k] = old_segs.get(k, 0) + 1
+
+    def unchanged(line: str, m) -> bool:
+        k = _segment(line, m.start(), m.end())
+        if old_segs.get(k, 0) > 0:
+            old_segs[k] -= 1
+            return True
+        return False
+
     for side, lines, src in (("new", c.new_changed, code), ("old", c.old_changed, ocode)):
         for ln in sorted(lines):
             if ln > len(src):
@@ -1780,12 +2944,16 @@ def _jvm_config(ctx: _Ctx, c: Change, cfg_keys: dict[str, list[str]]) -> list[di
             line = src[ln - 1]
             for m in rr.QUOTED_KEY.finditer(line):
                 key = m.group(1) or m.group(2)
+                if rr.NBT_RECEIVER.search(line[:m.start()]):
+                    continue   # a saved-data (NBT) key: persistence reads it, not the config rules
                 in_files = cfg_keys.get(key.rpartition(".")[2], [])
                 if not (in_files or rr.CONFIG_CALL.search(line)):
                     continue
                 if " " in key or key.count(":") or key.endswith((".png", ".json")):
                     continue
                 at = f"{c.file}:{ln}"
+                if side == "new" and unchanged(line, m):
+                    continue
                 if side == "old":
                     # the key left a changed line: report at the new line of the same statement when there is one
                     new_ln = min(c.new_changed) if c.new_changed else None
@@ -1807,14 +2975,53 @@ def _jvm_config(ctx: _Ctx, c: Change, cfg_keys: dict[str, list[str]]) -> list[di
             continue
         for m in rr.CONFIG_READ_JVM.finditer(code[ln - 1]):
             cls, member = m.group(1), m.group(2)
-            if member in ("get", "class", "INSTANCE") or not cls.endswith("Config"):
+            if member in ("get", "class", "INSTANCE") or member in rr.CONFIG_VERBS or not cls.endswith("Config"):
+                continue
+            if unchanged(code[ln - 1], m):
                 continue
             where = _jvm_member_def(ctx, cls, member)
             out.append(_finding("config", "config-read-on-changed-line",
                                 f"a changed line reads the config value {cls}.{member}"
                                 + (f" (defined at {where})" if where else ""), "strong_inference", f"{c.file}:{ln}",
-                                evidence_at=[where] if where else [], basis="config class read (text rule)",
-                                derived_by="review.CONFIG_READ_JVM", for_symbol=c.symbol, key=f"{cls}.{member}"))
+                                evidence_at=[where] if where else [], basis="config class read (text rule); the "
+                                "expression around it differs from the base version's", derived_by="review.CONFIG_READ_JVM",
+                                for_symbol=c.symbol, key=f"{cls}.{member}"))
+    # a field of a config class (its default values) initialised on a changed line of the class's own lines
+    cls_name = _last(c.qual) if c.qual and (ctx.sym(c.file, c.qual) or {}).get("kind") == "class" else ""
+    if cls_name and _CONFIG_CLASS.search(cls_name):
+        for ln in sorted(c.new_changed):
+            if ln > len(code):
+                continue
+            fm = _JVM_FIELD.match(code[ln - 1])
+            if not fm:
+                continue
+            field_name = fm.group(1)
+            readers = _field_readers(ctx, c.file, cls_name, field_name, ln)
+            out.append(_finding("config", "config-default-changed",
+                                f"the value of {cls_name}.{field_name} (a field of a config class) changed: "
+                                f"`{ctx.lines(c.file)[ln - 1].strip()[:100]}`"
+                                + (f"; read at {', '.join(readers[:3])}" if readers else ""), "strong_inference",
+                                f"{c.file}:{ln}", evidence_at=readers[:5], basis="field initialiser of a class named "
+                                "like a configuration, on a changed line (text rule); readers by name",
+                                derived_by="review.config_class_fields", for_symbol=c.symbol,
+                                key=f"{cls_name}.{field_name}"))
+    return out
+
+
+def _field_readers(ctx: _Ctx, rel: str, cls: str, field_name: str, decl_line: int) -> list[str]:
+    """Where a static field is read: by its bare name in its own file, as ``Cls.FIELD`` elsewhere."""
+    out = []
+    bare = re.compile(rf"(?<![\w.]){re.escape(field_name)}\b")
+    qual = re.compile(rf"\b{re.escape(cls)}\s*\.\s*{re.escape(field_name)}\b")
+    for f in ctx.files():
+        if _suffix(f) not in (".java", ".kt", ".kts"):
+            continue
+        t = ctx.text(f)
+        if not t or field_name not in t:
+            continue
+        for i, ln in enumerate(ctx.code(f), 1):
+            if (f == rel and i != decl_line and bare.search(ln)) or (f != rel and qual.search(ln)):
+                out.append(f"{f}:{i}")
     return out
 
 
@@ -1832,10 +3039,13 @@ def _jvm_member_def(ctx: _Ctx, cls: str, member: str) -> str | None:
 # -- entries and hot paths ------------------------------------------------------------------------------
 
 def _entry_info(ctx: _Ctx, node: str | None, unit: tuple[str, str] | None) -> dict | None:
-    """Why a unit is an entry point: map heuristics, registrations by method reference, input overrides."""
+    """Why a unit is an entry point: map heuristics (for a definition the snapshot does not have yet, the same
+    heuristics read from its syntax tree), registrations by method reference, input overrides."""
     reasons, at, kind = [], None, None
     if node is not None:
         reasons += entry_reasons(ctx.g, node)
+    elif unit is not None and _suffix(unit[0]) in (".py", ".pyi") and not _is_test(unit[0]):
+        reasons += _py_entry_reasons(ctx, unit)
     if unit is not None:
         for r in ctx.registered(*unit):
             if r["entry"]:
@@ -1851,28 +3061,57 @@ def _entry_info(ctx: _Ctx, node: str | None, unit: tuple[str, str] | None) -> di
             else "weak_inference"}
 
 
+def _py_entry_reasons(ctx: _Ctx, unit: tuple[str, str]) -> list[str]:
+    """The architecture map's entry heuristics (decorator, name, entry module without callers) applied to a
+    Python definition read from the tree under review (it has no graph node yet)."""
+    from verinoda.architecture_map import ENTRY_DECORATOR_RE, ENTRY_FILE_RE, ENTRY_NAME_RE
+
+    rel, qual = unit
+    s = ctx.sym(rel, qual)
+    if s is None or s.get("kind") != "def" or _nested_in_function(ctx, unit):
+        return []
+    name = _last(qual)
+    out = []
+    head = "\n".join(ctx.lines(rel)[max(0, s["start"] - 1): s["def"]])
+    if ENTRY_DECORATOR_RE.search(head):
+        out.append("route/command decorator")
+    if ENTRY_NAME_RE.search(name):
+        out.append("entry-like name")
+    if ENTRY_FILE_RE.search(rel) and not name.startswith("_") and "." not in qual and \
+            not [x for x in _py_call_sites(ctx, Change(rel, qual, "added")) if not _is_test(x[0])]:
+        out.append("public callable in entry module with no in-project callers")
+    return out
+
+
+_GAME_IMPORT = re.compile(r"^\s*import\s+(?:static\s+)?(?:net\.minecraft|net\.neoforged|net\.minecraftforge|"
+                          r"net\.fabricmc|com\.mojang)\.", re.M)
+
+
 def _hot_info(ctx: _Ctx, node: str | None, unit: tuple[str, str]) -> dict | None:
+    """Why a unit runs on a hot path, with the status that evidence supports: a registration found by text
+    (a tick / render registration, a tick event handler) is strong_inference; a method name the game calls
+    every tick, in a file that imports a game framework, or a request handler, only weak_inference."""
     for r in ctx.registered(*unit):
         if r["hot"]:
             return {"why": f"{r['what']} registered at {r['at']}", "at": r["at"],
-                    "basis": "registration by method reference (text search, inference)"}
+                    "basis": "registration by method reference (text search, inference)", "status": "strong_inference"}
     rel, qual = unit
     name = _last(qual)
-    if _suffix(rel) in (".java", ".kt", ".kts", ".js", ".ts") and name in rr.HOT_OVERRIDES:
-        return {"why": f"{name}() is called by the game every tick or frame (by name)", "at": None,
-                "basis": "method name table (inference)"}
     s = ctx.sym(rel, qual)
     if s and _suffix(rel) in (".java", ".kt"):
         head = "\n".join(ctx.lines(rel)[max(0, s["start"] - 1): s["def"] + 1])
         m = rr.EVENT_PARAM.search(head)
         if m:
             return {"why": f"@SubscribeEvent for {m.group(1)}", "at": f"{rel}:{s['start']}",
-                    "basis": "event type in the handler's signature (text)"}
+                    "basis": "event type in the handler's signature (text)", "status": "strong_inference"}
+    if _suffix(rel) in (".java", ".kt", ".kts") and name in rr.HOT_OVERRIDES and _GAME_IMPORT.search(ctx.text(rel) or ""):
+        return {"why": f"{name}() is a method the game calls every tick or frame (by name, in a file that imports "
+                       "the game)", "at": None, "basis": "method name table (inference)", "status": "weak_inference"}
     if node is not None and _suffix(rel) in (".py", ".pyi"):
         e = entry_reasons(ctx.g, node)
         if any("decorator" in r or "entry-like name" in r for r in e):
             return {"why": "request/command handler (" + "; ".join(e) + ")", "at": f"{rel}:{s['def']}" if s else None,
-                    "basis": "entry-point heuristics of the architecture map"}
+                    "basis": "entry-point heuristics of the architecture map", "status": "weak_inference"}
     return None
 
 
@@ -1963,37 +3202,88 @@ def _test_id(ctx: _Ctx, n: str) -> str | None:
 
 
 def _static_tests(ctx: _Ctx, changes: list[Change]) -> tuple[dict[str, dict], dict[str, list[str]]]:
-    """(test id -> {distance, reaches}, changed symbol -> [test ids]) over calls/uses/references, depth 3,
-    through non-test code (the rule of runtime.trace.select_tests)."""
+    """(test id -> {distance, reaches, basis?}, changed symbol -> [test ids]) over calls/uses/references, depth 3,
+    through non-test code (the rule of runtime.trace.select_tests). A function nested in another one is reached
+    through its enclosing function; a definition the snapshot does not have (added, renamed) through its callers
+    in the changed files; test functions in the changed test files that call a changed symbol are read from their
+    syntax trees. A removed symbol's tests are the ones that called it."""
     tests: dict[str, dict] = {}
     per: dict[str, list[str]] = {}
     g = ctx.g
-    if g is None:
-        return tests, per
+    changed_tests = [f for f in ctx.base_texts if _is_test(f) and f.endswith(".py") and ctx.text(f) is not None]
+
+    def add(tid: str, dist: int, c: Change, basis: str | None = None) -> None:
+        t = tests.setdefault(tid, {"distance": dist, "reaches": []})
+        t["distance"] = min(t["distance"], dist)
+        if basis and "basis" not in t:
+            t["basis"] = basis
+        if c.symbol not in t["reaches"]:
+            t["reaches"].append(c.symbol)
+        if tid not in per[c.symbol]:
+            per[c.symbol].append(tid)
+
     for c in changes:
-        if c.test or c.node is None or c.kind in ("removed",):
+        if c.test or not c.qual or c.kind in ("config_key", "file_only", "module_statement"):
             continue
         per.setdefault(c.symbol, [])
-        frontier, seen = {c.node}, {c.node}
+        py = _suffix(c.file) in (".py", ".pyi")
+        seeds: list[tuple[str, int]] = [(c.node, 0)] if c.node is not None else []
+        enc = _enclosing_def(ctx, c)
+        if enc is not None and g is not None:
+            en = ctx.node_of(c.file, enc)
+            if en is not None:
+                seeds.append((en, 0))
+        if py and c.node is None and c.kind != "removed":
+            for unit, u, _fn, _calls in _py_callers(ctx, (c.file, c.qual), None):
+                if u is not None:
+                    seeds.append((u, 1))
+        if py and changed_tests and c.kind != "removed":
+            for srel, call, _how, _st in _py_call_sites(ctx, Change(c.file, c.qual, c.kind), files=changed_tests):
+                q = ctx.label_at(srel, call.lineno)
+                if q and _last(q).startswith(("test", "Test")):
+                    add(f"{srel}::{q.replace('.', '::')}", 1, c, basis="a test in the changed files calls it (syntax "
+                                                                       "tree of the tree under review)")
+        if g is None:
+            continue
+        frontier = {n for n, d in seeds if d == 0}
+        seen = set(frontier)
+        for n, d in seeds:
+            if d == 1 and n not in seen:
+                seen.add(n)
+                tid = _test_id(ctx, n)
+                if tid:
+                    add(tid, 1, c)
+        later = {n for n, d in seeds if d == 1}
         for dist in range(1, DEPTH + 1):
             nxt = set()
-            for v in frontier:
+            for v in frontier | (later if dist == 2 else set()):
                 for u, _d in _in_edges(ctx, v, {"calls", "uses", "references"}):
                     if u in seen:
                         continue
                     seen.add(u)
                     tid = _test_id(ctx, u)
                     if tid:
-                        t = tests.setdefault(tid, {"distance": dist, "reaches": []})
-                        t["distance"] = min(t["distance"], dist)
-                        if c.symbol not in t["reaches"]:
-                            t["reaches"].append(c.symbol)
-                        if tid not in per[c.symbol]:
-                            per[c.symbol].append(tid)
+                        add(tid, dist, c)
                     elif g.file(u) and not _is_test(g.file(u)):
                         nxt.add(u)
             frontier = nxt
     return tests, per
+
+
+def _enclosing_def(ctx: _Ctx, c: Change) -> str | None:
+    """The qualified name of the function a nested function is defined in (None when ``c`` is not nested)."""
+    if not c.qual or "." not in c.qual:
+        return None
+    owner = c.qual.split("#")[0].rpartition(".")[0]
+    while owner:
+        if (ctx.sym(c.file, owner) or ctx.sym(c.file, owner, "old") or {}).get("kind") == "def":
+            outer = owner.rpartition(".")[0]
+            if not outer or (ctx.sym(c.file, outer) or {}).get("kind") != "def":
+                return owner
+            owner = outer
+        else:
+            return None
+    return None
 
 
 def _observed_tests(ctx: _Ctx, changes: list[Change]) -> dict | None:
@@ -2026,7 +3316,15 @@ def _observed_tests(ctx: _Ctx, changes: list[Change]) -> dict | None:
 def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concerns: dict[str, list[dict]],
                 max_chars: int) -> tuple[list[dict], dict]:
     items: list[tuple[str, int, int, str, str]] = []   # (file, start, end, side, why)
+    renamed = {(c.file, c.renamed_from) for c in changes if c.renamed_from}
     for c in changes:
+        if c.renamed_from and c.lines:   # a rename: the new header, not the unchanged body twice
+            d = c.def_line or c.lines[0]
+            items.append((c.file, max(c.lines[0], d - 1), d + 1, "new", f"renamed from {_last(c.renamed_from)} "
+                          "(same body)"))
+            continue
+        if c.kind == "removed" and (c.file, c.qual) in renamed:
+            continue
         if c.kind in ("added", "body", "signature", "module_statement", "config_key", "file_only") and c.lines:
             a, b = c.lines
             if b - a > 60 and c.new_changed:   # a long definition: the changed lines with context
@@ -2110,6 +3408,14 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         diffs, skipped = (_diff_staged if staged else _diff_worktree)(repo, base_sha)
     base_texts = {fd.rel: fd.old for fd in diffs}
     ctx = _Ctx(repo, g, store, base_texts)
+    if staged and not targets:
+        # the staged tree for every file: files outside the diff whose working copy differs from the index are
+        # read from the index, and the index lists the files
+        ctx.index_files, over = _staged_tree(repo)
+        ctx.overrides = {p: t for p, t in over.items() if p not in base_texts}
+        ctx.staged = {"base": base_sha, "paths": [fd.rel for fd in diffs if fd.new is not None],
+                      "deleted": [fd.rel for fd in diffs if fd.new is None],
+                      "skipped": [s["file"] for s in skipped]}
     for fd in diffs:   # the tree under review: the staged contents, or the working tree as read
         ctx._text[fd.rel] = fd.new
     changes: list[Change] = []
@@ -2130,10 +3436,13 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     for c in changes:
         if c.qual and c.kind not in ("config_key", "file_only") and not c.qual.startswith("<module>"):
             c.node = ctx.node_of(c.file, c.qual)
-    # dependents by change kind
+    _mark_renames(ctx, changes)
+    # dependents by change kind (a function nested in another one: the callers of the enclosing function)
     walk = {}
     if g is not None:
         seeds_body = [(c.node, c) for c in changes if c.node and c.kind in ("body", "added") and not c.test]
+        seeds_body += [(n, c) for c in changes if c.kind in ("body", "added", "signature") and not c.test
+                       for n in [ctx.node_of(c.file, _enclosing_def(ctx, c) or "")] if n is not None]
         seeds_sig = [(c.node, c) for c in changes if c.node and c.kind == "signature" and not c.test]
         seeds_rm = [(c.node, c) for c in changes if c.node and c.kind == "removed" and not c.test]
         walk = _walk_back(ctx, seeds_body, _BODY_RELS)
@@ -2156,8 +3465,9 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     if "config" in want:
         found["config"] = _config(ctx, changes)
     if "entry_points" in want:
-        found["entry_points"] = _entries(ctx, changes, walk)
+        found["entry_points"] = _entries(ctx, changes, walk) + _manifest_findings(ctx, changes)
     for k in found:
+        found[k] = _dedupe(found[k])
         found[k].sort(key=lambda f: (rr.rank(f["status"]), f["at"] or ""))
     truncated_concerns = {k: len(v) for k, v in found.items() if len(v) > MAX_PER_CONCERN}
     shown = {k: v[:MAX_PER_CONCERN] for k, v in found.items()}
@@ -2207,6 +3517,22 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     if record and store is not None:
         res["review_id"] = _record(store, repo, res)
     return res
+
+
+def _mark_renames(ctx: _Ctx, changes: list[Change]) -> None:
+    """An added and a removed definition of one file with the same body hash: a rename (``renamed_from``)."""
+    removed = [c for c in changes if c.kind == "removed" and c.qual and c.old_lines]
+    for a in changes:
+        if a.kind != "added" or not a.qual or not a.lines:
+            continue
+        new_t = " ".join(" ".join(ctx.code(a.file)[a.lines[0] - 1: a.lines[1]]).split())
+        for r in removed:
+            if r.file != a.file:
+                continue
+            old_t = " ".join(ctx.code(r.file, "old")[r.old_lines[0] - 1: r.old_lines[1]])
+            if " ".join(re.sub(rf"\b{re.escape(r.name)}\b", a.name, old_t).split()) == new_t:
+                a.renamed_from = r.qual
+                break
 
 
 def _planned(ctx: _Ctx, targets: list[str], kind: str) -> tuple[list[Change], list[dict]]:
@@ -2321,7 +3647,10 @@ def _binding_readers(ctx: _Ctx, changes: list[Change]) -> list[dict]:
             code = ctx.code(c.file)
             for ln in sorted(c.new_changed):
                 for k in range(ln, max(0, ln - 4), -1):
-                    m = re.match(r"\s*([A-Z_][A-Z0-9_]*)\s*=", code[k - 1]) if k <= len(code) else None
+                    # `NAME = ...` or a declaration `private static final Type NAME = ...`
+                    m = re.match(r"\s*(?:(?:public|private|protected|static|final|const|val|var|internal)\s+)*"
+                                 r"(?:[\w<>\[\],.?]+\s+)?([A-Z_][A-Z0-9_]*)\s*(?::\s*[\w<>?.]+\s*)?=(?!=)",
+                                 code[k - 1]) if k <= len(code) else None
                     if m:
                         names.append(m.group(1))
                         break
@@ -2347,11 +3676,16 @@ def _readers_of(ctx: _Ctx, c: Change, name: str) -> list[tuple[str, str | None]]
             if tree is None:
                 continue
             imports = ctx._py_imports(rel)
+            shadow = ctx.shadow(rel)
             local = {a for a, (m, orig) in imports.items() if orig == name and m == mod}
             if rel == c.file:
                 local.add(name)
             for n in ast.walk(tree):
-                if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id in local:
+                hit = (isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id in local
+                       and n.id not in shadow.get(id(n), ())) or \
+                    (isinstance(n, ast.Attribute) and n.attr == name and mod and isinstance(n.ctx, ast.Load)
+                     and ctx.py_module_of_expr(rel, n.value) == mod)
+                if hit:
                     q = ctx.label_at(rel, n.lineno)
                     if q:
                         out.append((f"{rel}:{n.lineno}", f"{rel}::{q}"))
@@ -2379,61 +3713,136 @@ def _tests(ctx: _Ctx, changes: list[Change], *, run_tests: bool, observe: bool, 
     out: dict = {"static": [{"test": t, **v} for t, v in sorted(static.items(), key=lambda kv: (kv[1]["distance"],
                                                                                                  kv[0]))],
                  "changed_tests": [c.symbol for c in changes if c.test],
-                 "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code)"}
+                 "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and "
+                          "the tests of the changed test files that call a changed symbol"}
     if observed:
         out["observed"] = observed
     reached_any = {c.symbol for c in code_changes if per.get(c.symbol)} | \
         {s for s, t in ((observed or {}).get("reached") or {}).items() if t}
-    out["no_test_reaches"] = [c.symbol for c in code_changes if c.symbol not in reached_any]
+    # "no test reaches" is said only of a symbol the static graph can reach at all: without any static caller
+    # (a callback, a registration, dispatch through a CLI or a subprocess) the tests' reach is unknown
+    silent = [c for c in code_changes if c.symbol not in reached_any]
+    out["no_test_reaches"] = [c.symbol for c in silent if _has_static_caller(ctx, c)]
+    out["reach_unknown"] = [{"symbol": c.symbol, "why": "it has no static caller (a callback, a registration, "
+                             "dispatch or a new definition nothing calls yet): tests that reach it that way are not "
+                             "seen"} for c in silent if c.symbol not in out["no_test_reaches"]]
     langs = {_lang(c.file) for c in code_changes}
     # test ids become command arguments: one that could be read as an option (a file named "-p.py") is never run
-    py_ids = [t for t in static if t.split("::")[0].endswith(".py") and not t.startswith("-")]
+    py_ids = [t for t, _v in sorted(static.items(), key=lambda kv: (kv[1]["distance"], kv[0]))
+              if t.split("::")[0].endswith(".py") and not t.startswith("-")]
     if langs - {"python"}:
         others = ", ".join(sorted({"jvm": "Java/Kotlin"}.get(x, x) for x in langs - {"python"}))
         unknown.append({"kind": "runtime_tests", "what": f"what the tests of the {others} code do at run time",
                         "why": "Verinoda runs and traces pytest only; Gradle, Maven and other runners are not "
                                "allowlisted", "next_step": "run the project's tests yourself (e.g. ./gradlew test) "
                                                            "and report the result"})
+    staged = ctx.staged
     if observe and py_ids:
-        from verinoda.runtime import trace
+        why_not = _staged_run_problem(ctx, staged, observe=True) if staged is not None else None
+        if why_not:
+            out["observe"] = {"refused": why_not}
+        else:
+            from verinoda.runtime import trace
 
-        nodes = [c.node for c in code_changes if c.node and c.file.endswith(".py")]
-        res = trace.observe(ctx.store, ctx.repo, py_ids, graph=ctx.g, targets=nodes)
-        tr = res.get("target_reach") or {}
-        by_symbol = {}
-        for c in code_changes:
-            if c.node in tr:
-                by_symbol[c.symbol] = tr[c.node]
-        ran = res.get("tests") or {}
-        out["observe"] = {"run": res.get("run_id"), "complete": res.get("complete"), "outcome": res.get("outcome"),
-                          "reached": by_symbol,
-                          "selected_not_reaching": sorted(t for t in py_ids if t in ran and not any(
-                              t in v for v in by_symbol.values())) if res.get("complete") else [],
-                          "limits": res.get("limits"), "error": res.get("error")}
-        reached = {t for v in by_symbol.values() for t in v}
-        out["no_test_reaches"] = [s for s in out["no_test_reaches"] if not by_symbol.get(s)]
-        for t in out["static"]:
-            if t["test"] in reached:
-                t["observed"] = "reached"
-            elif t["test"] in out["observe"]["selected_not_reaching"]:
-                t["observed"] = "not reached"
+            nodes = [c.node for c in code_changes if c.node and c.file.endswith(".py")]
+            res = trace.observe(ctx.store, ctx.repo, py_ids, graph=ctx.g, targets=nodes)
+            tr = res.get("target_reach") or {}
+            by_symbol = {}
+            for c in code_changes:
+                if c.node in tr:
+                    by_symbol[c.symbol] = tr[c.node]
+            ran = res.get("tests") or {}
+            out["observe"] = {"run": res.get("run_id"), "complete": res.get("complete"), "outcome": res.get("outcome"),
+                              "reached": by_symbol,
+                              "selected_not_reaching": sorted(t for t in py_ids if t in ran and not any(
+                                  t in v for v in by_symbol.values())) if res.get("complete") else [],
+                              "limits": res.get("limits"), "error": res.get("error"),
+                              "tree": "the working tree (it equals the index for every tracked file)" if staged
+                              is not None else "the working tree"}
+            reached = {t for v in by_symbol.values() for t in v}
+            out["no_test_reaches"] = [s for s in out["no_test_reaches"] if not by_symbol.get(s)]
+            out["reach_unknown"] = [r for r in out["reach_unknown"] if not by_symbol.get(r["symbol"])]
+            for t in out["static"]:
+                if t["test"] in reached:
+                    t["observed"] = "reached"
+                elif t["test"] in out["observe"]["selected_not_reaching"]:
+                    t["observed"] = "not reached"
     if run_tests:
         if py_ids:
             from verinoda import experiments
 
-            argv = [experiments.python_for(ctx.repo), "-m", "pytest", "-q", "-p", "no:cacheprovider", *py_ids[:50]]
-            try:
-                exp = experiments.run(ctx.store, ctx.repo, argv, hypothesis="the tests that reach the reviewed change "
-                                      "pass", expect="pass")
-                out["run"] = {"experiment": exp.get("id"), "outcome": exp.get("outcome"),
-                              "summary": exp.get("summary"), "tests": len(py_ids[:50]),
-                              "tree": (exp.get("tree") or {}).get("hash") if isinstance(exp.get("tree"), dict)
-                              else exp.get("tree"), "logs": exp.get("logs")}
-            except experiments.ExperimentRefused as exc:
-                out["run"] = {"refused": str(exc)}
+            chosen = py_ids[:MAX_RUN_TESTS]
+            argv = [experiments.python_for(ctx.repo), "-m", "pytest", "-q", "-p", "no:cacheprovider", *chosen]
+            src: dict = {}
+            why_not = None
+            if staged is not None:
+                why_not = _staged_run_problem(ctx, staged, observe=False)
+                src = {"ref": staged["base"], "overlay": staged["paths"]} if not why_not else {}
+            if why_not:
+                out["run"] = {"refused": why_not}
+            else:
+                try:
+                    exp = experiments.run(ctx.store, ctx.repo, argv, hypothesis="the tests that reach the reviewed "
+                                          "change pass", expect="pass", **src)
+                    out["run"] = {"experiment": exp.get("id"), "outcome": exp.get("outcome"),
+                                  "summary": exp.get("summary"), "tests": len(chosen), "selected": len(py_ids),
+                                  "not_run": len(py_ids) - len(chosen),
+                                  "source": ("the staged tree: the base commit with the staged files on top"
+                                             if staged is not None else "the working tree"),
+                                  "tree": (exp.get("tree") or {}).get("hash") if isinstance(exp.get("tree"), dict)
+                                  else exp.get("tree"), "logs": exp.get("logs")}
+                except experiments.ExperimentRefused as exc:
+                    out["run"] = {"refused": str(exc)}
         else:
             out["run"] = {"skipped": "no pytest test reaches the change statically"}
     return out
+
+
+MAX_RUN_TESTS = 50
+
+
+def _has_static_caller(ctx: _Ctx, c: Change) -> bool:
+    """Does anything call or reference ``c`` in the static view: the graph's edges into it (or into the function
+    it is nested in), or calls in the changed files (a definition the snapshot does not know yet)?"""
+    if ctx.g is not None:
+        for n in [c.node, ctx.node_of(c.file, _enclosing_def(ctx, c) or "")]:
+            if n is not None and _in_edges(ctx, n, {"calls", "references", "uses"}):
+                return True
+    if _suffix(c.file) in (".py", ".pyi") and c.node is None:
+        return bool(_py_callers(ctx, (c.file, c.qual), None)) or bool(
+            [s for s in _py_call_sites(ctx, Change(c.file, c.qual, c.kind), files=[
+                f for f in ctx.base_texts if f.endswith(".py") and _is_test(f)])])
+    return False
+
+
+def _staged_run_problem(ctx: _Ctx, staged: dict, *, observe: bool) -> str | None:
+    """Why the staged tree cannot be run: the tests run on a copy of the base commit with the staged files laid
+    on top, read from the working tree - so each staged file must hold its staged content there. ``observe``
+    copies the working tree itself: it needs every tracked file to hold its staged content."""
+    if observe:
+        if ctx.overrides:
+            return (f"--observe runs the working tree, and {len(ctx.overrides)} tracked file(s) there differ from "
+                    f"the staged tree (e.g. {sorted(ctx.overrides)[0]}): stash or stage them, or review the working "
+                    "tree instead")
+        return None
+    if staged.get("deleted"):
+        return (f"the staged tree deletes {len(staged['deleted'])} file(s) (e.g. {staged['deleted'][0]}) and a copy "
+                "of the base commit cannot drop them")
+    if staged.get("skipped"):
+        return f"staged file(s) that were not read (e.g. {staged['skipped'][0]}): the staged tree cannot be rebuilt"
+    bad = []
+    for p in staged["paths"]:
+        try:
+            now = _decode((ctx.repo / p).read_bytes())
+        except OSError:
+            now = None
+        if now != ctx.text(p) and p not in staged.get("unchanged", ()):
+            bad.append(p)
+    if bad:
+        return (f"{len(bad)} staged file(s) have unstaged changes in the working tree (e.g. {bad[0]}): the run "
+                "copies them from the working tree, so it would not run the staged tree - stash the unstaged changes "
+                "or review the working tree instead")
+    return None
 
 
 def _callers_unknown(ctx: _Ctx, changes: list[Change]) -> list[dict]:
@@ -2488,7 +3897,11 @@ def _graph_note(ctx: _Ctx, cited: set[str]) -> dict:
         recorded = ctx.store.snapshot_files(snap["id"])
         for rel in sorted(cited - set(ctx.base_texts)):
             try:
-                cur = hashlib.sha256((ctx.repo / rel).read_bytes()).hexdigest()
+                if rel in ctx.overrides:   # staged mode: the index's version is the one reviewed
+                    t = ctx.overrides[rel]
+                    cur = hashlib.sha256(t.encode("utf-8")).hexdigest() if t is not None else None
+                else:
+                    cur = hashlib.sha256((ctx.repo / rel).read_bytes()).hexdigest()
             except OSError:
                 cur = None
             if recorded.get(rel) not in (None, cur):
@@ -2507,10 +3920,12 @@ def _summary(res: dict) -> str:
     where = ("the planned change" if res["mode"] == "planned" else
              f"the {'staged changes' if res['mode'] == 'staged' else 'working tree'} against "
              f"{res['base']['ref']} ({res['base']['commit'][:10]})")
+    others = [f["file"] for f in res.get("files") or [] if f.get("kind") in ("data", "doc")]
+    named = f" ({', '.join(others[:3])}{', ...' if len(others) > 3 else ''})" if others else ""
     if not ch:
-        other = sum(1 for f in res.get("files") or [] if f.get("kind") in ("data", "doc"))
         return (f"Review of {where}: no changed definition (comments, whitespace and docstrings are not changes)."
-                + (f" {other} data or documentation file(s) changed (listed under files)." if other else ""))
+                + (f" {len(others)} data or documentation file(s) changed{named}, not reviewed by concern."
+                   if others else ""))
     kinds: dict[str, int] = {}
     for c in ch:
         kinds[c["kind"]] = kinds.get(c["kind"], 0) + 1
@@ -2521,10 +3936,8 @@ def _summary(res: dict) -> str:
                  + (f" No finding from the rules for: {', '.join(quiet)}." if quiet and counts else ""))
     if res["unknown"]:
         parts.append(f"{len(res['unknown'])} unknown(s) to report.")
-    other = sum(1 for f in res.get("files") or [] if f.get("kind") in ("data", "doc"))
-    if other:
-        parts.append(f"{other} data or documentation file(s) changed too (listed under files, not reviewed by "
-                     "concern).")
+    if others:
+        parts.append(f"{len(others)} data or documentation file(s) changed too{named}, not reviewed by concern.")
     return " ".join(parts)
 
 
@@ -2590,7 +4003,7 @@ def render_text(res: dict) -> str:
         ob = t["observed"]
         out.append(f"  observed in run {ob['run']} (commit {str(ob.get('commit') or '?')[:10]}, run-scoped): "
                    + "; ".join(f"{s.split('::')[-1]} reached by {len(v)} test(s)" for s, v in ob["reached"].items()))
-    if t.get("observe"):
+    if t.get("observe") and not t["observe"].get("refused"):
         ob = t["observe"]
         out.append(f"  observed (run {ob.get('run')}): " + "; ".join(f"{s.split('::')[-1]} reached by {len(v)}"
                                                                      for s, v in (ob.get("reached") or {}).items())
@@ -2598,11 +4011,20 @@ def render_text(res: dict) -> str:
                       if ob.get("selected_not_reaching") else ""))
     if t.get("run"):
         r = t["run"]
+        summ = r.get("summary")
+        if isinstance(summ, dict):
+            summ = "; ".join(summ.get("summary_lines") or []) or f"exit code {summ.get('exit_code')}"
         out.append(f"  run: {r.get('outcome') or r.get('refused') or r.get('skipped')}"
-                   + (f" ({r.get('summary')})" if r.get("summary") else "") + (f", experiment {r['experiment']}"
-                                                                                 if r.get("experiment") else ""))
+                   + (f" ({summ})" if summ else "") + (f" on {r['source']}" if r.get("source") else "")
+                   + (f"; {r['tests']} of {r['selected']} selected test(s) run" if r.get("not_run") else "")
+                   + (f", experiment {r['experiment']}" if r.get("experiment") else ""))
+    if (t.get("observe") or {}).get("refused"):
+        out.append(f"  observe: refused - {t['observe']['refused']}")
     if t.get("no_test_reaches"):
-        out.append("  no test reaches: " + ", ".join(t["no_test_reaches"][:6]))
+        out.append("  no test reaches it in the static graph: " + ", ".join(t["no_test_reaches"][:6]))
+    if t.get("reach_unknown"):
+        out.append("  tests unknown (no static caller - dispatch, callbacks, a CLI or subprocess run may reach it): "
+                   + ", ".join(r["symbol"] for r in t["reach_unknown"][:6]))
     if res.get("unknown"):
         out.append("")
         out.append("Unknown:")

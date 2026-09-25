@@ -23,11 +23,19 @@ from verinoda.architecture_map import SINK_PATTERNS
 
 # -- tables -----------------------------------------------------------------------------------------
 
-# Persistence sinks beyond architecture_map.SINK_PATTERNS that only the review reads (game saved data).
+# Persistence sinks beyond architecture_map.SINK_PATTERNS that only the review reads (game saved data; JVM file IO).
 EXTRA_SINK_PATTERNS = [
     (re.compile(r"\b(?:tag|nbt|compound|data)\s*\.\s*put(?:Int|Long|String|Boolean|Float|Double|Short|Byte|UUID|"
                 r"IntArray|LongArray|ByteArray|Compound)?\s*\(\s*\""), "saved-data-write (NBT)"),
-    (re.compile(r"\bsetDirty\s*\(|\bmarkDirty\s*\("), "saved-data-write (dirty flag)"),
+    # NeoForge / Forge mark a block entity for saving with setChanged(); Fabric / Yarn with markDirty()
+    (re.compile(r"\bsetDirty\s*\(|\bmarkDirty\s*\(|\bsetChanged\s*\(\s*\)"), "saved-data-write (dirty flag)"),
+    # SQL writes the map's table does not spell (SQLite's INSERT OR REPLACE / REPLACE INTO, upserts)
+    (re.compile(r"\bINSERT\s+OR\s+(?:REPLACE|IGNORE|ABORT|FAIL|ROLLBACK)\s+INTO\b|\bREPLACE\s+INTO\b|"
+                r"\bON\s+CONFLICT\b.*\bDO\s+UPDATE\b", re.I), "sql-write"),
+    (re.compile(r"\bFiles\s*\.\s*(?:newBufferedWriter|newOutputStream|write|writeString|copy|move|delete|"
+                r"deleteIfExists|createFile)\s*\(|\bnew\s+(?:FileOutputStream|FileWriter)\s*\("), "file-write"),
+    (re.compile(r"\bFiles\s*\.\s*(?:newBufferedReader|newInputStream|readAllLines|readAllBytes|readString|lines|"
+                r"list|walk)\s*\(|\bnew\s+(?:FileInputStream|FileReader|RandomAccessFile)\s*\("), "file-read"),
 ]
 REVIEW_SINKS = [(rx, kind, "architecture_map.SINK_PATTERNS") for rx, kind in SINK_PATTERNS] + \
     [(rx, kind, "review.EXTRA_SINK_PATTERNS") for rx, kind in EXTRA_SINK_PATTERNS]
@@ -35,6 +43,10 @@ REVIEW_SINKS = [(rx, kind, "architecture_map.SINK_PATTERNS") for rx, kind in SIN
 # itself and inside loops)
 WRITE_SINKS = {"sql-write", "orm-write", "file-write", "kv/object-store", "saved-data-write (NBT)",
                "saved-data-write (dirty flag)"}
+# kinds that only the performance rules use (IO cost), never a persistence finding
+IO_ONLY_SINKS = {"file-read"}
+# saved-data (NBT) keys: tag.putInt("K", ..) writes K, tag.getInt("K") reads it
+NBT_KEY = re.compile(r"\b(?:tag|nbt|compound|data)\s*\.\s*(put|get)[A-Z]?\w*\s*\(\s*\"([^\"\n]+)\"")
 
 # Python calls, resolved through imports and aliases (guards engine): qualified name -> kind
 PY_SECURITY_CALLS = {
@@ -50,8 +62,39 @@ PY_SECURITY_CALLS = {
     "ssl._create_unverified_context": "tls-verification-off",
 }
 PY_SECURITY_BUILTINS = {"eval": "code-exec", "exec": "code-exec", "compile": "code-exec", "__import__": "code-exec"}
-SQL_TEXT = re.compile(r"\b(SELECT\s+.+?\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|DROP\s+TABLE|"
-                      r"CREATE\s+TABLE)\b", re.I | re.S)
+SQL_TEXT = re.compile(r"\b(SELECT\s+.+?\s+FROM|INSERT\s+(?:OR\s+\w+\s+)?INTO|REPLACE\s+INTO|UPDATE\s+\w+\s+SET|"
+                      r"DELETE\s+FROM|DROP\s+TABLE|CREATE\s+TABLE)\b", re.I | re.S)
+# the rest of a statement that makes lower- or mixed-case text SQL and not prose ("Select one item from the list")
+_SQL_TAIL = re.compile(r"\b(WHERE|JOIN|ORDER\s+BY|GROUP\s+BY|LIMIT|VALUES|SET|RETURNING|HAVING)\b|[?]|%s|:[A-Za-z_]\w*",
+                       re.I)
+_SQL_SELECT_LIST = re.compile(r"\bSELECT\s+(?:DISTINCT\s+)?(?:\*|[\w.\"`\[\]()*]+(?:\s*,\s*[\w.\"`\[\]()*]+)+)\s+FROM\b",
+                              re.I)
+_LITERAL = re.compile(r"\"([^\"\n]*)\"|'([^'\n]*)'")
+
+
+def sql_shaped(text: str) -> bool:
+    """Is ``text`` (the text of a string) SQL rather than prose? SQL keywords written in upper case, or lower /
+    mixed case with a select list of ``*`` or several columns, a table name built in (``{table}``), or a WHERE /
+    VALUES / SET / JOIN ... clause or a placeholder after the keywords ("Select one item from the list" is not)."""
+    for m in SQL_TEXT.finditer(text or ""):
+        kw = re.sub(r"[^A-Za-z]", "", m.group(0).split()[0])
+        if kw.isupper():
+            return True
+        rest = text[m.start():]
+        after = rest[len(m.group(0)):]
+        if _SQL_SELECT_LIST.match(rest) or _SQL_TAIL.search(after) or after.lstrip().startswith("{"):
+            return True
+    return False
+
+
+def sql_line(code_line: str) -> bool:
+    """A line of code holds SQL-shaped text: its string literals are read when the SQL keywords are in one (else
+    the line itself, for a statement split over lines)."""
+    lits = [a or b for a, b in _LITERAL.findall(code_line or "")]
+    inside = [s for s in lits if SQL_TEXT.search(s)]
+    if inside:
+        return any(sql_shaped(s) for s in inside)
+    return sql_shaped(code_line)
 # Other languages: text over code (comments blanked, strings kept)
 TEXT_SECURITY_OPS = [
     (re.compile(r"\bRuntime\s*\.\s*getRuntime\s*\(\s*\)\s*\.\s*exec\s*\(|\bnew\s+ProcessBuilder\s*\("), "process-exec"),
@@ -111,6 +154,11 @@ CONFIG_CALL = re.compile(r"\b(define\w*|getInt|getString|getBoolean|getDouble|ge
                          r"number|section|getConfig\w*)\s*\(")
 QUOTED_KEY = re.compile(r"\"([A-Za-z][A-Za-z0-9_.\-]{2,})\"|'([A-Za-z][A-Za-z0-9_.\-]{2,})'")
 CONFIG_READ_JVM = re.compile(r"\b(\w*Config\w*)\s*\.\s*(?:get\s*\(\s*\)\s*\.\s*)?([A-Za-z_]\w*)")
+# members of a config class that do something rather than hold a value (GlowConfig.load() reads a file)
+CONFIG_VERBS = {"load", "reload", "save", "init", "initialize", "register", "write", "read", "parse", "create", "of",
+                "builder", "build", "setup", "bootstrap", "open", "close", "reset", "apply", "validate", "sync"}
+# NBT receivers: a key read from saved data is not a configuration key
+NBT_RECEIVER = re.compile(r"\b(?:tag|nbt|compound)\s*\.\s*\w+\s*\(\s*$")
 CONFIG_SUFFIXES = (".toml", ".yml", ".yaml", ".json", ".properties", ".ini", ".cfg", ".conf", ".env")
 
 STATUS_ORDER = ("observed", "experiment_verified", "statically_verified", "primary_source_verified",
@@ -128,12 +176,13 @@ def at_least_strong(status: str) -> bool:
 # -- sinks --------------------------------------------------------------------------------------------
 
 def sink_hits(code_lines: list[str], lo: int, hi: int) -> list[tuple[int, str, str]]:
-    """``(line, kind, derived_by)`` of persistence sinks on lines ``lo..hi`` of comment-free code lines."""
+    """``(line, kind, derived_by)`` of persistence sinks on lines ``lo..hi`` of comment-free code lines. An SQL row
+    counts only when the text is SQL-shaped (:func:`sql_shaped`), not prose such as an error message."""
     out = []
     for i in range(max(1, lo), min(hi, len(code_lines)) + 1):
         text = code_lines[i - 1]
         for rx, kind, by in REVIEW_SINKS:
-            if rx.search(text):
+            if rx.search(text) and (not kind.startswith("sql-") or sql_line(text)):
                 out.append((i, kind, by))
                 break
     return out
@@ -311,9 +360,9 @@ def py_carrying_params(call: ast.Call, callee_fn: ast.AST, tainted: set[str], ca
     return out
 
 
-def py_flows_to_line(fn: ast.AST, seeds: set[str], line: int) -> bool:
-    """Does a value from the names ``seeds`` reach the statement holding ``line`` in ``fn`` (through
-    assignments; straight-line reading)?"""
+def py_taint(fn: ast.AST, seeds: set[str]) -> set[str]:
+    """The names of ``fn`` that may hold a value computed from the names ``seeds`` (through assignments;
+    straight-line reading, containers and object fields not followed)."""
     tainted = set(seeds)
     stmts = [n for n in own_nodes(fn) if isinstance(n, (ast.Assign, ast.AnnAssign, ast.AugAssign))]
     stmts.sort(key=lambda n: (n.lineno, n.col_offset))
@@ -325,6 +374,13 @@ def py_flows_to_line(fn: ast.AST, seeds: set[str], line: int) -> bool:
                 tainted |= {n.id for t in targets for n in ast.walk(t) if isinstance(n, ast.Name)}
         if len(tainted) == before:
             break
+    return tainted
+
+
+def py_flows_to_line(fn: ast.AST, seeds: set[str], line: int) -> bool:
+    """Does a value from the names ``seeds`` reach the statement holding ``line`` in ``fn`` (through
+    assignments; straight-line reading)?"""
+    tainted = py_taint(fn, seeds)
     best = None
     for n in own_nodes(fn):
         if isinstance(n, ast.stmt) and n.lineno <= line <= (n.end_lineno or n.lineno) and \
@@ -446,16 +502,84 @@ def py_len_cap(fn: ast.AST, name: str) -> int | None:
     return None
 
 
-def py_security_ops(tree: ast.AST, rel: str, ix, lines: set[int] | None = None) -> list[tuple[int, str, str, str]]:
-    """``(line, kind, what, derived_by)`` of security-sensitive operations in a Python file's current text.
+def py_import_map(tree: ast.AST | None) -> dict[str, str]:
+    """alias -> qualified name bound by the file's imports (``import yaml as y`` -> ``y: yaml``; ``from yaml
+    import load`` -> ``load: yaml.load``; relative imports are left out)."""
+    out: dict[str, str] = {}
+    for n in ast.walk(tree) if tree is not None else ():
+        if isinstance(n, ast.Import):
+            for a in n.names:
+                if a.asname:
+                    out[a.asname] = a.name
+                else:
+                    out.setdefault(a.name.split(".")[0], a.name.split(".")[0])
+        elif isinstance(n, ast.ImportFrom) and n.module and not n.level:
+            for a in n.names:
+                if a.name != "*":
+                    out[a.asname or a.name] = f"{n.module}.{a.name}"
+    return out
+
+
+def py_qualified(expr: ast.AST, imports: dict[str, str]) -> str | None:
+    """The qualified name of a called expression through the file's imports (``load`` -> ``yaml.load``)."""
+    d = dotted(expr)
+    if d is None:
+        return None
+    head, _, rest = d.partition(".")
+    if head in imports:
+        return imports[head] + (f".{rest}" if rest else "")
+    return None
+
+
+# calls that send SQL text to a database (the argument that carries the text)
+DB_CALLS = {"execute", "executemany", "executescript", "raw", "text", "query", "read_sql", "read_sql_query",
+            "mogrify", "exec_driver_sql"}
+
+
+def _sql_reaches_db(fn: ast.AST | None, node: ast.AST) -> int | None:
+    """Line of the database call (``execute`` ...) that the SQL text built at ``node`` reaches: as an argument
+    of the call itself, or through a name assigned from it (def-use within ``fn``, straight-line). None when
+    that is not seen."""
+    if fn is None:
+        return None
+    parents: dict[int, ast.AST] = {}
+    for p in ast.walk(fn):
+        for ch in ast.iter_child_nodes(p):
+            parents[id(ch)] = p
+    cur = node
+    while id(cur) in parents:
+        par = parents[id(cur)]
+        if isinstance(par, ast.Call) and call_name(par) in DB_CALLS and cur is not par.func:
+            return par.lineno
+        if isinstance(par, (ast.Assign, ast.AnnAssign)) and cur is par.value:
+            targets = par.targets if isinstance(par, ast.Assign) else [par.target]
+            names = {t.id for t in targets if isinstance(t, ast.Name)}
+            if not names:
+                return None
+            for call in sorted(py_calls_in(fn), key=lambda c: c.lineno):
+                if call_name(call) in DB_CALLS and call.lineno > par.lineno and py_flows_to_line(fn, names,
+                                                                                                  call.lineno):
+                    return call.lineno
+            return None
+        if isinstance(par, ast.stmt):
+            return None
+        cur = par
+    return None
+
+
+def py_security_ops(tree: ast.AST, rel: str, ix, lines: set[int] | None = None) -> list[tuple[int, str, str, str,
+                                                                                                str]]:
+    """``(line, kind, what, derived_by, status)`` of security-sensitive operations in a Python file's text.
 
     Qualified calls go through the decision guards' import/alias engine (``ix``: a
-    :class:`verinoda.guards._PyIndex` of the working tree); builtins, ``shell=True``, ``verify=False``,
-    ``yaml.load`` without a safe loader and SQL text built with f-strings, ``%``, ``+`` or ``.format`` are
-    read from the syntax tree."""
+    :class:`verinoda.guards._PyIndex` of the tree under review) and through the file's own imports (``from yaml
+    import load``); builtins, ``shell=True``, ``verify=False``, ``yaml.load`` without a safe loader and SQL text
+    built with f-strings, ``%``, ``+`` or ``.format`` are read from the syntax tree. A call bound through the
+    imports is ``statically_verified``; SQL text built from strings is ``statically_verified`` when the text is
+    seen reaching a database call (``execute`` ...) in the same function, else ``strong_inference``."""
     from verinoda import guards
 
-    out: list[tuple[int, str, str, str]] = []
+    out: list[tuple[int, str, str, str, str]] = []
     if ix is not None:
         try:
             scan = guards.Scan()
@@ -463,12 +587,33 @@ def py_security_ops(tree: ast.AST, rel: str, ix, lines: set[int] | None = None) 
                 if level == guards.VIOLATED and (lines is None or line in lines):
                     target = next((t for t in PY_SECURITY_CALLS if t in why), None)
                     out.append((line, PY_SECURITY_CALLS.get(target, "security-call"), why,
-                                "review.PY_SECURITY_CALLS via the guards import/alias engine"))
+                                "review.PY_SECURITY_CALLS via the guards import/alias engine", "statically_verified"))
         except Exception:  # noqa: BLE001 - the syntax-tree rules below still run
             pass
+    imports = py_import_map(tree)
     bound = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)} | \
         {a.asname or a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names} | \
         {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+    funcs = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+
+    def enclosing_fn(ln: int):
+        best = None
+        for f in funcs:
+            if f.lineno <= ln <= (f.end_lineno or f.lineno) and (best is None or f.lineno > best.lineno):
+                best = f
+        return best
+
+    def sql(n: ast.AST, ln: int, how: str, text: str) -> None:
+        if not sql_shaped(text):
+            return
+        db = _sql_reaches_db(enclosing_fn(ln), n)
+        if db is not None:
+            out.append((ln, "sql-built-from-strings", f"SQL text built with {how}, passed to a database call at "
+                        f"line {db}", "review.SQL_TEXT", "statically_verified"))
+        else:
+            out.append((ln, "sql-built-from-strings", f"SQL text built with {how} (not seen reaching a database "
+                        "call in this function)", "review.SQL_TEXT", "strong_inference"))
+
     for n in ast.walk(tree):
         if not isinstance(n, (ast.Call, ast.JoinedStr, ast.BinOp)):
             continue
@@ -477,35 +622,240 @@ def py_security_ops(tree: ast.AST, rel: str, ix, lines: set[int] | None = None) 
             continue
         if isinstance(n, ast.Call):
             name = call_name(n)
+            qual = py_qualified(n.func, imports)
             if isinstance(n.func, ast.Name) and name in PY_SECURITY_BUILTINS and name not in bound:
-                out.append((ln, PY_SECURITY_BUILTINS[name], f"{name}() on dynamic input", "review.PY_SECURITY_BUILTINS"))
+                out.append((ln, PY_SECURITY_BUILTINS[name], f"{name}() on dynamic input", "review.PY_SECURITY_BUILTINS",
+                            "statically_verified"))
+            if qual in PY_SECURITY_CALLS:
+                out.append((ln, PY_SECURITY_CALLS[qual], f"call to {qual}", "review.PY_SECURITY_CALLS via the file's "
+                            "imports", "statically_verified"))
             for kw in n.keywords:
                 kl = getattr(kw.value, "lineno", ln)   # cite the line of the keyword itself
                 if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
-                    out.append((kl, "process-exec", f"{name}(..., shell=True)", "review: shell=True keyword"))
+                    out.append((kl, "process-exec", f"{name}(..., shell=True)", "review: shell=True keyword",
+                                "statically_verified"))
                 if kw.arg == "verify" and isinstance(kw.value, ast.Constant) and kw.value.value is False:
-                    out.append((kl, "tls-verification-off", f"{name}(..., verify=False)", "review: verify=False"))
-            if dotted(n.func) in ("yaml.load",) and not any(
-                    kw.arg == "Loader" and "Safe" in (_unparse(kw.value)) for kw in n.keywords):
-                out.append((ln, "deserialization", "yaml.load without a safe Loader", "review: yaml.load"))
+                    out.append((kl, "tls-verification-off", f"{name}(..., verify=False)", "review: verify=False",
+                                "statically_verified"))
+            if (qual or dotted(n.func)) == "yaml.load":
+                loader = [kw.value for kw in n.keywords if kw.arg == "Loader"] + list(n.args[1:2])
+                if not any("Safe" in _unparse(v) for v in loader):
+                    out.append((ln, "deserialization", "yaml.load without a safe Loader", "review: yaml.load (bound "
+                                "through the file's imports)", "statically_verified"))
             if isinstance(n.func, ast.Attribute) and n.func.attr == "format" and isinstance(n.func.value, ast.Constant) \
                     and isinstance(n.func.value.value, str) and SQL_TEXT.search(n.func.value.value):
-                out.append((ln, "sql-built-from-strings", "SQL text built with str.format", "review.SQL_TEXT"))
+                sql(n, ln, "str.format", n.func.value.value)
         elif isinstance(n, ast.JoinedStr):
             text = "".join(v.value for v in n.values if isinstance(v, ast.Constant) and isinstance(v.value, str))
             if SQL_TEXT.search(text) and any(isinstance(v, ast.FormattedValue) for v in n.values):
-                out.append((ln, "sql-built-from-strings", "SQL text built with an f-string", "review.SQL_TEXT"))
+                sql(n, ln, "an f-string", "".join(v.value if isinstance(v, ast.Constant) and isinstance(v.value, str)
+                                                  else "{x}" for v in n.values))
         elif isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Mod, ast.Add)):
             consts = [c.value for c in (n.left, n.right) if isinstance(c, ast.Constant) and isinstance(c.value, str)]
-            if any(SQL_TEXT.search(c) for c in consts):
-                op = "%" if isinstance(n.op, ast.Mod) else "+"
-                out.append((ln, "sql-built-from-strings", f"SQL text built with {op}", "review.SQL_TEXT"))
+            hit = next((c for c in consts if SQL_TEXT.search(c)), None)
+            if hit is not None:
+                sql(n, ln, "%" if isinstance(n.op, ast.Mod) else "+", hit)
     seen, uniq = set(), []
-    for item in sorted(out):
+    for item in sorted(out, key=lambda o: (o[0], o[1], rank(o[4]))):
         if (item[0], item[1]) not in seen:
             seen.add((item[0], item[1]))
             uniq.append(item)
     return uniq
+
+
+def py_param_names(fn: ast.AST | None) -> list[str]:
+    """Positional then keyword-only parameter names of a def, ``self`` / ``cls`` included."""
+    a = getattr(fn, "args", None)
+    if a is None:
+        return []
+    return [p.arg for p in getattr(a, "posonlyargs", [])] + [p.arg for p in a.args] + [p.arg for p in a.kwonlyargs]
+
+
+def py_scope_names(fn: ast.AST) -> set[str]:
+    """Names a function (or lambda) binds locally: parameters, assignment and loop targets, nested defs and
+    classes; minus names declared ``global`` / ``nonlocal``. Imports inside the function are not counted: they
+    bind the imported definition, which the review follows through the file's imports."""
+    names = set(py_param_names(fn))
+    a = getattr(fn, "args", None)
+    if a is not None:
+        names |= {x.arg for x in (a.vararg, a.kwarg) if x is not None}
+    declared: set[str] = set()
+    for n in own_nodes(fn):
+        if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            names.add(n.id)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(n.name)
+        elif isinstance(n, (ast.Global, ast.Nonlocal)):
+            declared |= set(n.names)
+        elif isinstance(n, ast.ExceptHandler) and n.name:
+            names.add(n.name)
+    return names - declared
+
+
+def py_shadowing(tree: ast.AST | None) -> dict[int, frozenset[str]]:
+    """``id(ast.Name)`` -> the names bound locally by the functions that enclose that name (a parameter named
+    like a module-level function hides it there)."""
+    out: dict[int, frozenset[str]] = {}
+    if tree is None:
+        return out
+    stack: list[tuple[ast.AST, frozenset[str]]] = [(tree, frozenset())]
+    while stack:
+        node, scope = stack.pop()
+        for ch in ast.iter_child_nodes(node):
+            if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                stack.append((ch, scope | frozenset(py_scope_names(ch))))
+                continue
+            if isinstance(ch, ast.Name):
+                out[id(ch)] = scope
+            stack.append((ch, scope))
+    return out
+
+
+def py_single_return(fn: ast.AST | None) -> tuple[list[str], ast.AST] | None:
+    """``(parameters, returned expression)`` of a def whose body is one ``return <expr>`` (a docstring
+    aside), else None: a helper a guard may have been moved into."""
+    body = list(getattr(fn, "body", []) or [])
+    if body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant) and \
+            isinstance(body[0].value.value, str):
+        body = body[1:]
+    if len(body) == 1 and isinstance(body[0], ast.Return) and body[0].value is not None:
+        return py_param_names(fn), body[0].value
+    return None
+
+
+def py_conditions(fn: ast.AST | None) -> list[tuple[str, int]]:
+    """``(condition, line)`` of every if / while / conditional expression / assert in ``fn``."""
+    out = []
+    for n in own_nodes(fn) if fn is not None else ():
+        if isinstance(n, (ast.If, ast.While, ast.IfExp, ast.Assert)):
+            out.append((_unparse(n.test), n.lineno))
+    return out
+
+
+def py_raising_guards(fn: ast.AST | None) -> list[int]:
+    """Lines of the checks in ``fn`` that stop the work with an exception (``if ...: raise``, ``assert``)."""
+    out = []
+    for n in own_nodes(fn) if fn is not None else ():
+        if isinstance(n, ast.If) and n.body and isinstance(n.body[-1], ast.Raise):
+            out.append(n.lineno)
+        elif isinstance(n, ast.Assert):
+            out.append(n.lineno)
+    return sorted(out)
+
+
+# -- conditions compared as text (guard diff, any language) ---------------------------------------------
+
+def cond_key(text: str) -> str:
+    """A condition for comparison: whitespace collapsed and dropped next to punctuation, outer parentheses
+    removed (``(a > b)`` and ``a>b`` are one key; ``not x`` keeps its space)."""
+    t = re.sub(r"\s*([^\w\s])\s*", r"\1", " ".join((text or "").split()))
+    while t.startswith("(") and t.endswith(")") and _balanced(t[1:-1]):
+        t = t[1:-1]
+    return t
+
+
+def _balanced(t: str) -> bool:
+    depth = 0
+    for ch in t:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0
+
+
+def split_top(text: str, seps: tuple[str, ...]) -> list[str]:
+    """``text`` split at the separators found outside parentheses, brackets and quotes (word separators such
+    as ``" and "`` must be spelled with their spaces)."""
+    parts, depth, cur, i, quote = [], 0, [], 0, None
+    while i < len(text):
+        ch = text[i]
+        if quote:
+            cur.append(ch)
+            if ch == quote and text[i - 1] != "\\":
+                quote = None
+            i += 1
+            continue
+        if ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if depth == 0:
+            sep = next((s for s in seps if text.startswith(s, i)), None)
+            if sep:
+                parts.append("".join(cur))
+                cur = []
+                i += len(sep)
+                continue
+        cur.append(ch)
+        i += 1
+    parts.append("".join(cur))
+    return [p.strip() for p in parts if p.strip()]
+
+
+_FLIP = {">=": "<", "<=": ">", "==": "!=", "!=": "==", ">": "<=", "<": ">="}
+BOOL_SEPS = ("&&", "||", " and ", " or ")
+
+
+def negations(text: str) -> set[str]:
+    """Keys (:func:`cond_key`) of the negation of a condition: ``not (c)``, ``!(c)``, and the comparison with its
+    operator flipped (``a > b`` -> ``a <= b``); for ``not c`` / ``!c`` the condition ``c`` itself."""
+    k = cond_key(text)
+    out = {f"not({k})", f"not {k}", f"!({k})", f"!{k}"}
+    for pre in ("not ", "not(", "!"):
+        if k.startswith(pre):
+            out.add(cond_key(k[len(pre) - (1 if pre.endswith("(") else 0):]))
+    ops = [(m.start(), m.group(0)) for m in re.finditer(r">=|<=|==|!=|(?<![-=<>])>(?![=>])|(?<![<=])<(?![=<])", k)]
+    top = []
+    for pos, op in ops:
+        if _balanced(k[:pos]) and not re.search(r"[\"']", k[:pos]):
+            top.append((pos, op))
+    if len(top) == 1:
+        pos, op = top[0]
+        out.add(cond_key(k[:pos] + _FLIP[op] + k[pos + len(op):]))
+    return out
+
+
+def cond_pieces(text: str) -> set[str]:
+    """Keys of a condition and of its top-level ``and`` / ``or`` operands."""
+    k = cond_key(text)
+    return {k} | {cond_key(p) for p in split_top(" ".join(text.split()), BOOL_SEPS)}
+
+
+def call_args(text: str, name: str) -> list[str] | None:
+    """The argument texts of the first call to ``name`` in ``text`` (None when there is no such call)."""
+    m = re.search(rf"(?<![\w.]){re.escape(name)}\s*\(", text) or re.search(rf"\.{re.escape(name)}\s*\(", text)
+    if not m:
+        return None
+    depth, i = 1, m.end()
+    while i < len(text) and depth:
+        depth += {"(": 1, ")": -1}.get(text[i], 0)
+        i += 1
+    return split_top(text[m.end(): i - 1], (",",))
+
+
+def substitute(expr: str, params: list[str], args: list[str]) -> str:
+    """``expr`` with each parameter name replaced by the argument text the call passes for it."""
+    out = expr
+    for p, a in zip(params, args):
+        a = a.strip()
+        rep = a if re.fullmatch(r"[\w.]+(\([^()]*\))?(\.[\w]+(\([^()]*\))?)*", a) else f"({a})"
+        out = re.sub(rf"(?<![\w.]){re.escape(p)}\b", lambda _m, r=rep: r, out)
+    return out
+
+
+def alpha(text: str, params: list[str]) -> str:
+    """``text`` with the parameter names replaced by their positions, so a renamed parameter compares equal."""
+    out = text
+    for i, p in enumerate(params):
+        if p in ("self", "cls", "this"):
+            continue
+        out = re.sub(rf"(?<![\w.]){re.escape(p)}\b", f"$p{i}", out)
+    return out
 
 
 def py_params(fn: ast.AST) -> dict:
@@ -641,6 +991,72 @@ def ts_guards(tree, lo: int, hi: int) -> list[tuple[str, int]]:
                     c = c[1:-1].strip()
                 out.append((c, line))
     return out
+
+
+def ts_conditions(tree, lo: int, hi: int) -> list[tuple[str, int]]:
+    """``(condition, line)`` of every ``if`` / ``while`` on lines ``lo..hi`` (whatever its body does)."""
+    out = []
+    if tree is None:
+        return out
+    for n in ts_walk(tree.root_node):
+        line = n.start_point[0] + 1
+        if lo <= line <= hi and (n.type in _TS_IF or n.type in ("while_statement", "while_expression",
+                                                                  "do_statement", "do_while_statement")):
+            cond = _ts_if_parts(n)[0] if n.type in _TS_IF else n.child_by_field_name("condition")
+            if cond is not None:
+                c = _ts_text(cond)
+                out.append((c[1:-1].strip() if c.startswith("(") and c.endswith(")") else c, line))
+    return out
+
+
+def _ts_def_at(tree, def_line: int):
+    from verinoda.anchors import TS_DEF_TYPES
+
+    for n in ts_walk(tree.root_node) if tree is not None else ():
+        if n.type in TS_DEF_TYPES and n.start_point[0] + 1 == def_line:
+            return n
+    return None
+
+
+def ts_param_names(tree, def_line: int) -> list[str]:
+    """Parameter names of the Java / Kotlin / JS method declared on ``def_line``."""
+    n = _ts_def_at(tree, def_line)
+    out: list[str] = []
+    if n is None:
+        return out
+    for c in n.children:
+        if c.type in ("formal_parameters", "function_value_parameters", "parameters", "parameter_list"):
+            for p in c.children:
+                if not p.is_named or "comment" in p.type:
+                    continue
+                nm = p.child_by_field_name("name") or p.child_by_field_name("pattern") or next(
+                    (x for x in p.children if x.type in ("identifier", "simple_identifier")), None)
+                if nm is not None:
+                    out.append(nm.text.decode("utf-8", "replace"))
+            break
+    return out
+
+
+def ts_single_return(tree, def_line: int) -> tuple[list[str], str] | None:
+    """``(parameters, returned expression text)`` of a method whose body is one ``return <expr>`` (Java,
+    Kotlin block body or expression body, JS / TS), else None."""
+    n = _ts_def_at(tree, def_line)
+    if n is None:
+        return None
+    body = n.child_by_field_name("body") or next((c for c in n.children if c.type in _TS_BODY), None)
+    if body is None:
+        return None
+    stmts = [c for c in body.children if c.is_named and "comment" not in c.type]
+    if len(stmts) == 1 and stmts[0].type == "statements":
+        stmts = [c for c in stmts[0].children if c.is_named and "comment" not in c.type]
+    if len(stmts) != 1:
+        return None
+    s = stmts[0]
+    if s.type in ("return_statement", "jump_expression") and s.text.lstrip().startswith(b"return"):
+        vals = [c for c in s.children if c.is_named and "comment" not in c.type]
+        if len(vals) == 1:
+            return ts_param_names(tree, def_line), _ts_text(vals[0])
+    return None
 
 
 def ts_loops(tree, lo: int, hi: int) -> list[tuple[int, int, str]]:
@@ -785,8 +1201,8 @@ def config_keys(rel: str, lines: list[str]) -> list[tuple[int, str]]:
         depth = 0
         for i, ln in enumerate(lines, 1):
             m = _JSON_KEY.match(ln)
-            if m:
-                depth_keys = depth_keys[:depth] + [m.group(1)]
+            if m:   # a key of the top-level object is at depth 1: its path has one part
+                depth_keys = depth_keys[:max(depth - 1, 0)] + [m.group(1)]
                 out.append((i, ".".join(depth_keys)))
             depth += ln.count("{") - ln.count("}")
             depth = max(depth, 0)

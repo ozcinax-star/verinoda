@@ -463,10 +463,13 @@ def test_static_tests_and_code_no_test_reaches(orders):
     _edit(orders, "orders/pricing.py", "    return subtotal\n",
           "    return subtotal\n\n\ndef unused(x: float) -> float:\n    return x\n")
     _edit(orders, "orders/pricing.py", "    return apply_discount(subtotal)\n", "    return round(apply_discount(subtotal), 2)\n")
+    _edit(orders, "orders/api.py", "        _repo = OrderRepository()\n", "        _repo = OrderRepository(\":memory:\")\n")
     res = _review(orders)
     tests = {t["test"] for t in res["tests"]["static"]}
     assert {"tests/test_pricing.py::test_compute_total", "tests/test_service.py::test_place_and_fetch_roundtrip"} <= tests
-    assert res["tests"]["no_test_reaches"] == ["orders/pricing.py::unused"]
+    # get_repo has callers (the handlers) and no test reaches them; `unused` has no caller at all: its reach is unknown
+    assert res["tests"]["no_test_reaches"] == ["orders/api.py::get_repo"]
+    assert [r["symbol"] for r in res["tests"]["reach_unknown"]] == ["orders/pricing.py::unused"]
 
 
 def test_dependents_have_chains_and_truncation_is_reported(orders, monkeypatch):
@@ -620,3 +623,651 @@ def test_the_fixture_files_match_their_manifest_or_its_amendments():
         data = json.loads((fx / name).read_text(encoding="utf-8"))
         assert data["schema"] == "verinoda.review_fixtures/1"
         assert len(data["fixtures"]) == man["counts"][name]
+
+
+# -- review round 1: the reviewers' findings (each test reproduces one) ------------------------------------------
+
+def _project(tmp_path, name: str, files: dict[str, str]) -> Path:
+    repo = tmp_path / name
+    for rel, text in files.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(text, encoding="utf-8", newline="\n")
+    (repo / ".gitignore").write_text("__pycache__/\n*.pyc\n.verinoda/\n", encoding="utf-8")
+    return _scan(repo)
+
+
+def test_staged_diff_of_many_files_reads_every_blob(tmp_path):
+    # r1: 900 staged files put every path on `git ls-files` (past the Windows command-line limit): every staged file
+    # was read as deleted and every definition "removed"
+    repo = tmp_path / "many"
+    names = [f"pkg/a_rather_long_directory_name_for_paths/module_with_a_long_file_name_{i:04d}.py" for i in range(400)]
+    for rel in names:
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text("def f(x):\n    return x + 1\n", encoding="utf-8", newline="\n")
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "init")
+    for rel in names:
+        (repo / rel).write_text("def f(x):\n    return x + 2\n", encoding="utf-8", newline="\n")
+    _git(repo, "add", "-A")
+    head = _git(repo, "rev-parse", "HEAD").strip()
+    diffs, skipped = rv._diff_staged(repo, head)
+    assert len(diffs) == 400 and not skipped
+    assert all(d.old and d.new and "x + 2" in d.new for d in diffs)
+
+
+def test_a_staged_blob_that_cannot_be_read_is_an_error_not_a_deletion(orders, monkeypatch):
+    from verinoda import treestate
+
+    _edit(orders, "orders/pricing.py", "        return round(subtotal * 0.9, 2)\n", "        return subtotal * 0.9\n")
+    _git(orders, "add", "orders/pricing.py")
+    monkeypatch.setattr(treestate, "read_blobs", lambda repo, specs, **kw: {s: None for s in specs})
+    with pytest.raises(treestate.NotAGitTree, match="could not read"):
+        _review(orders, staged=True)
+
+
+PKG_FILES = {
+    "pkg/__init__.py": "",
+    "pkg/rules.py": "def validate(value):\n    return value\n\n\ndef apply_all(items, validate):\n"
+                    "    return [validate(i) for i in items]\n",
+    "pkg/use_from.py": "from pkg.rules import validate\n\n\ndef a(v):\n    return validate(v)\n",
+    "pkg/use_frommod.py": "from pkg import rules\n\n\ndef b(v):\n    return rules.validate(v)\n",
+    "pkg/use_import.py": "import pkg.rules\n\n\ndef c(v):\n    return pkg.rules.validate(v)\n",
+    "pkg/use_alias.py": "import pkg.rules as r\n\n\ndef d(v):\n    return r.validate(v)\n",
+}
+
+
+def test_python_call_sites_through_module_imports_and_a_shadowing_parameter(tmp_path):
+    # r1: `from pkg import rules; rules.validate()` and `import pkg.rules; pkg.rules.validate()` were missed, and the
+    # parameter `validate` of apply_all was read as a call to the changed function (statically_verified)
+    repo = _project(tmp_path, "pkg", PKG_FILES)
+    _edit(repo, "pkg/rules.py", "def validate(value):", "def validate(value, strict):")
+    res = _review(repo)
+    ats = {f["at"]: f["status"] for f in _by(res, "public_api", "arity-break")}
+    assert ats == {"pkg/use_from.py:5": "statically_verified", "pkg/use_frommod.py:5": "statically_verified",
+                   "pkg/use_import.py:5": "statically_verified", "pkg/use_alias.py:5": "statically_verified"}
+    _git(repo, "checkout", "--", "pkg/rules.py")
+    _edit(repo, "pkg/rules.py", "def validate(value):\n    return value\n\n\n", "")
+    rm = {f["at"] for f in _by(_review(repo), "public_api", "removed-still-used")}
+    assert {"pkg/use_from.py:1", "pkg/use_from.py:5", "pkg/use_frommod.py:5", "pkg/use_import.py:5",
+            "pkg/use_alias.py:5"} <= rm
+    assert "pkg/rules.py:6" not in rm
+
+
+def test_a_removed_method_still_called_through_an_object(orders):
+    # r1 + r2: OrderRepository.get removed while fetch_order calls repo.get (repo annotated): exit 0 before
+    _edit(orders, "orders/repository.py", "\n    def get(self, order_id: int):\n        row = self.conn.execute(\n"
+          "            \"SELECT id, customer, total FROM orders WHERE id = ?\", (order_id,)\n        ).fetchone()\n"
+          "        return None if row is None else {\"id\": row[0], \"customer\": row[1], \"total\": row[2]}\n", "")
+    res = _review(orders)
+    [f] = _by(res, "public_api", "removed-still-used")
+    assert f["at"] == "orders/service.py:26" and f["status"] == "strong_inference" and res["exit"] == 3
+    assert "tests/test_service.py::test_place_and_fetch_roundtrip" in {t["test"] for t in res["tests"]["static"]}
+
+
+def test_planned_removal_of_a_method_lists_its_callers(orders):
+    res = _review(orders, targets=["orders/repository.py::OrderRepository.get"], change="remove")
+    assert "orders/service.py:26" in {f["at"] for f in _by(res, "public_api", "removed-still-used")}
+    assert res["exit"] == 3
+
+
+def test_staged_review_reads_the_index_for_every_file(orders):
+    # r2 R18: the staged signature change breaks the staged tests; the working tree's (unstaged) test update hid it
+    _edit(orders, "orders/pricing.py", "def apply_discount(subtotal: float) -> float:",
+          "def apply_discount(subtotal: float, rate: float) -> float:")
+    _edit(orders, "orders/pricing.py", "    return apply_discount(subtotal)\n", "    return apply_discount(subtotal, 0.1)\n")
+    _git(orders, "add", "orders/pricing.py")
+    _edit(orders, "tests/test_pricing.py", "apply_discount(200.0)", "apply_discount(200.0, 0.1)")
+    _edit(orders, "tests/test_pricing.py", "apply_discount(50.0)", "apply_discount(50.0, 0.1)")
+    staged = {f["at"] for f in _by(_review(orders, staged=True), "public_api", "arity-break")}
+    assert staged == {"tests/test_pricing.py:5", "tests/test_pricing.py:9"}
+    assert _by(_review(orders), "public_api", "arity-break") == []
+
+
+def test_staged_security_ops_are_read_from_the_index(tmp_path):
+    # r1: an unstaged subprocess call on a staged line gave a statically_verified finding for code not staged
+    repo = _project(tmp_path, "sd", {"app/__init__.py": "", "app/runner.py": "import subprocess\n\n\n"
+                                     "def launch(x):\n    return x\n"})
+    _edit(repo, "app/runner.py", "    return x\n", "    return x + 1\n")
+    _git(repo, "add", "app/runner.py")
+    _edit(repo, "app/runner.py", "    return x + 1\n", "    return subprocess.run(x)\n")
+    assert _by(_review(repo, staged=True), "security") == []
+    assert _by(_review(repo), "security", "op-on-changed-line")
+
+
+def test_staged_run_tests_run_the_staged_tree_or_are_refused(orders, monkeypatch):
+    # r1: --staged --run-tests ran the working tree and reported a pass for a staged change that fails
+    from verinoda import experiments
+
+    ran = []
+    monkeypatch.setattr(experiments, "run", lambda st, repo, argv, **kw: ran.append(kw) or {"id": "exp_x",
+                                                                                             "outcome": "pass"})
+    _edit(orders, "orders/pricing.py", "        return round(subtotal * 0.9, 2)\n", "        return 0\n")
+    _git(orders, "add", "orders/pricing.py")
+    res = _review(orders, staged=True, run_tests=True)
+    assert ran and ran[0]["overlay"] == ["orders/pricing.py"] and ran[0]["ref"] == res["base"]["commit"]
+    assert res["tests"]["run"]["source"].startswith("the staged tree")
+    _edit(orders, "orders/pricing.py", "        return 0\n", "        return round(subtotal * 0.9, 2)\n")
+    ran.clear()
+    res = _review(orders, staged=True, run_tests=True, observe=True)
+    assert not ran and "unstaged changes" in res["tests"]["run"]["refused"]
+    assert "differ from the staged tree" in res["tests"]["observe"]["refused"]
+
+
+def test_a_python_file_with_a_byte_order_mark(tmp_path):
+    repo = _project(tmp_path, "bom", {"app/__init__.py": ""})
+    p = repo / "app" / "runner.py"
+    p.write_bytes(b"\xef\xbb\xbfimport subprocess\n\n\ndef launch(cmd, depth):\n    if depth < 0:\n        return None\n"
+                  b"    return cmd\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "bom")
+    p.write_bytes(b"\xef\xbb\xbfimport subprocess\n\n\ndef launch(cmd, depth):\n"
+                  b"    return subprocess.run(cmd, shell=True)\n")
+    res = _review(repo)
+    assert [(c["symbol"], c["kind"]) for c in res["changes"]] == [("app/runner.py::launch", "body")]
+    assert {f["rule"] for f in _by(res, "security")} >= {"op-on-changed-line", "guard-removed"}
+
+
+def test_a_new_function_named_like_a_method_is_not_that_method(orders):
+    # r1: a new module-level save() took OrderRepository.save's node: false dependents, entry point and tests
+    (orders / "orders" / "repository.py").write_text((orders / "orders" / "repository.py").read_text(
+        encoding="utf-8") + "\n\ndef save(path):\n    return path\n", encoding="utf-8", newline="\n")
+    res = _review(orders)
+    assert [(c["symbol"], c["kind"]) for c in res["changes"]] == [("orders/repository.py::save", "added")]
+    assert res["dependents"] == [] and res["tests"]["static"] == [] and res["concerns"]["entry_points"] == []
+
+
+MOD_FILES = {
+    "src/main/java/com/ex/mod/Forge.java": """package com.ex.mod;
+
+public class Forge {
+    int heat;
+    int progress;
+
+    public void stoke(Object player) {
+        heat = heat + 5;
+        setChanged();
+    }
+
+    protected void loadAdditional(Tag tag) {
+        heat = tag.getInt("Heat");
+        progress = tag.getInt("Progress");
+    }
+
+    protected void saveAdditional(Tag tag) {
+        tag.putInt("Heat", heat);
+        tag.putInt("Progress", progress);
+    }
+
+    static void handle(Payload payload, Context context) {
+        if (context.player() == null) {
+            return;
+        }
+        if (context.player().distanceTo(payload.pos()) > 8.0) {
+            return;
+        }
+        Forge.poke(payload.pos());
+    }
+
+    static void poke(Object pos) {
+    }
+
+    public static void serverTick(Object level, Object pos, Forge forge) {
+        forge.cool();
+    }
+
+    void cool() {
+    }
+}
+""",
+    "src/main/java/com/ex/mod/ForgeBlock.java": """package com.ex.mod;
+
+public class ForgeBlock {
+    Object ticker(Object type) {
+        return createTickerHelper(type, Forge::serverTick);
+    }
+}
+""",
+    "src/main/java/com/ex/mod/ModConfig.java": """package com.ex.mod;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+public record ModConfig(int blocksPerTick, int maxDistance) {
+    private static final ModConfig DEFAULTS = new ModConfig(8, 8);
+
+    public static ModConfig load(Path file) throws Exception {
+        String text = Files.readString(file);
+        return text.isEmpty() ? DEFAULTS : new ModConfig(DEFAULTS.blocksPerTick(), DEFAULTS.maxDistance());
+    }
+}
+""",
+    "src/main/java/com/ex/mod/Scheduler.java": """package com.ex.mod;
+
+public final class Scheduler {
+    public static void register(Events events) {
+        ServerTickEvents.END_SERVER_TICK.register(Scheduler::tick);
+    }
+
+    static void tick(Object server) {
+        int budget = 8;
+        while (budget-- > 0) {
+            Object p = next();
+        }
+    }
+
+    static Object next() {
+        return null;
+    }
+}
+""",
+    "src/main/java/com/ex/shop/Cart.java": """package com.ex.shop;
+
+public class Cart {
+    java.util.List<Integer> items;
+
+    public int get(int i) {
+        return items.get(i);
+    }
+
+    public static int first(Cart c) {
+        return c.items.get(0);
+    }
+
+    public int size() {
+        return items.size();
+    }
+}
+""",
+    "src/main/java/com/ex/shop/Prices.java": """package com.ex.shop;
+
+import java.util.Map;
+import java.util.function.ToIntFunction;
+
+public class Prices {
+    Map<String, Integer> prices;
+
+    int price(String name, Cart cart) {
+        return prices.get(name) + cart.size();
+    }
+
+    ToIntFunction<Cart> firstOf() {
+        return Cart::first;
+    }
+}
+""",
+    "src/main/kotlin/com/ex/mod/Commands.kt": """package com.ex.mod
+
+object Commands {
+    fun register(d: Dispatcher) {
+        d.register(literal("reset").requires { it.hasPermission(2) && EmberConfig.ALLOW_RESET.get() })
+    }
+}
+""",
+    "src/main/resources/fabric.mod.json": """{
+  "schemaVersion": 1,
+  "id": "exmod",
+  "entrypoints": {
+    "main": ["com.ex.mod.Main"],
+    "fabric-gametest": ["com.ex.mod.test.Tests"]
+  }
+}
+""",
+    "src/main/ts/users.ts": """export function update(users: string[]): number {
+  return users.length;
+}
+""",
+}
+
+
+@pytest.fixture(scope="module")
+def mod_base(tmp_path_factory):
+    dst = tmp_path_factory.mktemp("review") / "mod_base"
+    for rel, text in MOD_FILES.items():
+        (dst / rel).parent.mkdir(parents=True, exist_ok=True)
+        (dst / rel).write_text(text, encoding="utf-8", newline="\n")
+    (dst / ".gitignore").write_text(".verinoda/\n", encoding="utf-8")
+    return _scan(dst)
+
+
+@pytest.fixture()
+def mod(mod_base, tmp_path):
+    return _clone(mod_base, tmp_path / "mod")
+
+
+FORGE = "src/main/java/com/ex/mod/Forge.java"
+
+
+def test_java_removed_method_with_a_common_name_is_not_strong_on_another_receiver(mod):
+    # r1: Cart.get removed; `prices.get(name)` (a Map) was a strong_inference removed-still-used
+    _edit(mod, "src/main/java/com/ex/shop/Cart.java", "    public int get(int i) {\n        return items.get(i);\n"
+          "    }\n\n", "")
+    res = _review(mod)
+    found = {(f["at"], f["status"]) for f in _by(res, "public_api", "removed-still-used")}
+    assert ("src/main/java/com/ex/shop/Prices.java:10", "strong_inference") not in found
+    assert not any(rr.at_least_strong(s) for _a, s in found)
+
+
+def test_java_method_reference_to_a_removed_method_is_still_used(mod):
+    # r2 R47: a method renamed while `Cart::first` (a registration) still names the old one
+    _edit(mod, "src/main/java/com/ex/shop/Cart.java", "public static int first(Cart c)", "public static int head(Cart c)")
+    res = _review(mod)
+    assert ("src/main/java/com/ex/shop/Prices.java:14", "strong_inference") in {
+        (f["at"], f["status"]) for f in _by(res, "public_api", "removed-still-used")}
+    [added] = [c for c in res["changes"] if c["kind"] == "added"]
+    assert added["renamed_from"] == "Cart.first"
+    assert not any(r["at"].endswith("(base)") and "Cart.java" in r["at"] for r in res["read_first"])
+
+
+def test_ts_function_named_update_is_not_a_game_tick_and_export_is_one_change(mod):
+    # r1: `export function update` got a module_statement change too, and a strong "called every tick" hot path
+    _edit(mod, "src/main/ts/users.ts", "  return users.length;\n", "  let n = 0;\n  for (const u of users) {\n"
+          "    n += u.length;\n  }\n  return n;\n")
+    res = _review(mod)
+    assert [(c["symbol"], c["kind"]) for c in res["changes"]] == [("src/main/ts/users.ts::update", "body")]
+    assert res["concerns"]["performance"] == []
+
+
+def test_permission_removed_is_reported_once_for_the_method(tmp_path):
+    repo = _project(tmp_path, "door", {"src/main/java/com/example/Door.java": "package com.example;\n\n"
+                    "public class Door {\n    int limit = 3;\n\n    public void open(Player p) {\n"
+                    "        if (!p.hasPermission(\"door.open\")) {\n            return;\n        }\n"
+                    "        swing();\n    }\n\n    void swing() {\n    }\n}\n"})
+    _edit(repo, "src/main/java/com/example/Door.java", "int limit = 3;", "int limit = 5;")
+    _edit(repo, "src/main/java/com/example/Door.java", "        if (!p.hasPermission(\"door.open\")) {\n"
+          "            return;\n        }\n", "")
+    [f] = _by(_review(repo), "security", "permission-removed")
+    assert f["for"].endswith("Door.open")
+
+
+def test_removed_dirty_flag_and_nbt_write_with_other_sinks_left(mod):
+    # r2 R19/R21: setChanged() removed, and one tag.putInt removed while another stays
+    _edit(mod, FORGE, "        heat = heat + 5;\n        setChanged();\n", "        heat = heat + 5;\n")
+    _edit(mod, FORGE, "        tag.putInt(\"Heat\", heat);\n        tag.putInt(\"Progress\", progress);\n",
+          "        tag.putInt(\"Heat\", heat);\n")
+    res = _review(mod)
+    removed = {f["at"] for f in _by(res, "persistence", "sink-line-removed")}
+    assert {f"{FORGE}:9", f"{FORGE}:19"} <= removed
+
+
+def test_saved_data_key_read_that_is_never_written_is_persistence_not_config(mod):
+    # r2 R20: loadAdditional reads "heat" while saveAdditional writes "Heat"
+    _edit(mod, FORGE, "heat = tag.getInt(\"Heat\");", "heat = tag.getInt(\"heat\");")
+    res = _review(mod)
+    [f] = _by(res, "persistence", "saved-data-key-mismatch")
+    assert f["at"] == f"{FORGE}:13" and f"{FORGE}:18" in f["evidence_at"]
+    assert res["concerns"]["config"] == []
+
+
+def test_guard_extracted_into_a_helper_or_folded_into_the_next_if_is_not_removed(mod):
+    # r2 R22/R23: behaviour-preserving refactors of a guard were "statically_verified: the guard is gone"
+    _edit(mod, FORGE, "        if (context.player().distanceTo(payload.pos()) > 8.0) {\n",
+          "        if (tooFar(context, payload.pos())) {\n")
+    _edit(mod, FORGE, "    static void poke(Object pos) {\n",
+          "    private static boolean tooFar(Context context, Object pos) {\n"
+          "        return context.player().distanceTo(pos) > 8.0;\n    }\n\n    static void poke(Object pos) {\n")
+    sec = _by(_review(mod), "security")
+    assert [f["rule"] for f in sec if f["rule"].startswith("guard")] == ["guard-moved"]
+    assert sec[0]["status"] == "weak_inference" and "tooFar" in sec[0]["finding"]
+    _git(mod, "checkout", "--", FORGE)
+    _edit(mod, FORGE, "        if (context.player().distanceTo(payload.pos()) > 8.0) {\n            return;\n        }\n"
+          "        Forge.poke(payload.pos());\n", "        if (context.player().distanceTo(payload.pos()) <= 8.0) {\n"
+          "            Forge.poke(payload.pos());\n        }\n")
+    [g] = [f for f in _by(_review(mod), "security") if f["rule"].startswith("guard")]
+    assert g["rule"] == "guard-restructured" and g["status"] == "weak_inference"
+
+
+def test_a_guard_split_in_two_and_a_renamed_parameter(orders):
+    # r2 R33: `a or b` split into two guards; R53: a parameter renamed changes no guard and reads no new config
+    _edit(orders, "orders/service.py", "    if not items:\n        raise ValidationError(\"order has no items\")\n"
+          "    if len(items) > MAX_ITEMS_PER_ORDER:\n        raise ValidationError(\"too many items\")\n",
+          "    if not items or len(items) > MAX_ITEMS_PER_ORDER:\n        raise ValidationError(\"bad order\")\n")
+    _git(orders, "commit", "-qam", "one guard")
+    _edit(orders, "orders/service.py", "    if not items or len(items) > MAX_ITEMS_PER_ORDER:\n"
+          "        raise ValidationError(\"bad order\")\n", "    if not items:\n        raise ValidationError(\"bad order\")\n"
+          "    if len(items) > MAX_ITEMS_PER_ORDER:\n        raise ValidationError(\"bad order\")\n")
+    [f] = _by(_review(orders), "security")
+    assert f["rule"] == "guard-split" and f["status"] == "weak_inference"
+    _git(orders, "checkout", "--", "orders/service.py")
+    text = (orders / "orders" / "service.py").read_text(encoding="utf-8")
+    text = text.replace("def validate_items(items: list[dict])", "def validate_items(order_items: list[dict])")
+    text = text.replace("    if not items or len(items) > MAX", "    if not order_items or len(order_items) > MAX")
+    (orders / "orders" / "service.py").write_text(text, encoding="utf-8", newline="\n")
+    res = _review(orders)
+    assert res["concerns"]["security"] == [] and res["concerns"]["config"] == []
+
+
+def test_a_removed_call_to_a_validator(orders):
+    # r2 R37: place_order no longer calls validate_items, which raises on bad orders
+    _edit(orders, "orders/service.py", "    validate_items(items)\n    total", "    total")
+    [f] = _by(_review(orders), "security", "check-call-removed")
+    assert f["at"] == "orders/service.py:20" and f["status"] == "strong_inference" and f["side"] == "base"
+    assert {"orders/service.py:13", "orders/service.py:15"} <= set(f["evidence_at"])
+
+
+def test_yaml_load_imported_by_name_and_a_new_handler_is_an_entry(orders):
+    # r2 R03/R41: `from yaml import load` was not yaml.load; a new handler had no entry point or parameter flow
+    _edit(orders, "orders/api.py", "from orders.repository import OrderRepository\n",
+          "from yaml import Loader, load\n\nfrom orders.repository import OrderRepository\n")
+    (orders / "orders" / "tools.py").write_text("import subprocess\n\n\ndef export_orders(target: str) -> int:\n"
+                                                "    return subprocess.run(\"dump > \" + target, shell=True).returncode\n",
+                                                encoding="utf-8", newline="\n")
+    (orders / "orders" / "api.py").write_text((orders / "orders" / "api.py").read_text(encoding="utf-8")
+                                              + "\n\ndef import_orders_handler(body: str) -> tuple[int, dict]:\n"
+                                              "    data = load(body, Loader=Loader)\n    return 200, {\"n\": len(data)}\n"
+                                              "\n\ndef export_handler(target: str) -> tuple[int, dict]:\n"
+                                              "    from orders.tools import export_orders\n\n"
+                                              "    return 200, {\"rc\": export_orders(target)}\n",
+                                              encoding="utf-8", newline="\n")
+    res = _review(orders)
+    kinds = {(f["at"], f["finding"].split(":")[0]) for f in _by(res, "security", "op-on-changed-line")}
+    assert ("orders/api.py:34", "a changed line adds deserialization") in kinds
+    [shell] = [f for f in _by(res, "security") if f["at"] == "orders/tools.py:5"]
+    assert shell["param_flow"]["from_entry"] == "export_handler(target) -> export_orders(target)"
+    entries = {f["at"] for f in _by(res, "entry_points", "changed-entry")}
+    assert {"orders/api.py:33", "orders/api.py:38"} <= entries
+
+
+def test_prose_with_select_and_from_is_not_sql(orders):
+    # r2 R05: an error message "Select ... from ..." was statically_verified SQL built from strings
+    _edit(orders, "orders/api.py", "        return 400, {\"error\": str(exc)}\n",
+          "        return 400, {\"error\": \"Select at least one item from the catalogue: \" + str(exc)}\n")
+    res = _review(orders)
+    assert res["concerns"]["security"] == [] and res["concerns"]["persistence"] == []
+    assert not rr.sql_shaped("Could not delete from cache") and not rr.sql_shaped("Select one item from the list")
+    assert rr.sql_shaped("SELECT id FROM t") and rr.sql_shaped("select name from users where id = ?")
+
+
+def test_sql_built_with_plus_and_executed_is_verified(orders):
+    _edit(orders, "orders/repository.py", "        row = self.conn.execute(\n"
+          "            \"SELECT id, customer, total FROM orders WHERE id = ?\", (order_id,)\n        ).fetchone()\n",
+          "        sql = \"SELECT id, customer, total FROM orders WHERE id = \" + str(order_id)\n"
+          "        row = self.conn.execute(sql).fetchone()\n")
+    [f] = [f for f in _by(_review(orders), "security") if "sql" in f["finding"]]
+    assert f["status"] == "statically_verified" and "passed to a database call at line 24" in f["finding"]
+
+
+def test_an_existing_security_call_on_a_changed_line_is_not_added(tmp_path):
+    repo = _project(tmp_path, "adds", {"app/__init__.py": "", "app/runner.py": "import subprocess\n\n\n"
+                                       "def launch(cmd):\n    return subprocess.run(cmd)\n"})
+    _edit(repo, "app/runner.py", "subprocess.run(cmd)", "subprocess.run(cmd, timeout=5)")
+    [f] = _by(_review(repo), "security", "op-on-changed-line")
+    assert f["status"] == "weak_inference" and "had on its changed lines too" in f["finding"]
+
+
+def test_value_bound_on_a_changed_line_and_written_later(orders):
+    # r2 R01: the changed total is saved by repo.save on the next (unchanged) line
+    _edit(orders, "orders/service.py", "    total = compute_total(items)\n", "    total = compute_total(items) * 1.18\n")
+    [f] = _by(_review(orders), "persistence", "changed-value-to-sink")
+    assert f["at"] == "orders/service.py:22" and "orders/repository.py:17" in f["evidence_at"]
+
+
+def test_value_bound_on_a_changed_line_and_written_by_the_next_statement(tmp_path):
+    # r2 R30: `vals` changed on one line, passed to the INSERT on the next
+    repo = _project(tmp_path, "ins", {"db/__init__.py": "", "db/store.py": "import json\n\n\nclass Store:\n"
+                    "    def insert(self, table, row):\n        cols = list(row)\n"
+                    "        vals = [json.dumps(row[c], sort_keys=True) for c in cols]\n"
+                    "        self.conn.execute(\n            f\"INSERT INTO {table} VALUES ({len(cols)})\", vals\n        )\n"})
+    _edit(repo, "db/store.py", "json.dumps(row[c], sort_keys=True)", "json.dumps(row[c])")
+    [f] = _by(_review(repo), "persistence", "changed-value-to-sink")
+    assert f["at"] == "db/store.py:9"
+
+
+def test_the_removed_commit_is_reported_while_the_insert_stays(orders):
+    # r2 R02
+    _edit(orders, "orders/repository.py", "        self.conn.commit()\n        return cur.lastrowid\n",
+          "        return cur.lastrowid\n")
+    [f] = _by(_review(orders), "persistence", "sink-line-removed")
+    assert f["at"] == "orders/repository.py:19" and f["side"] == "base"
+
+
+def test_swapped_positional_parameters(orders):
+    # r2 R11
+    _edit(orders, "orders/repository.py", "    def save(self, customer: str, total: float) -> int:",
+          "    def save(self, total: float, customer: str) -> int:")
+    [f] = _by(_review(orders), "public_api", "positional-order-changed")
+    assert f["at"] == "orders/service.py:22" and "was customer, is now total" in f["finding"]
+
+
+def test_new_and_renamed_functions_reached_by_tests_in_the_same_diff(orders):
+    # r2 R08: a new function and its new test; R07: fetch_order renamed with its callers and its test
+    _edit(orders, "orders/pricing.py", "    return subtotal\n", "    return subtotal\n\n\n"
+          "def bulk_discount(subtotal: float, count: int) -> float:\n    return subtotal * 0.95 if count >= 10 else subtotal\n")
+    _edit(orders, "tests/test_pricing.py", "from orders.pricing import apply_discount, compute_total\n",
+          "from orders.pricing import apply_discount, bulk_discount, compute_total\n\n\ndef test_bulk_discount():\n"
+          "    assert bulk_discount(100.0, 10) == 95.0\n")
+    for rel, a, b in (("orders/service.py", "def fetch_order(repo", "def load_order(repo"),
+                      ("orders/api.py", "fetch_order, place_order\n", "load_order, place_order\n"),
+                      ("orders/api.py", "order = fetch_order(", "order = load_order("),
+                      ("tests/test_service.py", "fetch_order, place_order\n", "load_order, place_order\n"),
+                      ("tests/test_service.py", "assert fetch_order(", "assert load_order(")):
+        _edit(orders, rel, a, b)
+    res = _review(orders)
+    reach = {t["test"]: t["reaches"] for t in res["tests"]["static"]}
+    assert "orders/pricing.py::bulk_discount" in reach["tests/test_pricing.py::test_bulk_discount"]
+    assert "orders/service.py::load_order" in reach["tests/test_service.py::test_place_and_fetch_roundtrip"]
+    assert res["tests"]["no_test_reaches"] == []
+    assert res["concerns"]["persistence"] == [] and res["concerns"]["public_api"] == []
+
+
+def test_a_nested_function_is_reached_through_its_enclosing_function(orders):
+    # r2 R35: a change inside a nested function had no dependents and "no test reaches"
+    _edit(orders, "orders/pricing.py", "    subtotal = sum(i[\"price\"] * i[\"qty\"] for i in items)\n",
+          "    def line(i):\n        return i[\"price\"] * i[\"qty\"]\n\n    subtotal = sum(line(i) for i in items)\n")
+    _git(orders, "commit", "-qam", "nested")
+    _edit(orders, "orders/pricing.py", "        return i[\"price\"] * i[\"qty\"]\n", "        return i[\"price\"] * i[\"qty\"] * 1\n")
+    res = _review(orders)
+    assert [c["symbol"] for c in res["changes"]] == ["orders/pricing.py::compute_total.line"]
+    assert "orders/service.py::place_order" in {d["symbol"] for d in res["dependents"]}
+    assert "tests/test_pricing.py::test_compute_total" in {t["test"] for t in res["tests"]["static"]}
+
+
+def test_config_key_renamed_reports_both_keys_and_the_old_reader(tmp_path):
+    # r2 R25: the (at, rule) de-duplication dropped the removed key and its reader
+    repo = _project(tmp_path, "cfgr", {"config/mod.toml": "[forge]\n\tstoke_heat = 15\n",
+                                       "src/Conf.java": "package c;\n\nclass Conf {\n    int n(M m) {\n"
+                                       "        return m.getInt(\"stoke_heat\");\n    }\n}\n"})
+    _edit(repo, "config/mod.toml", "\tstoke_heat = 15\n", "\tstoke_heat_amount = 15\n")
+    fs = {f["key"]: f for f in _by(_review(repo), "config", "config-file-key")}
+    assert set(fs) == {"forge.stoke_heat", "forge.stoke_heat_amount"}
+    assert fs["forge.stoke_heat"]["readers"] == ["src/Conf.java:5"] and fs["forge.stoke_heat"]["side"] == "base"
+
+
+def test_a_config_record_default_and_a_config_method_call(mod):
+    # r2 R26: a default of a config record changed; R44: ModConfig.load() is not "a config value"
+    _edit(mod, "src/main/java/com/ex/mod/ModConfig.java", "new ModConfig(8, 8);", "new ModConfig(8, 64);")
+    [f] = _by(_review(mod), "config", "config-default-changed")
+    assert f["at"] == "src/main/java/com/ex/mod/ModConfig.java:7" and "DEFAULTS" in f["finding"]
+    assert "src/main/java/com/ex/mod/ModConfig.java:11" in f["evidence_at"]
+
+
+def test_file_io_added_in_a_tick_loop(mod):
+    # r2 R44: a call reaching Files.readString added inside the loop of a tick-registered method
+    _edit(mod, "src/main/java/com/ex/mod/Scheduler.java", "            Object p = next();\n",
+          "            Object p = next();\n            ModConfig.load(null);\n")
+    res = _review(mod)
+    [f] = _by(res, "performance", "io-in-loop")
+    assert f["status"] == "strong_inference" and "tick event" in f["finding"]
+    assert not any("ModConfig.load" in f["finding"] for f in res["concerns"]["config"])
+
+
+def test_a_changed_mod_manifest_entrypoint_is_an_entry_point_change(mod):
+    # r2 R29: fabric.mod.json was "data, not reviewed" with exit 0
+    _edit(mod, "src/main/resources/fabric.mod.json", "    \"main\": [\"com.ex.mod.Main\"],\n"
+          "    \"fabric-gametest\": [\"com.ex.mod.test.Tests\"]\n", "    \"main\": [\"com.ex.mod.Main\"]\n")
+    res = _review(mod)
+    [f] = _by(res, "entry_points", "registration-manifest-changed")
+    assert "fabric-gametest" in f["finding"] and f["side"] == "base" and res["exit"] == 3
+    assert res["concerns"]["config"] == []
+
+
+def test_kotlin_permission_change_is_not_a_config_read(mod):
+    # r2 R24: the unchanged config read beside the changed permission level
+    _edit(mod, "src/main/kotlin/com/ex/mod/Commands.kt", "hasPermission(2)", "hasPermission(0)")
+    res = _review(mod)
+    assert [f["rule"] for f in res["concerns"]["security"]] == ["permission-changed"]
+    assert res["concerns"]["config"] == []
+
+
+def test_a_rename_does_not_report_the_unchanged_call_beside_it(orders):
+    # r2 R07: get_repo() on the renamed line was "the changed call ... reaches a sql-write"
+    _edit(orders, "orders/api.py", "    order = fetch_order(get_repo(), order_id)\n",
+          "    order = fetch_order(get_repo(), int(order_id))\n")
+    assert _by(_review(orders), "persistence", "changed-call-reaches-sink") == []
+
+
+def test_performance_on_a_literal_and_a_loop_without_io(orders):
+    # r2 R16/R45: a loop over a 2-item literal and a no-IO loop in a handler are no strong findings
+    _edit(orders, "orders/api.py", "    try:\n        order_id = place_order(",
+          "    for item in payload[\"items\"]:\n        item[\"qty\"] = int(item[\"qty\"])\n"
+          "    try:\n        order_id = place_order(")
+    _edit(orders, "orders/repository.py", "        self.conn.execute(\n            \"CREATE TABLE IF NOT EXISTS orders "
+          "(id INTEGER PRIMARY KEY, customer TEXT, total REAL)\"\n        )\n",
+          "        for ddl in (\n            \"CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, "
+          "total REAL)\",\n            \"CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY, note TEXT)\",\n"
+          "        ):\n            self.conn.execute(ddl)\n")
+    perf = _by(_review(orders), "performance")
+    assert perf and not any(rr.at_least_strong(f["status"]) for f in perf)
+
+
+def test_documentation_is_no_dependent_and_vendored_copies_are_other_projects(tmp_path):
+    # r2 R28/R30: a README heading as a dependent; a vendored copy importing its own `store`
+    repo = _project(tmp_path, "vend", {
+        "README.md": "# Guide\n\nCall `compute()` from `use()`.\n",
+        "app/__init__.py": "", "app/core.py": "def compute(x):\n    return x\n",
+        "app/use.py": "from app.core import compute\n\n\ndef use(v):\n    return compute(v)\n",
+        "app/store.py": "class Store:\n    def insert(self, row):\n        return row\n",
+        "vendor/old/repoatlas/__init__.py": "", "vendor/old/repoatlas/store.py": "class Store:\n    def insert(self, row):\n"
+        "        return row\n",
+        "vendor/old/repoatlas/user.py": "from repoatlas.store import Store\n\n\ndef keep(store: Store):\n"
+        "    return store.insert(1)\n"})
+    _edit(repo, "app/core.py", "    return x\n", "    return x + 1\n")
+    _edit(repo, "app/store.py", "        return row\n", "        return [row]\n")
+    res = _review(repo)
+    assert {d["symbol"] for d in res["dependents"]} == {"app/use.py::use"}
+    st = open_store(repo)
+    try:
+        ctx = rv._Ctx(repo, None, st, {})
+        assert rv._imports_namesake(ctx, "vendor/old/repoatlas/user.py", "app/store.py")
+        assert not rv._imports_namesake(ctx, "app/use.py", "app/core.py")
+    finally:
+        st.close()
+
+
+def test_cli_review_usage_errors_and_the_project_root_from_a_subdirectory(orders, capsys, monkeypatch):
+    from verinoda.cli import main
+
+    assert main(["review", str(orders), "--target", "orders/pricing.py::apply_discount", "--staged"]) == 2
+    assert main(["review", str(orders), "--target", "orders/pricing.py::apply_discount", "--base", "HEAD"]) == 2
+    assert main(["review", str(orders), "--max-chars", "-5"]) == 2
+    capsys.readouterr()
+    monkeypatch.chdir(orders / "orders")
+    assert main(["review", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["changes"] == []
+
+
+def test_planned_signature_change_lists_the_call_sites(orders):
+    res = _review(orders, targets=["orders/pricing.py::apply_discount"], change="signature")
+    sites = {f["at"]: f["status"] for f in _by(res, "public_api", "call-site-of-changed-signature")}
+    assert sites == {"orders/pricing.py:8": "weak_inference", "tests/test_pricing.py:5": "weak_inference",
+                     "tests/test_pricing.py:9": "weak_inference"}
