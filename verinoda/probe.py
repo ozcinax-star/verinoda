@@ -1572,8 +1572,11 @@ def emit_tests(res: dict, cases, rows_b, rows_h, spec: dict, qual: str, base_sha
     head_lines = [f"# verinoda probe {pid}: behaviour that differs between the base {(base_sha or '')[:12]} and the "
                   "working tree.",
                   "# Each test pins the BASE behaviour on one input. Whether the change is intended is the user's "
-                  "decision:", "# flip the expectation when it was meant. Verinoda did not write this file.",
-                  "import hashlib", "import math", "", "import pytest", ""]
+                  "decision:", "# flip the expectation when it was meant. Verinoda did not write this file."]
+    code = "\n".join(body)
+    std = [m for m in ("hashlib", "math") if f"{m}." in code]
+    head_lines += [f"import {m}" for m in std] + ([""] if std else [])
+    head_lines += (["import pytest", ""] if "pytest.raises" in code else [])
     head_lines += [f"from {m} import {', '.join(sorted(names))}" for m, names in sorted(imports.items())]
     return "\n".join(head_lines + body) + "\n"
 
@@ -1664,6 +1667,7 @@ def render(res: dict) -> str:
     lines = [res["headline"]]
     for d in res.get("differences") or []:
         lines.append(f"  {d['class']} ({d['count']} input(s)): the working tree {d['text']}"
+                     + (" (low priority)" if d.get("low_priority") else "")
                      + ("" if d.get("reproduced") or d["class"] == "growth_changed"
                         else " [not reproduced in a second run pair]")
                      + (f" - claim {d['claim_id']}" if d.get("claim_id") else ""))
@@ -1688,7 +1692,8 @@ def render(res: dict) -> str:
         lines.append(f"  property `{e['property']}` could not be evaluated: {e['error']}")
     for u in res.get("undeclared_exceptions") or []:
         lines.append(f"  undeclared {u['type']} on {u['count']} input(s) of the annotated domain, e.g. "
-                     f"{u['example']['call']}" + (" (also at the base)" if u.get("also_at_base") else ""))
+                     f"{u['example']['call']}" + {True: " (also at the base)", False: " (new in the working tree)",
+                                                  None: ""}[u.get("also_at_base")])
     if res.get("nondeterministic"):
         nd = res["nondeterministic"]
         lines.append(f"  nondeterministic on {nd['count']} input(s), e.g. {nd['example']['call']}: "
@@ -1709,7 +1714,11 @@ def render(res: dict) -> str:
             lines.append(f"    boundary: {_bound_text(b)}")
     runs = res.get("runs")
     if runs:
-        lines.append("  runs: " + ", ".join(f"{k} {v}" for k, v in runs.items()))
+        side = {"base": "base", "head": "working tree"}
+        text = "; ".join(f"{side[k]} {', '.join(runs[k])}" for k in ("base", "head") if runs.get(k))
+        if runs.get("confirm"):
+            text += "; confirmation " + "; ".join(f"{side[k]} {', '.join(v)}" for k, v in runs["confirm"].items() if v)
+        lines.append(f"  runs (experiments): {text}")
     if res.get("guarantees"):
         g = res["guarantees"]
         lines.append(f"  isolation {res.get('isolation')}: NOT " + ", ".join(k for k, v in g.items() if not v))
@@ -1719,10 +1728,10 @@ def render(res: dict) -> str:
         lines.append(f"  not checked: {n}")
     for lim in res.get("limits") or []:
         lines.append(f"  limit: {lim}")
-    if res.get("regression_test"):
-        lines += ["", res["regression_test"]]
     if res.get("next_step"):
         lines.append(f"  next: {res['next_step']}")
+    if res.get("regression_test"):
+        lines += ["", res["regression_test"]]
     return "\n".join(lines)
 
 
