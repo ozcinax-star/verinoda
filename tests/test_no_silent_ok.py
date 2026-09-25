@@ -611,6 +611,46 @@ def test_a_changed_notebook_or_cython_file_is_listed_as_not_checked(tmp_path):
     assert none["exit"] == 0 and none["limits"][0].startswith("no Python file was checked: no .py file changed")
 
 
+def test_a_flow_hop_outside_python_is_strong_inference_at_most(tmp_path):
+    """reviewer-a: the same Java call was `partial` as a relation claim and `full` as a flow hop."""
+    repo = tmp_path / "r"
+    shutil.copytree(GLOW / "src", repo / "src")
+    shutil.copytree(ORDERS / "orders", repo / "orders")
+    ritual = "src/main/java/com/example/glowmod/ritual/Ritual.java"
+    line = next(i for i, ln in enumerate((repo / ritual).read_text(encoding="utf-8").splitlines(), 1)
+                if ln.strip().startswith("alaniAc(world, altar);"))
+    ev = _src(repo, ritual, line)
+    ev.setdefault("meta", {})["hop"] = "Ritual.baslat->Ritual.alaniAc"
+    spec = {"hops": [{"from": "Ritual.baslat", "to": "Ritual.alaniAc", "relation": "calls"}]}
+    flow = entail.assess("flow", repo, spec, ev, text="Ritual.baslat calls Ritual.alaniAc",
+                         subjects=[ritual, ritual])
+    rel = entail.assess("relation", repo, {"target_label": "alaniAc"}, _src(repo, ritual, line),
+                        subjects=[f"{ritual}::baslat", f"{ritual}::alaniAc"])
+    assert flow.grade == rel.grade == "partial" and "checked for Python only" in flow.reason
+    # a Python hop keeps its binding checks
+    ev = _src(repo, "orders/pricing.py", 8)
+    ev.setdefault("meta", {})["hop"] = "compute_total->apply_discount"
+    spec = {"hops": [{"from": "compute_total", "to": "apply_discount", "relation": "calls"}]}
+    assert entail.assess("flow", repo, spec, ev, text="compute_total calls apply_discount",
+                         subjects=["orders/pricing.py", "orders/pricing.py"]).grade == "full"
+
+def test_analyze_caps_a_java_call_path_and_says_why(glow_indexed):
+    """reviewer-a: analyze asked `statically_verified` for a flow whose hops are Java calls graded full by the
+    syntax tree, while the same call as a relation claim stops at strong_inference."""
+    from verinoda import analysis
+
+    st = open_store(glow_indexed)
+    try:
+        res = analysis.analyze(st, glow_indexed, "What is the call path from the ritual command to spawning a wisp?")
+    finally:
+        st.close()
+    flows = [c for c in res["claims"] if c["text"].startswith("Call path")]
+    assert flows, [c["text"] for c in res["claims"]]
+    for c in flows:
+        assert c["status"] != "statically_verified", c
+        assert any("checked for Python only" in u and ".java:" in u for u in c["uncertainties"]), c["uncertainties"]
+
+
 def test_readmes_templates_and_this_repository_s_fixture_are_no_adr(tmp_path):
     """reviewer-a h9: docs/decisions/README.md alone made `decide check` exit 3; so did the branch's own
     fixture (benchmarks/results/.../adr-0002.md, a verinoda-decision front matter) on Verinoda itself."""

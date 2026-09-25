@@ -1775,8 +1775,10 @@ def _flow(repo, spec: dict, ev: dict, text: str, subjects: list[str]) -> Grade:
             if a and any(a in (s["start"], s["def"]) for _, s in anchors.symbols_named(facts, _token(to))):
                 return Grade("full", f"`{_token(to)}` is defined at line {a}")
             return Grade("partial", f"method hop {frm}->{to}: no definition at the cited line")
-        return _call_grade(repo, ev, _token(to), caller=_token(frm) or None, target_path=None, target_qual=None,
-                           relation=relation)
+        # a call hop is a relation claim with the same binding checks: outside Python strong_inference at most
+        g = _call_grade(repo, ev, _token(to), caller=_token(frm) or None, target_path=None, target_qual=None,
+                        relation=relation)
+        return _python_only(g, ev["path"], "which definition the hop's call binds to and that it sits in the caller")
     if meta.get("sink"):
         from verinoda.architecture_map import SINK_PATTERNS
 

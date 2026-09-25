@@ -951,6 +951,12 @@ def _path_claim(ctx: _Ctx, hops: list[dict], text: str, *, sink_lines: list[str]
     unc = list(base_unc)
     if inferred:
         unc.append("at least one hop is INFERRED")
+    other = [h["at"] for h in hops if h.get("at") and h.get("relation") != "method"
+             and not h["at"].rpartition(":")[0].endswith((".py", ".pyi"))]
+    if other:  # entail._flow caps such a hop: the binding checks exist for Python only
+        status = "strong_inference"
+        unc.append(f"which definition the call at {other[0]} binds to is checked for Python only"
+                   + (f" ({len(other)} such hops)" if len(other) > 1 else ""))
     unc += aliased + weak
     return ctx.rec.claim(text, kind="flow", status=status, evidence=evs, subjects=subjects,
                          spec={"hops": [{k: h.get(k) for k in ("from", "to", "relation", "confidence", "at")}
