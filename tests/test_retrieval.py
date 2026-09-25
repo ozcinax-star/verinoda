@@ -495,6 +495,29 @@ def test_render_text_says_so_when_nothing_matches(g):
     assert text.strip() and "## " not in text
 
 
+SHAPES = [("Where is the order total computed?", 4800), ("What calls shutil.copyfileobj?", 4800),
+          ("Sipariş toplamı nerede hesaplanıyor?", 4800),
+          ("How does an order get from the API handler to the database?", 6000),
+          ("Which environment variables configure the service and where are they read?", 6000),
+          ("Siparişler API'den veritabanına nasıl ulaşıyor?", 6000), ("Which tests reach apply_discount?", 6000),
+          ("hangi testler indirimi kapsıyor?", 6000), ("What happens when a save fails?", 6000),
+          ("from the handler to the repository", 6000), ("callers, callees", 6000)]
+
+
+@pytest.mark.parametrize("question, narrow", SHAPES)
+def test_the_question_shape_budget_is_off_by_default(question, narrow, tmp_path, monkeypatch):
+    monkeypatch.delenv("VERINODA_SHAPE_BUDGET", raising=False)
+    assert retrieval.question_chars(question) == retrieval.question_chars(question, tmp_path) == 6000
+    monkeypatch.setenv("VERINODA_SHAPE_BUDGET", "1")  # single-clause questions get less, the rest all of it
+    assert retrieval.question_chars(question, tmp_path) == narrow
+    monkeypatch.setenv("VERINODA_SHAPE_BUDGET", "0")
+    (tmp_path / ".verinoda").mkdir()
+    (tmp_path / ".verinoda" / "config.json").write_text('{"query": {"shape_budget": true}}', encoding="utf-8")
+    assert retrieval.question_chars(question, tmp_path) == 6000  # the environment wins
+    monkeypatch.delenv("VERINODA_SHAPE_BUDGET")
+    assert retrieval.question_chars(question, tmp_path) == narrow  # else the project's config
+
+
 def test_render_text_shows_module_constants_the_body_references(g):
     res = retrieval.retrieve(g, "load_settings")
     text = retrieval.render_text(res)

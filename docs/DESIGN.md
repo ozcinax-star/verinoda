@@ -477,6 +477,12 @@ apart from `atlas.db` because it is disposable.
   and the text carries every field the protocol reads. `--json` stays for programs and prints
   compact JSON off a terminal (indentation was a quarter of the bytes); `doctor --brief` prints
   the graph and snapshot lines and every problem, nothing else.
+- The budget still does not follow the question by default. A question-shape budget (4,800
+  characters for a single-clause question, 6,000 for compound, flow and test questions) exists
+  behind `query.shape_budget` / `VERINODA_SHAPE_BUDGET`: -8.3% tokens per question on the 8 sets
+  with no fact found lost, but one gold line no longer shown, so it stays off (the rule: no gold
+  fact lost anywhere, found or shown, in-sample or out). A stop signal that knows when the
+  question is covered is the open lever (docs/BENCHMARKS.md, "Token wins, 2026-09-26").
 
 **D21. Build-time work is not repeated at query time.**
 

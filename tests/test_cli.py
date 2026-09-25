@@ -180,6 +180,17 @@ def test_query_prints_model_text_by_default_even_on_a_legacy_code_page(repo):
     assert len(out) <= 1500 + 200 and not out.lstrip().startswith("{")
 
 
+def test_query_default_budget_follows_the_question_shape_when_it_is_on(repo):
+    q = "where is the order total computed?"  # one clause: 4800 characters with the shape budget on
+    on = ra("query", q, "--repo", str(repo), "--max-items", "25", cwd=repo, env=_env(VERINODA_SHAPE_BUDGET="1"))
+    narrow = ra("query", q, "--repo", str(repo), "--max-items", "25", "--max-chars", "4800", cwd=repo,
+                env=_env(VERINODA_SHAPE_BUDGET="0"))
+    wide = ra("query", q, "--repo", str(repo), "--max-items", "25", cwd=repo, env=_env(VERINODA_SHAPE_BUDGET="0"))
+    assert on.returncode == 0 and on.stdout == narrow.stdout
+    assert wide.stdout == ra("query", q, "--repo", str(repo), "--max-items", "25", "--max-chars", "6000",
+                             cwd=repo, env=_env(VERINODA_SHAPE_BUDGET="0")).stdout  # off: 6000, as before
+
+
 def test_write_falls_back_to_utf8_bytes(monkeypatch):
     import io
 

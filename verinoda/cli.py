@@ -670,11 +670,12 @@ def cmd_query(args) -> int:
     repo = _repo(args)
     _need_graph(repo)
     g = index.load(repo)
-    res = retrieval.retrieve(g, args.question, retrieval.Budget(max_items=args.max_items, max_chars=args.max_chars))
+    chars = args.max_chars or retrieval.question_chars(args.question, repo)
+    res = retrieval.retrieve(g, args.question, retrieval.Budget(max_items=args.max_items, max_chars=chars))
     if args.json:
         _write(_dump(res))
     else:  # the skeleton-first plain text a model reads (docs/DESIGN.md D20)
-        _write(retrieval.render_text(res, budget_chars=args.max_chars))
+        _write(retrieval.render_text(res, budget_chars=chars))
     return 0
 
 
@@ -2187,7 +2188,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("query", cmd_query, "bounded, justified retrieval for a question (plain text; --json for programs)")
     sp.add_argument("question")
     sp.add_argument("--max-items", type=int, default=10)
-    sp.add_argument("--max-chars", type=int, default=6000)
+    sp.add_argument("--max-chars", type=int, default=None,
+                    help="character budget (default 6000; with query.shape_budget on, 4800 for a single-clause "
+                         "question)")
     sp = add("trace", cmd_trace, "directed paths between two symbols/files with edge locations")
     sp.add_argument("source")
     sp.add_argument("target")

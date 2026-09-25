@@ -36,11 +36,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import textwrap
 from collections import defaultdict
 from dataclasses import dataclass, field
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 import networkx as nx
 
@@ -74,6 +75,15 @@ TEXT_PASSAGE_LINES = 14
 TEXT_LINE_CHARS = 160
 TEXT_MAX_PROSE = 2
 TEXT_MAX_EXPANSIONS = 3     # from->to pairs on the text's `expanded:` line (JSON lists all, with why)
+
+# The default text budget (`verinoda query`, MCP project_query, analyze's passages). With the
+# question-shape budget on (config query.shape_budget, env VERINODA_SHAPE_BUDGET; off by default,
+# docs/BENCHMARKS.md "Token wins, 2026-09-26" says why) a single-clause question gets
+# SHAPE_CHARS_NARROW; compound, flow and test questions keep QUERY_CHARS.
+QUERY_CHARS = 6000
+SHAPE_CHARS_NARROW = 4800
+_WIDE_QUESTION_RX = re.compile(r",|\b(?:and|ve|how does|nasil|what happens|ne oluyor|ends? up|down to|kadar|"
+                               r"which tests?|hangi test\w*)\b|\bfrom\b.+\bto\b")
 
 FLOW_RX = re.compile(r"\b(call|calls|called|calling|path|flow|pipeline|turn\w*|how does|how is|steps?|"
                      r"cagir\w*|akis\w*|nasil calis\w*|hangi fonksiyon\w*)\b", re.I)
@@ -408,6 +418,29 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
 
 
 # -- plain-text rendering (D20) -----------------------------------------------------------------
+
+def shape_budget_enabled(repo: Path | str | None = None) -> bool:
+    """Is the question-shape budget on? ``VERINODA_SHAPE_BUDGET`` (1/0) wins, else the project's
+    ``query.shape_budget``; off by default."""
+    env = os.environ.get("VERINODA_SHAPE_BUDGET")
+    if env is not None and env.strip():
+        return env.strip().lower() in ("1", "true", "on", "yes")
+    if repo is None:
+        return False
+    from verinoda.paths import load_config
+
+    try:
+        return bool((load_config(Path(repo)).get("query") or {}).get("shape_budget"))
+    except Exception:  # noqa: BLE001 - an unreadable config keeps the default
+        return False
+
+
+def question_chars(question: str, repo: Path | str | None = None) -> int:
+    """The default character budget of the text for ``question`` (see :data:`QUERY_CHARS`)."""
+    if not shape_budget_enabled(repo):
+        return QUERY_CHARS
+    return QUERY_CHARS if _WIDE_QUESTION_RX.search(fold_tr(question or "")) else SHAPE_CHARS_NARROW
+
 
 def _clip(s: str, n: int) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"

@@ -357,6 +357,16 @@ def test_project_query_text_and_json_equal_core(repo, tools):
     assert fmt["error"] == "invalid_argument" and set(fmt["valid"]) == {"text", "json"}
 
 
+def test_project_query_follows_the_question_shape_budget_when_it_is_on(repo, monkeypatch):
+    from verinoda import index, retrieval
+
+    q = "where is compute_total defined?"  # one clause
+    monkeypatch.setenv("VERINODA_SHAPE_BUDGET", "1")
+    res = AtlasTools(repo).project_query(q)
+    core = retrieval.retrieve(index.load(repo), q, retrieval.Budget(max_items=8, max_chars=4800))
+    assert res["text"] == retrieval.render_text(core, 4800)
+
+
 def test_project_query_text_fits_a_small_cap(repo):
     small = AtlasTools(repo, max_chars=2000)
     res = small.project_query(QUESTION)

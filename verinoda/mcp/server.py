@@ -107,7 +107,7 @@ TOOL_NAMES: tuple[str, ...] = (
 )
 
 MAX_RESPONSE_CHARS = int(os.environ.get("VERINODA_MCP_MAX_CHARS", "12000"))
-QUERY_MAX_CHARS = 6000          # same default as `verinoda query --max-chars`
+QUERY_MAX_CHARS = 6000          # same default as `verinoda query --max-chars` (retrieval.question_chars)
 QUERY_MEMO_SIZE = 64            # project_query answers kept, re-validated by stat on every hit
 EXCERPT_MAX_LINES = 30
 EDGE_CAP = 25
@@ -649,12 +649,13 @@ class AtlasTools:
                 self._query_memo.move_to_end(key)
                 self.cache_stats["query_memo_hits"] += 1
                 return hit[1]
-            res = retrieval.retrieve(g, q, retrieval.Budget(max_items=n, max_chars=QUERY_MAX_CHARS))
+            budget = retrieval.question_chars(q, self.repo)
+            res = retrieval.retrieve(g, q, retrieval.Budget(max_items=n, max_chars=budget))
             if fmt == "json":
                 out = _jsonable(res)
             else:
                 # the escaped JSON string must still fit the response cap
-                chars = min(QUERY_MAX_CHARS, max(800, int((self.max_chars - 200) * 0.85)))
+                chars = min(budget, max(800, int((self.max_chars - 200) * 0.85)))
                 out = {"format": "text", "question": q, "text": retrieval.render_text(res, budget_chars=chars)}
             rd = getattr(res, "render", None)
             if rd is not None:  # the same answer is recomputed only when one of its inputs changed on disk

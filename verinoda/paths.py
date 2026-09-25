@@ -72,6 +72,9 @@ DEFAULT_CONFIG: dict = {
     # MCP tools served (`verinoda mcp serve --profile` wins): "core" (11 tools: query, analyze, inspect,
     # trace, map, claims and evidence, index_update, code_check, decision_check) or "full" (all 33)
     "mcp": {"profile": "core"},
+    # `verinoda query` / MCP project_query / analyze passages: with shape_budget a single-clause question
+    # gets 4800 characters instead of 6000 (verinoda.retrieval.question_chars; env VERINODA_SHAPE_BUDGET)
+    "query": {"shape_budget": False},
 }
 
 NETWORK_MODES = ("off", "cache", "on")
