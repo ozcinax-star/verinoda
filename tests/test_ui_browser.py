@@ -413,7 +413,10 @@ def _key(page, key, **mods):
 def test_the_3d_view_flies_to_a_file_walks_its_links_and_follows_it(page, site):
     _in_3d(page, site)
     hub = page.js("""(() => {
-      const g = window.__verinoda.g3, n = [...g.nodes].sort((a, b) => b.deg - a.deg)[0], p = g.screenOf(n.id);
+      const g = window.__verinoda.g3, byDeg = [...g.nodes].sort((a, b) => b.deg - a.deg);
+      // the busiest node a click at its own position reaches (a node drawn in front may cover another)
+      const n = byDeg.find((m) => { const q = g.screenOf(m.id); return q && g.hit(q.x, q.y) === m; }) || byDeg[0];
+      const p = g.screenOf(n.id);
       const c = document.querySelector('#global3d'), r = c.getBoundingClientRect();
       for (const type of ['pointerdown', 'pointerup'])
         c.dispatchEvent(new PointerEvent(type, {clientX: r.left + p.x, clientY: r.top + p.y, bubbles: true, button: 0, pointerId: 1}));
@@ -485,7 +488,9 @@ def test_the_tour_goes_round_the_regions_and_every_key_is_listed(page, site):
 def test_a_watched_file_that_changes_is_announced(page, site, glow):
     _in_3d(page, site)
     hub = page.js("""(() => {
-      const g = window.__verinoda.g3, n = [...g.nodes].filter((m) => m.file).sort((a, b) => b.deg - a.deg)[0], p = g.screenOf(n.id);
+      const g = window.__verinoda.g3, byDeg = [...g.nodes].filter((m) => m.file).sort((a, b) => b.deg - a.deg);
+      const n = byDeg.find((m) => { const q = g.screenOf(m.id); return q && g.hit(q.x, q.y) === m; }) || byDeg[0];
+      const p = g.screenOf(n.id);
       const c = document.querySelector('#global3d'), r = c.getBoundingClientRect();
       for (const type of ['pointerdown', 'pointerup'])
         c.dispatchEvent(new PointerEvent(type, {clientX: r.left + p.x, clientY: r.top + p.y, bubbles: true, button: 0, pointerId: 1}));
