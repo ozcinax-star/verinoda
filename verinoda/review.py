@@ -60,6 +60,9 @@ REVIEWABLE_SUFFIXES = tuple(sorted({*CODE_SUFFIXES, *rr.CONFIG_SUFFIXES, *anchor
                                     ".mcfunction", ".sql", ".sh", ".ps1", ".cfg", ".txt"}))
 DATA_SUFFIXES = (".json", ".mcfunction", ".mcmeta", ".txt", ".csv", ".lang", ".svg", ".html", ".css", ".rst")
 DOC_SUFFIXES = (*anchors.MD_SUFFIXES, ".rst", ".txt", ".adoc")
+# files written this long before the last snapshot was recorded are taken to hold the content it hashed (a scan
+# that took longer, or a tool that backdates modification times, would hide a newer caller: docs/DESIGN.md 8.6)
+_DRIFT_MARGIN_S = 3600
 # files that make their directory a project of its own (a vendored copy, a sub-project)
 _PROJECT_MARKERS = {"pyproject.toml", "setup.py", "setup.cfg", "package.json", "build.gradle", "build.gradle.kts",
                     "pom.xml", "Cargo.toml", "go.mod"}
@@ -356,9 +359,23 @@ class _Ctx:
                     snap = None
             if snap is not None:
                 recorded = self.store.snapshot_files(snap["id"])
+                # a file last written well before the snapshot was taken had that content when it was hashed: only
+                # newer files (or files the snapshot does not have) are read and hashed again
+                try:
+                    from datetime import datetime
+
+                    cutoff = datetime.fromisoformat(str(snap.get("created_at"))).timestamp() - _DRIFT_MARGIN_S
+                except (TypeError, ValueError):
+                    cutoff = None
                 for rel in self.files():
                     if _suffix(rel) not in CODE_SUFFIXES or rel in self.base_texts:
                         continue
+                    if cutoff is not None and rel in recorded and rel not in self.overrides:
+                        try:
+                            if (self.repo / rel).stat().st_mtime < cutoff:
+                                continue
+                        except OSError:
+                            continue
                     try:
                         if rel in self.overrides:   # staged mode: the index's version is the one reviewed
                             t = self.overrides[rel]
@@ -1658,9 +1675,12 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
             otree = ctx.pytree(rel, "old") if rel in ctx.base_texts and old_lines else None
             for ol, kind, _w, _b, _s in (rr.py_security_ops(otree, rel, None, old_lines) if otree is not None else []):
                 had.append((kind, *_py_op_call(ctx, rel, "old", ol)[:3]))
+            # one call can hold several operations of a kind (the call, its shell=True keyword): one finding per
+            # call and kind, the strongest
+            by_call: dict[tuple, int] = {}
             for line, kind, what, by, status in rr.py_security_ops(tree, rel, ctx.pyix(), lines):
                 flow = _param_flow(ctx, rel, line)
-                call_key, names, shown, real = _py_op_call(ctx, rel, "new", line)
+                call_key, names, shown, real, call_at = _py_op_call(ctx, rel, "new", line)
                 same = next((h for h in had if h[0] == kind and h[1] == call_key), None)
                 prev = same or next((h for h in had if h[0] == kind), None)
                 if prev is not None:
@@ -1682,15 +1702,26 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                     text += f"; an entry point's parameter reaches it: {flow['from_entry']}"
                 elif flow:
                     text += f"; it uses the parameter(s) {', '.join(flow['params'])}"
-                out.append(_finding("security", "op-on-changed-line", text, status, f"{rel}:{line}",
-                                    basis="Python syntax tree of the tree under review (calls bound through imports "
-                                    "and aliases); parameter flow: def-use per hop, an inference"
-                                    + ("; the base version had this call on its changed lines" if same is not None
-                                       else "; the base version had this kind of operation on its changed lines, in "
-                                            "another call" if prev is not None else ""),
-                                    derived_by=by, for_symbol=_sym_for(ctx, rel, line),
-                                    evidence_at=[flow["entry"]] if flow and flow.get("entry") else (),
-                                    param_flow=flow))
+                f = _finding("security", "op-on-changed-line", text, status, f"{rel}:{line}",
+                             basis="Python syntax tree of the tree under review (calls bound through imports and "
+                                   "aliases); parameter flow: def-use per hop, an inference"
+                             + ("; the base version had this call on its changed lines" if same is not None
+                                else "; the base version had this kind of operation on its changed lines, in another "
+                                     "call" if prev is not None else ""),
+                             derived_by=by, for_symbol=_sym_for(ctx, rel, line),
+                             evidence_at=[flow["entry"]] if flow and flow.get("entry") else (), param_flow=flow)
+                group = (kind, call_at) if call_at is not None else None
+                i = by_call.get(group) if group is not None else None
+                if i is not None and rr.rank(status) != rr.rank(out[i]["status"]):
+                    # the weaker finding on the same call is folded into the stronger one (its line as evidence)
+                    keep, drop = (f, out[i]) if rr.rank(status) < rr.rank(out[i]["status"]) else (out[i], f)
+                    keep["evidence_at"] = [a for a in dict.fromkeys([*keep["evidence_at"], drop["at"]])
+                                           if a != keep["at"]]
+                    out[i] = keep
+                    continue
+                if group is not None and i is None:
+                    by_call[group] = len(out)
+                out.append(f)
         else:
             code, ocode = ctx.code(rel), ctx.code(rel, "old")
             had_t: list[tuple[str, str]] = []
@@ -1784,11 +1815,13 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
 _BUILTIN_NAMES = frozenset(dir(builtins))
 
 
-def _py_op_call(ctx: _Ctx, rel: str, side: str, line: int) -> tuple[str, frozenset[str], str, dict[str, str]]:
+def _py_op_call(ctx: _Ctx, rel: str, side: str, line: int) -> tuple[str, frozenset[str], str, dict[str, str],
+                                                                   tuple[int, int] | None]:
     """The call holding a security operation on ``line`` of one version of a Python file (the outermost call over
-    that line): ``(key, names, text, real)`` - its source with the enclosing function's parameters renamed by
-    position, the (renamed) names its arguments read (builtins aside), its source as written, and renamed -> real
-    name. A line without a call (SQL text built with an f-string) gives its code line."""
+    that line): ``(key, names, text, real, at)`` - its source with the enclosing function's parameters renamed by
+    position, the (renamed) names its arguments read (builtins aside), its source as written, renamed -> real
+    name, and where the call starts. A line without a call (SQL text built with an f-string) gives its code
+    line."""
     tree = ctx.pytree(rel, side)
     qual = ctx.label_at(rel, line, side)
     s = ctx.sym(rel, qual, side) if qual else None
@@ -1805,14 +1838,14 @@ def _py_op_call(ctx: _Ctx, rel: str, side: str, line: int) -> tuple[str, frozens
     if best is None:
         code = ctx.code(rel, side)
         text = _norm_code(code[line - 1]) if 0 < line <= len(code) else ""
-        return rr.alpha(text, params), frozenset(), text, {}
+        return rr.alpha(text, params), frozenset(), text, {}, None
     text = rr._unparse(best)
     real: dict[str, str] = {}
     for a in [*best.args, *(k.value for k in best.keywords)]:
         for x in ast.walk(a):
             if isinstance(x, ast.Name) and x.id not in _BUILTIN_NAMES:
                 real[rr.alpha(x.id, params)] = x.id
-    return rr.alpha(text, params), frozenset(real), text, real
+    return rr.alpha(text, params), frozenset(real), text, real, (best.lineno, best.col_offset)
 
 
 def _param_flow(ctx: _Ctx, rel: str, line: int) -> dict | None:

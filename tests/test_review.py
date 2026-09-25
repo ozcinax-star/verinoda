@@ -1115,6 +1115,17 @@ def test_a_security_call_whose_constant_argument_became_a_parameter(tmp_path):
                                                         "app/tasks.py:10": "statically_verified"}
     assert "changes process-exec" in got["app/tasks.py:6"]["finding"] and "now read cmd" in got["app/tasks.py:6"]["finding"]
     assert "now read blob" in got["app/tasks.py:10"]["finding"] and res["exit"] == 3
+    # one call, two operations of a kind (the call, and shell=True added to it): one finding, the verified one
+    (repo / "app" / "run2.py").write_text("import subprocess\n\n\ndef git(repo, *args):\n    return subprocess.run(\n"
+                                          "        [\"git\", \"-C\", str(repo), *args], capture_output=True,\n    )\n",
+                                          encoding="utf-8", newline="\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "run2")
+    _edit(repo, "app/run2.py", "        [\"git\", \"-C\", str(repo), *args], capture_output=True,\n",
+          "        \"git -C \" + str(repo) + \" \".join(args), shell=True, capture_output=True,\n")
+    got = [(f["at"], f["status"]) for f in _by(_review(repo), "security", "op-on-changed-line")
+           if f["at"].startswith("app/run2.py")]
+    assert got == [("app/run2.py:6", "statically_verified")]
 
 
 def test_security_calls_through_an_assigned_alias_or_a_renamed_re_export(tmp_path):
@@ -1145,15 +1156,21 @@ def test_a_caller_committed_after_the_last_snapshot_is_searched_and_named(tmp_pa
     # silently missed (arity break, removed name, binding reader), with no graph_stale unknown
     repo = _project(tmp_path, "c05", {"pkg/__init__.py": "", "pkg/rules.py": "LIMIT = 3\n\n\ndef validate(value):\n"
                                       "    return value > 0\n", "pkg/old_user.py": "from pkg.rules import validate\n\n\n"
-                                      "def check_old(v):\n    return validate(v)\n"})
+                                      "def check_old(v):\n    return validate(v)\n",
+                                      "pkg/other.py": "def other(v):\n    return v\n"})
     (repo / "pkg" / "new_user.py").write_text("from pkg.rules import LIMIT, validate\n\n\ndef check_new(v):\n"
                                               "    return validate(v) and v < LIMIT\n", encoding="utf-8", newline="\n")
-    _git(repo, "add", "pkg/new_user.py")
+    # a file the snapshot has, edited since: it now imports and calls the function
+    (repo / "pkg" / "other.py").write_text("from pkg.rules import validate\n\n\ndef other(v):\n    return validate(v)\n",
+                                           encoding="utf-8", newline="\n")
+    _git(repo, "add", "pkg/new_user.py", "pkg/other.py")
     _git(repo, "commit", "-qm", "a new caller")
     _edit(repo, "pkg/rules.py", "def validate(value):\n", "def validate(value, strict):\n")
     res = _review(repo)
-    assert {f["at"] for f in _by(res, "public_api", "arity-break")} == {"pkg/old_user.py:5", "pkg/new_user.py:5"}
-    assert res["graph"]["stale_files"] == ["pkg/new_user.py"] and "graph_stale" in {u["kind"] for u in res["unknown"]}
+    assert {f["at"] for f in _by(res, "public_api", "arity-break")} == {"pkg/old_user.py:5", "pkg/new_user.py:5",
+                                                                         "pkg/other.py:5"}
+    assert sorted(res["graph"]["stale_files"]) == ["pkg/new_user.py", "pkg/other.py"]
+    assert "graph_stale" in {u["kind"] for u in res["unknown"]}
     _git(repo, "checkout", "--", "pkg/rules.py")
     _edit(repo, "pkg/rules.py", "\n\ndef validate(value):\n    return value > 0\n", "\n")
     assert {"pkg/new_user.py:1", "pkg/new_user.py:5"} <= {f["at"] for f in _by(_review(repo), "public_api")}
