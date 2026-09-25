@@ -1,0 +1,91 @@
+[
+ {
+  "step": "comment:21",
+  "before_s": 38.86,
+  "after_s": 36.6,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:22",
+  "before_s": 39.99,
+  "after_s": 35.76,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "body:23",
+  "before_s": 38.5,
+  "after_s": 37.75,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "add:24",
+  "before_s": 39.68,
+  "after_s": 36.6,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "del:24",
+  "before_s": 57.42,
+  "after_s": 36.04,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "delx:verinoda/scip_reader.py",
+  "before_s": 40.12,
+  "after_s": 48.86,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "json:26",
+  "before_s": 4.21,
+  "after_s": 4.03,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "jsoncode:27",
+  "before_s": 37.86,
+  "after_s": 34.46,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "md:28",
+  "before_s": 40.55,
+  "after_s": 46.76,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "mdshift:29",
+  "before_s": 39.69,
+  "after_s": 40.59,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:30",
+  "before_s": 36.81,
+  "after_s": 33.43,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "query": "How does verinoda update decide whether to rebuild the code graph?",
+  "outputs": "identical"
+ },
+ {
+  "query": "Where are graph ids made portable after an index build?",
+  "outputs": "identical"
+ },
+ {
+  "query": "Türkçe sorulardaki ekler nasıl ayıklanıyor?",
+  "outputs": "identical"
+ }
+]

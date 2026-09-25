@@ -70,13 +70,15 @@ def _no_missing_files(repo: Path, stats: dict, known=()) -> tuple[dict, list[str
     Returns ``(stats, deleted, dangling)``. ``deleted`` were files of the previous snapshot
     (``known``); ``dangling`` never were: other files name them (a project file referencing
     another project, an import of a file that is not in the repository) and the indexer
-    made nodes for them anyway.
+    made nodes for them anyway. A build asked to (``prune_missing``) has dropped them already
+    and counted what is left (``stats["pruned_files"]``); the graph is still checked here.
     """
-    pruned = index.prune_missing_files(repo)
+    extra = index.prune_missing_files(repo)  # normally nothing is left to prune
+    pruned = sorted(set(stats.get("pruned_files") or ()) | set(extra))
     known = set(known)
     deleted = [f for f in pruned if f in known]
     dangling = [f for f in pruned if f not in known]
-    return (_graph_counts(repo, stats) if pruned else stats), deleted, dangling
+    return (_graph_counts(repo, stats) if extra else stats), deleted, dangling
 
 
 def _call_hook(fn, *args, **kwargs) -> dict:
@@ -148,7 +150,7 @@ def scan(store: Store, repo: Path, *, force: bool = False) -> dict:
     had_graph = graph_path(repo).exists()
     missing_before = index.missing_source_files(repo) if had_graph else []
     force = force or not had_graph or bool(missing_before)
-    stats = index.build(repo, force=force)
+    stats = index.build(repo, force=force, prune_missing=True)
     t_index = time.monotonic() - t0
     if not stats.get("ok", True):
         return {**_index_refused(store, repo, stats, force=force), "index_seconds": round(t_index, 3)}
@@ -177,8 +179,7 @@ def _graph_affected(repo: Path, diff: dict) -> bool:
     from verinoda.project_index.detect import FileType, classify_file
 
     try:
-        g = index.load(repo)
-        in_graph = {d.get("source_file") for _, d in g.G.nodes(data=True) if d.get("source_file")}
+        in_graph = index.graph_source_files(repo)
     except Exception:  # noqa: BLE001 - no readable graph: rebuild
         return True
     if any(f in in_graph for f in diff["modified"] + diff["removed"]):
@@ -238,12 +239,12 @@ def update(store: Store, repo: Path) -> dict:
         # are lost (orders_app: editing service.py dropped its 4 edges into pricing.py and
         # repository.py). The whole corpus is re-extracted instead; unchanged files come
         # from the AST cache.
-        stats = index.build(repo)
+        stats = index.build(repo, prune_missing=True)
         index_mode = "full"
         if not stats.get("ok", True) and diff["removed"]:
             # The indexer refuses a graph that shrinks; removed files explain the
             # shrink, so rebuild with force rather than keep their nodes.
-            stats = index.build(repo, force=True)
+            stats = index.build(repo, force=True, prune_missing=True)
             forced = True
     t_index = time.monotonic() - t0
     if stats is not None and not stats.get("ok", True):

@@ -18,7 +18,9 @@ Build-time work is done once and not repeated at query time (docs/DESIGN.md D21)
   only applies them. Per-file facts are cached under the file's sha256, so an
   incremental build re-parses only changed files.
 * The vendored rebuild's path-identity helpers are memoised by a monkeypatch
-  applied from :func:`build` (see :func:`install_path_identity_memo`); the
+  applied from :func:`build` (see :func:`install_path_identity_memo`), and so,
+  for the length of a build, are ``Path.resolve`` (:class:`_resolve_once`) and
+  the re-anchoring of cached source paths (:class:`_absolutize_once`); the
   graph it writes is unchanged.
 """
 
@@ -54,11 +56,18 @@ _CACHE_MAX = 4096              # per-file caches are cleared when they grow past
 
 
 def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
-          quiet: bool = True) -> dict:
+          quiet: bool = True, prune_missing: bool = False) -> dict:
     """Run the Graphify-derived AST pipeline; return graph stats.
 
-    After a successful rebuild the receiver-call sidecar is refreshed (per-file
-    facts are reused for files whose content did not change).
+    After a successful rebuild graph.json is read once and written at most once: its ids
+    are made portable (:mod:`verinoda.portable_ids`) and, with ``prune_missing``, the nodes
+    of files that do not exist are dropped as :func:`prune_missing_files` would drop them
+    (listed in ``pruned_files``). The counts come from that data. Then the receiver-call
+    sidecar is refreshed (per-file facts are reused for files whose content did not change).
+
+    A build with ``prune_missing`` (``scan``/``update``; not ``force``, not ``changed``) leaves
+    graph.json as it is when the last build rewrote it, the pipeline produced that build's graph
+    again and nothing that build left has changed (:class:`_keep_unchanged_graph`; ``graph_kept``).
     """
     from verinoda.project_index.watch import _rebuild_code
     from verinoda.python_cross import python_cross_cache
@@ -69,26 +78,40 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     ensure_atlas(repo)  # the upstream pipeline expects its output directory to exist
     index_dir(repo).mkdir(parents=True, exist_ok=True)
     buf = io.StringIO()
+    keep = _keep_unchanged_graph(repo, active=prune_missing and changed is None and not force)
+    empties = _known_empty_json(repo)
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
-    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(),             python_facts_cache(index_dir(repo)), python_cross_cache(index_dir(repo)):
+    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(), _absolutize_once(),             python_facts_cache(index_dir(repo)), python_cross_cache(index_dir(repo)), empties, keep:
         ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
+    if keep.failed:  # the full path would have failed making its report: so does this build
+        ok = False
     gp = graph_path(repo)
     if not ok and not gp.exists():
         raise RuntimeError("index build failed:\n" + buf.getvalue()[-2000:])
-    portable = None
+    portable = pruned = data = None
     if ok:  # before the sidecar: it is keyed by the graph file as it ends up
-        from verinoda.portable_ids import make_graph_portable
-
         try:
-            portable = make_graph_portable(gp, repo)
+            portable, pruned, data = _post_process(gp, repo, prune=prune_missing)
         except (OSError, ValueError) as exc:  # the ids stay as the pipeline wrote them
             portable = {"error": f"{type(exc).__name__}: {exc}"[:300]}
-    data = json.loads(gp.read_text(encoding="utf-8"))
+    if data is None:
+        data = json.loads(gp.read_text(encoding="utf-8"))
+    elif keep.kept:  # the kept graph is pruned already; the full path would have pruned these
+        pruned = sorted(set(pruned or ()) | set(keep.record.get("pruned") or ()))
     out = {"ok": bool(ok), "graph_path": str(gp), "nodes": len(data.get("nodes", [])),
            "edges": len(data.get("links", data.get("edges", []))), "log": buf.getvalue()[-2000:]}
+    rewrote = bool(pruned) or bool((portable or {}).get("changed"))
+    keep.finish(data if ok and "error" not in (portable or {}) else None, pruned, rewrote)
+    del data  # the sidecar refresh loads the graph again
     if portable is not None:
         out["portable_ids"] = portable
+    if pruned is not None:
+        out["pruned_files"] = pruned
+    if keep.kept:
+        out["graph_kept"] = True
+    if empties.replayed or empties.recorded:
+        out["empty_json"] = {"replayed": empties.replayed, "recorded": empties.recorded}
     if ok:
         try:
             out["receiver_calls"] = refresh_receiver_sidecar(repo)
@@ -125,6 +148,197 @@ class _resolve_once:
 
     def __exit__(self, *a):
         self.cls.resolve = self.real
+        return False
+
+
+class _absolutize_once:
+    """Each cached ``source_file`` re-anchored once per build.
+
+    Every AST cache hit makes its items' ``source_file`` / ``definition_file`` absolute again
+    (``cache._absolutize_source_files_in``: ``str(root / Path(value))`` per item), about 150,000
+    pathlib joins in an update of Verinoda's own repository, although the items of one file share
+    a handful of values. The answer depends only on the resolved root and the string, so it is
+    kept per pair until the build ends. A value that is not a ``str`` takes the original per-item
+    code (and raises where it raises).
+    """
+
+    def __enter__(self):
+        try:
+            from verinoda.project_index import cache as upstream_cache
+        except Exception:  # noqa: BLE001 - nothing to wrap
+            self.mod = None
+            return self
+        self.mod, self.real = upstream_cache, upstream_cache._absolutize_source_files_in
+        memo: dict = {}
+        unknown = object()
+
+        def absolutize(payload: dict, root: Path) -> None:
+            try:
+                root_resolved = Path(root).resolve()
+            except OSError:
+                return
+            known = memo.setdefault(str(root_resolved), {})  # the spelling, not Path equality
+            for bucket in ("nodes", "edges", "hyperedges", "raw_calls"):
+                for item in payload.get(bucket, []):
+                    if not isinstance(item, dict):
+                        continue
+                    for key in ("source_file", "definition_file"):
+                        source = item.get(key)
+                        if not source:
+                            continue
+                        if type(source) is str:
+                            new = known.get(source, unknown)
+                            if new is unknown:
+                                sp = Path(source)
+                                new = None  # None: leave the value as it is
+                                if not sp.is_absolute():
+                                    try:
+                                        new = str(root_resolved / sp)
+                                    except (TypeError, OSError):
+                                        pass
+                                known[source] = new
+                            if new is not None:
+                                item[key] = new
+                            continue
+                        sp = Path(source)  # the original code, item by item
+                        if sp.is_absolute():
+                            continue
+                        try:
+                            item[key] = str(root_resolved / sp)
+                        except (TypeError, OSError):
+                            continue
+
+        upstream_cache._absolutize_source_files_in = absolutize
+        return self
+
+    def __exit__(self, *a):
+        if self.mod is not None:
+            self.mod._absolutize_source_files_in = self.real
+        return False
+
+
+EMPTY_JSON_FILE = "empty_json.json"
+EMPTY_JSON_VERSION = 1
+IN_PROCESS_BELOW = 64  # uncached files left: fewer are extracted in this process, not by a pool
+
+
+class _known_empty_json:
+    """Data-shaped ``.json`` files are extracted to nothing on every build; remember that.
+
+    The upstream JSON extractor skips data-shaped JSON on purpose (by the file's name and its
+    top-level keys: ``{"nodes": [], "edges": [], "skipped": ...}``), and the upstream AST cache
+    never stores an empty result (#1666), so such a file is parsed again on every build: 112
+    benchmark and result files in Verinoda's own repository. With the JavaScript files, which
+    upstream never caches, they also push every update past the 20-file threshold for a process
+    pool, whose start-up on Windows costs more than the work.
+
+    For the build, ``extract._extract_parallel`` and ``_extract_sequential`` are wrapped. A file
+    the JSON extractor would read, whose bytes (blake2b) and path gave such a skipped result
+    under the same extractor code (``empty_json.json``, dropped when that code or the grammar
+    changes), is filled with a copy of that result without parsing; everything else goes to the
+    real functions, and their skipped JSON results are remembered. When fewer than
+    :data:`IN_PROCESS_BELOW` files are left, the parallel wrapper hands them back and the caller
+    extracts them in this process: the upstream contract of ``_extract_parallel`` returning
+    False, as it does for a one-worker pool.
+    """
+
+    def __init__(self, repo: Path):
+        self.path = index_dir(Path(repo).resolve()) / EMPTY_JSON_FILE
+        self.X = None
+        self.replayed = self.recorded = 0
+
+    @staticmethod
+    def _stamp(X, json_config) -> str:
+        from importlib import metadata
+
+        from verinoda.project_index.extractors import base
+
+        h = hashlib.blake2b(digest_size=16)
+        for mod in (json_config, base, X):
+            h.update(Path(mod.__file__).read_bytes())
+        for dist in ("tree-sitter", "tree-sitter-json"):
+            try:
+                h.update(f"{dist}={metadata.version(dist)}\0".encode())
+            except metadata.PackageNotFoundError:
+                h.update(f"{dist}=-\0".encode())
+        return h.hexdigest()
+
+    def __enter__(self):
+        try:
+            from verinoda.project_index import extract as X
+            from verinoda.project_index.extractors import json_config
+
+            stamp = self._stamp(X, json_config)
+        except Exception:  # noqa: BLE001 - nothing to wrap
+            return self
+        self.X, self.stamp, extract_json = X, stamp, json_config.extract_json
+        self.real_par, self.real_seq = X._extract_parallel, X._extract_sequential
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            ok = isinstance(data, dict) and data.get("version") == EMPTY_JSON_VERSION
+            known = data.get("files", {}) if ok and data.get("stamp") == stamp else {}
+        except (OSError, ValueError):
+            known = {}
+        self.known, self.kept, self.digests = known, {}, {}
+
+        def prefill(work, per_file) -> None:
+            for i, path in work:
+                if per_file[i] is not None or X._get_extractor(Path(path)) is not extract_json:
+                    continue
+                key = str(path)
+                try:
+                    digest = hashlib.blake2b(Path(path).read_bytes(), digest_size=16).hexdigest()
+                except OSError:
+                    continue
+                self.digests[key] = digest  # the bytes the extractor is about to read
+                hit = self.known.get(key)
+                if isinstance(hit, dict) and hit.get("h") == digest and isinstance(hit.get("r"), dict):
+                    per_file[i] = json.loads(json.dumps(hit["r"]))
+                    self.kept[key] = hit
+                    self.replayed += 1
+
+        def record(work, per_file) -> None:
+            for i, path in work:
+                key, r = str(path), per_file[i]
+                if (key not in self.digests or not isinstance(r, dict) or not r.get("skipped")
+                        or r.get("nodes") or r.get("edges") or "error" in r):
+                    continue
+                try:
+                    copy = json.loads(json.dumps(r))
+                except (TypeError, ValueError):
+                    continue
+                if copy == r:  # replayed as it came
+                    self.kept[key] = {"h": self.digests[key], "r": copy}
+                    self.recorded += 1
+
+        def parallel(uncached_work, per_file, root, max_workers, total_files, cache_location=None):
+            prefill(uncached_work, per_file)
+            rest = [(i, p) for i, p in uncached_work if per_file[i] is None]
+            if len(rest) < IN_PROCESS_BELOW:
+                return False  # the caller extracts what is left in this process
+            done = self.real_par(rest, per_file, root, max_workers, total_files, cache_location)
+            record(rest, per_file)
+            return done
+
+        def sequential(uncached_work, per_file, root, total_files, cache_location=None):
+            prefill(uncached_work, per_file)
+            rest = [(i, p) for i, p in uncached_work if per_file[i] is None]
+            self.real_seq(rest, per_file, root, total_files, cache_location)
+            record(rest, per_file)
+
+        X._extract_parallel, X._extract_sequential = parallel, sequential
+        return self
+
+    def __exit__(self, *a):
+        if self.X is None:
+            return False
+        self.X._extract_parallel, self.X._extract_sequential = self.real_par, self.real_seq
+        if self.digests and self.kept != self.known:  # a build that extracted: keep its files only
+            try:
+                write_json_atomic(self.path, {"version": EMPTY_JSON_VERSION, "stamp": self.stamp,
+                                              "files": self.kept})
+            except OSError:
+                pass
         return False
 
 
@@ -181,6 +395,330 @@ class _null:
 
     def __exit__(self, *a):
         return False
+
+
+# -- vendored rebuild: the "topology unchanged" fast path ------------------------------------------
+
+REBUILD_RECORD = "rebuild_record.json"
+REBUILD_RECORD_VERSION = 1
+_STAMP: list[str] = []
+
+
+def _code_stamp() -> str:
+    """Hash of the code a rebuild runs after extraction (every file of project_index, this module,
+    portable_ids), the Python version and the graph libraries' versions."""
+    if _STAMP:
+        return _STAMP[0]
+    from importlib import metadata
+    import sys
+
+    h = hashlib.sha256(sys.version.encode())
+    here = Path(__file__).resolve().parent
+    files = sorted((here / "project_index").rglob("*.py"))
+    for f in files + [here / "index.py", here / "portable_ids.py"]:
+        h.update(f.relative_to(here).as_posix().encode() + b"\0" + f.read_bytes() + b"\0")
+    for dist in ("networkx", "graspologic-native", "graspologic"):
+        try:
+            h.update(f"{dist}={metadata.version(dist)}\0".encode())
+        except metadata.PackageNotFoundError:
+            h.update(f"{dist}=-\0".encode())
+    _STAMP.append(h.hexdigest())
+    return _STAMP[0]
+
+
+def _file_state(p: Path):
+    try:
+        st = p.stat()
+    except OSError:
+        return None
+    return st.st_ino, st.st_size, st.st_mtime_ns
+
+
+def _sha256_bytes(p: Path) -> str | None:
+    try:
+        return hashlib.sha256(p.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+class _keep_unchanged_graph:
+    """Let the vendored "topology unchanged" fast path fire when the rebuild is the last one again.
+
+    After extraction the vendored rebuild (``watch._rebuild_code``) compares the new graph's
+    topology with graph.json; when they are equal it keeps graph.json and skips clustering, the
+    report and every rewrite. Verinoda rewrites graph.json after each build (portable ids, nodes
+    of missing files pruned), so on a repository whose code names a file that does not exist the
+    two never compare equal, and every update re-clusters and rewrites a graph that has not
+    changed (about a quarter of an update of Verinoda's own repository).
+
+    Only such a rewrite needs this. When graph.json is the pipeline's own output (nothing to make
+    portable, nothing pruned) the vendored comparison works as it is and decides alone, leaving
+    the report and backups untouched when it keeps the graph; no record is written then.
+
+    A build that took the full path, wrote its outputs and then rewrote graph.json leaves a record
+    (``rebuild_record.json``): a hash of the graph the pipeline built (every node and edge with
+    its attributes, in order, and each node's neighbours), the commit, the communities it wrote
+    and fingerprints of graph.json, the labels and their signatures as they were left. The record
+    is only written when the next full rebuild of the same graph would number the communities
+    the same way again (``remap_communities_to_previous`` run against the graph as written).
+
+    On the next build, ``_topology_from_graph`` (which the vendored code calls only for that
+    comparison) is wrapped. When the new graph hashes the same, the commit and the code are the
+    same and the files the record fingerprints are untouched, the full path is known to produce
+    the same clustering, labels and graph.json bytes; the topology is handed over as Verinoda
+    wrote it (edge direction as ``to_json`` writes it, ids made portable, nodes of missing files
+    pruned), so a file that appeared or vanished since makes the comparison fail and the full
+    path runs. When the vendored code then takes its fast path, what the full path would still
+    have changed is done here, with the vendored functions: GRAPH_REPORT.md (it carries the date
+    and the corpus's file and word counts) and the dated backup of a labelled graph. Anything
+    else returns the topology untouched: the full path runs as before.
+    """
+
+    def __init__(self, repo: Path, *, active: bool):
+        self.repo, self.active = Path(repo).resolve(), active
+        self.out = index_dir(self.repo)
+        self.key = self.commit = self.record = None
+        self.kept = self.failed = False
+        self.pending = None      # (G, record) while the vendored comparison runs
+        self.clustered = None    # what cluster() returned in this build
+        self.written = None      # (communities, labels) handed to to_json
+        self.detected = None     # what detect() returned
+        self.before = self.after = None
+        self._undo: list = []
+
+    def _patch(self, mod, name, fn) -> None:
+        self._undo.append((mod, name, getattr(mod, name)))
+        setattr(mod, name, fn)
+
+    def __enter__(self):
+        if not self.active:
+            return self
+        try:
+            from verinoda.project_index import cluster as cl
+            from verinoda.project_index import detect as dt
+            from verinoda.project_index import export as ex
+            from verinoda.project_index import watch
+        except Exception:  # noqa: BLE001 - no fast path; the build runs as before
+            self.active = False
+            return self
+        self.before = _file_state(graph_path(self.repo))
+        try:
+            rec = json.loads((self.out / REBUILD_RECORD).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            rec = None
+        real_topology, real_cluster = watch._topology_from_graph, cl.cluster
+        real_to_json, real_detect, real_save = ex.to_json, dt.detect, dt.save_manifest
+
+        def topology(G):
+            raw = real_topology(G)
+            self.pending = None
+            try:
+                self.key = _graph_key(G, raw)
+                self.commit = watch._git_head(cwd=self.repo)
+            except Exception:  # noqa: BLE001 - no key: the full path runs and nothing is recorded
+                self.key = None
+                return raw
+            if not (isinstance(rec, dict) and rec.get("rewrote") and self._unchanged(rec)):
+                return raw  # graph.json as the pipeline wrote it: its own comparison decides
+            try:
+                written = _as_written(raw, self.repo)
+            except Exception:  # noqa: BLE001
+                return raw
+            self.pending = (G, rec)
+            return written
+
+        def cluster(G, *a, **kw):
+            self.pending = None  # the full path runs
+            self.clustered = res = real_cluster(G, *a, **kw)
+            return res
+
+        def to_json(G, communities, output_path, **kw):
+            self.written = (communities, kw.get("community_labels"))
+            return real_to_json(G, communities, output_path, **kw)
+
+        def detect(*a, **kw):
+            self.detected = res = real_detect(*a, **kw)
+            return res
+
+        def save_manifest(*a, **kw):
+            if self.pending is not None:  # the vendored fast path: nothing was clustered
+                G, rec = self.pending
+                self.pending = None
+                try:
+                    self._as_the_full_path(G, rec)
+                except Exception:  # noqa: BLE001 - the full path would have failed here too
+                    self.failed = True
+                    return None
+                self.kept, self.record = True, rec
+            return real_save(*a, **kw)
+
+        self._patch(watch, "_topology_from_graph", topology)
+        self._patch(cl, "cluster", cluster)
+        self._patch(ex, "to_json", to_json)
+        self._patch(dt, "detect", detect)
+        self._patch(dt, "save_manifest", save_manifest)
+        return self
+
+    def __exit__(self, *a):
+        while self._undo:
+            mod, name, fn = self._undo.pop()
+            setattr(mod, name, fn)
+        if self.active:
+            self.after = _file_state(graph_path(self.repo))
+        return False
+
+    def _unchanged(self, rec: dict) -> bool:
+        """Is this the build the record describes, with every file it fingerprints untouched?"""
+        from verinoda.project_index.exporters.html import _HTML_STALE_MARKER, _viz_node_limit
+
+        out = self.out
+        return (rec.get("version") == REBUILD_RECORD_VERSION and rec.get("key") == self.key
+                and rec.get("commit") == self.commit and rec.get("root") == str(self.repo)
+                and self.detected is not None and rec.get("stamp") == _code_stamp()
+                and _viz_node_limit() <= 0 and not (out / "graph.html").exists()
+                and not (out / _HTML_STALE_MARKER).exists() and not any(out.glob("*-callflow.html"))
+                and _sha256_bytes(out / ".graphify_labels.json") == rec.get("labels")
+                and _sha256_bytes(out / ".graphify_labels.json.sig") == rec.get("sig")
+                and same_graph(graph_path(self.repo), rec.get("graph")))
+
+    def _as_the_full_path(self, G, rec: dict) -> None:
+        """What the vendored full path would still write when the graph and communities are the
+        last build's: its report (from the same functions and inputs), the dated backup of a
+        labelled graph, and ``.graphify_root``."""
+        from verinoda.project_index import analyze, report, watch
+        from verinoda.project_index import cluster as cl
+        from verinoda.project_index.export import backup_if_protected
+        from verinoda.project_index.extract import _get_extractor
+
+        out = self.out
+        communities = {int(cid): members for cid, members in rec["communities"]}
+        raw = json.loads((out / ".graphify_labels.json").read_text(encoding="utf-8"))
+        labels = {int(k): v for k, v in raw.items()}  # what the full path makes of it (see finish)
+        # the corpus as _rebuild_code counts it: code files plus the documents it extracts
+        code_files = [str(Path(f)) for f in self.detected["files"]["code"]]
+        code_files += [str(Path(f)) for f in self.detected["files"].get("document", [])
+                       if _get_extractor(Path(f)) is not None]
+        detection = {"files": {"code": code_files, "document": [], "paper": [], "image": []},
+                     "total_files": len(code_files),
+                     "total_words": self.detected.get("total_words", 0),
+                     "unclassified": self.detected.get("unclassified", [])}
+        text = report.generate(
+            G, communities, cl.score_all(G, communities), labels, analyze.god_nodes(G),
+            analyze.surprising_connections(G, communities), detection, {"input": 0, "output": 0},
+            watch._report_root_label(self.repo),
+            suggested_questions=analyze.suggest_questions(G, communities, labels),
+            built_at_commit=self.commit,
+            learning=report.load_learning_for_report(out / "graph.json"))
+        # graph.json is Verinoda's rewrite, never the candidate the full path compares with it:
+        # the full path always writes, after its backup
+        backup_if_protected(out)
+        report_path = out / "GRAPH_REPORT.md"
+        old = report_path.read_text(encoding="utf-8") if report_path.exists() else None
+        if old != text:
+            report_path.write_text(text, encoding="utf-8")
+        root_file = out / ".graphify_root"
+        if _sha256_bytes(root_file) != hashlib.sha256(str(self.repo).encode("utf-8")).hexdigest():
+            root_file.write_text(str(self.repo), encoding="utf-8")
+
+    def finish(self, data: dict | None, pruned: list[str] | None, rewrote: bool) -> None:
+        """After the post-processing: record this build when the next full rebuild of the same
+        graph is known to write the same outputs; otherwise remove any record."""
+        p = self.out / REBUILD_RECORD
+        if self.kept:
+            return  # graph.json and the files next to it are still the ones recorded
+        rec = None
+        if self.active and data is not None:
+            try:
+                rec = self._new_record(data, pruned, rewrote)
+            except Exception:  # noqa: BLE001 - no record: the next build takes the full path
+                rec = None
+        try:
+            if rec is None:
+                p.unlink(missing_ok=True)
+            else:
+                write_json_atomic(p, rec)
+        except OSError:
+            pass
+
+    def _new_record(self, data: dict, pruned: list[str] | None, rewrote: bool) -> dict | None:
+        from verinoda.project_index import watch
+        from verinoda.project_index.cluster import community_member_sigs
+        from verinoda.project_index.cluster import remap_communities_to_previous as remap
+
+        if (not rewrote or self.key is None or self.clustered is None or self.written is None
+                or self.before == self.after):  # nothing rewritten, or the full path wrote nothing
+            return None
+        communities, labels = self.written
+        if not isinstance(labels, dict) or set(labels) != set(communities):
+            return None
+        # The next full rebuild of this graph remaps its clustering to the graph as written now;
+        # only when that gives these communities again does it write the same outputs.
+        previous = watch._node_community_map(data)
+        again = remap(self.clustered, previous) if previous else self.clustered
+        if list(again.items()) != list(communities.items()):
+            return None
+        # and the labels it would read back are the ones written (so it keeps them all)
+        lf, sf = self.out / ".graphify_labels.json", self.out / ".graphify_labels.json.sig"
+        if (json.loads(lf.read_text(encoding="utf-8")) != {str(k): v for k, v in labels.items()}
+                or json.loads(sf.read_text(encoding="utf-8"))
+                != {str(k): v for k, v in community_member_sigs(communities).items()}):
+            return None
+        return {"version": REBUILD_RECORD_VERSION, "stamp": _code_stamp(), "key": self.key,
+                "commit": self.commit, "root": str(self.repo),
+                "graph": graph_identity(graph_path(self.repo)),
+                "labels": _sha256_bytes(lf), "sig": _sha256_bytes(sf), "rewrote": rewrote,
+                "pruned": sorted(pruned or ()),
+                "communities": [[cid, m] for cid, m in communities.items()]}
+
+
+def _graph_key(G, topology: dict) -> str:
+    """Hash of the graph the pipeline built: its node-link data as it comes (order and attribute
+    order kept) and each node's neighbours in the order the graph holds them."""
+    h = hashlib.sha256(json.dumps(topology, ensure_ascii=False, default=str).encode("utf-8"))
+    adj = [[n, list(nbrs)] for n, nbrs in G.adj.items()]
+    h.update(json.dumps(adj, ensure_ascii=False, default=str).encode("utf-8"))
+    if G.is_directed():
+        h.update(json.dumps([[n, list(p)] for n, p in G.pred.items()], ensure_ascii=False,
+                            default=str).encode("utf-8"))
+    return h.hexdigest()
+
+
+def _as_written(topology: dict, repo: Path) -> dict:
+    """``topology`` (node-link data of the pipeline's graph) as it ends up in graph.json: edge
+    direction and hyperedge order as ``to_json`` writes them, ids made portable, nodes of missing
+    files pruned (:func:`_post_process`), and the ``_origin`` the vendored reconcile stamps on the
+    graph it reads before comparing (or an unstamped node never compares equal)."""
+    import copy
+
+    from verinoda.portable_ids import strip_root_from_ids
+    from verinoda.project_index.build import _is_ast_tier
+
+    def order(item) -> str:  # to_json's sort key
+        return json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    data = dict(topology)
+    key = "links" if "links" in data else "edges"
+    data["nodes"] = [dict(n) for n in topology.get("nodes", [])]
+    edges = []
+    for e in topology.get(key, []):
+        e = dict(e)
+        src, tgt = e.pop("_src", None), e.pop("_tgt", None)
+        if src is not None and tgt is not None:
+            e["source"], e["target"] = src, tgt
+        edges.append(e)
+    data[key] = edges
+    hyper = sorted(copy.deepcopy(topology.get("hyperedges") or []), key=order)
+    if isinstance(data.get("graph"), dict) and "hyperedges" in data["graph"]:
+        data["graph"] = {**data["graph"], "hyperedges": copy.deepcopy(hyper)}
+    data["hyperedges"] = hyper
+    strip_root_from_ids(data["nodes"], data[key], repo, data["hyperedges"])
+    gone = set(_missing_in_nodes(repo, data["nodes"]))
+    if gone:
+        _drop_files(data, gone)
+    for item in (*data["nodes"], *data[key]):
+        if isinstance(item, dict):
+            item.setdefault("_origin", "ast" if _is_ast_tier(item) else "semantic")
+    return data
 
 
 # -- vendored rebuild: path-identity memo ------------------------------------------------------
@@ -1194,6 +1732,64 @@ def _local_source(repo: Path, sf) -> Path | None:
     return p
 
 
+def _missing_in_nodes(repo: Path, nodes) -> list[str]:
+    seen: dict[str, bool] = {}
+    for n in nodes:
+        sf = n.get("source_file")
+        if not isinstance(sf, str) or sf in seen:
+            continue
+        p = _local_source(repo, sf)
+        seen[sf] = p is not None and not p.exists()
+    return sorted(sf for sf, gone in seen.items() if gone)
+
+
+def _drop_files(data: dict, gone: set[str]) -> None:
+    """Remove, in place, the nodes of the files ``gone`` and the edges and hyperedges on them."""
+    drop = {n["id"] for n in data.get("nodes", []) if n.get("source_file") in gone}
+    data["nodes"] = [n for n in data.get("nodes", []) if n["id"] not in drop]
+    for key in ("links", "edges"):
+        if key in data:
+            data[key] = [e for e in data[key]
+                         if e.get("source") not in drop and e.get("target") not in drop
+                         and e.get("_src") not in drop and e.get("_tgt") not in drop
+                         and e.get("source_file") not in gone]
+    if isinstance(data.get("hyperedges"), list):
+        data["hyperedges"] = [h for h in data["hyperedges"]
+                              if not (isinstance(h, dict) and h.get("source_file") in gone)]
+
+
+def _write_pruned(gp: Path, data: dict) -> None:
+    fd, tmp = tempfile.mkstemp(prefix="graph.", suffix=".tmp", dir=str(gp.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, gp)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def _post_process(gp: Path, repo: Path, *, prune: bool) -> tuple[dict, list[str] | None, dict]:
+    """graph.json after a build, read once and written at most once: the ids made portable
+    (:func:`verinoda.portable_ids.make_graph_portable`) and, with ``prune``, the nodes of
+    missing files dropped (:func:`prune_missing_files`). The file ends byte for byte as those
+    two steps one after the other leave it: in the format of the last one that wrote.
+    Returns ``({"changed": ids rewritten}, files pruned or None, the graph data)``."""
+    from verinoda.portable_ids import strip_root_from_ids, write_graph
+
+    repo = Path(repo).resolve()
+    data = json.loads(gp.read_text(encoding="utf-8"))
+    edges = data.get("links") if isinstance(data.get("links"), list) else data.get("edges") or []
+    n = strip_root_from_ids(data.get("nodes") or [], edges, repo, data.get("hyperedges"))
+    gone = _missing_in_nodes(repo, data.get("nodes", [])) if prune else []
+    if gone:
+        _drop_files(data, set(gone))
+        _write_pruned(gp, data)
+    elif n:
+        write_graph(gp, data)
+    return {"changed": n}, (gone if prune else None), data
+
+
 def missing_source_files(repo: Path, gp: Path | None = None) -> list[str]:
     """``source_file`` values of graph nodes whose file no longer exists in ``repo``."""
     repo = Path(repo).resolve()
@@ -1202,14 +1798,7 @@ def missing_source_files(repo: Path, gp: Path | None = None) -> list[str]:
         data = json.loads(gp.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
-    seen: dict[str, bool] = {}
-    for n in data.get("nodes", []):
-        sf = n.get("source_file")
-        if not isinstance(sf, str) or sf in seen:
-            continue
-        p = _local_source(repo, sf)
-        seen[sf] = p is not None and not p.exists()
-    return sorted(sf for sf, gone in seen.items() if gone)
+    return _missing_in_nodes(repo, data.get("nodes", []))
 
 
 def prune_missing_files(repo: Path, gp: Path | None = None) -> list[str]:
@@ -1225,26 +1814,29 @@ def prune_missing_files(repo: Path, gp: Path | None = None) -> list[str]:
     if not gone:
         return []
     data = json.loads(gp.read_text(encoding="utf-8"))
-    drop = {n["id"] for n in data.get("nodes", []) if n.get("source_file") in gone}
-    data["nodes"] = [n for n in data.get("nodes", []) if n["id"] not in drop]
-    for key in ("links", "edges"):
-        if key in data:
-            data[key] = [e for e in data[key]
-                         if e.get("source") not in drop and e.get("target") not in drop
-                         and e.get("_src") not in drop and e.get("_tgt") not in drop
-                         and e.get("source_file") not in gone]
-    if isinstance(data.get("hyperedges"), list):
-        data["hyperedges"] = [h for h in data["hyperedges"]
-                              if not (isinstance(h, dict) and h.get("source_file") in gone)]
-    fd, tmp = tempfile.mkstemp(prefix="graph.", suffix=".tmp", dir=str(gp.parent))
-    with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, gp)
+    _drop_files(data, gone)
+    _write_pruned(gp, data)
     try:
         refresh_receiver_sidecar(repo)
     except (OSError, ValueError):
         pass
     return sorted(gone)
+
+
+def graph_source_files(repo: Path, gp: Path | None = None) -> set[str]:
+    """The files graph.json has nodes from, read from the JSON alone: the ``source_file``
+    values :func:`load` would give its nodes (a repeated id keeps the last value it was
+    given), with no graph built and no receiver pass."""
+    gp = Path(gp) if gp else graph_path(Path(repo).resolve())
+    data = json.loads(gp.read_text(encoding="utf-8"))
+    last: dict = {}
+    for n in data.get("nodes", []):
+        nid = n["id"]
+        if "source_file" in n:
+            last[nid] = n["source_file"]
+        else:
+            last.setdefault(nid, None)
+    return {sf for sf in last.values() if sf}
 
 
 def graphify_query_text(repo: Path, question: str, budget: int = 2000) -> str:

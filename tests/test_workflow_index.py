@@ -338,3 +338,207 @@ def test_an_update_that_touches_no_file_of_the_graph_keeps_the_graph(proj):
     # a new code file does rebuild it
     (repo / "orders" / "audit.py").write_text("def audit_order(order):\n    return order\n", encoding="utf-8")
     assert workflow.update(st, repo)["index_mode"] == "full" and "orders/audit.py" in _graph_files(repo)
+
+
+# -- the vendored "topology unchanged" fast path (index._keep_unchanged_graph) --------------------
+
+@pytest.fixture
+def dangling(tmp_path):
+    """orders_app plus files that name files the project does not have (a csproj's project
+    references, a require of a missing module): graph.json is rewritten after every build."""
+    repo = tmp_path / "orders_app"
+    shutil.copytree(EXAMPLE, repo, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc",
+                                                                 ".pytest_cache", "*.db"))
+    fx = ROOT / "tests_upstream" / "fixtures"
+    (repo / "web" / "App").mkdir(parents=True)
+    shutil.copy(fx / "cjs_require.js", repo / "web" / "app.js")
+    shutil.copy(fx / "sample.csproj", repo / "web" / "App" / "App.csproj")
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "init")
+    workflow.init(repo)
+    return repo
+
+
+def _outputs(repo: Path, res: dict) -> dict:
+    ix = index_dir(repo)
+    side = json.loads((ix / "receiver_calls.json").read_text(encoding="utf-8"))
+    side["graph"].pop("mtime_ns")
+    backups = {str(p.relative_to(ix)): p.read_bytes() for d in ix.iterdir()
+               if d.is_dir() and d.name[:2] == "20" for p in sorted(d.iterdir())}
+    files = ("GRAPH_REPORT.md", ".graphify_labels.json", ".graphify_labels.json.sig",
+             ".graphify_root")
+    return {"graph": graph_path(repo).read_bytes(), "sidecar": side, "backups": backups,
+            **{n: (ix / n).read_bytes() for n in files},
+            "counts": (res["snapshot"]["graph_nodes"], res["snapshot"]["graph_edges"]),
+            "dangling": res.get("dropped_dangling_references"), "stale": res["stale"]}
+
+
+def _update_once(repo: Path, monkeypatch, edit, *, fast: bool) -> tuple[dict, dict]:
+    """``edit``, then an update, with the fast path allowed or not; (outputs, the build's stats)."""
+    stats: list[dict] = []
+    real_build = index.build
+
+    def spy(r, **kw):
+        stats.append(real_build(r, **kw))
+        return stats[-1]
+
+    with monkeypatch.context() as m:
+        m.setattr(index, "build", spy)
+        if not fast:
+            m.setattr(index._keep_unchanged_graph, "_unchanged", lambda self, rec: False)
+        edit()
+        st = open_store(repo)
+        try:
+            res = workflow.update(st, repo)
+        finally:
+            st.close()
+    return _outputs(repo, res), (stats[-1] if stats else {})
+
+
+def _recorded(repo: Path, tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
+    """Scan, then updates appending a comment until one keeps the graph (the first ones change
+    it: the upstream reconcile keeps nodes of the previous graph); the state is saved."""
+    st = open_store(repo)
+    workflow.scan(st, repo)
+    st.close()
+    svc = repo / "orders" / "service.py"
+    for i in range(6):
+        def append(i=i):
+            svc.write_bytes(svc.read_bytes() + f"\n# edit {i}\n".encode())
+
+        if _update_once(repo, monkeypatch, append, fast=True)[1].get("graph_kept"):
+            break
+    else:
+        pytest.fail("the graph never came out the same twice")
+    assert (index_dir(repo) / index.REBUILD_RECORD).is_file()
+    saved = tmp_path / "saved"
+    shutil.copytree(repo, saved)
+    return svc, saved
+
+
+def _restore(saved: Path, repo: Path) -> None:
+    def writable(fn, path, _exc):  # git's object files are read-only on Windows
+        os.chmod(path, 0o700)
+        fn(path)
+
+    handler = {"onexc": writable} if sys.version_info >= (3, 12) else {"onerror": writable}
+    shutil.rmtree(repo, **handler)
+    shutil.copytree(saved, repo)
+
+
+def test_an_update_that_rebuilds_the_same_graph_keeps_it_and_writes_what_the_full_path_writes(
+        dangling, tmp_path, monkeypatch):
+    repo = dangling
+    svc, saved = _recorded(repo, tmp_path, monkeypatch)
+
+    def comment():  # in place: no node or edge changes; the corpus's word count does (the report)
+        svc.write_bytes(svc.read_bytes().replace(b"# edit ", b"# an edit, longer: "))
+
+    fast, fast_stats = _update_once(repo, monkeypatch, comment, fast=True)
+    assert fast_stats.get("graph_kept") is True
+    assert fast["dangling"]["files"] == ["web/Domain/Domain.csproj",
+                                         "web/Infrastructure/Infrastructure.csproj"]
+    _restore(saved, repo)
+    full, full_stats = _update_once(repo, monkeypatch, comment, fast=False)
+    assert "graph_kept" not in full_stats
+    assert fast == full
+
+    def again():  # the record still describes what is on disk
+        svc.write_bytes(svc.read_bytes().replace(b"an edit, longer", b"another edit"))
+
+    assert _update_once(repo, monkeypatch, again, fast=True)[1].get("graph_kept") is True
+
+
+@pytest.mark.parametrize("change", ["body", "labels", "new_file", "deleted_file"])
+def test_the_full_path_runs_when_the_graph_or_a_file_the_record_fingerprints_changed(
+        dangling, tmp_path, monkeypatch, change):
+    repo = dangling
+    svc, saved = _recorded(repo, tmp_path, monkeypatch)
+
+    def edit():
+        if change == "body":  # every later line moves
+            svc.write_bytes(b"# a line on top\n" + svc.read_bytes())
+        elif change == "labels":  # the labels changed by someone else
+            lf = index_dir(repo) / ".graphify_labels.json"
+            labels = json.loads(lf.read_text(encoding="utf-8"))
+            labels[next(iter(labels))] = "a name given by hand"
+            lf.write_text(json.dumps(labels, indent=2) + "\n", encoding="utf-8")
+            svc.write_bytes(svc.read_bytes().replace(b"# edit ", b"# edited again "))
+        elif change == "new_file":
+            (repo / "orders" / "audit.py").write_bytes(b"def audit(o):\n    return o\n")
+        else:
+            (repo / "orders" / "config.py").unlink()
+
+    fast, fast_stats = _update_once(repo, monkeypatch, edit, fast=True)
+    assert "graph_kept" not in fast_stats
+    _restore(saved, repo)
+    full, _ = _update_once(repo, monkeypatch, edit, fast=False)
+    assert fast == full
+
+
+@pytest.fixture
+def clean(tmp_path):
+    """orders_app as it is: nothing in graph.json needs a rewrite after a build."""
+    repo = tmp_path / "orders_app"
+    shutil.copytree(EXAMPLE, repo, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc",
+                                                                 ".pytest_cache", "*.db"))
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "init")
+    workflow.init(repo)
+    return repo
+
+
+def test_a_graph_json_the_pipeline_wrote_itself_is_left_to_the_vendored_comparison(
+        clean, tmp_path, monkeypatch):
+    # The vendored fast path keeps such a graph by itself and leaves GRAPH_REPORT.md and the
+    # dated backup as they are; Verinoda's kept path (which rewrites them) is not for this case.
+    repo = clean
+    st = open_store(repo)
+    workflow.scan(st, repo)
+    st.close()
+    ix, gp = index_dir(repo), graph_path(repo)
+    svc = repo / "orders" / "service.py"
+    code, extra = svc.read_bytes(), b"\n\ndef audit_order(order):\n    return order\n"
+
+    # a function added, then removed: each time the graph changes and the full path runs (the
+    # code before this fix left a record after the second that the next update matched)
+    for step in (lambda: svc.write_bytes(code + extra), lambda: svc.write_bytes(code)):
+        before = gp.stat().st_mtime_ns
+        stats = _update_once(repo, monkeypatch, step, fast=True)[1]
+        assert gp.stat().st_mtime_ns != before
+        assert not stats.get("pruned_files") and not stats["portable_ids"]["changed"]
+        assert not (ix / index.REBUILD_RECORD).exists()  # nothing was rewritten: no record
+    saved = tmp_path / "saved"
+    shutil.copytree(repo, saved)
+    before, report = gp.stat().st_mtime_ns, (ix / "GRAPH_REPORT.md").read_bytes()
+
+    def comment():  # no node or edge changes; the corpus's word count does
+        svc.write_bytes(code + b"\n# a comment of a few more words\n")
+
+    fast, fast_stats = _update_once(repo, monkeypatch, comment, fast=True)
+    assert gp.stat().st_mtime_ns == before  # the vendored fast path kept the graph
+    assert "graph_kept" not in fast_stats and fast["GRAPH_REPORT.md"] == report
+    _restore(saved, repo)
+    full, _ = _update_once(repo, monkeypatch, comment, fast=False)
+    assert fast == full
+
+
+def test_a_record_of_a_graph_json_nothing_rewrote_is_not_used(dangling, tmp_path, monkeypatch):
+    repo = dangling
+    svc, saved = _recorded(repo, tmp_path, monkeypatch)
+    rp = index_dir(repo) / index.REBUILD_RECORD
+    rec = json.loads(rp.read_text(encoding="utf-8"))
+    assert rec["rewrote"] is True
+    rp.write_text(json.dumps({**rec, "rewrote": False}), encoding="utf-8")
+    shutil.copy(rp, saved / rp.relative_to(repo))
+
+    def comment():
+        svc.write_bytes(svc.read_bytes().replace(b"# edit ", b"# an edit, longer: "))
+
+    fast, fast_stats = _update_once(repo, monkeypatch, comment, fast=True)
+    assert "graph_kept" not in fast_stats  # the vendored comparison decided: graph.json differs
+    _restore(saved, repo)
+    full, _ = _update_once(repo, monkeypatch, comment, fast=False)
+    assert fast == full

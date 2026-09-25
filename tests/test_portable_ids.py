@@ -9,9 +9,9 @@ from pathlib import Path
 
 os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
-from verinoda import workflow
-from verinoda.paths import graph_path
-from verinoda.portable_ids import strip_root_from_ids
+from verinoda import index, workflow
+from verinoda.paths import graph_path, receiver_calls_path
+from verinoda.portable_ids import make_graph_portable, strip_root_from_ids
 from verinoda.project_index.ids import make_id
 from verinoda.store import open_store
 
@@ -78,3 +78,88 @@ def test_real_nodes_and_one_folder_roots_are_left_alone_and_collisions_kept_apar
     for one in (Path("/web_app"), Path("C:/code") if os.name == "nt" else Path("/code")):
         ids = [{"id": make_id(str(one)) + "_pkg_mod"}]
         assert strip_root_from_ids(ids, [], one) == 0
+
+
+def test_one_rewrite_after_the_build_leaves_the_bytes_of_the_two_it_replaces(tmp_path):
+    """index._post_process is make_graph_portable followed by prune_missing_files, with one read
+    and at most one write: same bytes and same pruned files, whichever of the two had work."""
+    root = tmp_path / "home" / "me" / "proj"
+    (root / ".verinoda" / "index").mkdir(parents=True)
+    (root / "src").mkdir()
+    (root / "src" / "a.py").write_bytes(b"x = 1\n")
+    slug = make_id(str(root.resolve()))
+    gp = graph_path(root)
+    for strip in (False, True):
+        for prune in (False, True):
+            nodes = [{"id": "src_a", "label": "a.py", "source_file": "src/a.py"},
+                     {"id": "src_a_f", "label": "fé()", "source_file": "src/a.py"}]
+            links = [{"source": "src_a", "target": "src_a_f", "relation": "contains",
+                      "source_file": "src/a.py"}]
+            if strip:
+                nodes.append({"id": f"{slug}_missing_mod", "label": f"{slug}_missing_mod"})
+                links.append({"source": "src_a", "target": f"{slug}_missing_mod",
+                              "relation": "imports", "source_file": "src/a.py"})
+            if prune:
+                nodes.append({"id": "src_gone", "label": "gone.py", "source_file": "src/gone.py"})
+                links.append({"source": "src_a", "target": "src_gone", "relation": "imports",
+                              "source_file": "src/a.py"})
+            hyper = [{"id": "h", "nodes": ["src_a", "src_gone"],
+                      "source_file": "src/gone.py"}] * prune
+            text = json.dumps({"directed": False, "multigraph": False, "graph": {}, "nodes": nodes,
+                               "links": links, "hyperedges": hyper, "built_at_commit": "abc"},
+                              indent=2)
+            gp.write_text(text, encoding="utf-8")
+            make_graph_portable(gp, root)
+            want_pruned = index.prune_missing_files(root)
+            want = gp.read_bytes()
+            gp.write_text(text, encoding="utf-8")
+            changed, pruned, data = index._post_process(gp, root, prune=True)
+            assert gp.read_bytes() == want and pruned == want_pruned == ["src/gone.py"] * prune
+            assert changed == {"changed": 2 if strip else 0}
+            assert data == json.loads(want)
+            gp.write_text(text, encoding="utf-8")  # without the prune: make_graph_portable alone
+            make_graph_portable(gp, root)
+            want = gp.read_bytes()
+            gp.write_text(text, encoding="utf-8")
+            assert index._post_process(gp, root, prune=False)[1] is None and gp.read_bytes() == want
+
+
+def _dangling_project(root: Path) -> Path:
+    (root / "src" / "App").mkdir(parents=True)
+    shutil.copy(FIXTURES / "cjs_require.js", root / "src" / "app.js")  # ids of missing imports
+    shutil.copy(FIXTURES / "sample.dmf", root / "src" / "ui.dmf")
+    # it names ../Domain/Domain.csproj and ../Infrastructure/Infrastructure.csproj (not here)
+    shutil.copy(FIXTURES / "sample.csproj", root / "src" / "App" / "App.csproj")
+    return root
+
+
+def test_scan_and_update_leave_what_the_two_separate_rewrites_left(tmp_path, monkeypatch):
+    """The build prunes the nodes of missing files in the rewrite that makes the ids portable;
+    graph.json, the counts, the reported files and the receiver sidecar are what the build
+    followed by workflow's prune gave."""
+    real_build = index.build
+    out = {}
+    for name in ("one_rewrite", "two_rewrites"):
+        root = _dangling_project(tmp_path / name / "proj")
+        if name == "two_rewrites":  # the build only makes the ids portable, the prune follows
+            monkeypatch.setattr(index, "build",
+                                lambda r, **kw: real_build(r, **{**kw, "prune_missing": False}))
+        workflow.init(root)
+        st = open_store(root)
+        try:
+            scan = workflow.scan(st, root)
+            app = root / "src" / "app.js"
+            app.write_bytes(app.read_bytes() + b"\n// edited\n")
+            upd = workflow.update(st, root)
+        finally:
+            st.close()
+        side = json.loads(receiver_calls_path(root).read_text(encoding="utf-8"))
+        side["graph"].pop("mtime_ns")
+        out[name] = (graph_path(root).read_bytes(), scan["graph"]["nodes"], scan["graph"]["edges"],
+                     scan.get("dropped_dangling_references"), upd["snapshot"]["graph_nodes"],
+                     upd["snapshot"]["graph_edges"], upd.get("dropped_dangling_references"), side)
+    assert out["one_rewrite"] == out["two_rewrites"]
+    assert out["one_rewrite"][3]["files"] == ["src/Domain/Domain.csproj",
+                                               "src/Infrastructure/Infrastructure.csproj"]
+    data = json.loads(out["one_rewrite"][0])
+    assert out["one_rewrite"][4:6] == (len(data["nodes"]), len(data["links"]))

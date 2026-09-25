@@ -1,0 +1,119 @@
+[
+ {
+  "step": "comment:31",
+  "before_s": 35.52,
+  "after_s": 33.69,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:32",
+  "before_s": 35.28,
+  "after_s": 27.75,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "md:33",
+  "before_s": 36.26,
+  "after_s": 28.11,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "body:34",
+  "before_s": 35.74,
+  "after_s": 33.18,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:35",
+  "before_s": 35.36,
+  "after_s": 27.76,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "add:36",
+  "before_s": 35.84,
+  "after_s": 33.57,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:37",
+  "before_s": 36.07,
+  "after_s": 33.97,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "del:36",
+  "before_s": 35.53,
+  "after_s": 32.9,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "json:39",
+  "before_s": 3.91,
+  "after_s": 3.72,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "jsoncode:40",
+  "before_s": 35.33,
+  "after_s": 33.98,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "mdshift:41",
+  "before_s": 36.0,
+  "after_s": 33.57,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "md:42",
+  "before_s": 35.9,
+  "after_s": 27.9,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:43",
+  "before_s": 35.86,
+  "after_s": 27.86,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "scan",
+  "before_s": 35.19,
+  "after_s": 27.63,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:45",
+  "before_s": 35.71,
+  "after_s": 27.52,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "query": "How does verinoda update decide whether to rebuild the code graph?",
+  "outputs": "identical"
+ },
+ {
+  "query": "Where are graph ids made portable after an index build?",
+  "outputs": "identical"
+ },
+ {
+  "query": "Türkçe sorulardaki ekler nasıl ayıklanıyor?",
+  "outputs": "identical"
+ }
+]

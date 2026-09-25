@@ -1,0 +1,140 @@
+[
+ {
+  "step": "comment:51",
+  "before_s": 35.74,
+  "after_s": 34.62,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:52",
+  "before_s": 35.15,
+  "after_s": 27.09,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "body:53",
+  "before_s": 35.28,
+  "after_s": 32.68,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:54",
+  "before_s": 35.29,
+  "after_s": 26.65,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "json:55",
+  "before_s": 3.89,
+  "after_s": 3.7,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "jsoncode:56",
+  "before_s": 37.98,
+  "after_s": 28.24,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "add:57",
+  "before_s": 38.0,
+  "after_s": 34.51,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "del:57",
+  "before_s": 37.23,
+  "after_s": 33.55,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "md:59",
+  "before_s": 63.6,
+  "after_s": 56.38,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "mdshift:60",
+  "before_s": 39.54,
+  "after_s": 46.8,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:61",
+  "before_s": 38.55,
+  "after_s": 30.3,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:62",
+  "before_s": 43.31,
+  "after_s": 29.34,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "scanforce",
+  "before_s": 36.41,
+  "after_s": 32.47,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "scan",
+  "before_s": 34.8,
+  "after_s": 32.76,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:65",
+  "before_s": 38.24,
+  "after_s": 28.82,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "fresh",
+  "before_s": 74.31,
+  "after_s": 71.32,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:67",
+  "before_s": 46.45,
+  "after_s": 43.32,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "step": "comment:68",
+  "before_s": 40.45,
+  "after_s": 37.95,
+  "outputs": "identical",
+  "differences": []
+ },
+ {
+  "query": "How does verinoda update decide whether to rebuild the code graph?",
+  "outputs": "identical"
+ },
+ {
+  "query": "Where are graph ids made portable after an index build?",
+  "outputs": "identical"
+ },
+ {
+  "query": "Türkçe sorulardaki ekler nasıl ayıklanıyor?",
+  "outputs": "identical"
+ }
+]
