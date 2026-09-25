@@ -983,7 +983,7 @@ def _r_decide(res: dict) -> None:
               f"`verinoda decide accept {res['id']} {' '.join(proposed)}`")
 
 
-def _r_check(r: dict) -> None:
+def _r_decide_check(r: dict) -> None:
     base = r.get("base") or {}
     print(f"decide check: {len(r['violations'])} violated, {len(r['possible'])} possible, {len(r['reviews'])} "
           f"review, {len(r['triggers'])} trigger ({r['decisions']} decision record(s), {r['elapsed_s']} s)"
@@ -1103,7 +1103,7 @@ def _decide_check(args, repo: Path) -> int:
         return 2
     if note:
         res["index"] = note
-    _emit(args, res, _r_check)
+    _emit(args, res, _r_decide_check)
     return res["exit"]
 
 
