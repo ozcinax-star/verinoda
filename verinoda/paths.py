@@ -7,9 +7,11 @@ Everything lives under ``<repo>/.verinoda/``:
                     plus Verinoda's derived, disposable files next to it:
                     search.db (passage index), receiver_calls.json (receiver-call
                     edges), lexicon.json (repo-learned vocabulary), python_facts.json
-                    (what each .py file imports and calls, kept between builds)
-                    and, when the user supplies one, index.scip (a SCIP index read by
-                    scip_reader; freshness state in scip_fresh.json)
+                    (what each .py file imports and calls, kept between builds),
+                    rebuild_record.json (what the last full rebuild built, so an
+                    update that builds the same graph keeps graph.json) and, when the
+                    user supplies one, index.scip (a SCIP index read by scip_reader;
+                    freshness state in scip_fresh.json)
     plans/          question-plan files (JSON is never passed on the command line)
     runs/<id>/      raw experiment logs (never sent to a model wholesale)
     research/<slug> pinned checkouts of reference repositories
