@@ -103,9 +103,11 @@ a user's own words, the rest written in that style), 30 gold facts at commit 3bd
 11/30, analyze 8 → 11 with this round; of 5 questions judged met, 3 have none of their gold facts
 in the claims. It shows a weak spot the other sets did not: in a repository whose code is English
 but whose UI strings and docs are Turkish, the Turkish words of a question find the Turkish text
-first. Two attempts were measured and not kept: 29 passive verb stems (4 results up, 6 down) and
+first. Three attempts were measured and not kept: 29 passive verb stems (4 results up, 6 down),
 weighing a Turkish word no code name contains below its translation (user set +3, but `forge_mod`
-retrieve 50 → 45: in a mod, those words are how the data files are found).
+retrieve 50 → 45: in a mod, those words are how the data files are found), and a seed entry
+`degis` → change (değişince, değişirse; 3 results down, all on one user question whose answer
+is not about changes, none up).
 
 **Final answers.** `verinoda bench run --answer-cmd CMD` hands each approach's context and the
 question to any command (a local model, a command-line client) and scores the answer it writes:
