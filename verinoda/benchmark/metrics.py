@@ -23,6 +23,7 @@ a score by hand (the rules are restated in docs/BENCHMARKS.md):
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from dataclasses import dataclass
@@ -169,14 +170,56 @@ def match_fact(fact: dict, text: str, locators: list[Locator] | None = None) -> 
     return best
 
 
+def _read_as_text(text: str) -> str:
+    """What a reader of ``text`` sees, whitespace-normalised: a JSON output's string values joined by
+    newlines (so escaped quotes and line breaks read as source), anything else as it is."""
+    body = text
+    t = text.lstrip()
+    if t.startswith(("{", "[")):
+        try:
+            obj = json.loads(t)
+        except ValueError:
+            obj = None
+        if obj is not None:
+            parts: list[str] = []
+
+            def walk(o) -> None:
+                if isinstance(o, str):
+                    parts.append(o)
+                elif isinstance(o, dict):
+                    for v in o.values():
+                        walk(v)
+                elif isinstance(o, list):
+                    for v in o:
+                        walk(v)
+            walk(obj)
+            body = "\n".join(parts)
+    return " ".join(body.split())
+
+
+def shown_facts(facts: list[dict], text: str) -> list[str]:
+    """Facts whose gold line is in the text itself (``source.contains``, whitespace-normalised): a model
+    can use them without opening a file. Stricter than *found*, which a locator whose span merely
+    overlaps the fact's lines satisfies (a pointer line can game found per token; it cannot game this)."""
+    flat = _read_as_text(text)
+    out = []
+    for f in facts:
+        want = " ".join(((f.get("source") or {}).get("contains") or "").split())
+        if want and want in flat:
+            out.append(f["id"])
+    return out
+
+
 def score_facts(facts: list[dict], text: str) -> dict:
     locs = extract_locators(text)
     per = {f["id"]: match_fact(f, text, locs) for f in facts}
     found = [k for k, v in per.items() if v["found"]]
+    shown = shown_facts(facts, text)
     return {
         "total": len(facts), "found_n": len(found),
         "pinpointed_n": sum(1 for v in per.values() if v["pinpointed"]),
-        "found": found, "missed": [k for k in per if k not in found],
+        "shown_n": len(shown),
+        "found": found, "missed": [k for k in per if k not in found], "shown": shown,
         "via": {k: v["via"] for k, v in per.items() if v["found"]},
     }
 

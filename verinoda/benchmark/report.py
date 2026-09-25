@@ -35,6 +35,15 @@ def per_1k(s: dict) -> float | None:
     return round(1000 * s["facts_found"] / tot, 2) if tot else None
 
 
+def per_1k_of(s: dict, key: str) -> float | None:
+    """``key`` (facts_shown, facts_pinpointed) per 1k tokens; None for results written before it existed."""
+    field = {"facts_shown": "shown_per_1k_tokens", "facts_pinpointed": "pinpointed_per_1k_tokens"}[key]
+    if s.get(field) is not None:
+        return s[field]
+    tot = s.get("tokens_total")
+    return round(1000 * s[key] / tot, 2) if tot and s.get(key) is not None else None
+
+
 def _f(x, nd: int = 2) -> str:
     if x is None:
         return "-"
@@ -67,7 +76,7 @@ def render(res: dict) -> None:
     for line in per_question_table(res).splitlines():
         print(line)
     if res.get("sweep"):
-        print("\nbudget sweep (facts found / tokens mean / facts per 1k tokens):")
+        print("\nbudget sweep (facts found / shown / tokens mean / found per 1k / shown per 1k tokens):")
         for line in sweep_table(res).splitlines():
             print(line)
     s = res["summary"].get("verinoda_analyze", {})
@@ -130,19 +139,19 @@ def provenance_line(res: dict) -> str:
 
 
 def summary_table(res: dict) -> str:
-    rows = [("approach", "facts found", "via locator", "pinpointed", "all-facts Qs", "tokens mean", "tokens max",
-             "facts/1k tok", "locators/Q", "tool calls/Q", "cold s (median)", "warm s (median)", "neg. matched",
-             "cited line lacks target")]
+    rows = [("approach", "facts found", "via locator", "pinpointed", "shown", "all-facts Qs", "tokens mean",
+             "tokens max", "facts/1k tok", "shown/1k tok", "pinpointed/1k tok", "locators/Q", "tool calls/Q",
+             "cold s (median)", "warm s (median)", "neg. matched", "cited line lacks target")]
     for a in main_approaches(res):
         s = res["summary"].get(a, {})
         if "facts_total" not in s:
-            rows.append((label(a), s.get("status", "-"), *["-"] * 12))
+            rows.append((label(a), s.get("status", "-"), *["-"] * 15))
             continue
         rows.append((
             label(a), f"{s['facts_found']}/{s['facts_total']}", str(s["facts_found_via_locator"]),
-            str(s["facts_pinpointed"]),
+            str(s["facts_pinpointed"]), _f(s.get("facts_shown")),
             f"{s['questions_all_facts']}/{s['questions']}", _f(s["tokens_mean"], 0), str(s["tokens_max"]),
-            _f(per_1k(s), 2),
+            _f(per_1k(s), 2), _f(per_1k_of(s, "facts_shown"), 2), _f(per_1k_of(s, "facts_pinpointed"), 2),
             _f(s["locators_distinct_mean"], 1), _f(s["agent_tool_calls_mean"], 1),
             _f(s["seconds_cold_median"], 3), _f(s["seconds_warm_median"], 3),
             f"{s['negatives_matched']}/{s['negatives_checked']}" if s.get("assertions_scored", True) else "n/a",
@@ -183,23 +192,24 @@ def sweep_table(res: dict) -> str:
     """One row per budgeted approach, one column per token budget: facts found, tokens mean, facts per 1k."""
     sw = res.get("sweep") or {}
     budgets = sorted({int(t) for rows in sw.values() for t in rows})
-    head = ("approach", *[f"{t} tok: facts / tok mean / per 1k" for t in budgets])
+    head = ("approach", *[f"{t} tok: found / shown / tok mean / found per 1k / shown per 1k" for t in budgets])
     rows = [head]
     for base in [b for b in ("verinoda_retrieve_text", "graphify_vendored", "graphify_cli", "raw") if b in sw] + \
             sorted(b for b in sw if b not in LABELS):
         cells = []
         for t in budgets:
             c = sw[base].get(str(t))
-            cells.append("-" if not c else f"{c['facts_found']}/{c['facts_total']} / {_f(c['tokens_mean'], 0)} / "
-                                           f"{_f(c['facts_per_1k_tokens'], 2)}")
+            cells.append("-" if not c else f"{c['facts_found']}/{c['facts_total']} / {_f(c.get('facts_shown'))} / "
+                                           f"{_f(c['tokens_mean'], 0)} / {_f(c['facts_per_1k_tokens'], 2)} / "
+                                           f"{_f(c.get('shown_per_1k_tokens'), 2)}")
         rows.append((LABELS.get(base, base), *cells))
     return md_table(rows)
 
 
 def compare_table(before: dict, after: dict) -> str:
     """*before -> after* per approach present in ``after`` (default configurations only)."""
-    rows = [("approach", "facts found", "pinpointed", "neg. matched", "tokens mean", "facts/1k tok", "cold s (median)",
-             "warm s (median)")]
+    rows = [("approach", "facts found", "pinpointed", "neg. matched", "tokens mean", "facts/1k tok", "shown/1k tok",
+             "pinpointed/1k tok", "cold s (median)", "warm s (median)")]
 
     def cell(b: dict | None, a: dict, fn) -> str:
         return f"{fn(b) if b else 'n/a'} -> {fn(a)}"
@@ -218,6 +228,8 @@ def compare_table(before: dict, after: dict) -> str:
                  if s.get("assertions_scored", True) else "n/a"),
             cell(b, a, lambda s: _f(s["tokens_mean"], 0)),
             cell(b, a, lambda s: _f(per_1k(s), 2)),
+            cell(b, a, lambda s: _f(per_1k_of(s, "facts_shown"), 2)),
+            cell(b, a, lambda s: _f(per_1k_of(s, "facts_pinpointed"), 2)),
             cell(b, a, lambda s: _f(s["seconds_cold_median"], 3)),
             cell(b, a, lambda s: _f(s["seconds_warm_median"], 3)),
         ))

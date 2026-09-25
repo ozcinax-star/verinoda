@@ -2170,6 +2170,17 @@ delivered for that set, times 1,000 (`summary.<approach>.facts_per_1k_tokens`).
 It is a ratio of what was delivered, not a cost saving: it says nothing about
 whether a model answers correctly from it.
 
+**Shown** (schema 3, 2026-09-26). The fact's gold line is in the delivered
+context itself: its `source.contains` text occurs, whitespace-normalised (a
+JSON output's string values are read unescaped, one per line). *Found* can be
+met by a pointer - a locator whose span merely overlaps the fact's lines, such
+as a `path:1064-4842 dispatch_command` header - and a context shrunk to a list
+of pointers scores well on found per token while the model still has to open
+every file. Shown cannot be gamed that way. `facts_shown`,
+`shown_per_1k_tokens` and `pinpointed_per_1k_tokens` sit next to
+`facts_per_1k_tokens` in every summary, the report and the sweep table; a token
+change is judged on found *and* shown.
+
 **Gold verification.** Before anything is scored, every fact is re-checked
 against the benchmark copy (`validate_gold`): `source.at` must exist and
 contain `source.contains`; every `loc` alternative must point at existing

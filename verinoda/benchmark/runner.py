@@ -41,7 +41,8 @@ from verinoda.benchmark import metrics as mx  # noqa: E402
 
 # 2: verinoda_retrieve_text, budget sweep (``<approach>@<tokens>``), facts per 1k tokens,
 #    set provenance, corpora pinned to a commit.
-SCHEMA = 2
+# 3: facts shown (the gold line's text is in the delivered context) and shown / pinpointed per 1k tokens.
+SCHEMA = 3
 VERIFIED = {"observed", "experiment_verified", "statically_verified", "primary_source_verified"}
 FINDING = VERIFIED | {"strong_inference"}
 INFERENCE = {"strong_inference", "weak_inference"}
@@ -265,11 +266,13 @@ def summarize(res: dict) -> dict:
             "facts_found": sum(r["score"]["facts"]["found_n"] for r in ok),
             "facts_total": sum(r["score"]["facts"]["total"] for r in ok),
             "facts_pinpointed": sum(r["score"]["facts"]["pinpointed_n"] for r in ok),
+            "facts_shown": sum(r["score"]["facts"].get("shown_n", 0) for r in ok),
             "questions_all_facts": sum(1 for r in ok if r["score"]["facts"]["found_n"] == r["score"]["facts"]["total"]),
             "tokens_mean": round(statistics.mean(toks), 1), "tokens_median": _med(toks), "tokens_max": max(toks),
             "tokens_total": sum(toks), "chars_total": sum(r["score"]["chars"] for r in ok),
             "facts_per_1k_tokens": mx.per_1k(sum(r["score"]["facts"]["found_n"] for r in ok), sum(toks)),
             "pinpointed_per_1k_tokens": mx.per_1k(sum(r["score"]["facts"]["pinpointed_n"] for r in ok), sum(toks)),
+            "shown_per_1k_tokens": mx.per_1k(sum(r["score"]["facts"].get("shown_n", 0) for r in ok), sum(toks)),
             "locators_distinct_mean": round(statistics.mean(r["score"]["locators"]["distinct"] for r in ok), 1),
             "agent_tool_calls_mean": round(statistics.mean(r["score"]["agent_tool_calls"] or 0 for r in ok), 2),
             "seconds_cold_median": _med(cold), "seconds_cold_total": round(sum(cold), 3),
@@ -348,9 +351,10 @@ def sweep_summary(res: dict) -> dict | None:
         if tokens is None or "facts_total" not in s:
             continue
         rows.setdefault(base, {})[str(tokens)] = {
-            k: s[k] for k in ("facts_found", "facts_total", "facts_pinpointed", "tokens_mean", "tokens_max",
-                              "facts_per_1k_tokens", "pinpointed_per_1k_tokens", "seconds_cold_median",
-                              "seconds_warm_median", "negatives_matched", "negatives_checked")}
+            k: s[k] for k in ("facts_found", "facts_total", "facts_pinpointed", "facts_shown", "tokens_mean",
+                              "tokens_max", "facts_per_1k_tokens", "pinpointed_per_1k_tokens",
+                              "shown_per_1k_tokens", "seconds_cold_median", "seconds_warm_median",
+                              "negatives_matched", "negatives_checked")}
     return rows or None
 
 
