@@ -1363,7 +1363,9 @@ def test_a_module_level_receiver_says_so_and_unparsed_files_are_incomplete(tmp_p
     res = codecheck.check(tmp_path, ["mod.py", "broken.py"], env="none", use_cache=False)
     (s,) = [x for x in res["sites"] if x["name"] == "fetch_all"]
     assert s["verdict"] == "unknown" and "module-level" in s["why"]
-    assert res["exit"] == 0 and "broken.py (does not parse" in res["incomplete"][0]
+    # a file that does not parse was not checked: exit 4 (nothing absent, something not checked), never 0
+    assert res["exit"] == 4 and "broken.py (does not parse" in res["incomplete"][0]
+    assert res["summary"]["files"] == 1 and [u["path"] for u in res["not_checked"]] == ["broken.py"]
 
 
 # -- third review round -----------------------------------------------------------------------------------------

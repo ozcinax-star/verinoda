@@ -326,19 +326,20 @@ def test_check_never_passes_a_file_it_cannot_read(tmp_path, capsys):
 
     repo = _copy(GLOW, tmp_path / "glow")
     res = codecheck.check(repo, ["src/main/java/com/example/glowmod/ritual/Ritual.java"], env="none")
-    assert res["status"] == "unsupported_language" and res["exit"] == 3 and res["summary"]["files"] == 0
+    assert res["status"] == "unsupported_language" and res["exit"] == 4 and res["summary"]["files"] == 0
     assert res["not_checked"] == [{"path": "src/main/java/com/example/glowmod/ritual/Ritual.java", "language": "Java",
                                    "why": "language not supported: Java (check reads Python only)"}]
     assert "check reads Python only" in res["exit_because"] and res["incomplete"]
     snip = codecheck.check(repo, snippet="class Foo { void f() { HeatMath.addHeatClamped(1); } }\n",
                            as_path="src/main/java/Foo.java", env="none")
-    assert snip["status"] == "unsupported_language" and snip["exit"] == 3 and not snip["sites"]
+    assert snip["status"] == "unsupported_language" and snip["exit"] == 4 and not snip["sites"]
     assert not any("does not parse" in str(f) for f in snip["files"])
     whole = codecheck.check(repo, ["src"], env="none")
     assert whole["status"] == "unsupported_language" and whole["summary"]["not_checked"] >= 15
     # `api net.ashvale...EmberForgeBlockEntity` answered "module net is not in the standard library"
     api = codecheck.api(repo, "com.example.glowmod.ritual.Ritual.baslat", env="none")
     assert api["found"] is None and api["decided"] == "unsupported_language" and "Ritual.java" in api["why"]
+    assert api["exit"] == 4  # not checked, as in `check` (it was 0)
     # the diff: a TypeScript rename is listed, never passed
     _write(repo, "web/orderService.ts", "export function applyDiscount(x: number) { return x; }\n")
     _git(repo, "add", "-A")
@@ -346,19 +347,19 @@ def test_check_never_passes_a_file_it_cannot_read(tmp_path, capsys):
     _write(repo, "web/orderService.ts", "export function applyDiscont(x: number) { return x; }\n")
     _write(repo, "web/new.tsx", "export const A = 1;\n")
     capsys.readouterr()
-    assert cli.main(["check", "--repo", str(repo), "--diff", "--json"]) == 3
+    assert cli.main(["check", "--repo", str(repo), "--diff", "--json"]) == 4
     d = json.loads(capsys.readouterr().out)
     assert [u["path"] for u in d["not_checked"]] == ["web/new.tsx", "web/orderService.ts"]
     assert d["status"] == "unsupported_language" and d["summary"]["not_checked"] == 2
-    assert cli.main(["check", "--repo", str(repo), "web/orderService.ts"]) == 3
+    assert cli.main(["check", "--repo", str(repo), "web/orderService.ts"]) == 4
     assert "NOT CHECKED (not Python)" in capsys.readouterr().out
     (repo / ".verinoda").mkdir(exist_ok=True)
     m = AtlasTools(repo).code_check(paths=["web/orderService.ts"], env="none")
-    assert m["status"] == "unsupported_language" and m["exit"] == 3 and m["not_checked"][0]["language"] == "TypeScript"
-    # a Python edit next to them is checked as before; the TS files still keep the exit at 3
+    assert m["status"] == "unsupported_language" and m["exit"] == 4 and m["not_checked"][0]["language"] == "TypeScript"
+    # a Python edit next to them is checked as before; the TS files still keep the exit at 4
     _write(repo, "tools/x.py", "import json\n\njson.loads('1')\n")
     mixed = codecheck.check(repo, diff="HEAD", env="none")
-    assert mixed["status"] == "incomplete" and mixed["summary"]["files"] == 1 and mixed["exit"] == 3
+    assert mixed["status"] == "incomplete" and mixed["summary"]["files"] == 1 and mixed["exit"] == 4
     # nothing changed: nothing to check, and the result says so (in CI, compare with the base branch)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "all")
@@ -553,6 +554,61 @@ def test_no_edge_from_a_leaf_module_was_looked_at(tmp_path):
     # a language the index has no such edge for anywhere: nothing shows the file was looked at
     res = guards.check(repo, graph=g, records=[_rec(repo, "no_edge from=tools/run.sh to=pkg/app.py")])
     assert res["exit"] == 3 and "none out of any other file of their language" in res["unknown"][0]["why"]
+
+
+def test_check_tells_absent_from_not_checked_by_the_exit_code(tmp_path, capsys):
+    """reviewer-a: exit 3 meant both "a name is absent" and "a file is not Python", so a Python package that
+    ships JS (verinoda/ui, a Django app with static/*.js) could never pass; a Python file that does not parse
+    gave exit 0 and counted as checked."""
+    from verinoda import cli
+
+    repo = tmp_path / "mixed"
+    _write(repo, "app/views.py", "import json\n\n\ndef v():\n    return json.dumps({})\n")
+    _write(repo, "app/static/app.js", "export const x = 1;\n")
+    res = codecheck.check(repo, ["app"], env="none", use_cache=False)
+    assert res["exit"] == 4 and res["status"] == "incomplete" and res["summary"]["files"] == 1
+    assert "not checked: language not supported (JavaScript 1" in res["exit_because"]
+    _write(repo, "app/absent.py", "import json\n\njson.loadz('x')\n")
+    res = codecheck.check(repo, ["app"], env="none", use_cache=False)
+    assert res["exit"] == 3 and res["exit_because"].startswith("1 absent; 1 file not checked")
+    # a file that does not parse: not checked, never counted, exit 4 (it was exit 0 and "1 file")
+    _write(repo, "bad.py", 'def f(:\n    json.loadz("x")\n')
+    capsys.readouterr()
+    assert cli.main(["check", "bad.py", "--env", "none", "--no-cache", "--repo", str(repo)]) == 4
+    out = capsys.readouterr().out
+    assert "(0 sites in 0 files; whole files); 1 file NOT CHECKED\n" in out and "exit 4: 1 Python file" in out
+    bad = codecheck.check(repo, ["bad.py"], env="none", use_cache=False)
+    assert bad["summary"]["files"] == 0 and bad["status"] == "incomplete"
+    assert bad["not_checked"] == [{"path": "bad.py", "language": "Python",
+                                   "why": bad["files"][0]["error"]}] and "does not parse" in bad["files"][0]["error"]
+    snip = codecheck.check(repo, snippet="def f(:\n    pass\n", as_path="x.py", env="none")
+    assert snip["exit"] == 4 and snip["not_checked"][0]["path"] == "x.py" and snip["summary"]["files"] == 0
+
+
+def test_a_changed_notebook_or_cython_file_is_listed_as_not_checked(tmp_path):
+    """reviewer-a: a changed .ipynb and .pyx gave nothing_to_check ("no Python file changed"), exit 0."""
+    repo = tmp_path / "nb"
+    cell = {"cells": [{"cell_type": "code", "source": ["import json\n", "json.loadz('x')\n"], "metadata": {},
+                       "outputs": [], "execution_count": None}], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}
+    _write(repo, "a.py", "x = 1\n")
+    _write(repo, "nb.ipynb", json.dumps(cell))
+    _write(repo, "fast.pyx", "def f():\n    return 1\n")
+    _write(repo, "tools/go.sh", "echo 1\n")
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "init")
+    _write(repo, "nb.ipynb", json.dumps(cell).replace("loadz", "loadzz"))
+    _write(repo, "fast.pyx", "def f():\n    return os.getcwdu()\n")
+    _write(repo, "tools/go.sh", "echo 2\n")
+    res = codecheck.check(repo, diff="HEAD", env="none")
+    assert res["exit"] == 4 and res["status"] == "unsupported_language"
+    langs = {u["path"]: u["language"] for u in res["not_checked"]}
+    assert langs == {"fast.pyx": "Cython", "nb.ipynb": "Jupyter notebook", "tools/go.sh": "Shell"}
+    assert "code cells are not read" in next(u["why"] for u in res["not_checked"] if u["path"] == "nb.ipynb")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "all")
+    none = codecheck.check(repo, diff="HEAD", env="none")
+    assert none["exit"] == 0 and none["limits"][0].startswith("no Python file was checked: no .py file changed")
 
 
 def test_readmes_templates_and_this_repository_s_fixture_are_no_adr(tmp_path):

@@ -234,12 +234,12 @@ propose Python code, and after every edit:
    `verinoda api <module.or.Class> --json` (MCP `api_members`; `found: null` = not decided).
 3. `unknown` is unverified: read the definition or run the tests. `not_installed`: the checked
    environment lacks the package. `guarded`: the code handles it (a broad `except Exception` never is).
-4. Python only: a Java, Kotlin, TypeScript or other file comes back in `not_checked` (status
-   `unsupported_language`, exit 3), never as checked - say so; do not report it as passing.
+4. Python only: a Java, Kotlin, TypeScript or other file (or one that does not parse) comes back in
+   `not_checked` (exit 4), never as checked - say so; do not report it as passing.
 5. Name the environment checked (`env.python`, `env.packages_checked`, `env.lock_mismatches`). Exit 3:
-   something absent, a version differs from the lock or a file is not Python (`exit_because`); `incomplete`
-   lists files not checked. If `env.note` says a `.venv` was not used, tell the user; never pass `--env` to
-   run what it names. A PostToolUse hook running `verinoda check --diff` only if the user agrees.
+   something absent or a version differs from the lock; exit 4: nothing absent, but a file was not checked
+   (`exit_because`, `not_checked`). If `env.note` says a `.venv` was not used, tell the user; never pass `--env`
+   to run what it names. A PostToolUse hook running `verinoda check --diff` only if the user agrees.
 
 ## Fixing a bug: keep a debug ledger
 

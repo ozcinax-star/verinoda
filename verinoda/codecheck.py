@@ -15,10 +15,13 @@ walks a file, a diff or a snippet and gives every *site* one verdict:
                   argument or dict key inside it stays ``absent`` (the handler would
                   swallow the error at run time; ``swallowed_by`` says where).
 
-Python only: a file in another language (``Foo.java``, ``x.ts``, a snippet
-``--as`` one) is listed under ``not_checked`` with its language (status
-``unsupported_language`` when nothing else was checked, exit 3), never parsed
-as Python and never counted as checked.
+Python only: a file in another language (``Foo.java``, ``x.ts``, a notebook,
+a snippet ``--as`` one) is listed under ``not_checked`` with its language
+(status ``unsupported_language`` when nothing else was checked), never parsed
+as Python and never counted as checked; so is a Python file that does not
+parse or cannot be read. Exit 3: something is absent or an installed version
+differs from the lock; exit 4: nothing of that, but something asked for was
+not checked (``exit_because`` says what); 0: everything asked for was checked.
 
 Sites: ``import`` (imports and from-imports), ``attribute`` (``x.name`` loads),
 ``kwarg`` (keyword arguments of calls) and ``dict_key`` (a constant key read
@@ -79,7 +82,19 @@ OTHER_LANGUAGES = {".java": "Java", ".kt": "Kotlin", ".kts": "Kotlin", ".scala":
                    ".js": "JavaScript", ".jsx": "JavaScript", ".mjs": "JavaScript", ".cjs": "JavaScript",
                    ".vue": "Vue", ".svelte": "Svelte", ".go": "Go", ".rs": "Rust", ".rb": "Ruby", ".php": "PHP",
                    ".cs": "C#", ".c": "C", ".h": "C", ".cc": "C++", ".cpp": "C++", ".hpp": "C++", ".swift": "Swift",
-                   ".lua": "Lua", ".dart": "Dart", ".ex": "Elixir", ".exs": "Elixir", ".jl": "Julia", ".zig": "Zig"}
+                   ".lua": "Lua", ".dart": "Dart", ".ex": "Elixir", ".exs": "Elixir", ".jl": "Julia", ".zig": "Zig",
+                   # Python that is not a .py module: a notebook's cells and Cython are not read either
+                   ".ipynb": "Jupyter notebook", ".pyx": "Cython", ".pxd": "Cython", ".pxi": "Cython",
+                   # the other languages the index reads
+                   ".cxx": "C++", ".hh": "C++", ".cu": "CUDA", ".cuh": "CUDA", ".rake": "Ruby", ".luau": "Luau",
+                   ".astro": "Astro", ".sh": "Shell", ".bash": "Shell", ".zsh": "Shell", ".ps1": "PowerShell",
+                   ".psm1": "PowerShell", ".m": "Objective-C or MATLAB", ".mm": "Objective-C++", ".f": "Fortran",
+                   ".f90": "Fortran", ".f95": "Fortran", ".f03": "Fortran", ".f08": "Fortran", ".v": "Verilog",
+                   ".sv": "SystemVerilog", ".svh": "SystemVerilog", ".ml": "OCaml", ".mli": "OCaml",
+                   ".lisp": "Common Lisp", ".lsp": "Common Lisp", ".pas": "Pascal", ".dpr": "Pascal"}
+# exit codes of `check` and `api`: 3 = something absent (or a version differs from the lock), 4 = nothing absent,
+# but something that was asked for was not checked (another language, a file that does not parse); 0 otherwise
+EXIT_FOUND, EXIT_NOT_CHECKED = 3, 4
 NOT_CHECKED_LISTED = 50
 _SPECIAL_BASES = {"typing.Generic", "typing.Protocol", "typing_extensions.Protocol", "typing_extensions.Generic",
                   "builtins.object", "object"}
@@ -2958,6 +2973,16 @@ def other_language(path: str) -> str | None:
     return OTHER_LANGUAGES.get(Path(path).suffix.lower())
 
 
+def not_read_why(path: str) -> str:
+    """Why `check` does not read the code file ``path`` of another language (its ``not_checked`` entry)."""
+    lang = other_language(path) or "?"
+    if lang == "Jupyter notebook":
+        return "a Jupyter notebook: its code cells are not read (check reads .py files only)"
+    if lang == "Cython":
+        return "Cython: not Python syntax, not read (check reads .py files only)"
+    return f"language not supported: {lang} (check reads Python only)"
+
+
 def other_code_files(roots: list[Path], limit: int = MAX_FILES) -> list[Path]:
     """Code files in other languages under ``roots``, walked as :func:`py_files` walks (at most ``limit``)."""
     out: list[Path] = []
@@ -3335,9 +3360,10 @@ class _Cache:
 # -- public entry points ------------------------------------------------------------------------------------
 
 def _targets(repo: Path, paths: list[str] | None, diff: str | None
-             ) -> tuple[list[tuple[str, Path, set[int] | None]], str, list[str], list[str]]:
+             ) -> tuple[list[tuple[str, Path, set[int] | None]], str, list[str], list[str], list[tuple[str, str]]]:
     """(files to check with their changed lines, scope text, what was not checked, the code files in other
-    languages that were asked for - named, under a directory named, or changed - and are not checked)."""
+    languages that were asked for - named, under a directory named, or changed - and are not checked, the
+    changed Python paths that are not checked with the reason: a stub file, not a file)."""
     if paths:
         out = []
         others: list[str] = []
@@ -3364,7 +3390,7 @@ def _targets(repo: Path, paths: list[str] | None, diff: str | None
                 others += [f.relative_to(repo).as_posix() for f in other_code_files([p])]
         notes = [f"the file walk stopped at {MAX_FILES} Python files: later files were not checked"] if truncated \
             else []
-        return out, "whole files", notes, list(dict.fromkeys(others))
+        return out, "whole files", notes, list(dict.fromkeys(others)), []
     rev = diff or "HEAD"
     others = []
     ch = changed_lines(repo, rev, others)
@@ -3375,10 +3401,12 @@ def _targets(repo: Path, paths: list[str] | None, diff: str | None
         if f.is_file() and f.suffix == ".py":
             out.append((rel, f, lines))
         else:
-            skipped.append(f"{rel} ({'a stub file' if rel.endswith('.pyi') and f.is_file() else 'not a file'})")
-    notes = [f"{len(skipped)} changed file{'s' if len(skipped) > 1 else ''} not checked: " + "; ".join(skipped[:5]) +
-             (" ..." if len(skipped) > 5 else "")] if skipped else []
-    return out, f"changed lines against {rev} (sites on unchanged lines are not checked)", notes, others
+            skipped.append((rel, "a stub file (check reads the code that uses names)"
+                            if rel.endswith(".pyi") and f.is_file() else "not a file"))
+    notes = [f"{len(skipped)} changed file{'s' if len(skipped) > 1 else ''} not checked: " +
+             "; ".join(f"{rel} ({why})" for rel, why in skipped[:5]) + (" ..." if len(skipped) > 5 else "")
+             ] if skipped else []
+    return out, f"changed lines against {rev} (sites on unchanged lines are not checked)", notes, others, skipped
 
 
 def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None, snippet: str | None = None,
@@ -3400,6 +3428,10 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     sites: list[dict] = []
     notes: list[str] = []
     others: list[str] = []   # code in other languages that was asked for: never parsed as Python
+    # what was asked for and not checked (exit 4 when nothing is absent): (path, language, why), and the notes
+    # that say so without naming every file (the walk limit, the time budget)
+    unchecked: list[tuple[str, str, str]] = []
+    unchecked_why: list[str] = []
     if snippet is not None:
         rel = (as_path or "snippet.py").replace("\\", "/")
         abs_path = (repo / rel).resolve()
@@ -3412,12 +3444,19 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
             files.append({"path": rel, "sites": len(got), **({"error": err} if err else {})})
             sites += got
     else:
-        targets, scope, not_checked, others = _targets(repo, paths, diff)
+        targets, scope, not_checked, others, skipped = _targets(repo, paths, diff)
         notes += not_checked
+        unchecked += [(rel, "Python", why) for rel, why in skipped]
+        if not_checked and not skipped:   # the walk stopped at MAX_FILES
+            unchecked_why.append(not_checked[0])
         for n, (rel, f, lines) in enumerate(targets):
             if budget_s is not None and time.perf_counter() - t0 > budget_s:
                 notes.append(f"stopped after the time budget of {budget_s:g} s: {len(targets) - n} of "
                              f"{len(targets)} files were not checked (check fewer paths, or the diff)")
+                unchecked_why.append(f"the time budget of {budget_s:g} s left {len(targets) - n} of {len(targets)} "
+                                     "files not checked")
+                unchecked += [(r, "Python", f"not reached within the time budget of {budget_s:g} s")
+                              for r, _f, _l in targets[n:]]
                 break
             try:
                 data = f.read_bytes()
@@ -3439,6 +3478,7 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     if bad:   # a requested file that could not be read or parsed was not checked: "0 absent" does not cover it
         notes.append(f"{len(bad)} file{'s' if len(bad) > 1 else ''} not checked: " +
                      "; ".join(f"{f['path']} ({f['error']})" for f in bad[:5]) + (" ..." if len(bad) > 5 else ""))
+        unchecked += [(f["path"], "Python", str(f["error"])) for f in bad]
     failed = [s for s in sites if s.get("check_error")]
     if failed:   # a defect of the check on some sites: they are unknown, and the result says so
         notes.append(f"the check failed on {len(failed)} site{'s' if len(failed) > 1 else ''} (unknown): " +
@@ -3451,6 +3491,15 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
         notes.append(f"{len(others)} file{'s' if len(others) > 1 else ''} not checked, language not supported "
                      f"({by_lang}; check reads Python only): " + ", ".join(others[:5])
                      + (f" ... (not_checked lists {min(len(others), NOT_CHECKED_LISTED)})" if len(others) > 5 else ""))
+    py_unchecked = [u for u in unchecked if u[1] == "Python"]
+    if py_unchecked:
+        unchecked_why.append(f"{len(py_unchecked)} Python file{'s' if len(py_unchecked) > 1 else ''} not checked "
+                             f"({py_unchecked[0][0]}: {py_unchecked[0][2]}"
+                             + (f"; {len(py_unchecked) - 1} more" if len(py_unchecked) > 1 else "") + ")")
+    if others:
+        unchecked_why.append(f"{len(others)} file{'s' if len(others) > 1 else ''} not checked: language not supported "
+                             f"({by_lang}; check reads Python only)")
+    unchecked = [*[(rel, other_language(rel) or "?", not_read_why(rel)) for rel in others], *unchecked]
     sites = [{k: v for k, v in s.items() if k not in ("_span", "check_error")} for s in sites]
     counts = {v: 0 for v in VERDICTS}
     for s in sites:
@@ -3459,30 +3508,31 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     mismatches = len(header.get("lock_mismatches", []))
     shown = sites if include_exists else [s for s in sites if s["verdict"] != "exists"]
     shown.sort(key=lambda s: (VERDICTS.index(s["verdict"]), s["path"], s["line"], s["col"]))
+    # 3: something absent or a version differs from the lock (fix the code or the environment); 4: nothing of
+    # that, but something asked for was not checked (another language, a file that does not parse or cannot be
+    # read, the walk limit or the time budget), so "0 absent" does not cover it; 0: all of it was checked
     why_exit = [f"{counts['absent']} absent"] if counts["absent"] else []
     if mismatches:
         why_exit.append(f"{mismatches} installed package version{'s' if mismatches > 1 else ''} differ from the lock")
-    if others:
-        why_exit.append(f"{len(others)} file{'s' if len(others) > 1 else ''} not checked: language not supported "
-                        f"({by_lang}; check reads Python only)")
+    checked = [f for f in files if not f.get("error")]   # a file that does not parse was not checked
     status = ("absent" if counts["absent"] else "lock_mismatch" if mismatches else
               "unsupported_language" if others and not files else "incomplete" if notes else
-              "nothing_to_check" if not files else "checked")
+              "nothing_to_check" if not checked else "checked")
     nothing = [] if status != "nothing_to_check" else [
-        "no Python file was checked: " + ("no Python file changed against the revision (in CI, compare with the "
+        "no Python file was checked: " + ("no .py file changed against the revision (in CI, compare with the "
                                           "base branch: --diff origin/main)"
                                           if diff is not None or (not paths and snippet is None)
-                                          else "the paths hold no Python file")]
+                                          else "the paths hold no .py file")]
     res = {
         "status": status,
         "env": header,
         "scope": scope,
-        "summary": {"sites": len(sites), **counts, "files": len(files),
-                    **({"not_checked": len(others)} if others else {})},
+        "summary": {"sites": len(sites), **counts, "files": len(checked),
+                    **({"not_checked": len(unchecked)} if unchecked else {})},
         "files": files,
         "sites": shown,
-        "exit": 3 if why_exit else 0,
-        **({"exit_because": "; ".join(why_exit)} if why_exit else {}),
+        "exit": EXIT_FOUND if why_exit else EXIT_NOT_CHECKED if unchecked_why else 0,
+        **({"exit_because": "; ".join(why_exit + unchecked_why)} if why_exit or unchecked_why else {}),
         "limits": [
             *notes,
             *nothing,
@@ -3493,10 +3543,9 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
         ],
         "elapsed_s": round(time.perf_counter() - t0, 3),
     }
-    if others:
-        res["not_checked"] = [{"path": rel, "language": other_language(rel),
-                               "why": f"language not supported: {other_language(rel)} (check reads Python only)"}
-                              for rel in others[:NOT_CHECKED_LISTED]]
+    if unchecked:
+        res["not_checked"] = [{"path": rel, "language": lang, "why": why}
+                              for rel, lang, why in unchecked[:NOT_CHECKED_LISTED]]
     if notes:
         res["incomplete"] = notes
     if not include_exists:
@@ -3557,7 +3606,9 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
     """The real members of a module, class or function, with signatures and locations. ``found`` is False
     (exit 3) only for a name shown missing from a closed container, or a module missing from the search path;
     a name that was not decided (an open container, the attributes of a function or variable, no resolver,
-    no project environment) is ``found: None`` with ``decided: "unknown"`` (or ``"not_installed"``), exit 0."""
+    no project environment) is ``found: None`` with ``decided: "unknown"`` (or ``"not_installed"``), exit 0.
+    A name of the project's code in another language (a Java class) is ``found: None`` with ``decided:
+    "unsupported_language"``, exit 4 as in :func:`check`: not checked, never "not found" and never a pass."""
     from verinoda import precise
 
     repo = Path(repo).resolve()
@@ -3584,7 +3635,7 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
         if other is not None:  # `api net.ashvale...EmberForgeBlockEntity` is Java: never "no module net"
             return {**head, "found": None, "decided": "unsupported_language",
                     "why": f"{target} names {other[1]} code of this project ({other[0]}); api reads Python only",
-                    "exit": 0}
+                    "exit": EXIT_NOT_CHECKED}
         top = {n: Member(n, "module") for n in u.top_level_names()}
         if not envinfo.third_party and parts[0] not in envinfo.stdlib_names():
             return {**head, "found": None, "decided": "not_installed",

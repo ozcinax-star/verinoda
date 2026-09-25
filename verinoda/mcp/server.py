@@ -1555,7 +1555,7 @@ DESCRIPTIONS: dict[str, str] = {
         "target_line a verdict confirms | refutes | undetermined (definitive answers only). 'no precise "
         "answer' with the reason when the resolver is unavailable or the site cannot be read. Read-only."),
     "code_check": (
-        "Python only (files in other languages come back under not_checked, status unsupported_language, exit 3 - "
+        "Python only (files in other languages come back under not_checked, status unsupported_language, exit 4 - "
         "never as checked). Check that the modules, imported names, attributes, keyword arguments and constant dict "
         "keys that Python code uses exist - in the project's own environment (.venv/venv/env, or env=PATH; 'none' = standard "
         "library only; env=PATH only a virtual environment whose base interpreter is a known Python "
@@ -1566,7 +1566,9 @@ DESCRIPTIONS: dict[str, str] = {
         "for closed containers (a module or class whose names are all known, a direct instance, one known "
         "signature) and comes with nearest real names and where the name is defined elsewhere; unknown carries "
         "why. env names the interpreter and package versions checked (and lock mismatches). exit 3 = something "
-        "is absent, or an installed package version differs from the lock (exit_because says which). Files are "
+        "is absent, or an installed package version differs from the lock; exit 4 = nothing absent, but a file "
+        "asked for was not checked (another language, does not parse; not_checked lists it) - never a pass; "
+        "exit_because says which. Files are "
         "started only within a time budget (90 s): 'incomplete' lists what was not checked - pass fewer paths "
         "or use diff. Existence and signature shape only, not behaviour. Read-only (answers are cached under "
         ".verinoda/cache/check)."),
@@ -1576,7 +1578,9 @@ DESCRIPTIONS: dict[str, str] = {
         "and the version the source came from. Use it before writing calls to an API you have not read. "
         "private=true also lists names starting with '_'. found=false (exit 3: missing from a module or class "
         "whose names are all known, or no such module) comes with nearest names; found=null with decided="
-        "'unknown' or 'not_installed' (exit 0) was not decided - treat it as unverified. Read-only."),
+        "'unknown' or 'not_installed' (exit 0) was not decided - treat it as unverified; "
+        "decided='unsupported_language' (exit 4): the name is the project's code in another language, not "
+        "checked. Read-only."),
     "runtime_observe": (
         "Run tests in an isolated copy under the sys.monitoring call tracer and record the observed calls "
         "(stored under run_id). Tests: test_ids (pytest node ids), else tests selected for symbols/terms "

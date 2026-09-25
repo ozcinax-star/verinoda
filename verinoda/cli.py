@@ -10,9 +10,11 @@ model reads, docs/DESIGN.md D20).
 Exit codes: 0 done; 1 error; 2 usage error, invalid plan, unresolved trace
 endpoint or blocked upstream command; 3 "needs more": a plan that needs
 clarification, a partial reference resolution, a refused experiment, an
-incomplete observation, no precise answer, an absent name or a file in a
-language it does not read (`check`), a target not found (`api`; a target that could not be decided is 0),
-a debug attempt that says stop, a `decide check` that could not check something (no violation).
+incomplete observation, no precise answer, an absent name or a version that
+differs from the lock (`check`), a target not found (`api`; a target that could not be decided is 0),
+a debug attempt that says stop, a `decide check` that could not check something (no violation);
+4 (`check`, `api`) nothing absent, but something asked for was not checked: code in a language they do
+not read, a Python file that does not parse or cannot be read.
 """
 
 from __future__ import annotations
@@ -1922,8 +1924,9 @@ def _r_check(r: dict) -> None:
     print(f"verinoda check: {s['absent']} absent, {s['not_installed']} not installed, {s['unknown']} unknown, "
           f"{s['guarded']} guarded, {s['exists']} exist ({s['sites']} sites in {s['files']} "
           f"file{'' if s['files'] == 1 else 's'}; {r['scope']})"
-          + (f"; {s['not_checked']} file{'' if s['not_checked'] == 1 else 's'} NOT CHECKED (not Python)"
-             if s.get("not_checked") else ""))
+          + (f"; {s['not_checked']} file{'' if s['not_checked'] == 1 else 's'} NOT CHECKED" +
+             (" (not Python)" if all(u.get("language") != "Python" for u in r.get("not_checked") or [])
+              else "") if s.get("not_checked") else ""))
     if r.get("status") in ("unsupported_language", "nothing_to_check"):
         print(f"status: {r['status']}" + ("" if r["status"] == "unsupported_language"
                                           else f" - {next((x for x in r['limits'] if x.startswith('no Python')), '')}"))
@@ -1933,7 +1936,7 @@ def _r_check(r: dict) -> None:
     for m in env.get("lock_mismatches") or []:
         print(f"  ! {m['package']}: installed {m['installed']}, locked {m['locked']} ({m.get('at')})")
     if r.get("exit_because"):
-        print(f"exit 3: {r['exit_because']}")
+        print(f"exit {r['exit']}: {r['exit_because']}")
     for note in r.get("incomplete") or []:   # also the files that could not be read or parsed, or not Python
         print(f"incomplete: {note}")
     unknown = 0
@@ -2596,8 +2599,9 @@ def build_parser() -> argparse.ArgumentParser:
                 "or interpreter path, or none (standard library only)")
     sp = add("check", cmd_check, "Python only: check that the modules, names, keyword arguments and dict keys "
                                  "Python code uses exist in the project's environment (exit 3: something is "
-                                 "absent, an installed package version differs from the lock file, or a file in "
-                                 "another language was asked for - it is listed as not checked, never passed)")
+                                 "absent, or an installed package version differs from the lock file; exit 4: "
+                                 "nothing absent, but a file asked for was not checked - another language, a file "
+                                 "that does not parse - it is listed under not_checked, never passed)")
     sp.add_argument("paths", nargs="*", metavar="PATH",
                     help="files or directories to check (default: the lines changed against HEAD, as --diff)")
     sp.add_argument("--diff", nargs="?", const="HEAD", metavar="REV",
@@ -2609,9 +2613,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-cache", action="store_true", help="do not read or write .verinoda/cache/check")
     sp = add("api", cmd_api, "Python only: the real members of a Python module, class or function in the "
                              "project's environment, with signatures and locations (exit 3: not found; a name that "
-                             "could not be "
-                             "decided - an open container, an attribute of a function or variable - is "
-                             "reported as not decided, exit 0)")
+                             "could not be decided - an open container, an attribute of a function or variable - "
+                             "is reported as not decided, exit 0; a name of the project's code in another "
+                             "language is not checked, exit 4)")
     sp.add_argument("target", metavar="NAME", help="dotted name, e.g. packaging.specifiers.SpecifierSet")
     sp.add_argument("--env", default="auto", help=env_help)
     sp.add_argument("--private", action="store_true", help="also list names that start with an underscore")
