@@ -503,6 +503,7 @@ class _Ctx:
     started: set = field(default_factory=set)
     observations: list = field(default_factory=list)   # runtime observe() results of this analysis
     replaced: dict = field(default_factory=dict)       # claim id -> the claim that superseded it here
+    brief: dict | None = None                          # the decision brief of this analysis (one per message)
 
     def view(self, name: str):
         if name not in self.views:
@@ -1756,15 +1757,44 @@ def _h_compare(ctx: _Ctx, sub: _Sub) -> None:
 
 def _h_decide(ctx: _Ctx, sub: _Sub) -> None:
     """A choice between options (docs/DESIGN.md D33). Verinoda does not choose: the verdict is
-    ``human_decision_required`` and what is returned is what the human decides with."""
+    ``human_decision_required`` and what is returned is what the human decides with - the decision
+    brief of the whole message (one per analysis, stored under its id)."""
     sub.flags["human_decision"] = True
-    _unknown(ctx, sub, {"question": sub.sq.get("text") or SUBQUESTIONS["decide"],
-                        "why": "this asks for a choice between options; Verinoda does not choose, the human "
-                               "decides (load, growth, hosting, budget and team facts are not in the code)",
-                        "next_step": "collect what the code says for the decision - storage and configuration "
-                                     "sites (`verinoda map --view dataflow`, `--view config`), existing decision "
-                                     "records (`--view history`) and what a change would touch (`--view impact`) - "
-                                     "then ask the user"})
+    first = ctx.brief is None
+    if first:
+        try:
+            from verinoda import decision_brief as dbr
+
+            ctx.brief = dbr.brief(ctx.repo, ctx.plan.get("user_message") or sub.sq.get("text") or "",
+                                  store=ctx.store, graph=ctx.g)
+            ctx.step("decision_brief", f"{ctx.brief['brief_id']}: {len(ctx.brief['forces'])} forces, "
+                                       f"{len(ctx.brief['absences'])} absences, "
+                                       f"{len(ctx.brief['questions_for_human'])} questions for the user")
+        except Exception as exc:  # noqa: BLE001 - no brief is an unknown, never a crash
+            ctx.brief = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+    b = ctx.brief
+    if b.get("error"):
+        _unknown(ctx, sub, {"question": sub.sq.get("text") or SUBQUESTIONS["decide"],
+                            "why": "this asks for a choice between options; Verinoda does not choose, the human "
+                                   f"decides; the decision brief failed ({b['error']})",
+                            "next_step": "`verinoda decide brief \"<the question>\"`, then ask the user"})
+        return
+    from verinoda import decision_brief as dbr
+
+    if first:
+        compact = dbr.compact(b, (ctx.plan or {}).get("language"))
+        ctx.budget.spend(0, _size(compact))
+        sub.extra["decision_brief"] = compact
+    else:
+        sub.extra["decision_brief"] = {"brief_id": b["brief_id"], "same_brief_as": "an earlier sub-question"}
+    if first:
+        _unknown(ctx, sub, {"question": sub.sq.get("text") or SUBQUESTIONS["decide"],
+                            "why": f"a choice between options: the human decides. Brief {b['brief_id']}: "
+                                   f"{len(b['forces'])} fact(s) from the code, {len(b['absences'])} absence(s), "
+                                   f"{len(b['questions_for_human'])} question(s) only the user can answer",
+                            "next_step": f"ask the user the brief's questions, record each answer (`verinoda decide "
+                                         f"answer {b['brief_id']} --q qN \"...\"`), and record a decision only with "
+                                         "the user's explicit choice (`verinoda decide record`)"})
 
 
 def _h_unsupported(ctx: _Ctx, sub: _Sub) -> None:
@@ -1949,6 +1979,8 @@ def _finish_sub(ctx: _Ctx, sub: _Sub, out: dict, handler: str) -> dict:
         out["proposition"] = sub.extra["proposition"]
     if sub.extra.get("references"):
         out["references"] = sub.extra["references"]
+    if sub.extra.get("decision_brief"):
+        out["decision_brief"] = sub.extra["decision_brief"]
     return out
 
 

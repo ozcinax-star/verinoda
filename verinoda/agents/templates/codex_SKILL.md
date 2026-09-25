@@ -1,6 +1,6 @@
 ---
 name: verinoda
-description: Evidence-first answers about this codebase with Verinoda - how a feature works, where something is implemented, how calls or data flow between components (handler -> service -> storage), why a design decision was made, what a change would affect, or whether an earlier conclusion still holds. Every answer is a set of claims with file:line evidence and an explicit status (verified, inference, unknown). Use it before explaining unfamiliar code and when the user disputes an earlier answer; do not use it for pure code-writing tasks.
+description: Evidence-first answers about this codebase with Verinoda - how a feature works, where something is implemented, how calls or data flow between components (handler -> service -> storage), why a design decision was made, what a change would affect, whether an earlier conclusion still holds, or what the code says for a should-we or which-to-pick decision (the user decides; Verinoda never chooses). Every answer is a set of claims with file:line evidence and an explicit status (verified, inference, unknown). Use it before explaining unfamiliar code and when the user disputes an earlier answer; do not use it for pure code-writing tasks.
 ---
 <!-- verinoda-managed v1 -->
 <!-- Managed by `verinoda install`. After a local install, edits are kept: install will not overwrite them and uninstall leaves the file. A copy with no local install record is refreshed by install. Delete the marker line above to take ownership. -->
@@ -23,6 +23,8 @@ read its structured output, and report exactly what the evidence supports.
 
 - "How does X work / where is X / what calls X / how does data get from A to B?"
 - "Why is it built this way?" (git history and design docs are searched)
+- "Should we switch to X / which one should we pick / how will this scale?" (the code's side of a
+  decision; the user decides)
 - "What breaks if I change X?" (impact view)
 - Verifying, re-checking or challenging an earlier conclusion, yours or the user's.
 - Comparing a mechanism with a reference repository or an official document.
@@ -115,6 +117,19 @@ before researching or answering. Report each reference as `<name> @ <pin> (basis
 each mismatch on its own line. Never substitute the default branch for a version the user named.
 Ask the user only the `questions_for_user`. State every unresolved part with its `next_step`;
 read a pinned reference with `verinoda research --resolution <id> --reference-id <rN> --json`.
+
+## Decisions are the user's
+
+For "should we / which X should we pick / how will this scale" (`human_decision_required`):
+1. `verinoda decide brief "<the question, verbatim>" --json` (MCP `decision_brief`): forces from the
+   code with evidence, absences (with what was searched), decisions on record, options and
+   `questions_for_human`. It never recommends.
+2. Show the forces and absences, ask the `questions_for_human` (with `request_user_input` when it is
+   available, otherwise as plain text, and wait), and record each answer:
+   `verinoda decide answer <brief-id> --q qN "<their words>"`.
+3. Never pick an option for the user; your own view may follow their answers, labelled as inference.
+   Record only their explicit choice: `verinoda decide record <brief-id> --chosen NAME --rationale
+   "<their words>" [--guard SPEC]`. Never edit, supersede, accept or waive a decision yourself.
 
 ## Commands (examples; always add --json when you read the result)
 

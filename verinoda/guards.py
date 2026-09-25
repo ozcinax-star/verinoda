@@ -933,6 +933,12 @@ def _gradle_maven(root: Path) -> list[dict]:
                 continue
             text = _read(p) or ""
             for i, ln in enumerate(text.split("\n"), 1):
+                pm = re.match(r"\s*id\s*\(?\s*['\"]([\w.\-]+)['\"]\s*\)?(?:\s*version\s*\(?\s*['\"]([^'\"]+)['\"])?", ln)
+                if pm:  # a Gradle plugin (net.neoforged.moddev, fabric-loom, org.jetbrains.kotlin.jvm)
+                    items.append({"name": pm.group(1).lower(), "short": pm.group(1).rpartition(".")[2].lower(),
+                                  "spec": pm.group(2) or "*", "scope": "plugin", "at": f"{rel}:{i}", "path": rel,
+                                  "line": i, "ecosystem": "gradle-plugin"})
+                    continue
                 m = re.search(r"\b(\w*(?:[Ii]mplementation|[Aa]pi|[Cc]ompileOnly|[Rr]untimeOnly|[Aa]nnotationProcessor"
                               r"|[Cc]ompile))\s*\(?\s*['\"]([\w.\-]+):([\w.\-]+)(?::([^'\"]+))?['\"]", ln)
                 if m:

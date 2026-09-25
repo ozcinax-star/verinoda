@@ -214,6 +214,17 @@ def _r_claims(res: dict) -> None:
             n_unknowns = len(s.get("unknowns") or [])
             print(f"  {s['id']} [{s.get('status') or '?'}] {s.get('intent')}: {s.get('text') or ''}  "
                   f"({n_claims} claim(s){f', {n_unknowns} unknown(s)' if n_unknowns else ''})")
+    for s in subs:  # a choice: what the human decides with (no recommendation)
+        b = s.get("decision_brief") or {}
+        if b.get("forces") is None:
+            continue
+        print(f"\ndecision brief {b['brief_id']} ({s['id']}) [{b['verdict']}]: {b.get('understood_as')}")
+        for f in b["forces"]:
+            print(f"  [{f['status']}] {f['fact'][:200]}  ({', '.join(f['at'][:3])})")
+        for a in b.get("absences") or []:
+            print(f"  absent: {a['what']}")
+        for q in b.get("questions_for_human") or []:
+            print(f"  ask the user {q['id']}: {q['text']}")
     print()
     answering = {cid for s in subs for cid in s.get("answer_claim_ids") or []}
     shown_head, context_shown, context_more = None, 0, 0
@@ -1001,6 +1012,45 @@ def _r_check(r: dict) -> None:
         print(f"next: {r['next_step']}")
 
 
+def _r_brief(b: dict, indent: str = "") -> None:
+    tr = b.get("language") in ("tr", "mixed")
+    print(f"{indent}decision brief {b.get('brief_id') or '(not stored)'} [{b['verdict']}] "
+          f"{b.get('understood_as_tr') if tr else b.get('understood_as')}")
+    print(f"{indent}forces (from the code):")
+    for f in b.get("forces") or []:
+        at = ", ".join(e["locator"] for e in f["evidence"][:4]) + (" ..." if len(f["evidence"]) > 4 else "")
+        print(f"{indent}  {f['id']} [{f['status']}] {f['fact'][:220]}  ({at})")
+    if b.get("absences"):
+        print(f"{indent}absent (searched, not found):")
+        for a in b["absences"]:
+            print(f"{indent}  {a['id']} {a['what']}  [searched: {', '.join(a['searched'][:6])}"
+                  f"{', ...' if len(a['searched']) > 6 else ''}; {a['scope_note']}]")
+    for d in b.get("existing_decisions") or []:
+        print(f"{indent}decision on record: {d.get('doc')} ({d.get('status')})"
+              + (f" - reason: {d['reason']}" if d.get("reason") else ""))
+    for o in b.get("options") or []:
+        pres = {True: "present in the project", False: "not present", None: "presence unknown"}[
+            o["present_in_project"]]
+        where = ", ".join(e["locator"] for e in o.get("presence_evidence") or [])
+        touch = o.get("change_surface") or o.get("what_moving_away_touches") or []
+        print(f"{indent}option {o['name']} ({o['proposed_by']}): {pres}" + (f" ({where})" if where else "")
+              + (f"; a change touches {len(touch)} site(s): {', '.join(t['at'] for t in touch[:5])}" if touch else ""))
+        for c in o.get("constraints") or []:
+            print(f"{indent}    {c['fact']}")
+        for p in o.get("external") or []:
+            print(f"{indent}    external [{p['status']}] {p['url']}: {p.get('why')}")
+        for a in o.get("agent_arguments") or []:
+            print(f"{indent}    agent argument [weak_inference]: {a['text']}")
+    print(f"{indent}questions only the user can answer (ask them; record each with `verinoda decide answer`):")
+    for q in b.get("questions_for_human") or []:
+        print(f"{indent}  {q['id']}: {q['text_tr'] if tr else q['text_en']}")
+        print(f"{indent}      because {q['asked_because']}; decides between {', '.join(q['discriminates'])}")
+    for q in b.get("answered_by_code") or []:
+        print(f"{indent}  not asked ({q['kind']}): answered by {q.get('answered_by')}")
+    if b.get("next_step") and not indent:
+        print(f"next: {b['next_step']}")
+
+
 def _decide_check(args, repo: Path) -> int:
     from verinoda import decisions as dm
     from verinoda import guards
@@ -1048,6 +1098,27 @@ def cmd_decide(args) -> int:
         except dm.DecisionError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
+    if args.decide_cmd in ("brief", "answer"):
+        from verinoda import decision_brief as dbr
+
+        st = _store(repo)
+        try:
+            if args.decide_cmd == "answer":
+                res = dbr.answer(st, args.brief_id, args.q, args.answer)
+                _emit(args, res, lambda r: print(f"recorded the user's answer to {args.q} of {r['brief_id']}; "
+                                                  f"still open: {', '.join(q['id'] for q in r['open_questions']) or 'none'}"))
+                return 0
+            from verinoda import index
+            from verinoda.paths import graph_path
+
+            graph = index.load(repo) if graph_path(repo).exists() else None
+            res = dbr.brief(repo, args.question, store=st, graph=graph, options=args.option or [],
+                            quotes=[{"url": u, "text": t} for u, t in args.quote or []],
+                            agent_arguments=args.argument or [])
+        finally:
+            st.close()
+        _emit(args, res, _r_brief)
+        return 0
     graph = None
     if getattr(args, "governs", None) or args.decide_cmd == "import":
         from verinoda import index
@@ -1858,6 +1929,21 @@ def build_parser() -> argparse.ArgumentParser:
                      help="label findings new/touched since HEAD or pre-existing; only new ones fail")
     grp.add_argument("--base", metavar="REF", help="as --changed, against this git revision (e.g. origin/main)")
     c.add_argument("--no-refresh", action="store_true", help="do not update a stale index first (no_edge guards)")
+    c = add("brief", cmd_decide, "what a decision needs, from the code: forces with evidence, what is absent, "
+                                 "decisions on record, options, and the questions only the user can answer (no "
+                                 "recommendation)", parent=dsub)
+    c.add_argument("question", help="the user's question, verbatim")
+    c.add_argument("--option", action="append", metavar="NAME", help="an option the user named; repeatable")
+    c.add_argument("--quote", action="append", nargs=2, metavar=("URL", "TEXT"),
+                   help="an external claim: the page (fetched as research.network allows) must contain TEXT "
+                        "verbatim; repeatable")
+    c.add_argument("--argument", action="append", metavar="TEXT",
+                   help="the agent's own argument, shown as weak_inference; repeatable")
+    c = add("answer", cmd_decide, "record the user's answer to one question of a brief (answered_by: user)",
+            parent=dsub)
+    c.add_argument("brief_id")
+    c.add_argument("--q", required=True, metavar="qN", help="the question id")
+    c.add_argument("answer", help="the user's answer, in their words")
 
     sp = sub.add_parser("claim", help="inspect or add claims")
     csub = sp.add_subparsers(dest="claim_cmd", required=True)

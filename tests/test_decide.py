@@ -7,6 +7,7 @@ import os
 
 os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
+import re  # noqa: E402
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -50,6 +51,8 @@ def _copy(src: Path, dst: Path, *, scan: bool = True) -> Path:
 @pytest.fixture(scope="module")
 def orders(tmp_path_factory):
     repo = _copy(ORDERS, tmp_path_factory.mktemp("decide") / "orders_app")
+    # no network in these tests: an external quote not fetched before stays unknown
+    (repo / ".verinoda" / "config.json").write_text('{"research": {"network": "off"}}', encoding="utf-8")
     st = open_store(repo)
     yield repo, st
     st.close()
@@ -87,6 +90,121 @@ def test_a_compound_question_keeps_its_code_part_answerable(orders):
     by_intent = {s["intent"]: s["status"] for s in res["subquestions"]}
     assert by_intent.get("decide") == qp.HUMAN_DECISION
     assert by_intent.get("why") in ("met", "met_with_inference"), res["subquestions"]
+
+
+# -- the decision brief (step 4) --------------------------------------------------------------------
+
+def _locs(f):
+    return [e["locator"] for e in f["evidence"]]
+
+
+@pytest.mark.parametrize("question", [EN_Q, TR_Q])
+def test_brief_collects_the_forces_asks_the_human_and_recommends_nothing(orders, question):
+    from verinoda import decision_brief as dbr
+    from verinoda import index
+
+    repo, st = orders
+    b = dbr.brief(repo, question, store=st, graph=index.load(repo))
+    assert b["verdict"] == qp.HUMAN_DECISION and not any("recommend" in k for k in b)
+    assert b["decision_kinds"][0] == "datastore" and [o["name"] for o in b["options"]] == ["SQLite", "PostgreSQL"]
+    assert [o["present_in_project"] for o in b["options"]] == [True, False]
+    facts = {f["fact"]: _locs(f) for f in b["forces"]}
+    assert any("sqlite3.connect" in t and "orders/repository.py:10" in at for t, at in facts.items())
+    assert any("ORDERS_DATABASE_URL" in t and '"orders.db"' in t and at == ["orders/config.py:5"]
+               for t, at in facts.items())
+    assert any("same repository interface" in t and "docs/adr/0001-sqlite-persistence.md:5-7" in at
+               for t, at in facts.items())
+    assert any(re.search(r"all \d+ storage sink.*in one file: orders/repository.py", t) for t in facts)
+    assert any("`_repo`" in t and at == ["orders/api.py:6", "orders/api.py:9-13"] for t, at in facts.items())
+    assert any("':memory:'" in t and at == ["tests/test_service.py:8", "tests/test_service.py:15"]
+               for t, at in facts.items())
+    absences = " | ".join(a["what"] for a in b["absences"])
+    assert "no deployment or CI file" in absences and "no database driver" in absences
+    assert all(a["searched"] and a["scope_note"] for a in b["absences"])
+    # every cited line re-checks, and nothing is claimed without evidence
+    assert all(f["evidence"] and all(dbr.recheck(repo, e) for e in f["evidence"]) for f in b["forces"])
+    qs = b["questions_for_human"]
+    assert 1 <= len(qs) <= dbr.MAX_QUESTIONS and all(q["text_en"] and q["text_tr"] and q["asked_because"] and
+                                                       q["discriminates"] for q in qs)
+    assert [q["kind"] for q in qs] == ["concurrency", "volume", "hosting", "operations", "adr_reason"]
+    assert not any(re.search(r"which (database|db)\b.*\buse", q["text_en"].lower()) for q in qs)
+    assert "zero-ops local development" in qs[-1]["text_en"]
+    assert st.get("decision_briefs", b["brief_id"])["result"]["verdict"] == qp.HUMAN_DECISION
+
+
+def test_a_question_the_code_answers_is_not_asked(tmp_path):
+    from verinoda import decision_brief as dbr
+
+    repo = _copy(ORDERS, tmp_path / "orders_app", scan=False)
+    (repo / "docker-compose.yml").write_text("services:\n  db:\n    image: postgres:16\n", encoding="utf-8")
+    b = dbr.brief(repo, EN_Q, record=False)
+    assert "hosting" not in [q["kind"] for q in b["questions_for_human"]]
+    assert [q["answered_by"] for q in b["answered_by_code"]] == ["docker-compose.yml"]
+    assert any("docker-compose.yml" in f["fact"] for f in b["forces"])
+    assert not any("deployment" in a["what"] for a in b["absences"])
+
+
+def test_brief_answers_quotes_and_the_record_that_uses_them(orders, tmp_path, capsys):
+    import json
+
+    from verinoda import cli
+    from verinoda import decision_brief as dbr
+    from verinoda import decisions as dm
+    from verinoda.store import now
+
+    repo, st = orders
+    page = tmp_path / "pg.txt"
+    page.write_text("PostgreSQL supports many concurrent writers through MVCC.", encoding="utf-8")
+    url = "https://example.org/pg-concurrency"
+    st.insert("research", {"id": "res_test0000001", "reference": url, "kind": "document", "local_path": str(page),
+                           "content_hash": "sha256:x", "status": "ok", "notes": {}, "created_at": now()})
+    b = dbr.brief(repo, EN_Q, store=st,
+                  quotes=[{"url": url, "text": "supports many concurrent writers", "option": "PostgreSQL"},
+                          {"url": url, "text": "is always faster than SQLite", "option": "PostgreSQL"},
+                          {"url": "https://example.org/never-fetched", "text": "x"}],
+                  agent_arguments=["PostgreSQL is the usual choice for many writers"])
+    pg = next(o for o in b["options"] if o["name"] == "PostgreSQL")
+    assert [p["quote_found"] for p in pg["external"]] == [True, False]
+    assert pg["external"][0]["status"] == "primary_source_verified" and "not that it applies" in pg["external"][0]["why"]
+    other = next(o for o in b["options"] if o["name"] == "SQLite")["external"]
+    assert other and other[0]["status"] == "unknown"  # not fetched: cache, then network per config (off here)
+    assert all(a["status"] == "weak_inference" for o in b["options"] for a in o["agent_arguments"])
+    with pytest.raises(ValueError, match="no question q9"):
+        dbr.answer(st, b["brief_id"], "q9", "x")
+    res = dbr.answer(st, b["brief_id"], "q1", "two app servers, maybe four next year")
+    assert res["answers"][0]["question_id"] == "q1" and "q1" not in [q["id"] for q in res["open_questions"]]
+    rows = st.all("SELECT answered_by FROM decision_answers WHERE brief_id = ?", (b["brief_id"],))
+    assert [r["answered_by"] for r in rows] == ["user"]
+    rec = dm.record(st, repo, chosen="PostgreSQL", rationale="two servers write", brief_id=b["brief_id"])
+    body = (repo / rec["file"]).read_text(encoding="utf-8")
+    assert "[answered by the user] q1: two app servers" in body and "sqlite3.connect" in body
+    capsys.readouterr()
+    assert cli.main(["decide", "answer", b["brief_id"], "--q", "q2", "about 5000 a day, kept 7 years",
+                     "--repo", str(repo), "--json"]) == 0
+    assert [a["question_id"] for a in json.loads(capsys.readouterr().out)["answers"]] == ["q1", "q2"]
+    assert cli.main(["decide", "brief", TR_Q, "--repo", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert "human_decision_required" in out and "Nerede çalışacak" in out and "recommend" not in out.lower()
+
+
+def test_analyze_routes_a_decision_to_the_brief_and_mcp_offers_it(orders):
+    from verinoda.mcp.server import AtlasTools
+
+    repo, st = orders
+    res = analysis.analyze(st, repo, "Sipariş sayısı artarsa bu sistemi nasıl büyütürüz, hangi veritabanını "
+                                     "seçmeliyiz?", challenge=False)
+    q1, q2 = res["subquestions"]
+    assert q1["status"] == q2["status"] == qp.HUMAN_DECISION
+    b = q1["decision_brief"]
+    assert b["forces"] and b["questions_for_human"] and b["questions_for_human"][0]["text"].startswith("Şu an")
+    assert q2["decision_brief"]["brief_id"] == b["brief_id"]  # one brief per message
+    assert any(b["brief_id"] in u["why"] for u in res["unknowns"])
+    t = AtlasTools(repo)
+    m = t.decision_brief(EN_Q)
+    assert m["verdict"] == qp.HUMAN_DECISION and m["questions_for_human"]
+    assert t.decision_record("answer", brief_id=m["brief_id"], question_id="q1")["error"] == "user_statement_required"
+    ok = t.decision_record("answer", brief_id=m["brief_id"], question_id="q1", user_statement="one process")
+    assert ok["answers"][0]["answer"] == "one process"
 
 
 # -- decision records (step 2) ----------------------------------------------------------------------

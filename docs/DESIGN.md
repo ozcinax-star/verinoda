@@ -51,7 +51,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D28 | Runtime observation | implemented | CLI `observe` and `analyze --observe`, MCP `runtime_observe`. Deviations: overhead is 1.39× CPU (median) on 533 Graphify tests, against the research's 1.23×, because boundary calls are recorded and the trace is written inside the timed window. The `setprofile` fallback costs about 4.5× and was only forced on CPython 3.12. Child processes are not traced. The container path has not been run against a real docker/podman. The observed-edge retrieval channel is not built. |
 | D29 | Precise resolution | implemented | `verinoda[precise]` (jedi), `resolve-call`, `scan --precise`, `scan --scip FILE`, MCP `resolve_call`, per-analysis budget. Stricter than the research: a method called on a parameter or local receiver is `dynamic`, never definitive. SCIP is used for non-Python files only. |
 | D30 | Measurement harness | implemented | `verinoda benchmark staleness replay\|mutations` and `verinoda benchmark critique-eval`. The replay samples claims whose evidence is in modified files; incoming relations from unchanged files are not sampled. |
-| D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`; decision records (`verinoda/decisions.py`, schema v5 log, `decide record/import/guard/accept/waive/list`, MCP `decision_record`); guards and `decide check` (`verinoda/guards.py`, MCP `decision_check`, a one-line summary in `update`; critique's exclusivity check and feedback's exclusive corrections use the same engine). Guard mutations (53 cases on the three examples, written by the rule author: in-sample): VIOLATED precision 1.00, recall 1.00 in reach, 9/9 out-of-reach forms named in limits; the old raw-regex scan on the same orders_app cases tp 7 fp 8 fn 6. `decide check` 45-80 ms per example case, 1.4-1.9 s on Verinoda's own code (4 guards). Not built yet: the decision brief (section 6); `analyze` impact questions do not include violations; the UI shows no decision badge. Intent routing: 24 written questions 24/24 (in-sample); two held-out sets of 10, each measured once with frozen rules: precision 1.00 and recall 0.40 on both (the first set's misses were then fixed, so it is in-sample now). |
+| D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`; decision records (`verinoda/decisions.py`, schema v5 log, `decide record/import/guard/accept/waive/list`, MCP `decision_record`); guards and `decide check` (`verinoda/guards.py`, MCP `decision_check`, a one-line summary in `update`; critique's exclusivity check and feedback's exclusive corrections use the same engine). Guard mutations (53 cases on the three examples, written by the rule author: in-sample): VIOLATED precision 1.00, recall 1.00 in reach, 9/9 out-of-reach forms named in limits; the old raw-regex scan on the same orders_app cases tp 7 fp 8 fn 6. `decide check` 45-80 ms per example case, 1.4-1.9 s on Verinoda's own code (4 guards). The decision brief (`verinoda/decision_brief.py`, `decide brief/answer`, MCP `decision_brief`, answers through `decision_record(action='answer')`; `analyze` routes decide sub-questions to it): on orders_app, EN and TR question, 8/8 gold forces, 18/18 cited evidence re-checks, 5/5 gold question kinds, no question the code answers - in-sample (the gold came with the design and the probes were written after it). Not built: `analyze` impact questions do not include violations; the UI shows no decision badge; claims for accepted guards (kinds `exclusive` / `layering`); an ADR's reasons are matched by a few phrasings only; `research.dependencies` itself still reads no Gradle/Maven (the guards and the brief read them). Intent routing: 24 written questions 24/24 (in-sample); two held-out sets of 10, each measured once with frozen rules: precision 1.00 and recall 0.40 on both (the first set's misses were then fixed, so it is in-sample now). |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -664,6 +664,26 @@ records what the human chose and checks the code against it.
   new/touched violations count (pre-existing ones are listed). A ref is
   refused when it starts with `-` and is resolved with `rev-parse --verify
   --end-of-options`; `--` precedes paths.
+- *Brief* (`verinoda/decision_brief.py`). No recommendation field and no
+  score. `forces` are facts from probes P1-P9, each with evidence that
+  re-checks (a line and the text that must be on it); a force without
+  evidence cannot exist - what was looked for and not found is an `absence`
+  with the globs or patterns searched and its scope ("no Dockerfile in the
+  repository", never "not containerised"). Only forces and absences that
+  serve the decision's kinds (datastore, dependency, boundary, scaling,
+  other; derived by rules) are kept. `options` (named in the question, by
+  `--option`, or used by the project) carry presence evidence, the code a
+  change touches, installed metadata (read from the project's venv, never
+  imported) and external claims only as quote-checked pins: the page is
+  fetched through `research` as `research.network` allows and the quote must
+  occur verbatim, else it is dropped (`unknown` without the network); even
+  then it says what the page says, not that it applies here. The agent's own
+  arguments are `weak_inference`. `questions_for_human` come from fixed
+  EN/TR templates per kind, at most 5, each with `asked_because` and
+  `discriminates`; one a probe answers is not asked (`answered_by_code`).
+  Answers are appended with `answered_by = user` and go into a record's
+  Context marked as the user's; they support a decision's rationale, never a
+  claim about the code.
 - *What stays human:* choosing between options; load, growth, SLO, budget,
   hosting, team and compliance facts; whether a guard proposed from prose means
   what the record meant; waivers; superseding a decision.
