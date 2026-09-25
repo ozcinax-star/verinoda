@@ -137,7 +137,7 @@ def generate(work: Path, out: Path) -> None:
         survived = run_fixtures.tests_pass(d)
         rows.append({k: v for k, v in m.items() if k != "source"} | {"survives_tests": survived})
         print(m["id"], "survives" if survived else "killed by tests", flush=True)
-    out.write_text(json.dumps(rows, indent=1), encoding="utf-8")
+    out.write_text(json.dumps(rows, indent=1), encoding="utf-8", newline="\n")
     print(f"{len(rows)} mutants, {sum(r['survives_tests'] for r in rows)} survive the tests")
 
 
@@ -180,7 +180,8 @@ def probe_all(work: Path, survivors: Path, labels: Path, out: Path) -> None:
                "false_alarms_on_equivalent": f"{len(alarms)}/{len(eq)}", "false_alarm_ids": [r["id"] for r in alarms],
                "time_per_probe_s": {"median": round(statistics.median(times), 2) if times else None,
                                     "max": times[-1] if times else None}}
-    out.write_text(json.dumps({"summary": summary, "mutants": res_rows}, indent=1), encoding="utf-8")
+    out.write_text(json.dumps({"summary": summary, "mutants": res_rows}, indent=1), encoding="utf-8",
+                   newline="\n")
     print(json.dumps(summary, indent=1))
 
 

@@ -173,7 +173,7 @@ def main(argv: list[str]) -> int:
            "summary": summary, "fixtures": rows}
     text = json.dumps(res, indent=1, ensure_ascii=True)
     text = text.replace(str(work).replace("\\", "\\\\"), "<WORK>").replace(str(ROOT).replace("\\", "\\\\"), "<REPO>")
-    out.write_text(text, encoding="utf-8")
+    out.write_text(text, encoding="utf-8", newline="\n")
     print(json.dumps(summary, indent=1))
     return 0
 
