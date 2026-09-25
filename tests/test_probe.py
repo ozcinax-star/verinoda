@@ -183,6 +183,22 @@ def test_without_hypothesis_a_fixed_pseudo_random_list_fills_the_budget(monkeypa
     assert len(got) == 20 and got == again and "hypothesis is not installed" in how
 
 
+def test_generating_with_hypothesis_writes_nothing_in_the_working_directory(tmp_path, monkeypatch):
+    pytest.importorskip("hypothesis")
+    monkeypatch.chdir(tmp_path)
+    got, how = pin.generated([{"k": "str"}, {"k": "float"}], 25, 2)
+    assert len(got) == 25 and how.startswith("hypothesis")
+    assert list(tmp_path.iterdir()) == []  # no .hypothesis/ in the user's tree
+    # hypothesis would mix in constants of the local modules imported in this process: the same seed must give
+    # the same corpus whatever else is imported
+    (tmp_path / "pkg_with_constants.py").write_text("MAGIC = 98765.4321\nWORD = 'zebra-quartz'\n", encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    __import__("pkg_with_constants")
+    again, _ = pin.generated([{"k": "str"}, {"k": "float"}], 25, 2)
+    assert again == got and not any(98765.4321 in row or "zebra-quartz" in row for row in again)
+    (tmp_path / "pkg_with_constants.py").unlink()
+
+
 def test_defaults_are_exercised_by_leaving_them_out():
     params = [{"name": "amount", "kind": "pos", "ann": None, "default": None},
               {"name": "currency", "kind": "pos", "ann": None, "default": ast.Constant("EUR")}]

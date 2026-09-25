@@ -43,6 +43,7 @@ import hashlib
 import json
 import math
 import random
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -977,8 +978,45 @@ def generated(tds: list[dict], n: int, seed: int) -> tuple[list[list], str]:
         except TypeError:
             pass
 
-    collect()
-    return got, f"hypothesis {_h.__version__} (seed {seed}, generate phase, no example database)"
+    with _QuietHypothesis() as isolated:
+        collect()
+    return got, (f"hypothesis {_h.__version__} (seed {seed}, generate phase, no example database"
+                 + ("" if isolated else "; constants of already imported local modules may be mixed in") + ")")
+
+
+class _QuietHypothesis:
+    """Around one generation: hypothesis keeps caches (unicode tables, constants) under ``./.hypothesis`` - never
+    in the user's working directory, a directory of Verinoda's own under the system temp dir instead - and mixes
+    in constants of whatever local modules are imported in this process (Verinoda's own in a source checkout), so
+    the same seed would give another corpus in another process. Both are switched off for the call and restored
+    afterwards. Uses hypothesis internals when present; ``isolated`` says whether the constants were switched off."""
+
+    def __enter__(self) -> bool:
+        self.restore: list = []
+        try:
+            from hypothesis import configuration as hconf
+
+            before = getattr(hconf, "__hypothesis_home_directory", None)
+            hconf.set_hypothesis_home_dir(Path(tempfile.gettempdir()) / "verinoda-hypothesis")
+            self.restore.append(lambda: hconf.set_hypothesis_home_dir(before))
+        except (ImportError, AttributeError):  # pragma: no cover - other hypothesis versions
+            pass
+        try:
+            from hypothesis.internal.conjecture import providers as hp
+            from hypothesis.internal.constants_ast import Constants
+
+            fn, cache = hp._get_local_constants, hp.CONSTANTS_CACHE
+            hp._get_local_constants = lambda: Constants()
+            hp.CONSTANTS_CACHE = type(cache)(1024)
+            self.restore.append(lambda: (setattr(hp, "_get_local_constants", fn), setattr(hp, "CONSTANTS_CACHE",
+                                                                                           cache)))
+            return True
+        except (ImportError, AttributeError, TypeError):  # pragma: no cover - other hypothesis versions
+            return False
+
+    def __exit__(self, *exc) -> None:
+        for undo in reversed(self.restore):
+            undo()
 
 
 def corpus_sha256(cases: list[dict]) -> str:
