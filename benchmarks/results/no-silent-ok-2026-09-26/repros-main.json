@@ -1,0 +1,94 @@
+{
+ "label": "main",
+ "cases": {
+  "only_in_com_example": {
+   "status": "ok",
+   "exit": 0,
+   "violations": [],
+   "ok": [
+    {}
+   ],
+   "unknown": 0,
+   "silent": true
+  },
+  "no_edge_external_package": {
+   "status": "ok",
+   "exit": 0,
+   "violations": [],
+   "ok": [
+    {
+     "edges": 0
+    }
+   ],
+   "unknown": 0,
+   "silent": true
+  },
+  "dependency_version_catalog": {
+   "status": "ok",
+   "exit": 0,
+   "violations": [],
+   "ok": [
+    {
+     "manifests": 0
+    }
+   ],
+   "unknown": 0,
+   "silent": true
+  },
+  "dependency_workspace_package": {
+   "status": "ok",
+   "exit": 0,
+   "violations": [],
+   "ok": [
+    {
+     "manifests": 1
+    }
+   ],
+   "unknown": 0,
+   "silent": true
+  },
+  "fresh_clone_no_config": {
+   "exit": 0,
+   "first_line": "decide check: 0 violated, 0 possible, 0 review, 0 trigger (0 decision record(s), 0.125 s)",
+   "silent": true
+  },
+  "fresh_clone_verinoda_toml": {
+   "exit": 0,
+   "first_line": "decide check: 0 violated, 0 possible, 0 review, 0 trigger (0 decision record(s), 0.125 s)",
+   "silent": true
+  },
+  "check_java_file": {
+   "exit": 0,
+   "files": 0,
+   "status": null,
+   "silent": true
+  },
+  "check_stdin_as_java": {
+   "exit": 0,
+   "status": null,
+   "parsed_as_python": true,
+   "silent": true
+  },
+  "check_diff_ts_rename": {
+   "exit": 0,
+   "status": null,
+   "silent": true
+  },
+  "broad_except_snippet2": {
+   "exit": 0,
+   "absent": 0,
+   "guarded": 2,
+   "silent": true
+  },
+  "ts_config_claim_false": {
+   "grade": "full",
+   "silent": true
+  },
+  "java_relation_grade": {
+   "grade": "full",
+   "silent": true
+  }
+ },
+ "silent": 12,
+ "total": 12
+}
