@@ -78,7 +78,11 @@ earlier subject (Turkish drops it); no fact moved on the sets, one more backed v
 
 **Stemmer.** `query`/`queries`, `copy`/`copies`, `entry`/`entries`, `key`/`keys` were different
 tokens (quer vs query); they are one now. Fresh-index A/B: 2 of 333 results change, both up
-(retrieve JSON on `orders_app_tr` and `graphify_core_tr`).
+(retrieve JSON on `orders_app_tr` and `graphify_core_tr`). The same kind of split for words
+ending in -er: `cluster` was `clust` but `clustered`/`clustering` stayed `cluster` (likewise filter,
+register, render, answer: on `graphify_core` 77 units carried one form and 193 the other); an
+inflected -er word now meets its base (tokenizer version 4). Fresh-index A/B: 0 of 333 results
+change; kept as a correctness fix.
 
 **Update time.** Each path is resolved once per build (the pipeline called `Path.resolve` about
 30,000 times per update of Verinoda's own repository) and compact JSON goes through the C encoder.

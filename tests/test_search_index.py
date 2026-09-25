@@ -482,7 +482,11 @@ def test_a_module_qualifier_is_the_module_not_a_class_of_that_name(tmp_path):
 
 @pytest.mark.parametrize("family", [("query", "queries", "queried", "querying"), ("copy", "copies", "copied"),
                                     ("entry", "entries"), ("dependency", "dependencies"), ("retry", "retries"),
-                                    ("key", "keys"), ("play", "plays"), ("save", "saved", "saves")])
+                                    ("key", "keys"), ("play", "plays"), ("save", "saved", "saves"),
+                                    ("cluster", "clusters", "clustered", "clustering"), ("filter", "filtered", "filtering"),
+                                    ("register", "registered", "registering"), ("render", "rendered", "rendering"),
+                                    ("order", "orders", "ordered", "ordering"), ("power", "powered")])
 def test_a_word_and_its_inflections_are_one_token(family):
-    """A question saying "query" meets code saying "queries" (they were quer / query before)."""
+    """A question saying "query" meets code saying "queries" (they were quer / query before), and
+    "clustered" meets "cluster" (clust; the inflected form kept its -er before)."""
     assert len({search_index.word_stem(w) for w in family}) == 1

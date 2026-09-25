@@ -70,7 +70,7 @@ from verinoda import textnorm
 from verinoda.architecture_map import is_test_file
 
 SCHEMA_VERSION = 4
-TOKENIZER_VERSION = 3  # 3: y-final words meet their -ies/-ied forms (query/queries)
+TOKENIZER_VERSION = 4  # 3: y-final words meet their -ies/-ied forms (query/queries); 4: clustered/cluster
 DB_NAME = "search.db"
 
 WINDOW, STRIDE = 12, 6            # passage length and stride, in own non-blank lines
@@ -155,6 +155,7 @@ FILE_EXTS = {"py", "js", "ts", "tsx", "jsx", "go", "rs", "java", "rb", "md", "rs
 # (suffix, shortest stem kept); first match wins
 _SUFFIXES = (("ations", 4), ("ation", 4), ("ments", 4), ("ment", 4), ("ings", 4), ("ing", 4), ("ies", 4),
              ("ers", 4), ("es", 4), ("ed", 3), ("er", 4), ("s", 3))
+_ER_INFLECTIONS = frozenset({"ed", "ing", "ings"})
 _WORD = re.compile(r"\w+")
 _TR_CASE = str.maketrans({"İ": "I", "ı": "i", "Ş": "S", "ş": "s", "Ç": "C", "ç": "c", "Ğ": "G", "ğ": "g",
                           "Ö": "O", "ö": "o", "Ü": "U", "ü": "u", "Â": "A", "â": "a", "Î": "I", "î": "i",
@@ -196,7 +197,11 @@ def stem(term: str) -> str:
         return term
     for suf, keep in _SUFFIXES:
         if term.endswith(suf) and len(term) - len(suf) >= keep:
-            return term[: -len(suf)]
+            base = term[: -len(suf)]
+            # an inflected -er word meets its base form: clustered/clustering -> clust, as cluster is
+            if suf in _ER_INFLECTIONS and base.endswith("er") and len(base) - 2 >= 4:
+                return base[:-2]
+            return base
     return term
 
 
