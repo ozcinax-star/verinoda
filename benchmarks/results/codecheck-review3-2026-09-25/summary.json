@@ -1,0 +1,466 @@
+{
+ "what": "verinoda check after the third review round (docs/DESIGN.md D31, branch p1/code-check)",
+ "machine": "Windows 11, Python 3.12.0, jedi 0.20.0; other runs shared the machine (timings noisy)",
+ "fixture": {
+  "in_sample": true,
+  "same_verdicts_and_nearest_as_the_second_round": true,
+  "precision_absent": "74/74",
+  "recall_absent_closed": "74/74",
+  "decided_absent": "74/79",
+  "near_name_top3": "24/26",
+  "confusion_oracle_x_check": {
+   "exists": {
+    "exists": 62,
+    "unknown": 1,
+    "guarded": 2
+   },
+   "absent": {
+    "absent": 74,
+    "unknown": 5
+   }
+  },
+  "env_regression_violations": [],
+  "timing": {
+   "sites": 364,
+   "first_in_process_s": 2.95,
+   "warm_s": 1.12,
+   "warm_s_per_100_sites": 0.309,
+   "disk_cache_s": 0.588,
+   "disk_cache": {
+    "hits": 145,
+    "misses": 0
+   },
+   "cli_cold_whole_dir_s": [
+    3.52,
+    3.42,
+    3.52
+   ],
+   "cli_exit": 3,
+   "diff_changed_lines": 30,
+   "cli_cold_diff_s": [
+    1.09,
+    1.07,
+    1.06,
+    1.11,
+    1.05
+   ],
+   "cli_cold_diff_median_s": 1.07,
+   "diff_sites": {
+    "sites": 35,
+    "absent": 16,
+    "not_installed": 0,
+    "unknown": 0,
+    "guarded": 0,
+    "exists": 19,
+    "files": 30
+   },
+   "diff_elapsed_inside_s": 0.794
+  }
+ },
+ "diff_timing_same_load": {
+  "what": "check --diff of the same 30 changed lines of the fixture, fresh process, 7 runs each, alternating with the code this round started from",
+  "median_s_before": 1.17,
+  "median_s_after": 1.19,
+  "runs_before": [
+   1.36,
+   1.1,
+   1.17,
+   1.24,
+   1.24,
+   1.14,
+   1.05
+  ],
+  "runs_after": [
+   1.19,
+   1.25,
+   1.18,
+   1.22,
+   1.23,
+   1.12,
+   1.05
+  ],
+  "sites_before": {
+   "sites": 35,
+   "absent": 16,
+   "not_installed": 0,
+   "unknown": 0,
+   "guarded": 0,
+   "exists": 19,
+   "files": 30
+  },
+  "sites_after": {
+   "sites": 35,
+   "absent": 16,
+   "not_installed": 0,
+   "unknown": 0,
+   "guarded": 0,
+   "exists": 19,
+   "files": 30
+  }
+ },
+ "findings_reproduced": {
+  "collections ABCs removed in 3.10 (collections.Mapping, from collections import Iterable)": {
+   "before": "exists (13 of 1,732 stub-imported names), exit 0",
+   "after": "unknown (1,732 of 1,732)"
+  },
+  "MCP env naming a program inside the checked repository": {
+   "before": "started (pyvenv.cfg home inside the project; an interpreter path)",
+   "after": "invalid_argument, nothing started; the auto note names the program --env would start"
+  },
+  "descriptor / property writing the instance by computed name (3 probes)": {
+   "before": "absent (false)",
+   "after": "unknown"
+  },
+  "sys.path += / slice / alias / from sys import path (conftest.py and the checked file)": {
+   "before": "absent (false), exit 3",
+   "after": "unknown"
+  },
+  "cache after conftest.py or pytest.ini pythonpath changed (4 cases)": {
+   "before": "stale answer from the cache",
+   "after": "miss, fresh answer"
+  },
+  "--diff under diff.mnemonicPrefix / diff.dstPrefix, or --repo a subdirectory": {
+   "before": "changed tracked files silently not checked (exit 0)",
+   "after": "checked"
+  },
+  "api of names it did not decide (concurrent.futures.ProcessPoolExecutor, os.environ.copy)": {
+   "before": "found false, exit 3",
+   "after": "found null, decided unknown, exit 0"
+  }
+ },
+ "review_probe_sets_after": [
+  {
+   "set": "rb2_sweep_std",
+   "summary": {
+    "sites": 11367,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 16,
+    "guarded": 0,
+    "exists": 11351,
+    "files": 253
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/0"
+  },
+  {
+   "set": "rb2_proj",
+   "summary": {
+    "sites": 352,
+    "absent": 23,
+    "not_installed": 0,
+    "unknown": 49,
+    "guarded": 1,
+    "exists": 279,
+    "files": 87
+   },
+   "false_absent": 0,
+   "invented_not_absent": "3/26"
+  },
+  {
+   "set": "np",
+   "summary": {
+    "sites": 418,
+    "absent": 21,
+    "not_installed": 0,
+    "unknown": 72,
+    "guarded": 0,
+    "exists": 325,
+    "files": 83
+   },
+   "false_absent": 0,
+   "invented_not_absent": "10/31"
+  },
+  {
+   "set": "np2",
+   "summary": {
+    "sites": 153,
+    "absent": 4,
+    "not_installed": 0,
+    "unknown": 22,
+    "guarded": 0,
+    "exists": 127,
+    "files": 21
+   },
+   "false_absent": 0,
+   "invented_not_absent": "3/7"
+  },
+  {
+   "set": "np3",
+   "summary": {
+    "sites": 31,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 11,
+    "guarded": 0,
+    "exists": 20,
+    "files": 12
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/0"
+  },
+  {
+   "set": "np4",
+   "summary": {
+    "sites": 2,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 1,
+    "guarded": 0,
+    "exists": 1,
+    "files": 1
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/0"
+  },
+  {
+   "set": "np5",
+   "summary": {
+    "sites": 28,
+    "absent": 3,
+    "not_installed": 0,
+    "unknown": 5,
+    "guarded": 0,
+    "exists": 20,
+    "files": 8
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/3"
+  },
+  {
+   "set": "np_conf",
+   "summary": {
+    "sites": 15,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 2,
+    "guarded": 0,
+    "exists": 13,
+    "files": 8
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/0"
+  },
+  {
+   "set": "np_çalışma",
+   "summary": {
+    "sites": 15,
+    "absent": 2,
+    "not_installed": 0,
+    "unknown": 0,
+    "guarded": 0,
+    "exists": 13,
+    "files": 7
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/2"
+  },
+  {
+   "set": "rb2_proj2",
+   "summary": {
+    "sites": 51,
+    "absent": 0,
+    "not_installed": 5,
+    "unknown": 36,
+    "guarded": 0,
+    "exists": 10,
+    "files": 10
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/0"
+  },
+  {
+   "set": "rb2_proj4",
+   "summary": {
+    "sites": 26,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 6,
+    "guarded": 0,
+    "exists": 20,
+    "files": 7
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/0"
+  },
+  {
+   "set": "rb2_proj8",
+   "summary": {
+    "sites": 11,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 0,
+    "guarded": 0,
+    "exists": 11,
+    "files": 2
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/0"
+  },
+  {
+   "set": "rb2_proj9",
+   "summary": {
+    "sites": 7,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 0,
+    "guarded": 0,
+    "exists": 7,
+    "files": 5
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/0"
+  },
+  {
+   "set": "rb2_sweep_tp (main venv)",
+   "summary": {
+    "sites": 6922,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 123,
+    "guarded": 0,
+    "exists": 6799,
+    "files": 106
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/0"
+  },
+  {
+   "set": "rb2_sweep_cx (main venv)",
+   "summary": {
+    "sites": 1377,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 24,
+    "guarded": 0,
+    "exists": 1353,
+    "files": 14
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/0"
+  },
+  {
+   "set": "rb2_proj7 (main venv)",
+   "summary": {
+    "sites": 9,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 4,
+    "guarded": 0,
+    "exists": 5,
+    "files": 1
+   },
+   "false_absent": 0,
+   "invented_not_absent": "0/0"
+  },
+  {
+   "set": "np_tp (main venv)",
+   "summary": {
+    "sites": 69,
+    "absent": 2,
+    "not_installed": 0,
+    "unknown": 16,
+    "guarded": 0,
+    "exists": 51,
+    "files": 10
+   },
+   "false_absent": 0,
+   "invented_not_absent": "2/4"
+  }
+ ],
+ "unseen_packages": {
+  "set": "click, pluggy, h11, starlette (chosen by a reviewer)",
+  "env": "Verinoda's .venv",
+  "summary": {
+   "sites": 8525,
+   "absent": 2,
+   "not_installed": 0,
+   "unknown": 737,
+   "guarded": 4,
+   "exists": 7782,
+   "files": 71
+  },
+  "elapsed_s": 26.1,
+  "absent": [
+   "starlette/middleware/sessions.py:8:8 itsdangerous",
+   "starlette/middleware/sessions.py:9:6 itsdangerous.exc"
+  ]
+ },
+ "clean_sets": [
+  {
+   "set": "Verinoda's own package (this branch)",
+   "env": "Verinoda's .venv (--env)",
+   "summary": {
+    "sites": 48071,
+    "absent": 0,
+    "not_installed": 1,
+    "unknown": 13398,
+    "guarded": 58,
+    "exists": 34614,
+    "files": 161
+   },
+   "elapsed_s": 321.1,
+   "absent": []
+  },
+  {
+   "set": "Graphify copy (graphify, tests, scripts, tools)",
+   "env": "Verinoda's .venv",
+   "summary": {
+    "sites": 51943,
+    "absent": 0,
+    "not_installed": 2,
+    "unknown": 19106,
+    "guarded": 58,
+    "exists": 32777,
+    "files": 388
+   },
+   "elapsed_s": 656.8,
+   "absent": []
+  },
+  {
+   "set": "the same",
+   "env": "none found (standard library)",
+   "summary": {
+    "sites": 51841,
+    "absent": 0,
+    "not_installed": 276,
+    "unknown": 22743,
+    "guarded": 121,
+    "exists": 28701,
+    "files": 388
+   },
+   "elapsed_s": 588.3,
+   "absent": []
+  },
+  {
+   "set": "upstream-graphify itself (graphify, tests, tools, scripts)",
+   "env": "Verinoda's .venv",
+   "summary": {
+    "sites": 51941,
+    "absent": 0,
+    "not_installed": 2,
+    "unknown": 19063,
+    "guarded": 57,
+    "exists": 32819,
+    "files": 388
+   },
+   "elapsed_s": 665.2,
+   "absent": []
+  },
+  {
+   "set": "stdlib json, email, http, pathlib copied as a project",
+   "env": "none",
+   "summary": {
+    "sites": 5210,
+    "absent": 0,
+    "not_installed": 0,
+    "unknown": 1289,
+    "guarded": 0,
+    "exists": 3921,
+    "files": 40
+   },
+   "elapsed_s": 42.0,
+   "absent": []
+  }
+ ]
+}

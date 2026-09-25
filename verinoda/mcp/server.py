@@ -976,9 +976,10 @@ class AtlasTools:
                 if Path(ap).is_absolute() or ".." in Path(ap).parts:
                     raise ToolFailure("invalid_argument", f"as_path {ap!r} must be repository-relative",
                                       "pass a path such as 'pkg/module.py'")
+            # env comes from the model, not the user: nothing the checked repository supplies is started
             return codecheck.check(self.repo, ps, diff=_opt_text(diff), snippet=code, as_path=ap,
                                    env=_opt_text(env) or "auto", include_exists=bool(include_exists),
-                                   budget_s=CODE_CHECK_BUDGET_S)
+                                   budget_s=CODE_CHECK_BUDGET_S, trust_env=False)
         return self._run("code_check", go, first=("sites",),
                          keep=("summary", "exit", "exit_because", "incomplete", "env"))
 
@@ -986,7 +987,7 @@ class AtlasTools:
         def go():
             codecheck = self._optional("verinoda.codecheck")
             return codecheck.api(self.repo, _text(target, "target"), env=_opt_text(env) or "auto",
-                                 private=bool(private))
+                                 private=bool(private), trust_env=False)
         return self._run("api_members", go, first=("members",))
 
     def runtime_observe(self, test_ids: list[str] | None = None, symbols: list[str] | None = None,
@@ -1315,9 +1316,11 @@ DESCRIPTIONS: dict[str, str] = {
     "code_check": (
         "Check that the modules, imported names, attributes, keyword arguments and constant dict keys that "
         "code uses exist - in the project's own environment (.venv/venv/env, or env=PATH; 'none' = standard "
-        "library only). Input: paths (files/directories), or diff (a revision: only sites on changed lines "
-        "plus new files; default when nothing is given: changes against HEAD), or snippet + as_path (code not "
-        "written yet). Each site gets exists | absent | unknown | not_installed | guarded; absent is given only "
+        "library only; env=PATH only a virtual environment whose base interpreter is a known Python "
+        "installation outside the project). Input: paths (files/directories), or diff (a revision: only sites "
+        "on changed lines plus new files; default when nothing is given: changes against HEAD), or snippet + "
+        "as_path (code not written yet). Each site gets exists | absent | unknown | not_installed | guarded; "
+        "absent is given only "
         "for closed containers (a module or class whose names are all known, a direct instance, one known "
         "signature) and comes with nearest real names and where the name is defined elsewhere; unknown carries "
         "why. env names the interpreter and package versions checked (and lock mismatches). exit 3 = something "
@@ -1329,7 +1332,9 @@ DESCRIPTIONS: dict[str, str] = {
         "The real members of a module, class or function (dotted target, e.g. 'packaging.specifiers.SpecifierSet' "
         "or 'orders.service') in the project's environment: name, kind, signature, file:line, inherited-from, "
         "and the version the source came from. Use it before writing calls to an API you have not read. "
-        "private=true also lists names starting with '_'. found=false comes with nearest names. Read-only."),
+        "private=true also lists names starting with '_'. found=false (exit 3: missing from a module or class "
+        "whose names are all known, or no such module) comes with nearest names; found=null with decided="
+        "'unknown' or 'not_installed' (exit 0) was not decided - treat it as unverified. Read-only."),
     "runtime_observe": (
         "Run tests in an isolated copy under the sys.monitoring call tracer and record the observed calls "
         "(stored under run_id). Tests: test_ids (pytest node ids), else tests selected for symbols/terms "
@@ -1597,7 +1602,10 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None):
         return emit(t.resolve_call(path, line, target, target_path=target_path, target_line=target_line))
 
     EnvArg = Annotated[OptStr, Field(description="'auto' (default: the project's .venv, venv or env), a virtual "
-                                                 "environment path, or 'none' (standard library only).")]
+                                                 "environment directory whose base interpreter is a Python "
+                                                 "installation this system knows, outside the project (nothing "
+                                                 "the repository supplies is started), or 'none' (standard "
+                                                 "library only).")]
 
     @register("code_check")
     def code_check(

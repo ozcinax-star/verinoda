@@ -40,6 +40,7 @@ were read from, the set of project files, or Verinoda changes.
 from __future__ import annotations
 
 import ast
+import builtins
 import functools
 import hashlib
 import json
@@ -56,7 +57,7 @@ from verinoda import codecheck_env as cenv
 from verinoda import codecheck_facts as cf
 from verinoda.codecheck_facts import Member, Sig, dotted
 
-CHECK_VERSION = "2"
+CHECK_VERSION = "3"   # answers cached by an older rule set are not reused
 PROJECT_CONTENT = Path("<project-content>")   # a cache dependency on the content of every project file
 VERDICTS = ("absent", "not_installed", "unknown", "guarded", "exists")
 SITE_KINDS = ("import", "attribute", "kwarg", "dict_key")
@@ -80,6 +81,9 @@ _GUARD_TEST = re.compile(r"\bsys\.version_info\b|\bsys\.platform\b|\bos\.name\b|
 # (IS_PROD = True) tests nothing
 _FLAG_NAME = re.compile(r"PY\d*|_?HAS_\w+|\w+_AVAILABLE|IS_[A-Z0-9_]+")
 _BROAD = {"Exception", "BaseException"}
+# decorators and class-attribute factories whose values set no attribute other than their own name
+_DESCRIPTOR_SAFE = {*cf.SAFE_FUNC_DECORATORS, "builtins.property", "builtins.staticmethod", "builtins.classmethod",
+                    "functools.cached_property", "typing.overload", "typing_extensions.overload"}
 _CATCH = {"import": {"ImportError", "ModuleNotFoundError"}, "attribute": {"AttributeError"},
           "kwarg": {"TypeError"}, "dict_key": {"KeyError", "LookupError"}}
 _SYNONYMS = [{"get", "fetch", "retrieve", "load", "read", "find", "lookup", "query"},
@@ -129,6 +133,7 @@ class Container:
     stdlib_module: str | None = None
     deps: list[Path] = field(default_factory=list)     # other files its names were read from (star imports)
     jedi_files: set = field(default_factory=set, repr=False)   # files jedi loaded while working it out
+    no_dict: bool = False           # an instance without a __dict__ (slots, a C type): nothing can add attributes
 
 
 # -- scopes ---------------------------------------------------------------------------------------------
@@ -173,8 +178,11 @@ class FileCtx:
             cur = self.parents.get(id(cur))
         return cur or self.tree
 
-    def single_local(self, name: ast.Name, mode: str) -> tuple[ast.Assign | None, str]:
-        """The one assignment of a function-local name from a call (``mode`` instance|dict), or why not."""
+    def single_local(self, name: ast.Name, mode: str, escapes: bool = True) -> tuple[ast.Assign | None, str]:
+        """The one assignment of a function-local name from a call (``mode`` instance|dict), or why not. In
+        instance mode a literal (``d = {}``, ``s = "x"``) counts too: its builtin type holds no attributes of
+        its own, so what the local is handed to does not matter. ``escapes=False``: the caller checks
+        (:meth:`_escapes`) itself, once it knows whether the instance has a ``__dict__``."""
         n = name.id
         fn = self.scope_of(name)
         if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -216,13 +224,15 @@ class FileCtx:
         if len(binds) != 1:
             return None, f"`{n}` is bound {len(binds)} times in {fn.name}()"
         st = self.parents.get(id(binds[0]))
-        if not (isinstance(st, ast.Assign) and len(st.targets) == 1 and st.targets[0] is binds[0]
-                and isinstance(st.value, ast.Call)):
-            return None, f"`{n}` is not assigned from a call"
-        why = self._escapes(fn, n, mode)
+        one = isinstance(st, ast.Assign) and len(st.targets) == 1 and st.targets[0] is binds[0]
+        literal = one and mode == "instance" and _literal_type(st.value) is not None   # type: ignore[union-attr]
+        if not (one and (literal or isinstance(st.value, ast.Call))):   # type: ignore[union-attr]
+            return None, f"`{n}` is not assigned from a call or a literal" if mode == "instance" else \
+                f"`{n}` is not assigned from a call"
+        why = self._escapes(fn, n, mode) if escapes and not literal else None
         if why:
             return None, why
-        return st, ""
+        return st, ""  # type: ignore[return-value]
 
     def _escapes(self, fn: ast.AST, n: str, mode: str) -> str | None:
         for x in ast.walk(fn):
@@ -283,9 +293,7 @@ class Checker:
         self.repo = Path(repo).resolve()
         self.env = env
         cenv.install_jedi_guard()   # jedi imports no compiled module outside the standard library
-        self.project = jedi.Project(str(self.repo), smart_sys_path=True, sys_path=env.sys_path,
-                                    added_sys_path=[str(d) for d in pytest_pythonpath(self.repo)])
-        cenv.guard_project(self.project, env)
+        self._make_project()
         self._scripts: OrderedDict = OrderedDict()
         self._mod_memo: dict = {}
         self._cls_memo: dict = {}
@@ -302,6 +310,7 @@ class Checker:
         self._stack: list[tuple[dict, set]] = []  # the same two, for each container being worked out
         self._dep_ok: dict[str, bool] = {}
         self.stats = {"jedi_calls": 0, "jedi_s": 0.0}
+        self.jedi_error: str | None = None   # what jedi raised in the last goto, if it raised
 
     def begin(self) -> None:
         """A new call: forget what was derived from project files (they may have changed since), including
@@ -321,15 +330,37 @@ class Checker:
         self._search_roots = None
         self._stores = None
         self._proj_modules = None
+        if [str(d) for d in pytest_pythonpath(self.repo)] != self._pythonpath:   # pytest.ini etc. changed
+            self._make_project()
+
+    def _make_project(self) -> None:
+        """The jedi project: the environment's search path plus the directories of pytest's ``pythonpath``."""
+        self._pythonpath = [str(d) for d in pytest_pythonpath(self.repo)]
+        self.project = self.jedi.Project(str(self.repo), smart_sys_path=True, sys_path=self.env.sys_path,
+                                         added_sys_path=list(self._pythonpath))
+        cenv.guard_project(self.project, self.env)
+
+    def context_deps(self, fx: FileCtx) -> None:
+        """Files outside the checked file that decide its imports without jedi reading them: every
+        conftest.py from its directory up to the project root (one that changes sys.path makes a missing
+        module unknown) - also where there is none yet, so that a new one drops a cached answer."""
+        d = fx.path.parent
+        while _inside(d, self.repo):
+            self._dep(fx, d / "conftest.py")
+            if d == self.repo or d.parent == d:
+                break
+            d = d.parent
 
     # -- plumbing --------------------------------------------------------------------------------------
     def goto(self, script, line: int, col: int) -> list:
         t0 = time.perf_counter()
         self.stats["jedi_calls"] += 1
+        self.jedi_error = None
         try:
             defs = script.goto(line, col, follow_imports=True)
-        except Exception:  # noqa: BLE001 - jedi internal errors happen
+        except Exception as exc:  # noqa: BLE001 - jedi internal errors happen (some depend on set order)
             defs = []
+            self.jedi_error = f"{type(exc).__name__}: {str(exc)[:100]}"
         self.stats["jedi_s"] += time.perf_counter() - t0
         uniq: dict = {}
         for d in defs:
@@ -801,11 +832,17 @@ class Checker:
                 names.setdefault(n, Member(n, "attribute", None, None, "type"))
             if not tinfo.get("ok"):
                 opens.append("the names of `type` could not be read")
+        if not opens and not (instance and no_dict):   # read only when nothing else opened it
+            for e in mro:
+                if not isinstance(e, StdClass):
+                    opens += self.descriptor_reasons(e, instance)
+                    if opens:
+                        break
         what = "instance of class" if instance else "class"
         src = self.source_of(facts.path)
         return Container("instance" if instance else "class", f"{what} {full}", names, not opens,
                          "; ".join(dict.fromkeys(opens)) or None, src, f"{self.disp(facts.path)}:{facts.node.lineno}",
-                         files=files, full=full, mro=mro)
+                         files=files, full=full, mro=mro, no_dict=instance and no_dict)
 
     def std_class_container(self, full: str, instance: bool) -> Container:
         info = self.env.oracle().ask("object", name=full)
@@ -827,7 +864,7 @@ class Checker:
             if info.get("meta_getattr") or info.get("custom_meta"):
                 opens.append(f"the metaclass of {full} may add names")
         return Container(kind, f"{what} {full}", names, not opens, "; ".join(opens) or None, "stdlib",
-                         f"<stdlib>:{full}", full=full, mro=[e])
+                         f"<stdlib>:{full}", full=full, mro=[e], no_dict=instance and not info.get("inst_dict"))
 
     def _std_instance_open(self, e: StdClass, no_dict: bool = False) -> list[str]:
         info = e.info
@@ -872,7 +909,8 @@ class Checker:
         script = None
         for b in facts.node.bases:
             expr = b.value if isinstance(b, ast.Subscript) else b
-            text = dotted(expr)
+            # a call (`class P(namedtuple("P", "x y"))`) is an expression: dotted() would name the callee
+            text = dotted(expr) if isinstance(expr, (ast.Name, ast.Attribute)) else None
             if text is None:
                 opens.append(f"base `{ast.unparse(b)}` of {facts.qualname} is an expression")
                 continue
@@ -949,6 +987,261 @@ class Checker:
             hit = self._cls_memo[key] = self._work_out(reasons)
         self._note_files(hit[1])   # the callees read to decide it are dependencies of the answers
         return hit[0]
+
+    # -- code the class's own attributes run --------------------------------------------------------------
+    def descriptor_reasons(self, facts: cf.ClassFacts, instance: bool) -> list[str]:
+        """Why code that the class's own attributes run may give its instances (``instance``) or the class
+        more attributes: a method decorator, or a class attribute made by a call, whose code - a descriptor's
+        ``__get__``/``__set__``/``__set_name__``, a wrapper, a property getter - sets attributes on the object
+        it is given (the lazy_property recipe: ``setattr(self, "_lazy_" + name, value)``). The standard
+        library's descriptors (``functools.cached_property``) set only the attribute's own name. Code that
+        cannot be read or followed counts as setting attributes."""
+        key = ("descriptors", str(facts.path), facts.node.lineno, cf.stat_key(facts.path), instance)
+        hit = self._cls_memo.get(key)
+        if hit is None:
+            hit = self._cls_memo[key] = self._work_out(lambda: self._descriptor_reasons(facts, instance))
+        self._note_files(hit[1])   # the code read to decide it is a dependency of the answers
+        return hit[0]
+
+    def _descriptor_reasons(self, facts: cf.ClassFacts, instance: bool) -> list[str]:
+        mf = cf.module_facts(facts.path)
+        for stmt in facts.node.body:
+            for x in cf._walk_no_scopes(stmt):
+                if isinstance(x, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    for dec in x.decorator_list:   # @D: the attribute is D(fn); @F(...): it is F(...)(fn)
+                        why = self._attr_value_writes(facts, mf, dec, 2 if isinstance(dec, ast.Call) else 1,
+                                                      instance)
+                        if why:
+                            return [f"{facts.qualname}.{x.name} is decorated with @{_short(dec, 40)}, {why}"]
+                elif isinstance(x, (ast.Assign, ast.AnnAssign)) and isinstance(x.value, ast.Call):
+                    why = self._attr_value_writes(facts, mf, x.value, 1, instance)
+                    if why:
+                        return [f"{facts.qualname} has a class attribute set from {_short(x.value.func, 40)}(...) "
+                                f"(line {x.lineno}), {why}"]
+        return []
+
+    def _attr_value_writes(self, facts: cf.ClassFacts, mf: cf.ModFacts, expr: ast.AST, calls: int,
+                           instance: bool) -> str | None:
+        """Whether the value obtained by calling the callable ``expr`` names ``calls`` times may set
+        attributes on the instances (or the class) it is an attribute of: None when it provably does not."""
+        fexpr = expr.func if isinstance(expr, ast.Call) else expr
+        name = dotted(fexpr)
+        if name is None:
+            return "an expression whose code is not followed"
+        full = cf.origin_of(name, mf)
+        root = full.split(".")[0]
+        if full in _DESCRIPTOR_SAFE or cf._last(name) in ("setter", "getter", "deleter", "overload") or \
+                (full.startswith("builtins.") and hasattr(builtins, name.split(".")[0])) or \
+                (root in self.env.stdlib_names() and not full.startswith(("<local>", "builtins."))):
+            return None   # the standard library's own code: its descriptors set only the attribute's own name
+        script = self.script_for(facts.path)
+        if script is None:
+            return f"and {facts.path.name} cannot be read"
+        defs = [d for d in self.goto(script, *_token_pos(fexpr, cf.parse_file(facts.path)[1]))
+                if d.type in ("function", "class")]
+        if not defs:
+            return "which jedi does not resolve to a function or class: its code was not read"
+        for d in defs:
+            why = self._callable_writes(d, calls, instance, 0)
+            if why:
+                return why
+        return None
+
+    def _callable_writes(self, d, calls: int, instance: bool, depth: int) -> str | None:
+        """``d`` (a jedi function or class) called ``calls`` times gives a class attribute: why that value's
+        code may set attributes on instances (or the class), or None."""
+        p = Path(d.module_path) if d.module_path else None
+        label = d.full_name or d.name
+        if p is not None and self.origin(p) == "stdlib":
+            return None
+        if p is None or cenv.is_jedi_bundled_stub(p) or p.suffix != ".py" or not p.is_file():
+            return f"{label} has no Python source to read"
+        if depth > 3:
+            return f"{label} passes the value on too far to follow"
+        if d.type == "class":
+            facts, err = cf.class_at(p, d.line)
+            if facts is None:
+                return f"{label} could not be read ({err})"
+            why = self._descriptor_class_writes(facts, instance)
+            if why or calls < 2:
+                return why
+            call = facts.body.get("__call__")   # @Cls(...): the instance's __call__ makes the attribute
+            fn = cf.function_at(facts.path, call.line) if call and call.line else None
+            if fn is None:
+                return f"{label} instances are called, but {label}.__call__ was not read"
+            return self._returned_value_writes(p, fn, 1, instance, depth + 1, label + ".__call__")
+        fn = cf.function_at(p, d.line)
+        if fn is None:
+            return f"{label}: no function definition at {self.disp(p)}:{d.line}"
+        return self._returned_value_writes(p, fn, calls, instance, depth + 1, label)
+
+    def _returned_value_writes(self, path: Path, fn: ast.AST, calls: int, instance: bool, depth: int,
+                               label: str) -> str | None:
+        """What ``fn`` returns, called ``calls - 1`` more times, is a class attribute: why its code may set
+        attributes on instances (or the class), or None. A nested function returned as the value receives the
+        instance as its first argument (a wrapper, a property getter)."""
+        nested = {n.name: n for n in ast.walk(fn) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                  and n is not fn}
+        own_params = set(_param_names(fn))
+        body = list(cf._walk_no_scopes_body(fn))
+        parents = {id(ch): n for n in body for ch in ast.iter_child_nodes(n)}
+        rets = [n.value for n in body if isinstance(n, ast.Return) and n.value is not None]
+
+        def literal_assign(b: ast.AST) -> bool:
+            p = parents.get(id(b))
+            return isinstance(p, ast.Assign) and len(p.targets) == 1 and p.targets[0] is b and \
+                _literal_type(p.value) is not None
+
+        def plain_value(e: ast.AST) -> bool:   # a literal (or a local bound only to literals) is no descriptor
+            if _literal_type(e) or isinstance(e, (ast.Compare, ast.UnaryOp, ast.GeneratorExp)):
+                return True
+            if not isinstance(e, ast.Name) or e.id in own_params or e.id in nested:
+                return False
+            binds = [x for x in body if isinstance(x, ast.Name) and x.id == e.id and isinstance(x.ctx, ast.Store)]
+            return bool(binds) and all(literal_assign(b) for b in binds)
+
+        for r in rets:
+            if isinstance(r, ast.Name) and r.id in own_params and calls == 1:
+                continue   # the decorated function itself comes back unchanged
+            if calls == 1 and plain_value(r):
+                continue
+            if isinstance(r, (ast.Name, ast.Lambda)) and (isinstance(r, ast.Lambda) or r.id in nested):
+                inner = r if isinstance(r, ast.Lambda) else nested[r.id]
+                if calls == 1:
+                    why = self._instance_arg_writes(path, inner, own_params, None) if instance else None
+                else:
+                    why = self._returned_value_writes(path, inner, calls - 1, instance, depth + 1, label)
+                if why:
+                    return f"{label} returns {_short(r, 30)}, which {why}" if calls == 1 else why
+                continue
+            if isinstance(r, ast.Call) and calls == 1:
+                # property(getter), update_wrapper(wrapper, fn), Descriptor(fn): the class or function called,
+                # and the nested functions handed to it (they may receive the instance)
+                for a in [*r.args, *(k.value for k in r.keywords)]:
+                    inner = nested.get(a.id) if isinstance(a, ast.Name) else a if isinstance(a, ast.Lambda) else None
+                    why = self._instance_arg_writes(path, inner, own_params, None) if inner is not None and \
+                        instance else None
+                    if why:
+                        return f"{label} returns {_short(r, 40)}, whose {_short(a, 20)} {why}"
+                sub = self.script_for(path)
+                f = r.func.func if isinstance(r.func, ast.Call) else r.func
+                name = dotted(f)
+                if sub is None or name is None:
+                    return f"{label} returns {_short(r, 40)}, which is not followed"
+                full = cf.origin_of(name, cf.module_facts(path))
+                if full in _DESCRIPTOR_SAFE or (full.startswith("builtins.") and
+                                                hasattr(builtins, name.split(".")[0])):
+                    continue
+                defs = [d for d in self.goto(sub, *_token_pos(f, cf.parse_file(path)[1]))
+                        if d.type in ("function", "class")]
+                if not defs:
+                    return f"{label} returns {_short(r, 40)}, which jedi does not resolve"
+                for d in defs:
+                    why = self._callable_writes(d, 1, instance, depth + 1)
+                    if why:
+                        return f"{label} returns {_short(r, 40)}: {why}"
+                continue
+            return f"{label} returns {_short(r, 40)}, which is not followed"
+        return None
+
+    def _descriptor_class_writes(self, facts: cf.ClassFacts, instance: bool) -> str | None:
+        """Whether instances of the class ``facts``, as class attributes, may set attributes on the instances
+        of the owner class (``__get__``/``__set__``/``__delete__``, and ``__call__`` when ``__get__`` binds it)
+        or on the owner class (``__set_name__``, the owner argument of ``__get__``)."""
+        mro, bases_open = self._mro(facts)
+        if bases_open:   # a base that was not read may define __get__ or __set_name__
+            return f"not all bases of {facts.qualname} were read ({bases_open[0]})"
+        own = [e for e in mro if not isinstance(e, StdClass)]
+        has_get = any("__get__" in e.body for e in own)
+        want = [("__set_name__", 1), ("__get__", 2)]
+        if instance:
+            want += [("__get__", 1), ("__set__", 1), ("__delete__", 1)] + ([("__call__", -1)] if has_get else [])
+        for meth, idx in want:
+            e = next((e for e in own if meth in e.body), None)
+            m = e.body[meth] if e is not None else None
+            if m is None:
+                continue
+            fn = cf.function_at(e.path, m.line) if m.line else None
+            if fn is None:
+                return f"{e.qualname}.{meth} is not a plain method, so what it sets was not read"
+            ps = _param_names(fn, positional=True)
+            me = ps[0] if ps else None
+            targets = ps[1:] if idx < 0 else ps[idx:idx + 1]
+            vararg = fn.args.vararg   # type: ignore[attr-defined]
+            if vararg is not None and (idx < 0 or not targets):   # __get__(self, *args), __call__(self, *a)
+                targets = [*targets, vararg.arg]
+            for t in targets:
+                why = self._instance_arg_writes(e.path, fn, {me} if me else set(), t)
+                if why:
+                    return f"whose {e.qualname}.{meth} {why}"
+        return None
+
+    def _instance_arg_writes(self, path: Path, fn: ast.AST, wrapped: set[str], param: str | None) -> str | None:
+        """Whether ``fn`` may set attributes on the object passed as ``param`` (default: its first positional
+        parameter, or ``args[...]`` of its ``*args``): an attribute store, setattr/vars/``__dict__``, an alias
+        or a container that holds it, or a call it is handed to that may (callees named by ``wrapped`` - the
+        decorated function, the descriptor's own attributes - are the class's own methods)."""
+        a = fn.args  # type: ignore[attr-defined]
+        star = None
+        if param is None:
+            pos = [x.arg for x in [*a.posonlyargs, *a.args]]
+            param = pos[0] if pos else None
+            if param is None and a.vararg is not None:
+                param = star = a.vararg.arg
+        elif a.vararg is not None and a.vararg.arg == param:
+            star = param
+        if param is None:
+            return None
+
+        def is_obj(e) -> bool:
+            if isinstance(e, ast.Name) and e.id == param and star is None:
+                return True
+            return star is not None and isinstance(e, ast.Subscript) and isinstance(e.value, ast.Name) and \
+                e.value.id == star
+
+        parents: dict[int, ast.AST] = {}
+        for n in ast.walk(fn):
+            for ch in ast.iter_child_nodes(n):
+                parents[id(ch)] = n
+        script = None
+        for n in ast.walk(fn):
+            line = getattr(n, "lineno", "?")
+            if isinstance(n, ast.Attribute) and is_obj(n.value):
+                if isinstance(n.ctx, (ast.Store, ast.Del)):
+                    return f"sets {_short(n, 30)} (line {line})"
+                if n.attr in ("__dict__", "__class__", "__setattr__", "__delattr__"):
+                    return f"uses {_short(n, 30)} (line {line})"
+            elif isinstance(n, ast.Call):
+                args = [*n.args, *(k.value for k in n.keywords)]
+                hit = [x for x in args if is_obj(x) or (star is not None and isinstance(x, ast.Starred) and
+                                                        isinstance(x.value, ast.Name) and x.value.id == star)]
+                if not hit:
+                    continue
+                cname = dotted(n.func) or ""
+                last = cname.rsplit(".", 1)[-1]
+                if last in cf.ATTR_SETTERS:
+                    return f"calls {cname}() on it (line {line})"
+                # fn(self, ...) in a wrapper, self.fn(obj) in a descriptor: the decorated method itself
+                if last in cf.SELF_SAFE_CALLS or (cname and len(cname.split(".")) <= 2 and
+                                                  cname.split(".")[0] in wrapped):
+                    continue
+                if star is not None or not isinstance(hit[0], ast.Name):
+                    return f"passes it to {cname or 'a call'} (line {line})"
+                if script is None:
+                    script = self.script_for(path)
+                if script is None:
+                    return f"passes it to {cname or 'a call'} (line {line})"
+                ref = cf.arg_ref(n, param)
+                why = self.callee_mutates(script, path, n, ref or ("star", None), cname or "a call", 1)
+                if why:
+                    return why
+            elif isinstance(n, ast.Name) and n.id == param and isinstance(n.ctx, ast.Load) and star is None:
+                p = parents.get(id(n))
+                if isinstance(p, (ast.Assign, ast.AnnAssign, ast.NamedExpr)) and getattr(p, "value", None) is n:
+                    return f"aliases {param} (line {line})"
+                if isinstance(p, (ast.Tuple, ast.List, ast.Set, ast.Dict)):
+                    return f"puts {param} in a {type(p).__name__.lower()} (line {line})"
+        return None
 
     def callee_mutates(self, script, path: Path, call: ast.Call, ref: tuple, fname: str, depth: int) -> str | None:
         """None when the callee provably does not set attributes on the object passed at ``ref``."""
@@ -1039,7 +1332,7 @@ class Checker:
                 return f"the receiver `{ast.unparse(base)}` is a special attribute"
             line = base.end_lineno or base.lineno
             defs = fx.goto(*fx.pos(line, (base.end_col_offset or 0) - len(base.attr.encode())))
-            return self._from_defs(fx, defs, None)
+            return self._from_defs(fx, defs, None, _short(base, 60))
         if isinstance(base, ast.Call):
             f = base.func
             text = dotted(f)
@@ -1082,7 +1375,7 @@ class Checker:
             return fx.goto(*fx.pos(f.end_lineno or f.lineno, (f.end_col_offset or 0) - len(f.attr.encode())))
         return []
 
-    def _from_defs(self, fx: FileCtx, defs: list, name: ast.Name | None) -> Container | str:
+    def _from_defs(self, fx: FileCtx, defs: list, name: ast.Name | None, text: str | None = None) -> Container | str:
         label = f"`{name.id}`" if name is not None else "the receiver"
         if not defs:
             if name is not None:
@@ -1107,15 +1400,22 @@ class Checker:
         if len(defs) == 1 and defs[0].type == "class":
             return self.class_container(defs[0], False, fx)
         if name is not None and len(defs) == 1 and defs[0].type == "statement":
-            st, why = fx.single_local(name, "instance")
+            st, why = fx.single_local(name, "instance", escapes=False)
             if st is None:
                 return why
+            lit = _literal_type(st.value)
+            if lit:   # d = {}: a dict, whatever it is handed to (a builtin instance holds no attributes of its own)
+                return self.std_class_container(lit, True)
             cdefs = self._callee_defs(fx, st.value.func)
             if len(cdefs) == 1 and cdefs[0].type == "class" and \
                     (cdefs[0].full_name or "") not in ("builtins.type", "builtins.super"):
                 c = self.class_container(cdefs[0], True, fx)
                 why = _call_not_instance(c, st.value)
-                return f"{label} holds the result of {dotted(st.value.func)}(...), which {why}" if why else c
+                if why:
+                    return f"{label} holds the result of {dotted(st.value.func)}(...), which {why}"
+                # what the local is handed to matters only when attributes can be added to the instance
+                esc = None if c.no_dict else fx._escapes(fx.scope_of(name), name.id, "instance")
+                return esc or c
             return f"{label} holds the result of {dotted(st.value.func) or 'a call'}() (line {st.lineno}), " \
                    "not of a direct constructor call"
         if "param" in types:
@@ -1123,6 +1423,10 @@ class Checker:
                    "subclass that has the name)"
         if len(defs) > 1:
             return f"{label} has {len(defs)} possible definitions"
+        if defs[0].type == "statement":
+            what = f"`{text}`" if text else "the receiver"
+            return f"{what} is a value assigned at runtime (a variable or attribute); the type of that value is " \
+                   "not read"
         return f"{label} is a {defs[0].type}: its runtime type is not known"
 
     # -- signatures -----------------------------------------------------------------------------------
@@ -1149,8 +1453,13 @@ class Checker:
                           f"the callee has {len(defs)} possible definitions"), label
         d = defs[0]
         if d.type == "class":
-            c = self.class_container(d, True, fx)
+            # the class object decides the constructor's keywords (__new__, __init__, the metaclass), not what
+            # may later be added to an instance
+            c = self.class_container(d, False, fx)
             return (*self._ctor_sig(c), label)
+        if d.type == "statement":
+            return None, f"the callee `{label}` is a variable (an alias, or a value made at runtime such as " \
+                         "namedtuple() or functools.partial()), not a def or class", label
         if d.type != "function":
             return None, f"the callee is a {d.type}, not a known function", label
         path = Path(d.module_path) if d.module_path else None
@@ -1325,11 +1634,12 @@ class Checker:
             top = parts[0]
             # sys.path changed at runtime: the module may be the project's own, from a directory added there
             if fx.facts.sys_path_edit:
-                return self._verdict(site, "unknown", why="this file changes sys.path at runtime")
+                return self._verdict(site, "unknown", why="this file changes sys.path (or sys.modules, an import "
+                                                          "hook) at runtime")
             conftest = self.conftest_path_edit(fx.path.parent)
             if conftest:
-                return self._verdict(site, "unknown", why=f"{conftest} changes sys.path when pytest runs; the "
-                                                          "module may come from there")
+                return self._verdict(site, "unknown", why=f"{conftest} changes sys.path (or sys.modules, an import "
+                                                          "hook) when pytest runs; the module may come from there")
             here = self.project_module(dotted_name)
             if here is not None:   # never "not found in this project" for a module the project has
                 return self._verdict(site, "unknown", at_def=self.disp(here),
@@ -1430,7 +1740,7 @@ class Checker:
             s = self._site(fx, al.lineno, al.col_offset, "import", f"{expr}.{al.name}", al.name)
             defs = fx.goto(*fx.pos(al.lineno, al.col_offset))
             if container is not None and container.source == "stdlib" and al.name not in container.names:
-                defs = self._not_stub_only(container, defs)
+                defs = self._stdlib_defs(container, defs)
             if defs:
                 out.append(self._exists(s, defs[0], fx))
                 continue
@@ -1445,11 +1755,18 @@ class Checker:
             out.append(self._judge(fx, node, s, container, al.name))
         return out
 
-    def _not_stub_only(self, c: Container, defs: list) -> list:
-        """For a standard-library container the interpreter is the authority: a name it lacks that jedi
-        finds only in a stub is platform- or version-conditional (see :meth:`stub_declares`), not proof."""
+    def _stdlib_defs(self, c: Container, defs: list) -> list:
+        """The jedi definitions that count for a name a standard-library container lacks. The interpreter is
+        the authority: a definition jedi finds only in a stub is platform- or version-conditional (see
+        :meth:`stub_declares`), not proof. For a closed module the interpreter's own names are complete, so
+        no definition counts: one jedi reaches through the module's imports is not a name of the module (the
+        typeshed stub of collections imports Mapping from collections.abc for its annotations; jedi follows
+        that to typing.py), and what the module's own source binds under a condition this interpreter did
+        not take is unknown (:meth:`undecided_why`)."""
         if c.source != "stdlib":
             return defs
+        if c.kind == "module" and c.closed:
+            return []
         return [d for d in defs if not (d.module_path and str(d.module_path).endswith(".pyi"))]
 
     def eval_attribute(self, fx: FileCtx, node: ast.Attribute) -> dict:
@@ -1462,13 +1779,15 @@ class Checker:
             if m is not None:
                 return self._verdict(site, "exists", source=rec.source, container=rec.label,
                                      at_def=self._member_at(m, rec))
-            defs = self._not_stub_only(rec, fx.goto(*fx.pos(line, bcol)))
+            defs = self._stdlib_defs(rec, fx.goto(*fx.pos(line, bcol)))
             if defs:
                 return self._exists(site, defs[0], fx)
             return self._judge(fx, node, site, rec, node.attr)
         defs = fx.goto(*fx.pos(line, bcol))
         if defs:
             return self._exists(site, defs[0], fx)
+        if self.jedi_error:   # jedi failed on this name; another run (another set order) may resolve it
+            rec = f"{rec}; jedi also failed internally on {node.attr} ({self.jedi_error})"
         return self._verdict(site, "unknown", why=rec,
                              next_step="read the receiver's type definition, or run the tests that reach this line")
 
@@ -1595,49 +1914,54 @@ class Checker:
                                  where=c.where, source=c.source,
                                  next_step="read the container's source or run the tests that reach this line")
         kind = "attribute" if site["kind"] == "attribute" else "import"
-        if c.source == "stdlib" and c.kind == "module" and c.full == "sys" and name in _SYS_SOMETIMES:
+        undecided = self.undecided_why(c, name, fx)
+        if undecided:
             return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
-                                 why=f"sys.{name} is set only in some runs (interactive mode, after an uncaught "
-                                     "exception, frozen applications, virtual environments)",
-                                 next_step="guard it with hasattr() or getattr(sys, name, default)")
-        stub = self.stub_declares(c, name)
-        if stub:
-            return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
-                                 why=f"{name} is not in {c.label} of this interpreter ({self.env.label}, "
-                                     f"{self.platform()}), but the standard-library stubs declare it ({stub}), "
-                                     "under a platform or Python-version condition",
-                                 next_step="check which platforms and Python versions the code must run on")
-        fx.deps.add(PROJECT_CONTENT)   # the answer below depends on every project file (attribute stores)
-        store = self.attr_store(name, c)
-        if store:
-            return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
-                                 why=f"{name} is not in {c.label}, but the project assigns an attribute of that name "
-                                     f"({store}); it may be set at runtime",
-                                 next_step="read that assignment; run the code path if it matters")
-        computed = self.computed_store(c) if c.kind in ("module", "class", "instance") else None
-        if computed:
-            return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
-                                 why=f"{name} is not in {c.label}, but the project sets attributes on it by computed "
-                                     f"name ({computed}); it may be set at runtime",
-                                 next_step="read that code; run the code path if it matters")
-        if self._store_index()["truncated"]:
-            return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
-                                 why=f"{name} is not in {c.label}, but the project has more than {MAX_FILES} Python "
-                                     "files and the attribute stores of the rest were not read",
-                                 next_step="check a smaller directory as the project (--repo)")
-        if c.source not in ("project", "external") and c.kind in ("module", "class", "instance"):
-            ext = self.installed_store(name)
-            if ext:
-                return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
-                                     why=f"{name} is not in {c.label}, but an installed package assigns it on an "
-                                         f"imported module or class ({ext}); it may be set at runtime",
-                                     next_step="read that assignment; run the code path if it matters")
+                                 why=undecided[0], next_step=undecided[1])
         near = nearest(name, c.names, want_call=_is_called(fx, node) if isinstance(node, ast.Attribute) else None,
                        disp=self.disp)
         v = self._verdict(site, "absent", container=c.label, where=c.where, source=c.source,
                           message=f"not found in {c.label} {self.in_env_phrase(c)} ({c.where})", nearest=near,
                           elsewhere=self.elsewhere(name, c), next_step=self._next_absent(near, c))
         return self._guarded(v, self._guard(fx, node, kind, name))
+
+    def undecided_why(self, c: Container, name: str, fx: FileCtx | None = None) -> tuple[str, str] | None:
+        """(why, next step) when ``name``, missing from the closed container ``c``, may still exist at
+        runtime - a name set only in some runs, declared by the stubs for another platform or version, or
+        assigned from outside by the project or an installed package - else None (it is absent)."""
+        if c.source == "stdlib" and c.kind == "module" and c.full == "sys" and name in _SYS_SOMETIMES:
+            return (f"sys.{name} is set only in some runs (interactive mode, after an uncaught exception, frozen "
+                    "applications, virtual environments)", "guard it with hasattr() or getattr(sys, name, default)")
+        own = self.std_source_binds(c, name)
+        if own:
+            return (f"{name} is not in {c.label} of this interpreter ({self.env.label}, {self.platform()}), but "
+                    f"the module's source binds it ({own}), under a platform or Python-version condition this "
+                    "interpreter did not take", "check which platforms and Python versions the code must run on")
+        stub = self.stub_declares(c, name)
+        if stub:
+            return (f"{name} is not in {c.label} of this interpreter ({self.env.label}, {self.platform()}), but "
+                    f"the standard-library stubs declare it ({stub}), under a platform or Python-version condition",
+                    "check which platforms and Python versions the code must run on")
+        if fx is not None:
+            fx.deps.add(PROJECT_CONTENT)   # the answers below depend on every project file (attribute stores)
+        store = self.attr_store(name, c)
+        if store:
+            return (f"{name} is not in {c.label}, but the project assigns an attribute of that name ({store}); it "
+                    "may be set at runtime", "read that assignment; run the code path if it matters")
+        computed = self.computed_store(c) if c.kind in ("module", "class", "instance") else None
+        if computed:
+            return (f"{name} is not in {c.label}, but the project sets attributes on it by computed name "
+                    f"({computed}); it may be set at runtime", "read that code; run the code path if it matters")
+        if self._store_index()["truncated"]:
+            return (f"{name} is not in {c.label}, but the project has more than {MAX_FILES} Python files and the "
+                    "attribute stores of the rest were not read", "check a smaller directory as the project (--repo)")
+        if c.source not in ("project", "external") and c.kind in ("module", "class", "instance"):
+            ext = self.installed_store(name)
+            if ext:
+                return (f"{name} is not in {c.label}, but an installed package assigns it on an imported module or "
+                        f"class ({ext}); it may be set at runtime", "read that assignment; run the code path if it "
+                                                                    "matters")
+        return None
 
     def _next_absent(self, near: list[dict], c: Container) -> str:
         if c.full:
@@ -1714,6 +2038,18 @@ class Checker:
     def platform(self) -> str:
         info = self.env.oracle().ask("sys")
         return str(info.get("platform") or "platform unknown")
+
+    def std_source_binds(self, c: Container, name: str) -> str | None:
+        """Where the Python source of a standard-library module binds ``name`` (at any level, in any branch:
+        ``if _mswindows: import _winapi else: import _posixsubprocess``): "file:line", or None."""
+        if c.source != "stdlib" or c.kind != "module" or not c.stdlib_module:
+            return None
+        info = self.env.oracle().ask("module", name=c.stdlib_module)
+        src = info.get("file") if info.get("ok") else None
+        if not src or not str(src).endswith(".py"):
+            return None
+        m = cf.module_facts(Path(src)).names.get(name)
+        return f"{self.disp(src)}:{m.line}" if m is not None else None
 
     def stub_declares(self, c: Container, name: str) -> str | None:
         """Where the typeshed stubs bundled with jedi declare ``name`` for a standard-library container
@@ -1949,6 +2285,24 @@ def _reaches_caller_module(fn: ast.AST) -> str | None:
                 isinstance(n.args[0], ast.Subscript) and dotted(n.args[0].value) == "sys.modules":
             return "sets attributes on a module through sys.modules"
     return None
+
+
+def _token_pos(node: ast.AST, lines: list[str]) -> tuple[int, int]:
+    """(line, char col) of the last name token of a Name or Attribute chain (where jedi resolves it)."""
+    if isinstance(node, ast.Attribute):
+        line, bcol = node.end_lineno or node.lineno, (node.end_col_offset or 0) - len(node.attr.encode())
+    else:
+        line, bcol = getattr(node, "lineno", 1), getattr(node, "col_offset", 0)
+    return line, _char_col(lines[line - 1] if 0 < line <= len(lines) else "", bcol)
+
+
+def _param_names(fn: ast.AST, positional: bool = False) -> list[str]:
+    """The parameter names of a function or lambda (``positional``: only those before ``*``)."""
+    a = fn.args  # type: ignore[attr-defined]
+    pos = [x.arg for x in [*a.posonlyargs, *a.args]]
+    if positional:
+        return pos
+    return pos + [x.arg for x in a.kwonlyargs] + [x.arg for x in (a.vararg, a.kwarg) if x is not None]
 
 
 def _attr_base_pos(f: ast.Attribute, lines: list[str]) -> tuple[int, int]:
@@ -2622,12 +2976,13 @@ def get_checker(repo: Path, env: cenv.EnvInfo) -> Checker:
     return ck
 
 
-def get_env(repo: Path, env: str | None) -> cenv.EnvInfo:
-    key = (str(Path(repo).resolve()), env or "auto")
+def get_env(repo: Path, env: str | None, trusted: bool = True) -> cenv.EnvInfo:
+    """The environment of a check (see :func:`codecheck_env.select_env`; ``trusted=False``: the MCP server)."""
+    key = (str(Path(repo).resolve()), env or "auto", trusted)
     hit = _ENVS.get(key)
     if hit is not None and hit[0] == _env_stamp(Path(repo), env):
         return hit[1]
-    info = cenv.select_env(Path(repo), env)
+    info = cenv.select_env(Path(repo), env, trusted=trusted)
     _ENVS[key] = (_env_stamp(Path(repo), env), info)
     return info
 
@@ -2691,10 +3046,14 @@ def check_source(ck: Checker | None, rel: str, abs_path: Path, source: str, only
                     got.append(r)
         except RecursionError:
             got = [dict(s, why="the check recursed too deeply") for s in _unknown_site(rel, kind, node, extra, "")]
+        except Exception as exc:  # noqa: BLE001 - a defect on one site must not stop the others; it decides nothing
+            why = f"the check failed on this site ({type(exc).__name__}: {str(exc)[:120]}); not decided"
+            got = [dict(s, why=why, check_error=True) for s in _unknown_site(rel, kind, node, extra, "")]
         for s in got:
             s["_span"] = [first, last]   # the lines that select this site in a diff (a call's keywords: all of them)
         out += got
     ck.jedi_deps(fx)
+    ck.context_deps(fx)
     return out, fx.deps, None
 
 
@@ -2754,10 +3113,13 @@ def changed_lines(repo: Path, rev: str = "HEAD") -> dict[str, set[int] | None]:
                          "working tree)")
     out: dict[str, set[int] | None] = {}
     cur: str | None = None
-    for ln in git("diff", "--no-color", "--no-ext-diff", "-U0", sha, "--", "*.py", "*.pyi").splitlines():
+    # explicit prefixes override the user's diff.noprefix/mnemonicPrefix/srcPrefix/dstPrefix settings, and
+    # --relative gives paths relative to (and only under) `repo`, also when it is a subdirectory of the work tree
+    for ln in git("diff", "--no-color", "--no-ext-diff", "--no-textconv", "--relative", "--src-prefix=a/",
+                  "--dst-prefix=b/", "-U0", sha, "--", "*.py", "*.pyi").splitlines():
         if ln.startswith("+++ "):
             p = _git_path(ln[4:].rstrip("\t").strip())
-            cur = p[2:] if p.startswith("b/") else (None if p == "/dev/null" else p)
+            cur = p[2:] if p.startswith("b/") else None   # /dev/null: the file was deleted
             if cur is not None:
                 out.setdefault(cur, set())
         elif ln.startswith("@@") and cur is not None:
@@ -2782,6 +3144,14 @@ def _cache_dir(repo: Path) -> Path | None:
     return d / "cache" / "check" if d.is_dir() else None
 
 
+def _rel_or_abs(p: Path, root: Path) -> str:
+    """``p`` relative to ``root`` (forward slashes), or absolute when it is on another drive."""
+    try:
+        return os.path.relpath(p, root).replace("\\", "/")
+    except ValueError:
+        return Path(p).as_posix()
+
+
 class _Cache:
     def __init__(self, repo: Path, env: cenv.EnvInfo, enabled: bool):
         self.dir = _cache_dir(repo) if enabled else None
@@ -2792,6 +3162,8 @@ class _Cache:
         self._tree: str | None = None
         self._content: str | None = None
         self._sha: dict[str, str | None] = {}
+        # pytest's pythonpath (pytest.ini, pyproject.toml, tox.ini, setup.cfg) decides which imports resolve
+        self._context = "|".join(sorted(_rel_or_abs(d, repo) for d in pytest_pythonpath(repo)))
         self.off: str | None = None   # why the cache is not used
         if self.dir is not None:
             files, truncated = py_files(repo, [repo])
@@ -2826,7 +3198,7 @@ class _Cache:
         import verinoda
 
         return hashlib.sha256(f"{CHECK_VERSION}|{verinoda.__version__}|{self.env.fingerprint}|{self.env.kind}|"
-                              f"{rel}|{sha}".encode()).hexdigest()
+                              f"{self._context}|{rel}|{sha}".encode()).hexdigest()
 
     def _dep_sha(self, rel: str) -> str | None:
         if rel not in self._sha:
@@ -2895,8 +3267,8 @@ class _Cache:
 # -- public entry points ------------------------------------------------------------------------------------
 
 def _targets(repo: Path, paths: list[str] | None,
-             diff: str | None) -> tuple[list[tuple[str, Path, set[int] | None]], str, bool]:
-    """(files to check with their changed lines, scope text, whether the file walk stopped at MAX_FILES)."""
+             diff: str | None) -> tuple[list[tuple[str, Path, set[int] | None]], str, list[str]]:
+    """(files to check with their changed lines, scope text, what was not checked)."""
     if paths:
         out = []
         truncated = False
@@ -2915,28 +3287,37 @@ def _targets(repo: Path, paths: list[str] | None,
             truncated = truncated or cut
             for f in found:
                 out.append((f.relative_to(repo).as_posix(), f, None))
-        return out, "whole files", truncated
+        notes = [f"the file walk stopped at {MAX_FILES} Python files: later files were not checked"] if truncated \
+            else []
+        return out, "whole files", notes
     rev = diff or "HEAD"
     ch = changed_lines(repo, rev)
     out = []
+    skipped = []
     for rel, lines in sorted(ch.items()):
         f = repo / rel
         if f.is_file() and f.suffix == ".py":
             out.append((rel, f, lines))
-    return out, f"changed lines against {rev} (sites on unchanged lines are not checked)", False
+        else:
+            skipped.append(f"{rel} ({'a stub file' if rel.endswith('.pyi') and f.is_file() else 'not a file'})")
+    notes = [f"{len(skipped)} changed file{'s' if len(skipped) > 1 else ''} not checked: " + "; ".join(skipped[:5]) +
+             (" ..." if len(skipped) > 5 else "")] if skipped else []
+    return out, f"changed lines against {rev} (sites on unchanged lines are not checked)", notes
 
 
 def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None, snippet: str | None = None,
           as_path: str | None = None, env: str | None = "auto", include_exists: bool = False,
-          use_cache: bool = True, budget_s: float | None = None) -> dict:
+          use_cache: bool = True, budget_s: float | None = None, trust_env: bool = True) -> dict:
     """Check the names used in files, a diff or a snippet (see the module docstring). ``budget_s``: stop
-    starting new files after that many seconds (the result says which were not checked)."""
+    starting new files after that many seconds (the result says which were not checked). ``trust_env=False``
+    (the MCP server): ``env`` may name only a virtual environment whose base interpreter passes the rule of
+    ``auto`` (ValueError otherwise)."""
     from verinoda import precise
 
     t0 = time.perf_counter()
     repo = Path(repo).resolve()
     ok, jedi_why = precise.available()
-    envinfo = get_env(repo, env) if ok else None
+    envinfo = get_env(repo, env, trust_env) if ok else None
     ck = get_checker(repo, envinfo) if ok and envinfo is not None else None
     cache = _Cache(repo, envinfo, use_cache and ck is not None) if envinfo is not None else None
     files: list[dict] = []
@@ -2951,9 +3332,8 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
         files.append({"path": rel, "sites": len(got), **({"error": err} if err else {})})
         sites += got
     else:
-        targets, scope, truncated = _targets(repo, paths, diff)
-        if truncated:
-            notes.append(f"the file walk stopped at {MAX_FILES} Python files: later files were not checked")
+        targets, scope, not_checked = _targets(repo, paths, diff)
+        notes += not_checked
         for n, (rel, f, lines) in enumerate(targets):
             if budget_s is not None and time.perf_counter() - t0 > budget_s:
                 notes.append(f"stopped after the time budget of {budget_s:g} s: {len(targets) - n} of "
@@ -2970,7 +3350,7 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
             err = None
             if got is None:
                 got, deps, err = check_source(ck, rel, f, data.decode("utf-8-sig", "replace"), lines, jedi_why)
-                if cache is not None and not err:
+                if cache is not None and not err and not any(s.get("check_error") for s in got):
                     cache.put(rel, sha, got, deps, lines)
             files.append({"path": rel, "sites": len(got), **({"cached": True} if cached else {}),
                           **({"error": err} if err else {})})
@@ -2979,7 +3359,11 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     if bad:   # a requested file that could not be read or parsed was not checked: "0 absent" does not cover it
         notes.append(f"{len(bad)} file{'s' if len(bad) > 1 else ''} not checked: " +
                      "; ".join(f"{f['path']} ({f['error']})" for f in bad[:5]) + (" ..." if len(bad) > 5 else ""))
-    sites = [{k: v for k, v in s.items() if k != "_span"} for s in sites]
+    failed = [s for s in sites if s.get("check_error")]
+    if failed:   # a defect of the check on some sites: they are unknown, and the result says so
+        notes.append(f"the check failed on {len(failed)} site{'s' if len(failed) > 1 else ''} (unknown): " +
+                     "; ".join(f"{s['at']} {s['why']}" for s in failed[:3]) + (" ..." if len(failed) > 3 else ""))
+    sites = [{k: v for k, v in s.items() if k not in ("_span", "check_error")} for s in sites]
     counts = {v: 0 for v in VERDICTS}
     for s in sites:
         counts[s["verdict"]] = counts.get(s["verdict"], 0) + 1
@@ -3061,15 +3445,19 @@ def _env_header(repo: Path, env: cenv.EnvInfo | None, sites: list[dict], no_jedi
 
 # -- api --------------------------------------------------------------------------------------------------
 
-def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = False) -> dict:
-    """The real members of a module, class or function, with signatures and locations."""
+def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = False,
+        trust_env: bool = True) -> dict:
+    """The real members of a module, class or function, with signatures and locations. ``found`` is False
+    (exit 3) only for a name shown missing from a closed container, or a module missing from the search path;
+    a name that was not decided (an open container, the attributes of a function or variable, no resolver,
+    no project environment) is ``found: None`` with ``decided: "unknown"`` (or ``"not_installed"``), exit 0."""
     from verinoda import precise
 
     repo = Path(repo).resolve()
     ok, why = precise.available()
     if not ok:
-        return {"target": target, "found": False, "why": why, "exit": 3}
-    envinfo = get_env(repo, env)
+        return {"target": target, "found": None, "decided": "unknown", "why": why, "exit": 0}
+    envinfo = get_env(repo, env, trust_env)
     ck = get_checker(repo, envinfo)
     parts = [p for p in target.replace(":", ".").split(".") if p]
     if not parts:
@@ -3086,6 +3474,15 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
         i -= 1
     if spec is None:
         top = {n: Member(n, "module") for n in u.top_level_names()}
+        if not envinfo.third_party and parts[0] not in envinfo.stdlib_names():
+            return {**head, "found": None, "decided": "not_installed",
+                    "why": f"module {parts[0]} is not in the standard library, and "
+                           f"{envinfo.note or 'there is no project environment'}",
+                    "nearest": nearest(parts[0], top), "exit": 0}
+        if u.hooks:
+            return {**head, "found": None, "decided": "unknown",
+                    "why": f"no module {parts[0]} on the search path, but site-packages runs import hooks "
+                           f"({u.hooks[0]}); modules may come from elsewhere", "exit": 0}
         return {**head, "found": False, "why": f"no module {parts[0]} in this project or in {envinfo.label}",
                 "nearest": nearest(parts[0], top), "exit": 3}
     modname = ".".join(parts[:i])
@@ -3099,8 +3496,12 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
         m = c.names.get(part)
         if m is None:
             if not c.closed:
-                return {**head, "found": False, "decided": "unknown", "closed": False,
-                        "why": f"{part} is not listed in {c.label}, which is not closed ({c.why})", "exit": 3}
+                return {**head, "found": None, "decided": "unknown", "closed": False,
+                        "why": f"{part} is not listed in {c.label}, which is not closed ({c.why})", "exit": 0}
+            undecided = ck.undecided_why(c, part)
+            if undecided:
+                return {**head, "found": None, "decided": "unknown", "closed": True, "why": undecided[0],
+                        "exit": 0}
             return {**head, "found": False, "why": f"{part} not found in {c.label} {ck.in_env_phrase(c)} ({c.where})",
                     "nearest": nearest(part, c.names, disp=ck.disp), "closed": c.closed, "exit": 3}
         # a re-export (`from .client import Client` in a package __init__): follow it to the definition
@@ -3164,11 +3565,12 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
 
 
 def _api_leaf(head: dict, full: str, kind: str, rest: list[str], why: str | None = None) -> dict:
-    """``api a.b.c`` where ``a.b`` is a function, variable or property: the rest cannot be looked up."""
-    return {**head, "found": False, "decided": "unknown",
+    """``api a.b.c`` where ``a.b`` is a function, variable or property: the rest cannot be looked up (not
+    decided: exit 0)."""
+    return {**head, "found": None, "decided": "unknown",
             "why": f"{full} is a {kind}; api lists no attributes of a {kind}, so {'.'.join(rest)} was not looked "
                    f"up" + (f" ({why})" if why else ""),
-            "exit": 3}
+            "exit": 0}
 
 
 _TYPING_MODULES = ("typing", "typing_extensions", "__future__", "collections.abc", "abc", "types")

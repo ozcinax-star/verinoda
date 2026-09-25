@@ -607,7 +607,11 @@ catches the benchmark's wrong finding in 6 ms.
 - Sites: imports and from-imports, attribute loads, keyword arguments, and
   constant keys read from the dict literals a function returns. `--diff`
   checks the sites on changed lines (plus new files); its revision is resolved
-  to a commit first, so it is never read as a git option. `--stdin --as PATH`
+  to a commit first, so it is never read as a git option, and its diff sets its
+  own prefixes and `--relative` (the user's `diff.mnemonicPrefix`/`dstPrefix`
+  settings, and a `--repo` below the top of the work tree, dropped every
+  changed tracked file: third review round); a changed file that is not
+  checked (a stub) is listed in `incomplete`. `--stdin --as PATH`
   checks code before it is written; the snippet's own definitions stand for
   PATH (a changed signature is judged from the snippet, not the file on disk).
 - Environment: `--env PATH`, else `<project>/.venv`, `venv` or `env`, else
@@ -624,8 +628,13 @@ catches the benchmark's wrong finding in 6 ms.
   built from files (site-packages, `.pth` path lines, `PYTHONPATH`). A `.venv`
   found in the project is used only when that base interpreter lies outside
   the project and is known to the system (Verinoda's own, the Windows
-  registry, `PATH`, a Python manager's directory, owned by root); `--env` is
-  trusted as given. jedi imports a compiled module only if it is a
+  registry, `PATH`, a Python manager's directory, owned by root); `--env` on
+  the command line is trusted as given. The MCP tools' `env` comes from a model
+  that the checked repository may steer, so it is held to the rule of `auto`:
+  only a virtual-environment directory whose base interpreter is known to the
+  system and lies outside the project, never an interpreter path (third review
+  round). The note for a `.venv` that was not used names the program `--env`
+  would start. jedi imports a compiled module only if it is a
   standard-library module from the interpreter's own directories (a patch of
   `jedi.inference.imports._load_builtin_module` installed by `codecheck_env`,
   limited to the check's jedi project). The oracle imports no `X.__main__`.
@@ -633,7 +642,9 @@ catches the benchmark's wrong finding in 6 ms.
   `__getattr__`, `exec` or `globals()` writes and closed star imports; a class
   object; an instance made by a direct constructor call, or held by a single
   unreassigned local that is not handed to code that sets attributes (slotted
-  instances are closed whatever they are handed to); one known signature
+  instances and instances of C types without a `__dict__`, `collections.deque`,
+  are closed whatever they are handed to; so is a local bound to a literal,
+  `d = {}`); one known signature
   without `**kwargs` or an unknown decorator; the keys of dict literals a
   function returns. A parameter, an annotation or an inferred return value
   leaves the receiver `unknown`. jedi must also fail to find the name.
@@ -646,7 +657,9 @@ catches the benchmark's wrong finding in 6 ms.
   `mod.__dict__.update`); a name an installed package assigns on a module or
   class it imports (plugins: `pytest.lazy_fixture = ...`); a
   standard-library name this interpreter lacks but the typeshed stubs declare
-  under a platform or version condition (`os.fork` on Windows); `sys`
+  under a platform or version condition (`os.fork` on Windows), or that the
+  module's own source binds under a condition this interpreter did not take
+  (`subprocess.select` on Windows); `sys`
   attributes that exist only in some runs (`sys.ps1`, `sys._MEIPASS`);
   constructor keywords under a metaclass other than `type` (`Color(value=1)`
   for an Enum); a project larger than the file limit (5,000 Python files) -
@@ -660,8 +673,18 @@ catches the benchmark's wrong finding in 6 ms.
   fields); a local instance given to `setattr`/`vars`/`object.__setattr__`,
   or to a C function that may keep it (`list.append`, a queue); `self` put in
   a tuple or list; a call to an Enum with member names (the functional API
-  returns a class). A decorator keeps a signature or class closed only when it
-  comes from the module that defines it (`functools.cache`,
+  returns a class); an instance (or class) whose class has a method decorator
+  or a class attribute made by a call whose code - a descriptor's
+  `__get__`/`__set__`/`__set_name__`, a wrapper, a property getter - sets
+  attributes on the object it is given, or cannot be read or followed (the
+  lazy_property recipe `setattr(self, "_lazy_" + name, ...)`: third review
+  round; the standard library's `property`, `functools.cached_property`,
+  `staticmethod` and a wrapper that only calls the method keep it closed). For
+  a closed standard-library module the interpreter's names are complete: what
+  jedi reaches through the module's own imports is not one of its names
+  (typeshed's `collections` stub imports `Mapping` for its annotations, and
+  `collections.Mapping` was reported as existing). A decorator keeps a
+  signature or class closed only when it comes from the module that defines it (`functools.cache`,
   `dataclasses.dataclass`), not by its name. Names that do exist: a
   metaclass's names on the class (`Base.register` under `metaclass=ABCMeta`),
   what a classmethod sets on `cls`, mangled `__x` names, `typing.Protocol`'s
@@ -681,7 +704,9 @@ catches the benchmark's wrong finding in 6 ms.
   raise` handles nothing); a flag the module binds once to a constant
   (`IS_PROD = True`) tests nothing (second review round). pytest's
   `pythonpath` option adds its directories to the search path; a
-  `conftest.py` above the file that changes `sys.path`, or the module in a
+  `conftest.py` above the file (or the file itself) that changes `sys.path` or
+  `sys.modules` - in any form: `insert`/`append`, `+=`, a slice, an alias of
+  `sys`, `from sys import path`, `site.addsitedir` - or the module in a
   plain (non-package) directory of the project off the assumed search path
   (`lib/helpers.py`), makes a missing top-level module `unknown`, never "not
   found in this project"; a file inside a package does not count
@@ -691,7 +716,9 @@ catches the benchmark's wrong finding in 6 ms.
   class in the MRO does (`class Plugin(abc.ABC, Base)` takes `Base`'s). When
   such a base's constructor comes from one of its own bases and another base
   follows it, the keywords are `unknown` (the real MRO may put that base
-  first).
+  first). Keywords are judged against the class object (its `__new__`,
+  `__init__` and metaclass), not against what may later be added to an
+  instance (`threading.Thread(deamon=True)` is absent).
 - Output: nearest real names (edit distance with transpositions, shared word
   parts, a few synonyms) and where the name is defined elsewhere. Wording:
   "not found in <container> as installed in <env> (<file>)", never "does not
@@ -700,7 +727,10 @@ catches the benchmark's wrong finding in 6 ms.
   checked (the file limit, the MCP tool's 90-second budget, files that could
   not be read or parsed). `api A.B.C`
   looks up every part: the attributes of a function or variable are not
-  listed (`decided: unknown`).
+  listed. `api` says `found: false` (exit 3) only where `check` would say
+  `absent` (a closed container, the same exceptions) or for a module that is
+  not on the search path; an answer it could not decide is `found: null` with
+  `decided: unknown` or `not_installed`, exit 0 (third review round).
 - Cache: per file in `.verinoda/cache/check/`, keyed by the file's sha256 and
   the environment fingerprint; an answer is dropped when a file it was read
   from changes (project files, and files outside the project and its
@@ -714,7 +744,11 @@ catches the benchmark's wrong finding in 6 ms.
   new or removed package in the environment (also an explicit `--env` in a
   long-lived MCP server) changes the fingerprint. Past 5,000 project files the
   cache is off. A `--diff` answered from the cache selects the same sites as a
-  fresh run (a call's keywords by the call's lines).
+  fresh run (a call's keywords by the call's lines). Import answers also
+  depend on every `conftest.py` from the file's directory up to the project
+  root (recorded also where there is none, so that a new one drops the answer)
+  and on pytest's `pythonpath` (part of the key); a long-lived process rebuilds
+  its jedi project when `pythonpath` changes (third review round).
 
 ## 5. Delivery plan
 

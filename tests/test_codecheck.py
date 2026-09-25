@@ -567,8 +567,9 @@ def test_without_jedi_every_site_is_unknown(proj, monkeypatch):
     assert {s["verdict"] for s in res["sites"]} == {"unknown"}
     assert all("jedi is not installed" in s["why"] for s in res["sites"])
     assert res["env"]["third_party_checked"] is False
-    api = codecheck.api(proj, "pkg.core.Repo")
-    assert api["found"] is False and "jedi is not installed" in api["why"]
+    api = codecheck.api(proj, "pkg.core.Repo")   # not decided, so not "not found"
+    assert api["found"] is None and api["decided"] == "unknown" and api["exit"] == 0
+    assert "jedi is not installed" in api["why"]
 
 
 # -- api --------------------------------------------------------------------------------------------------
@@ -1028,9 +1029,20 @@ def test_api_looks_up_every_part_of_the_target(proj):
     assert join["found"] and join["kind"] == "function" and join["exit"] == 0
     bad = codecheck.api(proj, "os.path.joinpath_invented", env="none")
     assert bad["found"] is False and bad["exit"] == 3 and "join" in [n["name"] for n in bad["nearest"]]
-    for t in ("json.dumps.invented_attr", "sys.argv.invented", "pkg.core.compute.invented"):
+    # not decided is not "not found": found null, exit 0 (review round 3)
+    for t in ("json.dumps.invented_attr", "sys.argv.invented", "pkg.core.compute.invented", "os.environ.copy",
+              "concurrent.futures.ProcessPoolExecutor", "pkg.lazymod.magic"):
         r = codecheck.api(proj, t, env="none")
-        assert r["found"] is False and r["decided"] == "unknown" and r["exit"] == 3, (t, r)
+        assert r["found"] is None and r["decided"] == "unknown" and r["exit"] == 0, (t, r)
+    # a third-party module without a project environment is not installed, not missing
+    r = codecheck.api(proj, "requests.get", env="none")
+    assert r["found"] is None and r["decided"] == "not_installed" and r["exit"] == 0, r
+    # what check calls unknown, api does not call missing (a platform's name, a name the project assigns)
+    other = "fork" if sys.platform == "win32" else "startfile"
+    r = codecheck.api(proj, f"os.{other}", env="none")
+    assert r["found"] is None and r["decided"] == "unknown" and "stubs declare" in r["why"], r
+    r = codecheck.api(proj, "json.patched_here", env="none")
+    assert r["found"] is None and "pkg/patcher.py" in r["why"], r
 
 
 def test_snippet_definitions_are_the_source_of_truth_for_as_path(tmp_path):
@@ -1347,3 +1359,356 @@ def test_a_module_level_receiver_says_so_and_unparsed_files_are_incomplete(tmp_p
     (s,) = [x for x in res["sites"] if x["name"] == "fetch_all"]
     assert s["verdict"] == "unknown" and "module-level" in s["why"]
     assert res["exit"] == 0 and "broken.py (does not parse" in res["incomplete"][0]
+
+
+# -- third review round -----------------------------------------------------------------------------------------
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="collections lost its ABC aliases in Python 3.10")
+def test_a_name_a_stdlib_stub_imports_for_its_annotations_is_not_a_name_of_the_module(tmp_path):
+    # typeshed's collections stub imports Mapping from collections.abc for its own annotations; jedi follows
+    # that to typing.py, but the interpreter's collections has no Mapping: never "exists"
+    other = "select" if sys.platform == "win32" else "_winapi"   # bound by subprocess.py for another platform
+    _write(tmp_path, "a.py", "import collections\nimport os\nimport subprocess\n\n"
+                             f"print(collections.Mapping, os.Mapping, collections.OrderedDict, subprocess.{other})\n")
+    _write(tmp_path, "b.py", "from collections import Iterable, OrderedDict\n")
+    res = codecheck.check(tmp_path, ["a.py", "b.py"], env="none", include_exists=True, use_cache=False)
+    v = {s["expr"]: s for s in res["sites"]}
+    assert v["collections.Mapping"]["verdict"] == "unknown" and v["collections.Iterable"]["verdict"] == "unknown"
+    assert v["os.Mapping"]["verdict"] == "exists" and v["collections.OrderedDict"]["verdict"] == "exists"
+    s = v[f"subprocess.{other}"]
+    assert s["verdict"] == "unknown" and "the module's source binds it" in s["why"], s
+    snip = codecheck.check(tmp_path, snippet="from collections import Mapping\n", as_path="s.py", env="none",
+                           include_exists=True)
+    assert [x["verdict"] for x in snip["sites"] if x["name"] == "Mapping"] == ["unknown"]
+    assert codecheck.api(tmp_path, "collections.Mapping", env="none")["found"] is not True
+
+
+def _popen_log(monkeypatch) -> list[str]:
+    started: list[str] = []
+    orig = subprocess.Popen.__init__
+
+    def rec(self, args, *a, **kw):
+        started.append(str(args[0] if isinstance(args, (list, tuple)) else args))
+        return orig(self, args, *a, **kw)
+
+    monkeypatch.setattr(subprocess.Popen, "__init__", rec)
+    return started
+
+
+def test_mcp_never_starts_a_program_the_checked_repository_supplies(tmp_path, monkeypatch):
+    from verinoda.mcp.server import AtlasTools
+
+    repo = tmp_path / "repo"
+    tools = repo / "tools"
+    for exe in ("python.exe", "python3", "python"):
+        _write(tools, exe, "not an interpreter\n")
+    _write(repo, ".venv/pyvenv.cfg", f"home = {tools}\nversion = 3.12.0\n")
+    _write(repo, "app.py", "import json\n\njson.dumps(1)\n")
+    (repo / ".verinoda").mkdir()
+    started = _popen_log(monkeypatch)
+    t = AtlasTools(repo)
+    auto = t.code_check(paths=["app.py"])
+    note = auto["env"]["note"]
+    assert auto["env"]["kind"] == "verinoda" and "inside the project" in note and "would start" in note
+    assert "to trust it" not in note
+    for env in (".venv", "tools/python.exe", str(tools / "python.exe"), "tools"):
+        r = t.code_check(paths=["app.py"], env=env)
+        assert r["error"] == "invalid_argument", (env, r)
+        assert t.api_members("json", env=env)["error"] == "invalid_argument", env
+    assert not [s for s in started if Path(s).resolve().is_relative_to(repo.resolve())], started
+    # a virtual environment whose base interpreter is a known installation outside the project is accepted
+    ok = tmp_path / "ok"
+    _make_venv(ok)
+    _write(ok, "app.py", "import fancylib\n\nfancylib.fake_fn(1)\n")
+    (ok / ".verinoda").mkdir()
+    r = AtlasTools(ok).code_check(paths=["app.py"], env=".venv")
+    assert r["env"]["kind"] == "explicit" and r["summary"]["absent"] == 1, r
+    codecheck.reset_caches()
+
+
+DESCRIPTORS = '''\
+import functools
+
+
+class Memo:
+    def __init__(self, fn):
+        self.fn = fn
+
+    def __set_name__(self, owner, name):
+        self.key = "_" + name + "_cache"
+
+    def __get__(self, obj, owner=None):
+        if obj is None:
+            return self
+        v = self.fn(obj)
+        setattr(obj, self.key, v)
+        return v
+
+
+class Lazy:
+    def __init__(self, fn):
+        self.fn = fn
+
+    def __get__(self, obj, owner=None):
+        obj.__dict__["_loaded_" + self.fn.__name__] = True
+        return self.fn(obj)
+
+
+def lazy_property(fn):
+    attr_name = "_lazy_" + fn.__name__
+
+    @property
+    def _lazy_property(self):
+        if not hasattr(self, attr_name):
+            setattr(self, attr_name, fn(self))
+        return getattr(self, attr_name)
+    return _lazy_property
+
+
+def remember(prefix):
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(self, *args):
+            setattr(self, prefix + fn.__name__, fn(self, *args))
+            return getattr(self, prefix + fn.__name__)
+        return wrapper
+    return deco
+
+
+class Field:
+    def __set_name__(self, owner, name):
+        setattr(owner, name + "_default", 0)
+
+
+def logged(fn):
+    @functools.wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        print(fn.__name__)
+        return fn(self, *args, **kwargs)
+    return wrapper
+
+
+REG = []
+
+
+def register(fn):
+    REG.append(fn.__name__)
+    return fn
+
+
+class A:
+    @Memo
+    def total(self):
+        return 3
+
+
+class B:
+    @Lazy
+    def data(self):
+        return [1]
+
+
+class C:
+    @lazy_property
+    def rows(self):
+        return [1, 2]
+
+
+class D:
+    @remember("_last_")
+    def compute(self):
+        return 5
+
+
+class E:
+    size = Field()
+
+
+class Plain:
+    @property
+    def p(self):
+        return 1
+
+    @functools.cached_property
+    def q(self):
+        return 2
+
+    @logged
+    def go(self):
+        return 3
+
+    @register
+    def r(self):
+        return 4
+
+
+def use():
+    a = A()
+    b = B()
+    c = C()
+    d = D()
+    p = Plain()
+    return a._total_cache, b._loaded_data, c._lazy_rows, d._last_compute, E.size_default, p.missing_name
+'''
+
+
+def test_descriptors_and_wrappers_that_set_attributes_on_the_instance_open_it(tmp_path):
+    _write(tmp_path, "desc.py", DESCRIPTORS)
+    res = codecheck.check(tmp_path, ["desc.py"], env="none", include_exists=True, use_cache=False)
+    by = {s["name"]: s for s in res["sites"] if s["kind"] == "attribute"}
+    for name, why in (("_total_cache", "Memo.__get__"), ("_loaded_data", "Lazy.__get__"),
+                      ("_lazy_rows", "_lazy_property"), ("_last_compute", "wrapper"),
+                      ("size_default", "Field.__set_name__")):
+        assert by[name]["verdict"] == "unknown" and why in by[name]["why"], by[name]
+    # property, cached_property, a wrapper that only calls the method, a registering decorator: still closed
+    assert by["missing_name"]["verdict"] == "absent", by["missing_name"]
+
+
+def test_every_way_of_changing_sys_path_or_sys_modules_counts(tmp_path):
+    import ast
+
+    from verinoda import codecheck_facts as cf
+
+    edits = ["import sys\nsys.path.insert(0, D)", "import sys\nsys.path += [D]", "import sys\nsys.path[:0] = [D]",
+             "import sys as _s\n_s.path.append(D)", "from sys import path\npath.insert(0, D)",
+             "from sys import path as p\np += [D]", "import site\nsite.addsitedir(D)",
+             "from site import addsitedir\naddsitedir(D)", "import sys\nsys.path = [D, *sys.path]",
+             "import sys\nsys.modules['shared_util'] = object()", "import sys\nsys.meta_path.append(F)",
+             "import sys\ndef pytest_configure(config):\n    sys.path.extend([D])"]
+    reads = ["import sys\nprint(sys.path)", "import sys\nx = sys.path[0]", "import sys\nsys.path.index(D)",
+             "from sys import path\npath = [D]", "import sys\nm = sys.modules.get('x')", "import os\nos.path.join(D)"]
+    for src in edits:
+        assert cf.changes_import_path(ast.parse(src)), src
+    for src in reads:
+        assert not cf.changes_import_path(ast.parse(src)), src
+    # end to end: a conftest.py and the checked script itself
+    _write(tmp_path, "shared/shared_util.py", "def helper():\n    return 1\n")
+    app = tmp_path / "app"
+    _write(app, "tests/conftest.py", "import sys\nsys.path[:0] = [r'" + str(tmp_path / "shared") + "']\n")
+    _write(app, "tests/test_x.py", "import shared_util\n")
+    _write(app, "run.py", "import sys\nfrom pathlib import Path\n\n"
+                          "sys.path += [str(Path(__file__).resolve().parents[1] / 'shared')]\nimport shared_util\n")
+    res = codecheck.check(app, ["tests/test_x.py", "run.py"], env="none", use_cache=False)
+    got = {s["path"]: s for s in res["sites"] if s["expr"] == "shared_util"}
+    assert got["tests/test_x.py"]["verdict"] == "unknown" and "conftest.py" in got["tests/test_x.py"]["why"]
+    assert got["run.py"]["verdict"] == "unknown" and "this file changes sys.path" in got["run.py"]["why"]
+
+
+def test_conftest_and_pytest_config_changes_drop_cached_import_answers(tmp_path):
+    _write(tmp_path, "shared/shared_util.py", "def helper():\n    return 1\n")
+    app = tmp_path / "app"
+    (app / ".verinoda").mkdir(parents=True)
+    _write(app, "tests/test_x.py", "import shared_util\n")
+
+    def both() -> tuple:   # (with the cache, fresh) in one long-lived process
+        a = codecheck.check(app, ["tests/test_x.py"], env="none", include_exists=True)
+        b = codecheck.check(app, ["tests/test_x.py"], env="none", use_cache=False, include_exists=True)
+        return tuple([s["verdict"] for s in r["sites"] if s["expr"] == "shared_util"][0] for r in (a, b))
+
+    assert both() == ("not_installed", "not_installed")
+    _write(app, "tests/conftest.py", "import sys\nsys.path.insert(0, '../shared')\n")
+    assert both() == ("unknown", "unknown")
+    (app / "tests" / "conftest.py").unlink()
+    assert both() == ("not_installed", "not_installed")
+    _write(app, "pytest.ini", "[pytest]\npythonpath = ../shared\n")
+    assert both() == ("exists", "exists")
+    (app / "pytest.ini").unlink()   # the warm checker's jedi project must forget the directory too
+    assert both() == ("not_installed", "not_installed")
+    codecheck.reset_caches()
+
+
+def test_diff_ignores_the_users_prefix_settings_and_works_from_a_subdirectory(tmp_path):
+    _write(tmp_path, "app.py", "import json\n\nprint(json.dumps(1))\n")
+    _write(tmp_path, "pkgdir/tracked.py", "import json\n\nprint(json.dumps(1))\n")
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "x")
+    _write(tmp_path, "app.py", "import json\n\nprint(json.dumps(1))\nprint(json.loadz('1'))\n")
+    _write(tmp_path, "pkgdir/tracked.py", "import json\n\nprint(json.dumps(1))\nprint(json.loadz('1'))\n")
+    _write(tmp_path, "pkgdir/new.py", "import json\n\njson.loadz\n")
+    want = [("app.py", "loadz"), ("pkgdir/new.py", "loadz"), ("pkgdir/tracked.py", "loadz")]
+    for key, value in (("diff.mnemonicPrefix", "true"), ("diff.dstPrefix", "new/"), ("diff.noprefix", "true")):
+        _git(tmp_path, "config", key, value)
+        res = codecheck.check(tmp_path, diff="HEAD", env="none", use_cache=False)
+        got = sorted((s["path"], s["name"]) for s in res["sites"] if s["verdict"] == "absent")
+        assert got == want, (key, got)
+        _git(tmp_path, "config", "--unset", key)
+    sub = codecheck.check(tmp_path / "pkgdir", diff="HEAD", env="none", use_cache=False)
+    assert sorted((s["path"], s["name"]) for s in sub["sites"] if s["verdict"] == "absent") == \
+        [("new.py", "loadz"), ("tracked.py", "loadz")]
+    codecheck.reset_caches()
+
+
+LOCALS = '''\
+import collections
+import sys
+import threading
+
+
+def literal_dict():
+    d = {"a": 1}
+    return d.iteritems()
+
+
+def deque_returned():
+    dq = collections.deque()
+    dq.push(1)
+    return dq
+
+
+def thread_keyword():
+    return threading.Thread(target=print, deamon=True)
+
+
+def version():
+    return sys.version_info.majr
+'''
+
+
+def test_literal_locals_dict_less_instances_and_constructor_keywords_are_decided(tmp_path):
+    _write(tmp_path, "loc.py", LOCALS)
+    res = codecheck.check(tmp_path, ["loc.py"], env="none", use_cache=False)
+    by = {s["name"]: s for s in res["sites"]}
+    for name in ("iteritems", "push", "deamon"):
+        assert by[name]["verdict"] == "absent", by[name]
+    assert by["majr"]["verdict"] == "unknown" and "sys.version_info" in by["majr"]["why"]
+    assert "statement" not in by["majr"]["why"]
+
+
+def test_a_jedi_internal_error_is_named_in_the_unknown(tmp_path, monkeypatch):
+    # jedi raises inside its own inference for some names, depending on set order (starlette's
+    # self.router.routes): the answer is unknown either way, and says so instead of blaming the receiver
+    _write(tmp_path, "m.py", "def f(x):\n    return x.value.inner\n")
+    orig = jedi.Script.goto
+
+    def goto(self, line=None, column=None, **kw):
+        if line == 2 and column >= len("    return x.value."):
+            raise AttributeError("boom")
+        return orig(self, line, column, **kw)
+
+    monkeypatch.setattr(jedi.Script, "goto", goto)
+    res = codecheck.check(tmp_path, ["m.py"], env="none", use_cache=False)
+    (s,) = [x for x in res["sites"] if x["name"] == "inner"]
+    assert s["verdict"] == "unknown" and "jedi also failed internally" in s["why"] and "boom" in s["why"], s
+
+
+def test_a_class_whose_base_is_a_call_and_a_failing_site_do_not_stop_the_check(tmp_path, monkeypatch):
+    _write(tmp_path, "nt.py", "from collections import namedtuple\n\n\nclass P(namedtuple('P', 'x y')):\n    pass\n\n\n"
+                              "def use():\n    p = P(1, 2)\n    return p.x, p.zz, P(1, 2).zz\n")
+    res = codecheck.check(tmp_path, ["nt.py"], env="none", use_cache=False)
+    zz = [s for s in res["sites"] if s["name"] == "zz"]
+    assert len(zz) == 2 and all(s["verdict"] == "unknown" and "is an expression" in s["why"] for s in zz), zz
+    # a defect of the check on one site: that site is unknown and listed as not decided, the rest is checked
+    orig = codecheck.Checker.eval_attribute
+
+    def boom(self, fx, node):
+        if node.attr == "zz":
+            raise KeyError("defect")
+        return orig(self, fx, node)
+
+    monkeypatch.setattr(codecheck.Checker, "eval_attribute", boom)
+    res = codecheck.check(tmp_path, ["nt.py"], env="none", include_exists=True, use_cache=False)
+    zz = [s for s in res["sites"] if s["name"] == "zz"]
+    assert len(zz) == 2 and all(s["verdict"] == "unknown" and "check failed" in s["why"] for s in zz)
+    assert any(s["name"] == "x" and s["verdict"] == "exists" for s in res["sites"])
+    assert "the check failed on 2 sites" in res["incomplete"][0] and "check_error" not in zz[0]

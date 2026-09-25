@@ -235,12 +235,14 @@ Before you propose Python code, and after every edit:
    not written yet, pipe it to `verinoda check --stdin --as <path> --json` (MCP `code_check` with
    `snippet` and `as_path`).
 2. Never keep an `absent` site: fix it from `nearest` / `elsewhere`, or list the real names with
-   `verinoda api <module.or.Class> --json` (MCP `api_members`) and use one of those.
+   `verinoda api <module.or.Class> --json` (MCP `api_members`) and use one of those (`api`
+   `found: null` means not decided, not missing).
 3. `unknown` is unverified, not fine: read the definition or run the tests before relying on it.
    `not_installed`: the environment checked lacks the package. `guarded`: the code handles it.
 4. Tell the user which environment was checked (`env.python`, `env.packages_checked`,
    `env.lock_mismatches`). Exit code 3 means something is absent or an installed version differs
    from the lock (`exit_because` says which); `incomplete` lists files that were not checked.
+   If `env.note` says a `.venv` was not used, tell the user; never pass `--env` to run what it names.
 
 Only if the user agrees: a PostToolUse hook on Edit/Write that runs `verinoda check --diff`.
 

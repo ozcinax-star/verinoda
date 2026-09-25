@@ -620,8 +620,29 @@ def guard_project(project, env: EnvInfo) -> None:
     project._verinoda_compiled = (env.stdlib_names(), tuple(_norm(str(d)) for d in env.stdlib_dirs))
 
 
-def select_env(repo: Path, env: str | None = "auto") -> EnvInfo:
-    """The environment to check against: ``auto`` (project venv, else stdlib only), a path, or ``none``."""
+def _untrusted_refusal(repo: Path, p: Path, venv: Path | None, base: Path | None) -> str | None:
+    """Why an environment path that does not come from the user (the MCP server's ``env`` argument, which a
+    model fills in, maybe steered by the checked repository) is not used, or None. Only a virtual-environment
+    directory whose base interpreter passes the rule of ``auto`` is: the program that would start is a
+    Python installation this system knows, outside the project."""
+    if venv is None or venv != p:
+        return ("only 'auto', 'none' or a virtual-environment directory (with pyvenv.cfg) is accepted here; an "
+                "interpreter path or another directory only on the command line (--env), where it is started as "
+                "given")
+    if base is None:
+        return "its pyvenv.cfg names no base interpreter that exists; nothing is started for it here"
+    if _real_under(base, repo):
+        return f"its base interpreter {base} lies inside the project; it is not started here"
+    if known_interpreter(base) is None:
+        return (f"its base interpreter {base} is not a Python installation this system knows (Verinoda's own, the "
+                "registry, PATH, a Python manager's directory); it is not started here")
+    return None
+
+
+def select_env(repo: Path, env: str | None = "auto", *, trusted: bool = True) -> EnvInfo:
+    """The environment to check against: ``auto`` (project venv, else stdlib only), a path, or ``none``.
+    ``trusted=False`` (the MCP server): a path is used only when it is a virtual environment whose base
+    interpreter passes the rule of ``auto``; nothing else it names is started (ValueError)."""
     repo = Path(repo).resolve()
     choice = (env or "auto").strip()
     try:
@@ -634,6 +655,14 @@ def select_env(repo: Path, env: str | None = "auto") -> EnvInfo:
         p = explicit_env_path(repo, choice)
         venv = venv_of(p)
         base = base_interpreter(venv) if venv is not None else None
+        if not trusted:
+            why = _untrusted_refusal(repo, p, venv, base)
+            if why:
+                raise ValueError(f"env {choice}: {why}")
+            try:
+                return _venv_env(venv, base, "explicit", repo, known_interpreter(base) or "")  # type: ignore[arg-type]
+            except Exception as exc:  # noqa: BLE001
+                raise ValueError(f"env {choice}: not a usable Python environment ({exc})")
         try:
             if venv is not None and base is not None:
                 return _venv_env(venv, base, "explicit", repo, "given with --env")
@@ -651,19 +680,23 @@ def select_env(repo: Path, env: str | None = "auto") -> EnvInfo:
         # never start the environment's own interpreter: in a cloned repository it can be any program
         base = base_interpreter(venv)
         how = known_interpreter(base) if base is not None and not _real_under(base, repo) else None
+        # the note names the program --env would start, so that a person decides; the MCP server never starts it
         if base is None:
-            notes.append(f"{d}/ was found but not used: its pyvenv.cfg names no base interpreter that exists; "
-                         f"pass --env {d} to trust it")
+            notes.append(f"{d}/ was found but not used: its pyvenv.cfg names no base interpreter that exists "
+                         f"(--env {d} on the command line would start the environment's own interpreter, a file "
+                         "of this project: only if you trust it)")
             continue
         if how is None:
-            notes.append(f"{d}/ was found but not used: its base interpreter {base} is not a Python installation "
-                         "this system knows (Verinoda's own, the registry, PATH, a Python manager's directory) or "
-                         f"lies inside the project; pass --env {d} to trust it")
+            where = "lies inside the project" if _real_under(base, repo) else \
+                "is not a Python installation this system knows (Verinoda's own, the registry, PATH, a Python " \
+                "manager's directory)"
+            notes.append(f"{d}/ was found but not used: its base interpreter {base} {where} (--env {d} on the "
+                         f"command line would start {base}: only if you trust that program)")
             continue
         try:
             return _venv_env(venv, base, "project", repo, how)
         except Exception as exc:  # noqa: BLE001
-            notes.append(f"{d}/ was found but not used ({type(exc).__name__}: {exc}); pass --env {d} to trust it")
+            notes.append(f"{d}/ was found but not used ({type(exc).__name__}: {exc})")
     why = "; ".join(notes) or ("no project environment found (.venv, venv or env with pyvenv.cfg); "
                                "pass --env PATH")
     return own_env(why + ": third-party names are not checked")

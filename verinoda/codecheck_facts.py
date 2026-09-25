@@ -293,20 +293,12 @@ def module_facts_from_tree(path: Path, tree: ast.Module) -> ModFacts:
                      and isinstance(parents.get(id(p)), ast.Call)) or isinstance(p, ast.Compare)
                 if not reading:
                     f.open.append(f"writes or hands out {fn}() (line {node.lineno})")
-            elif fn in ("sys.path.insert", "sys.path.append", "sys.path.extend", "site.addsitedir"):
-                f.sys_path_edit = True
             elif fn == "setattr" and node.args and _is_sys_modules(getattr(node.args[0], "value", None) or ast.Pass()):
                 f.open.append(f"sets attributes on itself through sys.modules (line {node.lineno})")
         elif isinstance(node, ast.Subscript) and _is_sys_modules(node.value):
             key = node.slice
             if isinstance(node.ctx, ast.Store) or (isinstance(key, ast.Name) and key.id == "__name__"):
                 f.open.append(f"replaces or patches a module through sys.modules (line {node.lineno})")
-        elif isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store) and dotted(node.value) == "sys.path":
-            f.sys_path_edit = True
-        elif isinstance(node, ast.Assign):
-            for t in node.targets:
-                if dotted(t) == "sys.path":
-                    f.sys_path_edit = True
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call) and _at_module_level(node, parents):
             f.expr_calls.append(node.value)
         if isinstance(node, ast.Import):
@@ -321,7 +313,59 @@ def module_facts_from_tree(path: Path, tree: ast.Module) -> ModFacts:
         if path.name.startswith("__init__.") and isinstance(node, (ast.Import, ast.ImportFrom)) and \
                 _at_module_level(node, parents):
             f.own_submodules |= _own_submodule_imports(node, path.parent.name)
+    f.sys_path_edit = changes_import_path(tree)
     return f
+
+
+# methods of sys.path / sys.modules that only read it
+_PATH_READS = {"index", "count", "copy", "get", "keys", "items", "values", "__contains__", "__len__", "__getitem__",
+               "__iter__", "__repr__"}
+_IMPORT_STATE = ("path", "meta_path", "path_hooks", "modules")
+
+
+def changes_import_path(tree: ast.Module) -> bool:
+    """The module changes where imports are found at runtime: a call of a method of ``sys.path``,
+    ``sys.meta_path``, ``sys.path_hooks`` or ``sys.modules`` other than a read, ``+=`` on one of them, an item
+    or slice store (``sys.path[:0] = [...]``), rebinding one of them (``sys.path = [...]``), or
+    ``site.addsitedir`` - also through an alias of sys or site (``import sys as _sys``) or a from-import
+    (``from sys import path; path.insert(0, d)``)."""
+    sys_names, site_names, state_names, adders = {"sys"}, {"site"}, set(), set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            for al in n.names:
+                if al.name in ("sys", "site"):
+                    (sys_names if al.name == "sys" else site_names).add(al.asname or al.name)
+        elif isinstance(n, ast.ImportFrom) and not n.level and n.module in ("sys", "site"):
+            for al in n.names:
+                if n.module == "sys" and al.name in _IMPORT_STATE:
+                    state_names.add(al.asname or al.name)
+                elif n.module == "site" and al.name == "addsitedir":
+                    adders.add(al.asname or al.name)
+
+    def state(e: ast.AST) -> bool:   # sys.path, _sys.meta_path, path (from sys import path)
+        if isinstance(e, ast.Name):
+            return e.id in state_names
+        return isinstance(e, ast.Attribute) and e.attr in _IMPORT_STATE and isinstance(e.value, ast.Name) and \
+            e.value.id in sys_names
+
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call):
+            fn = n.func
+            if isinstance(fn, ast.Attribute) and state(fn.value) and fn.attr not in _PATH_READS:
+                return True
+            if (isinstance(fn, ast.Name) and fn.id in adders) or (isinstance(fn, ast.Attribute) and
+                                                                 fn.attr == "addsitedir" and
+                                                                 isinstance(fn.value, ast.Name) and
+                                                                 fn.value.id in site_names):
+                return True
+        elif isinstance(n, ast.AugAssign) and state(n.target):
+            return True
+        elif isinstance(n, ast.Subscript) and isinstance(n.ctx, (ast.Store, ast.Del)) and state(n.value):
+            return True
+        elif isinstance(n, ast.Attribute) and isinstance(n.ctx, (ast.Store, ast.Del)) and \
+                (state(n) or state(n.value)):
+            return True
+    return False
 
 
 def _own_submodule_imports(node: ast.AST, pkg: str) -> set[str]:

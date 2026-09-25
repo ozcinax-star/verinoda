@@ -10,8 +10,8 @@ model reads, docs/DESIGN.md D20).
 Exit codes: 0 done; 1 error; 2 usage error, invalid plan, unresolved trace
 endpoint or blocked upstream command; 3 "needs more": a plan that needs
 clarification, a partial reference resolution, a refused experiment, an
-incomplete observation, no precise answer, an absent name (`check`) or an
-unknown target (`api`).
+incomplete observation, no precise answer, an absent name (`check`) or a
+target not found (`api`; a target that could not be decided is 0).
 """
 
 from __future__ import annotations
@@ -1380,7 +1380,8 @@ def cmd_check(args) -> int:
 def _r_api(r: dict) -> None:
     env = r.get("env") or {}
     if not r.get("found"):
-        print(f"{r['target']}: {'not decided' if r.get('decided') == 'unknown' else 'not found'} - {r.get('why')}")
+        state = {"unknown": "not decided", "not_installed": "not installed"}.get(r.get("decided"), "not found")
+        print(f"{r['target']}: {state} - {r.get('why')}")
         if r.get("nearest"):
             print("  nearest: " + ", ".join(n["name"] for n in r["nearest"]))
         return
@@ -1847,7 +1848,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--all", action="store_true", help="also list the sites that exist")
     sp.add_argument("--no-cache", action="store_true", help="do not read or write .verinoda/cache/check")
     sp = add("api", cmd_api, "the real members of a module, class or function in the project's environment, with "
-                             "signatures and locations (exit 3: not found)")
+                             "signatures and locations (exit 3: not found; a name that could not be "
+                             "decided - an open container, an attribute of a function or variable - is "
+                             "reported as not decided, exit 0)")
     sp.add_argument("target", metavar="NAME", help="dotted name, e.g. packaging.specifiers.SpecifierSet")
     sp.add_argument("--env", default="auto", help=env_help)
     sp.add_argument("--private", action="store_true", help="also list names that start with an underscore")

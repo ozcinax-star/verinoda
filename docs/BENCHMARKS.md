@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d31) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d31) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,85 @@ Sections: [Name check, second review round](#update-2026-09-25-name-check-second
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-25: name check, third review round
+
+A second reviewer reported nine findings (one high, six medium, two low). Each was reproduced on the
+branch and fixed (docs/DESIGN.md D31):
+
+- **High: removed names reported as existing.** `collections.Mapping`, `from collections import
+  Iterable` and 11 more collections ABCs removed in Python 3.10 were `exists` (exit 0). jedi followed
+  the typeshed stub's own `from collections.abc import ...` to `typing.py`. For a closed
+  standard-library module the interpreter's names are now complete: of 1,732 names that stubs import
+  for their annotations and the running module lacks, 0 are `exists` (13 before) and 0 are `absent`.
+- **MCP `env` started a program from the checked repository** (a `pyvenv.cfg` home inside the project,
+  or an interpreter path). It is now refused, and nothing is started. The note for a `.venv` that was
+  not used names the program `--env` would start. Before, the note said "pass --env .venv to trust it".
+- **False `absent` for attributes that a descriptor or property sets on the instance by computed name**
+  (the lazy_property recipe; 3 probes). They are `unknown` now. Standard `property`,
+  `functools.cached_property` and a wrapper that only calls the method keep the instance closed.
+- **False `absent` for `sys.path += [...]`, `sys.path[:0] = ...`, `import sys as _s` and `from sys import
+  path`** in a `conftest.py` or in the checked file (4 forms). They are `unknown` now.
+- **Stale cache after a `conftest.py` or pytest's `pythonpath` changed** (4 cases). Each is now a miss
+  with the fresh answer, also in a long-lived process.
+- **`--diff` silently checked nothing** under `diff.mnemonicPrefix` or `diff.dstPrefix`, or with
+  `--repo` in a subdirectory. It now checks these files.
+- **`api` said "not found" (exit 3) for names it did not decide.** Examples:
+  `concurrent.futures.ProcessPoolExecutor`, `os.environ.copy`. These are now `found: null`,
+  `decided: unknown`, exit 0.
+
+Also fixed while checking: a local bound to a literal (`d = {}`) or an instance without a `__dict__`
+(`collections.deque`) is closed. Constructor keywords are judged against the class object, so
+`threading.Thread(deamon=True)` is `absent`. A standard-library name that the module's own source binds
+only on another platform is `unknown` (`subprocess.select` on Windows was `absent`). A class whose
+base is a call (`class P(namedtuple(...))`) crashed the check; it is `unknown` now. One failing site no
+longer stops the check; it is listed under `incomplete`. The one open low finding is not fixed:
+verdicts that change between runs. jedi raises inside its own inference for some names, depending on
+set order. The site is then `unknown` instead of `exists`, never `absent`, and the reason now says so.
+
+Result files are in `benchmarks/results/codecheck-review3-2026-09-25/`. Windows 11, Python 3.12.0,
+jedi 0.20.0.
+
+| set | environment | sites | absent (false) |
+|---|---|---|---|
+| reviewer probes of real idioms, plus 26 invented names | none | 352 | 23 (0) |
+| reviewer sweeps: stdlib, third-party, compiled stubs | none / Verinoda's `.venv` | 19,666 | 0 |
+| second reviewer's probes (removed names, descriptors, conftest, locals), plus 44 invented | none / `.venv` | 703 | 29 (0) |
+| fixer's descriptor and decorator probes (5 real, 3 invented) | none | 28 | 3 (0) |
+| first round's smaller probe projects | none / a project `.venv` | 104 | 0 |
+| click, pluggy, h11, starlette (chosen by a reviewer) | Verinoda's `.venv` | 8,525 | 2 (0) |
+
+- The 2 absents in the four packages are right: `itsdangerous` is not installed. Their `unknown` count
+  went from 813 to 737.
+- Invented names decided `absent` on the second reviewer's probes: 11/31 missed before, 10/31 now;
+  on the local-instance probes 6/7 missed before, 3/7 now.
+
+**Fixture** (144 probes, runtime oracle, in-sample): every probe gets the same verdict and the same
+nearest names as in the second round.
+
+| measure | result | bar |
+|---|---|---|
+| precision of `absent` | 74/74 | |
+| recall on closed containers | 74/74 | ≥ 0.9 |
+| invented names decided | 74/79 | |
+| intended name in the nearest three | 24/26 | |
+| warm check | 0.31 s per 100 sites | |
+| `check --diff`, 30 changed lines, fresh process | median 1.07 s (1.05-1.11 s, 5 runs) | 1.5 s |
+
+The two versions also took turns on the same 30 changed lines, 7 runs each, on an idle machine. The
+median was 1.17 s for the code this round started from and 1.19 s for this code. Reading all 145 files
+from the disk cache took 0.59 s (0.37 s in the second round): each answer now also depends on the
+`conftest.py` files above its file.
+
+**Clean sets** (every site real; the times are noisy because other runs shared the machine):
+
+| body | environment | sites | absent | not_installed | guarded | unknown | time |
+|---|---|---|---|---|---|---|---|
+| Verinoda's own package | Verinoda's `.venv` | 48,071 | 0 | 1 | 58 | 13,398 (28%) | 321 s |
+| Graphify (a copy) | Verinoda's `.venv` | 51,943 | 0 | 2 | 58 | 19,106 (37%) | 657 s |
+| the same | none | 51,841 | 0 | 276 | 121 | 22,743 (44%) | 588 s |
+| upstream-graphify itself | Verinoda's `.venv` | 51,941 | 0 | 2 | 57 | 19,063 (37%) | 665 s |
+| stdlib `json`, `email`, `http`, `pathlib` as a project | none | 5,210 | 0 | 0 | 0 | 1,289 (25%) | 42 s |
 
 ## Update 2026-09-25: name check, second review round
 
