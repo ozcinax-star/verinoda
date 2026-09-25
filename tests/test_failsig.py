@@ -23,18 +23,29 @@ FIX = ROOT / "tests" / "fixtures" / "failsig"
 EXAMPLE = ROOT / "examples" / "orders_app"
 
 
+# The fixture sources carry a `.fixture` suffix (and the logs `.log`) so that indexing this repository does
+# not take them for its own code or documents; the tests see them under their real names.
+SUFFIX = ".fixture"
+
+
 def _project(name: str) -> Path:
     return EXAMPLE if name == "orders_app" else FIX / "projects" / name
 
 
 def _files(root: Path) -> list[str]:
-    return [p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file() and "__pycache__" not in p.parts]
+    out = []
+    for p in root.rglob("*"):
+        if p.is_file() and "__pycache__" not in p.parts:
+            rel = p.relative_to(root).as_posix()
+            if FIX not in root.parents or rel.endswith(SUFFIX):
+                out.append(rel[:-len(SUFFIX)] if FIX in root.parents else rel)
+    return out
 
 
 def _reader(root: Path):
     def read(rel: str):
         try:
-            return (root / rel).read_bytes()
+            return (root / (rel + SUFFIX) if FIX in root.parents else root / rel).read_bytes()
         except OSError:
             return None
     return read
@@ -46,7 +57,7 @@ CASES = json.loads((FIX / "cases.json").read_text(encoding="utf-8"))["cases"]
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c["case"])
 def test_log_fixtures_give_the_gold_exception_and_symbol(case):
     root = _project(case["project"])
-    log = (FIX / "logs" / f"{case['case']}.txt").read_text(encoding="utf-8")
+    log = (FIX / "logs" / f"{case['case']}.log").read_text(encoding="utf-8")
     sig = failsig.extract(log, "", outcome="fail", files=_files(root), reader=_reader(root))
     got = sorted({(f["exc"], f["at"]) for f in sig["failures"]})
     assert got == sorted(tuple(g) for g in case["gold"]), sig
