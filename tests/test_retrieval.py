@@ -7,6 +7,7 @@ import os
 os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
 import json  # noqa: E402
+import re  # noqa: E402
 import shutil  # noqa: E402
 import sqlite3  # noqa: E402
 import subprocess  # noqa: E402
@@ -433,20 +434,65 @@ def test_render_text_is_skeleton_first_with_outlines_and_constants(g):
     res = retrieval.retrieve(g, "How does create_order_handler reach the database write?")
     text = retrieval.render_text(res, budget_chars=6000)
     lines = text.splitlines()
-    assert lines[0].startswith("# How does create_order_handler")
+    assert not any(ln.startswith("# ") for ln in lines)  # the question is not echoed
     heads = [ln for ln in lines if ln.startswith("## ")]
-    assert heads and heads[0].startswith("## orders/api.py:16-21 def create_order_handler(")
+    # the passage starts at the signature: the header names the function, the signature is printed once
+    assert heads and heads[0] == "## orders/api.py:16-21 create_order_handler"
+    assert text.count("def create_order_handler(payload: dict) -> tuple[int, dict]") == 1
     assert "  calls: place_order@18, get_repo@18" in text or "  calls: get_repo@18, place_order@18" in text
     assert "save@22?" in text  # flow question: the outline of place_order, INFERRED marked
     assert "'?' = inferred edge" in text
     assert len(text) <= 6000
 
 
+def test_render_text_dedents_each_window_and_keeps_the_locators(g):
+    res = retrieval.retrieve(g, "How does create_order_handler reach the database write?")
+    text = retrieval.render_text(res, budget_chars=6000)
+    # a method's passage starts at column 0; its place is in the header, not in the indentation
+    assert "## orders/repository.py:9-13 OrderRepository.__init__\ndef __init__(self, url: str = DATABASE_URL):" \
+        in text
+    assert "    self.conn = sqlite3.connect(url)" in text  # relative indentation inside the window stays
+    for ln in text.splitlines():
+        if ln.startswith("## "):
+            assert re.match(r"## \S+:\d+-\d+ \S", ln), ln
+
+
+@pytest.mark.parametrize("q", ["create_order_handler", "How does create_order_handler reach the database write?",
+                               "order"])
+def test_render_text_never_loses_a_signature_to_the_short_header(g, q):
+    """Whatever the budget cuts (the passage, or the note at the end pushing it out), an item whose
+    header names it without its signature still has the signature printed."""
+    res = retrieval.retrieve(g, q)
+    sigs = {f"{h.file}:{h.a}-{h.b}": h.sig for h in res.render.ranking.hits if h.sig}
+    for n in range(150, 3200, 23):
+        text = retrieval.render_text(res, budget_chars=n)
+        assert len(text) <= n
+        flat = " ".join(text.split())  # a data file's "signature" is its first lines joined
+        for m in re.finditer(r"^## (\S+:\d+-\d+) ", text, re.M):
+            sig = sigs.get(m.group(1))
+            if sig:
+                assert " ".join(sig.split())[:25] in flat, (n, m.group(0), sig)
+
+
 def test_render_text_states_truncation_with_the_follow_up_command(g):
     res = retrieval.retrieve(g, "order")
     text = retrieval.render_text(res, budget_chars=700)
     assert len(text) <= 700
-    assert "more candidates not shown" in text and 'next: verinoda query "order" --max-chars 1400' in text
+    assert "more candidates not shown" in text and "next: same query, --max-chars 1400" in text
+
+
+def test_render_text_lists_at_most_three_expansions_without_their_notes(g):
+    res = retrieval.retrieve(g, "order")
+    res["budget"]["expansions"] = ["a->b (abbreviation)", "c->d (turkish stem 'c')", "e->f (gloss)",
+                                   "g->h (gloss)", "i->j (gloss)"]
+    first = retrieval.render_text(res, budget_chars=3000).splitlines()[0]
+    assert first == "expanded: a->b, c->d, e->f (+2 more)"
+
+
+def test_render_text_says_so_when_nothing_matches(g):
+    res = retrieval.retrieve(g, "zzqxv_nothing_like_this")
+    text = retrieval.render_text(res)
+    assert text.strip() and "## " not in text
 
 
 def test_render_text_shows_module_constants_the_body_references(g):
@@ -459,7 +505,7 @@ def test_render_text_after_a_json_round_trip_uses_the_items(g):
     res = retrieval.retrieve(g, "where is the order saved to the database?")
     plain = json.loads(json.dumps(res))
     text = retrieval.render_text(plain, budget_chars=3000)
-    assert text.startswith("# where is the order saved") and "## orders/" in text and len(text) <= 3000
+    assert "## orders/" in text and len(text) <= 3000 and "# where is" not in text
     assert retrieval.render_text(res) != text  # the ranking attached to the live result gives more
 
 

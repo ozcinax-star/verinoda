@@ -312,7 +312,7 @@ def test_project_query_text_and_json_equal_core(repo, tools):
     core = retrieval.retrieve(index.load(repo), QUESTION, retrieval.Budget(max_items=5, max_chars=6000))
     text = tools.project_query(QUESTION, max_items=5)  # text is the default (D20)
     assert text == {"format": "text", "question": QUESTION, "text": retrieval.render_text(core, 6000)}
-    assert text["text"].startswith(f"# {QUESTION}") and "orders/repository.py:" in text["text"]
+    assert QUESTION not in text["text"] and "\n## orders/repository.py:" in text["text"]  # no question echo
     res = tools.project_query(QUESTION, max_items=5, format="json")
     assert res == _norm(core)
     assert 0 < len(res["items"]) <= 5

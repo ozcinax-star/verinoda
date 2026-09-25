@@ -37,6 +37,7 @@ import hashlib
 import json
 import math
 import re
+import textwrap
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
@@ -72,6 +73,7 @@ TEXT_SHORT_BODY = 24
 TEXT_PASSAGE_LINES = 14
 TEXT_LINE_CHARS = 160
 TEXT_MAX_PROSE = 2
+TEXT_MAX_EXPANSIONS = 3     # from->to pairs on the text's `expanded:` line (JSON lists all, with why)
 
 FLOW_RX = re.compile(r"\b(call|calls|called|calling|path|flow|pipeline|turn\w*|how does|how is|steps?|"
                      r"cagir\w*|akis\w*|nasil calis\w*|hangi fonksiyon\w*)\b", re.I)
@@ -455,9 +457,13 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
 
     Works on the result of :func:`retrieve`. A result that went through JSON
     (no ranking attached) is rendered from its items alone.
+
+    Nothing is printed twice: the question is not echoed, an item's ``## path:a-b`` header carries
+    only its name when the passage below starts at its first line (the signature is that line),
+    and each passage window is dedented on its own. ``## path:a-b`` / ``  path:x-y`` locators are
+    kept exactly: they are what an agent (and the benchmark's locator parser) cites.
     """
     rd: _RenderData | None = getattr(result, "render", None)
-    q = result.get("question", "")
     out: list[str] = []
     used = 0
 
@@ -469,11 +475,10 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
         used += len(block) + 1
         return True
 
-    head = f"# {q}" if q else "# query"
+    # no echo of the question (the model asked it); expansions stay visible, compactly
     expansions = (result.get("budget") or {}).get("expansions")
     if expansions:
-        head += "\nexpanded: " + "; ".join(expansions[:6])
-    add(_clip(head, 600))
+        add(_clip(_expanded_line(expansions), 300))
     stale = (result.get("budget") or {}).get("stale_files") or (rd.stale if rd else [])
     if stale:
         add(_clip("changed since indexing (run `verinoda update`): " + ", ".join(stale), 300))
@@ -490,6 +495,7 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
     rank = prose = 0
     rest: list[str] = []
     outlined = False
+    sig_back: dict[int, tuple[int, str]] = {}  # passage block -> (its short header block, header with signature)
     for i, h in enumerate(rd.ranking.hits):
         if h.file.lower().endswith(PROSE_SUFFIXES):
             if prose >= TEXT_MAX_PROSE:
@@ -540,14 +546,32 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
                 wins.append((pa, min(pb, pa + TEXT_PASSAGE_LINES - 1)))
                 if len(wins) >= k:
                     break
+        # A passage that starts at the item's first line prints the signature itself: the header only
+        # names the item (it gets the signature back below if that passage does not fit).
+        short = bool(wins) and min(wins)[0] == a and bool(h.sig)
+        if short:
+            parts[0] = f"## {h.file}:{a}-{b} {_clip(name, 80)}{ref_tag}"
         if not add("\n".join(parts)):
             if not add(f"{h.file}:{a}-{b} {_clip(h.sig or name, 120)}"):
                 rest = [f"{x.file}:{x.a}-{x.b} {x.qual or x.name}" for x in rd.ranking.hits[i:]]
                 break
             continue
+        at = len(out) - 1
         for x, y in sorted(wins):
-            body = "\n".join(_clip(lines[j - 1], TEXT_LINE_CHARS) for j in range(x, min(y, len(lines)) + 1))
-            add((f"  {h.file}:{x}-{y}\n" if (x, y) != (a, b) else "") + body)
+            # each window dedented on its own: the path:lines header keeps the place, indentation is noise
+            body = textwrap.dedent("\n".join(_clip(lines[j - 1], TEXT_LINE_CHARS)
+                                             for j in range(x, min(y, len(lines)) + 1)))
+            added = add((f"  {h.file}:{x}-{y}\n" if (x, y) != (a, b) else "") + body)
+            if short and x == a:
+                with_sig = "\n".join([f"## {h.file}:{a}-{b} {sig}{ref_tag}", *parts[1:]])
+                if added:  # should the note at the end push this passage out, the header takes it back
+                    sig_back[len(out) - 1] = (at, with_sig)
+                else:  # the section with its signature, else the one line an item gets when that does not fit
+                    for block in (with_sig, f"{h.file}:{a}-{b} {_clip(h.sig, 120)}"):
+                        now = _swap_block(out, at, block, used, budget_chars)
+                        if out[at] == block:
+                            used = now
+                            break
         # the lines printed, not the whole span: a method of a long class whose section showed two
         # other passages still gets its own section (with its callers)
         shown[h.file].extend(wins)
@@ -561,7 +585,7 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
     if outlined:
         add("(calls / called by: static call graph, '?' = inferred edge; may be incomplete)")
     if more:
-        nxt = f'next: verinoda query "{_clip(q, 120)}" --max-chars {budget_chars * 2}'
+        nxt = f"next: same query, --max-chars {budget_chars * 2}"
         while True:
             tail = f"… {more} more candidates not shown" + (": " + "; ".join(rest[:4]) if rest else "")
             tail = _clip(tail, 400) + "\n" + nxt
@@ -569,12 +593,43 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
                 break
             dropped = out.pop()  # make room for the note: the last block goes to the list instead
             used -= len(dropped) + 1
-            first = dropped.splitlines()[0].lstrip("# ").split(" ", 1)
-            if first and ":" in first[0] and not dropped.startswith("  "):
-                rest.insert(0, " ".join(first)[:120])
+            if len(out) in sig_back:  # the passage that printed a signature went: its header shows it again
+                at, with_sig = sig_back.pop(len(out))
+                used = _swap_block(out, at, with_sig, used, budget_chars, force=True)
+            m = _ITEM_HEAD_RX.match(dropped)  # an item's section or line (not a passage body) is listed
+            if m:
+                rest.insert(0, f"{m.group(1)} {m.group(2) or ''}".strip()[:120])
                 more += 1
+        while len(out) > 1 and used > budget_chars:  # a header that took its signature back overran
+            used -= len(out.pop()) + 1
         add(tail)
+    if not out:
+        add("no candidate locations to show for this question")
     return "\n".join(out)
+
+
+# the first line of a rendered item: "## path:a-b name" (a section) or "path:a-b signature" (a line)
+_ITEM_HEAD_RX = re.compile(r"(?:## )?([^\s:]+:\d+-\d+)(?: ([^\n]*))?")
+
+
+def _swap_block(out: list[str], at: int, block: str, used: int, budget_chars: int, *, force: bool = False) -> int:
+    """Replace ``out[at]`` with ``block`` when the budget allows (always with ``force``: the caller is
+    making room and cuts again); returns the new character count."""
+    grow = len(block) - len(out[at])
+    if force or used + grow <= budget_chars:
+        out[at] = block
+        return used + grow
+    return used
+
+
+def _expanded_line(expansions: list[str]) -> str:
+    """The query-side expansions as ``from->to`` pairs, at most :data:`TEXT_MAX_EXPANSIONS`.
+
+    Why each was made (abbreviation, Turkish stem, gloss) and the full list are in the JSON
+    result's ``budget.expansions``; the text says how many were left out."""
+    pairs = [e.split(" (", 1)[0] for e in expansions]
+    left = len(pairs) - TEXT_MAX_EXPANSIONS
+    return "expanded: " + ", ".join(pairs[:TEXT_MAX_EXPANSIONS]) + (f" (+{left} more)" if left > 0 else "")
 
 
 def _render_items(result: dict, out: list[str], add, budget_chars: int) -> str:
@@ -594,8 +649,7 @@ def _render_items(result: dict, out: list[str], add, budget_chars: int) -> str:
             add(f"… {left} more items not shown")
             break
     if (result.get("budget") or {}).get("truncated"):
-        add(f'… more candidates exist: verinoda query "{_clip(result.get("question", ""), 120)}" '
-            f'--max-chars {budget_chars * 2}')
+        add(f"… more candidates exist: same query, --max-chars {budget_chars * 2}")
     return "\n".join(out)
 
 

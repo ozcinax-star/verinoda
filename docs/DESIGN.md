@@ -460,6 +460,12 @@ apart from `atlas.db` because it is disposable.
 - The rest: one skeleton line each.
 - Truncation is always stated, with the follow-up command.
 - JSON output stays for programs.
+- Nothing is printed twice (2026-09-26): no echo of the question; `expanded:` shows at most
+  three `from->to` pairs (the JSON keeps all, with why); the header names the item without its
+  signature when the passage below starts at the item's first line (the signature is that
+  line; the header takes it back if the passage is cut); each passage window is dedented on its
+  own; the tail says `next: same query, --max-chars N`. The `## path:a-b` and `  path:x-y`
+  locators are unchanged (measured in docs/BENCHMARKS.md, "Token wins, 2026-09-26").
 
 **D21. Build-time work is not repeated at query time.**
 

@@ -173,7 +173,9 @@ def test_query_prints_model_text_by_default_even_on_a_legacy_code_page(repo):
                        stdin=subprocess.DEVNULL, check=False)
     out = r.stdout.decode("utf-8").replace("\r\n", "\n")  # text-mode stdout on Windows
     assert r.returncode == 0 and b"Traceback" not in r.stderr, r.stderr[-2000:]
-    assert out.startswith(f"# {q}\n") and "## orders/pricing.py:6-8 def compute_total" in out
+    # no echo of the question; the passage starts at the signature, so the header names the function
+    assert q not in out and "## orders/pricing.py:6-8 compute_total\n" in out
+    assert "\ndef compute_total(" in out.split("## orders/pricing.py:6-8 compute_total\n", 1)[1]
     assert "apply_discount" in out and "calls: " in out
     assert len(out) <= 1500 + 200 and not out.lstrip().startswith("{")
 
