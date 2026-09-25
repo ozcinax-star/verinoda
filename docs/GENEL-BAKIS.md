@@ -620,7 +620,7 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
   netleştirme sorularını sor → planla analiz. (3) Cevap "Understood as /
   Anladığım: …" ile başlar; ardından her alt soru için kararı, iddiaları ve
   bilinmeyenleri gelir.
-- **MCP:** 33 araç, aynı çekirdek fonksiyonları çağırır. Yanıtlar
+- **MCP:** 35 araç, aynı çekirdek fonksiyonları çağırır. Yanıtlar
   varsayılan 12.000 karakterle sınırlıdır. Uzun yaşayan sunucu grafiği,
   sözlüğü ve jedi projesini bellekte tutar.
 - Kurulum tekrar çalıştırılabilir, başka araçların ayarlarını ezmez ve yaptığı
@@ -652,7 +652,9 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
 | Kullanıcı eleştirisi protokolü | — | 9 adım, 4 sonuç, önce referans çözümü, geçmiş korunur | Çalışıyor |
 | Sürümlü hafıza | — | iddiaya bağlanırsa eskiyince geçersiz | Çalışıyor (yalnızca elle) |
 | Ajan kurulumu | 20'den fazla platform | Claude Code + Codex, manifest, güvenli kaldırma | Çalışıyor |
-| MCP araçları | grafik araçları | 33 araç: plan, referans, iddia, kanıt, gözlem, doğrulama, eleştiri, isim denetimi, kararlar, hata ayıklama defteri | Çalışıyor |
+| MCP araçları | grafik araçları | 35 araç: plan, referans, iddia, kanıt, gözlem, doğrulama, eleştiri, isim denetimi, kararlar, hata ayıklama defteri, değişiklik incelemesi, davranış sondası | Çalışıyor |
+| Büyük resim: bir değişiklik neyi etkiler | etki görünümü | `verinoda review`: değişen tanımlar, onlara bağlı olanlar (zinciriyle), kaygıya göre bulgular (kalıcılık, güvenlik, performans, genel API, yapılandırma, giriş noktaları), değişikliğe hangi testlerin ulaştığı ve hiçbir testin ulaşmadığı kod; önce ne okunmalı. "Bulgu yok" asla "güvenli" demek değildir | Çalışıyor (D35) |
+| Çalışıyor ama yanlış kod | yok | `verinoda probe` (Python): değişen fonksiyonun eski ve yeni sürümü atılabilir kopyalarda üretilen girdilerle çalıştırılır ve karşılaştırılır; fark bir davranış değişikliği olarak örneğiyle bildirilir. Yan etkisini yalıtamadığı fonksiyonları nedenini söyleyerek reddeder; "N girdide fark bulunmadı" der, asla "doğrulandı" demez | Çalışıyor (D36) |
 | Mimari kararlar | yok | "Geçmeli miyiz / hangisini seçelim / nasıl büyütürüz" sorusu `human_decision_required` olur, asla `met` değil. `decide brief` kodun tarafını (kanıtlı olgular, nerede arandığıyla bulunamayanlar, kayıtlı kararlar, seçenekler) ve yalnız kullanıcının yanıtlayabileceği en çok 5 soruyu verir, öneri vermez. Kullanıcının açık seçimi korumalarıyla bir karar kaydı olur; `decide check` kararı bozan kodu bulur (CI'da kullanılabilir). Sınır: ayarlanmadığı sorularda seçim sorusunu yaklaşık yarı yarıya tanır | Çalışıyor (D33) |
 | Hata ayıklama döngüleri | yok | Tek bir hatayı düzeltme denemelerinin her biri, çalıştığı ağaç, tabana göre yama, hatanın `dosya::sembol` imzası ve ilerlemeyle kaydedilir; kesin döngü kuralları ajanı durdurur (ağaç geri döndü, aynı hata geri geldi, ilerleme yok, kod yerine test değişti, düzenleme hatalı testin hiç ulaşmadığı yerde); stratejiler atılabilir kopyalarda çalışır (tabanda tekrar, iki ucu önce çalıştırılan bisect, tekrarlama, izli çalıştırma). "Düzeldi" asla denmez | Çalışıyor (D34) |
 | Kod yazarken isim denetimi | yok | `verinoda check` / `verinoda api`: modül, içe aktarılan ad, öznitelik, anahtar kelime argümanı ve sözlük anahtarı projenin kendi ortamında var mı; kapalı-dünya kuralıyla `absent`, gerisi nedenli `unknown`; denetlenen projeden hiçbir şey içe aktarılmaz ya da çalıştırılmaz | Çalışıyor (yalnız Python) |
