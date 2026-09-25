@@ -349,6 +349,71 @@ def changes_vs_base(repo: Path, base: str, files: dict[str, str] | None = None) 
     return {"tree_files": tree_files, "contents": contents, "base": base_contents, "drift": drift}
 
 
+def base_ids(repo: Path, base: str) -> dict[str, str]:
+    """``{path: content id}`` of commit ``base``, computed once and kept under ``runs/base-ids/``."""
+    import json
+
+    from verinoda.paths import runs_dir
+
+    if not _SHA_RE.match(base or ""):
+        raise NotAGitTree("no base commit")
+    p = runs_dir(repo) / "base-ids" / f"{base}.json"
+    try:
+        got = json.loads(p.read_text(encoding="utf-8"))
+        if isinstance(got, dict) and got.get("commit") == base and isinstance(got.get("files"), dict):
+            return got["files"]
+    except (OSError, ValueError):
+        pass
+    files = commit_files(repo, base)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"commit": base, "files": files}, sort_keys=True), encoding="utf-8")
+    tmp.replace(p)
+    return files
+
+
+def changes_from_ids(repo: Path, base: str, ids: dict[str, str], base_map: dict[str, str]) -> dict:
+    """:func:`changes_vs_base` from content ids alone: no ``git diff``; base contents of the changed
+    paths come from the blob store (or one ``git cat-file``, then stored)."""
+    repo = Path(repo).resolve()
+    changed = sorted(p for p in set(ids) | set(base_map) if ids.get(p) != base_map.get(p))
+    tree_files: dict[str, str | None] = {p: ids.get(p) for p in changed}
+    base_contents: dict[str, bytes] = {}
+    missing = []
+    for p in changed:
+        if p in base_map:
+            data = get_blob(repo, base_map[p])
+            if data is None:
+                missing.append(p)
+            else:
+                base_contents[p] = data
+    if missing:
+        raw = read_blobs(repo, [f"{base}:{p}" for p in missing])
+        for p in missing:
+            b = raw.get(f"{base}:{p}")
+            if b is not None:
+                base_contents[p] = normalise(b)
+                put_blob(repo, b)
+    contents: dict[str, bytes] = {}
+    drift: list[str] = []
+    for p in changed:
+        want = ids.get(p)
+        if want is None:
+            if (repo / p).is_file():
+                drift.append(p)
+            continue
+        try:
+            data = normalise((repo / p).read_bytes())
+        except OSError:
+            drift.append(p)
+            continue
+        if hashlib.sha256(data).hexdigest() == want:
+            contents[p] = data
+        else:
+            drift.append(p)
+    return {"tree_files": tree_files, "contents": contents, "base": base_contents, "drift": drift}
+
+
 def changes_between_commits(repo: Path, base: str, commit: str) -> dict:
     """:func:`changes_vs_base` for the tree of another commit (a bisect or differential copy)."""
     repo = Path(repo).resolve()
@@ -449,6 +514,11 @@ def diff_file(rel: str, old: bytes | None, new: bytes | None) -> dict:
         for s in syms:
             if s not in rec["symbols"]:
                 rec["symbols"].append(s)
+    kinds = {}
+    for s in rec["symbols"]:
+        info = ((fb or {}).get("symbols") or {}).get(s) or ((fa or {}).get("symbols") or {}).get(s)
+        kinds[s] = "module" if s == "<module>" else ((info or {}).get("kind") or "section")
+    rec["kinds"] = kinds
     return rec
 
 
@@ -490,17 +560,26 @@ def content_reader(repo: Path, base: str | None, tree_files: dict[str, str | Non
 
 
 def diff_trees(repo: Path, base: str | None, old_files: dict[str, str | None],
-               new_files: dict[str, str | None]) -> list[dict]:
+               new_files: dict[str, str | None], base_map: dict[str, str] | None = None) -> list[dict]:
     """:func:`diff_file` for every path whose content differs between two recorded trees.
 
     Both trees are given as changes vs the same ``base`` (``tree_files``); a
-    path missing from a map has its base content. A changed file whose content
-    is not in the blob store is listed with ``content_unknown``.
+    path missing from a map has its base content (from the blob store when
+    ``base_map`` names its content id, else from git). A changed file whose
+    content is not in the blob store is listed with ``content_unknown``.
     """
     paths = sorted(set(old_files) | set(new_files))
     changed = [p for p in paths if old_files.get(p, "<base>") != new_files.get(p, "<base>")]
     base_needed = [p for p in changed if p not in old_files or p not in new_files]
-    base_raw = read_blobs(repo, [f"{base}:{p}" for p in base_needed]) if base and base_needed else {}
+    base_raw: dict[str, bytes | None] = {}
+    for p in list(base_needed):
+        cid = (base_map or {}).get(p)
+        data = get_blob(repo, cid) if cid else None
+        if data is not None:
+            base_raw[f"{base}:{p}"] = data
+            base_needed.remove(p)
+    if base and base_needed:
+        base_raw.update(read_blobs(repo, [f"{base}:{p}" for p in base_needed]))
 
     def side(files: dict[str, str | None], p: str) -> tuple[bytes | None, bool]:
         if p in files:

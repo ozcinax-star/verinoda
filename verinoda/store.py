@@ -416,9 +416,12 @@ CREATE TABLE IF NOT EXISTS debug_attempts (
     signature TEXT NOT NULL DEFAULT '{}',
     sig_exact TEXT,
     sig_coarse TEXT,
+    trace TEXT NOT NULL DEFAULT '{}',
     progress TEXT,
     findings TEXT NOT NULL DEFAULT '[]',
     stop INTEGER NOT NULL DEFAULT 0,
+    stop_reason TEXT,
+    strategies TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
     UNIQUE (session_id, n)
 );
@@ -446,7 +449,8 @@ _JSON_COLS = {
     "spec", "subjects", "uncertainties", "meta", "payload", "resolution", "environment",
     "notes", "budget", "usage", "result", "command",
     # debug ledger (v6)
-    "settings", "hypothesis_terms", "copy_source", "tree_files", "touched", "signature", "findings",
+    "settings", "hypothesis_terms", "copy_source", "tree_files", "touched", "signature", "findings", "trace",
+    "strategies",
 }
 
 

@@ -44,6 +44,7 @@ _NORM = [
      "<tmp>"),
     (re.compile(r"(?:[A-Za-z]:)?[\\/](?:[^\s'\"<>|]*[\\/])?(?:Temp|tmp)[\\/]tmp[\w-]+"), "<tmp>"),
     (re.compile(r"0x[0-9a-fA-F]+"), "0x?"),
+    (re.compile(r"(?<=[\w'\"\]>)])\s?@[0-9a-fA-F]{5,16}\b"), "@?"),  # JVM identity hashes: Obj@1b6d3586, 'app' @5e2d
     (re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"), "<uuid>"),
     (re.compile(r"\b\d{7,}\b"), "<n>"),
     (re.compile(r"\b\d+(?:\.\d+)?\s?(?:ms|s)\b"), "<t>"),

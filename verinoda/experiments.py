@@ -488,7 +488,9 @@ def run(
             raise ValueError(f"env_extra may only set VERINODA_* variables, not {key!r}")
     timeout = float(timeout or cfg["default_timeout"])
     kind, why_risky = policy(argv, cfg["process_isolation_allowlist"])
-    runtime = container_runtime() if isolation in ("auto", "container") else None
+    # probed only when it can matter: an allowlisted command under auto/process runs with process isolation
+    process_ok = kind == "allowlisted" and isolation in ("auto", "process")
+    runtime = container_runtime() if isolation == "container" or (isolation == "auto" and not process_ok) else None
     if isolation == "container" and not runtime:
         level = None
     elif kind == "allowlisted" and isolation in ("auto", "process"):

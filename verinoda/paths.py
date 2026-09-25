@@ -17,7 +17,10 @@ Everything lives under ``<repo>/.verinoda/``:
                     when the user supplies one, index.scip (a SCIP index read by
                     scip_reader; freshness state in scip_fresh.json)
     plans/          question-plan files (JSON is never passed on the command line)
-    runs/<id>/      raw experiment logs (never sent to a model wholesale)
+    runs/<id>/      raw experiment logs (never sent to a model wholesale); for a debug
+                    attempt its change.patch vs the session base (and an agent-reported
+                    run's output); runs/blobs/ (changed files by content id) and
+                    runs/base-ids/ (a base commit's content ids) serve the debug ledger
     research/<slug> pinned checkouts of reference repositories
                     (research/http-cache: offline-first HTTP cache of the reference resolver)
     config.json     budgets, experiment policy, research network mode, understanding thresholds
@@ -61,6 +64,9 @@ DEFAULT_CONFIG: dict = {
     # {"path": ..., "aliases": [...]}, whose code ranks lower unless the question names the path
     # or an alias (verinoda.search_index.REFERENCE_FACTOR). `verinoda setup --reference PATH` adds one.
     "index": {"reference": []},
+    # Debug ledger (docs/DESIGN.md D34): stop after this many fix attempts in a row without measured progress;
+    # reruns of the flaky-check strategy; bisect run budget.
+    "debug": {"max_no_progress": 3, "rerun_times": 5, "bisect_max_runs": 12},
 }
 
 NETWORK_MODES = ("off", "cache", "on")

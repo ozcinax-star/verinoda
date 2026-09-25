@@ -68,9 +68,16 @@ EXPECTED_PARAMS = {
     "feedback_resolve": ({"feedback_id", "verdict", "reason", "evidence_ids", "correction"},
                          {"feedback_id", "verdict", "reason", "evidence_ids"}),
     "index_update": (set(), set()),
+    "experiment_run": ({"command", "hypothesis", "expect", "timeout", "claim_id", "ref", "overlay"},
+                       {"command", "hypothesis"}),
+    "debug_start": ({"symptom", "command", "base", "trace", "observed_output", "exit_code"}, {"symptom", "command"}),
+    "debug_attempt": ({"hypothesis", "session_id", "command", "expect", "kind", "observed_output", "exit_code",
+                       "trace"}, {"hypothesis"}),
+    "debug_status": ({"session_id"}, set()),
+    "debug_strategy": ({"strategy", "session_id", "good", "bad", "times", "prepare"}, {"strategy"}),
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
-             "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call"}
+             "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "debug_status"}
 
 
 # -- fixtures & helpers -----------------------------------------------------------
@@ -226,6 +233,11 @@ def _all_calls(t: AtlasTools) -> dict:
         "feedback_process": lambda: t.feedback_process("fb_1"),
         "feedback_resolve": lambda: t.feedback_resolve("fb_1", "confirmed", "because", ["evd_1"]),
         "index_update": lambda: t.index_update(),
+        "experiment_run": lambda: t.experiment_run(["python", "-m", "pytest", "-q"], "the tests pass"),
+        "debug_start": lambda: t.debug_start("totals are wrong", ["python", "-m", "pytest", "-q"]),
+        "debug_attempt": lambda: t.debug_attempt("the rename broke it"),
+        "debug_status": lambda: t.debug_status(),
+        "debug_strategy": lambda: t.debug_strategy("differential"),
     }
 
 
