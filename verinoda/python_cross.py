@@ -38,6 +38,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from verinoda.python_facts import parse_current
+
 VERSION = 1
 FILE = "python_cross.json"
 # blake2b-64 of the source of resolution._resolve_cross_file_imports the pruning was checked against.
@@ -277,17 +279,23 @@ class python_cross_cache:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return {}
-        return data.get("files", {}) if isinstance(data, dict) and data.get("stamp") == self.stamp else {}
+        files = data.get("files") if isinstance(data, dict) and data.get("stamp") == self.stamp else None
+        return files if isinstance(files, dict) else {}
 
     def _save(self, files: dict) -> None:
+        tmp = None
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp = tempfile.mkstemp(prefix="python_cross.", suffix=".tmp", dir=str(self.path.parent))
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(json.dumps({"stamp": self.stamp, "files": files}, separators=(",", ":")))
             os.replace(tmp, self.path)
-        except OSError:
-            pass  # a cache: the next build parses the files again
+        except OSError:  # a cache: the next build parses the files again
+            if tmp is not None:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
 
     def __enter__(self):
         from verinoda.project_index import extract
@@ -332,9 +340,9 @@ class python_cross_cache:
                         if built is not None:
                             return built
                         self.deep += 1
-                        return real_parse(path)  # the full tree, as without the cache
+                        return parse_current(res, path, data, real_parse)  # the full tree, as without the cache
                 self.misses += 1
-                parsed = real_parse(path)
+                parsed = parse_current(res, path, data, real_parse)
                 if parsed is None:
                     return None
                 if room < DEEP + 64:  # no room for the pruning walk: the full tree, not kept

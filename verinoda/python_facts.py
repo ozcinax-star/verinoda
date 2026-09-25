@@ -37,9 +37,44 @@ def _stamp(res) -> str:
     return f"{VERSION}:{grammar}:{code}"
 
 
-def _local_facts(res, path: Path) -> dict | None:
+def parse_current(res, path: Path, data: bytes, parse=None):
+    """The upstream parse of ``path``, of the bytes ``data`` just read from it.
+
+    The upstream memo is keyed by (path, mtime, size): in a long-lived process a file changed within
+    one mtime tick at the same size gets the older tree. What is kept under the hash of ``data`` must
+    come from ``data``, so a memo answer for other bytes is parsed again without the memo. ``parse`` is
+    the upstream parse function, for a caller that has replaced it on the module for the moment.
+    """
+    parsed = (parse or res._parse_python_tree)(path)
+    if parsed is None or parsed[0] == data:
+        return parsed
+    fresh = getattr(res._parse_python_tree_cached, "__wrapped__", None)
+    if fresh is None:
+        return None
+    try:
+        st = path.stat()
+        return fresh(str(path), st.st_mtime_ns, st.st_size)
+    except Exception:  # noqa: BLE001 - as the upstream parse: any error means "skip this file"
+        return None
+
+
+def _kept_ok(hit) -> bool:
+    """Is a kept entry shaped as this module writes it (a damaged file is walked again, not trusted)?"""
+    try:
+        for _line, _level, _module, names in hit["imports"]:
+            for _imported, _local in names:
+                pass
+        for _source_id, flat in hit["calls"]:
+            if len(flat) % 2:
+                return False
+        return True
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _local_facts(res, path: Path, data: bytes) -> dict | None:
     """The imports and calls of one file, as the upstream walks find them; None if it does not parse."""
-    parsed = res._parse_python_tree(path)
+    parsed = parse_current(res, path, data)
     if parsed is None:
         return None
     source, root_node = parsed
@@ -77,17 +112,23 @@ class python_facts_cache:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return {}
-        return data.get("files", {}) if isinstance(data, dict) and data.get("stamp") == self.stamp else {}
+        files = data.get("files") if isinstance(data, dict) and data.get("stamp") == self.stamp else None
+        return files if isinstance(files, dict) else {}
 
     def _save(self, files: dict) -> None:
+        tmp = None
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp = tempfile.mkstemp(prefix="python_facts.", suffix=".tmp", dir=str(self.path.parent))
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(json.dumps({"stamp": self.stamp, "files": files}, separators=(",", ":")))
             os.replace(tmp, self.path)
-        except OSError:
-            pass  # a cache: the next build walks the files again
+        except OSError:  # a cache: the next build walks the files again
+            if tmp is not None:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
 
     def __enter__(self):
         from verinoda.project_index.extractors import resolution as res
@@ -106,17 +147,18 @@ class python_facts_cache:
                 if key in local:
                     continue
                 try:
-                    digest = hashlib.blake2b(path.read_bytes(), digest_size=16).hexdigest()
+                    data = path.read_bytes()
                 except OSError:
                     local[key] = None  # unreadable: skipped, as the upstream parse skips it
                     continue
+                digest = hashlib.blake2b(data, digest_size=16).hexdigest()
                 hit = cache.get(key)
-                if hit is not None and hit.get("h") == digest:
+                if isinstance(hit, dict) and hit.get("h") == digest and _kept_ok(hit):
                     self.hits += 1
                     found = hit
                 else:
                     self.misses += 1
-                    found = _local_facts(res, path)
+                    found = _local_facts(res, path, data)
                     if found is not None:
                         found = {"h": digest, **found}
                         changed = True

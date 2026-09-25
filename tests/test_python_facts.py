@@ -1,5 +1,7 @@
 """The kept Python facts give the symbol resolution pass exactly what the upstream walks give it."""
 
+import json
+import os
 from pathlib import Path
 
 from verinoda.project_index.extractors import resolution as res
@@ -85,3 +87,57 @@ def test_a_cache_from_other_code_is_not_used(tmp_path):
     with python_facts_cache(tmp_path / "index") as again:
         _facts(res._collect_python_symbol_resolution_facts, paths, root)
     assert again.hits == 0
+
+
+def test_damaged_kept_entries_are_walked_again(tmp_path):
+    root, paths = _project(tmp_path)
+    want = _facts(res._collect_python_symbol_resolution_facts, paths, root)
+    with python_facts_cache(tmp_path / "index"):
+        _facts(res._collect_python_symbol_resolution_facts, paths, root)
+    kept = tmp_path / "index" / FILE
+    data = json.loads(kept.read_text(encoding="utf-8"))
+    keys = sorted(data["files"])
+    data["files"][keys[0]] = "not an entry"
+    data["files"][keys[1]]["imports"] = [[1, 0]]
+    data["files"][keys[2]]["calls"] = [["f", ["x"]]]
+    kept.write_text(json.dumps(data), encoding="utf-8")
+    with python_facts_cache(tmp_path / "index") as again:
+        assert _facts(res._collect_python_symbol_resolution_facts, paths, root) == want
+    assert again.misses == 3
+    for bad in ([1], None):
+        kept.write_text(json.dumps({**data, "files": bad}), encoding="utf-8")
+        with python_facts_cache(tmp_path / "index") as fresh:
+            assert _facts(res._collect_python_symbol_resolution_facts, paths, root) == want
+        assert fresh.hits == 0
+
+
+def test_facts_come_from_the_bytes_on_disk_when_the_parse_memo_is_older(tmp_path):
+    """The upstream memo is keyed by (path, mtime, size): a file changed within one mtime tick at
+    the same size gets the older tree in a long-lived process; the kept facts must not."""
+    root, paths = _project(tmp_path)
+    a = root / "pkg" / "a.py"
+    res._parse_python_tree(a)  # the memo now holds this content
+    st = a.stat()
+    new = FILES["pkg/a.py"].replace("helper()", "zelper()")
+    assert len(new) == len(FILES["pkg/a.py"])
+    a.write_text(new, encoding="utf-8")
+    os.utime(a, ns=(st.st_atime_ns, st.st_mtime_ns))  # same size, same mtime: the memo answers
+    with python_facts_cache(tmp_path / "index"):
+        got = _facts(res._collect_python_symbol_resolution_facts, paths, root)
+    assert any(u.local_name == "zelper" for u in got.uses)
+    assert not any(u.local_name == "helper" and u.file_path == a for u in got.uses)
+    res._parse_python_tree_cached.cache_clear()
+
+
+def test_a_failed_write_leaves_no_temporary_file(tmp_path, monkeypatch):
+    import verinoda.python_facts as pf
+
+    root, paths = _project(tmp_path)
+
+    def refuse(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(pf.os, "replace", refuse)
+    with python_facts_cache(tmp_path / "index"):
+        _facts(res._collect_python_symbol_resolution_facts, paths, root)
+    assert not list((tmp_path / "index").glob("python_facts.*.tmp"))

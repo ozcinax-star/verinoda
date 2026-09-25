@@ -362,3 +362,26 @@ def test_a_build_gives_the_same_graph_with_and_without_the_kept_trees(tmp_path, 
     trees = kept.read_bytes()
     assert b'"t":["R"' in trees
     assert builds(keep=trees) == without  # warm from the first build on
+
+
+def test_a_kept_file_whose_files_are_not_an_object_is_ignored(tmp_path):
+    _, blob, want = _project(tmp_path)
+    _cached(tmp_path / "index", blob)
+    kept = tmp_path / "index" / FILE
+    data = json.loads(kept.read_text(encoding="utf-8"))
+    for bad in ([1, 2], "x", None):
+        kept.write_text(json.dumps({**data, "files": bad}), encoding="utf-8")
+        got, c = _cached(tmp_path / "index", blob)
+        assert got == want and c.hits == 0
+
+
+def test_a_failed_write_leaves_no_temporary_file(tmp_path, monkeypatch):
+    _, blob, want = _project(tmp_path)
+
+    def refuse(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(pc.os, "replace", refuse)
+    got, _ = _cached(tmp_path / "index", blob)
+    assert got == want
+    assert not list((tmp_path / "index").glob("python_cross.*.tmp"))
