@@ -159,84 +159,47 @@ read a pinned reference with `verinoda research --resolution <id> --reference-id
 
 ## Decisions are the user's
 
-For "should we / which X should we pick / how will this scale" (`human_decision_required`):
-1. `verinoda decide brief "<the question, verbatim>" --json` (MCP `decision_brief`): forces from the
-   code with evidence, absences (with what was searched), decisions on record, options and
-   `questions_for_human`. It never recommends. The routing rules miss some phrasings: run the brief
-   yourself whenever the user asks which option to take or what you recommend, or an unknown says the
-   question "may ask for a choice". Tie your own arguments to an option: `--argument "NAME: text"`.
-2. Show the forces and absences, ask the `questions_for_human` with `AskUserQuestion`, and record each
-   answer: `verinoda decide answer <brief-id> --q qN "<their words>"`.
-3. Never pick an option for the user; your own view may follow their answers, labelled as inference.
-   Record only their explicit choice: `verinoda decide record <brief-id> --chosen NAME --rationale
-   "<their words>" [--guard SPEC]`. Never edit, supersede, accept or waive a decision yourself.
+For "should we / which X should we pick / how will this scale" (`human_decision_required`), and whenever the
+user asks which option to take or what you recommend (the routing misses some phrasings):
+1. `verinoda decide brief "<the question, verbatim>" --json` (MCP `decision_brief`): forces from the code with
+   evidence, absences, decisions on record, options and `questions_for_human`; it never recommends. Tie your
+   own arguments to an option: `--argument "NAME: text"`.
+2. Show the forces and absences, ask the `questions_for_human` with `AskUserQuestion`, and record each answer:
+   `verinoda decide answer <brief-id> --q qN "<their words>"`.
+3. Never pick an option; your view may follow their answers, labelled as inference. Record only their explicit
+   choice: `verinoda decide record <brief-id> --chosen NAME --rationale "<their words>" [--guard SPEC]`. Never
+   edit, supersede, accept or waive a decision yourself.
 
 ## Commands (examples; always add --json when you read the result)
 
 ```bash
-# orient
-verinoda map . --json
-verinoda map . --view dependencies --json
 verinoda map . --view impact --target src/module.py --json
 verinoda query "where is the order total computed" --max-items 8 --json
-
-# answer a question: claims + evidence + critique + unknowns, within a budget
+verinoda resolve "compare with requests 2.31 sessions.py" --json
 verinoda plan draft "how does an order get persisted?" --json
 verinoda plan check .verinoda/plans/plan-001.json --json
 verinoda analyze --plan .verinoda/plans/plan-001.json --json
-verinoda analyze "how does an order get persisted?" --json
 verinoda analyze "why is pricing separate from the service?" --run-tests --json
-
-# references in the message: pin them first (offline-first)
-verinoda resolve "compare with requests 2.31 sessions.py" --json
-
-# optional deeper verification: runtime observation, precise call resolution
 verinoda analyze "which tests reach apply_discount?" --observe --json
 verinoda observe --for apply_discount --json
 verinoda resolve-call src/service.py:22 save --json
-
-# follow a flow between two symbols or files (edge locations included)
-verinoda trace create_order save_order --json
 verinoda trace create_order save_order --mode any --json
-
-# inspect, re-check and attack claims
 verinoda claim show <claim-id> --json
-verinoda claim list --status unknown --json
 verinoda claim add "place_order calls validate_items" --kind relation --source src/service.py:20 --json
-verinoda verify <claim-id> --json
 verinoda verify <claim-id> --run --json
 verinoda challenge <claim-id> --json
-
-# targeted experiment (runs in a throw-away copy; non-test commands need docker/podman)
 verinoda experiment run --hypothesis "discount is applied before tax" --expect pass --json -- python -m pytest -q tests/test_pricing.py
-
-# external references: pinned repo commit or document URL
 verinoda research https://github.com/org/reference --topic "retry policy" --json
-verinoda research https://example.org/spec.html --kind official_doc --json
 verinoda compare . https://github.com/org/reference --topic "retry policy" --json
-
-# user critique (see below)
 verinoda feedback add --text "the total is rounded in the repository" --claim <claim-id> --process --json
-verinoda feedback add --text "prices are cached" --expect-pattern "lru_cache" --expect-in "src/*.py" --process --json
 verinoda feedback process <feedback-id> --json
-verinoda feedback list --json
-
-# before proposing code and after every edit: do the names it uses exist?
-verinoda check --diff --json
-verinoda api packaging.specifiers.SpecifierSet --json
-
-# after code changes
 verinoda update .
 ```
 
 Workflow: resolve references -> plan (draft, edit, check, ask) -> `analyze` -> drill down (`trace`,
 `claim show`) -> `challenge` the claims you will rely on -> `verify` / `experiment run` where static
-evidence is not enough -> answer.
-
-Optional deeper verification: `--observe` (or `verinoda observe`) runs the selected tests under a
-call tracer in an isolated copy; an observed call can raise a claim to `experiment_verified` for
-that run and commit. `verinoda resolve-call` asks the precise resolver (the `precise` extra) which
-definition a call binds to; analyze already uses it within a small budget when it is installed.
+evidence is not enough -> answer. Optional deeper verification: `--observe` (or `verinoda observe`) runs
+the selected tests under a call tracer in an isolated copy; `resolve-call` asks the precise resolver.
 
 ## User critique is a hypothesis
 
@@ -277,25 +240,19 @@ propose Python code, and after every edit:
 
 ## Fixing a bug: keep a debug ledger
 
-Before the first edit of a bug fix, record the repro (for pytest, `--trace` also checks whether your edits are
-even reached): `verinoda debug start "<symptom>" --json -- <repro command>` (MCP `debug_start`).
-After every edit: `verinoda debug try --hypothesis "<what you believe and why>" --json` (MCP `debug_attempt`).
-A command Verinoda may not run (Gradle, Maven): run it yourself, save the output and record it with
-`--observed-output out.txt --exit-code N -- <the command you ran>` (labelled agent-reported; it never verifies
-anything, and Verinoda's own runs of the same tree outweigh it).
+Before the first edit: `verinoda debug start "<symptom>" --json -- <repro command>` (MCP `debug_start`; for
+pytest `--trace` also checks that your edits are reached). After every edit: `verinoda debug try --hypothesis
+"<what you believe and why>" --json` (MCP `debug_attempt`). A command Verinoda may not run (Gradle, Maven): run
+it, then record `--observed-output out.txt --exit-code N -- <command>` (agent-reported: it never verifies).
 
-- `stop: true` (exit 3): stop editing. Run `strategies[0]` (e.g. `verinoda debug differential --json`, MCP
-  `debug_strategy`), then show the user `verinoda debug status`.
-- `questions_for_human`: never change a test's expected value on your own, and never skip, xfail or deselect a
-  failing test (`failing_tests_skipped`); ask with `AskUserQuestion`, quoting both sides.
-- Do not retry a hypothesis whose attempt did not make the repro pass (`hypothesis_repeated`) without new evidence.
-- `flaky` or `possibly_flaky`: run `verinoda debug rerun --json` first; loop findings wait until the result is
-  stable.
-- A narrowed command (`debug try ... -- <other command>`) is a probe: its pass is never a pass of the repro.
-- Never say "fixed": say "the repro command passed at tree T in run R" and list `not_run`. Close with
-  `verinoda debug close --resolved-by N` only when attempt N is a pass of the repro command on the current tree;
-  add `--accept-test-edit` only after the user decided that a test change made since attempt 0 is right.
-- Verinoda never edits or reverts code; strategies run in throw-away copies.
+- `stop: true` (exit 3): stop editing, run `strategies[0]` (MCP `debug_strategy`), show `verinoda debug status`.
+- `questions_for_human`: never change a test's expected value, and never skip, xfail or deselect a failing
+  test, on your own; ask the user with `AskUserQuestion`, quoting both sides.
+- Do not retry a hypothesis that did not make the repro pass (`hypothesis_repeated`) without new evidence.
+  `flaky`: `verinoda debug rerun --json` first. A narrowed command is a probe, never a pass of the repro.
+- Never say "fixed": say "the repro command passed at tree T in run R" and list `not_run`. Close with `verinoda
+  debug close --resolved-by N` only for a pass of the repro on the current tree (`--accept-test-edit` only after
+  the user decided a test change is right). Verinoda never edits or reverts code.
 
 ## After editing code
 

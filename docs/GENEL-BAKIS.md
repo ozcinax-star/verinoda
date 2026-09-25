@@ -620,7 +620,7 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
   netleştirme sorularını sor → planla analiz. (3) Cevap "Understood as /
   Anladığım: …" ile başlar; ardından her alt soru için kararı, iddiaları ve
   bilinmeyenleri gelir.
-- **MCP:** 25 araç, aynı çekirdek fonksiyonları çağırır. Yanıtlar
+- **MCP:** 33 araç, aynı çekirdek fonksiyonları çağırır. Yanıtlar
   varsayılan 12.000 karakterle sınırlıdır. Uzun yaşayan sunucu grafiği,
   sözlüğü ve jedi projesini bellekte tutar.
 - Kurulum tekrar çalıştırılabilir, başka araçların ayarlarını ezmez ve yaptığı
@@ -652,7 +652,9 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
 | Kullanıcı eleştirisi protokolü | — | 9 adım, 4 sonuç, önce referans çözümü, geçmiş korunur | Çalışıyor |
 | Sürümlü hafıza | — | iddiaya bağlanırsa eskiyince geçersiz | Çalışıyor (yalnızca elle) |
 | Ajan kurulumu | 20'den fazla platform | Claude Code + Codex, manifest, güvenli kaldırma | Çalışıyor |
-| MCP araçları | grafik araçları | 25 araç: plan, referans, iddia, kanıt, gözlem, doğrulama, eleştiri, isim denetimi | Çalışıyor |
+| MCP araçları | grafik araçları | 33 araç: plan, referans, iddia, kanıt, gözlem, doğrulama, eleştiri, isim denetimi, kararlar, hata ayıklama defteri | Çalışıyor |
+| Mimari kararlar | yok | "Geçmeli miyiz / hangisini seçelim / nasıl büyütürüz" sorusu `human_decision_required` olur, asla `met` değil. `decide brief` kodun tarafını (kanıtlı olgular, nerede arandığıyla bulunamayanlar, kayıtlı kararlar, seçenekler) ve yalnız kullanıcının yanıtlayabileceği en çok 5 soruyu verir, öneri vermez. Kullanıcının açık seçimi korumalarıyla bir karar kaydı olur; `decide check` kararı bozan kodu bulur (CI'da kullanılabilir). Sınır: ayarlanmadığı sorularda seçim sorusunu yaklaşık yarı yarıya tanır | Çalışıyor (D33) |
+| Hata ayıklama döngüleri | yok | Tek bir hatayı düzeltme denemelerinin her biri, çalıştığı ağaç, tabana göre yama, hatanın `dosya::sembol` imzası ve ilerlemeyle kaydedilir; kesin döngü kuralları ajanı durdurur (ağaç geri döndü, aynı hata geri geldi, ilerleme yok, kod yerine test değişti, düzenleme hatalı testin hiç ulaşmadığı yerde); stratejiler atılabilir kopyalarda çalışır (tabanda tekrar, iki ucu önce çalıştırılan bisect, tekrarlama, izli çalıştırma). "Düzeldi" asla denmez | Çalışıyor (D34) |
 | Kod yazarken isim denetimi | yok | `verinoda check` / `verinoda api`: modül, içe aktarılan ad, öznitelik, anahtar kelime argümanı ve sözlük anahtarı projenin kendi ortamında var mı; kapalı-dünya kuralıyla `absent`, gerisi nedenli `unknown`; denetlenen projeden hiçbir şey içe aktarılmaz ya da çalıştırılmaz | Çalışıyor (yalnız Python) |
 | Yanlış cümlenin doğrulanması | kelime örtüşmesi doğruluyordu | Kelime örtüşmesi doğrulamaz; yazılı iddianın her rolü (çağıran/çağrılan yönü, ayarın bağlandığı ad) denetlenir; kesin ıska oluşturulurken kapsamıyla çürütülür; kod gibi yazılmış ama depoda olmayan ad benzeriyle değiştirilmez (`not_found`, `did_you_mean`) | Çalışıyor (D31) |
 | Karşılaştırmalı benchmark | kendi yayınladığı doğruluk, maliyet ve token rakamları (Verinoda'ya aktarılmaz) | ham arama vs Graphify vs Verinoda; eskime ve karşıt kontrol ölçüm düzenekleri | Çalışıyor (model döngüde değil) |
