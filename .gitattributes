@@ -1,3 +1,6 @@
 # Keep bytes identical on every platform: upstream fixtures and content hashes
 # depend on exact line endings.
 * -text
+
+# The build stamp: `git archive` (GitHub source archives) writes the commit into it; see verinoda/buildinfo.py.
+verinoda/data/git_archival.txt export-subst

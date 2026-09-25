@@ -56,6 +56,8 @@ MUST_SHIP = (
     "verinoda/schemas/question_plan.v1.json",
     "verinoda/data/seed_lexicon_tr_en.json",
     "verinoda/runtime/calltrace_plugin.py",
+    # the build stamp `git archive` fills in (GitHub source archives): `verinoda --version` names the commit
+    "verinoda/data/git_archival.txt",
 )
 LICENSES = ("LICENSE", "LICENSE-MIT", "NOTICE")
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", "*.egg-info", ".pytest_cache", ".verinoda",
@@ -244,7 +246,8 @@ def _drive_installed_cli(ra: Path, base: Path, *, full: bool) -> dict:
     work.mkdir(exist_ok=True)
     env = _clean_env(HOME=str(home), USERPROFILE=str(home))
     r = _ok(_run([ra, "--version"], cwd=work, env=env), "--version")
-    assert r.stdout.startswith("verinoda ")
+    # built from a copy without .git or a filled-in stamp: the build is said to be unknown, not guessed
+    assert r.stdout.startswith("verinoda ") and "(build unknown" in r.stdout, r.stdout
     r = _ok(_run([ra, "--help"], cwd=work, env=env), "--help")
     assert all(c in r.stdout for c in ("scan", "analyze", "doctor", "install", "index"))
     doc = json.loads(_ok(_run([ra, "doctor", "--json"], cwd=work, env=env), "doctor --json").stdout)

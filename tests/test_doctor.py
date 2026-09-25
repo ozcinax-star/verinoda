@@ -280,3 +280,49 @@ def test_lexicon_state(tmp_path):
     checks = []
     doctor._lexicon(tmp_path, checks)
     assert checks[0]["level"] == "warn" and "another version" in checks[0]["detail"]
+
+
+# -- build identity (senior review gap 14) ------------------------------------------------------------
+
+def test_doctor_names_the_build_and_flags_a_server_of_another_python(tmp_path, monkeypatch):
+    import contextlib
+    import io
+    import shutil
+
+    from verinoda import buildinfo
+
+    other = r"C:\other\venv\Scripts\python.exe" if os.name == "nt" else "/other/venv/bin/python"
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / ".mcp.json").write_text(json.dumps({"mcpServers": {"verinoda": {
+        "command": other, "args": ["-m", "verinoda", "mcp", "serve", "--repo-of", ".mcp.json"]}}}),
+        encoding="utf-8")
+    launcher = tmp_path / "bin" / "verinoda.exe"  # an older install first on PATH
+    launcher.parent.mkdir()
+    launcher.write_bytes(f"#!{other}\n".encode("utf-8"))
+    real_which = shutil.which
+    monkeypatch.setattr(shutil, "which",
+                        lambda name, *a, **k: str(launcher) if name == "verinoda" else real_which(name, *a, **k))
+
+    res = doctor.run(proj)
+    checks = _checks(res)
+    b = res["build"]
+    assert b == buildinfo.build_info() and b["version"] == res["version"]
+    assert checks["build"]["detail"].startswith(f"verinoda {b['version']}, {buildinfo.describe(b)}")
+    assert checks["build"]["ok"] is (b["commit"] is not None)
+    cli = checks["cli_on_path"]
+    assert cli["level"] == "warn" and other in cli["detail"] and "another installation" in cli["detail"]
+    srv = checks["mcp_server:claude:project"]
+    assert srv["level"] == "warn" and f"starts {other}" in srv["detail"] and "--version" in srv["detail"]
+    assert "starts " + other in checks["agent:claude:project"]["detail"]
+    assert res["ok"] is True  # warnings, not failures
+    json.dumps(res)  # --json output stays serialisable
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        doctor.render(res)
+    assert out.getvalue().splitlines()[0].startswith(f"verinoda {b['version']} ({buildinfo.describe(b)})")

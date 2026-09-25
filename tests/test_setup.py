@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -54,6 +56,18 @@ def test_setup_auto_installs_only_the_agents_found(project, tmp_path, monkeypatc
     assert (project / ".claude" / "skills" / "verinoda" / "SKILL.md").is_file()
     assert not (project / ".agents").exists()
     assert any("/verinoda" in s for s in rep["next_steps"])
+    # which build set it up, and which program the agents start (the running build, never a guess)
+    from verinoda import buildinfo
+
+    assert rep["build"]["build"] == buildinfo.build_info()["build"] and rep["build"]["python"] == sys.executable
+    assert rep["server"]["note"].startswith("registered ") and rep["server"]["how"] in ("path", "interpreter")
+    entry = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["verinoda"]
+    assert entry["args"][-4:] == ["mcp", "serve", "--repo-of", ".mcp.json"] and str(project) not in json.dumps(entry)
+    assert rep["agents"][0]["server"] == [entry["command"], *entry["args"]]
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        setup_mod.render(rep)
+    assert f"build {rep['build']['build']}" in out.getvalue() and "agents start: registered" in out.getvalue()
     # re-running changes nothing
     rep2 = setup_mod.setup_project(project, agents="auto", home=tmp_path / "home")
     assert rep2["agents"][0]["result"] == "unchanged"

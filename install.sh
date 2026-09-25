@@ -13,7 +13,8 @@
 # Running it again upgrades to the latest code on the chosen ref.
 #
 # Options (environment variables):
-#   VERINODA_REF              branch, tag or commit to install (default: main)
+#   VERINODA_REF              branch, tag or commit to install (default: main); a team pins one build
+#                             with a full commit sha, and `verinoda --version` names the commit it runs
 #   VERINODA_EXTRAS           extras to install (default: precise; set to "none" for none)
 #   VERINODA_SPEC             full requirement to install instead (advanced / testing)
 #   VERINODA_NO_MODIFY_PATH   set to 1 to leave shell profiles alone

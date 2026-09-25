@@ -286,12 +286,21 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
     if res.get("error"):
         report["warnings"].append(f"index: {res['error']} (hint: {res.get('hint')})")
 
+    from verinoda.buildinfo import build_info
+
+    report["build"] = {k: build_info()[k] for k in ("version", "build", "commit", "source", "package", "python")}
     for agent in chosen:
         r = installer.install(agent, scope, project_dir=repo, home=home, with_mcp=with_mcp)
         report["agents"].append({"agent": agent, "scope": scope, "ok": r.get("ok", True),
                                  "result": r.get("result"), "skill": r.get("skill"),
+                                 "server": (r.get("server") or {}).get("command"),
                                  "notes": (r.get("notes") or [])[:3], "manual": (r.get("manual") or [])[:3],
                                  "error": "; ".join(r.get("errors") or []) or None})
+        if r.get("server") and "server" not in report:  # which program the agents start, and why
+            report["server"] = {k: r["server"].get(k) for k in ("how", "note", "python", "path_exe")}
+        for w in r.get("warnings") or []:
+            if w not in report["warnings"]:
+                report["warnings"].append(w)
         if r.get("ok", True):
             report["next_steps"].append(USAGE[agent])
     if not chosen and agents == "auto":
@@ -337,7 +346,9 @@ def _first_question(repo: Path) -> str | None:
 
 def render(rep: dict) -> None:
     idx = rep.get("index") or {}
-    print(f"Verinoda is set up in {rep['repo']}")
+    b = rep.get("build") or {}
+    by = f" (verinoda {b.get('version')}, build {b.get('build')})" if b else ""
+    print(f"Verinoda is set up in {rep['repo']}{by}")
     print(f"  index: {idx.get('mode')} - {idx.get('files')} files, {idx.get('nodes')} nodes, "
           f"{idx.get('edges')} edges" + (f", {idx['stale_claims']} claim(s) marked stale" if idx.get('stale_claims') else ""))
     for r in rep.get("reference") or []:
@@ -350,6 +361,8 @@ def render(rep: dict) -> None:
             print(f"    error: {a['error']}")
         for m in a.get("manual") or []:
             print(f"    do by hand: {m}")
+    if (rep.get("server") or {}).get("note"):
+        print(f"  agents start: {rep['server']['note']}")
     for w in rep["warnings"]:
         print(f"  note: {w}")
     print("Next:")

@@ -78,7 +78,7 @@ For pure code-writing tasks skip the question workflow; the name check, the debu
 3. Snapshot does not match the working tree: `verinoda update .`
 
 Commands find the project root from the working directory (nearest `.verinoda` or `.git`);
-pass `--repo <dir>` otherwise. The CLI command recorded at install time is `{{VERINODA_CLI}}`.
+pass `--repo <dir>` otherwise. The CLI command recorded at install time is `{{VERINODA_CLI}}`.{{VERINODA_CLI_NOTE}}
 If that does not run here (not on PATH, sandboxed shell), use the MCP tools: their server entry
 stores the absolute path of the installed program.
 

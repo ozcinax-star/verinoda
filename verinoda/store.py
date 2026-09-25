@@ -28,10 +28,18 @@ SCHEMA_VERSION = 6
 class SchemaTooNew(RuntimeError):
     """atlas.db was written by a newer Verinoda (its schema version is above :data:`SCHEMA_VERSION`)."""
 
-    def __init__(self, found: int):
+    def __init__(self, found: int, written_by: str | None = None):
+        import sys
+
+        from verinoda.buildinfo import server_version
+
         self.found = found
-        super().__init__(f"atlas.db schema v{found} is newer than this Verinoda (v{SCHEMA_VERSION}); upgrade "
-                         "verinoda (a migration is one-way: see docs/UPGRADING.md)")
+        self.written_by = written_by
+        by = f", migrated by verinoda {written_by}" if written_by else ""
+        super().__init__(f"atlas.db schema v{found}{by} is newer than this Verinoda ({server_version()} at "
+                         f"{sys.executable}, schema v{SCHEMA_VERSION}); upgrade this installation, or point the "
+                         "agent at the newer one (`verinoda doctor` shows which build each agent starts; a "
+                         "migration is one-way: see docs/UPGRADING.md)")
 
 
 _SCHEMA_V1 = """
@@ -563,13 +571,19 @@ class Store:
         row = self.conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
         current = int(row[0]) if row else 0
         if current > SCHEMA_VERSION:
+            by = self.conn.execute("SELECT value FROM meta WHERE key='schema_written_by'").fetchone()
             self.conn.close()
-            raise SchemaTooNew(current)
+            raise SchemaTooNew(current, by[0] if by else None)
         for v in range(current + 1, SCHEMA_VERSION + 1):
             self.conn.executescript(_MIGRATIONS[v])
             self.conn.execute(
                 "INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)", (str(v),)
             )
+        if current < SCHEMA_VERSION:  # which build wrote this schema: named when an older one refuses it
+            from verinoda.buildinfo import server_version
+
+            self.conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_written_by', ?)",
+                              (server_version(),))
         self.conn.commit()
 
     def close(self) -> None:
