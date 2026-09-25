@@ -392,3 +392,66 @@ def test_prune_missing_files_drops_their_nodes_and_edges(tmp_path):
     assert index.prune_missing_files(repo) == []  # idempotent
     g = index.load(repo)
     assert not any(g.file(n) == "orders/pricing.py" for n in g.G.nodes)
+
+
+# -- data-shaped JSON and small batches (index._known_empty_json) --------------------------------------
+
+def _json_project(root: Path) -> Path:
+    shutil.copytree(EXAMPLE, root, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc",
+                                                                 ".pytest_cache", "*.db"))
+    data = root / "data"
+    data.mkdir()
+    for i in range(3):  # data-shaped: the JSON extractor skips them
+        (data / f"rows_{i}.json").write_text(json.dumps({"rows": [{"id": i, "name": f"row {i}"}]}),
+                                             encoding="utf-8")
+    (root / "package.json").write_text(json.dumps({"name": "shop", "dependencies": {"left-pad": "1"}}),
+                                       encoding="utf-8")
+    web = root / "web"
+    web.mkdir()
+    for i in range(22):  # JavaScript is never cached upstream: 22 files to extract on every build
+        (web / f"m{i}.js").write_text(f"export function f{i}(x) {{ return x + {i}; }}\n", encoding="utf-8")
+    return root
+
+
+def test_skipped_data_json_is_remembered_and_small_batches_stay_in_this_process(tmp_path, monkeypatch):
+    from verinoda.project_index import extract
+
+    pool_calls = []
+    real_parallel = extract._extract_parallel
+
+    def counted(*a, **kw):
+        pool_calls.append(len(a[0]))
+        return real_parallel(*a, **kw)
+
+    monkeypatch.setattr(extract, "_extract_parallel", counted)
+    graphs, pools = {}, {}
+    for name, below in (("in_process", index.IN_PROCESS_BELOW), ("pool", 0)):
+        monkeypatch.setattr(index, "IN_PROCESS_BELOW", below)
+        pool_calls.clear()
+        repo = _json_project(tmp_path / name / "proj")
+        first = index.build(repo, force=True)
+        second = index.build(repo)
+        rows = repo / "data" / "rows_0.json"
+        rows.write_text(json.dumps({"rows": [], "note": "changed"}), encoding="utf-8")
+        third = index.build(repo)
+        rows.write_text(json.dumps({"dependencies": {"left-pad": "1"}}), encoding="utf-8")  # now config
+        fourth = index.build(repo)
+        graphs[name] = [first, second, third, fourth], graph_path(repo).read_bytes()
+        pools[name] = list(pool_calls)
+        assert first["empty_json"] == {"replayed": 0, "recorded": 3}
+        assert second["empty_json"] == {"replayed": 3, "recorded": 0}
+        assert third["empty_json"] == {"replayed": 2, "recorded": 1}
+        assert fourth["empty_json"] == {"replayed": 2, "recorded": 0}
+        assert "data/rows_0.json" in {n.get("source_file") for n in json.loads(graphs[name][1])["nodes"]}
+    # 22 or 23 files to extract after the first build: past the upstream threshold of 20 for a
+    # process pool, extracted in this process instead; the same graph either way
+    assert pools["in_process"] == [] and pools["pool"][1:] == [22, 23, 23]
+    assert graphs["in_process"][1] == graphs["pool"][1]
+    assert [s["nodes"] for s in graphs["in_process"][0]] == [s["nodes"] for s in graphs["pool"][0]]
+
+
+def test_remembered_empty_json_is_dropped_when_the_extractor_changes(tmp_path, monkeypatch):
+    repo = _json_project(tmp_path / "proj")
+    index.build(repo, force=True)
+    monkeypatch.setattr(index._known_empty_json, "_stamp", staticmethod(lambda X, jc: "another extractor"))
+    assert index.build(repo)["empty_json"] == {"replayed": 0, "recorded": 3}

@@ -78,9 +78,10 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     index_dir(repo).mkdir(parents=True, exist_ok=True)
     buf = io.StringIO()
     keep = _keep_unchanged_graph(repo, active=prune_missing and changed is None and not force)
+    empties = _known_empty_json(repo)
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
-    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(), _absolutize_once(),             python_facts_cache(index_dir(repo)), keep:
+    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(), _absolutize_once(),             python_facts_cache(index_dir(repo)), empties, keep:
         ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
     if keep.failed:  # the full path would have failed making its report: so does this build
         ok = False
@@ -108,6 +109,8 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
         out["pruned_files"] = pruned
     if keep.kept:
         out["graph_kept"] = True
+    if empties.replayed or empties.recorded:
+        out["empty_json"] = {"replayed": empties.replayed, "recorded": empties.recorded}
     if ok:
         try:
             out["receiver_calls"] = refresh_receiver_sidecar(repo)
@@ -210,6 +213,131 @@ class _absolutize_once:
     def __exit__(self, *a):
         if self.mod is not None:
             self.mod._absolutize_source_files_in = self.real
+        return False
+
+
+EMPTY_JSON_FILE = "empty_json.json"
+EMPTY_JSON_VERSION = 1
+IN_PROCESS_BELOW = 64  # uncached files left: fewer are extracted in this process, not by a pool
+
+
+class _known_empty_json:
+    """Data-shaped ``.json`` files are extracted to nothing on every build; remember that.
+
+    The upstream JSON extractor skips data-shaped JSON on purpose (by the file's name and its
+    top-level keys: ``{"nodes": [], "edges": [], "skipped": ...}``), and the upstream AST cache
+    never stores an empty result (#1666), so such a file is parsed again on every build: 112
+    benchmark and result files in Verinoda's own repository. With the JavaScript files, which
+    upstream never caches, they also push every update past the 20-file threshold for a process
+    pool, whose start-up on Windows costs more than the work.
+
+    For the build, ``extract._extract_parallel`` and ``_extract_sequential`` are wrapped. A file
+    the JSON extractor would read, whose bytes (blake2b) and path gave such a skipped result
+    under the same extractor code (``empty_json.json``, dropped when that code or the grammar
+    changes), is filled with a copy of that result without parsing; everything else goes to the
+    real functions, and their skipped JSON results are remembered. When fewer than
+    :data:`IN_PROCESS_BELOW` files are left, the parallel wrapper hands them back and the caller
+    extracts them in this process: the upstream contract of ``_extract_parallel`` returning
+    False, as it does for a one-worker pool.
+    """
+
+    def __init__(self, repo: Path):
+        self.path = index_dir(Path(repo).resolve()) / EMPTY_JSON_FILE
+        self.X = None
+        self.replayed = self.recorded = 0
+
+    @staticmethod
+    def _stamp(X, json_config) -> str:
+        from importlib import metadata
+
+        from verinoda.project_index.extractors import base
+
+        h = hashlib.blake2b(digest_size=16)
+        for mod in (json_config, base, X):
+            h.update(Path(mod.__file__).read_bytes())
+        for dist in ("tree-sitter", "tree-sitter-json"):
+            try:
+                h.update(f"{dist}={metadata.version(dist)}\0".encode())
+            except metadata.PackageNotFoundError:
+                h.update(f"{dist}=-\0".encode())
+        return h.hexdigest()
+
+    def __enter__(self):
+        try:
+            from verinoda.project_index import extract as X
+            from verinoda.project_index.extractors import json_config
+
+            stamp = self._stamp(X, json_config)
+        except Exception:  # noqa: BLE001 - nothing to wrap
+            return self
+        self.X, self.stamp, extract_json = X, stamp, json_config.extract_json
+        self.real_par, self.real_seq = X._extract_parallel, X._extract_sequential
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            ok = isinstance(data, dict) and data.get("version") == EMPTY_JSON_VERSION
+            known = data.get("files", {}) if ok and data.get("stamp") == stamp else {}
+        except (OSError, ValueError):
+            known = {}
+        self.known, self.kept, self.digests = known, {}, {}
+
+        def prefill(work, per_file) -> None:
+            for i, path in work:
+                if per_file[i] is not None or X._get_extractor(Path(path)) is not extract_json:
+                    continue
+                key = str(path)
+                try:
+                    digest = hashlib.blake2b(Path(path).read_bytes(), digest_size=16).hexdigest()
+                except OSError:
+                    continue
+                self.digests[key] = digest  # the bytes the extractor is about to read
+                hit = self.known.get(key)
+                if isinstance(hit, dict) and hit.get("h") == digest and isinstance(hit.get("r"), dict):
+                    per_file[i] = json.loads(json.dumps(hit["r"]))
+                    self.kept[key] = hit
+                    self.replayed += 1
+
+        def record(work, per_file) -> None:
+            for i, path in work:
+                key, r = str(path), per_file[i]
+                if (key not in self.digests or not isinstance(r, dict) or not r.get("skipped")
+                        or r.get("nodes") or r.get("edges") or "error" in r):
+                    continue
+                try:
+                    copy = json.loads(json.dumps(r))
+                except (TypeError, ValueError):
+                    continue
+                if copy == r:  # replayed as it came
+                    self.kept[key] = {"h": self.digests[key], "r": copy}
+                    self.recorded += 1
+
+        def parallel(uncached_work, per_file, root, max_workers, total_files, cache_location=None):
+            prefill(uncached_work, per_file)
+            rest = [(i, p) for i, p in uncached_work if per_file[i] is None]
+            if len(rest) < IN_PROCESS_BELOW:
+                return False  # the caller extracts what is left in this process
+            done = self.real_par(rest, per_file, root, max_workers, total_files, cache_location)
+            record(rest, per_file)
+            return done
+
+        def sequential(uncached_work, per_file, root, total_files, cache_location=None):
+            prefill(uncached_work, per_file)
+            rest = [(i, p) for i, p in uncached_work if per_file[i] is None]
+            self.real_seq(rest, per_file, root, total_files, cache_location)
+            record(rest, per_file)
+
+        X._extract_parallel, X._extract_sequential = parallel, sequential
+        return self
+
+    def __exit__(self, *a):
+        if self.X is None:
+            return False
+        self.X._extract_parallel, self.X._extract_sequential = self.real_par, self.real_seq
+        if self.digests and self.kept != self.known:  # a build that extracted: keep its files only
+            try:
+                write_json_atomic(self.path, {"version": EMPTY_JSON_VERSION, "stamp": self.stamp,
+                                              "files": self.kept})
+            except OSError:
+                pass
         return False
 
 
