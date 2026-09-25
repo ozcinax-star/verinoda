@@ -1162,6 +1162,51 @@ def test_a_caller_committed_after_the_last_snapshot_is_searched_and_named(tmp_pa
     assert [b["at"] for b in _review(repo)["binding_readers"]] == ["pkg/new_user.py:5"]
 
 
+def test_edges_between_the_packages_of_a_monorepo_or_gradle_subprojects_are_kept(tmp_path):
+    # r2-2 C06/C07: an INFERRED edge crossing into another project root (one pyproject.toml / build.gradle per
+    # package) was dropped: no dependents, entry points or tests, "no call edge in the graph"
+    pyproj = "[project]\nname = \"{}\"\nversion = \"0.1\"\n"
+    repo = _project(tmp_path, "mono", {
+        "libs/core/pyproject.toml": pyproj.format("core"), "libs/core/core/__init__.py": "",
+        "libs/core/core/repo.py": "import sqlite3\n\n\nclass OrderRepo:\n    def __init__(self):\n"
+                                  "        self.conn = sqlite3.connect(':memory:')\n\n    def save(self, customer, total):\n"
+                                  "        self.conn.execute('INSERT INTO orders (customer, total) VALUES (?, ?)', "
+                                  "(customer, total))\n        return 1\n",
+        "services/api/pyproject.toml": pyproj.format("api"), "services/api/api/__init__.py": "",
+        "services/api/api/handlers.py": "from core.repo import OrderRepo\n\n\ndef create_order_handler(payload):\n"
+                                        "    repo = OrderRepo()\n    return repo.save(payload['customer'], "
+                                        "payload['total'])\n",
+        "services/api/tests/test_handlers.py": "from api.handlers import create_order_handler\n\n\ndef test_create():\n"
+                                               "    assert create_order_handler({'customer': 'a', 'total': 1}) == 1\n",
+        "third_party/old/pyproject.toml": pyproj.format("old"), "third_party/old/oldpkg/__init__.py": "",
+        "third_party/old/oldpkg/user.py": "from oldpkg.store import OrderRepo\n\n\ndef keep(r: OrderRepo):\n"
+                                          "    return r.save(1, 2)\n",
+        "settings.gradle": "include 'common', 'fabric'\n", "common/build.gradle": "plugins { id 'java' }\n",
+        "fabric/build.gradle": "plugins { id 'java' }\n",
+        "common/src/main/java/com/ex/mod/Heat.java": "package com.ex.mod;\n\npublic class Heat {\n    private int heat;\n\n"
+                                                     "    public void stoke(int amount) {\n        heat = heat + amount;\n"
+                                                     "    }\n}\n",
+        "fabric/src/main/java/com/ex/mod/fabric/Ticker.java": "package com.ex.mod.fabric;\n\nimport com.ex.mod.Heat;\n\n"
+                                                              "public class Ticker {\n    private final Heat heat = new "
+                                                              "Heat();\n\n    public void onUse(int amount) {\n"
+                                                              "        heat.stoke(amount);\n    }\n}\n"})
+    _edit(repo, "libs/core/core/repo.py", "        return 1\n", "        return 2\n")
+    _edit(repo, "common/src/main/java/com/ex/mod/Heat.java", "heat + amount;", "heat + amount * 2;")
+    res = _review(repo)
+    deps = {d["symbol"] for d in res["dependents"]}
+    assert {"services/api/api/handlers.py::create_order_handler",
+            "fabric/src/main/java/com/ex/mod/fabric/Ticker.java::Ticker.onUse"} <= deps
+    assert "services/api/tests/test_handlers.py::test_create" in {t["test"] for t in res["tests"]["static"]}
+    assert not [u for u in res["unknown"] if u["kind"] == "no_callers"]
+    st = open_store(repo)
+    try:
+        ctx = rv._Ctx(repo, None, st, {})
+        assert not rv._refers_to_project(ctx, "third_party/old/oldpkg/user.py", "libs/core/core/repo.py", "libs/core")
+        assert rv._refers_to_project(ctx, "services/api/api/handlers.py", "libs/core/core/repo.py", "libs/core")
+    finally:
+        st.close()
+
+
 def test_value_bound_on_a_changed_line_and_written_later(orders):
     # r2 R01: the changed total is saved by repo.save on the next (unchanged) line
     _edit(orders, "orders/service.py", "    total = compute_total(items)\n", "    total = compute_total(items) * 1.18\n")
@@ -1327,7 +1372,8 @@ def test_cli_review_usage_errors_and_the_project_root_from_a_subdirectory(orders
     assert main(["review", str(orders), "--target", "orders/pricing.py::apply_discount", "--staged"]) == 2
     assert main(["review", str(orders), "--target", "orders/pricing.py::apply_discount", "--base", "HEAD"]) == 2
     assert main(["review", str(orders), "--max-chars", "-5"]) == 2
-    capsys.readouterr()
+    assert main(["review", str(orders), "--concerns", "security,bogus"]) == 2   # r2-2 C03: was 1
+    assert "bogus" in capsys.readouterr().err
     monkeypatch.chdir(orders / "orders")
     assert main(["review", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["changes"] == []
@@ -1443,3 +1489,163 @@ def test_a_guard_moved_to_a_function_off_its_call_path_is_removed(admin):
     _edit(admin, "app/orders.py", "def archive_order(user, order_id):\n", "def archive_order(user, order_id):\n"
           + ADMIN_GUARD)
     assert _guards_of(_review(admin)) == [("guard-removed", "statically_verified", "app/orders.py:11")]
+
+
+def test_staged_observe_is_refused_when_a_staged_file_has_unstaged_changes(tmp_path, monkeypatch):
+    # r2-2 C02A: --staged --observe traced the working tree (the staged break undone there) and labelled it "the
+    # working tree (it equals the index for every tracked file)"; --run-tests was already refused
+    from verinoda.runtime import trace
+
+    ran = []
+    monkeypatch.setattr(trace, "observe", lambda *a, **kw: ran.append(kw) or {"run_id": "rtr_x", "complete": True,
+                                                                              "outcome": "pass", "tests": {}})
+    repo = _project(tmp_path, "c02", {"app/__init__.py": "", "app/calc.py": "def half(x):\n    return x / 2\n",
+                                      "tests/test_calc.py": "from app.calc import half\n\n\ndef test_half():\n"
+                                                            "    assert half(4) == 2\n"})
+    _edit(repo, "app/calc.py", "    return x / 2\n", "    return 0\n")
+    _git(repo, "add", "app/calc.py")
+    _edit(repo, "app/calc.py", "    return 0\n", "    return x / 2\n")
+    res = _review(repo, staged=True, observe=True)
+    assert not ran and "app/calc.py" in res["tests"]["observe"]["refused"]
+    _edit(repo, "app/calc.py", "    return x / 2\n", "    return 0\n")
+    res = _review(repo, staged=True, observe=True)
+    assert ran and res["tests"]["observe"]["tree"].startswith("the working tree (it equals the index")
+
+
+def test_a_write_added_to_a_loop_that_already_read_per_item(orders):
+    # r2-2 C09: only the loop's first IO call (the old get) was compared: the new per-item save was "there before"
+    _edit(orders, "orders/service.py", "    return repo.get(order_id)\n", "    return repo.get(order_id)\n\n\n"
+          "def copy_orders(repo: OrderRepository, ids: list[int]) -> int:\n    n = 0\n    for oid in ids:\n"
+          "        row = repo.get(oid)\n        n += 1\n    return n\n")
+    _git(orders, "commit", "-qam", "copy_orders")
+    _edit(orders, "orders/service.py", "        row = repo.get(oid)\n        n += 1\n",
+          "        row = repo.get(oid)\n        repo.save(row[\"customer\"], row[\"total\"])\n        n += 1\n")
+    [f] = _by(_review(orders), "performance", "io-in-loop")
+    assert f["status"] == "strong_inference" and f["finding"].startswith("save() runs once per iteration")
+    assert "already called get()" in f["finding"] and "orders/service.py:33" in f["evidence_at"]
+
+
+def test_a_removed_method_of_a_class_with_a_project_base_and_calls_through_attributes(tmp_path):
+    # r2-2 C27: any base class made every caller weak_inference (exit 0), even a project base without the method;
+    # C13: once one caller was bound, `self.repo.save(...)` was neither a finding nor an unknown
+    repo = _project(tmp_path, "c27", {
+        "app/__init__.py": "", "app/base.py": "class BaseRepo:\n    def __init__(self):\n        self.rows = []\n",
+        "app/ext.py": "import collections\n\n\nclass Rows(collections.UserList):\n    def save(self, row):\n"
+                      "        self.append(row)\n",
+        "app/repo.py": "from app.base import BaseRepo\n\n\nclass OrderRepo(BaseRepo):\n    def save(self, row):\n"
+                       "        self.rows.append(row)\n",
+        "app/service.py": "from app.repo import OrderRepo\n\n\ndef _place(repo: OrderRepo, row):\n    return repo.save(row)\n",
+        "app/checkout.py": "class Checkout:\n    def __init__(self, repo):\n        self.repo = repo\n\n"
+                           "    def finish(self, row):\n        return self.repo.save(row)\n"})
+    _edit(repo, "app/repo.py", "    def save(self, row):\n        self.rows.append(row)\n", "    pass\n")
+    res = _review(repo)
+    [f] = _by(res, "public_api", "removed-still-used")
+    assert (f["at"], f["status"]) == ("app/service.py:5", "strong_inference") and res["exit"] == 3
+    [u] = [u for u in res["unknown"] if u["kind"] == "unresolved_callers"]
+    assert u["at"] == "app/checkout.py:6" and "other call" in u["what"]
+    _git(repo, "checkout", "--", "app/repo.py")
+    _edit(repo, "app/ext.py", "    def save(self, row):\n        self.append(row)\n", "    pass\n")
+    (repo / "app" / "service.py").write_text("from app.ext import Rows\n\n\ndef _keep(rows: Rows, row):\n"
+                                             "    return rows.save(row)\n", encoding="utf-8", newline="\n")
+    [f] = _by(_review(repo), "public_api", "removed-still-used")
+    assert f["status"] == "weak_inference" and "outside the project" in f["basis"]
+
+
+def test_a_commit_removed_from_save_while_a_new_method_next_to_it_commits(orders):
+    # r2-2 C16: the file's line diff paired save()'s removed commit with the commit of the new save_many() below it,
+    # so the removed-sink rule (filtered on the diff's changed lines) said nothing
+    _edit(orders, "orders/repository.py", "        self.conn.commit()\n        return cur.lastrowid\n",
+          "        return cur.lastrowid\n\n    def save_many(self, rows):\n        ids = [self.save(c, t) for c, t in rows]\n"
+          "        self.conn.commit()\n        return ids\n")
+    [f] = _by(_review(orders), "persistence", "sink-line-removed")
+    assert f["at"] == "orders/repository.py:19" and f["for"] == "orders/repository.py::OrderRepository.save"
+
+
+def test_a_constructor_that_gains_a_required_parameter_breaks_its_constructions(orders):
+    # r2-2 C10: `Cls(...)` was never a call site of `Cls.__init__`: no arity break, and "no call site binds to it"
+    _edit(orders, "orders/repository.py", "    def __init__(self, url: str = DATABASE_URL):\n",
+          "    def __init__(self, url: str, timeout: float):\n")
+    res = _review(orders)
+    got = {f["at"]: f["status"] for f in _by(res, "public_api", "arity-break")}
+    assert got == {"orders/api.py:12": "statically_verified", "tests/test_service.py:8": "statically_verified",
+                   "tests/test_service.py:15": "statically_verified"}
+    assert "OrderRepository.__init__()" in _by(res, "public_api")[0]["finding"]
+    assert not [u for u in res["unknown"] if u["kind"] == "dynamic_callers"]
+
+
+def test_call_sites_through_a_package_re_export(tmp_path):
+    # r2-2 C01d: `from pkg import validate` (pkg/__init__.py: `from .rules import validate`) was no call site
+    repo = _project(tmp_path, "reexp", {**PKG_FILES, "pkg/__init__.py": "from .rules import validate\n",
+                                        "pkg/reexp.py": "from pkg import validate\n\n\ndef e(v):\n    return validate(v)\n"})
+    _edit(repo, "pkg/rules.py", "def validate(value):", "def validate(value, strict):")
+    [f] = [f for f in _by(_review(repo), "public_api", "arity-break") if f["at"] == "pkg/reexp.py:5"]
+    assert f["status"] == "statically_verified" and "re-export in pkg/__init__.py" in f["basis"]
+    _git(repo, "checkout", "--", "pkg/rules.py")
+    _edit(repo, "pkg/rules.py", "def validate(value):\n    return value\n\n\n", "")
+    assert {"pkg/__init__.py:1", "pkg/reexp.py:5"} <= {f["at"] for f in _by(_review(repo), "public_api")}
+
+
+TS_FILES = {
+    "src/format.ts": "export function format(n: number): string {\n  return n.toFixed(2);\n}\n\n"
+                     "export function parse(s: string): number {\n  return Number(s);\n}\n",
+    "src/view.ts": "import { parse } from './format';\n\nexport class View {\n  format = 'long';\n"
+                   "  show(s: string): string {\n    return String({ format: this.format }) + parse(s);\n  }\n}\n",
+    "src/log.ts": "export function log(msg: string): void {\n  console.log(`bad format: ${msg}`);\n}\n",
+    "src/use.ts": "import { format as fmt } from './format';\nimport * as F from './format';\n\n"
+                  "export function a(n: number): string {\n  return fmt(n) + F.format(n);\n}\n",
+    "package.json": '{\n  "name": "x",\n  "main": "dist/index.js",\n  "scripts": {\n    "lint": "eslint .",\n'
+                    '    "start": "node dist/index.js"\n  }\n}\n',
+    ".env": "API_URL=http://localhost\nTIMEOUT=5\n",
+    "src/config.ts": "export const timeout = Number(process.env.TIMEOUT ?? '5');\n",
+}
+
+
+def test_ts_removal_binds_imports_and_manifest_scripts_and_env_readers(tmp_path):
+    # r2-2 C18: every word `format` (a template string, an import path, a class field, an object key) was a
+    # strong_inference use of the removed function; C19: a lint script edit was a strong entry-point change; C20: a
+    # removed .env key read as process.env.KEY had no reader
+    repo = _project(tmp_path, "ts", TS_FILES)
+    _edit(repo, "src/format.ts", "export function format(n: number): string {\n  return n.toFixed(2);\n}\n\n", "")
+    got = {f["at"]: f["status"] for f in _by(_review(repo), "public_api", "removed-still-used")}
+    assert {a for a, s in got.items() if rr.at_least_strong(s)} == {"src/use.ts:1", "src/use.ts:5"}
+    assert got.get("src/log.ts:2") == "weak_inference" and got.get("src/view.ts:4") == "weak_inference"
+    _git(repo, "checkout", "--", "src/format.ts")
+    _edit(repo, "package.json", '"lint": "eslint ."', '"lint": "eslint . --fix"')
+    _edit(repo, "package.json", '"start": "node dist/index.js"', '"start": "node dist/main.js"')
+    got = {f["at"]: f["status"] for f in _by(_review(repo), "entry_points", "registration-manifest-changed")}
+    assert got == {"package.json:5": "weak_inference", "package.json:6": "strong_inference"}
+    _git(repo, "checkout", "--", "package.json")
+    _edit(repo, ".env", "TIMEOUT=5\n", "REQUEST_TIMEOUT=5\n")
+    [f] = [f for f in _by(_review(repo), "config", "config-file-key") if f["key"] == "TIMEOUT"]
+    assert f["readers"] == ["src/config.ts:1"]
+
+
+def test_an_import_statement_edited_in_place_is_one_change(orders):
+    # r2-2 R07/R08 (low): one edited import line was two module_statement changes (the old and the new name set)
+    _edit(orders, "tests/test_pricing.py", "from orders.pricing import apply_discount, compute_total\n",
+          "from orders.pricing import apply_discount, bulk_discount, compute_total\n")
+    _edit(orders, "orders/api.py", "from orders.service import ValidationError, fetch_order, place_order\n",
+          "from orders.service import ValidationError, place_order\n")
+    res = _review(orders)
+    ms = [c for c in res["changes"] if c["kind"] == "module_statement"]
+    assert [(c["symbol"], c.get("base_names")) for c in ms] == [
+        ("orders/api.py::ValidationError,place_order", "ValidationError,fetch_order,place_order"),
+        ("tests/test_pricing.py::apply_discount,bulk_discount,compute_total", "apply_discount,compute_total")]
+    # the name the edited import no longer binds is still used in the file
+    assert "orders/api.py:25" in {f["at"] for f in _by(res, "public_api", "removed-still-used")}
+
+
+def test_a_config_record_default_lists_the_readers_of_the_changed_component(mod):
+    # r2-2 R26 recheck (low): readers were searched in the config class's own file only; the accessor of the record
+    # component the changed argument initialises (`.maxDistance()`) is read elsewhere
+    (mod / "src/main/java/com/ex/net/Net.java").parent.mkdir(parents=True, exist_ok=True)
+    (mod / "src/main/java/com/ex/net/Net.java").write_text(
+        "package com.ex.net;\n\nimport com.ex.mod.ModConfig;\n\nclass Net {\n    boolean near(ModConfig cfg, int d) {\n"
+        "        return d <= cfg.maxDistance();\n    }\n\n    int per(ModConfig cfg) {\n        return cfg.blocksPerTick();\n"
+        "    }\n}\n", encoding="utf-8", newline="\n")
+    _git(mod, "add", "-A")
+    _git(mod, "commit", "-qm", "net")
+    _edit(mod, "src/main/java/com/ex/mod/ModConfig.java", "new ModConfig(8, 8);", "new ModConfig(8, 64);")
+    [f] = _by(_review(mod), "config", "config-default-changed")
+    assert "src/main/java/com/ex/net/Net.java:7" in f["evidence_at"]
+    assert "src/main/java/com/ex/net/Net.java:11" not in f["evidence_at"]

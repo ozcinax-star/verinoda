@@ -122,6 +122,7 @@ class Change:
     def_line: int | None = None
     old_def_line: int | None = None
     renamed_from: str | None = None   # an added definition whose body equals a removed one's in the same file
+    old_qual: str | None = None   # an import statement: the names it bound in the base version
 
     @property
     def symbol(self) -> str:
@@ -141,6 +142,8 @@ class Change:
             d["test"] = True
         if self.renamed_from:
             d["renamed_from"] = self.renamed_from
+        if self.old_qual and self.old_qual != self.qual and self.lines and self.old_lines:
+            d["base_names"] = self.old_qual   # an import statement edited in place
         return d
 
 
@@ -1009,8 +1012,36 @@ def _classify(ctx: _Ctx, fd: FileDiff) -> tuple[list[Change], dict]:
             name = f"<module>@L{ln}"
         out.append(Change(rel, name, "module_statement", lines=(b["start"], b["end"]) if b else None,
                           old_lines=(a["start"], a["end"]) if a else None, new_changed=nc, old_changed=oc,
-                          test=test))
-    return out, {**info, "kind": "code"}
+                          test=test, old_qual=name if key.startswith("IMPORT:") else None))
+    return _pair_imports(out, fd), {**info, "kind": "code"}
+
+
+def _pair_imports(changes: list[Change], fd: FileDiff) -> list[Change]:
+    """An import statement edited in place (``from m import a, b`` -> ``from m import a, c``) is one change with its
+    old and new name sets, not a removed statement and an added one: a statement only in the base version and one
+    only in the new version that fall in the same hunk of the line diff are paired."""
+    gone = [c for c in changes if c.kind == "module_statement" and c.old_qual and c.lines is None]
+    came = [c for c in changes if c.kind == "module_statement" and c.old_qual and c.old_lines is None]
+    if not gone or not came or fd.old is None or fd.new is None:
+        return changes
+    sm = difflib.SequenceMatcher(None, fd.old.split("\n"), fd.new.split("\n"), autojunk=False)
+    old_h: dict[int, int] = {}
+    new_h: dict[int, int] = {}
+    for h, (tag, i1, i2, j1, j2) in enumerate(sm.get_opcodes()):
+        if tag != "equal":
+            old_h.update({ln: h for ln in range(i1 + 1, i2 + 1)})
+            new_h.update({ln: h for ln in range(j1 + 1, j2 + 1)})
+    merged: dict[int, Change] = {}
+    drop: set[int] = set()
+    for g in gone:
+        h = old_h.get(g.old_lines[0]) if g.old_lines else None
+        partner = next((a for a in came if id(a) not in merged and h is not None and a.lines
+                        and new_h.get(a.lines[0]) == h), None)
+        if partner is None:
+            continue
+        drop.add(id(g))
+        merged[id(partner)] = replace(partner, old_lines=g.old_lines, old_changed=g.old_changed, old_qual=g.qual)
+    return [merged.get(id(c), c) for c in changes if id(c) not in drop]
 
 
 def _config_changes(ctx: _Ctx, fd: FileDiff, new_l: set[int], old_l: set[int]) -> list[Change]:
@@ -1080,32 +1111,87 @@ def _edge_kept(ctx: _Ctx, caller: str, callee: str, d: dict) -> bool:
         return True
     key = (uf, vf)
     if key not in ctx._edge_ok:
-        ok = ctx.project_root(uf) == ctx.project_root(vf)
+        vroot = ctx.project_root(vf)
+        ok = ctx.project_root(uf) == vroot or _refers_to_project(ctx, uf, vf, vroot)
         if ok and uf.endswith((".py", ".pyi")) and vf.endswith((".py", ".pyi")):
             ok = not _imports_namesake(ctx, uf, vf)
         ctx._edge_ok[key] = ok
     return ctx._edge_ok[key]
 
 
+_JS_IMPORT = re.compile(r"(?:\bfrom\s+|\brequire\s*\(\s*|\bimport\s*\(\s*|^\s*import\s+)[\"']([^\"'\n]+)[\"']", re.M)
+
+
+def _refers_to_project(ctx: _Ctx, caller_file: str, callee_file: str, callee_root: str) -> bool:
+    """Does ``caller_file``, in another project of the repository than ``callee_file`` (a monorepo package, a
+    Gradle subproject), import from the callee's project? Python: an import whose top-level package is the one
+    ``callee_file`` has under its project root (``from core.repo import ...`` for ``libs/core/core/repo.py``);
+    Java / Kotlin: the callee's class seen through an import or the same package; JS / TS: a relative import into
+    the callee's project or its package.json name. A vendored copy imports its own modules and is not linked."""
+    text = ctx.text(caller_file) or ""
+    cs = _suffix(callee_file)
+    if cs in (".py", ".pyi") and _suffix(caller_file) in (".py", ".pyi"):
+        tops = {m.split(".")[0] for m in _py_module_names(ctx, callee_file)}
+        return any((m or "").split(".")[0] in tops for m, _n in ctx.py_imported(caller_file))
+    if cs in (".java", ".kt", ".kts"):
+        return _jvm_sees(text, _jvm_package(ctx.text(callee_file) or ""), PurePosixPath(callee_file).stem)
+    if cs in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"):
+        pkg_name = None
+        try:
+            import json as _json
+
+            meta = _json.loads(ctx.text(f"{callee_root}/package.json" if callee_root else "package.json") or "{}")
+            pkg_name = meta.get("name") if isinstance(meta, dict) else None
+        except ValueError:
+            pkg_name = None
+        here = PurePosixPath(caller_file).parent
+        for spec in _JS_IMPORT.findall(text):
+            if spec.startswith("."):
+                parts: list[str] = []
+                for p in (here / spec).parts:
+                    if p == "..":
+                        parts = parts[:-1]
+                    elif p != ".":
+                        parts.append(p)
+                if callee_root and "/".join(parts).startswith(callee_root + "/"):
+                    return True
+            elif pkg_name and (spec == pkg_name or spec.startswith(pkg_name + "/")):
+                return True
+    return False
+
+
 def _imports_namesake(ctx: _Ctx, caller_file: str, callee_file: str) -> bool:
     """Does the Python file ``caller_file`` import a module named like ``callee_file``'s module (or a name
     defined there) from another module, and nothing from ``callee_file``'s module itself?"""
-    from verinoda.guards import _module_of
-
-    mod = _module_of(callee_file) or ""
-    last = mod.rpartition(".")[2]
-    if not mod:
+    mods = _py_module_names(ctx, callee_file)
+    if not mods:
         return False
+    last = next(iter(mods)).rpartition(".")[2]
     classes = {q for q, s in ((ctx.facts(callee_file) or {}).get("symbols") or {}).items()
                if s.get("kind") == "class" and "." not in q}
     same, other = False, False
     for m, orig in ctx.py_imported(caller_file):
         full = f"{m}.{orig}" if orig else m
-        if full == mod or m == mod or full.startswith(mod + "."):
+        if any(full == mod or m == mod or full.startswith(mod + ".") for mod in mods):
             same = True
-        elif full.rpartition(".")[2] == last or (orig in classes and m != mod):
+        elif full.rpartition(".")[2] == last or (orig in classes and m not in mods):
             other = True
     return other and not same
+
+
+def _py_module_names(ctx: _Ctx, rel: str) -> set[str]:
+    """The names a Python file can be imported as: from the repository root, without a leading ``src``, and from
+    its own project root (a monorepo package: ``libs/core/core/repo.py`` is ``core.repo``)."""
+    from verinoda.guards import _module_of
+
+    root = ctx.project_root(rel)
+    out = set()
+    for inner in (rel, rel[len(root) + 1:] if root else rel):
+        for x in (inner, inner[4:] if inner.startswith("src/") else inner):
+            m = _module_of(x)
+            if m:
+                out.add(m)
+    return out
 
 
 def _walk_back(ctx: _Ctx, seeds: list[tuple[str, Change]], rels: set[str], depth: int = DEPTH) -> dict:
@@ -1255,9 +1341,10 @@ def _persistence(ctx: _Ctx, changes: list[Change], walk: dict) -> list[dict]:
 
 def _removed_sinks(ctx: _Ctx, c: Change) -> list[dict]:
     """Sink lines of the base version that the new version of the definition no longer has: compared as a
-    multiset of their code text (a moved line is not removed; another write left in the definition does not hide
-    a removed commit)."""
-    if not c.old_changed or c.old_lines is None:
+    multiset of their code text over the definition's own spans (a moved line is not removed; another write left
+    in the definition does not hide a removed commit; the file's line diff is not asked, since it may pair the
+    removed line with the same text in another definition)."""
+    if c.old_lines is None or c.lines is None or c.kind not in ("body", "signature"):
         return []
     ocode = ctx.code(c.file, "old")
     base = rr.sink_hits(ocode, *c.old_lines)
@@ -1292,7 +1379,7 @@ def _removed_sinks(ctx: _Ctx, c: Change) -> list[dict]:
         if left.get(kind, 0) > 0:
             left[kind] -= 1
             continue
-        if line in c.old_changed and kind not in rr.IO_ONLY_SINKS:
+        if kind not in rr.IO_ONLY_SINKS:
             out.append(_finding("persistence", "sink-line-removed",
                                 f"a {kind} line was removed or changed (base line {line}): "
                                 f"`{ctx.lines(c.file, 'old')[line - 1].strip()[:90]}`", "strong_inference",
@@ -1711,7 +1798,9 @@ def _py_op_call(ctx: _Ctx, rel: str, side: str, line: int) -> tuple[str, frozens
     best = None
     for n in ast.walk(scope) if scope is not None else ():
         if isinstance(n, ast.Call) and n.lineno <= line <= (n.end_lineno or n.lineno):
-            if best is None or (n.lineno, -(n.end_lineno or n.lineno)) < (best.lineno, -(best.end_lineno or best.lineno)):
+            span, best_span = (n.lineno, -(n.end_lineno or n.lineno)), \
+                (best.lineno, -(best.end_lineno or best.lineno)) if best is not None else None
+            if best_span is None or span < best_span:
                 best = n
     if best is None:
         code = ctx.code(rel, side)
@@ -2025,9 +2114,9 @@ def _guard_diff(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                 if how == "callee":
                     late = _guard_late(ctx, c, g, call_at)
                     if late:
-                        out.append(_late_guard(c, g, late, f"the exit guard `{cond}` of {c.name} (base line {ln}) moved "
-                                               f"into {dest.name} (line {dg['line']}), which {c.name} calls at line "
-                                               f"{call_at}", f"{c.file}:{call_at}", [f"{dest.file}:{dg['line']}"]))
+                        out.append(_late_guard(c, g, late, f"the exit guard `{cond}` of {c.name} (base line {ln}) "
+                                               f"moved into {dest.name} (line {dg['line']}), which {c.name} calls at "
+                                               f"line {call_at}", f"{c.file}:{call_at}", [f"{dest.file}:{dg['line']}"]))
                         continue
                     where = f"which {c.name} calls at line {call_at}"
                 elif dg["line"] > call_at:   # the caller now checks after it has called the definition
@@ -2087,9 +2176,9 @@ def _guard_diff(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                 new.remove(ng)
                 late = _guard_late(ctx, c, g, ng["line"])
                 if late:
-                    out.append(_late_guard(c, g, late, f"the exit guard `{cond}` of {c.name} (base line {ln}) now calls "
-                                           f"{name}(), which returns that condition (defined at {where}), at line "
-                                           f"{ng['line']}", f"{c.file}:{ng['line']}", [where]))
+                    out.append(_late_guard(c, g, late, f"the exit guard `{cond}` of {c.name} (base line {ln}) now "
+                                           f"calls {name}(), which returns that condition (defined at {where}), at "
+                                           f"line {ng['line']}", f"{c.file}:{ng['line']}", [where]))
                     continue
                 out.append(_finding("security", "guard-moved",
                                     f"the exit guard `{cond}` of {c.name} (base line {ln}) now calls {name}(), which "
@@ -2152,8 +2241,8 @@ def _guard_diff(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                 continue
             left = [x for x in _guard_rows(ctx, c, "new")][:3]
             out.append(_finding("security", "guard-removed",
-                                f"the exit guard `if {cond}: <exit>` of {c.name} (base line {ln}) is gone: no condition "
-                                "the new version adds holds the condition or its negation"
+                                f"the exit guard `if {cond}: <exit>` of {c.name} (base line {ln}) is gone: no "
+                                "condition the new version adds holds the condition or its negation"
                                 + ("; the new version's exit guards are " + ", ".join(
                                     f"`{x['cond'][:60]}` (line {x['line']})" for x in left) if left else
                                    "; the new version has no exit guard"),
@@ -2458,36 +2547,43 @@ def _performance(ctx: _Ctx, changes: list[Change], hot: dict[str, dict], unknown
                 twin_kinds = {k for _l, k, _b in rr.sink_hits(ocode, _py_loop_body_start(twin[0], twin[1]),
                                                               twin[2])} if twin else set()
                 body_lo = _py_loop_body_start(loop, lo)
-                found = None
-                for call in rr.py_calls_in(loop):
+                # every call of the loop that reaches IO, and the sinks written in its body: one the base loop did
+                # not have is the one to report (a write added next to a read that was there)
+                calls_io = []
+                for call in sorted(rr.py_calls_in(loop), key=lambda k: (k.lineno, k.col_offset)):
                     if call.lineno < body_lo and not isinstance(loop, (ast.ListComp, ast.SetComp, ast.GeneratorExp,
                                                                        ast.DictComp)):
                         continue   # the iterable of a for-loop is evaluated once
                     tgt, how, conf = ctx.py_resolve(c.file, c.qual, fn, call)
                     hits = ctx.sink_reach(tgt, depth=2) if tgt else []
                     if hits:
-                        found = (call, hits[0], how, conf)
-                        break
-                direct = [h for h in rr.sink_hits(ctx.code(c.file), body_lo, hi)] if not found else []
+                        calls_io.append((call, hits[0], how, conf, head_new or rr.call_name(call) not in twin_calls))
+                direct = [(h, head_new or h[1] not in twin_kinds) for h in rr.sink_hits(ctx.code(c.file), body_lo, hi)]
+                found = next((f for f in calls_io if f[4]), None)
+                pick = None if found else next((d for d in direct if d[1]), None)
+                if found is None and pick is None:
+                    found = calls_io[0] if calls_io else None
+                    pick = direct[0] if direct and found is None else None
                 literal = _literal_size(loop)
-                if not found and not direct:
+                if not found and not pick:
                     if hot_why and head_new and lo in c.new_changed:
                         out.append(_hot_loop(c, lo, hot_why, "a loop", literal=literal))
                     continue
                 bound = None if literal is not None else (_py_loop_bound(ctx, c, fn, it, lo) if it else None)
                 if found:
-                    call, sink, how, conf = found
+                    call, sink, how, conf, io_new = found
                     text = (f"{rr.call_name(call)}() runs once per iteration of the loop at line {lo} and reaches a "
                             f"{sink['kind']} at {sink['at']} (N+1)")
                     ev = [f"{c.file}:{call.lineno}", sink["at"]]
                     basis = f"syntax tree loop; call resolved by: {how}" + (f" ({conf})" if conf else "")
                     by = sink["derived_by"]
-                    io_new = head_new or rr.call_name(call) not in twin_calls
                 else:
-                    line, kind, by = direct[0]
+                    (line, kind, by), io_new = pick
                     text = f"a {kind} at line {line} runs once per iteration of the loop at line {lo}"
                     ev, basis = [f"{c.file}:{line}"], "syntax tree loop; sink pattern in its body"
-                    io_new = head_new or kind not in twin_kinds
+                before = sorted({rr.call_name(f[0]) or "?" for f in calls_io if not f[4]})
+                if io_new and before:
+                    text += f"; the loop already called {', '.join(f'{b}()' for b in before[:3])} before the change"
                 if hot_why:
                     text += f"; the function is on a hot path ({hot_why['why']})"
                     ev += [hot_why["at"]] if hot_why.get("at") else []
@@ -2519,13 +2615,16 @@ def _performance(ctx: _Ctx, changes: list[Change], hot: dict[str, dict], unknown
             for lo, hi, head in rr.ts_loops(tree, s["start"], s["end"]):
                 if not (set(range(lo, hi + 1)) & c.new_changed):
                     continue
-                calls = _loop_calls_sinks(ctx, c, lo, hi)
-                if calls:
-                    call_line, name, sink = calls
+                calls_io = _loop_calls_sinks(ctx, c, lo, hi)
+                if calls_io:
                     twin = next(((a, b) for a, b, h in old_loops if h == head), None)
                     ocode = ctx.code(c.file, "old")
-                    io_new = twin is None or not any(re.search(rf"\b{re.escape(name)}\s*\(", ocode[i - 1])
-                                                     for i in range(twin[0], min(twin[1], len(ocode)) + 1))
+
+                    def _was_there(nm: str, tw=twin, oc=ocode) -> bool:
+                        return tw is not None and any(re.search(rf"\b{re.escape(nm)}\s*\(", oc[i - 1])
+                                                      for i in range(tw[0], min(tw[1], len(oc)) + 1))
+                    call_line, name, sink = next((x for x in calls_io if not _was_there(x[1])), calls_io[0])
+                    io_new = not _was_there(name)
                     text = (f"{name}() runs once per iteration of the loop at line {lo} and reaches a "
                             f"{sink['kind']} at {sink['at']} (N+1)")
                     ev = [f"{c.file}:{call_line}", sink["at"]]
@@ -2611,15 +2710,17 @@ def _removed_bound(old: str, new: str) -> str | None:
     return None
 
 
-def _loop_calls_sinks(ctx: _Ctx, c: Change, lo: int, hi: int):
+def _loop_calls_sinks(ctx: _Ctx, c: Change, lo: int, hi: int) -> list[tuple[int, str, dict]]:
+    """``(line, called name, first sink)`` of every call in the loop's body whose callee reaches IO."""
     unit = (c.file, c.qual)
-    for line, name, tgt, _how, _conf in ctx.callees(unit, set(range(lo + 1, hi + 1))):
+    out = []
+    for line, name, tgt, _how, _conf in sorted(ctx.callees(unit, set(range(lo + 1, hi + 1))), key=lambda x: x[0]):
         if tgt is None:
             continue
         hits = ctx.sink_reach(tgt, depth=2)
         if hits:
-            return line, name, hits[0]
-    return None
+            out.append((line, name, hits[0]))
+    return out
 
 
 def _py_loop_bound(ctx: _Ctx, c: Change, fn: ast.AST, it: str, loop_line: int) -> dict | None:
@@ -2665,12 +2766,13 @@ def _public_api(ctx: _Ctx, changes: list[Change], unknown: list[dict]) -> list[d
                 out += _py_arity(ctx, c, unknown)
             else:
                 out += _jvm_arity(ctx, c)
-        elif c.kind == "removed" or (c.kind == "module_statement" and c.lines is None and c.old_lines):
+        elif c.kind == "removed" or (c.kind == "module_statement" and c.old_lines and (
+                c.lines is None or (c.old_qual and c.old_qual != c.qual))):
             # a name the module still binds (an import rewritten to import more names, a function replaced by
-            # an import of it) is not removed
+            # an import of it) is not removed; an import edited in place: the names it no longer binds
             planned = ctx.base_texts.get(c.file) == ctx.text(c.file)   # a planned removal: the code is unchanged
             still = set() if planned else set(((ctx.facts(c.file) or {}).get("bindings") or {}))
-            names = [n for n in c.qual.split(",") if n] if c.kind == "module_statement" else [c.qual]
+            names = [n for n in (c.old_qual or c.qual).split(",") if n] if c.kind == "module_statement" else [c.qual]
             for name in names:
                 if "." not in name and name in still:
                     continue
@@ -2691,6 +2793,9 @@ def _py_call_sites(ctx: _Ctx, c: Change, files: list[str] | None = None) -> list
     owner = c.qual.rpartition(".")[0] if "." in c.qual else ""
     owner_kind = ((ctx.sym(c.file, owner) or ctx.sym(c.file, owner, "old") or {}).get("kind")) if owner else None
     owner_last = owner.rpartition(".")[2]
+    # a constructor is called through its class: `Cls(...)` runs `Cls.__init__`
+    ctor = owner_kind == "class" and name == "__init__" and "." not in owner
+    search = owner_last if ctor else name
     sites = []
     if files is not None:
         cand_files = set(files)
@@ -2699,9 +2804,9 @@ def _py_call_sites(ctx: _Ctx, c: Change, files: list[str] | None = None) -> list
         if c.node is not None:
             cand_files |= {ctx.g.file(u) for u, _ in _in_edges(ctx, c.node, {"calls", "imports_from", "imports"})
                            if ctx.g.file(u)}
-        cand_files |= set(ctx.py_candidates(c.file, name))
+        cand_files |= set(ctx.py_candidates(c.file, search))
     for rel in sorted(f for f in cand_files if f and f.endswith((".py", ".pyi"))):
-        if rel != c.file and name not in (ctx.text(rel) or ""):
+        if rel != c.file and search not in (ctx.text(rel) or ""):
             continue
         tree = ctx.pytree(rel)
         if tree is None:
@@ -2709,16 +2814,28 @@ def _py_call_sites(ctx: _Ctx, c: Change, files: list[str] | None = None) -> list
         imports = ctx._py_imports(rel)
         shadow = ctx.shadow(rel)
         local_names = {a for a, (m, orig) in imports.items() if orig == name and m == mod}
+        via = {a: r for a, (m, orig) in imports.items() if not owner and orig == name and m and m != mod
+               for r in [_py_reexport(ctx, m, orig, mod, name)] if r}
+        local_names |= set(via)
+        class_names = {a for a, (m, orig) in imports.items() if orig == owner_last and m == mod} if ctor else set()
         for call in ast.walk(tree):
             if not isinstance(call, ast.Call):
                 continue
             f = call.func
             how = None
             status = "statically_verified"
-            if not owner:
+            if ctor and isinstance(f, ast.Name) and f.id not in shadow.get(id(f), ()) and \
+                    (f.id in class_names or (rel == c.file and f.id == owner_last)):
+                how = f"construction of {owner_last} (" + ("the class imported from its module" if f.id in class_names
+                                                          else "same module") + ")"
+            elif ctor and isinstance(f, ast.Attribute) and f.attr == owner_last and mod and \
+                    ctx.py_module_of_expr(rel, f.value) == mod:
+                how = f"construction of {owner_last} (module attribute)"
+            elif not owner:
                 if isinstance(f, ast.Name) and f.id not in shadow.get(id(f), ()) and \
                         (f.id in local_names or (rel == c.file and f.id == name)):
-                    how = "name bound by an import of the changed module" if f.id in local_names else "same module"
+                    how = (f"name imported through the re-export in {via[f.id]}" if f.id in via else
+                           "name bound by an import of the changed module" if f.id in local_names else "same module")
                 elif isinstance(f, ast.Attribute) and f.attr == name and mod and \
                         ctx.py_module_of_expr(rel, f.value) == mod:
                     how = "module attribute"
@@ -2745,6 +2862,23 @@ def _py_call_sites(ctx: _Ctx, c: Change, files: list[str] | None = None) -> list
     return sites
 
 
+def _py_reexport(ctx: _Ctx, module: str, name: str, target_mod: str | None, target: str,
+                 depth: int = 3) -> str | None:
+    """The project file through which ``module``'s ``name`` is ``target_mod``'s ``target`` (``pkg/__init__.py``
+    doing ``from .rules import validate``), following re-exports ``depth`` modules deep; None when it is not."""
+    mrel = ctx.pyix().modules.get(module) if target_mod else None
+    if mrel is None or depth <= 0:
+        return None
+    for alias, m2, orig in ctx._py_import_rows(mrel):
+        if alias != name or not orig or not m2:
+            continue
+        if m2 == target_mod and orig == target:
+            return mrel
+        if _py_reexport(ctx, m2, orig, target_mod, target, depth - 1):
+            return mrel
+    return None
+
+
 def _py_arity(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
     s = ctx.sym(c.file, c.qual)
     fn = rr.py_def_at(ctx.pytree(c.file), s["def"]) if s else None
@@ -2768,13 +2902,14 @@ def _py_arity(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
         ofn = rr.py_def_at(ctx.pytree(c.file, "old"), c.old_def_line) if c.old_def_line else None
         old_pos = rr.py_params(ofn)["pos"] if ofn is not None and not isinstance(ofn, ast.ClassDef) else None
         for rel, call, how, status in sites:
+            shown = f"{_last(c.qual.rpartition('.')[0])}.__init__" if how.startswith("construction") else c.name
             if params["decorated"] and status == "statically_verified":
                 status = "strong_inference"   # a decorator may change the signature
             b = bound and how != "class attribute"
             problem = rr.py_arity_problem(params, call, bound=b)
             if problem:
                 out.append(_finding("public_api", "arity-break",
-                                    f"the call to {c.name}() at {rel}:{call.lineno} no longer fits the new signature: "
+                                    f"the call to {shown}() at {rel}:{call.lineno} no longer fits the new signature: "
                                     f"{problem}", status, f"{rel}:{call.lineno}", evidence_at=[f"{c.file}:{s['def']}"],
                                     basis=f"call bound by: {how}; arguments counted against the new parameters (syntax "
                                           "tree)" + ("; decorated definition" if params["decorated"] else ""),
@@ -2783,7 +2918,7 @@ def _py_arity(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
             moved = _moved_positional(old_pos, params["pos"], call, b)
             if moved:
                 out.append(_finding("public_api", "positional-order-changed",
-                                    f"the call to {c.name}() at {rel}:{call.lineno} passes positional arguments that "
+                                    f"the call to {shown}() at {rel}:{call.lineno} passes positional arguments that "
                                     f"now bind to other parameters: {moved}", "strong_inference",
                                     f"{rel}:{call.lineno}", evidence_at=[f"{c.file}:{s['def']}"],
                                     basis=f"call bound by: {how}; the parameter names of both versions compared by "
@@ -2917,7 +3052,8 @@ def _removed_refs(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
                 continue
             imports = ctx._py_imports(rel)
             shadow = ctx.shadow(rel)
-            local = {a for a, (m, orig) in imports.items() if orig == name and m == mod}
+            local = {a for a, (m, orig) in imports.items() if orig == name and (m == mod or (
+                m and _py_reexport(ctx, m, orig, mod, name)))}
             for n in ast.walk(tree):
                 if isinstance(n, ast.ImportFrom) and any(a.name == name for a in n.names) and \
                         imports.get(next(a.asname or a.name for a in n.names if a.name == name), (None,))[0] == mod:
@@ -2974,14 +3110,11 @@ def _removed_method_py(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
     the caller's line. When nothing binds, calls of ``.m(`` through receivers of unknown type are an unknown."""
     out: list[dict] = []
     owner_q = c.qual.rpartition(".")[0]
-    tree = ctx.pytree(c.file)
-    cls = rr.py_def_at(tree, (ctx.sym(c.file, owner_q) or {}).get("def", -1)) if ctx.sym(c.file, owner_q) else None
-    bases = [rr.dotted(b) or "?" for b in getattr(cls, "bases", [])] if isinstance(cls, ast.ClassDef) else []
-    bases = [b for b in bases if b not in ("object", "Protocol", "ABC", "Generic")]
-    syms = (ctx.facts(c.file) or {}).get("symbols") or {}
-    if any(f"{_last(b)}.{c.name}" in syms for b in bases):
-        return out   # a base class of the same file still defines it: calls reach the inherited method
-    cap = "weak_inference" if bases else None
+    provides, bases = _py_bases_provide(ctx, c.file, owner_q, c.name)
+    if provides is True:
+        return out   # a base class still defines it: calls reach the inherited method
+    # a base class outside the project (or one not resolved) may provide it: the callers are only possibly broken
+    cap = "weak_inference" if provides is None else None
     seen: set[str] = set()
     for rel, call, how, status in _py_call_sites(ctx, c):
         at = f"{rel}:{call.lineno}"
@@ -2991,8 +3124,11 @@ def _removed_method_py(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
         out.append(_finding("public_api", "removed-still-used",
                             f"{c.qual} was removed but {at} still calls it ({how})",
                             cap or ("strong_inference" if status == "statically_verified" else status), at,
-                            basis=f"call bound by: {how}" + (f"; the class has base classes ({', '.join(bases)}) that "
-                                                            "may still provide it" if bases else ""),
+                            basis=f"call bound by: {how}" + (
+                                f"; the class has base classes ({', '.join(bases)}) outside the project or not "
+                                "resolved, which may still provide it" if cap else
+                                f"; its base classes ({', '.join(bases)}) are project classes that do not define it"
+                                if bases else ""),
                             derived_by="review.removed_refs", for_symbol=c.symbol))
     if c.node is not None and ctx.g is not None:
         for u, d in _in_edges(ctx, c.node, {"calls"}):
@@ -3010,29 +3146,90 @@ def _removed_method_py(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
                                 f"{_clean_label(ctx.g.label(u))}, {d.get('confidence') or 'no confidence'})",
                                 cap or "strong_inference", at, basis="call edge of the last snapshot's graph; the call "
                                 "is still on that line", derived_by="review.removed_refs", for_symbol=c.symbol))
-    if not out:
-        rx = re.compile(rf"\.\s*{re.escape(c.name)}\s*\(")
-        loose = []
-        for rel in ctx.files():
-            if not rel.endswith((".py", ".pyi")):
-                continue
-            t = ctx.text(rel)
-            if not t or f"{c.name}(" not in t.replace(" ", ""):
-                continue
-            loose += [f"{rel}:{i}" for i, ln in enumerate(ctx.code(rel), 1) if rx.search(ln)]
-        if loose:
-            unknown.append({"kind": "unresolved_callers", "at": loose[0],
-                            "what": f"whether the {len(loose)} call(s) of .{c.name}( through objects reach the removed "
-                                    f"{c.qual}",
-                            "why": "their receivers' types are not resolved statically",
-                            "next_step": "read " + ", ".join(loose[:3])})
+    # calls of `.m(` that no rule above bound (a receiver such as `self.repo`): whether they reach the removed
+    # method is unknown - also when other callers were bound
+    rx = re.compile(rf"\.\s*{re.escape(c.name)}\s*\(")
+    loose = []
+    for rel in ctx.files():
+        if not rel.endswith((".py", ".pyi")):
+            continue
+        t = ctx.text(rel)
+        if not t or f"{c.name}(" not in t.replace(" ", ""):
+            continue
+        loose += [at for i, ln in enumerate(ctx.code(rel), 1) for at in [f"{rel}:{i}"] if rx.search(ln)
+                  and at not in seen]
+    if loose:
+        unknown.append({"kind": "unresolved_callers", "at": loose[0],
+                        "what": f"whether the {len(loose)} other call(s) of .{c.name}( through objects reach the "
+                                f"removed {c.qual}" if out else f"whether the {len(loose)} call(s) of .{c.name}( "
+                                f"through objects reach the removed {c.qual}",
+                        "why": "their receivers' types are not resolved statically",
+                        "next_step": "read " + ", ".join(loose[:3])})
     return out
+
+
+_NO_BASES = {"object", "Protocol", "ABC", "Generic", "typing.Protocol", "typing.Generic", "abc.ABC", "NamedTuple",
+             "TypedDict", "Enum", "enum.Enum"}
+
+
+def _py_bases_provide(ctx: _Ctx, rel: str, cls_qual: str, meth: str, depth: int = 4) -> tuple[bool | None, list[str]]:
+    """Does a base class of the Python class ``rel::cls_qual`` (the tree under review) define ``meth``? True when
+    one does (in the project), False when every base is a project class - resolved through the file's definitions
+    and imports - and none of them (nor their bases) does, None when a base is outside the project or not
+    resolved. Also the base classes' names."""
+    s = ctx.sym(rel, cls_qual)
+    cls = rr.py_def_at(ctx.pytree(rel), s["def"]) if s else None
+    if not isinstance(cls, ast.ClassDef):
+        return None, []
+    names: list[str] = []
+    verdict: bool | None = False
+    for b in cls.bases:
+        expr = b.value if isinstance(b, ast.Subscript) else b
+        d = rr.dotted(expr) or "?"
+        if d in _NO_BASES:
+            continue
+        names.append(d)
+        tgt = _py_class_unit(ctx, rel, expr)
+        if tgt is None:
+            verdict = None
+            continue
+        brel, bqual = tgt
+        if f"{bqual}.{meth}" in ((ctx.facts(brel) or {}).get("symbols") or {}):
+            return True, names
+        sub = _py_bases_provide(ctx, brel, bqual, meth, depth - 1)[0] if depth > 0 else None
+        if sub is True:
+            return True, names
+        if sub is None:
+            verdict = None
+    return verdict, names
+
+
+def _py_class_unit(ctx: _Ctx, rel: str, expr: ast.AST) -> tuple[str, str] | None:
+    """``(file, qual)`` of the project class an expression of ``rel`` names: a class of the same file, an imported
+    one, or a module attribute."""
+    syms = (ctx.facts(rel) or {}).get("symbols") or {}
+    if isinstance(expr, ast.Name):
+        if (syms.get(expr.id) or {}).get("kind") == "class":
+            return rel, expr.id
+        imp = ctx._py_imports(rel).get(expr.id)
+        if imp and imp[0] and imp[1]:
+            mrel = ctx.pyix().modules.get(imp[0])
+            if mrel and (((ctx.facts(mrel) or {}).get("symbols") or {}).get(imp[1]) or {}).get("kind") == "class":
+                return mrel, imp[1]
+    elif isinstance(expr, ast.Attribute):
+        mod = ctx.py_module_of_expr(rel, expr.value)
+        mrel = ctx.pyix().modules.get(mod) if mod else None
+        if mrel and (((ctx.facts(mrel) or {}).get("symbols") or {}).get(expr.attr) or {}).get("kind") == "class":
+            return mrel, expr.attr
+    return None
 
 
 def _removed_refs_jvm(ctx: _Ctx, c: Change, owner_q: str) -> list[dict]:
     """A removed Java / Kotlin / other member still named: the graph's call edges into it, ``Owner.name(`` and
     ``Owner::name`` (method references) in files that see the owner's class, ``this::name`` and unqualified calls
     in its own file (strong_inference); ``x.name(`` on a receiver of unknown type is weak_inference."""
+    if not owner_q and _suffix(c.file) in _JS_SUFFIXES:
+        return _removed_refs_js(ctx, c)
     out: list[dict] = []
     name = c.name
     owner = _last(owner_q) if owner_q else ""
@@ -3090,6 +3287,92 @@ def _removed_refs_jvm(ctx: _Ctx, c: Change, owner_q: str) -> list[dict]:
     return out
 
 
+_JS_SUFFIXES = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts")
+_JS_NAMED = re.compile(r"\bimport\s+(?:type\s+)?(?:\w+\s*,\s*)?\{([^}]*)\}\s*from\s*[\"']([^\"'\n]+)[\"']|"
+                       r"\b(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\s*\(\s*[\"']([^\"'\n]+)[\"']\s*\)")
+_JS_STAR = re.compile(r"\bimport\s+\*\s+as\s+(\w+)\s+from\s*[\"']([^\"'\n]+)[\"']|"
+                      r"\b(?:const|let|var)\s+(\w+)\s*=\s*require\s*\(\s*[\"']([^\"'\n]+)[\"']\s*\)")
+
+
+def _js_module_is(importer: str, spec: str, target: str) -> bool:
+    """Does the import specifier ``spec`` of the file ``importer`` name the module file ``target`` (a relative
+    path, with or without its extension, or its directory's index)?"""
+    if not spec.startswith("."):
+        return False
+    parts: list[str] = []
+    for p in (PurePosixPath(importer).parent / spec).parts:
+        if p == "..":
+            parts = parts[:-1]
+        elif p != ".":
+            parts.append(p)
+    got = "/".join(parts)
+    stem = str(PurePosixPath(target).with_suffix(""))
+    return got in (target, stem) or re.sub(r"\.(?:m|c)?[jt]sx?$", "", got) == stem or \
+        (PurePosixPath(target).stem == "index" and got == str(PurePosixPath(target).parent))
+
+
+def _removed_refs_js(ctx: _Ctx, c: Change) -> list[dict]:
+    """A removed JS / TS top-level function still used: an import of it from its module (``import { f }``,
+    ``require``), calls of the imported name or through a namespace import (``m.f(``), and unqualified calls in its
+    own module (strong_inference); the word elsewhere - a template string, an object key, a field of that name -
+    is weak_inference (at most 5)."""
+    out: list[dict] = []
+    name = c.name
+    word = re.compile(rf"(?<![\w$]){re.escape(name)}(?![\w$])")
+    n_weak = 0
+    for rel in ctx.files():
+        if _suffix(rel) not in CODE_SUFFIXES:
+            continue
+        t = ctx.text(rel)
+        if not t or name not in t:
+            continue
+        code = ctx.code(rel)
+        strong_rx: list[re.Pattern] = []
+        how = ""
+        if rel == c.file:
+            strong_rx.append(re.compile(rf"(?<![\w$.]){re.escape(name)}\s*\("))
+            how = "called in its own module"
+        elif _suffix(rel) in _JS_SUFFIXES:
+            for m in _JS_NAMED.finditer(t):
+                names, spec = (m.group(1), m.group(2)) if m.group(2) else (m.group(3), m.group(4))
+                if not _js_module_is(rel, spec, c.file):
+                    continue
+                for part in (names or "").split(","):
+                    bits = re.split(r"\s+as\s+|\s*:\s*", part.strip())
+                    if bits and bits[0].strip() == name:
+                        alias = bits[-1].strip() or name
+                        line = t[: m.start()].count("\n") + 1
+                        out.append(_finding("public_api", "removed-still-used",
+                                            f"{c.qual} was removed but {rel}:{line} still imports it",
+                                            "strong_inference", f"{rel}:{line}",
+                                            basis="import of the removed name from its module (text)",
+                                            derived_by="review.removed_refs", for_symbol=c.symbol))
+                        strong_rx.append(re.compile(rf"(?<![\w$.]){re.escape(alias)}\s*\("))
+                        how = f"`{alias}(` imported from {c.file}"
+            for m in _JS_STAR.finditer(t):
+                ns, spec = (m.group(1), m.group(2)) if m.group(2) else (m.group(3), m.group(4))
+                if _js_module_is(rel, spec, c.file):
+                    strong_rx.append(re.compile(rf"(?<![\w$.]){re.escape(ns)}\s*\.\s*{re.escape(name)}\b"))
+                    how = f"`{ns}.{name}` through a namespace import of {c.file}"
+        seen_here = {f["at"] for f in out}
+        for i, ln in enumerate(code, 1):
+            at = f"{rel}:{i}"
+            if at in seen_here or name not in ln:
+                continue
+            if any(rx.search(ln) for rx in strong_rx) and not re.match(r"\s*(?:import|export)\b", ln):
+                out.append(_finding("public_api", "removed-still-used", f"{c.qual} was removed but {at} still uses it "
+                                    f"({how})", "strong_inference", at, basis="text match in code bound through the "
+                                    "file's imports (comments removed)", derived_by="review.removed_refs",
+                                    for_symbol=c.symbol))
+            elif rel != c.file and word.search(ln) and n_weak < 5:
+                n_weak += 1
+                out.append(_finding("public_api", "removed-still-used", f"{c.qual} was removed and {at} names `{name}` "
+                                    "- not an import of it or a call through one (a string, a key or a member of "
+                                    "that name?)", "weak_inference", at, basis="text match in code (comments removed)",
+                                    derived_by="review.removed_refs", for_symbol=c.symbol))
+    return out
+
+
 def _dedupe(findings: list[dict]) -> list[dict]:
     """One finding per rule, place and text; of duplicates (a class and its method both cover a changed line)
     the one for the innermost symbol is kept."""
@@ -3101,6 +3384,9 @@ def _dedupe(findings: list[dict]) -> list[dict]:
     return list(best.values())
 
 
+# package.json scripts that npm runs by itself (install, publish) or that start the program
+_NPM_LIFECYCLE = ("start", "prestart", "poststart", "restart", "serve", "preinstall", "install", "postinstall",
+                  "prepare", "prepublish", "prepublishOnly", "prepack", "postpack")
 # registration manifests: (path pattern, what it is, key prefixes that register code)
 _MANIFESTS = [
     (re.compile(r"(^|/)(fabric|quilt)\.mod\.json$"), "mod manifest (Fabric / Quilt)",
@@ -3110,9 +3396,13 @@ _MANIFESTS = [
     (re.compile(r"(^|/)(paper-)?plugin\.yml$"), "plugin manifest (Bukkit / Paper)",
      ("main", "commands", "permissions", "depend", "softdepend")),
     (re.compile(r"(^|/)[\w.-]+\.mixins\.json$"), "Mixin configuration", ("",)),
-    (re.compile(r"(^|/)package\.json$"), "npm package manifest", ("main", "bin", "exports", "module", "scripts",
-                                                                   "type")),
+    # npm: what node loads (main / bin / exports / module / type) and the lifecycle scripts npm runs by itself;
+    # any other script (lint, test, build) is developer tooling (weak_inference, below)
+    (re.compile(r"(^|/)package\.json$"), "npm package manifest", ("main", "bin", "exports", "module", "type",
+                                                                   *(f"scripts.{s}" for s in _NPM_LIFECYCLE))),
 ]
+# keys of a manifest whose change is reported at weak_inference only (a package.json script other than a lifecycle one)
+_MANIFEST_WEAK = {"npm package manifest": ("scripts",)}
 
 
 def _manifest_kind(rel: str) -> str | None:
@@ -3127,7 +3417,10 @@ def _manifest_findings(ctx: _Ctx, changes: list[Change]) -> list[dict]:
         if c.kind != "config_key" or not c.qual:
             continue
         row = next(((what, prefixes) for rx, what, prefixes in _MANIFESTS if rx.search(c.file)), None)
-        if row is None or not any(c.qual == p or c.qual.startswith(p + ".") or not p for p in row[1]):
+        if row is None:
+            continue
+        strong = any(c.qual == p or c.qual.startswith(p + ".") or not p for p in row[1])
+        if not strong and not any(c.qual == p or c.qual.startswith(p + ".") for p in _MANIFEST_WEAK.get(row[0], ())):
             continue
         if c.lines is None:
             ln, side = c.old_lines[0], "base"
@@ -3138,10 +3431,12 @@ def _manifest_findings(ctx: _Ctx, changes: list[Change]) -> list[dict]:
             what = (f"changed: `{ctx.lines(c.file, 'old')[c.old_lines[0] - 1].strip()[:80]}` -> `{new}`"
                     if c.old_lines else f"added: `{new}`")
         out.append(_finding("entry_points", "registration-manifest-changed",
-                            f"{c.file} ({row[0]}): {c.qual} {what} - what the runtime loads or registers at start "
-                            "changed", "strong_inference", f"{c.file}:{ln}", basis="changed key of a registration "
-                            "manifest (line diff; manifest table)", derived_by="review.MANIFESTS", for_symbol=c.symbol,
-                            **({"side": side} if side else {})))
+                            f"{c.file} ({row[0]}): {c.qual} {what} - " + (
+                                "what the runtime loads or registers at start changed" if strong else
+                                "a script run on request (tooling), not at install or start"),
+                            "strong_inference" if strong else "weak_inference", f"{c.file}:{ln}",
+                            basis="changed key of a registration manifest (line diff; manifest table)",
+                            derived_by="review.MANIFESTS", for_symbol=c.symbol, **({"side": side} if side else {})))
     return out
 
 
@@ -3174,14 +3469,15 @@ def _config(ctx: _Ctx, changes: list[Change]) -> list[dict]:
             side = "new" if c.lines else "old"
             text = ctx.lines(rel, side)[ln - 1].strip()
             old = ctx.lines(rel, "old")[c.old_lines[0] - 1].strip() if c.old_lines else None
-            readers = _key_readers(ctx, c.qual)
+            readers = _key_readers(ctx, c.qual, env=PurePosixPath(rel).name.startswith(".env"))
             if not c.lines:
                 what = "removed" + (f"; still read at {', '.join(readers[:3])}" if readers else "")
             else:
                 what = f"`{old}` -> `{text}`" if old else "added"
             add(_finding("config", "config-file-key", f"config key {c.qual} changed: {what}",
                          "strong_inference", f"{rel}:{ln}", evidence_at=readers[:5],
-                         basis="line diff of the config file; readers by literal key search in code",
+                         basis="line diff of the config file; readers by literal key search in code (and "
+                               "`process.env.KEY` / `import.meta.env.KEY` for .env files)",
                          derived_by="review.config_keys", for_symbol=c.symbol, readers=readers[:10] or None,
                          key=c.qual, **({"side": "base"} if side == "old" else {})))
             continue
@@ -3371,11 +3667,14 @@ def _repo_config_keys(ctx: _Ctx) -> dict[str, list[str]]:
     return keys
 
 
-def _key_readers(ctx: _Ctx, key: str) -> list[str]:
+def _key_readers(ctx: _Ctx, key: str, *, env: bool = False) -> list[str]:
+    """Code lines that read a config key: the key as a quoted literal (``getenv("K")``, ``cfg["k"]``) and, for the
+    keys of a .env file, the attribute forms of JS / TS (``process.env.K``, ``import.meta.env.K``)."""
     last = key.rpartition(".")[2]
     if len(last) < 3:
         return []
-    rx = re.compile(rf"[\"']{re.escape(last)}[\"']")
+    attr = rf"|\b(?:process\.env|import\.meta\.env)\s*\.\s*{re.escape(last)}\b" if env else ""
+    rx = re.compile(rf"[\"']{re.escape(last)}[\"']" + attr)
     out = []
     for rel in ctx.files():
         if _suffix(rel) not in CODE_SUFFIXES or _is_test(rel):
@@ -3477,6 +3776,7 @@ def _jvm_config(ctx: _Ctx, c: Change, cfg_keys: dict[str, list[str]]) -> list[di
                 continue
             field_name = fm.group(1)
             readers = _field_readers(ctx, c.file, cls_name, field_name, ln)
+            readers += [r for r in _record_component_readers(ctx, c, cls_name, field_name, ln) if r not in readers]
             out.append(_finding("config", "config-default-changed",
                                 f"the value of {cls_name}.{field_name} (a field of a config class) changed: "
                                 f"`{ctx.lines(c.file)[ln - 1].strip()[:100]}`"
@@ -3485,6 +3785,37 @@ def _jvm_config(ctx: _Ctx, c: Change, cfg_keys: dict[str, list[str]]) -> list[di
                                 "like a configuration, on a changed line (text rule); readers by name",
                                 derived_by="review.config_class_fields", for_symbol=c.symbol,
                                 key=f"{cls_name}.{field_name}"))
+    return out
+
+
+def _record_component_readers(ctx: _Ctx, c: Change, cls: str, field_name: str, line: int) -> list[str]:
+    """A config field initialised with its own record's constructor (``DEFAULTS = new Cfg(8, 64)`` in ``record
+    Cfg(int a, int maxDistance)``): the reads, in the files that see the class, of the components whose argument
+    changed (``.maxDistance()``) - the values the changed default feeds."""
+    new_args = rr.call_args(ctx.code(c.file)[line - 1], cls)
+    header = re.search(rf"\brecord\s+{re.escape(cls)}\s*(?:<[^>]*>)?\s*\(([^)]*)\)", "\n".join(ctx.code(c.file)))
+    if not new_args or header is None:
+        return []
+    old_args = None
+    for t in ctx.code(c.file, "old"):
+        m = _JVM_FIELD.match(t)
+        if m and m.group(1) == field_name:
+            old_args = rr.call_args(t, cls)
+            break
+    comps = [p.split()[-1] for p in rr.split_top(" ".join(header.group(1).split()), (",",)) if p.split()]
+    changed = [comps[i] for i in range(min(len(comps), len(new_args)))
+               if old_args is None or i >= len(old_args) or _norm_code(old_args[i]) != _norm_code(new_args[i])]
+    pkg = _jvm_package(ctx.text(c.file) or "")
+    out: list[str] = []
+    for comp in changed:
+        rx = re.compile(rf"\.\s*{re.escape(comp)}\s*\(\s*\)")
+        for f in ctx.files():
+            if _suffix(f) not in (".java", ".kt", ".kts"):
+                continue
+            t = ctx.text(f)
+            if not t or comp not in t or (f != c.file and not _jvm_sees(t, pkg, cls)):
+                continue
+            out += [f"{f}:{i}" for i, ln in enumerate(ctx.code(f), 1) if rx.search(ln) and f"{f}:{i}" not in out]
     return out
 
 
@@ -4122,7 +4453,7 @@ def _binding_readers(ctx: _Ctx, changes: list[Change]) -> list[dict]:
             continue
         names: list[str] = []
         if c.kind == "module_statement" and _suffix(c.file) in (".py", ".pyi") and not c.qual.startswith("<module>"):
-            names = [n for n in c.qual.split(",") if n]
+            names = [n for n in dict.fromkeys([*c.qual.split(","), *(c.old_qual or "").split(",")]) if n]
         elif c.kind == "body" and (ctx.sym(c.file, c.qual) or {}).get("kind") == "class" and \
                 _suffix(c.file) in (".java", ".kt"):
             code = ctx.code(c.file)
@@ -4158,7 +4489,8 @@ def _readers_of(ctx: _Ctx, c: Change, name: str) -> list[tuple[str, str | None]]
                 continue
             imports = ctx._py_imports(rel)
             shadow = ctx.shadow(rel)
-            local = {a for a, (m, orig) in imports.items() if orig == name and m == mod}
+            local = {a for a, (m, orig) in imports.items() if orig == name and (m == mod or (
+                m and _py_reexport(ctx, m, orig, mod, name)))}
             if rel == c.file:
                 local.add(name)
             for n in ast.walk(tree):
@@ -4299,18 +4631,30 @@ def _has_static_caller(ctx: _Ctx, c: Change) -> bool:
 def _staged_run_problem(ctx: _Ctx, staged: dict, *, observe: bool) -> str | None:
     """Why the staged tree cannot be run: the tests run on a copy of the base commit with the staged files laid
     on top, read from the working tree - so each staged file must hold its staged content there. ``observe``
-    copies the working tree itself: it needs every tracked file to hold its staged content."""
+    copies the working tree itself: it needs every tracked file - the staged ones included - to hold its staged
+    content."""
     if observe:
-        if ctx.overrides:
-            return (f"--observe runs the working tree, and {len(ctx.overrides)} tracked file(s) there differ from "
-                    f"the staged tree (e.g. {sorted(ctx.overrides)[0]}): stash or stage them, or review the working "
-                    "tree instead")
+        differ = sorted({*ctx.overrides, *_staged_unlike_worktree(ctx, staged),
+                         *(p for p in staged.get("deleted") or () if (ctx.repo / p).exists())})
+        if differ:
+            return (f"--observe runs the working tree, and {len(differ)} tracked file(s) there differ from "
+                    f"the staged tree (e.g. {differ[0]}): stash or stage them, or review the working tree instead")
         return None
     if staged.get("deleted"):
         return (f"the staged tree deletes {len(staged['deleted'])} file(s) (e.g. {staged['deleted'][0]}) and a copy "
                 "of the base commit cannot drop them")
     if staged.get("skipped"):
         return f"staged file(s) that were not read (e.g. {staged['skipped'][0]}): the staged tree cannot be rebuilt"
+    bad = _staged_unlike_worktree(ctx, staged)
+    if bad:
+        return (f"{len(bad)} staged file(s) have unstaged changes in the working tree (e.g. {bad[0]}): the run "
+                "copies them from the working tree, so it would not run the staged tree - stash the unstaged changes "
+                "or review the working tree instead")
+    return None
+
+
+def _staged_unlike_worktree(ctx: _Ctx, staged: dict) -> list[str]:
+    """Staged files whose working-tree copy is not their staged content (unstaged changes on top)."""
     bad = []
     for p in staged["paths"]:
         try:
@@ -4319,11 +4663,7 @@ def _staged_run_problem(ctx: _Ctx, staged: dict, *, observe: bool) -> str | None
             now = None
         if now != ctx.text(p) and p not in staged.get("unchanged", ()):
             bad.append(p)
-    if bad:
-        return (f"{len(bad)} staged file(s) have unstaged changes in the working tree (e.g. {bad[0]}): the run "
-                "copies them from the working tree, so it would not run the staged tree - stash the unstaged changes "
-                "or review the working tree instead")
-    return None
+    return bad
 
 
 def _callers_unknown(ctx: _Ctx, changes: list[Change]) -> list[dict]:

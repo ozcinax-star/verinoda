@@ -769,8 +769,12 @@ def cmd_review(args) -> int:
     if args.max_chars < 1:
         print("error: --max-chars must be a positive number of characters", file=sys.stderr)
         return 2
-    _need_graph(repo)
     concerns = [c.strip() for c in args.concerns.split(",") if c.strip()] if args.concerns else None
+    bad = [c for c in concerns or () if c not in rv.CONCERNS]
+    if bad:
+        print(f"error: unknown concern(s) {', '.join(bad)}; choose from {', '.join(rv.CONCERNS)}", file=sys.stderr)
+        return 2
+    _need_graph(repo)
     st = _store(repo)
     try:
         res = rv.review(repo, store=st, base=args.base, staged=args.staged, targets=args.target,
