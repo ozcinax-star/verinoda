@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,41 @@ Sections: [Update 2026-09-25: change review](#update-2026-09-25-change-review-ve
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-25: change review, first review round (D35)
+
+Two reviewers reported 41 findings on the change review (11 high, 20 medium, 10 low): silent misses (a value
+changed on one line and saved on the next, a commit removed while the INSERT stays, a removed method still
+called through an object, call sites through `from pkg import mod` / `import pkg.mod`, `from yaml import load`,
+a removed call to a validator, a changed mod manifest), false alarms stated as verified (an error message
+"Select ... from ..." read as SQL built from strings, behaviour-preserving guard refactors read as removed
+guards, a parameter named like the changed function read as a call to it), a `--staged` review that read the
+working tree for files outside the diff and ran the working tree's tests, 900 staged files read as deleted, and
+"no test reaches" said of functions whose callers the static graph cannot see. Each was reproduced on commit
+8e2cc3b and fixed with a regression test (39 new tests in `tests/test_review.py`, each failing on 8e2cc3b); the
+time finding was partly fixed. docs/DESIGN.md section 8.5 has the list.
+
+| split | precision (>= strong_inference) | recall | must-say-unknown | changed symbols exact | gold dependents | gold lines in `read_first` |
+|---|---|---|---|---|---|---|
+| dev after the round (in-sample) | 67/73 = 0.92 | 62/62 | 9/9 | 36/36 | 19/19 | 62/62 |
+| held-out after the round (no longer clean) | 22/27 = 0.81 | 18/18 | 2/2 | 10/11 | 3/3 | 18/18 |
+
+Result files: `benchmarks/results/review-2026-09-25/dev-review-round1.json` and `heldout-review-round1.json` (fresh
+indexed base copies; fixtures and gold unchanged). The false positives are the ones the builder's fixes left.
+One gold count went down on purpose: 3 of the 4 dev "no test reaches" items are symbols without any static
+caller (a new unused function, a packet handler, a ticker-registered method); they are now reported under
+`tests.reach_unknown`, since tests may reach such a symbol through dispatch, as `tests/test_cli.py` reaches
+`cmd_map` through a subprocess. The 47 changes the second reviewer labelled were re-run after the fixes; their
+outputs are in the reviewers' scratch, not in the result files.
+
+**Time** with the graph loaded (median / max, other agents' test suites running on the machine): orders_app
+0.19 / 0.33 s, forge_mod 0.24 / 0.41 s, glow_mod 0.24 / 0.27 s, the 380-file copy 1.71 / 1.87 s on dev (V03, a
+signature change of a widely imported function, 5.0 s before this round: the Python call-site search read every
+file, it now reads the files that import the module in the graph plus the changed ones) and 3.7 / 6.0 s on
+held-out; graph in memory 0.63 s median on the copy. A 40-definition diff on the copy (the reviewer's time
+finding): 8.7 s (13.4 s in the reviewer's run, 10.7 s on this machine before the caches); under cProfile a
+repeated review of it 9.1 s instead of 22.9 s. Not brought to 6 s: the new versions' facts, value flow over
+many callers and the entry heuristics' source reads remain.
 
 ## Update 2026-09-25: change review (`verinoda review`, D35)
 

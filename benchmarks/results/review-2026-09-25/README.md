@@ -50,3 +50,27 @@ raise / throw / break / continue or returns a fixed value.
 
 The six dev false positives are entry points that do reach the change (commands, a packet handler, a chunk
 event) on three glow_mod fixtures whose gold lists no entry points (G03, G05, G06); the gold was not changed.
+
+## First review round (`dev-review-round1.json`, `heldout-review-round1.json`)
+
+Two reviewers reported 41 findings (11 high, 20 medium, 10 low) from their own changes: scripted repros on
+small projects, and 47 changes they labelled on the example copies and the Verinoda clone before running the
+review. Each finding was reproduced on commit 8e2cc3b and fixed with a regression test in
+`tests/test_review.py` (39 new tests; every one fails on 8e2cc3b), docs/DESIGN.md section 8.5 lists them. Both
+splits were then run again on fresh indexed base copies (the fixtures and their gold unchanged; the held-out
+split is no longer clean for these rules):
+
+| split | precision (>= strong_inference) | recall | must-say-unknown | changed symbols exact | static test reach | `no_test_reaches` gold | gold dependents | gold lines in `read_first` |
+|---|---|---|---|---|---|---|---|---|
+| dev (in-sample) | 67/73 = 0.92 | 62/62 | 9/9 | 36/36 | 22/22 | 1/4 | 19/19 | 62/62 |
+| held-out | 22/27 = 0.81 | 18/18 | 2/2 | 10/11 | - | - | 3/3 | 18/18 |
+
+The false positives are the same as after the builder's fixes (the six glow_mod entry points on dev; HV1's four
+value flows and one entry point on held-out). `no_test_reaches` 1/4: the gold says "no test reaches" for three
+symbols with no static caller (O14's unused new function, F01's packet handler, F02's ticker-registered method);
+the review now puts such symbols under `tests.reach_unknown` - their tests' reach is unknown, not zero (the
+reviewers' finding: `verinoda/cli.py::cmd_map` is run by tests through a subprocess and was listed as reached by
+no test). The gold was not changed. Time with the graph loaded (median / max; other agents' test suites were
+running on the machine): orders_app 0.19 / 0.33 s, forge_mod 0.24 / 0.41 s, glow_mod 0.24 / 0.27 s, the
+380-file copy 1.71 / 1.87 s on dev (V03 5.0 s before this round's caches) and 3.7 / 6.0 s on held-out (HV1, 61
+dependents); with the graph in memory 0.63 s median on the copy.

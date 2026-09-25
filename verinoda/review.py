@@ -197,6 +197,8 @@ class _Ctx:
         self._shadow: dict[tuple[str, str], dict] = {}
         self._roots: list[str] | None = None
         self._edge_ok: dict[tuple[str, str], bool] = {}
+        self._importers: dict[str, set[str]] | None = None
+        self._graph_files: set[str] = set()
         self.reparsed: set[str] = set()
 
     # texts ------------------------------------------------------------------------------------------
@@ -303,6 +305,34 @@ class _Ctx:
         if key not in self._shadow:
             self._shadow[key] = rr.py_shadowing(self.pytree(rel, side))
         return self._shadow[key]
+
+    def importers(self, rel: str) -> set[str] | None:
+        """Files with an import edge (``imports`` / ``imports_from``) into ``rel`` or its definitions in the last
+        snapshot's graph; None when the graph does not know ``rel`` (then the files are searched by text)."""
+        g = self.g
+        if g is None:
+            return None
+        if self._importers is None:
+            idx: dict[str, set[str]] = {}
+            for u, v, _d in g.edges({"imports", "imports_from"}):
+                fv, fu = g.file(v), g.file(u)
+                if fv and fu:
+                    idx.setdefault(fv, set()).add(fu)
+            self._importers = idx
+            self._graph_files = {g.file(n) for n in g.G.nodes if g.file(n)}
+        if rel not in self._graph_files:
+            return None
+        return self._importers.get(rel, set())
+
+    def py_candidates(self, rel: str, name: str) -> list[str]:
+        """Python files that may name ``rel``'s ``name`` through an import or in ``rel`` itself: ``rel``, the files
+        importing it in the graph, and every file the review reads from elsewhere than the snapshot (the diff, the
+        index) - or, when the graph does not know ``rel``, every Python file whose text holds ``name``."""
+        imp = self.importers(rel)
+        if imp is None:
+            return [f for f in self.files() if f.endswith((".py", ".pyi")) and name in (self.text(f) or "")]
+        extra = [f for f in [*self.base_texts, *self.overrides] if self.text(f) is not None]
+        return sorted({f for f in {rel, *imp, *extra} if f.endswith((".py", ".pyi"))})
 
     def project_root(self, rel: str) -> str:
         """The innermost directory holding its own project marker (pyproject.toml, package.json, build.gradle
@@ -2300,13 +2330,10 @@ def _py_call_sites(ctx: _Ctx, c: Change, files: list[str] | None = None) -> list
         if c.node is not None:
             cand_files |= {ctx.g.file(u) for u, _ in _in_edges(ctx, c.node, {"calls", "imports_from", "imports"})
                            if ctx.g.file(u)}
-        probe = (mod or "").rpartition(".")[2] if not owner else owner_last
-        for rel in ctx.files():
-            if rel.endswith((".py", ".pyi")) and rel not in cand_files:
-                t = ctx.text(rel)
-                if t and name in t and probe in t:
-                    cand_files.add(rel)
+        cand_files |= set(ctx.py_candidates(c.file, name))
     for rel in sorted(f for f in cand_files if f and f.endswith((".py", ".pyi"))):
+        if rel != c.file and name not in (ctx.text(rel) or ""):
+            continue
         tree = ctx.pytree(rel)
         if tree is None:
             continue
@@ -2510,7 +2537,7 @@ def _removed_refs(ctx: _Ctx, c: Change, unknown: list[dict]) -> list[dict]:
         mod = _module_of(c.file)
         if owner_kind == "class":
             out += _removed_method_py(ctx, c, unknown)
-        for rel in ctx.files() if not owner_q else ():
+        for rel in (ctx.py_candidates(c.file, name) if not owner_q else ()):
             if not rel.endswith((".py", ".pyi")):
                 continue
             t = ctx.text(rel)
@@ -3751,7 +3778,7 @@ def _readers_of(ctx: _Ctx, c: Change, name: str) -> list[tuple[str, str | None]]
         from verinoda.guards import _module_of
 
         mod = _module_of(c.file)
-        for rel in ctx.files():
+        for rel in ctx.py_candidates(c.file, name):
             if not rel.endswith((".py", ".pyi")):
                 continue
             t = ctx.text(rel)

@@ -55,7 +55,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D32 | Name-existence check | partial | Python only: `verinoda check` (files, `--diff`, `--stdin --as`) and `verinoda api`, MCP `code_check` / `api_members`, skill text. Not done: mod config keys and resource ids, JVM jars, JS/TS, `--against PKG==VER`, the environment fingerprint in snapshots. Measurements in BENCHMARKS.md (the fixture set was written by the rule author: in-sample). |
 | D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`; decision records (`verinoda/decisions.py`, schema v5 log, `decide record/import/guard/accept/waive/list`, MCP `decision_record`); guards and `decide check` (`verinoda/guards.py`, MCP `decision_check`, a one-line summary in `update`; critique's exclusivity check and feedback's exclusive corrections use the same engine). Guard mutations (54 cases on the three examples, written by the rule author, plus 22 forms from the two reviews added by the fixer: all in-sample): VIOLATED precision 1.00, recall 1.00 in reach, 13/13 out-of-reach forms named in limits or POSSIBLE; the old raw-regex scan on the same orders_app cases tp 7 fp 8 fn 6. `decide check` median 42 ms per example case, about 2 s (1.8-2.2 s) on the full Verinoda tree (3 guards; results in `benchmarks/results/decide-2026-09-25/`). The decision brief (`verinoda/decision_brief.py`, `decide brief/answer`, MCP `decision_brief`, answers through `decision_record(action='answer')`; `analyze` routes decide sub-questions to it): on orders_app, EN and TR question, 8/8 gold forces, 19/19 cited evidence re-checks, 5/5 gold question kinds - in-sample (the gold came with the design and the probes were written after it). Not built: `analyze` impact questions do not include violations; the UI shows no decision badge; claims for accepted guards (kinds `exclusive` / `layering`); an ADR's reasons are matched by a few phrasings only; `research.dependencies` itself still reads no Gradle/Maven (the guards and the brief read them). Intent routing: the last held-out set (held-out 4, 20 questions by the fixer, hashed before the review fixes' cue rules were written): precision 0.83, recall 0.50 - the recall bar (0.85) is not met; every other set (written, held-out 1-3, the reviewers' 52) is in-sample. Review round 3 (40 new questions, written before running the router: recall 0.55) added cues that make its set in-sample (20/20) and held-out 4 no longer clean (0.86 / 0.60, its new hit a phrasing section 6 had named): no clean held-out set is left. A missed choice question whose words may ask for a choice is at most `met_with_inference`; one without such words can still be judged `met`. |
 | D34 | Debug ledger (loop detection, strategies) | partial | Built 2026-09-25 (section 7): `verinoda debug start/try/status/diff/close`, strategies `differential/bisect/rerun/observe`, MCP `debug_start` / `debug_attempt` / `debug_status` / `debug_strategy` / `experiment_run`, schema v6. debugloops_v1 (12 sessions written by the builder, gold fixed before the rules ran; in-sample after three fixes): definitive precision 11/11, loop recall 8/8, 0/4 controls stopped, top strategy 8/8. A review found 27 problems (25 distinct: false stops, false "passed", unverified bisect ends, git-safety gaps); all fixed with regression tests (section 7.5), the benchmark scores unchanged after the fixes. Not built: a real agent session with and without the protocol. `debug try` overhead is copy-bound on big trees (median 2.4-5.0 s on 2,341 files, depending on machine load). |
-| D35 | Change review (`verinoda review`) | partial | Built 2026-09-25 (section 8): `verinoda review` (working tree vs HEAD, `--base`, `--staged`, a planned change with `--target` + `--change`), MCP `change_review` (34 tools), rule tables in `review_rules.py`, the review stored in `analyses`, a review step in both skills. review fixtures (36 dev + 11 held-out, gold hashed before any rule; one documented gold amendment before the first run): dev, in-sample, precision 0.92 and recall 1.00 at strong_inference or above; held-out, its only run with the rules frozen: precision 0.79 (bar 0.8 not met), recall 18/18, must-say-unknown 2/2; 0.81 after seven later fixes (one from that run, six from reviewing Verinoda's own branch; no longer clean). Time with the graph loaded: 0.19-0.21 s median on the examples, 1.8 s median (5.4 s max) on the 380-file copy. Not built: findings as claims and critique on them, the entail predicate for a carried value, line-level coverage of changed lines, nested-loop and unbounded-append rules, value and parameter flow outside Python. |
+| D35 | Change review (`verinoda review`) | partial | Built 2026-09-25 (section 8): `verinoda review` (working tree vs HEAD, `--base`, `--staged`, a planned change with `--target` + `--change`), MCP `change_review` (34 tools), rule tables in `review_rules.py`, the review stored in `analyses`, a review step in both skills. review fixtures (36 dev + 11 held-out, gold hashed before any rule; one documented gold amendment before the first run): dev, in-sample, precision 0.92 and recall 1.00 at strong_inference or above; held-out, its only run with the rules frozen: precision 0.79 (bar 0.8 not met), recall 18/18, must-say-unknown 2/2; 0.81 after seven later fixes (one from that run, six from reviewing Verinoda's own branch; no longer clean). Time with the graph loaded: 0.19-0.21 s median on the examples, 1.8 s median (5.4 s max) on the 380-file copy. First review round (section 8.5): the 41 findings of two reviewers fixed with regression tests (the time finding partly): `--staged` reads the staged tree everywhere and runs it or refuses, SQL must be SQL-shaped, guard refactors are told apart from removals, removed methods and module-attribute call sites are found, a value changed on one line and saved later is found, `no_test_reaches` only for symbols with a static caller (`reach_unknown` otherwise); after it dev 67/73 = 0.92 and 62/62, held-out 22/27 = 0.81 and 18/18 (no longer clean), 1.7 s median on the copy. Not built: findings as claims and critique on them, the entail predicate for a carried value, line-level coverage of changed lines, nested-loop and unbounded-append rules, value and parameter flow outside Python. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -1595,6 +1595,108 @@ still not built.
   that ran in `concerns_checked`).
 - The graph is the last snapshot's: a new caller in an unchanged file appears only after `verinoda update`.
 - No agent session with and without the review step has been measured.
+
+### 8.5 First review round (2026-09-25)
+
+Two reviewers ran the review on changes of their own - scripted repros on small projects, and 47 changes one of
+them labelled on the example copies and the Verinoda clone before running it - and reported 41 findings (11
+high, 20 medium, 10 low). Each was reproduced on commit 8e2cc3b and fixed with a regression test (39 tests in
+`tests/test_review.py`, section "review round 1", each failing on 8e2cc3b); the time finding was partly fixed.
+What changed in the decisions of 8.2:
+
+- **The staged tree is the index, everywhere.** `git diff-index --cached --raw` names both blobs of each staged
+  path (the old `ls-files -s -- <paths>` put every path on one command line: 900 staged files overflowed it on
+  Windows and every file read as deleted; a git failure is now an error). Files outside the diff whose working
+  copy differs from the index (`diff-files`) are read from the index, the file list is the index's, and the
+  guards engine reads the reviewed texts - before, an unstaged test update hid a staged arity break and an
+  unstaged `subprocess.run` gave a verified finding. `--run-tests` runs a copy of the base commit with the staged
+  files laid on top (each must hold its staged content in the working tree) or refuses; `--observe` refuses
+  unless no tracked file differs from the index.
+- **Text as Python reads it**: a leading byte-order mark is dropped (such files did not parse and got no rules).
+- **Graph nodes and edges**: a definition takes a node only when the node's line or class fits it (a new function
+  `save` took the node of the method `OrderRepository.save`); incoming edges skip documentation, and INFERRED
+  edges are dropped when they cross into another project root of the repository (its own pyproject.toml,
+  package.json, build.gradle ...) or come from a Python file that imports a namesake module from elsewhere (a
+  vendored copy's `store.save()` bound to Verinoda's `Store`: 43 foreign tests, 4 foreign entry points and a
+  `--run-tests` run that could not collect).
+- **Python binding**: module attributes through `from pkg import m`, `import pkg.m` and `import pkg.m as x`; a
+  name bound in the calling function (a parameter named like the changed function) is no call to it; a removed
+  method is still used where `self.` / `cls.`, the class name, an annotated or constructed receiver or a graph call
+  edge still calls it (strong_inference; weak_inference when base classes may provide it), and when nothing binds,
+  `.m(` calls through unresolved receivers are an unknown. JVM removals: `Owner.name(`, `Owner::name` and calls in
+  the own class are strong_inference, `x.name(` on any other receiver weak_inference (a removed `Cart.get` matched
+  `prices.get(name)` on a Map).
+- **Public API**: a planned signature change lists the call sites (weak_inference: there is no new signature to
+  check); positional parameters whose names changed places give `positional-order-changed` at each call site.
+- **Persistence**: a value bound on a changed line and written later in the same function - by a sink statement or
+  through a callee's parameter into its sink statement - is `changed-value-to-sink` (the rules only covered sinks
+  on changed lines and the changed function's return value); removed sink lines are found by comparing the sink
+  lines' code as a multiset (a removed `commit()` hid behind the INSERT that stayed); `setChanged()`, `INSERT OR
+  REPLACE` / `REPLACE INTO` and JVM `Files.*` / file-stream rows join the tables (file reads count for performance
+  only); an NBT key read that the class never writes, or written and never read, is `saved-data-key-mismatch`
+  (it was a "config key"); a class reached through a constructor call holds only its own lines as sinks.
+- **SQL text** counts only when it is SQL-shaped: upper-case keywords, a column list, a WHERE / VALUES / SET / JOIN
+  clause or a placeholder ("Select at least one item from the catalogue" is not); SQL built from strings is
+  statically_verified only when it reaches an `execute`-like call in its function, else strong_inference.
+- **Security operations**: calls bound through the file's imports (`from yaml import load`); an operation the base
+  version had on its changed lines too "holds ... too" at weak_inference (strong when an entry parameter reaches it)
+  instead of "adds" at statically_verified.
+- **Guards**: conditions are compared with parameters renamed by position (a renamed parameter changed no guard).
+  Before `guard-removed`, the review rules out a move to another changed definition, a split (`a or b` into two
+  guards: `guard-split`, weak), an extraction (a new guard calling a helper whose single return expression, with
+  the call's arguments put in, is the old condition: `guard-moved`, weak), a change (the closest new guard, or a
+  wider exit guard holding the condition: `guard-changed`, verified), and a restructuring (the negated condition
+  inside another condition: `guard-restructured`, weak). The same condition still tested by an if that no longer
+  exits is `guard-removed` and says so. A call removed from a changed function to a check - a callee that raises on
+  bad input or is named like a check - is `check-call-removed` (Python, strong_inference).
+- **Constructs, not lines**: rules "on a changed line" report a construct only when the base version's changed
+  lines do not hold it too: calls (text with parameters renamed), environment reads (the whole call, so a changed
+  default still counts), config names (the operand around them), JVM config keys (the call they are an argument of)
+  and config reads (the operand). A rename no longer reports the unchanged `get_repo()` beside it.
+- **Performance**: a for-loop's body excludes its iterable; a literal iterable states its size and caps the finding
+  at weak_inference; IO in a loop that the same base loop already had is weak_inference ("was there before"); a
+  hot path by registration or tick event is strong_inference, by method name (JVM files that import a game
+  framework only - `update` in TypeScript is no game tick) or by request-handler heuristics weak_inference, and a
+  loop added there without IO is as strong as that evidence; JVM calls `Owner.name(` on changed lines resolve to a
+  class of that name the file can see.
+- **Entry points and parameter flow**: a Python definition without a graph node gets the map's entry heuristics
+  from its syntax tree, and parameter flow follows callers found in the changed files; changed keys of registration
+  manifests (`fabric.mod.json`, `mods.toml`, `plugin.yml`, mixin configs, `package.json` main/bin/exports/scripts)
+  are `registration-manifest-changed` (JSON key paths no longer carry the first key as a prefix).
+- **Config**: findings are one per place, rule and key (a renamed key is two findings); a removed config-file key
+  names the code still reading it; a field of a config class (`*Config`, `*Settings`, `*Defaults`, `*Options`)
+  initialised on a changed line is `config-default-changed` with its readers; a verb member such as
+  `GlowConfig.load()` is no config value.
+- **Tests**: static reach also runs from the function a nested function is defined in, from the callers in the
+  changed files of a definition the snapshot does not have (added, renamed), and from the tests of changed test
+  files that call a changed symbol. `no_test_reaches` lists only symbols with a static caller; the others are in
+  `tests.reach_unknown` - tests may reach them through a callback, a registration or a subprocess run, as
+  `tests/test_cli.py` reaches `cmd_map`. The run reports its source (working tree or staged tree), the tests
+  selected and how many the cap of 50 left out (nearest first).
+- **Output**: duplicate findings (a class and its method covering one line) are one, for the innermost symbol; a
+  rename (an added definition whose code is a removed one's with the name replaced) is marked `renamed_from` and
+  `read_first` shows its new header only; the text output names changed data and documentation files.
+- **CLI**: `--target` with `--base` / `--staged` and `--max-chars` below 1 are usage errors (exit 2); PATH defaults
+  to the project found from the working directory.
+- **Cost**: facts of the reviewed texts go through the content-addressed facts cache, code text is cached per
+  content, a tree's definitions are indexed once, def-use results are kept per function, the guards engine is
+  skipped when no target name is on the changed lines, and the Python call-site, removed-name and reader searches
+  read the files that import the module in the graph (plus the changed ones) instead of every file.
+
+Measurements (docs/BENCHMARKS.md, "change review, first review round"; fixtures and gold unchanged, fresh base
+copies): dev (in-sample) precision 67/73 = 0.92, recall 62/62, must-say-unknown 9/9, changed symbols 36/36,
+static test reach 22/22, gold dependents 19/19, gold lines in `read_first` 62/62; held-out (no longer clean)
+22/27 = 0.81, 18/18, 2/2, 10/11, 3/3, 18/18. The false positives are those the builder's fixes left. The dev gold's
+"no test reaches" items went from 4/4 to 1/4 on purpose: the other three have no static caller and are now
+`reach_unknown` (the gold was not changed). Time with the graph loaded, other agents running: 0.19-0.24 s median on
+the examples, 1.71 s median and 1.87 s max on the copy's dev fixtures (V03 was 5.0 s), 3.7 / 6.0 s on its two
+held-out fixtures.
+
+Still not done, beyond 8.4: a test run whose collection fails is not retried without the failing files; value
+flow into later statements, removed check calls, moved positional parameters and entry heuristics for new
+definitions are Python only; `map_view.go` (reviewer 2's R35) stays `reach_unknown`, since the graph has no edge
+into the MCP tool that encloses it; a 40-definition diff on the copy takes 8.7 s (the design's 6 s bar was set
+for fixture-sized changes; 13.4 s in the reviewer's run).
 
 ## Sources
 
