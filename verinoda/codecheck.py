@@ -46,6 +46,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -66,6 +67,11 @@ _SPECIAL_BASES = {"typing.Generic", "typing.Protocol", "typing_extensions.Protoc
                   "builtins.object", "object"}
 _OPEN_BASES = {"typing.NamedTuple", "typing.TypedDict", "typing_extensions.TypedDict",
                "typing_extensions.NamedTuple"}
+# attributes of sys that exist only in some runs
+_SYS_SOMETIMES = {"ps1", "ps2", "last_type", "last_value", "last_traceback", "last_exc", "tracebacklimit",
+                  "frozen", "_MEIPASS", "_home", "_base_executable", "_stdlib_dir", "exitfunc"}
+# the metaclasses a class statement may name without opening the class (codecheck_facts.SAFE_METACLASSES)
+_META_FULL = {"ABCMeta": "abc.ABCMeta", "EnumMeta": "enum.EnumMeta", "EnumType": "enum.EnumType"}
 _LITERAL_TYPES = {str: "builtins.str", bytes: "builtins.bytes", int: "builtins.int", float: "builtins.float",
                   complex: "builtins.complex", bool: "builtins.bool"}
 _GUARD_TEST = re.compile(r"\bsys\.version_info\b|\bsys\.platform\b|\bos\.name\b|\bplatform\.|\bTYPE_CHECKING\b|"
@@ -131,7 +137,7 @@ class FileCtx:
     def __init__(self, checker: "Checker", rel: str, abs_path: Path, source: str, tree: ast.Module):
         self.checker = checker
         self.rel, self.path, self.source, self.tree = rel, abs_path, source, tree
-        self.lines = source.splitlines()
+        self.lines = cf.split_lines(source)
         self.parents: dict[int, ast.AST] = {}
         for n in ast.walk(tree):
             for c in ast.iter_child_nodes(n):
@@ -220,7 +226,7 @@ class FileCtx:
                         f"`{n}` is changed (line {p.lineno})"
                 if mode == "dict" and p.attr not in cf.DICT_READS:
                     return f"`{n}.{p.attr}` may change the dict (line {p.lineno})"
-                if p.attr in ("__dict__", "__class__") and mode == "instance":
+                if p.attr in ("__dict__", "__class__", "__setattr__", "__delattr__") and mode == "instance":
                     return f"`{n}.{p.attr}` is used (line {p.lineno})"
                 continue
             if isinstance(p, ast.Subscript) and p.value is x:
@@ -235,6 +241,8 @@ class FileCtx:
                 if not isinstance(call, ast.Call) or call.func is x:
                     return f"`{n}` is handed to other code (line {getattr(p, 'lineno', '?')})"
                 fname = dotted(call.func) or ""
+                if mode == "instance" and fname.rsplit(".", 1)[-1] in cf.ATTR_SETTERS:
+                    return f"attributes are set on `{n}` through {fname}() (line {call.lineno})"
                 safe = cf.SELF_SAFE_CALLS if mode == "instance" else {"len", "list", "sorted", "dict", "set", "tuple",
                                                                       "iter", "print", "repr", "str", "bool",
                                                                       "isinstance", "id", "type"}
@@ -265,8 +273,10 @@ class Checker:
         self.jedi = jedi
         self.repo = Path(repo).resolve()
         self.env = env
-        kw = {"sys_path": env.sys_path} if env.kind == "verinoda" else {}
-        self.project = jedi.Project(str(self.repo), smart_sys_path=True, **kw)
+        cenv.install_jedi_guard()   # jedi imports no compiled module outside the standard library
+        self.project = jedi.Project(str(self.repo), smart_sys_path=True, sys_path=env.sys_path,
+                                    added_sys_path=[str(d) for d in pytest_pythonpath(self.repo)])
+        cenv.guard_project(self.project, env)
         self._scripts: OrderedDict = OrderedDict()
         self._mod_memo: dict = {}
         self._cls_memo: dict = {}
@@ -324,7 +334,7 @@ class Checker:
         sc = self._scripts.get(key)
         if sc is None:
             try:
-                code = path.read_bytes().decode("utf-8", "replace")
+                code = cf.read_text(path)
             except OSError:
                 return None
             sc = self.jedi.Script(code, path=str(path), project=self.project, environment=self.env.jedi_env)
@@ -355,8 +365,24 @@ class Checker:
                     ((d / "__init__.py").is_file() or (d / "__init__.pyi").is_file()):
                 d = d.parent
             dirs.append(d)
+            dirs += pytest_pythonpath(self.repo)
             u = self._universes[key] = cenv.ImportUniverse(self.env, dirs, self.builtin_modules())
         return u
+
+    def conftest_path_edit(self, file_dir: Path) -> str | None:
+        """A conftest.py between ``file_dir`` and the project root that changes sys.path (pytest loads it
+        before the tests import anything), as "path:line", or None."""
+        d = file_dir
+        while _inside(d, self.repo):
+            c = d / "conftest.py"
+            if c.is_file():
+                mf = cf.module_facts(c)
+                if mf.sys_path_edit:
+                    return self.disp(c)
+            if d == self.repo or d.parent == d:
+                break
+            d = d.parent
+        return None
 
     def disp(self, path: Path | str | None) -> str | None:
         if not path:
@@ -409,7 +435,10 @@ class Checker:
         return "project" if _inside(Path(path), self.repo) else "external"
 
     def _dep(self, fx: FileCtx | None, path: Path | str | None) -> None:
-        if fx is not None and path and _inside(Path(path), self.repo) and self.origin(path) is None:
+        """Record a file an answer was read from: a project file, or one outside the project and the
+        environment's site-packages (an editable sibling, a PYTHONPATH directory). Installed and
+        standard-library files are covered by the environment fingerprint."""
+        if fx is not None and path and self.origin(path) is None and not cenv.is_jedi_bundled_stub(path):
             fx.deps.add(Path(path))
 
     def in_env_phrase(self, c: Container) -> str:
@@ -419,6 +448,8 @@ class Checker:
             return f"in the standard library of {self.env.label}"
         if c.source.startswith("installed:"):
             return f"as installed in {self.env.label}, {c.source.split(':', 1)[1]}"
+        if c.source == "external":
+            return "outside the project and its environment"
         return f"in {c.source}"
 
     # -- module containers -----------------------------------------------------------------------------
@@ -451,9 +482,9 @@ class Checker:
             if path is None or path.suffix != ".py":
                 return Container("module", label, {}, False, f"the standard-library oracle could not load it "
                                  f"({info.get('error')})", "stdlib", self.disp(path), full=name)
-        if path is None:
+        if path is None or path.suffix in (".pyc", ".pyd", ".so"):
             return Container("module", label, {}, False, "a compiled or built-in module without source; not "
-                             "inspected", "installed" if origin else "project", None, full=name)
+                             "inspected", "installed" if origin else "project", self.disp(path), full=name)
         if cenv.is_jedi_bundled_stub(path):
             return Container("module", label, {}, False, "only a stub bundled with jedi describes it; the installed "
                              "version may differ", "stub:jedi-bundled", self.disp(path), full=name)
@@ -463,6 +494,9 @@ class Checker:
             files.append(twin)
         names: dict[str, Member] = {}
         why: list[str] = []
+        if path.suffix == ".pyi" and not twin.is_file() and self.origin(path) != "stdlib":
+            why.append(f"only a stub ({path.name}) describes it: the module itself is compiled or elsewhere, and "
+                       "a stub need not list every name")
         for f in files:
             mf = cf.module_facts(f)
             if mf.tree is None:
@@ -485,9 +519,44 @@ class Checker:
                 if mf.path_hack:
                     why.append("the package changes its __path__ (submodules may come from elsewhere)")
                 del open_subs
+            why += self._module_changers(f, mf)
         src = self.source_of(path)
         return Container("module", label, names, not why, "; ".join(dict.fromkeys(why)) or None, src,
                          self.disp(path), files=files, full=name)
+
+    def _module_changers(self, f: Path, mf: cf.ModFacts) -> list[str]:
+        """Module-level calls (result dropped) to a function with Python source that reaches the calling
+        module through its frame or sys.modules - it may add names, even a module __getattr__
+        (``set_deprecated_aliases({...})`` in anyio)."""
+        out: list[str] = []
+        script = None
+        for call in mf.expr_calls:
+            fn = call.func
+            if not isinstance(fn, (ast.Name, ast.Attribute)):
+                continue
+            label = dotted(fn) or "a call"
+            if label.split(".")[0] in ("sys", "os", "logging", "warnings", "print", "atexit", "signal"):
+                continue
+            if script is None:
+                script = self.script_for(f)
+                if script is None:
+                    return out
+            lines = cf.parse_file(f)[1]
+            if isinstance(fn, ast.Name):
+                line, bcol = fn.lineno, fn.col_offset
+            else:
+                line, bcol = fn.end_lineno or fn.lineno, (fn.end_col_offset or 0) - len(fn.attr.encode())
+            col = _char_col(lines[line - 1] if 0 < line <= len(lines) else "", bcol)
+            for d in self.goto(script, line, col):
+                p = Path(d.module_path) if d.module_path else None
+                if d.type != "function" or p is None or p.suffix != ".py" or self.origin(p) == "stdlib":
+                    continue
+                body = cf.function_at(p, d.line)
+                why = _reaches_caller_module(body) if body is not None else None
+                if why:
+                    out.append(f"calls {label}() (line {call.lineno}), which {why}")
+                    break
+        return out
 
     def _star_names(self, importer: Path, level: int, mod: str | None, seen: set) -> dict[str, Member] | str:
         if level:
@@ -519,6 +588,10 @@ class Checker:
         if mf.open:
             return mf.open[0]
         names = dict(mf.names)
+        if mf.own_submodules:   # `import pkg.sub` in pkg/__init__ makes `sub` a name of the package
+            real = set(_submodules(spec.file.parent)[0])
+            for s in sorted(mf.own_submodules & real):
+                names.setdefault(s, Member(s, "module", None, spec.file.parent / s))
         for lv, m2, _ln in mf.stars:
             sub = self._star_names(spec.file, lv, m2, seen | {str(spec.file)})
             if isinstance(sub, str):
@@ -583,6 +656,9 @@ class Checker:
                         names.setdefault(n, m)
                 continue
             files.append(e.path)
+            if e.path.suffix == ".pyi" and not e.path.with_suffix(".py").is_file():
+                opens.append(f"only a stub ({e.path.name}) describes {e.qualname}: the class itself is compiled or "
+                             "elsewhere, and a stub need not list every name")
             for n, m in e.body.items():
                 names.setdefault(n, m)
             if instance:
@@ -598,6 +674,19 @@ class Checker:
                 opens += e.open_class
             if i > 0 and e.init_subclass:
                 opens.append(f"base {e.qualname} defines __init_subclass__ (it may add names to subclasses)")
+        # a metaclass named in a class statement (metaclass=abc.ABCMeta): its names reach the class object,
+        # and ABCMeta gives every class it makes an _abc_impl
+        meta = next((_META_FULL.get((dotted(k.value) or "").rsplit(".", 1)[-1]) for e in mro
+                     if not isinstance(e, StdClass) for k in e.node.keywords if k.arg == "metaclass"), None)
+        if meta:
+            minfo = self.env.oracle().ask("object", name=meta)
+            if not instance:
+                for n in minfo.get("names", []) if minfo.get("ok") else []:
+                    names.setdefault(n, Member(n, "attribute", None, None, meta))
+                if not minfo.get("ok"):
+                    opens.append(f"the names of the metaclass {meta} could not be read")
+            if meta == "abc.ABCMeta":
+                names.setdefault("_abc_impl", Member("_abc_impl", "attribute", None, None, meta))
         if not instance:
             tinfo = self.env.oracle().ask("object", name="builtins.type")
             for n in tinfo.get("names", []) if tinfo.get("ok") else []:
@@ -637,6 +726,8 @@ class Checker:
         out = []
         if info.get("inst_getattr"):
             out.append(f"{e.full} defines __getattr__/__getattribute__")
+        if info.get("custom_meta"):   # ctypes.Structure: its metaclass turns _fields_ into attributes
+            out.append(f"the metaclass {info.get('meta')} of {e.full} may add names (fields, columns)")
         if no_dict:
             return out   # slotted instances: nothing can add attributes
         for entry in info.get("mro", []):
@@ -697,7 +788,12 @@ class Checker:
                 continue
             d = defs[0]
             fn = d.full_name or text
-            if fn in _SPECIAL_BASES:
+            if fn in _SPECIAL_BASES:   # Generic, Protocol: their own names are real (Protocol's _is_protocol)
+                info = self.env.oracle().ask("object", name=fn) if fn.startswith("typing.") else {}
+                if info.get("ok") and info.get("kind") == "class":
+                    std = StdClass(fn, info)
+                    bases.append(std)
+                    seqs.append([std])
                 continue
             if fn in _OPEN_BASES:
                 opens.append(f"base {fn} builds the class dynamically")
@@ -757,16 +853,21 @@ class Checker:
             line, bcol = f.end_lineno or f.lineno, (f.end_col_offset or 0) - len(f.attr.encode())
         else:
             return f"passes it to {label}"
-        lines = cf.parse_file(path)[1] if path.is_file() else []
+        lines = cf.parse_file(path)[1]
         col = _char_col(lines[line - 1] if 0 < line <= len(lines) else "", bcol)
         defs = [d for d in self.goto(script, line, col) if d.type in ("function", "class")]
 
         def c_function(x) -> bool:
             xp = Path(x.module_path) if x.module_path else None
-            return (xp is None or xp.suffix == ".pyi") and (xp is None or self.origin(xp) == "stdlib") and \
-                (x.name or "") not in ("setattr", "delattr", "__setattr__", "__delattr__", "update_wrapper")
+            return (xp is None or xp.suffix == ".pyi") and (xp is None or self.origin(xp) == "stdlib")
         if defs and all(c_function(x) for x in defs):
-            return None   # a C function of the standard library (only a stub describes it) sets no attributes
+            # a C function of the standard library (only a stub describes it) sets no attributes itself, but
+            # it may keep the object (list.append, dict.setdefault, a queue) where other code later does;
+            # object's own special methods (object.__dir__, __reduce_ex__) and pure builtins do not keep it
+            if all((x.name or "") in cf.SELF_SAFE_CALLS or (x.name or "") in cf.PURE_C_CALLS or
+                   (_dunder(x.name or "") and x.name != "__setitem__") for x in defs):
+                return None
+            return f"passes it to {label}, which may keep it (a function without Python source)"
         if len(defs) != 1:
             return f"passes it to {label}, which does not resolve to one function"
         d = defs[0]
@@ -839,7 +940,9 @@ class Checker:
             if len(defs) == 1 and defs[0].type == "class":
                 if (defs[0].full_name or "") in ("builtins.type", "builtins.super"):
                     return f"`{text}()` does not say which class answers"
-                return self.class_container(defs[0], True, fx)
+                c = self.class_container(defs[0], True, fx)
+                why = _call_not_instance(c, base)
+                return f"`{text}(...)` {why}" if why else c
             if len(defs) == 1 and defs[0].type == "function":
                 return f"the receiver is the return value of {text}(): a subclass or another type may be returned"
             return f"the receiver is the result of {text}(), whose type is not known"
@@ -899,7 +1002,9 @@ class Checker:
             cdefs = self._callee_defs(fx, st.value.func)
             if len(cdefs) == 1 and cdefs[0].type == "class" and \
                     (cdefs[0].full_name or "") not in ("builtins.type", "builtins.super"):
-                return self.class_container(cdefs[0], True, fx)
+                c = self.class_container(cdefs[0], True, fx)
+                why = _call_not_instance(c, st.value)
+                return f"{label} holds the result of {dotted(st.value.func)}(...), which {why}" if why else c
             return f"{label} holds the result of {dotted(st.value.func) or 'a call'}() (line {st.lineno}), " \
                    "not of a direct constructor call"
         if "param" in types:
@@ -952,14 +1057,19 @@ class Checker:
         return s, why, label
 
     def _fn_sig(self, path: Path, fn: ast.AST, drop_first: bool, label: str) -> tuple[Sig | None, str]:
-        """The keyword arguments of a source function (overloads merged; unknown under other decorators)."""
+        """The keyword arguments of a source function (overloads and conditional definitions merged; unknown
+        under other decorators)."""
+        mf = cf.module_facts(path)
         group = [fn]
         if "overload" in {d.rsplit(".", 1)[-1] for d in cf._func_decorators(fn)}:
-            tree = cf.module_facts(path).tree
-            group = cf.overload_group(tree, fn) if tree is not None else [fn]
+            group = cf.overload_group(mf.tree, fn) if mf.tree is not None else [fn]
+        elif mf.tree is not None:
+            group = cf.def_variants(mf.tree, fn)   # one per branch of an if/else or try: any may be the live one
+            if any(cf.method_kind(f) == "property" for f in group):
+                group = [fn]
         sigs = []
         for f in group:
-            bad = cf.unsafe_decorators(f)
+            bad = cf.unsafe_decorators(f, mf)
             if bad:
                 return None, f"{label} is decorated with @{bad[0]}: the wrapper may take other arguments"
             sigs.append(cf.signature_of(f, drop_first=drop_first))
@@ -1016,6 +1126,8 @@ class Checker:
                 return None, f"the metaclass {meta} decides the constructor's arguments"
         for e in c.mro:
             if isinstance(e, StdClass):
+                if e.full == "typing.Generic":   # takes no constructor arguments of its own
+                    continue
                 if e.full in ("builtins.object", "object"):
                     return Sig([], [], False, "object()", None), ""
                 return self._std_sig(e.full, drop_first=False)
@@ -1035,7 +1147,7 @@ class Checker:
         fields: list[str] = []
         for e in reversed(c.mro):
             if isinstance(e, StdClass):
-                if e.full not in ("builtins.object", "object"):
+                if e.full not in ("builtins.object", "object", "typing.Generic"):
                     return None, f"base {e.full} of a dataclass"
                 continue
             if not e.dataclass:
@@ -1048,9 +1160,12 @@ class Checker:
                     ann = ast.unparse(st.annotation)
                     if "ClassVar" in ann or "KW_ONLY" in ann:
                         continue
-                    if isinstance(st.value, ast.Call) and (dotted(st.value.func) or "").endswith("field") and \
-                            any(k.arg == "init" for k in st.value.keywords):
-                        continue
+                    if isinstance(st.value, ast.Call) and (dotted(st.value.func) or "").endswith("field"):
+                        init = next((k.value for k in st.value.keywords if k.arg == "init"), None)
+                        if isinstance(init, ast.Constant) and init.value is False:
+                            continue   # field(init=False) is not a constructor argument
+                        if init is not None and not isinstance(init, ast.Constant):
+                            return None, f"field {st.target.id} sets init= to an expression"
                     if st.target.id not in fields:
                         fields.append(st.target.id)
         return Sig(fields, [], False, f"{c.full}({', '.join(fields)})", c.where), ""
@@ -1089,6 +1204,13 @@ class Checker:
         missing = ".".join(parts[: miss_at + 1])
         if miss_at == 0 and base_dir is None:
             top = parts[0]
+            # sys.path changed at runtime: the module may be the project's own, from a directory added there
+            if fx.facts.sys_path_edit:
+                return self._verdict(site, "unknown", why="this file changes sys.path at runtime")
+            conftest = self.conftest_path_edit(fx.path.parent)
+            if conftest:
+                return self._verdict(site, "unknown", why=f"{conftest} changes sys.path when pytest runs; the "
+                                                          "module may come from there")
             if not self.env.third_party:
                 v = self._verdict(site, "not_installed", container=f"the standard library of {self.env.label}",
                                   why=f"module {top} is not in the standard library, and "
@@ -1104,8 +1226,6 @@ class Checker:
             if u.hooks:
                 return self._verdict(site, "unknown", why=f"site-packages runs import hooks ({u.hooks[0]}); "
                                                           "modules may come from elsewhere")
-            if fx.facts.sys_path_edit:
-                return self._verdict(site, "unknown", why="this file changes sys.path at runtime")
             near = nearest(top, {n: Member(n, "module") for n in u.top_level_names()})
             v = self._verdict(site, "absent", container=f"sys.path of {self.env.label}",
                               message=f"module {top} not found in this project or in {self.env.label}",
@@ -1348,6 +1468,11 @@ class Checker:
                                  where=c.where, source=c.source,
                                  next_step="read the container's source or run the tests that reach this line")
         kind = "attribute" if site["kind"] == "attribute" else "import"
+        if c.source == "stdlib" and c.kind == "module" and c.full == "sys" and name in _SYS_SOMETIMES:
+            return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
+                                 why=f"sys.{name} is set only in some runs (interactive mode, after an uncaught "
+                                     "exception, frozen applications, virtual environments)",
+                                 next_step="guard it with hasattr() or getattr(sys, name, default)")
         stub = self.stub_declares(c, name)
         if stub:
             return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
@@ -1356,12 +1481,30 @@ class Checker:
                                      "under a platform or Python-version condition",
                                  next_step="check which platforms and Python versions the code must run on")
         fx.deps.add(PROJECT_CONTENT)   # the answer below depends on every project file (attribute stores)
-        store = self.attr_store(name)
+        store = self.attr_store(name, c)
         if store:
             return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
                                  why=f"{name} is not in {c.label}, but the project assigns an attribute of that name "
                                      f"({store}); it may be set at runtime",
                                  next_step="read that assignment; run the code path if it matters")
+        computed = self.computed_store(c) if c.kind in ("module", "class", "instance") else None
+        if computed:
+            return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
+                                 why=f"{name} is not in {c.label}, but the project sets attributes on it by computed "
+                                     f"name ({computed}); it may be set at runtime",
+                                 next_step="read that code; run the code path if it matters")
+        if self._store_index()["truncated"]:
+            return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
+                                 why=f"{name} is not in {c.label}, but the project has more than {MAX_FILES} Python "
+                                     "files and the attribute stores of the rest were not read",
+                                 next_step="check a smaller directory as the project (--repo)")
+        if c.source not in ("project", "external") and c.kind in ("module", "class", "instance"):
+            ext = self.installed_store(name)
+            if ext:
+                return self._verdict(site, "unknown", container=c.label, where=c.where, source=c.source,
+                                     why=f"{name} is not in {c.label}, but an installed package assigns it on an "
+                                         f"imported module or class ({ext}); it may be set at runtime",
+                                     next_step="read that assignment; run the code path if it matters")
         near = nearest(name, c.names, want_call=_is_called(fx, node) if isinstance(node, ast.Attribute) else None,
                        disp=self.disp)
         v = self._verdict(site, "absent", container=c.label, where=c.where, source=c.source,
@@ -1385,6 +1528,8 @@ class Checker:
     def _guard(self, fx: FileCtx, node: ast.AST, kind: str, name: str | None = None) -> str | None:
         cur = node
         in_function = False
+        # `if getattr(sys, "frozen", False): sys._MEIPASS` - a test of the same receiver
+        recv = _short(node.value, 200) if isinstance(node, ast.Attribute) else None
         while True:
             p = fx.parents.get(id(cur))
             if p is None:
@@ -1395,6 +1540,8 @@ class Checker:
                     return f"under `if {t[:70]}` (line {p.lineno})"
                 if name and _hasattr_test(p.test, name):
                     return f"under `if {t[:70]}` (line {p.lineno})"
+                if recv and _probe_test(p.test, recv):
+                    return f"under `if {t[:70]}`, a test of {recv} (line {p.lineno})"
             elif isinstance(p, ast.BoolOp) and isinstance(p.op, ast.And) and name:
                 idx = next((i for i, v in enumerate(p.values) if v is cur), 0)
                 if any(_hasattr_test(v, name) for v in p.values[:idx]):
@@ -1473,33 +1620,97 @@ class Checker:
                 return f"{self.disp(stub)}:{m.line}"
         return None
 
-    def attr_store(self, name: str) -> str | None:
-        """Where the project assigns an attribute ``name`` on something other than a variable, self or cls
-        (``mod.x = ...``, ``Cls.x = ...``, ``setattr(mod, "x", ...)``): a module or class may get it at
-        runtime. Only files whose text could hold such a store are parsed."""
+    def _store_index(self) -> dict:
+        """Once per call: which project files may assign which attribute names (a text pre-filter), and
+        where the project sets attributes by computed name (``setattr(x, name, v)``, ``x.__dict__.update``,
+        ``vars(x).update``), keyed by the receiver's name."""
         if self._stores is None:
-            self._stores = {}
-            self._store_files: dict[str, list[Path]] = {}
-            for p in iter_py_files(self.repo, [self.repo]):   # a text pre-filter, once per call
-                for n in _store_like_names(p):
-                    self._store_files.setdefault(n, []).append(p)
-        if name in self._stores:
-            return self._stores[name]
+            files, truncated = py_files(self.repo, [self.repo])
+            seen = {os.path.normcase(str(p)) for p in files}
+            files += [p for p in cf.overridden_paths()   # a snippet checked as a file that is not written yet
+                      if _inside(p, self.repo) and os.path.normcase(str(p)) not in seen]
+            by_name: dict[str, list[Path]] = {}
+            by_call: dict[str, list[Path]] = {}
+            computed: dict[str, str] = {}
+            through: dict[str, str] = {}
+            for p in files:
+                stores, calls, maybe_computed = _text_facts(p)
+                for n in stores:
+                    by_name.setdefault(n, []).append(p)
+                for n in calls:
+                    by_call.setdefault(n, []).append(p)
+                if maybe_computed:
+                    fs = _file_stores(p)
+                    for k, ln in fs.computed.items():
+                        computed.setdefault(k, f"{self.disp(p)}:{ln}")
+                    for k, ln in fs.computed_params.items():
+                        through.setdefault(k, f"{self.disp(p)}:{ln}")
+            self._stores = {"by_name": by_name, "by_call": by_call, "computed": computed, "names": {},
+                            "passed": {}, "truncated": truncated}
+            # a function that sets attributes by computed name on its parameter: what is passed to it
+            for fn, where in through.items():
+                for recv in self._passed_to(fn):
+                    computed.setdefault(recv, f"{where}, through {fn}()")
+        return self._stores
+
+    def attr_store(self, name: str, c: Container) -> str | None:
+        """Where the project assigns an attribute ``name`` that may reach ``c`` at runtime: on a module,
+        class or other named object (``mod.x = ...``, ``Cls.x = ...``, ``setattr(mod, "x", ...)``), on a
+        variable that holds ``c``'s name (``for k in (A, B): k.x = 1``), or on a parameter of a function
+        that is called with ``c``'s name (``def reg(cls): cls.x = 1`` ... ``reg(A)``). What a method sets
+        on its own ``self`` or ``cls`` belongs to its class (codecheck_facts). Only files whose text could
+        hold such a store are parsed."""
+        idx = self._store_index()
+        cands = _container_names(c)
+        key = (name, frozenset(cands))
+        if key in idx["names"]:
+            return idx["names"][key]
         hit = None
-        for p in self._store_files.get(name, []):   # the AST decides
-            hit = _file_attr_stores(p, self.disp).get(name)
-            if hit:
+        for p in idx["by_name"].get(name, []):   # the AST decides
+            fs = _file_stores(p)
+            if name in fs.names:
+                hit = f"{self.disp(p)}:{fs.names[name]}"
                 break
-        self._stores[name] = hit
+            holder = next((h for h in sorted(fs.named.get(name, {})) if h in cands), None)
+            if holder:
+                hit = f"{self.disp(p)}:{fs.named[name][holder]}"
+                break
+            fn = next((f for f in sorted(fs.on_params.get(name, {})) if cands & self._passed_to(f)), None)
+            if fn:
+                given = ", ".join(sorted(cands & self._passed_to(fn)))
+                hit = f"{self.disp(p)}:{fs.on_params[name][fn]}, on a parameter of {fn}(), which is given {given}"
+                break
+        idx["names"][key] = hit
         return hit
 
-    def attr_stores(self) -> dict[str, str]:
-        """Every attribute store of the project (see :meth:`attr_store`): name -> first file:line."""
-        out: dict[str, str] = {}
-        for p in iter_py_files(self.repo, [self.repo]):
-            for k, v in _file_attr_stores(p, self.disp).items():
-                out.setdefault(k, v)
-        return out
+    def _passed_to(self, fn: str) -> set[str]:
+        """The names the project passes to calls of ``fn`` (matched by its last name)."""
+        idx = self._store_index()
+        hit = idx["passed"].get(fn)
+        if hit is None:
+            hit = set()
+            for p in idx["by_call"].get(fn, []):
+                hit |= _file_stores(p).passed.get(fn, set())
+            idx["passed"][fn] = hit
+        return hit
+
+    def installed_store(self, name: str) -> str | None:
+        """Where an installed package assigns an attribute ``name`` on a module or class it imports (plugins do:
+        ``pytest.lazy_fixture = lazy_fixture``): "file:line", or None."""
+        for p in _site_store_index(self.env, self.repo).get(name, [])[:64]:
+            ln = _imported_store(Path(p), name)
+            if ln:
+                return f"{self.disp(p)}:{ln}"
+        return None
+
+    def computed_store(self, c: Container) -> str | None:
+        """Where the project sets attributes by computed name on this module or class (or a class of an
+        instance), matched by the receiver's name: "file:line", or None."""
+        computed = self._store_index()["computed"]
+        for n in sorted(_container_names(c)) if computed else []:
+            if n in computed:
+                return computed[n]
+        return None
 
     def _project_defs(self) -> dict:
         if self._defs_index is None:
@@ -1547,6 +1758,33 @@ class Checker:
         return None
 
 
+def _container_names(c: Container) -> set[str]:
+    """The short names code uses for a container: the module's last name, or the classes of its MRO."""
+    names = {(c.full or "").rsplit(".", 1)[-1]}
+    for e in c.mro:
+        names.add((e.full if isinstance(e, StdClass) else e.qualname).rsplit(".", 1)[-1])
+    return {n for n in names if n}
+
+
+def _reaches_caller_module(fn: ast.AST) -> str | None:
+    """Why a function may change the module that calls it (it reads the caller's frame, or writes a module
+    through sys.modules), or None."""
+    for n in ast.walk(fn):
+        d = dotted(n) if isinstance(n, (ast.Attribute, ast.Call)) else None
+        if d in ("sys._getframe", "inspect.currentframe", "inspect.stack", "sys._current_frames") or \
+                (isinstance(n, ast.Attribute) and n.attr in ("f_globals", "f_locals", "f_back")):
+            return "reads the caller's frame"
+        if isinstance(n, ast.Subscript) and dotted(n.value) == "sys.modules" and isinstance(n.ctx, ast.Store):
+            return "replaces a module in sys.modules"
+        if isinstance(n, ast.Attribute) and n.attr == "__dict__" and isinstance(n.value, ast.Subscript) and \
+                dotted(n.value.value) == "sys.modules":
+            return "writes a module's namespace through sys.modules"
+        if isinstance(n, ast.Call) and dotted(n.func) == "setattr" and n.args and \
+                isinstance(n.args[0], ast.Subscript) and dotted(n.args[0].value) == "sys.modules":
+            return "sets attributes on a module through sys.modules"
+    return None
+
+
 def _attr_base_pos(f: ast.Attribute, lines: list[str]) -> tuple[int, int]:
     """(line, char col) of the last name token of an attribute's receiver."""
     b = f.value
@@ -1557,65 +1795,266 @@ def _attr_base_pos(f: ast.Attribute, lines: list[str]) -> tuple[int, int]:
     return line, _char_col(lines[line - 1] if 0 < line <= len(lines) else "", bcol)
 
 
-_STORES: dict[tuple, dict[str, int]] = {}
-_STORE_LIKE: dict[tuple, frozenset] = {}
+_TEXT: dict[tuple, tuple] = {}
 # `.name =`, `.name: T =`, `.name[k] =`, `.name,` (a tuple target), `for/as x.name`, `setattr(x, "name"`
 _STORE_RX = re.compile(rb"\.\s*([A-Za-z_]\w*)\s*(?:\[[^\]\n]*\]\s*)?(?::[^=\n]*)?(?:=(?!=)|,)|"
                        rb"\b(?:as|for)\s+[\w.]*\.([A-Za-z_]\w*)\b|setattr\s*\([^\n]*?['\"]([A-Za-z_]\w*)['\"]")
+_CALL_RX = re.compile(rb"([A-Za-z_]\w*)\s*\(")
+_COMPUTED_RX = re.compile(rb"setattr\s*\(|__dict__|vars\s*\(|__setattr__")
 
 
-def _store_like_names(path: Path) -> frozenset:
-    """Names that may be assigned as attributes in a file, by a regex over its text (cached by stat)."""
+def _text_facts(path: Path) -> tuple[frozenset, frozenset, bool]:
+    """By a regex over a file's text (cached by stat): the names that may be assigned as attributes, the
+    names that are called, and whether attributes may be set by computed name."""
     key = cf.stat_key(path)
-    hit = _STORE_LIKE.get(key) if key else None
+    hit = _TEXT.get(key) if key else None
     if hit is None:
         try:
-            data = path.read_bytes()
+            data = cf.read_text(path).encode("utf-8", "replace")
         except OSError:
             data = b""
-        hit = frozenset(g.decode("ascii", "replace") for m in _STORE_RX.finditer(data) for g in m.groups() if g)
+        hit = (frozenset(g.decode("ascii", "replace") for m in _STORE_RX.finditer(data) for g in m.groups() if g),
+               frozenset(m.group(1).decode("ascii", "replace") for m in _CALL_RX.finditer(data)),
+               bool(_COMPUTED_RX.search(data)))
         if key:
-            if len(_STORE_LIKE) > 8192:
-                _STORE_LIKE.clear()
-            _STORE_LIKE[key] = hit
+            if len(_TEXT) > 16384:
+                _TEXT.clear()
+            _TEXT[key] = hit
     return hit
 
 
-def _file_attr_stores(path: Path, disp) -> dict[str, str]:
-    """Attribute stores of one file on something that is not a variable of its scope, self or cls
-    (``mod.x = ...``, ``Cls.x = ...``, ``setattr(mod, "x", ...)``): name -> "file:line". Cached by stat."""
+@dataclass
+class _FileStores:
+    # attribute name -> first line it is assigned on a module, class or other named object (`mod.x = ...`)
+    names: dict[str, int] = field(default_factory=dict)
+    # attribute name -> {name a variable holds (`for c in (A, B)`, `m = mod`) -> line}
+    named: dict[str, dict[str, int]] = field(default_factory=dict)
+    # attribute name -> {function -> line}: assigned on a parameter of that function (`def reg(cls): cls.x = 1`)
+    on_params: dict[str, dict[str, int]] = field(default_factory=dict)
+    computed: dict[str, int] = field(default_factory=dict)         # receiver name -> line of a computed-name store
+    computed_params: dict[str, int] = field(default_factory=dict)  # function -> line: computed store on a parameter
+    passed: dict[str, set] = field(default_factory=dict)           # called name -> names passed to it
+
+
+_STORES: dict[tuple, _FileStores] = {}
+
+
+def _file_stores(path: Path) -> _FileStores:
+    """The attribute stores of one file (cached by stat). What a method sets on its own first parameter
+    (``self``, ``cls``) is left out: that is part of the class (codecheck_facts)."""
     key = cf.stat_key(path)
-    lines = _STORES.get(key) if key else None
-    if lines is None:
-        lines = {}
-        tree = cf.parse_file(path)[0]
-        scopes = [] if tree is None else \
-            [tree, *(n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)))]
-        for scope in scopes:
-            # names bound as variables in a scope hold ordinary objects: their attributes reach no module or class
-            variables = {"self", "cls"}
-            if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                a = scope.args
-                variables |= {x.arg for x in [*a.posonlyargs, *a.args, *a.kwonlyargs, a.vararg, a.kwarg] if x}
-            body = [n for stmt in scope.body for n in cf._walk_no_scopes(stmt)]  # type: ignore[attr-defined]
-            variables |= {n.id for n in body if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
-            for n in body:
-                if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Store):
-                    recv, name = n.value, n.attr
-                elif isinstance(n, ast.Call) and dotted(n.func) == "setattr" and len(n.args) >= 2 and \
-                        isinstance(n.args[1], ast.Constant) and isinstance(n.args[1].value, str):
-                    recv, name = n.args[0], n.args[1].value
-                else:
+    hit = _STORES.get(key) if key else None
+    if hit is not None:
+        return hit
+    fs = _FileStores()
+    tree = cf.parse_file(path)[0]
+    if tree is not None:
+        _scan_stores(tree, fs)
+    if key:
+        if len(_STORES) > 4096:
+            _STORES.clear()
+        _STORES[key] = fs
+    return fs
+
+
+_SITE_STORES: dict[str, dict[str, list[str]]] = {}
+SITE_INDEX_VERSION = "1"
+
+
+def _site_store_index(env: cenv.EnvInfo, repo: Path) -> dict[str, list[str]]:
+    """Attribute names the environment's installed packages may assign (a regex over their text; test
+    directories skipped): name -> files. Built once per environment fingerprint (about a second for 3,000
+    files) and kept in memory and, when the project has .verinoda/, in its check cache."""
+    if not env.site_dirs:
+        return {}
+    hit = _SITE_STORES.get(env.fingerprint)
+    if hit is not None:
+        return hit
+    d = _cache_dir(repo)
+    disk = d / f"site-stores-{env.fingerprint[:32]}.json" if d is not None else None
+    if disk is not None:
+        try:
+            data = json.loads(disk.read_text(encoding="utf-8"))
+            if data.get("version") == SITE_INDEX_VERSION and data.get("fingerprint") == env.fingerprint:
+                hit = data["index"]
+        except (OSError, ValueError, KeyError):
+            hit = None
+    if hit is None:
+        hit = {}
+        for site in env.site_dirs:
+            for dirpath, dirnames, filenames in os.walk(site):
+                dirnames[:] = [x for x in dirnames if x not in ("__pycache__", "tests", "test", "testing")]
+                for fn in filenames:
+                    if not fn.endswith(".py"):
+                        continue
+                    p = os.path.join(dirpath, fn)
+                    try:
+                        data = Path(p).read_bytes()
+                    except OSError:
+                        continue
+                    for n in {g.decode("ascii", "replace") for m in _STORE_RX.finditer(data) for g in m.groups() if g}:
+                        hit.setdefault(n, []).append(p)
+        if disk is not None:
+            try:
+                disk.parent.mkdir(parents=True, exist_ok=True)
+                tmp = disk.with_suffix(f".{os.getpid()}.tmp")
+                tmp.write_text(json.dumps({"version": SITE_INDEX_VERSION, "fingerprint": env.fingerprint,
+                                           "index": hit}), encoding="utf-8", newline="\n")
+                os.replace(tmp, disk)
+            except OSError:
+                pass
+    if len(_SITE_STORES) > 4:
+        _SITE_STORES.clear()
+    _SITE_STORES[env.fingerprint] = hit
+    return hit
+
+
+def _imported_store(path: Path, name: str) -> int | None:
+    """The first line of ``path`` that assigns attribute ``name`` on a name bound by an import
+    (``import pytest; pytest.name = ...``, ``setattr(pytest, "name", ...)``), or None."""
+    tree = cf.parse_file(path)[0]
+    if tree is None:
+        return None
+    imported: set[str] = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            imported |= {al.asname or al.name.split(".")[0] for al in n.names}
+        elif isinstance(n, ast.ImportFrom):
+            imported |= {al.asname or al.name for al in n.names if al.name != "*"}
+
+    def root(e) -> str | None:
+        while isinstance(e, ast.Attribute):
+            e = e.value
+        return e.id if isinstance(e, ast.Name) else None
+
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Store) and n.attr == name and \
+                root(n.value) in imported:
+            return n.lineno
+        if isinstance(n, ast.Call):
+            recv, key = _setattr_parts(n, None)
+            if recv is not None and isinstance(key, ast.Constant) and key.value == name and root(recv) in imported:
+                return n.lineno
+    return None
+
+
+def _setattr_parts(x: ast.Call, own: str | None) -> tuple[ast.AST | None, ast.AST | None]:
+    """(receiver, name) of ``setattr(r, n, v)``, ``object.__setattr__(r, n, v)``, ``r.__setattr__(n, v)``,
+    ``super().__setattr__(n, v)`` (receiver: the method's own first parameter); (None, None) otherwise."""
+    f = dotted(x.func) or ""
+    if f in ("setattr", "builtins.setattr") and len(x.args) >= 2:
+        return x.args[0], x.args[1]
+    if isinstance(x.func, ast.Attribute) and x.func.attr == "__setattr__":
+        base = x.func.value
+        if isinstance(base, ast.Call) and dotted(base.func) == "super":
+            return ast.Name(id=own or "self", ctx=ast.Load()), (x.args[0] if x.args else None)
+        if dotted(base) in ("object", "type", "builtins.object"):
+            return (x.args[0] if x.args else None), (x.args[1] if len(x.args) > 1 else None)
+        return base, (x.args[0] if x.args else None)
+    return None, None
+
+
+def _scan_stores(tree: ast.Module, fs: _FileStores) -> None:
+    aliases: dict[str, str] = {}   # import alias -> the imported name (`import pkg.settings as s`: s -> settings)
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.Import, ast.ImportFrom)):
+            for al in n.names:
+                if al.asname:
+                    aliases[al.asname] = al.name.rsplit(".", 1)[-1]
+
+    def params(fn) -> list[str]:
+        a = fn.args
+        return [x.arg for x in [*a.posonlyargs, *a.args, *a.kwonlyargs, a.vararg, a.kwarg] if x]
+
+    def visit(scope: ast.AST, own: str | None, fn_name: str | None, fn_params: list[str]) -> None:
+        stmts = [scope.body] if isinstance(scope, ast.Lambda) else getattr(scope, "body", [])
+        body = [x for stmt in stmts for x in cf._walk_no_scopes(stmt)]
+        variables = {x.id for x in body if isinstance(x, ast.Name) and isinstance(x.ctx, ast.Store)}
+        # a loop over a literal tuple of names, or a plain alias: the names a variable may hold
+        holds: dict[str, list[str]] = {}
+        for x in body:
+            if isinstance(x, (ast.For, ast.AsyncFor, ast.comprehension)) and isinstance(x.target, ast.Name) and \
+                    isinstance(x.iter, (ast.Tuple, ast.List, ast.Set)):
+                holds.setdefault(x.target.id, []).extend(
+                    [(dotted(e) or "").rsplit(".", 1)[-1] for e in x.iter.elts if dotted(e)])
+            elif isinstance(x, ast.Assign) and len(x.targets) == 1 and isinstance(x.targets[0], ast.Name) and \
+                    not isinstance(x.value, ast.Call) and dotted(x.value):
+                holds.setdefault(x.targets[0].id, []).append((dotted(x.value) or "").rsplit(".", 1)[-1])
+
+        def own_self(recv) -> bool:
+            return own is not None and isinstance(recv, ast.Name) and recv.id == own
+
+        def store(recv, attr: str, line: int) -> None:
+            """Classify a store by what the receiver can be: the method's own self (skipped), a parameter
+            (whatever callers pass), a variable (the names it holds), anything else (a module, class, ...)."""
+            if own_self(recv):
+                return
+            if isinstance(recv, ast.Name):
+                if recv.id in fn_params and fn_name:
+                    if fn_name == "__set_name__" and fn_params.index(recv.id) == 0:   # the owner class
+                        fs.names.setdefault(attr, line)
+                    else:
+                        fs.on_params.setdefault(attr, {}).setdefault(fn_name, line)
+                    return
+                if recv.id in variables:
+                    for h in holds.get(recv.id, []):
+                        fs.named.setdefault(attr, {}).setdefault(h, line)
+                    return
+            fs.names.setdefault(attr, line)
+
+        def computed_on(recv, line: int) -> None:
+            if recv is None or own_self(recv):
+                return
+            if isinstance(recv, ast.Name):
+                if recv.id in fn_params and fn_name:
+                    fs.computed_params.setdefault(fn_name, line)
+                for name in holds.get(recv.id) or [aliases.get(recv.id, recv.id)]:
+                    fs.computed.setdefault(name, line)
+            elif isinstance(recv, ast.Attribute):
+                fs.computed.setdefault(recv.attr, line)
+
+        for x in body:
+            if x is not scope and isinstance(x, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                if isinstance(x, ast.ClassDef):
+                    visit(x, None, None, [])
                     continue
-                if isinstance(recv, ast.Name) and recv.id in variables:
-                    continue
-                lines.setdefault(name, n.lineno)
-        if key:
-            if len(_STORES) > 4096:
-                _STORES.clear()
-            _STORES[key] = lines
-    rel = disp(path)
-    return {k: f"{rel}:{v}" for k, v in lines.items()}
+                ps = params(x)
+                if isinstance(scope, ast.ClassDef) and not isinstance(x, ast.Lambda) and \
+                        cf.method_kind(x) != "staticmethod":
+                    visit(x, ps[0] if ps else None, x.name, ps[1:])
+                else:   # a nested function still sees the method's self, unless it rebinds the name
+                    visit(x, own if own not in ps else None, getattr(x, "name", None), ps)
+                continue
+            if isinstance(x, ast.Attribute) and isinstance(x.ctx, ast.Store):
+                store(x.value, x.attr, x.lineno)
+            elif isinstance(x, ast.Subscript) and isinstance(x.ctx, ast.Store):
+                t = x.value   # r.__dict__[k] = v, vars(r)[k] = v
+                if isinstance(t, ast.Attribute) and t.attr == "__dict__":
+                    computed_on(t.value, x.lineno)
+                elif isinstance(t, ast.Call) and dotted(t.func) == "vars" and t.args:
+                    computed_on(t.args[0], x.lineno)
+            elif isinstance(x, ast.Call):
+                recv, key = _setattr_parts(x, own)
+                if recv is not None:
+                    if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                        store(recv, key.value, x.lineno)
+                    else:
+                        computed_on(recv, x.lineno)
+                elif isinstance(x.func, ast.Attribute) and x.func.attr == "update":
+                    t = x.func.value   # r.__dict__.update(...), vars(r).update(...)
+                    if isinstance(t, ast.Attribute) and t.attr == "__dict__":
+                        computed_on(t.value, x.lineno)
+                    elif isinstance(t, ast.Call) and dotted(t.func) == "vars" and t.args:
+                        computed_on(t.args[0], x.lineno)
+                last = (dotted(x.func) or "").rsplit(".", 1)[-1]
+                if last:
+                    for a in [*x.args, *(k.value for k in x.keywords)]:
+                        d = dotted(a) if not isinstance(a, ast.Call) else None
+                        if d:
+                            fs.passed.setdefault(last, set()).update(
+                                holds.get(d) or [aliases.get(d, d).rsplit(".", 1)[-1]])
+
+    visit(tree, None, None, [])
 
 
 def _is_called(fx: FileCtx, node: ast.AST) -> bool:
@@ -1627,6 +2066,27 @@ def _hasattr_test(test: ast.AST, name: str) -> bool:
     for n in ast.walk(test):
         if isinstance(n, ast.Call) and dotted(n.func) == "hasattr" and len(n.args) >= 2 and \
                 isinstance(n.args[1], ast.Constant) and n.args[1].value == name:
+            return True
+    return False
+
+
+def _call_not_instance(c: Container, call: ast.Call) -> str | None:
+    """Why calling this class may not return an instance of it (Enum's functional API makes a new class:
+    ``Enum("E", "A B")``), or None."""
+    for e in c.mro:
+        meta = e.info.get("meta") if isinstance(e, StdClass) else \
+            next((dotted(k.value) for k in e.node.keywords if k.arg == "metaclass"), None)
+        if (meta or "").rsplit(".", 1)[-1] in ("EnumType", "EnumMeta") and \
+                (len(call.args) >= 2 or any(k.arg == "names" for k in call.keywords)):
+            return "is Enum's functional API: it makes a new class, not an instance"
+    return None
+
+
+def _probe_test(test: ast.AST, recv: str) -> bool:
+    """The test asks ``getattr(recv, ...)`` or ``hasattr(recv, ...)`` of the same receiver."""
+    for n in ast.walk(test):
+        if isinstance(n, ast.Call) and dotted(n.func) in ("getattr", "hasattr") and n.args and \
+                _short(n.args[0], 200) == recv:
             return True
     return False
 
@@ -1725,7 +2185,7 @@ def _submodules(d: Path) -> tuple[list[str], bool]:
     out = []
     try:
         for e in os.listdir(d):
-            if e.endswith((".py", ".pyi")) and not e.startswith("__init__."):
+            if e.endswith((".py", ".pyi", ".pyc")) and not e.startswith("__init__."):
                 out.append(e.rsplit(".", 1)[0])
             elif e.endswith((".pyd", ".so")):
                 out.append(e.split(".")[0])
@@ -1734,6 +2194,58 @@ def _submodules(d: Path) -> tuple[list[str], bool]:
     except OSError:
         return [], True
     return sorted(set(out)), False
+
+
+_PYTEST_PATHS: dict[tuple, list[Path]] = {}
+
+
+def pytest_pythonpath(repo: Path) -> list[Path]:
+    """Directories pytest's ``pythonpath`` option puts on sys.path (pytest.ini, pyproject.toml, tox.ini or
+    setup.cfg at the project root, the first that configures pytest, as pytest picks it)."""
+    files = [(repo / "pytest.ini", "pytest"), (repo / "pyproject.toml", None), (repo / "tox.ini", "pytest"),
+             (repo / "setup.cfg", "tool:pytest")]
+    key = tuple(cf.stat_key(p) for p, _s in files)
+    hit = _PYTEST_PATHS.get(key)
+    if hit is not None:
+        return hit
+    out: list[str] = []
+    for p, section in files:
+        if not p.is_file():
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if section is None:
+            if sys.version_info >= (3, 11):
+                import tomllib
+            else:  # pragma: no cover - python 3.10
+                import tomli as tomllib
+            try:
+                opts = tomllib.loads(text).get("tool", {}).get("pytest", {}).get("ini_options")
+            except (tomllib.TOMLDecodeError, AttributeError):
+                continue
+            if not isinstance(opts, dict):
+                continue
+            v = opts.get("pythonpath", [])
+            out = v.split() if isinstance(v, str) else [x for x in v if isinstance(x, str)]
+            break
+        import configparser
+
+        cp = configparser.ConfigParser(interpolation=None)
+        try:
+            cp.read_string(text)
+        except configparser.Error:
+            continue
+        if not cp.has_section(section):
+            continue
+        out = cp.get(section, "pythonpath", fallback="").split()
+        break
+    dirs = [d for d in ((repo / x) for x in out) if d.is_dir()]
+    if len(_PYTEST_PATHS) > 64:
+        _PYTEST_PATHS.clear()
+    _PYTEST_PATHS[key] = dirs
+    return dirs
 
 
 def _c3(seqs: list[list]) -> list | None:
@@ -1809,23 +2321,30 @@ def _defs_index(files) -> dict:
     return idx
 
 
-def iter_py_files(repo: Path, roots: list[Path]):
-    """Python files under ``roots`` (virtual environments, caches and VCS folders skipped)."""
-    n = 0
+def py_files(repo: Path, roots: list[Path], limit: int | None = None) -> tuple[list[Path], bool]:
+    """Python files under ``roots`` (virtual environments, caches and VCS folders skipped), at most ``limit``
+    (default MAX_FILES), and whether the walk stopped at that limit."""
+    limit = MAX_FILES if limit is None else limit
+    out: list[Path] = []
     for root in roots:
         if root.is_file():
             if root.suffix in (".py", ".pyi"):
-                yield root
+                out.append(root)
             continue
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.endswith(".egg-info")
                                  and not (Path(dirpath) / d / "pyvenv.cfg").is_file())
             for fn in sorted(filenames):
                 if fn.endswith(".py"):
-                    n += 1
-                    if n > MAX_FILES:
-                        return
-                    yield Path(dirpath) / fn
+                    if len(out) >= limit:
+                        return out, True
+                    out.append(Path(dirpath) / fn)
+    return out, False
+
+
+def iter_py_files(repo: Path, roots: list[Path]):
+    """Python files under ``roots`` (see :func:`py_files`; stops silently at MAX_FILES)."""
+    yield from py_files(repo, roots)[0]
 
 
 # -- site collection ---------------------------------------------------------------------------------------
@@ -1905,14 +2424,25 @@ _ENVS: dict[tuple, tuple] = {}
 
 
 def _env_stamp(repo: Path, env: str | None) -> tuple:
+    """What changes when a package is installed or removed: pyvenv.cfg, the site-packages directories and
+    their .pth files - of the project's own environments and of an explicit --env."""
+    roots = [Path(repo) / d for d in cenv.VENV_DIRS]
+    if env and env not in ("auto", "none"):
+        p = cenv.explicit_env_path(Path(repo).resolve(), env)
+        roots.append(cenv.venv_of(p) or p)
+        if p.is_file():
+            roots.append(p.parent.parent)   # an interpreter: its installation
     out = []
-    for d in cenv.VENV_DIRS:
-        cfg = Path(repo) / d / "pyvenv.cfg"
-        st = cf.stat_key(cfg)
-        out.append(st)
-        lib = Path(repo) / d / "lib"
-        for site in (Path(repo) / d / "Lib" / "site-packages", *sorted(lib.glob("python*/site-packages"))):
+    for root in roots:
+        out.append(cf.stat_key(root / "pyvenv.cfg"))
+        lib = root / "lib"
+        for site in (root / "Lib" / "site-packages", *sorted(lib.glob("python*/site-packages"))):
             out.append(cf.stat_key(site))
+            try:
+                pths = sorted(e for e in os.listdir(site) if e.endswith(".pth"))
+            except OSError:
+                pths = []
+            out += [cf.stat_key(site / e) for e in pths]
     return (env, tuple(out))
 
 
@@ -1932,36 +2462,69 @@ def check_source(ck: Checker | None, rel: str, abs_path: Path, source: str, only
             out += _unknown_site(rel, kind, node, extra, why_no_jedi)
         return out, set(), None
     fx = FileCtx(ck, rel, abs_path, source, tree)
-    for kind, node, extra, _a, _b in nodes:
+    for kind, node, extra, first, last in nodes:
+        got: list[dict] = []
         try:
             if kind == "import":
-                out.append(ck.eval_import(fx, node, extra))
+                got.append(ck.eval_import(fx, node, extra))
             elif kind == "from":
-                out += ck.eval_from(fx, node)
+                got += ck.eval_from(fx, node)
             elif kind == "attribute":
-                out.append(ck.eval_attribute(fx, node))
+                got.append(ck.eval_attribute(fx, node))
             elif kind == "kwarg":
-                out += ck.eval_kwargs(fx, node)
+                got += ck.eval_kwargs(fx, node)
             elif kind == "dict_key":
                 r = ck.eval_dict_key(fx, node)
                 if r is not None:
-                    out.append(r)
+                    got.append(r)
         except RecursionError:
-            out += [dict(s, why="the check recursed too deeply") for s in _unknown_site(rel, kind, node, extra, "")]
+            got = [dict(s, why="the check recursed too deeply") for s in _unknown_site(rel, kind, node, extra, "")]
+        for s in got:
+            s["_span"] = [first, last]   # the lines that select this site in a diff (a call's keywords: all of them)
+        out += got
     return out, fx.deps, None
 
 
 # -- diff -----------------------------------------------------------------------------------------------
 
+_C_ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
+
+
+def _git_path(p: str) -> str:
+    """A path as git prints it in a diff header: C-quoted ("\\303\\247a.py") when it has special bytes."""
+    if not (len(p) >= 2 and p.startswith('"') and p.endswith('"')):
+        return p
+    body, out, i = p[1:-1], bytearray(), 0
+    while i < len(body):
+        ch = body[i]
+        if ch == "\\" and i + 1 < len(body):
+            nxt = body[i + 1]
+            if nxt in "01234567" and re.match(r"[0-7]{3}", body[i + 1:i + 4]):
+                out.append(int(body[i + 1:i + 4], 8))
+                i += 4
+                continue
+            out.append(_C_ESCAPES.get(nxt, ord(nxt)))
+            i += 2
+            continue
+        out += ch.encode("utf-8")
+        i += 1
+    return out.decode("utf-8", "replace")
+
+
 def changed_lines(repo: Path, rev: str = "HEAD") -> dict[str, set[int] | None]:
-    """Changed lines of Python files against ``rev`` (None: a new, untracked file - every line)."""
+    """Changed lines of Python files against ``rev`` (None: a new, untracked file - every line). ``rev`` is
+    one revision, compared with the working tree; it is resolved to a commit before git diff sees it, so
+    it can never be read as an option (``--output=FILE`` would write a file)."""
     def git(*args) -> str:
-        r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=60)
+        r = subprocess.run(["git", "-C", str(repo), "-c", "core.quotepath=off", *args], capture_output=True,
+                           text=True, encoding="utf-8", errors="replace", timeout=60)
         if r.returncode != 0:
             raise ValueError(f"git {' '.join(args[:2])} failed: {(r.stderr or '').strip()[:200]}")
         return r.stdout
 
+    rev = (rev or "HEAD").strip()
+    if not rev or rev.startswith("-") or any(c in rev for c in "\0\n\r"):
+        raise ValueError(f"--diff {rev!r}: not a revision (a revision does not start with '-')")
     try:
         inside = git("rev-parse", "--is-inside-work-tree").strip() == "true"
     except ValueError:
@@ -1969,11 +2532,18 @@ def changed_lines(repo: Path, rev: str = "HEAD") -> dict[str, set[int] | None]:
     if not inside:
         raise ValueError(f"{repo} is not a git work tree, so there is no diff to check: pass files or directories, "
                          "or --stdin")
+    try:
+        sha = git("rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}").strip()
+    except ValueError:
+        sha = ""
+    if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", sha):
+        raise ValueError(f"--diff {rev}: not a commit of this repository (one revision, compared with the "
+                         "working tree)")
     out: dict[str, set[int] | None] = {}
     cur: str | None = None
-    for ln in git("diff", "--no-color", "--no-ext-diff", "-U0", rev, "--", "*.py", "*.pyi").splitlines():
+    for ln in git("diff", "--no-color", "--no-ext-diff", "-U0", sha, "--", "*.py", "*.pyi").splitlines():
         if ln.startswith("+++ "):
-            p = ln[4:].strip()
+            p = _git_path(ln[4:].rstrip("\t").strip())
             cur = p[2:] if p.startswith("b/") else (None if p == "/dev/null" else p)
             if cur is not None:
                 out.setdefault(cur, set())
@@ -1984,9 +2554,9 @@ def changed_lines(repo: Path, rev: str = "HEAD") -> dict[str, set[int] | None]:
                 s = out[cur]
                 if s is not None:
                     s.update(range(start, start + count))
-    for p in git("ls-files", "--others", "--exclude-standard", "--", "*.py", "*.pyi").splitlines():
+    for p in git("ls-files", "-z", "--others", "--exclude-standard", "--", "*.py", "*.pyi").split("\0"):
         if p.strip():
-            out[p.strip()] = None
+            out[p] = None
     return out
 
 
@@ -1999,38 +2569,43 @@ def _cache_dir(repo: Path) -> Path | None:
     return d / "cache" / "check" if d.is_dir() else None
 
 
-def _tree_fp(repo: Path) -> str:
-    h = hashlib.sha256()
-    for p in iter_py_files(repo, [repo]):
-        try:
-            h.update(p.relative_to(repo).as_posix().encode("utf-8", "replace") + b"\n")
-        except ValueError:
-            continue
-    return h.hexdigest()
-
-
 class _Cache:
     def __init__(self, repo: Path, env: cenv.EnvInfo, enabled: bool):
         self.dir = _cache_dir(repo) if enabled else None
         self.repo = repo
         self.env = env
         self.hits = self.misses = 0
+        self._files: list[Path] | None = None
         self._tree: str | None = None
         self._content: str | None = None
         self._sha: dict[str, str | None] = {}
+        self.off: str | None = None   # why the cache is not used
+        if self.dir is not None:
+            files, truncated = py_files(repo, [repo])
+            if truncated:   # the fingerprints below could not cover every file
+                self.dir = None
+                self.off = f"the project has more than {MAX_FILES} Python files"
+            else:
+                self._files = files
 
     def tree(self) -> str:
+        """The set of project files (a new or removed module changes imports)."""
         if self._tree is None:
-            self._tree = _tree_fp(self.repo)
+            h = hashlib.sha256()
+            for p in self._files or []:
+                try:
+                    h.update(p.relative_to(self.repo).as_posix().encode("utf-8", "replace") + b"\n")
+                except ValueError:
+                    continue
+            self._tree = h.hexdigest()
         return self._tree
 
     def content(self) -> str:
         """Every project file by stat (answers that read the project-wide attribute stores depend on it)."""
         if self._content is None:
             h = hashlib.sha256()
-            for p in iter_py_files(self.repo, [self.repo]):
-                st = cf.stat_key(p)
-                h.update(repr(st).encode("utf-8", "replace"))
+            for p in self._files or []:
+                h.update(repr(cf.stat_key(p)).encode("utf-8", "replace"))
             self._content = h.hexdigest()
         return self._content
 
@@ -2066,7 +2641,15 @@ class _Cache:
             return None
         self.hits += 1
         sites = data.get("sites", [])
-        return sites if want is None else [s for s in sites if s["line"] in want or s.get("span", s["line"]) in want]
+        if want is None:
+            return sites
+        # the same selection as a fresh run: a site whose node spans a changed line
+        out = []
+        for s in sites:
+            first, last = s.get("_span") or (s["line"], s["line"])
+            if any(ln in want for ln in range(first, last + 1)):
+                out.append(s)
+        return out
 
     def put(self, rel: str, sha: str, sites: list[dict], deps: set[Path], lines: set[int] | None) -> None:
         if self.dir is None:
@@ -2075,9 +2658,13 @@ class _Cache:
             self.dir.mkdir(parents=True, exist_ok=True)
             depmap = {}
             for d in deps:
+                if d == PROJECT_CONTENT:
+                    continue
                 try:
                     r = d.resolve().relative_to(self.repo).as_posix()
-                except (ValueError, OSError):
+                except ValueError:   # outside the project: kept by its absolute path
+                    r = d.resolve().as_posix()
+                except OSError:
                     continue
                 if r != rel:
                     depmap[r] = self._dep_sha(r)
@@ -2095,9 +2682,11 @@ class _Cache:
 # -- public entry points ------------------------------------------------------------------------------------
 
 def _targets(repo: Path, paths: list[str] | None,
-             diff: str | None) -> tuple[list[tuple[str, Path, set[int] | None]], str]:
+             diff: str | None) -> tuple[list[tuple[str, Path, set[int] | None]], str, bool]:
+    """(files to check with their changed lines, scope text, whether the file walk stopped at MAX_FILES)."""
     if paths:
         out = []
+        truncated = False
         for spec in paths:
             p = Path(spec)
             if not p.is_absolute():
@@ -2109,9 +2698,11 @@ def _targets(repo: Path, paths: list[str] | None,
                 p.relative_to(repo)
             except ValueError:
                 raise ValueError(f"{spec} is outside the repository {repo}")
-            for f in iter_py_files(repo, [p]):
+            found, cut = py_files(repo, [p], MAX_FILES - len(out))
+            truncated = truncated or cut
+            for f in found:
                 out.append((f.relative_to(repo).as_posix(), f, None))
-        return out, "whole files"
+        return out, "whole files", truncated
     rev = diff or "HEAD"
     ch = changed_lines(repo, rev)
     out = []
@@ -2119,13 +2710,14 @@ def _targets(repo: Path, paths: list[str] | None,
         f = repo / rel
         if f.is_file() and f.suffix == ".py":
             out.append((rel, f, lines))
-    return out, f"changed lines against {rev} (sites on unchanged lines are not checked)"
+    return out, f"changed lines against {rev} (sites on unchanged lines are not checked)", False
 
 
 def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None, snippet: str | None = None,
           as_path: str | None = None, env: str | None = "auto", include_exists: bool = False,
-          use_cache: bool = True) -> dict:
-    """Check the names used in files, a diff or a snippet (see the module docstring)."""
+          use_cache: bool = True, budget_s: float | None = None) -> dict:
+    """Check the names used in files, a diff or a snippet (see the module docstring). ``budget_s``: stop
+    starting new files after that many seconds (the result says which were not checked)."""
     from verinoda import precise
 
     t0 = time.perf_counter()
@@ -2136,16 +2728,24 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     cache = _Cache(repo, envinfo, use_cache and ck is not None) if envinfo is not None else None
     files: list[dict] = []
     sites: list[dict] = []
+    notes: list[str] = []
     if snippet is not None:
         rel = (as_path or "snippet.py").replace("\\", "/")
         abs_path = (repo / rel).resolve()
         scope = f"a snippet checked as {rel}"
-        got, _deps, err = check_source(ck, rel, abs_path, snippet, None, jedi_why)
+        with cf.override(abs_path, snippet):   # the snippet's own definitions, not the file on disk
+            got, _deps, err = check_source(ck, rel, abs_path, snippet, None, jedi_why)
         files.append({"path": rel, "sites": len(got), **({"error": err} if err else {})})
         sites += got
     else:
-        targets, scope = _targets(repo, paths, diff)
-        for rel, f, lines in targets:
+        targets, scope, truncated = _targets(repo, paths, diff)
+        if truncated:
+            notes.append(f"the file walk stopped at {MAX_FILES} Python files: later files were not checked")
+        for n, (rel, f, lines) in enumerate(targets):
+            if budget_s is not None and time.perf_counter() - t0 > budget_s:
+                notes.append(f"stopped after the time budget of {budget_s:g} s: {len(targets) - n} of "
+                             f"{len(targets)} files were not checked (check fewer paths, or the diff)")
+                break
             try:
                 data = f.read_bytes()
             except OSError as exc:
@@ -2156,37 +2756,47 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
             cached = got is not None
             err = None
             if got is None:
-                got, deps, err = check_source(ck, rel, f, data.decode("utf-8", "replace"), lines, jedi_why)
+                got, deps, err = check_source(ck, rel, f, data.decode("utf-8-sig", "replace"), lines, jedi_why)
                 if cache is not None and not err:
                     cache.put(rel, sha, got, deps, lines)
             files.append({"path": rel, "sites": len(got), **({"cached": True} if cached else {}),
                           **({"error": err} if err else {})})
             sites += got
+    sites = [{k: v for k, v in s.items() if k != "_span"} for s in sites]
     counts = {v: 0 for v in VERDICTS}
     for s in sites:
         counts[s["verdict"]] = counts.get(s["verdict"], 0) + 1
     header = _env_header(repo, envinfo, sites, jedi_why if not ok else None)
-    problems = counts["absent"] + len(header.get("lock_mismatches", []))
+    mismatches = len(header.get("lock_mismatches", []))
     shown = sites if include_exists else [s for s in sites if s["verdict"] != "exists"]
     shown.sort(key=lambda s: (VERDICTS.index(s["verdict"]), s["path"], s["line"], s["col"]))
+    why_exit = [f"{counts['absent']} absent"] if counts["absent"] else []
+    if mismatches:
+        why_exit.append(f"{mismatches} installed package version{'s' if mismatches > 1 else ''} differ from the lock")
     res = {
         "env": header,
         "scope": scope,
         "summary": {"sites": len(sites), **counts, "files": len(files)},
         "files": files,
         "sites": shown,
-        "exit": 3 if problems else 0,
+        "exit": 3 if why_exit else 0,
+        **({"exit_because": "; ".join(why_exit)} if why_exit else {}),
         "limits": [
+            *notes,
             "existence and signature shape only: a real name used wrongly is not detected",
             "unknown = not checked (open container or receiver type not known), never 'fine'",
             "runtime-made names (setattr, ORM columns, mocks, __getattr__) are unknown by design",
         ],
         "elapsed_s": round(time.perf_counter() - t0, 3),
     }
+    if notes:
+        res["incomplete"] = notes
     if not include_exists:
         res["exists_not_listed"] = counts["exists"]
     if cache is not None and cache.dir is not None:
         res["cache"] = {"hits": cache.hits, "misses": cache.misses}
+    elif cache is not None and cache.off:
+        res["cache"] = {"off": cache.off}
     if ck is not None:
         res["jedi"] = {"calls": ck.stats["jedi_calls"], "seconds": round(ck.stats["jedi_s"], 3)}
     return res
@@ -2267,9 +2877,13 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
     obj_kind = "module"
     cls_facts = None
     std_full = modname if c.source == "stdlib" else None
-    for part in parts[i:]:
+    for k, part in enumerate(parts[i:], start=i):
+        rest = parts[k + 1:]
         m = c.names.get(part)
         if m is None:
+            if not c.closed:
+                return {**head, "found": False, "decided": "unknown", "closed": False,
+                        "why": f"{part} is not listed in {c.label}, which is not closed ({c.why})", "exit": 3}
             return {**head, "found": False, "why": f"{part} not found in {c.label} {ck.in_env_phrase(c)} ({c.where})",
                     "nearest": nearest(part, c.names, disp=ck.disp), "closed": c.closed, "exit": 3}
         # a re-export (`from .client import Client` in a package __init__): follow it to the definition
@@ -2286,6 +2900,12 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
         if m is None:   # the name is a module
             obj_kind = "module"
             continue
+        if std_full is None and m.kind == "module" and m.file and not m.line:   # a submodule of a package
+            sub = [s for s in cenv._in_dir(Path(m.file).parent, part) if s.file]
+            if sub:
+                c = ck.module_container(f"{c.full}.{part}", sub[0].file)
+                obj_kind = "module"
+                continue
         if std_full is not None:
             std_full = f"{std_full}.{part}"
             info = envinfo.oracle().ask("object", name=std_full)
@@ -2294,16 +2914,28 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
                 obj_kind = "class"
                 continue
             obj_kind = info.get("kind", "variable")
+            if obj_kind == "module":   # os.path is the module ntpath / posixpath
+                real = str(info.get("module") or std_full)
+                minfo = envinfo.oracle().ask("module", name=real)
+                c = ck.module_container(real, Path(minfo["file"]) if minfo.get("file") else None)
+                std_full = real
+                continue
+            if rest:
+                return _api_leaf(head, std_full, obj_kind, rest)
             sig = info.get("signature")
             return {**head, "found": True, "kind": obj_kind, "source": "stdlib", "at": f"<stdlib>:{std_full}",
                     **({"signature": part + sig} if sig else {}), "exit": 0}
         if m.kind == "class" and m.file and m.line:
             cls_facts, err = cf.class_at(Path(m.file), m.line)
             if cls_facts is None:
+                if rest:
+                    return _api_leaf(head, f"{c.full}.{part}", "class", rest, err)
                 return {**head, "found": True, "kind": "class", "why": err, "exit": 0}
             c = ck.facts_container(cls_facts, f"{c.full}.{part}", True)
             obj_kind = "class"
             continue
+        if rest:
+            return _api_leaf(head, f"{c.full}.{part}", m.kind, rest)
         fn = cf.function_at(Path(m.file), m.line) if m.file and m.line else None
         at = f"{ck.disp(m.file)}:{m.line}" if m.file and m.line else c.where
         return {**head, "found": True, "kind": m.kind, "source": c.source, "at": at,
@@ -2312,6 +2944,14 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
     return {**head, "found": True, "kind": obj_kind, "name": c.full, "source": c.source, "at": c.where,
             "closed": c.closed, **({"why_open": c.why} if c.why else {}), "members": rows,
             "count": len(rows), "exit": 0}
+
+
+def _api_leaf(head: dict, full: str, kind: str, rest: list[str], why: str | None = None) -> dict:
+    """``api a.b.c`` where ``a.b`` is a function, variable or property: the rest cannot be looked up."""
+    return {**head, "found": False, "decided": "unknown",
+            "why": f"{full} is a {kind}; api lists no attributes of a {kind}, so {'.'.join(rest)} was not looked "
+                   f"up" + (f" ({why})" if why else ""),
+            "exit": 3}
 
 
 _TYPING_MODULES = ("typing", "typing_extensions", "__future__", "collections.abc", "abc", "types")
@@ -2417,5 +3057,7 @@ def reset_caches() -> None:
     _CHECKERS.clear()
     _ENVS.clear()
     _STORES.clear()
-    _STORE_LIKE.clear()
+    _TEXT.clear()
+    _SITE_STORES.clear()
+    _PYTEST_PATHS.clear()
     cf.reset_caches()

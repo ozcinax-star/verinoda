@@ -402,6 +402,111 @@ def test_project_environment_is_used_and_third_party_is_judged_there(tmp_path):
     codecheck.reset_caches()
 
 
+def _std_extension() -> Path | None:
+    """A compiled standard-library module file (its base name must stay: the loader calls PyInit_<name>)."""
+    import importlib.machinery
+    import sysconfig
+
+    for d in {sysconfig.get_path("platstdlib"), os.path.join(sys.base_prefix, "DLLs"),
+              os.path.join(sysconfig.get_path("platstdlib") or "", "lib-dynload")}:
+        for name in ("_socket", "_json", "select", "_struct", "_bisect"):
+            for suffix in importlib.machinery.EXTENSION_SUFFIXES:
+                p = Path(d or "") / f"{name}{suffix}"
+                if p.is_file():
+                    return p
+    return None
+
+
+def _marker_init(marker: Path) -> str:
+    return f"import pathlib\npathlib.Path({str(marker)!r}).write_text('ran')\n\n\ndef real():\n    return 1\n"
+
+
+def test_nothing_from_the_checked_project_or_its_environment_runs(tmp_path):
+    import shutil
+
+    proj, marks = tmp_path / "proj", tmp_path / "marks"
+    marks.mkdir()
+    venv = _make_venv(proj)
+    site = next(iter(cenv.venv_site_dirs(venv, sys.version_info)))
+    ext = _std_extension()
+    # the environment's own interpreter is not a program at all: it must never be started
+    for exe in [venv / "Scripts" / "python.exe"] if os.name == "nt" else list((venv / "bin").glob("python*")):
+        exe.unlink()
+        exe.write_bytes(b"not an interpreter\n")
+    (site / "zz_hook.pth").write_text(f"import pathlib; pathlib.Path({str(marks / 'pth')!r}).write_text('ran')\n",
+                                      encoding="utf-8")
+    _write(site, "evilpkg/__init__.py", _marker_init(marks / "site_init"))
+    _write(site, "evilpkg-1.0.dist-info/METADATA", "Metadata-Version: 2.1\nName: evilpkg\nVersion: 1.0\n")
+    _write(proj, "mypkg/__init__.py", _marker_init(marks / "project_init"))
+    (site / "__editable__.mypkg-0.1.pth").write_text(str(proj) + "\n", encoding="utf-8")
+    if ext is not None:
+        shutil.copy(ext, site / "evilpkg" / ext.name)
+        shutil.copy(ext, proj / "mypkg" / ext.name)
+    mod = ext.name.split(".")[0] if ext is not None else "_nothing"
+    _write(proj, "use.py", f"import evilpkg\nfrom evilpkg import {mod}\nfrom mypkg import {mod} as m2\n"
+                           "evilpkg.real()\nevilpkg.fake_xyz()\n")
+    res = codecheck.check(proj, ["use.py"], include_exists=True, use_cache=False)
+    env = res["env"]
+    assert env["kind"] == "project" and not Path(env["executable"]).resolve().is_relative_to(proj.resolve())
+    assert "not run" in env["started"]
+    by = {s["name"]: s["verdict"] for s in res["sites"]}
+    assert by["real"] == "exists" and by["fake_xyz"] == "absent"
+    # the same project with Verinoda's own interpreter (stdlib only): jedi runs in this very process
+    none = codecheck.check(proj, ["use.py"], env="none", include_exists=True, use_cache=False)
+    assert none["sites"]
+    assert sorted(p.name for p in marks.iterdir()) == []
+    # a base interpreter inside the project is not trusted
+    other = tmp_path / "other"
+    _write(other, "fakebase/python.exe" if os.name == "nt" else "fakebase/python3", "not an interpreter\n")
+    _write(other, ".venv/pyvenv.cfg", f"home = {other / 'fakebase'}\nversion = 3.12.0\n")
+    env2 = cenv.select_env(other, "auto")
+    assert env2.kind == "verinoda" and "inside the project" in env2.note
+    codecheck.reset_caches()
+
+
+def test_environment_changes_outside_the_project_reach_a_long_lived_process(tmp_path):
+    proj, sib = tmp_path / "proj", tmp_path / "siblib"
+    venv = _make_venv(tmp_path / "envroot")   # an explicit --env outside the project
+    site = next(iter(cenv.venv_site_dirs(venv, sys.version_info)))
+    _write(sib, "sib.py", "def a():\n    pass\n")
+    (site / "__editable__.sib-0.1.pth").write_text(str(sib) + "\n", encoding="utf-8")
+    _write(proj, "main.py", "import sib\nimport newpkg\nsib.b()\nnewpkg.go()\n")
+    (proj / ".verinoda").mkdir()
+
+    def verdicts():
+        r = codecheck.check(proj, ["main.py"], env=str(venv), include_exists=True)
+        return {s["expr"]: s["verdict"] for s in r["sites"]}, r
+
+    first, r1 = verdicts()
+    assert first["sib.b"] == "absent" and "outside the project and its environment" in \
+        [s for s in r1["sites"] if s["expr"] == "sib.b"][0]["message"]
+    assert first["newpkg"] == "absent"
+    _write(sib, "sib.py", "def a():\n    pass\n\n\ndef b():\n    pass\n")            # the sibling gains b()
+    _write(site, "newpkg/__init__.py", "def go():\n    pass\n")                       # a package is installed
+    _write(site, "newpkg-1.0.dist-info/METADATA", "Metadata-Version: 2.1\nName: newpkg\nVersion: 1.0\n")
+    second, r2 = verdicts()
+    assert second["sib.b"] == "exists" and second["newpkg"] == "exists" and second["newpkg.go"] == "exists"
+    assert r2["exit"] == 0
+    codecheck.reset_caches()
+
+
+def test_installed_plugin_stores_and_lock_mismatch_exit_reason(tmp_path):
+    venv = _make_venv(tmp_path)
+    site = next(iter(cenv.venv_site_dirs(venv, sys.version_info)))
+    _write(site, "hostlib/__init__.py", "def real():\n    return 1\n")
+    _write(site, "hostlib_ext/__init__.py", "import hostlib\n\n\ndef lazy_thing(x):\n    return x\n\n\n"
+                                            "hostlib.lazy_thing = lazy_thing\n")
+    _write(tmp_path, "requirements.txt", "fancylib==9.9\n")
+    _write(tmp_path, "app.py", "import hostlib\nimport hostlib_ext\nimport fancylib\n\n"
+                               "hostlib.lazy_thing(1)\nhostlib.fake_xyz\nfancylib.real_fn(1)\n")
+    res = codecheck.check(tmp_path, ["app.py"], include_exists=True, use_cache=False)
+    by = {s["expr"]: s for s in res["sites"]}
+    assert by["hostlib.lazy_thing"]["verdict"] == "unknown" and "hostlib_ext" in by["hostlib.lazy_thing"]["why"]
+    assert by["hostlib.fake_xyz"]["verdict"] == "absent"
+    assert res["exit"] == 3 and "absent" in res["exit_because"] and "lock" in res["exit_because"]
+    codecheck.reset_caches()
+
+
 def test_environment_choice_fallbacks(tmp_path):
     (tmp_path / ".venv").mkdir()
     (tmp_path / ".venv" / "pyvenv.cfg").write_text("home = /nowhere\n", encoding="utf-8")
@@ -579,10 +684,452 @@ def test_mcp_tools_call_the_same_core(proj):
     res = t.code_check(paths=["pkg/use.py"], env="none")
     core = codecheck.check(proj, ["pkg/use.py"], env="none")
     assert res["summary"] == core["summary"] and res["exit"] == 3
-    assert list(res)[:3] == ["summary", "exit", "env"]
+    assert list(res)[:4] == ["summary", "exit", "exit_because", "env"] and "absent" in res["exit_because"]
     snip = t.code_check(snippet="import json\njson.loadz\n", as_path="pkg/s.py", env="none")
     assert snip["summary"]["absent"] == 1
     assert t.code_check(snippet="x", paths=["pkg/use.py"])["error"] == "invalid_argument"
     assert t.code_check(snippet="x", as_path="../out.py")["error"] == "invalid_argument"
     api = t.api_members("pkg.core.Repo", env="none")
     assert api["found"] and "save" in {m["name"] for m in api["members"]}
+
+
+# -- names that reach a container from elsewhere (review findings) ---------------------------------------------
+
+OBJS = '''\
+import abc
+import enum
+import queue
+import sys
+from ctypes import Structure, c_int
+from typing import Protocol
+
+
+class Opts:
+    def __init__(self):
+        self.a = 1
+
+
+def by_setattr():
+    o = Opts()
+    setattr(o, "verbose", True)
+    return o.verbose
+
+
+def by_vars():
+    o = Opts()
+    vars(o).update({"quiet": 1})
+    return o.quiet
+
+
+def by_object_setattr():
+    o = Opts()
+    object.__setattr__(o, "level", 3)
+    return o.level
+
+
+class Base(metaclass=abc.ABCMeta):
+    pass
+
+
+class Impl(Base):
+    pass
+
+
+def meta_names():
+    Base.register(int)
+    return Impl.register, Impl()._abc_impl
+
+
+class Counter:
+    @classmethod
+    def reset(cls):
+        cls.count = 0
+
+
+def counted():
+    return Counter.count
+
+
+class Job:
+    def __init__(self, n):
+        self.n = n
+
+
+def queued():
+    q = queue.Queue()
+    job = Job(3)
+    q.put(job)
+    return job.result
+
+
+REGISTRY = []
+
+
+def registered():
+    p = Job(1)
+    REGISTRY.append(p)
+    return p.enabled
+
+
+class Point(Structure):
+    _fields_ = [("x", c_int)]
+
+
+def fields():
+    p = Point()
+    return p.x
+
+
+def functional_enum():
+    E = enum.Enum("E", "A B")
+    return E.A
+
+
+def frozen_app():
+    if getattr(sys, "frozen", False):
+        return sys._MEIPASS
+    return None
+
+
+class Greeter(Protocol):
+    def greet(self) -> str: ...
+
+
+def protocol_flag():
+    return Greeter._is_protocol
+
+
+class Conn:
+    def __init__(self):
+        self.__response = None
+
+
+def mangled():
+    return Conn()._Conn__response
+
+
+class Rec:
+    def __init__(self, other):
+        a, b = self, other
+        a.via_tuple = 1
+
+
+def via_tuple():
+    return Rec(None).via_tuple
+
+
+def invented():
+    o = Opts()
+    return o.not_there_xyz, Counter.nope_xyz, Job(1).nope_xyz
+'''
+
+REGISTRY = '''\
+from opn import settings
+
+
+class Registered:
+    pass
+
+
+class Model:
+    pass
+
+
+class Flags:
+    pass
+
+
+def register(cls):
+    cls.plugin_id = 1
+    return cls
+
+
+register(Registered)
+
+
+def configure(mod):
+    mod.READY = True
+
+
+configure(settings)
+
+
+def load(values):
+    for k, v in values.items():
+        setattr(settings, k.upper(), v)
+
+
+class Field:
+    def __set_name__(self, owner, name):
+        owner.registry = {}
+
+
+for _name in ("debug", "trace"):
+    setattr(Flags, _name, False)
+'''
+
+USERS = '''\
+from opn import dynmod, lazyalias, mid, plain, registry, settings
+from opn.registry import Flags, Model, Registered
+
+
+def use():
+    return (Registered.plugin_id, settings.READY, settings.LEVEL, Model.registry, Flags.debug,
+            dynmod.alpha_dyn, lazyalias.old_name, mid.sub, mid.helper, plain.nope_xyz)
+'''
+
+
+@pytest.fixture(scope="module")
+def opn(tmp_path_factory):
+    root = tmp_path_factory.mktemp("opn")
+    _write(root, "opn/__init__.py", "")
+    _write(root, "opn/objs.py", OBJS)
+    _write(root, "opn/registry.py", REGISTRY)
+    _write(root, "opn/settings.py", "DEBUG_DEFAULT = False\n")
+    _write(root, "opn/plain.py", "VALUE = 1\n")
+    _write(root, "opn/dynmod.py", 'for _n in ("alpha", "beta"):\n    locals()[_n + "_dyn"] = 1\n')
+    _write(root, "opn/hooks.py", "import sys\n\n\ndef install(aliases):\n    g = sys._getframe(1).f_globals\n"
+                                 "    g['__getattr__'] = lambda name: aliases[name]\n")
+    _write(root, "opn/lazyalias.py", "from opn.hooks import install\n\ninstall({'old_name': 1})\n")
+    _write(root, "opn/pkgx/__init__.py", "import opn.pkgx.sub\n\n\ndef helper():\n    return 1\n")
+    _write(root, "opn/pkgx/sub.py", "X = 1\n")
+    _write(root, "opn/mid.py", "from opn.pkgx import *\n")
+    _write(root, "opn/users.py", USERS)
+    res = codecheck.check(root, ["opn/objs.py", "opn/users.py"], env="none", include_exists=True, use_cache=False)
+    yield res
+    codecheck.reset_caches()
+
+
+def _at(res: dict, path: str, text: str, name: str, source: str) -> dict:
+    lines = [i for i, ln in enumerate(source.splitlines(), 1) if text in ln]
+    hits = [s for s in res["sites"] if s["path"] == path and s["line"] in lines and s["name"] == name]
+    assert hits, (text, name)
+    return hits[0]
+
+
+def test_attributes_set_on_a_local_through_setattr_vars_or_object_setattr_open_it(opn):
+    for text, name, how in (("return o.verbose", "verbose", "setattr"), ("return o.quiet", "quiet", "vars"),
+                            ("return o.level", "level", "object.__setattr__")):
+        s = _at(opn, "opn/objs.py", text, name, OBJS)
+        assert s["verdict"] == "unknown" and how in s["why"], s
+
+
+def test_metaclass_names_and_class_attributes_set_by_a_classmethod_exist(opn):
+    for text, name in (("Base.register(int)", "register"), ("return Impl.register", "register"),
+                       ("return Impl.register", "_abc_impl"), ("return Counter.count", "count"),
+                       ("return Greeter._is_protocol", "_is_protocol"), ("_Conn__response", "_Conn__response")):
+        assert _at(opn, "opn/objs.py", text, name, OBJS)["verdict"] == "exists", (text, name)
+
+
+def test_instances_kept_by_a_container_or_aliased_are_open(opn):
+    job = _at(opn, "opn/objs.py", "return job.result", "result", OBJS)
+    assert job["verdict"] == "unknown" and "may keep it" in job["why"]
+    reg = _at(opn, "opn/objs.py", "return p.enabled", "enabled", OBJS)
+    assert reg["verdict"] == "unknown" and "REGISTRY.append" in reg["why"]
+    tup = _at(opn, "opn/objs.py", "return Rec(None).via_tuple", "via_tuple", OBJS)
+    assert tup["verdict"] == "unknown" and "tuple" in tup["why"]
+
+
+def test_ctypes_fields_enum_functional_api_and_sometimes_sys_names_are_not_absent(opn):
+    assert "metaclass" in _at(opn, "opn/objs.py", "return p.x", "x", OBJS)["why"]
+    assert "functional API" in _at(opn, "opn/objs.py", "return E.A", "A", OBJS)["why"]
+    assert _at(opn, "opn/objs.py", "sys._MEIPASS", "_MEIPASS", OBJS)["verdict"] in ("unknown", "guarded")
+    # invented names on the same containers are still absent
+    for name in ("not_there_xyz", "nope_xyz"):
+        hits = [s for s in opn["sites"] if s["path"] == "opn/objs.py" and s["name"] == name]
+        assert hits and {s["verdict"] for s in hits} == {"absent"}, hits
+
+
+def test_names_the_project_sets_from_outside_are_unknown(opn):
+    by = {s["name"]: s for s in opn["sites"] if s["path"] == "opn/users.py" and s["kind"] == "attribute"}
+    assert "register()" in by["plugin_id"]["why"] and "Registered" in by["plugin_id"]["why"]   # reg(A)
+    assert by["READY"]["verdict"] == "unknown" and "configure()" in by["READY"]["why"]          # a parameter
+    assert by["LEVEL"]["verdict"] == "unknown" and "computed name" in by["LEVEL"]["why"]        # setattr(mod, k)
+    assert by["registry"]["verdict"] == "unknown"                                              # __set_name__
+    assert by["debug"]["verdict"] == "unknown" and "computed name" in by["debug"]["why"]        # loop setattr
+    assert by["alpha_dyn"]["verdict"] == "unknown" and "locals()" in by["alpha_dyn"]["why"]
+    assert by["old_name"]["verdict"] == "unknown" and "caller's frame" in by["old_name"]["why"]
+    assert by["sub"]["verdict"] == "exists" and by["helper"]["verdict"] == "exists"             # star + submodule
+    assert by["nope_xyz"]["verdict"] == "absent"
+
+
+# -- signatures and decorators -------------------------------------------------------------------------------
+
+SIGS = '''\
+import sys
+from dataclasses import dataclass, field
+
+from sigs_lib import cache, dataclass as frozen
+
+
+@dataclass
+class Cfg:
+    name: str
+    tags: list = field(default_factory=list, init=True)
+    hidden: int = field(default=0, init=False)
+
+
+class Reader:
+    if sys.version_info >= (3, 99):
+        def read(self, n):
+            return n
+    else:
+        def read(self, n, *, timeout=None):
+            return n
+
+
+@cache
+def load(key):
+    return key
+
+
+@frozen
+class State:
+    step: int
+
+
+def use():
+    c = Cfg(name="a", tags=[], hidden=1)
+    r = Reader()
+    s = State(step=1)
+    return c, r.read(1, timeout=2), r.read(1, timout=2), load("k", refresh=True), s.replace
+'''
+
+
+def test_signatures_follow_field_init_conditional_defs_and_where_a_decorator_comes_from(tmp_path):
+    _write(tmp_path, "sigs.py", SIGS)
+    _write(tmp_path, "sigs_lib.py", "def cache(fn):\n    return fn\n\n\ndef dataclass(cls):\n    return cls\n")
+    res = codecheck.check(tmp_path, ["sigs.py"], env="none", include_exists=True, use_cache=False)
+    by = {(s["name"], s["kind"]): s for s in res["sites"] if s["kind"] in ("kwarg", "attribute")}
+    assert by[("tags", "kwarg")]["verdict"] == "exists"                     # field(init=True) is an argument
+    assert by[("hidden", "kwarg")]["verdict"] == "absent"                   # field(init=False) is not
+    assert by[("timeout", "kwarg")]["verdict"] == "exists"                  # the else branch defines it
+    assert by[("timout", "kwarg")]["verdict"] == "absent"                   # no branch does
+    assert by[("refresh", "kwarg")]["verdict"] == "unknown"                 # sigs_lib.cache, not functools.cache
+    assert by[("replace", "attribute")]["verdict"] == "unknown"             # sigs_lib.dataclass may add names
+    assert by[("step", "kwarg")]["verdict"] == "unknown"
+
+
+def test_bom_and_form_feed_do_not_shift_or_break_a_file(tmp_path):
+    (tmp_path / "bom.py").write_bytes(b"\xef\xbb\xbfimport json\n\njson.loads_file('x')\n")
+    for name, sep in (("plain.py", "\n"), ("ff.py", "\x0c\n")):
+        _write(tmp_path, name, "import json\nimport os\n" + sep + "print(os.sep, json.nosuch)\n")
+    res = codecheck.check(tmp_path, ["bom.py", "plain.py", "ff.py"], env="none", use_cache=False)
+    absent = sorted((s["path"], s["line"], s["col"], s["name"]) for s in res["sites"] if s["verdict"] == "absent")
+    assert absent == [("bom.py", 3, 6, "loads_file"), ("ff.py", 4, 20, "nosuch"), ("plain.py", 4, 20, "nosuch")]
+    assert not [f for f in res["files"] if f.get("error")]
+
+
+def test_api_looks_up_every_part_of_the_target(proj):
+    join = codecheck.api(proj, "os.path.join", env="none")
+    assert join["found"] and join["kind"] == "function" and join["exit"] == 0
+    bad = codecheck.api(proj, "os.path.joinpath_invented", env="none")
+    assert bad["found"] is False and bad["exit"] == 3 and "join" in [n["name"] for n in bad["nearest"]]
+    for t in ("json.dumps.invented_attr", "sys.argv.invented", "pkg.core.compute.invented"):
+        r = codecheck.api(proj, t, env="none")
+        assert r["found"] is False and r["decided"] == "unknown" and r["exit"] == 3, (t, r)
+
+
+def test_snippet_definitions_are_the_source_of_truth_for_as_path(tmp_path):
+    _write(tmp_path, "net.py", "def fetch(url):\n    return url\n")
+    _write(tmp_path, "models.py", "from dataclasses import dataclass\n\n\n@dataclass\nclass Cfg:\n    name: str\n")
+    new_net = "def fetch(url, *, timeout=10):\n    return url\n\n\nprint(fetch('u', timeout=3), fetch('u', tmeout=3))\n"
+    res = codecheck.check(tmp_path, snippet=new_net, as_path="net.py", env="none", include_exists=True,
+                          use_cache=False)
+    kw = {s["name"]: s["verdict"] for s in res["sites"] if s["kind"] == "kwarg"}
+    assert kw == {"timeout": "exists", "tmeout": "absent"}
+    new_models = ("from dataclasses import dataclass\n\n\n@dataclass\nclass Cfg:\n    name: str\n"
+                  "    port: int = 80\n\n\nprint(Cfg(name='a', port=1))\n")
+    for as_path in ("models.py", "new_models.py"):   # an existing file, and one not written yet
+        res = codecheck.check(tmp_path, snippet=new_models, as_path=as_path, env="none", include_exists=True,
+                              use_cache=False)
+        assert {s["name"]: s["verdict"] for s in res["sites"] if s["kind"] == "kwarg"} == \
+            {"name": "exists", "port": "exists"}, as_path
+    assert (tmp_path / "net.py").read_text(encoding="utf-8") == "def fetch(url):\n    return url\n"
+
+
+def test_conftest_and_pytest_pythonpath_put_modules_on_the_search_path(tmp_path):
+    _write(tmp_path, "scripts/release_tool.py", "def bump(v):\n    return v + 1\n")
+    _write(tmp_path, "tools/helper_mod.py", "X = 1\n")
+    _write(tmp_path, "pyproject.toml", '[tool.pytest.ini_options]\npythonpath = ["scripts"]\n')
+    _write(tmp_path, "tests/conftest.py",
+           "import os\nimport sys\n\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))\n")
+    _write(tmp_path, "tests/test_a.py", "import release_tool\nimport helper_mod\nimport missing_mod_xyz\n")
+    res = codecheck.check(tmp_path, ["tests/test_a.py"], env="none", include_exists=True, use_cache=False)
+    by = {s["name"]: s for s in res["sites"]}
+    assert by["release_tool"]["verdict"] == "exists"                                     # pytest pythonpath
+    for name in ("helper_mod", "missing_mod_xyz"):                                        # conftest edits sys.path
+        assert by[name]["verdict"] == "unknown" and "tests/conftest.py" in by[name]["why"]
+
+
+def test_a_large_project_says_what_it_did_not_read(tmp_path, monkeypatch):
+    monkeypatch.setattr(codecheck, "MAX_FILES", 3)
+    _write(tmp_path, "conf.py", "DEBUG = False\n")
+    _write(tmp_path, "a_main.py", "import conf\nprint(conf.EXTRA, conf.DEBUGG)\n")
+    for i in range(4):
+        _write(tmp_path, f"b{i}.py", "x = 1\n")
+    _write(tmp_path, "zzz/setup_extra.py", "import conf\nconf.EXTRA = 1\n")
+    (tmp_path / ".verinoda").mkdir()
+    one = codecheck.check(tmp_path, ["a_main.py"], env="none")
+    assert {s["name"]: s["verdict"] for s in one["sites"]} == {"EXTRA": "unknown", "DEBUGG": "unknown"}
+    assert "more than 3 Python files" in one["sites"][0]["why"] and "more than 3" in one["cache"]["off"]
+    whole = codecheck.check(tmp_path, ["."], env="none")
+    assert whole["summary"]["files"] == 3 and "stopped at 3 Python files" in whole["incomplete"][0]
+    codecheck.reset_caches()
+
+
+def test_a_time_budget_stops_before_the_next_file(proj):
+    res = codecheck.check(proj, ["pkg"], env="none", use_cache=False, budget_s=0)
+    assert res["summary"]["files"] == 0 and "time budget" in res["incomplete"][0]
+
+
+def test_the_oracle_never_imports_a_main_module():
+    env = cenv.own_env("test")
+    info = env.oracle().ask("module", name="unittest.__main__")
+    assert info["ok"] is False and "a program" in info["error"]
+    env.oracle().close()
+
+
+# -- diff ----------------------------------------------------------------------------------------------------------
+
+def test_diff_revision_is_never_read_as_an_option(tmp_path):
+    from verinoda.mcp.server import AtlasTools
+
+    _write(tmp_path, "a.py", "import json\n")
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "x")
+    (tmp_path / ".verinoda").mkdir()
+    target = tmp_path / "precious.txt"
+    target.write_text("keep me\n", encoding="utf-8")
+    for rev in (f"--output={target}", "-p", "no-such-revision"):
+        with pytest.raises(ValueError):
+            codecheck.check(tmp_path, diff=rev, env="none", use_cache=False)
+    out = AtlasTools(tmp_path).code_check(diff=f"--output={target}", env="none")
+    assert out["error"] == "invalid_argument"
+    assert target.read_text(encoding="utf-8") == "keep me\n"
+
+
+def test_diff_reads_non_ascii_file_names_and_the_cache_selects_like_a_fresh_run(tmp_path):
+    _write(tmp_path, "a.py", "import json\n\n\ndef f():\n    return json.dumps(\n        1,\n        indent=2)\n")
+    _write(tmp_path, "çalışma.py", "import json\n")
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "x")
+    _write(tmp_path, "çalışma.py", "import json\njson.dumpz(1)\n")
+    _write(tmp_path, "yeni_dosya_ğ.py", "import json\njson.loadz\n")
+    res = codecheck.check(tmp_path, diff="HEAD", env="none", use_cache=False)
+    assert sorted((s["path"], s["name"]) for s in res["sites"] if s["verdict"] == "absent") == \
+        [("yeni_dosya_ğ.py", "loadz"), ("çalışma.py", "dumpz")]
+    # only the last line of a two-line call changes: the cached whole-file answer selects the same sites
+    (tmp_path / ".verinoda").mkdir()
+    _write(tmp_path, "a.py", "import json\n\n\ndef f():\n    return json.dumps(\n        1,\n        indnt=2)\n")
+    codecheck.check(tmp_path, ["a.py"], env="none", include_exists=True)
+    warm = codecheck.check(tmp_path, diff="HEAD", env="none", include_exists=True)
+    fresh = codecheck.check(tmp_path, diff="HEAD", env="none", include_exists=True, use_cache=False)
+    assert warm["cache"]["hits"] >= 1
+
+    def key(r):
+        return sorted((s["path"], s["line"], s["expr"], s["verdict"]) for s in r["sites"] if s["path"] == "a.py")
+    assert key(warm) == key(fresh) and key(fresh)
+    codecheck.reset_caches()

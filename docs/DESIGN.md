@@ -606,14 +606,29 @@ catches the benchmark's wrong finding in 6 ms.
   against Verinoda's own interpreter instead of the project's environment.
 - Sites: imports and from-imports, attribute loads, keyword arguments, and
   constant keys read from the dict literals a function returns. `--diff`
-  checks the sites on changed lines (plus new files); `--stdin --as PATH`
-  checks code before it is written.
-- Environment: `--env PATH`, else `<project>/.venv`, `venv` or `env` (jedi's
-  safety check must pass), else Verinoda's interpreter for the standard library
-  only; third-party names are then `not_installed`, never `absent`.
-  Standard-library names come from that interpreter itself (`python -I -S`),
-  not from jedi's bundled stubs. The report header names the interpreter, the
-  package versions used and lock-file mismatches.
+  checks the sites on changed lines (plus new files); its revision is resolved
+  to a commit first, so it is never read as a git option. `--stdin --as PATH`
+  checks code before it is written; the snippet's own definitions stand for
+  PATH (a changed signature is judged from the snippet, not the file on disk).
+- Environment: `--env PATH`, else `<project>/.venv`, `venv` or `env`, else
+  Verinoda's interpreter for the standard library only; third-party names are
+  then `not_installed`, never `absent`. Standard-library names come from that
+  interpreter itself (`python -I -S`), not from jedi's bundled stubs. The
+  report header names the interpreter, the package versions used and lock-file
+  mismatches.
+- Safety (review of 2026-09-25: jedi's `safe=True` passes any file on Windows,
+  where every file's `st_uid` is 0; a `.pth` import line ran on each check; a
+  package `__init__` ran when jedi read a compiled submodule): nothing from the
+  checked repository runs. A virtual environment's own interpreter is never
+  started; the base interpreter its `pyvenv.cfg` names is, with a search path
+  built from files (site-packages, `.pth` path lines, `PYTHONPATH`). A `.venv`
+  found in the project is used only when that base interpreter lies outside
+  the project and is known to the system (Verinoda's own, the Windows
+  registry, `PATH`, a Python manager's directory, owned by root); `--env` is
+  trusted as given. jedi imports a compiled module only if it is a
+  standard-library module from the interpreter's own directories (a patch of
+  `jedi.inference.imports._load_builtin_module` installed by `codecheck_env`,
+  limited to the check's jedi project). The oracle imports no `X.__main__`.
 - Closed-world rule: `absent` only from a closed container - a module with no
   `__getattr__`, `exec` or `globals()` writes and closed star imports; a class
   object; an instance made by a direct constructor call, or held by a single
@@ -623,23 +638,62 @@ catches the benchmark's wrong finding in 6 ms.
   function returns. A parameter, an annotation or an inferred return value
   leaves the receiver `unknown`. jedi must also fail to find the name.
 - Still `unknown` although the container is closed: a name the project
-  assigns elsewhere (`mod.x = ...`, `setattr(Cls, "x", ...)`); a
+  assigns where it may reach the container - on a module or class name
+  (`mod.x = ...`, `setattr(Cls, "x", ...)`), on a variable that holds its name
+  (`for c in (A, B): c.x = 1`), on a parameter of a function called with its
+  name (`def reg(cls): cls.x = 1` ... `reg(A)`), on the owner in
+  `__set_name__`; attributes set by computed name on it (`setattr(mod, k, v)`,
+  `mod.__dict__.update`); a name an installed package assigns on a module or
+  class it imports (plugins: `pytest.lazy_fixture = ...`); a
   standard-library name this interpreter lacks but the typeshed stubs declare
-  under a platform or version condition (`os.fork` on Windows); constructor
-  keywords under a metaclass other than `type` (`Color(value=1)` for an Enum).
+  under a platform or version condition (`os.fork` on Windows); `sys`
+  attributes that exist only in some runs (`sys.ps1`, `sys._MEIPASS`);
+  constructor keywords under a metaclass other than `type` (`Color(value=1)`
+  for an Enum); a project larger than the file limit (5,000 Python files) -
+  its attribute stores were not all read.
+- Not closed at all (review of 2026-09-25): a module a module-level call
+  changes through the caller's frame or `sys.modules` (anyio's
+  `set_deprecated_aliases` installs a module `__getattr__`), or whose
+  module-level code writes `locals()`; a class or module described only by a
+  stub whose module is compiled (a stub need not list every name); an instance
+  whose class has a metaclass other than `type`/`ABCMeta`/`EnumType` (ctypes
+  fields); a local instance given to `setattr`/`vars`/`object.__setattr__`,
+  or to a C function that may keep it (`list.append`, a queue); `self` put in
+  a tuple or list; a call to an Enum with member names (the functional API
+  returns a class). A decorator keeps a signature or class closed only when it
+  comes from the module that defines it (`functools.cache`,
+  `dataclasses.dataclass`), not by its name. Names that do exist: a
+  metaclass's names on the class (`Base.register` under `metaclass=ABCMeta`),
+  what a classmethod sets on `cls`, mangled `__x` names, `typing.Protocol`'s
+  own names, a package's submodules its `__init__` imports (for star imports),
+  `field(init=True)` in a dataclass, keywords of every conditional definition
+  of a function (`if sys.version_info ...: def f(a) else: def f(a, b)`).
 - jedi answers from outside the project, the environment's search path and
   the standard library are ignored: jedi's own process has `jedi` and `parso`
   imported, which would otherwise make them "exist" in any environment.
 - Guards: try/except ImportError (AttributeError, TypeError, KeyError for the
-  other kinds), `if TYPE_CHECKING`, version and platform tests and `hasattr`
-  make a missing name `guarded`.
+  other kinds), `if TYPE_CHECKING`, version and platform tests, `hasattr`, and
+  a `getattr`/`hasattr` test of the same receiver
+  (`if getattr(sys, "frozen", False): sys._MEIPASS`) make a missing name
+  `guarded`. pytest's `pythonpath` option adds its directories to the search
+  path; a `conftest.py` above the file that changes `sys.path` makes a
+  missing top-level module `unknown`.
 - Output: nearest real names (edit distance with transpositions, shared word
   parts, a few synonyms) and where the name is defined elsewhere. Wording:
   "not found in <container> as installed in <env> (<file>)", never "does not
-  exist". Exit 3 when something is absent.
+  exist". Exit 3 when something is absent or an installed version differs
+  from the lock; `exit_because` says which. `incomplete` lists what was not
+  checked (the file limit, or the MCP tool's 90-second budget). `api A.B.C`
+  looks up every part: the attributes of a function or variable are not
+  listed (`decided: unknown`).
 - Cache: per file in `.verinoda/cache/check/`, keyed by the file's sha256 and
-  the environment fingerprint; an answer is dropped when a project file it was
-  read from, or the set of project files, changes.
+  the environment fingerprint; an answer is dropped when a file it was read
+  from changes (project files, and files outside the project and its
+  site-packages such as an editable sibling), or the set of project files
+  changes. A new or removed package in the environment (also an explicit
+  `--env` in a long-lived MCP server) changes the fingerprint. Past 5,000
+  project files the cache is off. A `--diff` answered from the cache selects
+  the same sites as a fresh run (a call's keywords by the call's lines).
 
 ## 5. Delivery plan
 

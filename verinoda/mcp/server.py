@@ -104,6 +104,7 @@ QUERY_MEMO_SIZE = 64            # project_query answers kept, re-validated by st
 EXCERPT_MAX_LINES = 30
 EDGE_CAP = 25
 LIST_CAP = 50
+CODE_CHECK_BUDGET_S = float(os.environ.get("VERINODA_MCP_CHECK_BUDGET_S", "90"))   # code_check holds the server
 VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact")
 VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
 RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
@@ -976,8 +977,10 @@ class AtlasTools:
                     raise ToolFailure("invalid_argument", f"as_path {ap!r} must be repository-relative",
                                       "pass a path such as 'pkg/module.py'")
             return codecheck.check(self.repo, ps, diff=_opt_text(diff), snippet=code, as_path=ap,
-                                   env=_opt_text(env) or "auto", include_exists=bool(include_exists))
-        return self._run("code_check", go, first=("sites",), keep=("summary", "exit", "env"))
+                                   env=_opt_text(env) or "auto", include_exists=bool(include_exists),
+                                   budget_s=CODE_CHECK_BUDGET_S)
+        return self._run("code_check", go, first=("sites",),
+                         keep=("summary", "exit", "exit_because", "incomplete", "env"))
 
     def api_members(self, target: str, env: str | None = None, private: bool = False) -> dict:
         def go():
@@ -1318,7 +1321,9 @@ DESCRIPTIONS: dict[str, str] = {
         "for closed containers (a module or class whose names are all known, a direct instance, one known "
         "signature) and comes with nearest real names and where the name is defined elsewhere; unknown carries "
         "why. env names the interpreter and package versions checked (and lock mismatches). exit 3 = something "
-        "is absent. Existence and signature shape only, not behaviour. Read-only (answers are cached under "
+        "is absent, or an installed package version differs from the lock (exit_because says which). Files are "
+        "started only within a time budget (90 s): 'incomplete' lists what was not checked - pass fewer paths "
+        "or use diff. Existence and signature shape only, not behaviour. Read-only (answers are cached under "
         ".verinoda/cache/check)."),
     "api_members": (
         "The real members of a module, class or function (dotted target, e.g. 'packaging.specifiers.SpecifierSet' "

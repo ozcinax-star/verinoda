@@ -15,18 +15,24 @@ from __future__ import annotations
 import ast
 import hashlib
 import os
+import re
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# decorators that keep a function's signature (or only wrap it in a descriptor)
+# decorators that keep a function's signature (or only wrap it in a descriptor), by where they come from:
+# a project's own `cache` or `dataclass` may do anything
 SAFE_FUNC_DECORATORS = {
-    "staticmethod", "classmethod", "abstractmethod", "cache", "lru_cache", "final", "override",
-    "contextmanager", "asynccontextmanager", "wraps", "total_ordering",
+    "builtins.staticmethod", "builtins.classmethod", "abc.abstractmethod", "functools.cache",
+    "functools.lru_cache", "typing.final", "typing_extensions.final", "typing.override",
+    "typing_extensions.override", "contextlib.contextmanager", "contextlib.asynccontextmanager",
+    "functools.wraps", "functools.total_ordering",
 }
 # class decorators that add dunder methods only
-SAFE_CLASS_DECORATORS = {"dataclass", "total_ordering", "unique", "final", "runtime_checkable",
-                         "dataclass_transform"}
+SAFE_CLASS_DECORATORS = {"dataclasses.dataclass", "functools.total_ordering", "enum.unique", "typing.final",
+                         "typing_extensions.final", "typing.runtime_checkable",
+                         "typing_extensions.runtime_checkable", "typing.dataclass_transform",
+                         "typing_extensions.dataclass_transform"}
 SAFE_METACLASSES = {"type", "ABCMeta", "EnumMeta", "EnumType"}
 # builtins that cannot set attributes on an object passed to them
 SELF_SAFE_CALLS = {
@@ -37,6 +43,10 @@ SELF_SAFE_CALLS = {
 }
 # methods of a dict that do not add keys
 DICT_READS = {"get", "keys", "items", "values", "copy", "__contains__", "__getitem__"}
+# calls that set attributes on the object they are given (vars(): its __dict__ can be changed)
+ATTR_SETTERS = {"setattr", "delattr", "vars", "__setattr__", "__delattr__"}
+# C functions of the standard library that neither set attributes on an object nor keep it
+PURE_C_CALLS = {"dir", "getsizeof", "dumps", "dump", "getrefcount", "pformat", "pprint", "encode", "join"}
 
 
 @dataclass
@@ -63,6 +73,20 @@ class ModFacts:
     functions: dict[int, ast.AST] = field(default_factory=dict)
     sys_path_edit: bool = False
     error: str | None = None
+    expr_calls: list[ast.Call] = field(default_factory=list)   # module-level calls whose result is dropped
+    own_submodules: set[str] = field(default_factory=set)      # a package __init__: submodules it imports
+    imports: dict[str, str] = field(default_factory=dict)      # local name -> what it imports ("functools.cache")
+
+
+def origin_of(name: str, mf: "ModFacts | None") -> str:
+    """Where a dotted name used in a module comes from: ``lru_cache`` imported from functools ->
+    "functools.lru_cache"; a name the module defines -> "<local>.name"; anything else is a builtin."""
+    root, _, rest = name.partition(".")
+    if mf is not None and root in mf.imports:
+        return mf.imports[root] + ("." + rest if rest else "")
+    if mf is not None and root in mf.names:
+        return "<local>." + name
+    return "builtins." + name
 
 
 def dotted(node: ast.AST | None) -> str | None:
@@ -213,6 +237,15 @@ def _is_sys_modules(node: ast.AST) -> bool:
     return isinstance(node, ast.Attribute) and node.attr == "modules" and dotted(node.value) == "sys"
 
 
+def _at_module_level(node: ast.AST, parents: dict[int, ast.AST]) -> bool:
+    cur = parents.get(id(node))
+    while cur is not None:
+        if isinstance(cur, _SCOPE_NODES):
+            return False
+        cur = parents.get(id(cur))
+    return True
+
+
 def module_facts_from_tree(path: Path, tree: ast.Module) -> ModFacts:
     f = ModFacts(path=path, tree=tree)
 
@@ -252,7 +285,8 @@ def module_facts_from_tree(path: Path, tree: ast.Module) -> ModFacts:
             fn = dotted(node.func)
             if fn in ("exec", "builtins.exec"):
                 f.open.append(f"calls exec() (line {node.lineno})")
-            elif fn in ("globals", "vars") and not node.args:
+            elif (fn in ("globals", "vars") or (fn == "locals" and _at_module_level(node, parents))) and \
+                    not node.args:   # at module level, locals() is the module's namespace too
                 p = parents.get(id(node))
                 reading = (isinstance(p, ast.Subscript) and isinstance(p.ctx, ast.Load)) or \
                     (isinstance(p, ast.Attribute) and p.attr in ("get", "keys", "items", "values", "__contains__")
@@ -273,7 +307,46 @@ def module_facts_from_tree(path: Path, tree: ast.Module) -> ModFacts:
             for t in node.targets:
                 if dotted(t) == "sys.path":
                     f.sys_path_edit = True
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call) and _at_module_level(node, parents):
+            f.expr_calls.append(node.value)
+        if isinstance(node, ast.Import):
+            for al in node.names:   # `import a.b` binds a; `import a.b as c` binds c to a.b
+                top = al.name.split(".")[0]
+                f.imports.setdefault(al.asname or top, al.name if al.asname else top)
+        elif isinstance(node, ast.ImportFrom):
+            base = "." * (node.level or 0) + (node.module or "")
+            for al in node.names:
+                if al.name != "*":
+                    f.imports.setdefault(al.asname or al.name, f"{base}.{al.name}" if node.module else base + al.name)
+        if path.name.startswith("__init__.") and isinstance(node, (ast.Import, ast.ImportFrom)) and \
+                _at_module_level(node, parents):
+            f.own_submodules |= _own_submodule_imports(node, path.parent.name)
     return f
+
+
+def _own_submodule_imports(node: ast.AST, pkg: str) -> set[str]:
+    """The submodules of package ``pkg`` an import in its __init__ binds as attributes of the package
+    (``from . import a``, ``from .a import x``, ``import pkg.a``)."""
+    def after_pkg(parts: list[str]) -> str | None:   # `a.pkg.sub.x` -> "sub" (pkg nested or not)
+        idx = max((i for i, p in enumerate(parts[:-1]) if p == pkg), default=None)
+        return parts[idx + 1] if idx is not None else None
+
+    out: set[str] = set()
+    if isinstance(node, ast.ImportFrom):
+        mod = (node.module or "").split(".")
+        if node.level == 1:
+            if mod[0]:
+                out.add(mod[0])
+            else:
+                out |= {al.name for al in node.names if al.name != "*"}
+        elif not node.level and after_pkg(mod + [""]):
+            out.add(after_pkg(mod + [""]))   # type: ignore[arg-type]
+    elif isinstance(node, ast.Import):
+        for al in node.names:
+            sub = after_pkg(al.name.split("."))
+            if sub:
+                out.add(sub)
+    return out
 
 
 # -- classes ----------------------------------------------------------------------------------------
@@ -327,7 +400,7 @@ def param_writes(fn: ast.AST, param: str) -> tuple[list[str], list[tuple[ast.Cal
             ref = arg_ref(n, param)
             if ref is None:
                 continue
-            if _last(fname) in ("setattr", "vars", "delattr"):
+            if _last(fname) in ATTR_SETTERS:
                 why.append(f"{getattr(fn, 'name', '?')}() calls {fname}({param}, ...) (line {n.lineno})")
             elif _last(fname) not in SELF_SAFE_CALLS:
                 passed.append((n, ref, fname or "a call"))
@@ -360,14 +433,15 @@ def _first_param(fn: ast.AST) -> str | None:
     return ps[0].arg if ps else None
 
 
-def class_facts(node: ast.ClassDef, path: Path, qualname: str) -> ClassFacts:
+def class_facts(node: ast.ClassDef, path: Path, qualname: str, mf: ModFacts | None = None) -> ClassFacts:
     c = ClassFacts(node=node, path=path, qualname=qualname)
     for d in node.decorator_list:
         name = dotted(d) or "<expr>"
         c.decorators.append(name)
-        if _last(name) == "dataclass":
+        full = origin_of(name, mf)
+        if full == "dataclasses.dataclass":
             c.dataclass = True
-        if _last(name) not in SAFE_CLASS_DECORATORS:
+        if full not in SAFE_CLASS_DECORATORS:
             why = f"class decorator @{name} may change the class (line {d.lineno})"
             c.open_class.append(why)
             c.open_inst.append(why)
@@ -393,6 +467,9 @@ def class_facts(node: ast.ClassDef, path: Path, qualname: str) -> ClassFacts:
         else:
             sig = None
         c.body.setdefault(name, Member(name, kind, line, path, qualname, sig))
+        mangled = _mangled(name, node.name)
+        if mangled:   # __x in the body of class C is C._C__x
+            c.body.setdefault(mangled, Member(mangled, kind, line, path, qualname, sig))
         if isinstance(stmt, ast.AnnAssign) and stmt.value is None and isinstance(stmt.target, ast.Name):
             c.inst.setdefault(name, Member(name, "attribute", line, path, qualname))
         if name in ("__getattr__", "__getattribute__"):
@@ -435,11 +512,29 @@ def _args_text(fn: ast.AST) -> str:
         return "..."
 
 
+def _mangled(name: str, cls_name: str) -> str | None:
+    """``__x`` written inside class ``C`` is stored as ``_C__x``."""
+    if name.startswith("__") and not name.endswith("__") and cls_name.strip("_"):
+        return f"_{cls_name.lstrip('_')}{name}"
+    return None
+
+
 def _instance_writes(c: ClassFacts, fn: ast.AST) -> None:
-    """Attributes a method sets on its first parameter, and what makes the instance open."""
+    """Attributes a method sets on its first parameter, and what makes the instance open. A classmethod's
+    first parameter is the class: what it sets there is a class attribute (instances see it too)."""
     me = _first_param(fn)
     if not me:
         return
+    on_class = method_kind(fn) == "classmethod"
+    dest = c.body if on_class else c.inst
+    cls_name = c.qualname.rsplit(".", 1)[-1]
+
+    def record(name: str, line: int) -> None:
+        dest.setdefault(name, Member(name, "attribute", line, c.path, c.qualname))
+        m = _mangled(name, cls_name)
+        if m:
+            dest.setdefault(m, Member(m, "attribute", line, c.path, c.qualname))
+
     parents: dict[int, ast.AST] = {}
     for n in ast.walk(fn):
         for ch in ast.iter_child_nodes(n):
@@ -449,8 +544,10 @@ def _instance_writes(c: ClassFacts, fn: ast.AST) -> None:
             if isinstance(n.ctx, ast.Store):
                 if n.attr == "__class__":
                     c.open_inst.append(f"reassigns {me}.__class__ (line {n.lineno})")
-                c.inst.setdefault(n.attr, Member(n.attr, "attribute", n.lineno, c.path, c.qualname))
+                record(n.attr, n.lineno)
             elif n.attr == "__dict__":
+                if on_class:
+                    c.open_class.append(f"uses {me}.__dict__ in a classmethod (line {n.lineno})")
                 c.open_dict.append(f"uses {me}.__dict__ (line {n.lineno})")
         elif isinstance(n, ast.Call):
             f = n.func
@@ -470,11 +567,17 @@ def _instance_writes(c: ClassFacts, fn: ast.AST) -> None:
             if target is not None:
                 if isinstance(target, ast.Name) and target.id == me:
                     if isinstance(key, ast.Constant) and isinstance(key.value, str):
-                        c.inst.setdefault(key.value, Member(key.value, "attribute", n.lineno, c.path, c.qualname))
+                        dest.setdefault(key.value, Member(key.value, "attribute", n.lineno, c.path, c.qualname))
                     else:
-                        c.open_dict.append(f"sets attributes by computed name ({fname}, line {n.lineno})")
+                        why = f"sets attributes by computed name ({fname}, line {n.lineno})"
+                        if on_class:
+                            c.open_class.append(why)
+                            c.open_inst.append(why)
+                        c.open_dict.append(why)
                 continue
             if fname == "vars" and args and isinstance(args[0], ast.Name) and args[0].id == me:
+                if on_class:
+                    c.open_class.append(f"uses vars({me}) in a classmethod (line {n.lineno})")
                 c.open_dict.append(f"uses vars({me}) (line {n.lineno})")
                 continue
             if _last(fname) in SELF_SAFE_CALLS or fname.endswith(".__init__") or fname.endswith(".__new__"):
@@ -487,6 +590,9 @@ def _instance_writes(c: ClassFacts, fn: ast.AST) -> None:
             p = parents.get(id(n))
             if isinstance(p, (ast.Assign, ast.AnnAssign, ast.NamedExpr)) and getattr(p, "value", None) is n:
                 c.open_dict.append(f"aliases {me} (line {n.lineno})")
+            elif isinstance(p, (ast.Tuple, ast.List, ast.Set, ast.Dict, ast.Starred)):
+                # `a, b = self, other`, `for obj in (self,)`, `[self]`: another name may hold it
+                c.open_dict.append(f"puts {me} in a {type(p).__name__.lower()} (line {n.lineno})")
 
 
 # -- functions: signature and constant-key dict returns -------------------------------------------------
@@ -538,6 +644,35 @@ def overload_group(tree: ast.Module, fn: ast.AST) -> list[ast.AST]:
     return [fn]
 
 
+def def_variants(tree: ast.Module, fn: ast.AST) -> list[ast.AST]:
+    """Every definition of ``fn``'s name in the same scope (module or class body), through if/else and try
+    (``if sys.version_info >= ...: def read(self, n) else: def read(self, n, *, timeout=None)``)."""
+    name = getattr(fn, "name", None)
+
+    def scope_of(nodes, owner):
+        for n in nodes:
+            if n is fn:
+                return owner
+            if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                hit = scope_of(n.body, n)
+            else:
+                subs = [getattr(n, a, None) or [] for a in ("body", "orelse", "finalbody")]
+                subs += [h.body for h in getattr(n, "handlers", []) or []]
+                subs += [c.body for c in getattr(n, "cases", []) or []]
+                hit = next((r for r in (scope_of(s, owner) for s in subs if isinstance(s, list)) if r is not None),
+                           None)
+            if hit is not None:
+                return hit
+        return None
+
+    owner = scope_of(tree.body, tree)
+    if owner is None:
+        return [fn]
+    out = [n for stmt in owner.body for n in _walk_no_scopes(stmt)   # type: ignore[attr-defined]
+           if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name]
+    return out or [fn]
+
+
 def merge_sigs(sigs: list[Sig]) -> Sig:
     """Keyword arguments any of several overloads accepts."""
     names: list[str] = []
@@ -548,11 +683,11 @@ def merge_sigs(sigs: list[Sig]) -> Sig:
                text=" | ".join(s.text for s in sigs[:3]) + (" | ..." if len(sigs) > 3 else ""))
 
 
-def unsafe_decorators(fn: ast.AST) -> list[str]:
+def unsafe_decorators(fn: ast.AST, mf: ModFacts | None = None) -> list[str]:
+    """The decorators of ``fn`` that may change what it accepts (anything not known by its origin)."""
     out = []
     for d in _func_decorators(fn):
-        last = _last(d)
-        if last in SAFE_FUNC_DECORATORS or last in ("setter", "getter", "deleter", "overload"):
+        if _last(d) in ("setter", "getter", "deleter", "overload") or origin_of(d, mf) in SAFE_FUNC_DECORATORS:
             continue
         out.append(d)
     return out
@@ -590,14 +725,73 @@ _TREES: OrderedDict = OrderedDict()
 _TREES_MAX = 512
 _MODFACTS: dict[tuple, ModFacts] = {}
 _CLASSFACTS: dict[tuple, ClassFacts] = {}
+# text that stands for a file while a snippet is checked as that file (``check --stdin --as PATH``)
+_OVERRIDES: dict[str, tuple[str, str, Path]] = {}
+
+
+def _okey(path: Path | str) -> str:
+    return os.path.normcase(os.path.abspath(str(path)))
+
+
+class override:
+    """``with override(path, text):`` - every reader here (and the checker's jedi scripts) sees ``text`` as
+    the content of ``path``: a snippet's own definitions are the source of truth for the file it is meant
+    for, even when an older version of that file is on disk."""
+
+    def __init__(self, path: Path, text: str):
+        self.key = _okey(path)
+        self.value = (text, hashlib.sha256(text.encode("utf-8", "replace")).hexdigest(), Path(path))
+
+    def __enter__(self):
+        self.prev = _OVERRIDES.get(self.key)
+        _OVERRIDES[self.key] = self.value
+        return self
+
+    def __exit__(self, *exc):
+        if self.prev is None:
+            _OVERRIDES.pop(self.key, None)
+        else:
+            _OVERRIDES[self.key] = self.prev
+        return False
+
+
+def overridden(path: Path | str) -> str | None:
+    """The text standing for ``path`` (see :class:`override`), or None."""
+    hit = _OVERRIDES.get(_okey(path)) if _OVERRIDES else None
+    return hit[0] if hit else None
+
+
+def overridden_paths() -> list[Path]:
+    return [v[2] for v in _OVERRIDES.values()]
+
+
+def split_lines(text: str) -> list[str]:
+    """Lines as the tokenizer counts them: only \\n, \\r\\n and \\r end a line (str.splitlines also splits
+    at form feeds and other separators, which shifts every later line)."""
+    lines = re.split(r"\r\n|\r|\n", text)
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
 
 
 def stat_key(path: Path) -> tuple | None:
+    if _OVERRIDES:
+        hit = _OVERRIDES.get(_okey(path))
+        if hit is not None:
+            return ("<override>", str(path), hit[1])
     try:
         st = os.stat(path)
     except OSError:
         return None
     return (str(path), st.st_mtime_ns, st.st_size)
+
+
+def read_text(path: Path) -> str:
+    """The file's text (UTF-8, errors replaced), or the text standing for it; OSError when unreadable."""
+    text = overridden(path)
+    if text is not None:
+        return text
+    return Path(path).read_bytes().decode("utf-8-sig", "replace")   # a byte order mark is not code
 
 
 def parse_file(path: Path) -> tuple[ast.Module | None, list[str], str | None]:
@@ -610,14 +804,14 @@ def parse_file(path: Path) -> tuple[ast.Module | None, list[str], str | None]:
         _TREES.move_to_end(key)
         return hit
     try:
-        text = path.read_bytes().decode("utf-8", "replace")
+        text = read_text(path)
     except OSError as exc:
         return None, [], f"unreadable: {exc}"
     try:
         tree = ast.parse(text, filename=str(path))
-        res = (tree, text.splitlines(), None)
+        res = (tree, split_lines(text), None)
     except (SyntaxError, ValueError) as exc:
-        res = (None, text.splitlines(), f"does not parse: {exc}")
+        res = (None, split_lines(text), f"does not parse: {exc}")
     _TREES[key] = res
     while len(_TREES) > _TREES_MAX:
         _TREES.popitem(last=False)
@@ -652,7 +846,7 @@ def class_at(path: Path, line: int) -> tuple[ClassFacts | None, str | None]:
     key = (stat_key(path), line)
     hit = _CLASSFACTS.get(key)
     if hit is None:
-        hit = _CLASSFACTS[key] = class_facts(node, path, _qualname(mf.tree, node))
+        hit = _CLASSFACTS[key] = class_facts(node, path, _qualname(mf.tree, node), mf)
     return hit, None
 
 
@@ -691,7 +885,7 @@ def _qualname(tree: ast.Module, target: ast.AST) -> str:
 
 def file_sha(path: Path) -> str | None:
     try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
     except OSError:
         return None
 

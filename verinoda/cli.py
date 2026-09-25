@@ -1325,6 +1325,10 @@ def _r_check(r: dict) -> None:
         print(f"  {name} {text}")
     for m in env.get("lock_mismatches") or []:
         print(f"  ! {m['package']}: installed {m['installed']}, locked {m['locked']} ({m.get('at')})")
+    if r.get("exit_because"):
+        print(f"exit 3: {r['exit_because']}")
+    for note in r.get("incomplete") or []:
+        print(f"incomplete: {note}")
     for f in r.get("files", []):
         if f.get("error"):
             print(f"{f['path']}: {f['error']}")
@@ -1362,7 +1366,7 @@ def cmd_check(args) -> int:
     if args.stdin:
         if args.paths or args.diff is not None:
             raise SystemExit("error: --stdin checks the code on stdin; do not also give PATHs or --diff")
-        snippet = sys.stdin.buffer.read().decode("utf-8", "replace")
+        snippet = sys.stdin.buffer.read().decode("utf-8-sig", "replace")
         as_path = _rel_in_repo(repo, args.as_path, "--as") if args.as_path else None
     elif args.as_path:
         raise SystemExit("error: --as goes with --stdin")
@@ -1379,7 +1383,7 @@ def cmd_check(args) -> int:
 def _r_api(r: dict) -> None:
     env = r.get("env") or {}
     if not r.get("found"):
-        print(f"{r['target']}: not found - {r.get('why')}")
+        print(f"{r['target']}: {'not decided' if r.get('decided') == 'unknown' else 'not found'} - {r.get('why')}")
         if r.get("nearest"):
             print("  nearest: " + ", ".join(n["name"] for n in r["nearest"]))
         return
@@ -1834,7 +1838,8 @@ def build_parser() -> argparse.ArgumentParser:
     env_help = ("auto (the project's .venv, venv or env; else the standard library only), a virtual environment "
                 "or interpreter path, or none (standard library only)")
     sp = add("check", cmd_check, "check that the modules, names, keyword arguments and dict keys code uses exist "
-                                 "in the project's environment (exit 3: something is absent)")
+                                 "in the project's environment (exit 3: something is absent, or an installed "
+                                 "package version differs from the lock file)")
     sp.add_argument("paths", nargs="*", metavar="PATH",
                     help="files or directories to check (default: the lines changed against HEAD, as --diff)")
     sp.add_argument("--diff", nargs="?", const="HEAD", metavar="REV",

@@ -6,12 +6,18 @@ and falls back to Verinoda's own interpreter for the standard library only.
 Without a project environment, third-party names are never judged: they come
 back ``not_installed`` ("no project environment"), never ``absent``.
 
-Safety: an environment found on disk is accepted only when jedi's safety check
-(``create_environment(safe=True)``) passes, i.e. its interpreter is (a link to
-or a copy of) a Python installation known to the system; ``--env`` is the
-user's explicit choice and is trusted as given. jedi's default policy stays in
-force: compiled extension modules outside the standard library are never
-imported (``Project(load_unsafe_extensions=False)``).
+Safety: nothing from the checked repository runs. A virtual environment's own
+interpreter is never started (in a cloned repository it can be any program,
+and its ``.pth`` files run on start-up); the base interpreter its
+``pyvenv.cfg`` names is started instead, and the environment's search path is
+built from files (site-packages and ``.pth`` path lines). A virtual environment
+found in the project is used only when that base interpreter is a Python
+installation this system knows (Verinoda's own, the registry, ``PATH``, a
+Python manager's directory, or owned by root) and lies outside the project;
+``--env`` is the user's explicit choice and is trusted as given. jedi imports
+compiled modules to read them; :func:`install_jedi_guard` limits that to
+standard-library modules from the interpreter's own directories, so no package
+``__init__`` of the project or of site-packages runs.
 
 :class:`StdlibOracle` answers "which names does this standard-library module or
 class have" from the running interpreter of the chosen environment, started
@@ -44,7 +50,7 @@ VENV_DIRS = (".venv", "venv", "env")
 # .pth lines that run code but only set up tooling, not an import hook for other modules
 _BENIGN_PTH = ("_virtualenv", "distutils-precedence", "pywin32_bootstrap", "coverage", "_distutils_hack",
                "__editable__", "sitecustomize")
-# standard-library modules the oracle never imports (side effects on import)
+# standard-library modules the oracle never imports (side effects on import); nor any X.__main__
 _ORACLE_DENY = ("antigravity", "this", "__main__", "__hello__", "__phello__", "turtledemo", "idlelib")
 ORACLE_TIMEOUT = 20.0
 
@@ -70,6 +76,7 @@ class EnvInfo:
     dists: dict[str, tuple[str, str, Path]] = field(default_factory=dict)   # norm name -> (name, version, dist-info)
     top_level: dict[str, str] = field(default_factory=dict)                 # top-level module -> norm dist name
     fingerprint: str = ""
+    started: str = ""               # which interpreter was started, when it is not the environment's own
     _oracle: object = None
     _stdlib: list[Path] | None = None   # asked from the interpreter on first use (the oracle starts early)
 
@@ -125,9 +132,19 @@ class EnvInfo:
             return "stdlib"
         return None
 
+    def stdlib_names(self) -> frozenset:
+        """Top-level standard-library module names of the environment's interpreter."""
+        if self.kind == "verinoda":
+            return frozenset(set(getattr(sys, "stdlib_module_names", ())) | set(sys.builtin_module_names))
+        info = self.oracle().ask("sys")
+        names = set(info.get("stdlib_module_names", [])) | set(info.get("builtin_module_names", [])) \
+            if info.get("ok") else set(getattr(sys, "stdlib_module_names", ())) | set(sys.builtin_module_names)
+        return frozenset(names)
+
     def header(self) -> dict:
         return {"python": self.label, "kind": self.kind, "executable": self.executable,
-                "third_party_checked": self.third_party, **({"note": self.note} if self.note else {})}
+                "third_party_checked": self.third_party, **({"started": self.started} if self.started else {}),
+                **({"note": self.note} if self.note else {})}
 
 
 def _under(p: Path, roots: list[Path]) -> bool:
@@ -272,26 +289,262 @@ def _jedi_sys_path(jenv) -> list[str]:
     return [p for p in jenv.get_sys_path() if os.path.normcase(os.path.abspath(p)) != own]
 
 
+def _where(venv: Path, repo: Path) -> str:
+    try:
+        return venv.resolve().relative_to(repo).as_posix()
+    except (ValueError, OSError):
+        return str(venv)
+
+
 def _from_jedi_env(jenv, kind: str, venv: Path | None, repo: Path) -> EnvInfo:
+    """An environment read by starting its own interpreter (``--env`` given an interpreter or a non-venv
+    directory: the user's explicit choice)."""
     sp = _jedi_sys_path(jenv)
     vi = tuple(jenv.version_info)[:3]
     exe = str(jenv.executable)
     site_dirs = [Path(p) for p in sp if "site-packages" in Path(p).parts or "dist-packages" in Path(p).parts]
     oracle = StdlibOracle(exe)
     oracle.prefetch("sys")   # the interpreter starts while jedi works; stdlib_dirs reads the answer
-    if venv is not None:
-        try:
-            rel = venv.resolve().relative_to(repo)
-            where = rel.as_posix()
-        except ValueError:
-            where = str(venv)
-    else:
-        where = exe
+    where = _where(venv, repo) if venv is not None else exe
     label = f"{where} (python {'.'.join(map(str, vi))})"
     dists, top = _dists(site_dirs)
     env = EnvInfo(kind=kind, label=label, executable=exe, version=vi, third_party=True, path=venv,
                   jedi_env=jenv, sys_path=sp, site_dirs=site_dirs, dists=dists, top_level=top, _oracle=oracle)
     env.fingerprint = _fingerprint(exe, vi, site_dirs, [Path(x) for x in sp])
+    return env
+
+
+# -- virtual environments, read from their files -------------------------------------------------
+
+def read_pyvenv(venv: Path) -> dict[str, str]:
+    """The ``key = value`` lines of a virtual environment's pyvenv.cfg (keys lower-cased)."""
+    out: dict[str, str] = {}
+    try:
+        text = (Path(venv) / "pyvenv.cfg").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    for ln in text.splitlines():
+        k, sep, v = ln.partition("=")
+        if sep:
+            out[k.strip().lower()] = v.strip()
+    return out
+
+
+def base_interpreter(venv: Path) -> Path | None:
+    """The interpreter a virtual environment was made from, as its pyvenv.cfg names it (``base-executable``,
+    ``executable`` or ``home``), when that file exists."""
+    cfg = read_pyvenv(venv)
+    cands = [Path(cfg[k]) for k in ("base-executable", "executable") if cfg.get(k)]
+    home = cfg.get("home")
+    if home:
+        h = Path(home)
+        if os.name == "nt":
+            cands.append(h / "python.exe")
+        else:
+            m = re.match(r"(\d+)\.(\d+)", cfg.get("version_info") or cfg.get("version") or "")
+            if m:
+                cands.append(h / f"python{m.group(1)}.{m.group(2)}")
+            cands += [h / "python3", h / "python"]
+    for c in cands:
+        if c.is_absolute() and c.is_file():
+            return c
+    return None
+
+
+def venv_of(p: Path) -> Path | None:
+    """The virtual environment ``p`` is (a directory with pyvenv.cfg) or whose interpreter ``p`` is."""
+    for d in (p, p.parent, p.parent.parent):
+        if (d / "pyvenv.cfg").is_file() and (d == p or p.is_file()):
+            return d
+    return None
+
+
+def _same_file(a: Path | str, b: Path | str) -> bool:
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+
+
+def _real_under(p: Path, root: Path) -> bool:
+    try:
+        Path(os.path.realpath(p)).relative_to(os.path.realpath(root))
+        return True
+    except ValueError:
+        return False
+
+
+@functools.lru_cache(maxsize=1)
+def _registry_pythons() -> tuple[str, ...]:
+    """Interpreters registered in the Windows registry (PEP 514: python.org, the Store, uv, conda, ...)."""
+    try:
+        import winreg
+    except ImportError:
+        return ()
+    out: list[str] = []
+
+    def subkeys(key):
+        i = 0
+        while True:
+            try:
+                yield winreg.EnumKey(key, i)
+            except OSError:
+                return
+            i += 1
+
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for view in (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
+            try:
+                root = winreg.OpenKey(hive, r"SOFTWARE\Python", 0, winreg.KEY_READ | view)
+            except OSError:
+                continue
+            with root:
+                for company in list(subkeys(root)):
+                    try:
+                        ck = winreg.OpenKey(root, company, 0, winreg.KEY_READ | view)
+                    except OSError:
+                        continue
+                    with ck:
+                        for tag in list(subkeys(ck)):
+                            try:
+                                ik = winreg.OpenKey(ck, tag + r"\InstallPath", 0, winreg.KEY_READ | view)
+                            except OSError:
+                                continue
+                            with ik:
+                                for value, suffix in (("ExecutablePath", None), ("", "python.exe")):
+                                    try:
+                                        v = winreg.QueryValueEx(ik, value)[0]
+                                    except OSError:
+                                        continue
+                                    if isinstance(v, str) and v:
+                                        out.append(os.path.join(v, suffix) if suffix else v)
+    return tuple(dict.fromkeys(out))
+
+
+def _manager_dirs() -> list[Path]:
+    """Directories where Python managers install interpreters (a clone does not write there)."""
+    env, home = os.environ, Path.home()
+    out = [Path(env[v]) for v in ("UV_PYTHON_INSTALL_DIR", "PYENV_ROOT", "CONDA_PREFIX") if env.get(v)]
+    if sys.platform == "win32":
+        for v in ("APPDATA", "LOCALAPPDATA"):
+            if env.get(v):
+                out += [Path(env[v]) / "uv" / "python", Path(env[v]) / "Programs" / "Python"]
+        out.append(home / ".pyenv" / "pyenv-win" / "versions")
+    else:
+        data = Path(env.get("XDG_DATA_HOME") or home / ".local" / "share")
+        out += [data / "uv" / "python", home / ".pyenv" / "versions", Path("/opt/homebrew"),
+                Path("/usr/local/Cellar"), Path("/Library/Frameworks/Python.framework")]
+    return [p for p in out if p.is_absolute()]
+
+
+def known_interpreter(exe: Path) -> str | None:
+    """How this system knows the interpreter ``exe`` - so a cloned repository cannot have put it there -
+    or None."""
+    own = [sys.executable, getattr(sys, "_base_executable", None),
+           os.path.join(sys.base_prefix, "python.exe" if os.name == "nt" else "bin/python3")]
+    if any(c and os.path.isfile(c) and _same_file(c, exe) for c in own):
+        return "Verinoda's own interpreter"
+    if any(os.path.isfile(c) and _same_file(c, exe) for c in _registry_pythons()):
+        return "registered in the Windows registry"
+    for d in os.environ.get("PATH", "").split(os.pathsep):
+        c = Path(d) / exe.name
+        if d and Path(d).is_absolute() and c.is_file() and _same_file(c, exe):
+            return "on PATH"
+    for root in _manager_dirs():
+        if _real_under(exe, root):
+            return f"under {root}"
+    if os.name != "nt":
+        try:
+            if os.stat(os.path.realpath(exe)).st_uid == 0:
+                return "owned by root"
+        except OSError:
+            pass
+    return None
+
+
+def venv_site_dirs(venv: Path, version: tuple) -> list[Path]:
+    """The site-packages directories of a virtual environment."""
+    x, y = version[0], version[1]
+    cands = [venv / "Lib" / "site-packages", venv / "lib" / f"python{x}.{y}" / "site-packages",
+             venv / "lib64" / f"python{x}.{y}" / "site-packages", venv / "lib" / f"pypy{x}.{y}" / "site-packages",
+             venv / "site-packages"]
+    out: list[Path] = []
+    seen: set[str] = set()
+    for c in cands:
+        k = os.path.normcase(os.path.realpath(c))
+        if c.is_dir() and k not in seen:
+            seen.add(k)
+            out.append(c)
+    return out
+
+
+def pth_paths(site: Path) -> tuple[list[Path], list[str]]:
+    """What the ``.pth`` files of a site directory do, read as site.py reads them but without running
+    anything: the directories their path lines add, and their import lines that are not known tooling."""
+    dirs: list[Path] = []
+    hooks: list[str] = []
+    try:
+        entries = sorted(e for e in os.listdir(site) if e.endswith(".pth") and not e.startswith("."))
+    except OSError:
+        return dirs, hooks
+    for e in entries:
+        try:
+            lines = (site / e).read_text(encoding="utf-8-sig", errors="replace").splitlines()
+        except OSError:
+            continue
+        for ln in lines:
+            s = ln.strip()
+            if not s or s.startswith("#"):
+                continue
+            if s.startswith(("import ", "import\t")):
+                if not any(b in s or b in e for b in _BENIGN_PTH):
+                    hooks.append(f"{e}: {s[:80]}")
+                continue
+            p = Path(s) if Path(s).is_absolute() else site / s
+            if p.is_dir():
+                dirs.append(p)
+    return dirs, hooks
+
+
+def _venv_env(venv: Path, base: Path, kind: str, repo: Path, how: str) -> EnvInfo:
+    """A virtual environment read without starting its own interpreter: jedi and the standard-library
+    oracle run its base interpreter; the search path is that interpreter's standard library, then the
+    environment's site-packages and the directories its ``.pth`` path lines add."""
+    import jedi
+
+    oracle = StdlibOracle(str(base))
+    oracle.prefetch("sys")   # starts while jedi's process starts
+    try:
+        jenv = jedi.create_environment(str(base), safe=False)   # checked by the caller, or given with --env
+        vi = tuple(jenv.version_info)[:3]
+        info = oracle.ask("sys")
+        if not info.get("ok"):
+            raise ValueError(f"{base} did not list its standard library ({info.get('error')})")
+    except BaseException:
+        oracle.close()
+        raise
+    site_dirs = venv_site_dirs(venv, vi)
+    if read_pyvenv(venv).get("include-system-site-packages", "").lower() == "true":
+        site_dirs += [Path(p) for p in info.get("site_dirs", []) if Path(p).is_dir()]
+    pth = [d for s in site_dirs for d in pth_paths(s)[0]]
+    # PYTHONPATH as the interpreter would put it first; then its standard library, site-packages, .pth lines
+    user = [p for p in os.environ.get("PYTHONPATH", "").split(os.pathsep) if p and Path(p).is_absolute()]
+    seen: set[str] = set()
+    sys_path: list[str] = []
+    for p in [*user, *info.get("path", []), *map(str, site_dirs), *map(str, pth)]:
+        k = os.path.normcase(os.path.abspath(p))
+        if p and k not in seen:
+            seen.add(k)
+            sys_path.append(str(p))
+    where = _where(venv, repo)
+    dists, top = _dists(site_dirs)
+    env = EnvInfo(kind=kind, label=f"{where} (python {'.'.join(map(str, vi))})", executable=str(jenv.executable),
+                  version=vi, third_party=True, path=venv, jedi_env=jenv, sys_path=sys_path, site_dirs=site_dirs,
+                  dists=dists, top_level=top, _oracle=oracle,
+                  started=f"{base}, the base interpreter {where}/pyvenv.cfg names ({how}); the environment's own "
+                          "interpreter and its .pth import lines are not run, its search path is read from files")
+    env._stdlib = [Path(d) for d in info.get("stdlib_dirs", [])]
+    env.fingerprint = _fingerprint(env.executable, vi, site_dirs, [Path(x) for x in sys_path])
     return env
 
 
@@ -313,6 +566,57 @@ def own_env(note: str) -> EnvInfo:
     return info
 
 
+def explicit_env_path(repo: Path, choice: str) -> Path:
+    """The path ``--env`` names (relative: to the project if it exists there, else to the working directory)."""
+    p = Path(choice)
+    if not p.is_absolute():
+        p = (repo / p) if (repo / p).exists() else (Path.cwd() / p)
+    return p
+
+
+# -- jedi imports only standard-library compiled modules ------------------------------------------------
+
+_GUARD: list = []
+
+
+def _norm(p: str) -> str:
+    return os.path.normcase(os.path.abspath(p))
+
+
+def install_jedi_guard() -> None:
+    """jedi reads a compiled module by importing it (``jedi.inference.imports._load_builtin_module``), in
+    its environment process or, for Verinoda's own interpreter, in this process. Importing ``pkg._ext``
+    runs ``pkg/__init__.py`` first, and jedi's own "safe" directories include site-packages. For a project
+    marked by :func:`guard_project` only a standard-library module is imported, from the interpreter's own
+    standard-library directories; anything else reads as not importable (its names stay unknown).
+    Other users of jedi (``precise.py``) keep jedi's behaviour."""
+    if _GUARD:
+        return
+    from jedi.inference import compiled, imports
+
+    upstream = imports._load_builtin_module
+
+    def load(inference_state, import_names, sys_path):
+        policy = getattr(inference_state.project, "_verinoda_compiled", None)
+        if policy is None:
+            return upstream(inference_state, import_names, sys_path)
+        names, dirs = policy
+        if not import_names or import_names[0] not in names or "__main__" in import_names:
+            return None
+        paths = inference_state.get_sys_path() if sys_path is None else sys_path
+        keep = [p for p in paths if "site-packages" not in Path(p).parts and "dist-packages" not in Path(p).parts
+                and any(_norm(p) == d or _norm(p).startswith(d + os.sep) for d in dirs)]
+        return compiled.load_module(inference_state, dotted_name=".".join(import_names), sys_path=keep)
+
+    imports._load_builtin_module = load
+    _GUARD.append(upstream)
+
+
+def guard_project(project, env: EnvInfo) -> None:
+    """Mark a jedi project so that :func:`install_jedi_guard` applies to it."""
+    project._verinoda_compiled = (env.stdlib_names(), tuple(_norm(str(d)) for d in env.stdlib_dirs))
+
+
 def select_env(repo: Path, env: str | None = "auto") -> EnvInfo:
     """The environment to check against: ``auto`` (project venv, else stdlib only), a path, or ``none``."""
     repo = Path(repo).resolve()
@@ -324,28 +628,39 @@ def select_env(repo: Path, env: str | None = "auto") -> EnvInfo:
     if choice == "none":
         return own_env("--env none: third-party names are not checked")
     if choice != "auto":
-        p = Path(choice)
-        if not p.is_absolute():
-            p = (repo / p) if (repo / p).exists() else (Path.cwd() / p)
+        p = explicit_env_path(repo, choice)
+        venv = venv_of(p)
+        base = base_interpreter(venv) if venv is not None else None
         try:
+            if venv is not None and base is not None:
+                return _venv_env(venv, base, "explicit", repo, "given with --env")
+            # an interpreter, a conda environment, or a venv whose pyvenv.cfg names no base: run it as given
             jenv = jedi.create_environment(str(p), safe=False)   # the user's explicit choice
             jenv.get_sys_path()
         except Exception as exc:  # noqa: BLE001 - InvalidPythonEnvironment and friends
             raise ValueError(f"--env {choice}: not a usable Python environment ({exc})")
-        venv = p if p.is_dir() else None
-        return _from_jedi_env(jenv, "explicit", venv, repo)
+        return _from_jedi_env(jenv, "explicit", venv or (p if p.is_dir() else None), repo)
     notes = []
     for d in VENV_DIRS:
         venv = repo / d
         if not (venv / "pyvenv.cfg").is_file():
             continue
+        # never start the environment's own interpreter: in a cloned repository it can be any program
+        base = base_interpreter(venv)
+        how = known_interpreter(base) if base is not None and not _real_under(base, repo) else None
+        if base is None:
+            notes.append(f"{d}/ was found but not used: its pyvenv.cfg names no base interpreter that exists; "
+                         f"pass --env {d} to trust it")
+            continue
+        if how is None:
+            notes.append(f"{d}/ was found but not used: its base interpreter {base} is not a Python installation "
+                         "this system knows (Verinoda's own, the registry, PATH, a Python manager's directory) or "
+                         f"lies inside the project; pass --env {d} to trust it")
+            continue
         try:
-            jenv = jedi.create_environment(str(venv), safe=True)
-            jenv.get_sys_path()
+            return _venv_env(venv, base, "project", repo, how)
         except Exception as exc:  # noqa: BLE001
             notes.append(f"{d}/ was found but not used ({type(exc).__name__}: {exc}); pass --env {d} to trust it")
-            continue
-        return _from_jedi_env(jenv, "project", venv, repo)
     why = "; ".join(notes) or ("no project environment found (.venv, venv or env with pyvenv.cfg); "
                                "pass --env PATH")
     return own_env(why + ": third-party names are not checked")
@@ -363,15 +678,18 @@ STD = set(getattr(sys, "stdlib_module_names", ())) | set(sys.builtin_module_name
 DENY = set(json.loads(sys.argv[2]))
 STD_META = []
 try:
-    import abc, enum
-    STD_META = [type, abc.ABCMeta, getattr(enum, "EnumType", None), getattr(enum, "EnumMeta", None)]
+    import abc, enum, typing
+    STD_META = [type, abc.ABCMeta, getattr(enum, "EnumType", None), getattr(enum, "EnumMeta", None),
+                getattr(typing, "_ProtocolMeta", None)]
 except Exception:
     pass
 
 def std(name):
-    top = name.split(".")[0]
-    if top in DENY or top not in STD:
+    parts = name.split(".")
+    if parts[0] in DENY or parts[0] not in STD:
         raise ImportError("not a standard-library module: " + name)
+    if "__main__" in parts:   # unittest.__main__, sqlite3.__main__: a program runs on import
+        raise ImportError("not imported (a program): " + name)
 
 def load(dotted):
     parts = dotted.split(".")
@@ -501,9 +819,16 @@ def handle(req):
                 pass
         dirs.append(os.path.join(sys.base_prefix, "DLLs"))
         dirs += [p for p in sys.path if p.endswith(".zip")]
+        site = []
+        for key in ("purelib", "platlib"):
+            try:
+                site.append(sysconfig.get_path(key, vars=base))
+            except KeyError:
+                pass
         return {"ok": True, "builtin_module_names": sorted(sys.builtin_module_names),
                 "stdlib_module_names": sorted(STD), "version": list(sys.version_info[:3]), "platform": sys.platform,
-                "stdlib_dirs": [d for d in dict.fromkeys(dirs) if os.path.exists(d)]}
+                "stdlib_dirs": [d for d in dict.fromkeys(dirs) if os.path.exists(d)],
+                "path": [p for p in sys.path if p], "site_dirs": list(dict.fromkeys(site))}
     return {"ok": False, "error": "unknown op " + op}
 
 for line in sys.stdin:
@@ -666,8 +991,8 @@ def _in_dir(d: Path, name: str) -> list[ModSpec]:
                 out.append(ModSpec(name, "package", pkg / init, [pkg],
                                    stub if "__init__.pyi" in inner and init == "__init__.py" else None))
                 break
-        else:
-            out.append(ModSpec(name, "namespace", None, [pkg]))
+        else:   # __init__ as bytecode only: a package whose source is not there
+            out.append(ModSpec(name, "package" if "__init__.pyc" in inner else "namespace", None, [pkg]))
     src, stub = d / f"{name}.py", d / f"{name}.pyi"
     has_stub = f"{name}.pyi" in entries
     if f"{name}.py" in entries:
@@ -677,6 +1002,8 @@ def _in_dir(d: Path, name: str) -> list[ModSpec]:
     for e in entries:
         if e.startswith(name + ".") and e.endswith(_EXT) and e.split(".")[0] == name:
             out.append(ModSpec(name, "compiled", d / e, [], stub if has_stub else None))
+    if f"{name}.pyc" in entries and not out:   # a module shipped as bytecode only (sourceless)
+        out.append(ModSpec(name, "compiled", d / f"{name}.pyc"))
     return out
 
 
@@ -699,32 +1026,20 @@ class ImportUniverse:
             self._read_pth(site, seen)
 
     def _read_pth(self, site: Path, seen: set[str]) -> None:
+        dirs, hooks = pth_paths(site)
+        self.hooks += hooks
+        for p in dirs:
+            k = os.path.normcase(str(p))
+            if k not in seen:
+                seen.add(k)
+                self.dirs.append(p)
         try:
-            entries = sorted(e for e in os.listdir(site) if e.endswith(".pth"))
+            if any(e.startswith("__editable__") and e.endswith(".pth") for e in os.listdir(site)):
+                self._read_editable_finder(site, "")
         except OSError:
-            return
-        for e in entries:
-            try:
-                lines = (site / e).read_text(encoding="utf-8", errors="replace").splitlines()
-            except OSError:
-                continue
-            for ln in lines:
-                s = ln.strip()
-                if not s or s.startswith("#"):
-                    continue
-                if s.startswith(("import ", "import\t")):
-                    if not any(b in s or b in e for b in _BENIGN_PTH):
-                        self.hooks.append(f"{e}: {s[:80]}")
-                    continue
-                p = Path(s) if Path(s).is_absolute() else site / s
-                k = os.path.normcase(str(p))
-                if p.is_dir() and k not in seen:
-                    seen.add(k)
-                    self.dirs.append(p)
-            if e.startswith("__editable__"):
-                self._read_editable_finder(site, e)
+            pass
 
-    def _read_editable_finder(self, site: Path, pth: str) -> None:
+    def _read_editable_finder(self, site: Path, _pth: str) -> None:
         for cand in site.glob("__editable___*_finder.py"):
             try:
                 tree = ast.parse(cand.read_text(encoding="utf-8", errors="replace"))
@@ -783,7 +1098,7 @@ class ImportUniverse:
         for d in self.dirs:
             try:
                 for e in os.listdir(d):
-                    if e.endswith((".py", ".pyi")):
+                    if e.endswith((".py", ".pyi", ".pyc")):
                         names.add(e.rsplit(".", 1)[0])
                     elif e.endswith(_EXT):
                         names.add(e.split(".")[0])

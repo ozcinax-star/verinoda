@@ -239,7 +239,8 @@ Before you propose Python code, and after every edit:
 3. `unknown` is unverified, not fine: read the definition or run the tests before relying on it.
    `not_installed`: the environment checked lacks the package. `guarded`: the code handles it.
 4. Tell the user which environment was checked (`env.python`, `env.packages_checked`,
-   `env.lock_mismatches`). Exit code 3 means something is absent.
+   `env.lock_mismatches`). Exit code 3 means something is absent or an installed version differs
+   from the lock (`exit_because` says which); `incomplete` lists files that were not checked.
 
 Only if the user agrees: a PostToolUse hook on Edit/Write that runs `verinoda check --diff`.
 
