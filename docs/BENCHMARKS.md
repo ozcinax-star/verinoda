@@ -780,6 +780,14 @@ runs per version: 44.1-44.8 s → 36.6-38.1 s (resolve once) → 34.3-34.9 s (ke
 graph.json is the same (byte for byte on the examples, on graphify_core and, with the kept facts, on
 Verinoda's own repository). Fresh-index A/B of the first change: 0 of 333 results differ.
 
+**All of it together, on a quiet machine (2026-09-25, evening).** The code before these changes
+(`d3165b8`) against the integration of the per-file caches (Python facts and the cross-file pass), the
+kept graph and the other update changes: each version on its own copy of Verinoda's repository (the
+new code migrates `atlas.db`), the command itself, wall clock, three alternating runs per edit kind.
+An edit that shifts lines (the graph changes): 34.0-34.3 s -> 27.1-27.2 s. A comment appended (the
+graph stays the same, so the last build's graph.json is kept): 34.0-34.1 s -> 21.1-21.2 s (27.3 s on
+the first such update, which records the build). Harness: `cli_ab2.sh` in the session scratchpad.
+
 *Correction:* this section first said 35.1 s → 27.9 s. Those figures came from a timing script that
 imported the indexer before Verinoda had pointed it at `.verinoda/index`, so part of the pipeline
 used another directory and did less work. The figures above are the command's own.
