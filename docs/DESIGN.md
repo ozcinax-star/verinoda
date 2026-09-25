@@ -167,6 +167,8 @@ Results:
   change the answer. If it would not, the candidates are merged silently.
 - **weak**: used, and the resulting claims carry an uncertainty.
 - **unlinked**: reported as `unknown` with a next step.
+- **not_found** (D31): a mention written as code with no exact name, spelled
+  nowhere in the repository; never replaced by a similar name.
 
 **D4. The same code path with or without a host plan.**
 
@@ -592,6 +594,85 @@ catches the benchmark's wrong finding in 6 ms.
 - Staleness recall must be 1.0, and zero claims may be silently wrong while
   shown as verified.
 - Critique precision and recall are measured on a labelled set.
+
+**D31. No laundering: word overlap never verifies, every role is bound, a
+definitive miss is contradicted at once, a code name is never substituted.**
+Four ways a false sentence reached a verified or "likely" status (found on a
+copy of `examples/orders_app`, 2026-09-25) are closed. All rules are
+deterministic.
+
+- **Term coverage is `partial` at most** (`entail._coverage_grade`, code
+  `coverage`). "apply_discount returns the subtotal above the threshold" had
+  every word of the lines that return `subtotal * 0.9` there, and was
+  `statically_verified`. Order, direction, conditions and roles are invisible
+  to word overlap. Only a verbatim quote (`<path>:<line> contains: <text>`; a
+  quote under 8 characters only as the whole cited line) or a kind's typed
+  check is `full`. Text a user or an agent wrote (`spec.free_text`,
+  `claim add`) that no typed check covers needs a `full` grade even for
+  `strong_inference`, so word overlap gives it `weak_inference` at most
+  (`claims._allows`, `entail.typed`). The same holds for a passing run
+  attached to a plain-text claim ("the pricing tests pass"): its command line
+  sharing the claim's words is relevance, not verification; a `test_run`
+  claim that names the run (`spec.experiment` or `spec.command`) is verified
+  by it.
+- **Every role is bound** (`entail.assess`, free text only; generated claims
+  state the roles by construction):
+  - a relation's text states a caller and a callee (`entail.relation_roles`:
+    "A calls B", "B is called by A", "A, B'yi çağırır", "B, A tarafından
+    çağrılır"). The callee must be the claim's target, and the call-site grade
+    checks the cited line against the caller the text names;
+  - a config text's subject ("the discount threshold") must be spelled by the
+    name the cited read of the variable is bound to (`entail.env_bindings`:
+    assignment target, dict key, keyword, enclosing definitions), at least
+    half of its words, else the grade is `partial`.
+- **Scope-exhaustive checks at creation** (`critique.check_at_creation`, run by
+  `claim add`; the same checks run in `challenge`):
+  - relation: a cited line without the call is checked against the caller's
+    whole body (`entail.caller_scope`, AST; direct calls, import aliases and
+    `x.name()` on any receiver count). No such call is `contradicted`, with the
+    scope printed: "no direct call to save in create_order_handler
+    (orders/api.py:16-21); calls through other names are not followed". The
+    caller's body is the refuting evidence. A call at another line of the body
+    is a heuristic warning (the citation is off), no longer a definitive
+    refutation;
+  - config: when no read of the variable in the cited file is bound to the
+    text's subject and another read's binding spells the whole subject, the
+    claim is `contradicted`: "orders/config.py:6 binds ORDERS_MAX_ITEMS to
+    MAX_ITEMS_PER_ORDER; DISCOUNT_THRESHOLD reads ORDERS_DISCOUNT_THRESHOLD at
+    orders/config.py:7 (scope: environment reads in orders/config.py)";
+  - order: `claim add --kind order` records "A before B in F" (a behaviour
+    claim, `entail.order_proposition`). The first calls of A and B in F's whole
+    body decide it (`entail.call_order`); a missing call, or the reverse order
+    in a function without branches or loops, is `contradicted`. The analysis'
+    own order claims are graded the same way (they used to verify by word
+    overlap);
+  - location: a written claim that a Python file defines a name it does not
+    define is `contradicted` ("no definition named `place_orders` in
+    orders/service.py (scope: its syntax tree); nearest: place_order").
+- **Code-shaped mentions are not substituted** (`question_plan.link_mention`).
+  A mention in backticks, a path, snake_case, camelCase, dotted or ending in
+  `()` needs a name tier (exact id, path, `Class.method`, label, folded
+  label). Without one:
+  - if the repository spells it nowhere outside import statements
+    (`question_plan.name_site`, a file scan that is lenient on purpose: a
+    dotted name counts when its last part occurs, any letter case counts), the
+    link is `not_found` with `did_you_mean`. The first unknown reads "no
+    symbol named `place_orders` in this repository; nearest: place_order
+    (orders/service.py:19)", and the sub-question is `unmet`;
+  - if it is spelled somewhere (an environment variable, a data key, an
+    external name), the link is at most `weak`, with the site in the
+    uncertainty.
+  `trace` does the same for its endpoints: a code-shaped endpoint without an
+  exact name is unresolved with the same line, and a plain-words endpoint
+  resolved by similarity is kept and reported in `fuzzy`.
+
+Limits: Python only for relation scopes, config bindings and order (other
+languages keep their partial grades). Calls through other names, dynamic
+dispatch and runtime order under branches are not followed, and the scope
+text says so. Word overlap still makes evidence relevant, so generated text
+without a typed check stays `strong_inference` and written text
+`weak_inference`. The check of the agent's own answer (sentence by sentence)
+is a separate, later step.
 
 ## 5. Delivery plan
 

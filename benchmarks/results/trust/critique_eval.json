@@ -56,7 +56,7 @@
   },
   "environment": {
     "cpu_count": 6,
-    "date_utc": "2026-09-23T01:22:37+00:00",
+    "date_utc": "2026-09-25T05:40:39+00:00",
     "git": "git version 2.53.0.windows.1",
     "graphify_cli": null,
     "machine": "AMD64",
@@ -64,35 +64,11 @@
     "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
     "python": "3.12.0",
     "python_impl": "CPython",
-    "repoatlas_package_changes_vs_commit": [
-      "M repoatlas/agents/templates/claude_SKILL.md",
-      "M repoatlas/agents/templates/codex_SKILL.md",
-      "M repoatlas/analysis.py",
-      "M repoatlas/benchmark/__main__.py",
-      "M repoatlas/benchmark/approaches.py",
-      "M repoatlas/benchmark/critique_eval.py",
-      "M repoatlas/benchmark/metrics.py",
-      "M repoatlas/benchmark/questions/graphify_core.json",
-      "M repoatlas/benchmark/questions/orders_app.json",
-      "M repoatlas/benchmark/report.py",
-      "M repoatlas/benchmark/runner.py",
-      "M repoatlas/benchmark/sanitize.py",
-      "M repoatlas/benchmark/staleness.py",
-      "M repoatlas/cli.py",
-      "M repoatlas/doctor.py",
-      "M repoatlas/feedback.py",
-      "M repoatlas/mcp/__init__.py",
-      "M repoatlas/mcp/server.py",
-      "M repoatlas/paths.py",
-      "M repoatlas/workflow.py",
-      "?? repoatlas/benchmark/questions/graphify_core_tr.json",
-      "?? repoatlas/benchmark/questions/heldout_repoatlas.json",
-      "?? repoatlas/benchmark/questions/orders_app_tr.json"
-    ],
-    "repoatlas_package_diff_sha256": "1a8dd47e680d8a7333ce15c25b0b9e14d8789cfc6fa066e1d476e3973b34f764",
-    "repoatlas_source_commit": "73719901c9dea49c2e87120ca040c6b998298fe3",
-    "repoatlas_version": "0.1.0.dev0",
-    "vendored_graphify_commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7"
+    "vendored_graphify_commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7",
+    "verinoda_package_changes_vs_commit": [],
+    "verinoda_package_diff_sha256": null,
+    "verinoda_source_commit": "7da834bc1a5618eaa3ee2bd2e353f25f67380df7",
+    "verinoda_version": "0.1.0.dev0"
   },
   "false": 22,
   "gate": {
@@ -106,33 +82,33 @@
       ]
     },
     "true_verified_at_creation": {
-      "k": 20,
+      "k": 18,
       "n": 23,
-      "rate": 0.8696,
+      "rate": 0.7826,
       "wilson95": [
-        0.6787,
-        0.9546
+        0.581,
+        0.9034
       ]
     }
   },
   "ms_per_claim": {
     "p50": 2.4,
-    "p95": 19.7
+    "p95": 21.8
   },
   "paths_sanitized": {
     "placeholders": [],
-    "rule": "absolute home / temp / checkout paths replaced when written; see repoatlas/benchmark/sanitize.py"
+    "rule": "absolute home / temp / checkout paths replaced when written; see verinoda/benchmark/sanitize.py"
   },
   "presented_as_strong_inference": {
-    "n": 3,
-    "true": 3
+    "n": 5,
+    "true": 5
   },
   "presented_as_verified": {
-    "n": 20,
+    "n": 18,
     "precision": 1.0,
-    "true": 20,
+    "true": 18,
     "wilson95": [
-      0.8389,
+      0.8241,
       1.0
     ]
   },
@@ -145,7 +121,7 @@
       "id": "t.handler_place",
       "kind": "relation",
       "lowered": false,
-      "ms": 2.4,
+      "ms": 2.3,
       "source": "gold q02.handler",
       "truth": true
     },
@@ -157,7 +133,7 @@
       "id": "t.handler_repo",
       "kind": "relation",
       "lowered": false,
-      "ms": 1.7,
+      "ms": 1.9,
       "source": "code",
       "truth": true
     },
@@ -169,7 +145,7 @@
       "id": "t.get_fetch",
       "kind": "relation",
       "lowered": false,
-      "ms": 2.2,
+      "ms": 2.3,
       "source": "gold q08.handler",
       "truth": true
     },
@@ -193,7 +169,7 @@
       "id": "t.place_total",
       "kind": "relation",
       "lowered": false,
-      "ms": 2.2,
+      "ms": 2.3,
       "source": "code",
       "truth": true
     },
@@ -205,7 +181,7 @@
       "id": "t.total_discount",
       "kind": "relation",
       "lowered": false,
-      "ms": 2.0,
+      "ms": 1.8,
       "source": "gold q07.caller",
       "truth": true
     },
@@ -217,7 +193,7 @@
       "id": "t.repo_ctor",
       "kind": "relation",
       "lowered": false,
-      "ms": 2.3,
+      "ms": 1.9,
       "source": "code",
       "truth": true
     },
@@ -229,7 +205,7 @@
       "id": "t.place_save",
       "kind": "relation",
       "lowered": false,
-      "ms": 2.2,
+      "ms": 1.8,
       "source": "gold q02.service",
       "truth": true
     },
@@ -241,7 +217,7 @@
       "id": "t.fetch_get",
       "kind": "relation",
       "lowered": false,
-      "ms": 2.2,
+      "ms": 2.4,
       "source": "gold q08.service",
       "truth": true
     },
@@ -253,7 +229,7 @@
       "id": "t.test_total",
       "kind": "relation",
       "lowered": false,
-      "ms": 2.2,
+      "ms": 2.3,
       "source": "code",
       "truth": true
     },
@@ -267,7 +243,7 @@
       "id": "f.handler_save",
       "kind": "relation",
       "lowered": true,
-      "ms": 7.4,
+      "ms": 9.4,
       "source": "negative q02.n.handler_save",
       "truth": false
     },
@@ -281,7 +257,7 @@
       "id": "f.place_discount",
       "kind": "relation",
       "lowered": true,
-      "ms": 7.1,
+      "ms": 8.7,
       "source": "negative q07.n.service_discount",
       "truth": false
     },
@@ -295,7 +271,7 @@
       "id": "f.reversed",
       "kind": "relation",
       "lowered": true,
-      "ms": 6.3,
+      "ms": 7.9,
       "source": "negative q07.n.reversed",
       "truth": false
     },
@@ -309,7 +285,7 @@
       "id": "f.fetch_save",
       "kind": "relation",
       "lowered": true,
-      "ms": 7.5,
+      "ms": 7.7,
       "source": "negative q08.n.fetch_save",
       "truth": false
     },
@@ -323,7 +299,7 @@
       "id": "f.get_place",
       "kind": "relation",
       "lowered": true,
-      "ms": 7.4,
+      "ms": 7.8,
       "source": "negative q08.n.handler_place",
       "truth": false
     },
@@ -337,7 +313,7 @@
       "id": "f.handler_validate",
       "kind": "relation",
       "lowered": true,
-      "ms": 7.4,
+      "ms": 8.7,
       "source": "negative q10.n.handler_validates",
       "truth": false
     },
@@ -351,7 +327,7 @@
       "id": "f.get_save",
       "kind": "relation",
       "lowered": true,
-      "ms": 7.3,
+      "ms": 7.5,
       "source": "negative q06.n.read_path",
       "truth": false
     },
@@ -365,7 +341,7 @@
       "id": "f.swap",
       "kind": "relation",
       "lowered": true,
-      "ms": 7.3,
+      "ms": 7.8,
       "source": "mutation direction_swap",
       "truth": false
     },
@@ -379,7 +355,7 @@
       "id": "f.substitute",
       "kind": "relation",
       "lowered": true,
-      "ms": 6.1,
+      "ms": 9.1,
       "source": "mutation target_substitution",
       "truth": false
     },
@@ -393,7 +369,7 @@
       "id": "f.service_sql",
       "kind": "relation",
       "lowered": true,
-      "ms": 7.7,
+      "ms": 8.5,
       "source": "negative q01.n.service_sql",
       "truth": false
     },
@@ -405,7 +381,7 @@
       "id": "t.loc_total",
       "kind": "location",
       "lowered": false,
-      "ms": 1.6,
+      "ms": 1.5,
       "source": "code",
       "truth": true
     },
@@ -417,7 +393,7 @@
       "id": "t.loc_discount",
       "kind": "location",
       "lowered": false,
-      "ms": 1.3,
+      "ms": 1.1,
       "source": "gold q07.apply",
       "truth": true
     },
@@ -429,7 +405,7 @@
       "id": "t.loc_place",
       "kind": "location",
       "lowered": false,
-      "ms": 1.4,
+      "ms": 1.5,
       "source": "code",
       "truth": true
     },
@@ -467,7 +443,7 @@
       "id": "f.loc_total_long",
       "kind": "location",
       "lowered": true,
-      "ms": 6.3,
+      "ms": 8.7,
       "source": "mutation off_by_1",
       "truth": false
     },
@@ -481,7 +457,7 @@
       "id": "f.loc_place_long",
       "kind": "location",
       "lowered": true,
-      "ms": 9.5,
+      "ms": 6.2,
       "source": "mutation off_by_3",
       "truth": false
     },
@@ -509,7 +485,7 @@
       "id": "f.loc_wrong_start",
       "kind": "location",
       "lowered": true,
-      "ms": 7.0,
+      "ms": 6.1,
       "source": "mutation start-1",
       "truth": false
     },
@@ -521,7 +497,7 @@
       "id": "t.env_db",
       "kind": "config",
       "lowered": false,
-      "ms": 1.5,
+      "ms": 1.7,
       "source": "gold q03.db",
       "truth": true
     },
@@ -545,7 +521,7 @@
       "id": "t.env_discount",
       "kind": "config",
       "lowered": false,
-      "ms": 1.3,
+      "ms": 1.7,
       "source": "gold q03.discount",
       "truth": true
     },
@@ -559,7 +535,7 @@
       "id": "f.env_wrong_var",
       "kind": "config",
       "lowered": true,
-      "ms": 5.6,
+      "ms": 5.8,
       "source": "mutation wrong_variable",
       "truth": false
     },
@@ -573,7 +549,7 @@
       "id": "f.repo_env",
       "kind": "config",
       "lowered": true,
-      "ms": 6.5,
+      "ms": 6.1,
       "source": "negative q03.n.repo_env",
       "truth": false
     },
@@ -599,7 +575,7 @@
       "id": "f.reach_empty",
       "kind": "tests",
       "lowered": true,
-      "ms": 20.3,
+      "ms": 21.8,
       "source": "negative q04.n.empty_order",
       "truth": false
     },
@@ -611,7 +587,7 @@
       "id": "t.only_repo",
       "kind": "exclusive",
       "lowered": false,
-      "ms": 19.7,
+      "ms": 31.0,
       "source": "gold q09.connect",
       "truth": true
     },
@@ -623,7 +599,7 @@
       "id": "t.adr",
       "kind": "decision",
       "lowered": false,
-      "ms": 1.4,
+      "ms": 1.5,
       "source": "gold q05",
       "truth": true
     },
@@ -635,31 +611,31 @@
       "id": "f.adr_postgres",
       "kind": "decision",
       "lowered": false,
-      "ms": 1.2,
+      "ms": 1.4,
       "source": "mutation misattribution",
       "truth": false
     },
     {
-      "after": "statically_verified",
+      "after": "strong_inference",
       "contradicted": false,
-      "created": "statically_verified",
+      "created": "strong_inference",
       "fired": [],
       "id": "t.text_discount",
       "kind": "general",
       "lowered": false,
-      "ms": 2.0,
+      "ms": 1.9,
       "source": "code",
       "truth": true
     },
     {
-      "after": "statically_verified",
+      "after": "strong_inference",
       "contradicted": false,
-      "created": "statically_verified",
+      "created": "strong_inference",
       "fired": [],
       "id": "t.text_threshold",
       "kind": "general",
       "lowered": false,
-      "ms": 1.6,
+      "ms": 1.4,
       "source": "gold q07.threshold",
       "truth": true
     },
@@ -671,7 +647,7 @@
       "id": "f.text_postgres",
       "kind": "general",
       "lowered": false,
-      "ms": 1.8,
+      "ms": 1.5,
       "source": "audit criterion 6",
       "truth": false
     },
@@ -685,7 +661,7 @@
       "id": "f.text_negated",
       "kind": "general",
       "lowered": true,
-      "ms": 6.5,
+      "ms": 6.4,
       "source": "mutation negation",
       "truth": false
     },
@@ -699,7 +675,7 @@
       "id": "f.text_factor",
       "kind": "general",
       "lowered": true,
-      "ms": 6.7,
+      "ms": 6.4,
       "source": "mutation constant",
       "truth": false
     },
@@ -713,11 +689,11 @@
       "id": "f.only_repo_planted",
       "kind": "exclusive",
       "lowered": true,
-      "ms": 24.1,
+      "ms": 41.0,
       "source": "mutation planted_second_occurrence",
       "truth": false
     }
   ],
-  "schema": "repoatlas.critique_eval/1",
+  "schema": "verinoda.critique_eval/1",
   "true": 23
 }
