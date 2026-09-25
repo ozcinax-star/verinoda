@@ -399,15 +399,12 @@ def graphify_cli_context(cmd: str, root: Path, question: str, budget: int | None
 # -- 3. Verinoda ---------------------------------------------------------------------
 
 def analyze_context(res: dict) -> str:
-    """What an agent receives from ``verinoda analyze --json``, minus run bookkeeping."""
-    claims = []
-    for c in res["claims"]:
-        claims.append({k: c[k] for k in ("id", "text", "status", "confidence", "evidence", "uncertainties", "challenged")
-                       if k in c})
-    body = {"question": res["question"], "intents": res["intents"], "claims": claims, "unknowns": res["unknowns"]}
-    if res.get("passages"):
-        body["passages"] = res["passages"]
-    return json.dumps(body, ensure_ascii=False, separators=(",", ":"))
+    """What an agent reads of ``verinoda analyze``: its default text (``analysis_view.render_text``:
+    sub-question verdicts, claims, unknowns and the passages ``query`` gives). Until 2026-09-26 this
+    was the ``--json`` result minus run bookkeeping; docs/BENCHMARKS.md has both."""
+    from verinoda import analysis_view
+
+    return analysis_view.render_text(res)
 
 
 def verinoda_analyze(store, root: Path, question: str) -> tuple[str, dict]:

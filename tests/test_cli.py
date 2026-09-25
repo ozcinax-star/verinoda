@@ -243,8 +243,13 @@ def test_analyze_json(repo):
                      str(repo), "--budget-calls", "3", "--json", cwd=repo)
     assert budget["usage"]["exhausted"] == "tool-call budget 3 spent"
     assert any(u["why"] == "tool-call budget 3 spent" for u in budget["unknowns"])
+    r = ra("analyze", "How does an order get from the API handler to the database?", "--repo", str(repo),
+           "--budget-calls", "3", cwd=repo)
+    assert "budget exhausted: tool-call budget 3 spent" in r.stdout and "unknown: " in r.stdout
+    # the default text is what a model reads: verdicts, claims, passages; no run bookkeeping
     r = ra("analyze", "Why does OrderRepository use SQLite?", "--repo", str(repo), "--no-challenge", cwd=repo)
-    assert r.returncode == 0 and "[primary_source_verified" in r.stdout and "usage:" in r.stdout
+    assert r.returncode == 0 and "[primary_source_verified" in r.stdout and "\npassages (" in r.stdout
+    assert "usage:" not in r.stdout and '"steps"' not in r.stdout and r.stdout.startswith("analysis ana_")
     # Critique was switched off, not cut by the budget: the rendering must not claim a reason it lacks.
     assert "[not challenged" in r.stdout and "[not challenged: budget]" not in r.stdout
 
@@ -651,7 +656,7 @@ def test_plan_draft_check_analyze_and_audit(repo, capsys):
     assert "changed: none" in out and "  q1 [" in out
     # the human rendering: understood as, one line per sub-question verdict
     r = ra("analyze", "--plan", str(path), "--no-challenge", "--repo", str(repo), cwd=repo)
-    assert r.returncode == 0 and "understood as: " in r.stdout and "\nsub-questions:\n  q1 [" in r.stdout
+    assert r.returncode == 0 and "understood as: " in r.stdout and "\nq1 [" in r.stdout and "\nq2 [" in r.stdout
     assert "Sipariş" in r.stdout
 
 

@@ -466,6 +466,12 @@ apart from `atlas.db` because it is disposable.
   line; the header takes it back if the passage is cut); each passage window is dedented on its
   own; the tail says `next: same query, --max-chars N`. The `## path:a-b` and `  path:x-y`
   locators are unchanged (measured in docs/BENCHMARKS.md, "Token wins, 2026-09-26").
+- `analyze` follows the same rule (2026-09-26, `analysis_view`): its default text and the MCP
+  response carry the answer, not the run - verdicts, answer claims, the other claims, unknowns
+  and the query passages; confidence only below its status's cap, evidence only where it adds a
+  locator, a verified context claim whose lines a printed passage shows left out and counted.
+  Over the MCP cap the critique log and the plan's links are cut before the passages, and the
+  passages (from the end) before any claim. `--json` keeps the full record.
 
 **D21. Build-time work is not repeated at query time.**
 

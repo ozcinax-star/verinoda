@@ -124,8 +124,10 @@ DECISION_NEEDS_USER = ("record", "guard", "accept", "waive", "answer")
 DEBUG_KINDS = ("fix", "probe", "rerun", "differential")
 DEBUG_STRATEGIES = ("differential", "bisect", "rerun", "observe")
 # analyze: what the agent reads first and what is cut last (the interpretation and the per-sub-question verdicts)
-ANALYZE_KEEP = ("understood_as", "subquestions", "plan_check")
-ANALYZE_FIRST_CUT = ("steps", "critique", "passages")  # passages: `query` gives them in full; claims come first
+ANALYZE_KEEP = ("analysis_id", "snapshot", "understood_as", "subquestions")
+# over the cap, bookkeeping goes before evidence: the critique log and the plan's links first, then the
+# passages (from the end: the top-ranked stay; `project_query` gives them in full), claims last
+ANALYZE_FIRST_CUT = ("critique", "plan_check.links", "passages")
 PLAN_HINT = "call question_plan_draft, or see `verinoda plan schema` for the plan format"
 # A file modified this close to (or after) the start of a call may have changed while it was read, or
 # within the file system's timestamp granularity: what was derived from it is not kept (git's racy-clean rule).
@@ -293,7 +295,8 @@ def cap_response(obj: dict, limit: int = MAX_RESPONSE_CHARS, *, first: tuple[str
                  keep_tail: tuple[str, ...] = ("history",), keep: tuple[str, ...] = ()) -> dict:
     """Cut ``obj`` until its compact JSON (truncation note included) fits ``limit`` chars.
 
-    Top-level lists named in ``first`` are shortened before anything else.
+    Lists named in ``first`` (top-level keys, or ``parent.key`` one level down) are shortened
+    before anything else, in that order.
     Then the largest list (or name->data map) anywhere in the tree is cut, or
     the longest string when it dominates. Cuts are proportional to the excess,
     so the result stays close to the limit. Lists under a key in ``keep_tail``
@@ -341,8 +344,11 @@ def cap_response(obj: dict, limit: int = MAX_RESPONSE_CHARS, *, first: tuple[str
             del node[keep_n:]
 
     for key in first:
-        while isinstance(obj.get(key), list) and len(obj[key]) > 1 and (over := excess()) > 0:
-            cut_seq((key,), obj[key], _size(obj[key]), over)
+        path = tuple(key.split(".", 1))
+        parent = obj if len(path) == 1 else obj.get(path[0])
+        while (isinstance(parent, dict) and isinstance(parent.get(path[-1]), list) and len(parent[path[-1]]) > 1
+               and (over := excess()) > 0):
+            cut_seq(path, parent[path[-1]], _size(parent[path[-1]]), over)
 
     # first everything but ``keep``; then, if still too big, the kept keys too (never ``coverage``)
     for protected in (PROTECTED_KEYS | frozenset(keep), PROTECTED_KEYS) if keep else (PROTECTED_KEYS,):
@@ -852,7 +858,9 @@ class AtlasTools:
                 raise ToolFailure("invalid_plan", f"the plan failed validation ({len(problems)} problem(s)); "
                                                   "nothing was analysed", PLAN_HINT, problems=problems,
                                   analysis_id=res.get("analysis_id"), plan_id=res.get("plan_id"))
-            return res
+            from verinoda.analysis_view import lean
+
+            return lean(res)  # the answer, not the run (verinoda.analysis_view); plan_audit / claim_inspect for more
         return self._run("analyze", go, need="graph", first=ANALYZE_FIRST_CUT, keep=ANALYZE_KEEP)
 
     def plan_audit(self, analysis_id: str, refresh: bool = True) -> dict:
@@ -1510,7 +1518,9 @@ DESCRIPTIONS: dict[str, str] = {
         "git history/decision records for 'why', optionally running (run_tests) or tracing (observe) the "
         "tests that reach the answer in an isolated copy. Every conclusion is a claim (status, confidence, "
         "evidence, uncertainties), challenged by critique; unknowns carry the next verification step. "
-        "Returns understood_as, per-sub-question verdicts, claims and unknowns. needs_clarification is a "
+        "Returns the snapshot, understood_as, per-sub-question verdicts with their answer claim ids, claims "
+        "(confidence only when below its status's cap, evidence only when it adds a locator), unknowns and the "
+        "passages project_query gives (plan_audit / claim_inspect for the full record). needs_clarification is a "
         "normal result (ask the user); an invalid plan is an error. Re-indexes first if the working tree "
         "changed. Bounded by budget_seconds and budget_calls."),
     "plan_audit": (
