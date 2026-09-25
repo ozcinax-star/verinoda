@@ -125,6 +125,15 @@ class _WebSocket:
             pass
 
 
+def _port_file_text(port_file: Path) -> str:
+    """The browser's DevToolsActivePort, or "" while it is missing or still being written (Windows refuses
+    to read a file another process has open for writing)."""
+    try:
+        return port_file.read_text().strip()
+    except OSError:
+        return ""
+
+
 class Browser:
     """One headless browser with one page; ``js`` evaluates in it (promises awaited)."""
 
@@ -136,12 +145,12 @@ class Browser:
             args.insert(1, "--no-sandbox")  # a root CI container
         self.proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         port_file, end = profile / "DevToolsActivePort", time.monotonic() + 30
-        while not (port_file.exists() and port_file.read_text().strip()):
+        while not _port_file_text(port_file):
             if self.proc.poll() is not None or time.monotonic() > end:
                 self.close()
                 raise RuntimeError("the browser did not start")
             time.sleep(0.1)
-        port = int(port_file.read_text().split()[0])
+        port = int(_port_file_text(port_file).split()[0])
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list", timeout=10) as r:
             page = next(t for t in json.load(r) if t["type"] == "page")
         self.ws, self.n, self.events = _WebSocket(page["webSocketDebuggerUrl"]), 0, []

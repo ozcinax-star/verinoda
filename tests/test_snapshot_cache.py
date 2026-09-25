@@ -85,11 +85,14 @@ def test_a_changed_stat_is_rehashed(tmp_path, monkeypatch):
     assert "a.py" in seen and after["pkg/a.py"] != before["pkg/a.py"]
 
 
-def test_racy_clean_same_size_same_mtime_edit_is_still_detected(tmp_path):
+def test_racy_clean_same_size_same_mtime_edit_is_still_detected(tmp_path, monkeypatch):
     """A file rewritten within the same timestamp tick as it was hashed keeps its stat;
     it is re-hashed while its mtime is within RACY_MARGIN_NS of the recording time."""
+    # a slow machine may take longer than the 2 s margin between creating the file and hashing it
+    monkeypatch.setattr(snapshot, "RACY_MARGIN_NS", 60_000_000_000)
     repo = _repo(tmp_path, git=False)
     p = repo / "pkg" / "a.py"
+    os.utime(p, None)  # written just now, as in the case this guards against
     st = p.stat()
     first = snapshot.hash_files(repo)["pkg/a.py"]
     p.write_bytes(b"A = 9\n")                         # same size

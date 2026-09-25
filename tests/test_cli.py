@@ -326,8 +326,11 @@ def test_experiment_run_allowlisted_and_refused(repo):
         # a path outside the repository copy: the refusal names the reason
         r = ra("experiment", "run", "--hypothesis", "h", "--", "python", "-m", "pytest", "-q", "../outside/test_x.py",
                cwd=repo)
-        assert r.returncode == 3 and r.stdout.startswith("refused: ") and "limit: " in r.stdout
-        assert "next: " in r.stdout and "Traceback" not in r.stderr
+        if r.returncode == 0:  # a container runtime answered this time: the run was confined to the container
+            assert "fs_writes_confined" in r.stdout and "path_args_confined" in r.stdout, r.stdout[-800:]
+        else:
+            assert r.returncode == 3 and r.stdout.startswith("refused: ") and "limit: " in r.stdout
+            assert "next: " in r.stdout and "Traceback" not in r.stderr
     r = ra("experiment", "run", "--hypothesis", "h", cwd=repo)
     assert r.returncode != 0 and "give the command" in (r.stdout + r.stderr)
 
