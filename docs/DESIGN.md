@@ -55,6 +55,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D32 | Name-existence check | partial | Python only: `verinoda check` (files, `--diff`, `--stdin --as`) and `verinoda api`, MCP `code_check` / `api_members`, skill text. Not done: mod config keys and resource ids, JVM jars, JS/TS, `--against PKG==VER`, the environment fingerprint in snapshots. Measurements in BENCHMARKS.md (the fixture set was written by the rule author: in-sample). |
 | D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`; decision records (`verinoda/decisions.py`, schema v5 log, `decide record/import/guard/accept/waive/list`, MCP `decision_record`); guards and `decide check` (`verinoda/guards.py`, MCP `decision_check`, a one-line summary in `update`; critique's exclusivity check and feedback's exclusive corrections use the same engine). Guard mutations (54 cases on the three examples, written by the rule author, plus 22 forms from the two reviews added by the fixer: all in-sample): VIOLATED precision 1.00, recall 1.00 in reach, 13/13 out-of-reach forms named in limits or POSSIBLE; the old raw-regex scan on the same orders_app cases tp 7 fp 8 fn 6. `decide check` median 42 ms per example case, about 2 s (1.8-2.2 s) on the full Verinoda tree (3 guards; results in `benchmarks/results/decide-2026-09-25/`). The decision brief (`verinoda/decision_brief.py`, `decide brief/answer`, MCP `decision_brief`, answers through `decision_record(action='answer')`; `analyze` routes decide sub-questions to it): on orders_app, EN and TR question, 8/8 gold forces, 19/19 cited evidence re-checks, 5/5 gold question kinds - in-sample (the gold came with the design and the probes were written after it). Not built: `analyze` impact questions do not include violations; the UI shows no decision badge; claims for accepted guards (kinds `exclusive` / `layering`); an ADR's reasons are matched by a few phrasings only; `research.dependencies` itself still reads no Gradle/Maven (the guards and the brief read them). Intent routing: the last held-out set (held-out 4, 20 questions by the fixer, hashed before the review fixes' cue rules were written): precision 0.83, recall 0.50 - the recall bar (0.85) is not met; every other set (written, held-out 1-3, the reviewers' 52) is in-sample. Review round 3 (40 new questions, written before running the router: recall 0.55) added cues that make its set in-sample (20/20) and held-out 4 no longer clean (0.86 / 0.60, its new hit a phrasing section 6 had named): no clean held-out set is left. A missed choice question whose words may ask for a choice is at most `met_with_inference`; one without such words can still be judged `met`. |
 | D34 | Debug ledger (loop detection, strategies) | partial | Built 2026-09-25 (section 7): `verinoda debug start/try/status/diff/close`, strategies `differential/bisect/rerun/observe`, MCP `debug_start` / `debug_attempt` / `debug_status` / `debug_strategy` / `experiment_run`, schema v6. debugloops_v1 (12 sessions written by the builder, gold fixed before the rules ran; in-sample after three fixes): definitive precision 11/11, loop recall 8/8, 0/4 controls stopped, top strategy 8/8. A review found 27 problems (25 distinct: false stops, false "passed", unverified bisect ends, git-safety gaps); all fixed with regression tests (section 7.5), the benchmark scores unchanged after the fixes. Not built: a real agent session with and without the protocol. `debug try` overhead is copy-bound on big trees (median 2.4-5.0 s on 2,341 files, depending on machine load). |
+| D35 | Exact names, one build at a time, freshness on every read (section 8) | implemented | Built 2026-09-26: `naming.resolve` for trace, impact and `node_inspect` (copies give way, ties listed), the copy rule in plan linking, the receiver pass bound to what a file can see, `buildlock` around scan/update, `freshness.check` on query/trace/map and the MCP read tools, analyze's refresh outside its budget (skipped with the stale files named when slow; MCP refreshes in the background). Tests from the evaluators' repros (`tests/test_exact_and_fresh.py`); the eight benchmark sets unchanged. Not done: per-file incremental update (the refresh is still a full rebuild). |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -800,7 +801,13 @@ deterministic.
   is not found although `save` is). Only a name found nowhere is unresolved
   with the not-found line; otherwise the similar node is kept and `fuzzy`
   says so ("`DISCOUNT_THRESHOLD` occurs at orders/config.py:7, not the whole
-  name"), as for plain words.
+  name"), as for plain words. Since D35 (section 8) this resolution is
+  `naming.resolve`, shared with `map --view impact` and MCP `node_inspect`: a
+  detected copy gives way to the project's own code, a name that still names
+  several symbols is `ambiguous` (listed, none picked), a name spelled only in
+  a file changed since the index is `not_indexed`, and a code name the index
+  spells but has no node for (a constant, an attribute) is `not_a_symbol` with
+  where it occurs - no longer kept by similarity.
   An analysis stores a claim with its own uncertainties; the question's
   reading (a weak link, an open clarification) is added when the claim is
   shown, so a claim reused by a later question does not carry it.
@@ -1450,6 +1457,98 @@ test_experiments.py):
 Not changed: per-test outcomes (so `failing_tests_skipped` and the symptom judgement by test) exist for
 pytest only; other runners fall back to the coarse signature. A per-session reusable copy (7.4) is
 still not built.
+
+## 8. Exact names and a fresh index (D35, 2026-09-26)
+
+### 8.1 Findings that drive the design
+
+A senior-engineer review (2026-09-26; five personas, gaps 2 and 6 of its synthesis) found:
+
+- **Names resolved to the wrong thing.** On Verinoda's own repository, whose
+  `benchmarks/corpora/heldout_repoatlas_7371990/` scan had just detected as a copy,
+  `trace cmd_query search_index.rank` answered with hops inside the copy, `node_inspect rank`
+  showed the copy's `evidence.py`, and `plan check` for "What calls assess_change?" asked the
+  user to choose between the copy's function and `verinoda/claims.py`. `map --view impact`
+  resolved targets with the fuzzy scorer: `asyncio/base_events.py::BaseEventLoop.call_soon`
+  gave 0 affected, `...::NoSuchThing` gave 80, and nothing was reported unresolved.
+- **A false edge between two packages.** The receiver-call pass took the first class of a name
+  in the whole graph, so the copy's `cl.set_status` (`cl: Claims`, imported from the copy's own
+  package) was linked to `verinoda/claims.py`.
+- **Builds collided.** Two `update` runs a second apart: the second failed with `[WinError 2]`
+  (the upstream rebuild lock is a no-op on Windows) and told the user to run `scan --force`, a
+  three-minute rebuild. `analyze` during an update reported a refused shrink with the same hint.
+- **Staleness was silent.** After an edit, `query` returned 1,500 tokens of an unrelated C# test
+  for a function added to the edited file, `query --json` had no project-wide stale list, and
+  `trace` answered "resolved by similarity to Widget" for that function. `analyze` right after a
+  one-line edit spent 92-108 s refreshing inside its 60 s budget and answered unmet with 0 claims.
+
+### 8.2 Decisions
+
+**D35. One exact resolver; one build at a time; freshness on every read.**
+
+- **One exact resolver** (`naming.resolve`) for trace endpoints, `map --view impact` targets and
+  MCP `node_inspect`: the node the text names exactly (`retrieval._names_exactly`). Among several,
+  a node in a detected copy (`copies.json`) or a configured reference tree gives way to the
+  project's own code unless the text names that tree (`copies.roots_not_named`, the rule search
+  already used); then trace's order (a class before its constructor or file, a top-level symbol
+  before a member). What is still tied is `ambiguous`: listed, none picked (trace used to pick the
+  first and say so). `module.name` where that module imports `name` is the imported node (the
+  same object, found through the import edge). A code name that names no node is never replaced by
+  a similar one: `not_indexed` (spelled in a file changed since the index; those files are read
+  first, so a large repository's time-capped scan cannot hide it), `not_found` (spelled nowhere) or
+  `not_a_symbol` (spelled somewhere, a module constant or an attribute: where it occurs, with the
+  nearest symbols as hints; round 2 had kept the similar node here, which answered about another
+  name). Plain words may still resolve by similarity (`fuzzy`). Impact accepts an exact name only;
+  any other target is `unresolved` with its candidates, and the CLI exits 2 for a `--target` that
+  is. The question plan's mention linking applies the same copy rule, so a copy and its original
+  are never a clarification.
+- **The receiver pass binds the class the calling file can see** (`index._visible_class`): its own
+  file's, one from a file it imports, then one under a top-level folder it imports from or lives
+  in; never across the boundary of a copy or reference tree. Sidecar v3 (older per-file facts are
+  reused).
+- **One build at a time** (`buildlock`): an operating-system file lock on `.verinoda/build.lock`
+  around `scan` and `update` and so around every refresh (analyze, verify, claim add, feedback,
+  decide check, `ui --watch`, MCP). A second caller waits (the CLI up to 10 minutes, saying who
+  builds; MCP `index_update` 30 s) or, asked not to wait (analyze on a project of 300+ files,
+  `ui --watch`, the decide-check refresh), does nothing and returns `mode: busy` with the holder.
+  It is never told to use `--force`; a rebuild that failed (`Rebuild failed: ...` in the indexer's
+  log) is no longer reported as a refused shrink either.
+- **Freshness on every read** (`freshness.check`): query, trace, `map`, MCP `project_query`,
+  `node_inspect`, `relation_trace` and `map_view` say "N file(s) changed since the index" with the
+  list (`stale_count`, `stale_files`). The check lists each folder that holds indexed files once
+  and hashes only a file whose size or time moved (the `file_stat` cache); new files are the
+  listings' names the snapshot lacks, git-ignored ones left out. A code name of a query that no
+  node has but a changed file spells is reported first ("not in the index yet ... `x` at
+  file:line"), and trace never resolves such a name by similarity.
+- **analyze's refresh is not the answer's time.** The refresh runs first and its time is given
+  back to the budget. On a project of 300 or more files, a refresh that would rebuild the graph
+  and is expected to take over 15 s (the last recorded graph build, `build_stats.json`; without
+  one, 0.015 s a file), or that faces over 200 changed files or another build, is not run: the
+  answer comes from the previous index, `index_refresh` and an unknown name the stale files, and a
+  claim citing one says so. The MCP server then starts `verinoda update` in a separate process (a
+  thread would share the process-wide stdout redirection with the protocol channel), one at a
+  time; while it holds the lock, the tools keep answering from the graph already loaded.
+
+### 8.3 Measurements
+
+See BENCHMARKS.md, "Update 2026-09-26: exact names and a fresh index". The eight benchmark sets
+are unchanged (every question and approach equal to the main run of the day); the agent persona's
+ten out-of-sample questions are compared there too.
+
+### 8.4 Not done / limits
+
+- The refresh is still a full graph rebuild whenever a code file changed (gap 5): analyze no
+  longer waits for it on a big project, but `update` itself is as slow as before.
+- trace and `node_inspect` still resolve plain words by similarity (with the `fuzzy` note or a
+  heuristic resolution and candidates); impact never does. A module constant or an attribute is
+  not a node, so `trace x config.LIMIT` is now unresolved with hints where it used to trace the
+  similar node; pass the file or the function that reads it.
+- New files in a folder the index does not know are looked for up to 200 files; git decides what
+  is ignored (asked once per snapshot and path); outside git no ignore rule applies.
+- The CLI `analyze` does not start a background update (it says to run `verinoda update`); the
+  lock covers Verinoda's own builds, not a graphify CLI run through `verinoda index --`.
+- Ambiguity is decided among exact names only; a name defined in two files of the product is now
+  `ambiguous` in trace where it used to pick one.
 
 ## Sources
 

@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-26: exact names and a fresh index](#update-2026-09-26-exact-names-and-a-fresh-index-d35) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,72 @@ Sections: [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debu
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-26: exact names and a fresh index (D35)
+
+What changed is in docs/DESIGN.md section 8: one exact resolver for trace, impact and
+`node_inspect` (a detected copy gives way to the original; ties are listed, not picked; a code name
+is never replaced by a similar one), the copy rule in the question plan's mention linking, the
+receiver pass bound to the class a file can see, one index build at a time per project, "N files
+changed since the index" on every read, and analyze's refresh outside its budget.
+
+**Answers.** On the eight benchmark sets (fastbench, the scorer of the benchmark runner, all three
+Verinoda approaches: analyze, retrieve JSON, retrieve text) every question and approach found the same
+gold facts as the main code of the same day (`scratchpad/fb/int0925c.json` against the branch run:
+0 differences on 86 questions of 8 sets x 3 approaches; negatives unchanged). The prepared indexes
+of that run were built by the main code; the only index-time change (receiver edges) is recomputed
+on load because the sidecar version changed (v2 -> v3), and a second run on indexes the branch built
+from scratch had 0 differences as well. The agent persona's ten out-of-sample questions of the 2026-09-26
+review (five on a copy of Verinoda, five on Python's standard library; its gold file and scorer),
+run through the CLI on copies of both corpora indexed from scratch, main and branch each on its own
+copy:
+
+| approach | main | branch |
+|---|---|---|
+| query (text) | 14/32 | 14/32 |
+| query --json | 16/32 | 16/32 |
+| analyze --json | 14/32 | 14/32 |
+| analyze (text) | 10/32 | 10/32 |
+
+Per question the counts are equal too. What differs is where the plan links words: on the
+Verinoda copy, which holds a frozen copy of its own code, main linked 11 of its 15 mentions into
+the copy and the branch none (the project's own code or its tests instead). "What calls
+assess_change?" was `ambiguous` between the copy and `verinoda/claims.py` on main (4 claims) and
+linked to `verinoda/claims.py` on the branch (9 claims); its gold facts were found by both.
+
+**The evaluators' repros** (a scratch copy of Verinoda at `main`, 2,388 files, scanned by the
+branch; all in `tests/test_exact_and_fresh.py` on a small project with a detected copy):
+
+| repro (review 2026-09-26) | main | branch |
+|---|---|---|
+| `trace cmd_query search_index.rank` | hops inside `benchmarks/corpora/heldout_repoatlas_7371990/` | `verinoda/cli.py` -> `retrieve()` -> `rank()` in `verinoda/` |
+| `trace cmd_query rank` | one similar `rank()` picked, no directed path | `ambiguous`: 4 symbols listed (none in the copy), exit 2 |
+| `trace cmd_update search_index.update` | "names 2 symbols; using update() (benchmarks/corpora/...)", exit 2 | the project's `update()`; no directed path (a function reference, not a call) |
+| MCP `node_inspect rank` | the copy's `evidence.py:102` (the review) | `error: ambiguous` with the 4 candidates |
+| `plan check` "What calls assess_change?" | `needs_clarification`: the copy's or the original | `ready`, linked to `verinoda/claims.py` |
+| `map --view impact --target verinoda/retrieval.py::NoSuchThing` | 0 affected, nothing unresolved, exit 0 (on the standard library the review saw 80 affected) | unresolved, `not_found`, exit 2 |
+| receiver-call edges across the copy's boundary (old rule re-run on the branch's graph) | 321 of 817 (copy -> project 245, tests -> copy 49, project -> copy 27) | 0 of 895 (the copy's calls now land in the copy) |
+| two `update`s a second apart | `[WinError 2]`, "hint: scan --force" | the second waits ("waiting for another index build ... (update, pid N)"), then runs; no `--force` anywhere |
+| `query` after adding `frobnicate_widget` to an edited file | an unrelated test, nothing said | "not in the index yet ... `frobnicate_widget` at app/cli.py:10" and "1 file(s) changed since the index" |
+| `trace ... frobnicate_widget` | "resolved by similarity to Widget" | `not_indexed`, unresolved, "run `verinoda update`" |
+| analyze after an edit on a big project | refresh inside the 60 s budget | refresh time not charged; slow refresh skipped, stale files named, MCP updates in the background |
+
+**Cost of the freshness check** (Windows, a loaded machine: a test suite and other agents running):
+
+| | files | freshness check alone | CLI `query` (cold process, median of 5) | CLI `trace` |
+|---|---|---|---|---|
+| Verinoda copy | 2,388 (421 folders) | 43-60 ms | main 2.96 s, branch 2.58 s | main 3.84 s, branch 2.64 s |
+| standard library copy | 2,305 | 32-40 ms | | |
+
+Within the noise of a cold process. In the long-lived MCP server (warm, same copy, medians of 10):
+a `project_query` answered from the memo went from 4 ms to 50 ms, `node_inspect` from 14 to 61 ms,
+`relation_trace` from 173 to 215 ms: the check is paid on every call (an edit between two calls must
+be seen), after two cuts it needed - the snapshot's rows are read again only after atlas.db changed,
+and the plan's lookup index is kept on the graph (its cache key counted every edge, 0.13 s a call on
+60k edges, which trace and `node_inspect` now pay on every call). The check lists each folder that
+holds indexed files once; a file is hashed only when its size or time moved.
+
+Not measured: a model in the loop; the background update's effect on the next question's latency.
 
 ## Update 2026-09-25: debug ledger (debugloops_v1)
 
