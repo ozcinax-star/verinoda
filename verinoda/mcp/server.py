@@ -104,6 +104,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "debug_attempt",
     "debug_status",
     "debug_strategy",
+    "change_probe",
 )
 
 MAX_RESPONSE_CHARS = int(os.environ.get("VERINODA_MCP_MAX_CHARS", "12000"))
@@ -1326,6 +1327,33 @@ class AtlasTools:
                     return experiments.refusal(self.repo, exc)
         return self._run("experiment_run", go, keep=("id", "outcome", "status", "reason", "tree"))
 
+    def change_probe(self, symbol: str | None = None, base: str | None = None, no_base: bool = False,
+                     changed: bool = False, inputs: int | None = None, seed: int | None = None,
+                     properties: list[str] | None = None, examples: list[str] | None = None, scaling: bool = False,
+                     allow_side_effects: bool = False, emit_test: bool = False) -> dict:
+        def go():
+            from verinoda import probe
+
+            sym = _opt_text(symbol)
+            if bool(sym) == bool(changed):
+                raise ToolFailure("invalid_argument", "give either symbol or changed=true",
+                                  "symbol='path.py::name', or changed=true to probe every changed function")
+            if changed and no_base:
+                raise ToolFailure("invalid_argument", "changed=true compares with a base; no_base cannot be used",
+                                  "drop no_base, or name one function")
+            kw = dict(inputs=300 if inputs is None else _clamp(inputs, 10, probe.MAX_INPUTS, "inputs"),
+                      seed=0 if seed is None else _clamp(seed, 0, 2**31 - 1, "seed"),
+                      properties=_str_list(properties, "properties"), examples=_str_list(examples, "examples"),
+                      scaling=bool(scaling), allow_side_effects=bool(allow_side_effects), emit_test=bool(emit_test))
+            with self._store() as st:
+                if changed:
+                    return probe.probe_changed(st, self.repo, base=_opt_text(base) or "HEAD", **kw)
+                return probe.compact(probe.probe(st, self.repo, sym, base=_opt_text(base) or "HEAD",
+                                                 no_base=bool(no_base), **kw))
+        return self._run("change_probe", go, keep=("status", "headline", "symbol", "probe_id", "differences",
+                                                   "next_step"),
+                         first=("status", "headline", "differences"))
+
     def _debug(self, tool: str, fn: Callable, keep: tuple[str, ...] = ()) -> dict:
         def go():
             from verinoda import debug, experiments
@@ -1454,6 +1482,9 @@ Tools:
   debug_start(symptom, command); after every edit, debug_attempt(hypothesis). When the answer says stop=true, stop
   editing, run strategies[0] with debug_strategy and show the user debug_status. Never change a test's expected
   value without asking the user (questions_for_human). Never say "fixed": say the repro passed at tree T in run R.
+- change_probe: after editing a Python function, call it on generated inputs at the base and in the working tree
+  (isolated runs). A difference is a behaviour change, not a bug: compare it with what the user asked for, ask when
+  unclear. Say "no difference found in N inputs", never "verified". A refusal (side effects) is not a pass.
 
 Rules: graph edges (EXTRACTED/INFERRED) are extractions, never verification. Claim status is one of
 observed, experiment_verified, statically_verified, primary_source_verified, strong_inference,
@@ -1680,6 +1711,18 @@ DESCRIPTIONS: dict[str, str] = {
         "from good to bad; commits that cannot run are skipped; returns the first failing commit and its hunks), "
         "rerun (times runs of the current tree: pass rate, flakiness), observe (one run under the call tracer: "
         "which failing tests reached each edited function, and the call chain to the crash)."),
+    "change_probe": (
+        "Probe one changed Python function (symbol 'path.py::name' or 'path.py::Class.method'; or changed=true for "
+        "every function changed against base): inputs derived from its annotations, call-site literals, boundaries "
+        "mined from both versions (comparisons, len checks, slices, imported constants), standard edges (empty, "
+        "None, +-1, unicode, special floats, large sizes) and hypothesis; each input runs at the base commit and in "
+        "the working tree through the isolated runner (throw-away copies, allowlisted pytest plugin). Returns "
+        "status (differences_found | no_difference_found | property_violated | undeclared_exceptions | "
+        "nothing_found | refused | unsupported | inconclusive), difference classes with minimal examples "
+        "(reproduced in a second run pair, recorded as run-scoped claims), property violations, undeclared "
+        "exceptions, nondeterminism, with scaling=true rough growth, the side-effect gate's reasons, the inputs "
+        "used and what was not checked. A static gate refuses functions that write files, use the network, start "
+        "processes or change global state (allow_side_effects is the user's decision). Never edits code."),
 }
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
@@ -1946,6 +1989,33 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None):
                                                            "the configured experiment timeout).")] = None,
     ) -> dict[str, Any]:
         return emit(t.runtime_observe(test_ids=test_ids, symbols=symbols, terms=terms, timeout=timeout))
+
+    @register("change_probe")
+    def change_probe(
+        symbol: Annotated[str | None, Field(description="The function: 'path.py::name' or 'path.py::Class.method' "
+                                                        "(or a unique name). Omit with changed=true.")] = None,
+        base: Annotated[str | None, Field(description="Commit to compare with (default HEAD).")] = None,
+        no_base: Annotated[bool, Field(description="No differential: the working tree only (properties, undeclared "
+                                                   "exceptions, nondeterminism).")] = False,
+        changed: Annotated[bool, Field(description="Probe every Python function changed against base (at most "
+                                                   "10).")] = False,
+        inputs: Annotated[int | None, Field(description="Input budget (10-5000, default 300).")] = None,
+        seed: Annotated[int | None, Field(description="Seed of the generated inputs (default 0).")] = None,
+        properties: Annotated[list[str] | None, Field(description="Python expressions over the parameters and "
+                                                                  "`result` that must hold, from the user's request "
+                                                                  "(e.g. 'result <= subtotal').")] = None,
+        examples: Annotated[list[str] | None, Field(description="Arguments to try first, each a Python literal "
+                                                                "tuple such as '(100.0,)'.")] = None,
+        scaling: Annotated[bool, Field(description="Also time one list/string argument at growing sizes (rough "
+                                                   "growth, both versions).")] = False,
+        allow_side_effects: Annotated[bool, Field(description="Run although the side-effect gate refused. Only "
+                                                              "when the user agreed.")] = False,
+        emit_test: Annotated[bool, Field(description="Return pytest functions that pin the base behaviour (text "
+                                                     "only; nothing is written).")] = False,
+    ) -> dict[str, Any]:
+        return emit(t.change_probe(symbol=symbol, base=base, no_base=no_base, changed=changed, inputs=inputs,
+                                   seed=seed, properties=properties, examples=examples, scaling=scaling,
+                                   allow_side_effects=allow_side_effects, emit_test=emit_test))
 
     @register("reference_resolve")
     def reference_resolve(

@@ -1,0 +1,494 @@
+"""The side-effect gate of ``verinoda probe`` (docs/DESIGN.md D36): which functions it will not call.
+
+Before any input runs, the gate reads - never imports - the target function, the
+project functions it calls (its static closure, 4 levels, through imports,
+re-exports, ``self.method()``, constructors and parameters annotated with a
+project class), the constructors the input recipes will run, and the
+module-level statements of every project module those live in and import (they
+run when the target is imported). It refuses the probe when any of them:
+
+* writes files (``open(..., "w"/"a"/"x"/"+")``, ``os.remove``, ``shutil.rmtree``,
+  ``tempfile``, ``Path.write_text`` ...), opens network connections (``socket``,
+  ``requests``, ``urllib.request``, ``http.client`` ...), starts processes or
+  threads (``subprocess``, ``os.system``, ``multiprocessing``,
+  ``threading.Thread`` ...) or connects to a database (``sqlite3.connect`` ...);
+* matches a sink line of :data:`verinoda.architecture_map.SINK_PATTERNS` (an
+  ``INSERT INTO`` in an ``execute`` string, ``.commit()``, ``json.dump``); read
+  queries are allowed;
+* changes state the probe cannot isolate between calls: a ``global`` name it
+  assigns, a module-level container it mutates (``CACHE[k] = v``,
+  ``_seen.append(x)``), an attribute of an imported module or a class
+  (``config.X = 1``, ``Cls.count += 1``), the environment, ``sys.path``, the
+  working directory, the global random seed, signal or exit handlers.
+
+Each reason names the line and the call chain that reaches it (``place_order ->
+OrderRepository.save``). The gate is static and therefore heuristic: calls
+through objects it cannot type (``self.conn.execute``), ``getattr`` with a
+computed name, ``exec`` and code in installed packages are not followed (they
+are counted in ``unresolved_calls``). The probe run itself carries an audit hook
+that blocks file writes, network, processes and environment changes while the
+function runs (:mod:`verinoda.runtime.probe_plugin`), so what the gate misses is
+still stopped and reported. ``--allow-side-effects`` is the user's decision to
+run anyway; the reasons are then kept in the result.
+"""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+from verinoda import guards
+from verinoda.architecture_map import SINK_PATTERNS
+
+MAX_DEPTH = 4
+MAX_FUNCTIONS = 300
+MAX_MODULES = 200
+
+EXACT_SINKS: dict[str, str] = {
+    **{f"os.{n}": "file-write" for n in ("remove", "unlink", "rmdir", "removedirs", "rename", "renames", "replace",
+                                         "mkdir", "makedirs", "chmod", "chown", "lchown", "link", "symlink",
+                                         "truncate", "ftruncate", "utime", "write", "mkfifo", "mknod")},
+    **{f"shutil.{n}": "file-write" for n in ("rmtree", "move", "copy", "copy2", "copyfile", "copytree", "copymode",
+                                             "copystat", "make_archive", "unpack_archive", "chown")},
+    **{f"tempfile.{n}": "file-write" for n in ("mkstemp", "mkdtemp", "NamedTemporaryFile", "TemporaryFile",
+                                               "TemporaryDirectory", "SpooledTemporaryFile")},
+    "shelve.open": "file-write", "dbm.open": "file-write",
+    **{f"os.{n}": "process" for n in ("system", "popen", "fork", "forkpty", "kill", "killpg", "startfile",
+                                      "posix_spawn", "posix_spawnp")},
+    "pty.spawn": "process", "webbrowser.open": "process", "webbrowser.open_new": "process",
+    "webbrowser.open_new_tab": "process",
+    "threading.Thread": "thread", "threading.Timer": "thread", "_thread.start_new_thread": "thread",
+    "concurrent.futures.ThreadPoolExecutor": "thread",
+    **{f"os.{n}": "global-state" for n in ("putenv", "unsetenv", "chdir", "fchdir", "chroot", "setuid", "setgid",
+                                           "umask")},
+    **{f"sys.{n}": "global-state" for n in ("setrecursionlimit", "settrace", "setprofile", "setswitchinterval",
+                                            "set_int_max_str_digits")},
+    "random.seed": "global-state", "signal.signal": "global-state", "signal.alarm": "global-state",
+    "atexit.register": "global-state", "logging.basicConfig": "global-state", "logging.disable": "global-state",
+    "warnings.simplefilter": "global-state", "warnings.filterwarnings": "global-state",
+    "locale.setlocale": "global-state", "gc.disable": "global-state", "importlib.reload": "global-state",
+    "faulthandler.enable": "global-state",
+}
+PREFIX_SINKS: tuple[tuple[str, str], ...] = (
+    ("subprocess.", "process"), ("multiprocessing.", "process"), ("os.exec", "process"), ("os.spawn", "process"),
+    ("concurrent.futures.ProcessPoolExecutor", "process"), ("asyncio.create_subprocess", "process"),
+    ("socket.", "network"), ("requests.", "network"), ("urllib.request.", "network"), ("urllib3.", "network"),
+    ("http.client.", "network"), ("httpx.", "network"), ("aiohttp.", "network"), ("smtplib.", "network"),
+    ("ftplib.", "network"), ("poplib.", "network"), ("imaplib.", "network"), ("telnetlib.", "network"),
+    ("xmlrpc.client.", "network"), ("paramiko.", "network"), ("boto3.", "network"), ("botocore.", "network"),
+    ("grpc.", "network"), ("websocket.", "network"), ("websockets.", "network"),
+    ("redis.", "kv/object-store"),
+    *((name, "db-connection") for name in guards.SINK_CALLS["db-connection"] if not name.startswith("java.")),
+    ("pymongo.", "db-connection"), ("psycopg2.", "db-connection"), ("psycopg.", "db-connection"),
+    ("pymysql.", "db-connection"), ("mysql.connector.", "db-connection"), ("asyncpg.", "db-connection"),
+    ("aiosqlite.", "db-connection"),
+)
+STATE_ROOTS = {"os.environ": "the environment", "sys.path": "sys.path", "sys.modules": "sys.modules",
+               "sys.stdout": "sys.stdout", "sys.stderr": "sys.stderr"}
+PATH_METHODS = {"write_text", "write_bytes", "unlink", "rmdir", "touch", "symlink_to", "hardlink_to", "mkdir"}
+MUTATORS = {"append", "extend", "insert", "update", "add", "pop", "popitem", "clear", "setdefault", "remove",
+            "discard", "sort", "reverse", "appendleft", "extendleft", "rotate", "__setitem__", "__delitem__"}
+OPEN_CALLS = {"open", "io.open", "codecs.open", "builtins.open"}
+TEXT_SINKS = [(rx, kind) for rx, kind in SINK_PATTERNS if kind != "sql-read"]
+LIMITS = [
+    "the gate reads code, it does not run it: calls through objects it cannot type (self.conn.execute), getattr "
+    "with a computed name, exec/eval and code inside installed packages are not followed; the probe's audit hook "
+    "blocks file writes, network, processes and environment changes at run time",
+    "state a function keeps in its own instance (self.x = ...) is not a refusal: each call gets a fresh instance",
+]
+
+
+def sink_of(qual: str) -> str | None:
+    if qual in EXACT_SINKS:
+        return EXACT_SINKS[qual]
+    for prefix, kind in PREFIX_SINKS:
+        if qual == prefix.rstrip(".") or qual.startswith(prefix):
+            return kind
+    return None
+
+
+def _open_mode(call: ast.Call) -> tuple[bool, str | None]:
+    """(writes?, why) for an ``open``-like call: a literal mode with w/a/x/+, or a mode that is not a literal."""
+    mode = call.args[1] if len(call.args) > 1 else next((k.value for k in call.keywords if k.arg == "mode"), None)
+    if mode is None:
+        return False, None
+    if isinstance(mode, ast.Constant) and isinstance(mode.value, str):
+        return (any(c in mode.value for c in "wax+"), f"mode {mode.value!r}")
+    return True, "a mode that is not a literal"
+
+
+def _find_def(tree: ast.AST, qual: str) -> ast.AST | None:
+    node: ast.AST | None = tree
+    for part in qual.split("."):
+        found = None
+        for child in getattr(node, "body", []):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and child.name == part:
+                found = child
+        if found is None:
+            for child in ast.walk(node) if node is tree else []:
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and child.name == part \
+                        and child.col_offset == 0:
+                    found = child
+        node = found
+        if node is None:
+            return None
+    return node
+
+
+def _main_guard(node: ast.AST) -> bool:
+    return isinstance(node, ast.If) and "__name__" in ast.unparse(node.test) and "__main__" in ast.unparse(node.test)
+
+
+class Gate:
+    """One gate run over a repository (a :class:`guards._PyIndex` of its Python files)."""
+
+    def __init__(self, repo: Path, files: list[str]):
+        self.repo = Path(repo)
+        self.ix = guards._PyIndex(self.repo, [f for f in files if f.endswith(".py")])
+        self.reasons: list[dict] = []
+        self.seen_fn: set[tuple[str, str]] = set()
+        self.seen_mod: set[str] = set()
+        self.unresolved: list[str] = []
+        self.checked: list[str] = []
+        self._uses: dict[str, dict[int, object]] = {}
+
+    # -- helpers ---------------------------------------------------------------------------
+    def _uses_map(self, rel: str) -> dict[int, object]:
+        if rel not in self._uses:
+            sc = self.ix.scopes(rel)
+            self._uses[rel] = {id(c): s for c, s in (sc.uses if sc else [])}
+        return self._uses[rel]
+
+    def _locate(self, full: str) -> tuple[str, str] | None:
+        """(file, qualified name inside it) of a project definition named by a dotted name."""
+        parts = full.split(".")
+        for i in range(len(parts) - 1, 0, -1):
+            rel = self.ix.modules.get(".".join(parts[:i]))
+            if rel is not None:
+                return rel, ".".join(parts[i:])
+        return None
+
+    def _module_qual(self, rel: str, name: str) -> str | None:
+        """What a module-level name of ``rel`` holds (a dotted name), following imports and re-exports."""
+        sc = self.ix.scopes(rel)
+        if sc is None or name not in sc.module.binds:
+            return None
+        for q, b in sc.exports(name):
+            if q:
+                return self.ix.resolve(q)[0][0]
+            if b.kind in ("def", "class"):
+                mod = guards._module_of(rel)
+                return f"{mod}.{name}" if mod else name
+        return None
+
+    def _line(self, rel: str, line: int) -> str:
+        _, text = self.ix.tree(rel)
+        lines = (text or "").splitlines()
+        return lines[line - 1].strip()[:160] if 0 < line <= len(lines) else ""
+
+    def _add(self, kind: str, rel: str, line: int, why: str, via: list[str], phase: str) -> None:
+        at = f"{rel}:{line}"
+        if any(r["at"] == at and r["kind"] == kind for r in self.reasons):
+            return
+        self.reasons.append({"kind": kind, "at": at, "line": self._line(rel, line), "why": why,
+                             "via": list(via), "phase": phase})
+
+    # -- walking -------------------------------------------------------------------------------
+    def run(self, roots: list[tuple[str, str]]) -> dict:
+        queue: list[tuple[str, str, int, list[str]]] = [(rel, qual, 0, [qual]) for rel, qual in roots]
+        for rel, _ in roots:
+            self._module(rel)
+        while queue and len(self.seen_fn) < MAX_FUNCTIONS:
+            rel, qual, depth, via = queue.pop(0)
+            if (rel, qual) in self.seen_fn:
+                continue
+            self.seen_fn.add((rel, qual))
+            tree, _ = self.ix.tree(rel)
+            node = _find_def(tree, qual) if tree is not None else None
+            if node is None:
+                continue
+            if isinstance(node, ast.ClassDef):  # a constructor call: __init__ / __post_init__ / __new__
+                for m in ("__init__", "__post_init__", "__new__"):
+                    if _find_def(tree, f"{qual}.{m}") is not None:
+                        queue.append((rel, f"{qual}.{m}", depth, via))
+                continue
+            self.checked.append(f"{rel}::{qual}")
+            self._module(rel)
+            for nxt in self._visit(rel, qual, node, via, "call"):
+                if depth + 1 <= MAX_DEPTH:
+                    queue.append((*nxt, depth + 1, [*via, nxt[1]]))
+        return {"verdict": "refused" if self.reasons else "passed", "reasons": self.reasons,
+                "functions_checked": len(self.checked), "modules_checked": sorted(self.seen_mod),
+                "unresolved_calls": len(self.unresolved), "unresolved_examples": self.unresolved[:5],
+                "limits": list(LIMITS)}
+
+    def _module(self, rel: str) -> None:
+        """Module-level statements of ``rel`` and of the project modules it imports (they run at import)."""
+        if rel in self.seen_mod or len(self.seen_mod) >= MAX_MODULES:
+            return
+        self.seen_mod.add(rel)
+        tree, _ = self.ix.tree(rel)
+        sc = self.ix.scopes(rel)
+        if tree is None or sc is None:
+            return
+        skip: set[int] = set()
+        for st in tree.body:
+            if _main_guard(st):
+                skip.update(id(n) for n in ast.walk(st))
+        calls = {(getattr(n, "lineno", 0), getattr(n, "col_offset", 0)): n for n in ast.walk(tree)
+                 if isinstance(n, ast.Call)}
+        mod_calls = [calls[pos] for pos in sc.module_calls if pos in calls and id(calls[pos]) not in skip]
+        uses = self._uses_map(rel)
+        for call in mod_calls:
+            for nxt in self._call(rel, call, uses.get(id(call)), [f"import of {rel}"], "import", None):
+                fr, fq = nxt
+                self.run_extra(fr, fq, [f"import of {rel}", fq])
+        # text sinks on module-level statement lines (not inside defs / classes' methods)
+        for st in tree.body:
+            if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom)) \
+                    or _main_guard(st):
+                continue
+            self._text(rel, st.lineno, st.end_lineno or st.lineno, [f"import of {rel}"], "import")
+        # project modules imported at module level
+        for st in tree.body:
+            if isinstance(st, (ast.Import, ast.ImportFrom)):
+                for a in st.names:
+                    qual = self._import_qual(rel, st, a)
+                    loc = self._module_rel(qual) if qual else None
+                    if loc:
+                        self._module(loc)
+
+    def _import_qual(self, rel: str, st: ast.AST, alias: ast.alias) -> str | None:
+        if isinstance(st, ast.Import):
+            return alias.name
+        sc = self.ix.scopes(rel)
+        base = sc._from_base(st) if sc is not None else (st.module or "")
+        return f"{base}.{alias.name}" if base else alias.name
+
+    def _module_rel(self, qual: str) -> str | None:
+        parts = qual.split(".")
+        for i in range(len(parts), 0, -1):
+            rel = self.ix.modules.get(".".join(parts[:i]))
+            if rel is not None:
+                return rel
+        return None
+
+    def run_extra(self, rel: str, qual: str, via: list[str]) -> None:
+        if (rel, qual) in self.seen_fn:
+            return
+        tree, _ = self.ix.tree(rel)
+        node = _find_def(tree, qual) if tree is not None else None
+        if node is None or isinstance(node, ast.ClassDef):
+            return
+        self.seen_fn.add((rel, qual))
+        self.checked.append(f"{rel}::{qual}")
+        for nxt in self._visit(rel, qual, node, via, "import"):
+            self.run_extra(nxt[0], nxt[1], [*via, nxt[1]])
+
+    def _text(self, rel: str, a: int, b: int, via: list[str], phase: str) -> None:
+        _, text = self.ix.tree(rel)
+        if text is None:
+            return
+        code = guards.code_text(text, ".py", keep_strings=True).splitlines()
+        for ln in range(a, min(b, len(code)) + 1):
+            line = code[ln - 1]
+            for rx, kind in TEXT_SINKS:
+                if rx.search(line):
+                    self._add(kind, rel, ln, f"the line matches the {kind} sink pattern", via, phase)
+
+    def _visit(self, rel: str, qual: str, node: ast.AST, via: list[str], phase: str) -> list[tuple[str, str]]:
+        """Check one definition; return the project definitions it calls."""
+        self._text(rel, node.lineno, node.end_lineno or node.lineno, via, phase)
+        self._state_writes(rel, node, via, phase)
+        uses = self._uses_map(rel)
+        cls = qual.rpartition(".")[0] if "." in qual else None
+        out: list[tuple[str, str]] = []
+        for call in ast.walk(node):
+            if isinstance(call, ast.Call):
+                out += self._call(rel, call, uses.get(id(call)), via, phase, (node, cls))
+        return out
+
+    def _call(self, rel: str, call: ast.Call, scope, via: list[str], phase: str,
+              ctx: tuple[ast.AST, str | None] | None) -> list[tuple[str, str]]:
+        sc = self.ix.scopes(rel)
+        f = call.func
+        out: list[tuple[str, str]] = []
+        written = ast.unparse(f)[:60]
+        if isinstance(f, ast.Attribute) and f.attr in PATH_METHODS:
+            self._add("file-write", rel, call.lineno, f"`{written}()` writes to the file system (a Path method)",
+                      via, phase)
+        if isinstance(f, ast.Attribute) and f.attr == "open":
+            writes, why = _open_mode(ast.Call(func=f, args=[ast.Constant(None), *call.args], keywords=call.keywords))
+            if writes:
+                self._add("file-write", rel, call.lineno, f"`{written}()` opens a file with {why}", via, phase)
+        reach = sc.qualify(f, scope) if (sc is not None and scope is not None) else None
+        if reach is None:  # not a dotted name (a call on a call's result, a subscript ...)
+            self.unresolved.append(f"{rel}:{call.lineno} {written}")
+            return out
+        if not reach:  # bound nowhere in this file: a builtin
+            name = f.id if isinstance(f, ast.Name) else None
+            if name == "open":
+                writes, why = _open_mode(call)
+                if writes:
+                    self._add("file-write", rel, call.lineno, f"open() with {why}", via, phase)
+            elif name is None:
+                self.unresolved.append(f"{rel}:{call.lineno} {written}")
+            return out
+        for q, b in reach:
+            if q is not None:
+                for full, _chain in self.ix.resolve(q):
+                    if full in OPEN_CALLS:
+                        writes, why = _open_mode(call)
+                        if writes:
+                            self._add("file-write", rel, call.lineno, f"{full}() with {why}", via, phase)
+                        continue
+                    kind = sink_of(full)
+                    if kind:
+                        self._add(kind, rel, call.lineno, f"calls {full}", via, phase)
+                        continue
+                    loc = self._locate(full)
+                    if loc is not None:
+                        out.append(loc)
+                continue
+            if b.kind in ("def", "class"):
+                attrs = []
+                e = f
+                while isinstance(e, ast.Attribute):
+                    attrs.append(e.attr)
+                    e = e.value
+                base = ""
+                if b.scope is not None and b.scope.kind == "class":
+                    base = b.scope.name + "."
+                out.append((rel, base + ".".join([e.id, *reversed(attrs)]) if isinstance(e, ast.Name) else b.name))
+            elif b.kind == "param" and isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and ctx:
+                target = self._param_method(rel, ctx, f.value.id, f.attr)
+                if target is not None:
+                    out.append(target)
+                else:
+                    self.unresolved.append(f"{rel}:{call.lineno} {written}")
+            else:
+                self.unresolved.append(f"{rel}:{call.lineno} {written}")
+        return out
+
+    def _param_method(self, rel: str, ctx: tuple[ast.AST, str | None], param: str, method: str
+                      ) -> tuple[str, str] | None:
+        """``self.m()`` in a method of C -> C.m; ``p.m()`` with ``p: Cls`` (a project class) -> Cls.m."""
+        node, cls = ctx
+        args = getattr(node, "args", None)
+        if args is None:
+            return None
+        params = [*args.posonlyargs, *args.args]
+        if cls and params and params[0].arg == param and param in ("self", "cls"):
+            return rel, f"{cls}.{method}"
+        for p in [*params, *args.kwonlyargs]:
+            if p.arg == param and p.annotation is not None:
+                ann = p.annotation
+                if isinstance(ann, ast.Constant) and isinstance(ann.value, str):
+                    try:
+                        ann = ast.parse(ann.value, mode="eval").body
+                    except SyntaxError:
+                        return None
+                name = ann.id if isinstance(ann, ast.Name) else None
+                if isinstance(ann, ast.Subscript) and ast.unparse(ann.value) in ("Optional", "typing.Optional"):
+                    name = ann.slice.id if isinstance(ann.slice, ast.Name) else None
+                if not name:
+                    return None
+                full = self._module_qual(rel, name)
+                loc = self._locate(full) if full else None
+                if loc:
+                    return loc[0], f"{loc[1]}.{method}"
+        return None
+
+    def _state_writes(self, rel: str, fn: ast.AST, via: list[str], phase: str) -> None:
+        """Writes to state the probe cannot isolate between calls (see the module docstring)."""
+        sc = self.ix.scopes(rel)
+        module_names = set(sc.module.binds) if sc is not None else set()
+        declared = {n for st in ast.walk(fn) if isinstance(st, ast.Global) for n in st.names}
+        local: set[str] = set()
+        args = getattr(fn, "args", None)
+        if args is not None:
+            local |= {a.arg for a in [*args.posonlyargs, *args.args, *args.kwonlyargs]}
+            local |= {a.arg for a in (args.vararg, args.kwarg) if a is not None}
+        for n in ast.walk(fn):
+            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store) and n.id not in declared:
+                local.add(n.id)
+
+        def module_kind(name: str) -> str | None:
+            if name in local or name not in module_names or sc is None:
+                return None
+            kinds = {b.kind for b in sc.module.binds.get(name, [])}
+            if kinds & {"import", "from"}:
+                return "module"
+            if "class" in kinds:
+                return "class"
+            if kinds & {"def"}:
+                return None
+            return "value"
+
+        def root(e: ast.AST) -> ast.AST:
+            while isinstance(e, (ast.Attribute, ast.Subscript)):
+                e = e.value
+            return e
+
+        def target(t: ast.AST, line: int) -> None:
+            if isinstance(t, (ast.Tuple, ast.List)):
+                for x in t.elts:
+                    target(x, line)
+                return
+            if isinstance(t, ast.Starred):
+                target(t.value, line)
+                return
+            if isinstance(t, ast.Name):
+                if t.id in declared:
+                    self._add("global-state", rel, line, f"assigns the module global `{t.id}`", via, phase)
+                return
+            r = root(t)
+            written = ast.unparse(t)[:60]
+            for name, what in STATE_ROOTS.items():
+                if written == name or written.startswith(name + ".") or written.startswith(name + "["):
+                    self._add("global-state", rel, line, f"changes {what} (`{written}`)", via, phase)
+                    return
+            if isinstance(r, ast.Name):
+                k = module_kind(r.id)
+                if k == "module" and isinstance(t, ast.Attribute):
+                    self._add("global-state", rel, line, f"sets an attribute of an imported module (`{written}`)",
+                              via, phase)
+                elif k == "class":
+                    self._add("global-state", rel, line, f"changes class-level state (`{written}`)", via, phase)
+                elif k == "value" or (r.id in declared):
+                    self._add("global-state", rel, line, f"mutates the module-level `{r.id}` (`{written}`)",
+                              via, phase)
+                elif r.id in ("self", "cls") and isinstance(t, ast.Attribute) and \
+                        ast.unparse(t).startswith(("self.__class__.", "cls.")):
+                    self._add("global-state", rel, line, f"changes class-level state (`{written}`)", via, phase)
+            elif isinstance(r, ast.Call) and ast.unparse(r.func) == "type":
+                self._add("global-state", rel, line, f"changes class-level state (`{written}`)", via, phase)
+
+        for n in ast.walk(fn):
+            if isinstance(n, ast.Assign):
+                for t in n.targets:
+                    target(t, n.lineno)
+            elif isinstance(n, (ast.AugAssign, ast.AnnAssign)) and n.target is not None:
+                if isinstance(n, ast.AnnAssign) and n.value is None:
+                    continue
+                target(n.target, n.lineno)
+            elif isinstance(n, ast.Delete):
+                for t in n.targets:
+                    if not isinstance(t, ast.Name):
+                        target(t, n.lineno)
+            elif isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in MUTATORS:
+                r = root(n.func.value)
+                written = ast.unparse(n.func)[:60]
+                for name, what in STATE_ROOTS.items():
+                    if written.startswith(name + "."):
+                        self._add("global-state", rel, n.lineno, f"changes {what} (`{written}()`)", via, phase)
+                        break
+                else:
+                    if isinstance(r, ast.Name) and module_kind(r.id) == "value":
+                        self._add("global-state", rel, n.lineno, f"mutates the module-level `{r.id}` "
+                                                                 f"(`{written}()`)", via, phase)
+
+
+def check(repo: Path, files: list[str], roots: list[tuple[str, str]]) -> dict:
+    """Run the gate from ``roots`` (``(file, qualified name)``: the target and the recipe constructors)."""
+    return Gate(repo, files).run(roots)
