@@ -1421,275 +1421,222 @@ def _error_hint(exc: BaseException, repo: Path) -> str:
 
 # -- MCP registration -------------------------------------------------------------
 
-INSTRUCTIONS = """Verinoda: evidence-first analysis of the repository {repo}.
+# the core tool profile: what an agent needs to answer questions about code, check its own edits and
+# re-index; every other family (question plans, references, feedback, decisions, the debug ledger,
+# experiments, runtime tracing, claim re-checks) is served with `--profile full` (or config mcp.profile)
+CORE_TOOLS: tuple[str, ...] = (
+    "project_query", "analyze", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
+    "evidence_inspect", "index_update", "code_check", "decision_check",
+)
+PROFILES: dict[str, tuple[str, ...]] = {"core": CORE_TOOLS, "full": TOOL_NAMES}
+DEFAULT_PROFILE = "core"
 
-Understand the question first (Turkish or English):
-1. question_plan_draft(question) -> a plan. Edit it: split compound questions, gloss domain words in English,
-   copy versions exactly as the user wrote them, never invent candidates.
-2. question_plan_check(plan_json) -> ready | needs_clarification (ask the user the listed clarifications, add
-   answers[] with each clarification_id, check again) | invalid (an error listing the problems).
-3. analyze(plan_json=...) (or analyze(question) for a quick answer). Start the answer with
-   "Understood as / Anladığım: ..." (understood_as), then one block per sub-question.
-References the user gives (links, repos, packages, versions, commits, PR/issue numbers, papers, docs): call
-reference_resolve first. Report each as <name> @ <pin> (basis: <basis>) with its mismatches; never substitute
-the default branch for a named version; ask only questions_for_user; state unresolved ones with their next step.
-reference_research(resolution_id, reference_id) inspects one at exactly its pin.
-
-Tools:
-- project_query: where is X / what handles Y - plain text, skeleton first (format='json' for programs).
+_INSTRUCTIONS_HEAD = """Verinoda: evidence-first answers about the repository {repo}.
+- project_query: where is X / what handles Y - plain text, skeleton first; hits are leads, not verified claims.
+- analyze(question): claims with evidence, one verdict per sub-question, unknowns with their next step, and
+  the passages. Start the answer with "Understood as / Anladığım: ..." (understood_as), then one block per
+  sub-question; never present weak_inference or unknown as fact.
 - node_inspect / relation_trace: one symbol's definition and edges; call paths between two symbols.
 - map_view: architecture views (hierarchy, dependencies, dataflow, config, tests, history, impact).
-- analyze / plan_audit: answer as recorded claims with evidence, critique and unknowns; re-judge it later.
-- lexicon_show: which code words the repository associates with a natural-language word.
-- claim_inspect / claim_list / evidence_inspect / claim_verify / claim_challenge: audit claims.
-- resolve_call: which definition a call on path:line binds to (only 'definitive' answers verify).
-- code_check: after editing code, and before proposing it, check that the modules, names, keyword arguments
-  and dict keys it uses exist in the project's environment; fix every absent site (nearest/elsewhere), treat
-  unknown as unverified. api_members: the real members of a module or class before you write calls to it.
-- runtime_observe: run selected tests under the call tracer; which tests reach which symbols.
-- reference_resolve / reference_research / reference_compare: pinned external references.
-- feedback_submit / feedback_process / feedback_resolve: record critique as a hypothesis, verify, resolve.
-- index_update: re-index after editing files (marks affected claims stale).
-- decision_record: what the user decided (records, guards, waivers). A choice between options is the user's:
-  never record, accept or waive without their words (user_statement).
-- decision_check: the code against every accepted guard (VIOLATED / POSSIBLE / REVIEW / TRIGGER, ok with its
-  limits). Call it (changed_only=true) before finishing a code change; on VIOLATED fix the code or ask the user.
-- decision_brief: for a should/which/scale question: forces from the code with evidence, what is absent, decisions
-  on record, options and questions_for_human. No recommendation: ask the user those questions, record each answer
-  (decision_record action='answer'), and never pick an option for the user.
-- experiment_run: run one allowlisted command (tests) in a throw-away copy (of the working tree or a commit, ref).
-- debug_start / debug_attempt / debug_status / debug_strategy: the debug ledger. Before the first edit of a bug fix,
-  debug_start(symptom, command); after every edit, debug_attempt(hypothesis). When the answer says stop=true, stop
-  editing, run strategies[0] with debug_strategy and show the user debug_status. Never change a test's expected
-  value without asking the user (questions_for_human). Never say "fixed": say the repro passed at tree T in run R.
+- claim_inspect / claim_list / evidence_inspect: a claim's record, earlier claims, one evidence re-checked now.
+- index_update: re-index after editing files (claims whose files changed become stale).
+- code_check: after editing code, check that the modules, names, keyword arguments and dict keys it uses exist;
+  fix every absent site, treat unknown as unverified.
+- decision_check(changed_only=true) before finishing a code change; on VIOLATED fix the code or ask the user."""
 
-Rules: graph edges (EXTRACTED/INFERRED) are extractions, never verification. Claim status is one of
-observed, experiment_verified, statically_verified, primary_source_verified, strong_inference,
-weak_inference, unknown, contradicted, stale; heuristic results say so in 'coverage'/'uncertainties'.
-When evidence is missing the answer is 'unknown' plus a next step - do not fill the gap by guessing.
-Responses are small; "truncated": true means lists were cut (see 'truncation').
-Errors come back as {{"error", "message", "hint"}}; not_initialised/no_index means the user must run
-`verinoda scan {repo}` first."""
+_INSTRUCTIONS_FULL = """
+Understand the question first: question_plan_draft(question) -> edit the plan (split compound questions, gloss
+domain words in English, copy versions as written, never invent candidates) -> question_plan_check(plan_json):
+ready | needs_clarification (ask the user, add answers[] with each clarification_id) | invalid -> analyze(plan_json).
+References the user gives (links, repos, packages, versions, commits, PR/issue numbers, papers, docs): call
+reference_resolve first; report each as <name> @ <pin> (basis: <basis>) with its mismatches; never substitute
+the default branch for a named version; ask only questions_for_user. reference_research(resolution_id,
+reference_id) inspects one at its pin; reference_compare compares a mechanism.
+- plan_audit: re-judge an analysis later. lexicon_show: the code words the repository ties to a word.
+- claim_verify / claim_challenge: re-check a claim's lines; adversarial check. resolve_call: which definition
+  a call binds to (only 'definitive' verifies). api_members: the real members of a module or class.
+- runtime_observe: selected tests under the call tracer. experiment_run: one allowlisted command in a copy.
+- feedback_submit / feedback_process / feedback_resolve: user critique as a hypothesis, verified, resolved.
+- decision_brief: the code's side of a should/which question; no recommendation - ask the user its questions and
+  record each answer (decision_record action='answer'). decision_record: never record, accept or waive without
+  the user's own words (user_statement).
+- debug_start before the first edit of a bug fix, debug_attempt after every edit; on stop=true stop editing, run
+  strategies[0] with debug_strategy and show debug_status. Never say "fixed": the repro passed at tree T in run R."""
+
+_INSTRUCTIONS_CORE = """
+More tools (question plans, references, feedback, decision records and briefs, the debug ledger, experiments,
+runtime tracing): `verinoda mcp serve --profile full`, or the `verinoda` CLI."""
+
+_INSTRUCTIONS_TAIL = """
+Rules: graph edges are extractions, never verification. Claim status: observed, experiment_verified,
+statically_verified, primary_source_verified, strong_inference, weak_inference, unknown, contradicted, stale.
+Missing evidence -> 'unknown' plus a next step, never a guess. "truncated": true means lists were cut
+('truncation'). Errors: {{"error", "message", "hint"}}; not_initialised/no_index: run `verinoda scan {repo}`."""
+
+
+def instructions(profile: str = DEFAULT_PROFILE) -> str:
+    """The server instructions for a profile (``{repo}`` still to be filled in)."""
+    return (_INSTRUCTIONS_HEAD + (_INSTRUCTIONS_FULL if profile == "full" else _INSTRUCTIONS_CORE)
+            + _INSTRUCTIONS_TAIL)
+
+
+INSTRUCTIONS = instructions("full")
 
 DESCRIPTIONS: dict[str, str] = {
     "project_query": (
-        "Bounded, justified retrieval for a question: the best code locations (symbol, file, start-end lines) "
-        "ranked by a persistent passage index (BM25F + graph prior). format='text' (default) is plain text, "
-        "skeleton first: path:lines headers with signatures, call outlines and the matching lines, packed to "
-        "6000 chars with any truncation stated; format='json' returns items with reasons, excerpts and the "
-        "relations among them. Read-only. Start here for 'where is X / what handles Y'. Hits are retrieval "
-        "results, not verified claims."),
+        "Where is X / what handles Y: the best code locations for a question, ranked by the passage index "
+        "(BM25F + graph prior). format='text' (default): plain text, skeleton first (path:lines headers, call "
+        "outlines, the matching lines), packed to 6000 chars, truncation stated; format='json': items with "
+        "reasons, for programs. Read-only; hits are leads, not verified claims."),
     "node_inspect": (
-        "Inspect one graph node. name may be a node id, a label ('place_order'), 'path/file.py::symbol', "
-        "'Class.method' or a file path. Returns the resolved node and how it was resolved (a 'scored' "
-        "resolution is a heuristic label match - check 'candidates'/'same_label'), its location, the "
-        "source excerpt of its definition (at most 30 lines) and its outgoing/incoming edges with relation, "
-        "confidence and file:line (at most 25 each, totals given). Edges are extractions, not verification."),
+        "One node: an id, label, 'path/file.py::symbol', 'Class.method' or a file path. Returns how the name "
+        "resolved ('scored' = heuristic: check 'candidates'), location, source excerpt (at most 30 lines) and "
+        "edges in and out with relation, confidence and file:line (at most 25 each, totals given). Edges are "
+        "extractions, not verification."),
     "relation_trace": (
-        "Directed paths (up to 3, at most 8 hops) from source to target; every hop has relation, kind, "
-        "confidence (EXTRACTED/INFERRED) and call-site file:line. mode='flow' follows calls only "
-        "(control flow, plus construction -> __init__); mode='any' also follows uses/imports/inherits/"
-        "method/references and says whether a path is execution or only structural reachability "
-        "('reachability', 'note'). status: found | unresolved (with 'hints': likely symbols) | no directed "
-        "path | ambiguous. No path in the static graph does not prove there is none at runtime."),
+        "Directed paths (up to 3, at most 8 hops) from source to target; each hop has relation, confidence "
+        "(EXTRACTED/INFERRED) and call-site file:line. mode='flow': calls only; 'any': also uses/imports/inherits/"
+        "references, saying whether a path is execution or structure. status: found | unresolved (with hints) | "
+        "no directed path | ambiguous; no static path does not prove there is none at runtime."),
     "map_view": (
-        "One top-down architecture view. view: hierarchy (subsystems/packages/files), dependencies "
-        "(file-level call/import edges), dataflow (entry points -> persistence sinks), config (env vars "
-        "and config files), tests (static test reachability), history (git log + decision records), "
-        "impact (reverse dependents of targets). 'coverage' states the method and its limits; heuristics "
-        "are labelled. For impact pass targets (files or symbols); without targets the git working-tree "
-        "changes are used. Large views are truncated."),
+        "One architecture view: hierarchy, dependencies (file-level calls/imports), dataflow (entry points -> "
+        "persistence), config (env vars, config files), tests (static reachability), history (git log, decision "
+        "records), impact (reverse dependents of targets; default: the working-tree changes). 'coverage' states "
+        "the method and its limits."),
     "question_plan_draft": (
-        "Draft a question plan (verinoda.question_plan/1) from the user's message with deterministic "
-        "Turkish/English rules: sub-questions with intent and a checkable done_when, mentions (the user's "
-        "words that name code) with candidate names, references with the version as written. Every element "
-        "is tagged derived_by. Nothing is stored. Edit it, then pass it to question_plan_check / analyze."),
+        "Draft a question plan (verinoda.question_plan/1) from the user's message by deterministic Turkish/English "
+        "rules: sub-questions with intent and done_when, mentions with candidate names, references with the "
+        "version as written. Nothing is stored; edit it, then question_plan_check / analyze."),
     "question_plan_check": (
-        "Validate and ground a plan given as JSON text: schema, unique ids and a sub-question DAG, every "
-        "mention/reference quoted verbatim from the message, every version token carried, mentions linked "
-        "to graph nodes in evidence tiers (linked / ambiguous / weak / unlinked; host candidates that match "
-        "nothing are rejected; a name written as code that the repository spells nowhere is not_found, with "
-        "did_you_mean, never replaced by a similar name). The plan and its check are stored (plan_id). status: ready | "
-        "needs_clarification (ask the user the clarifications, record answers[] with their clarification_id) "
-        "| invalid (returned as an error with the problems)."),
+        "Validate and ground a plan (JSON text): schema, sub-question DAG, mentions and versions quoted verbatim, "
+        "mentions linked to graph nodes (linked / ambiguous / weak / unlinked; a code name the repository spells "
+        "nowhere is not_found with did_you_mean, never replaced). Stored (plan_id). status: ready | "
+        "needs_clarification (ask the user, record answers[] with clarification_id) | invalid (an error)."),
     "analyze": (
-        "Answer a question as claims with evidence. The question (or a checked plan_json) is turned into a "
-        "stored plan with sub-questions; each is answered by retrieving code, re-checking cited lines, "
-        "git history/decision records for 'why', optionally running (run_tests) or tracing (observe) the "
-        "tests that reach the answer in an isolated copy. Every conclusion is a claim (status, confidence, "
-        "evidence, uncertainties), challenged by critique; unknowns carry the next verification step. "
-        "Returns the snapshot, understood_as, per-sub-question verdicts with their answer claim ids, claims "
-        "(confidence only when below its status's cap, evidence only when it adds a locator), unknowns and the "
-        "passages project_query gives (plan_audit / claim_inspect for the full record). needs_clarification is a "
-        "normal result (ask the user); an invalid plan is an error. Re-indexes first if the working tree "
-        "changed. Bounded by budget_seconds and budget_calls."),
+        "Answer a question as claims with evidence: sub-questions (from the question, or a checked plan_json) "
+        "answered by retrieval, re-checked source lines and git history/decision records; run_tests / observe "
+        "also run or trace the tests that reach the answer in an isolated copy. Returns the snapshot, "
+        "understood_as, per-sub-question verdicts, claims (evidence only where it adds a locator), unknowns "
+        "with next steps and the passages project_query gives. needs_clarification is a normal result (ask the "
+        "user). Re-indexes first if the tree changed; bounded by budget_seconds / budget_calls."),
     "plan_audit": (
-        "Re-judge an earlier analysis' sub-questions against their done_when on the current claim "
-        "statuses. refresh=true (default) re-indexes first, so claims whose files changed are marked stale; "
-        "a sub-question relying on a stale claim is reported 'stale'. 'changed' lists the sub-questions "
-        "whose verdict moved since the analysis."),
+        "Re-judge an earlier analysis' sub-questions on the current claim statuses (refresh=true re-indexes "
+        "first, so claims whose files changed are stale); 'changed' lists the verdicts that moved."),
     "lexicon_show": (
-        "Audit view of one natural-language word (Turkish or English): the identifier parts this repository "
-        "associates with it (log-likelihood association with file:line sites), grounded seed-dictionary "
-        "glosses and text sites. These widen search and plan linking only; they are never evidence. Read-only."),
+        "The identifier parts, seed glosses and text sites (file:line) the repository associates with a "
+        "natural-language word (Turkish or English). They widen search and plan linking only; never evidence. "
+        "Read-only."),
     "claim_inspect": (
-        "Full record of one claim: text, status, confidence, kind, the snapshot/commit it is pinned to, "
-        "supporting/refuting/qualifying evidence (id, type, file:line or URL, hash, grade, current state) and "
-        "its complete status history (newest kept if truncated). Read-only."),
+        "A claim's full record: text, status, confidence, kind, snapshot/commit, supporting/refuting/qualifying "
+        "evidence with its current state, and its status history. Read-only."),
     "claim_list": (
-        "List recorded claims, newest first (id, status, confidence, kind, text), optionally filtered by "
-        "status. Use it to find claim ids from earlier sessions. Read-only."),
+        "Recorded claims, newest first (id, status, confidence, kind, text), optionally filtered by status: "
+        "claim ids from earlier sessions. Read-only."),
     "evidence_inspect": (
-        "One evidence record (source type, locator, commit, content hash, excerpt, metadata), whether that "
-        "source type can verify a claim, the claims citing it, and a live re-check: file/line evidence is "
-        "re-read now (from meta.root for reference checkouts) and compared with the recorded hash; "
-        "recheck.status is same | moved (with the new lines) | changed | gone | ambiguous, and 'candidate' "
-        "says where changed anchored lines probably are now (never counted as unchanged). Read-only."),
+        "One evidence record (type, locator, commit, hash, excerpt), whether its type can verify a claim, the "
+        "claims citing it, and a live re-check: recheck.status same | moved (new lines) | changed | gone | "
+        "ambiguous. Read-only."),
     "claim_verify": (
-        "Re-check a claim's cited source lines against the current working tree and re-assess its status: "
-        "unchanged evidence keeps (or restores up to its assessed ceiling) the status, changed evidence "
-        "makes it stale. run=true also re-runs the claim's recorded test experiment in an isolated copy. "
-        "Returns before/after status and every source check."),
+        "Re-check a claim's cited lines against the working tree and re-assess its status (changed evidence -> "
+        "stale); run=true also re-runs its recorded test experiment in an isolated copy. Returns before/after "
+        "and every source check."),
     "claim_challenge": (
-        "Adversarial check of a claim: is there verifying support, do cited lines still match, is support "
-        "only graph edges, does the call-site line name the target, is the target name ambiguous, does an "
-        "'only X does Y' pattern occur elsewhere, did the files change. Failures attach refuting evidence; "
-        "confidence only goes down. Returns findings, alternatives and before/after status."),
+        "Adversarial check of a claim: verifying support, cited lines still matching, graph-only support, the "
+        "call-site line naming the target, ambiguous names, 'only X' patterns, changed files. Failures attach "
+        "refuting evidence; confidence only goes down."),
     "resolve_call": (
-        "Precise resolution of one call site: which definition does the call to target on path:line bind "
-        "to (jedi for Python; a fresh index.scip for other languages; cached by file hash)? kind: definitive "
-        "| dynamic | ambiguous | external | unresolved, with the target definitions. With target_path/"
-        "target_line a verdict confirms | refutes | undetermined (definitive answers only). 'no precise "
-        "answer' with the reason when the resolver is unavailable or the site cannot be read. Read-only."),
+        "Which definition the call to target on path:line binds to (jedi for Python, a fresh index.scip for "
+        "other languages): definitive | dynamic | ambiguous | external | unresolved. With target_path/target_line "
+        "a verdict: confirms | refutes | undetermined (definitive answers only). Read-only."),
     "code_check": (
-        "Check that the modules, imported names, attributes, keyword arguments and constant dict keys that "
-        "code uses exist - in the project's own environment (.venv/venv/env, or env=PATH; 'none' = standard "
-        "library only; env=PATH only a virtual environment whose base interpreter is a known Python "
-        "installation outside the project). Input: paths (files/directories), or diff (a revision: only sites "
-        "on changed lines plus new files; default when nothing is given: changes against HEAD), or snippet + "
-        "as_path (code not written yet). Each site gets exists | absent | unknown | not_installed | guarded; "
-        "absent is given only "
-        "for closed containers (a module or class whose names are all known, a direct instance, one known "
-        "signature) and comes with nearest real names and where the name is defined elsewhere; unknown carries "
-        "why. env names the interpreter and package versions checked (and lock mismatches). exit 3 = something "
-        "is absent, or an installed package version differs from the lock (exit_because says which). Files are "
-        "started only within a time budget (90 s): 'incomplete' lists what was not checked - pass fewer paths "
-        "or use diff. Existence and signature shape only, not behaviour. Read-only (answers are cached under "
-        ".verinoda/cache/check)."),
+        "After editing code: do the modules, imported names, attributes, keyword arguments and constant dict keys "
+        "it uses exist in the project's environment (.venv/venv/env; env=PATH another venv; 'none' = standard "
+        "library only)? Input: paths, or diff (a revision; nothing given: changes against HEAD), or snippet + "
+        "as_path. Each site: exists | absent (with nearest names and where it is defined elsewhere) | unknown "
+        "(why) | not_installed | guarded. 'incomplete' lists files the 90 s budget did not reach. Existence and "
+        "signature shape only. Read-only."),
     "api_members": (
-        "The real members of a module, class or function (dotted target, e.g. 'packaging.specifiers.SpecifierSet' "
-        "or 'orders.service') in the project's environment: name, kind, signature, file:line, inherited-from, "
-        "and the version the source came from. Use it before writing calls to an API you have not read. "
-        "private=true also lists names starting with '_'. found=false (exit 3: missing from a module or class "
-        "whose names are all known, or no such module) comes with nearest names; found=null with decided="
-        "'unknown' or 'not_installed' (exit 0) was not decided - treat it as unverified. Read-only."),
+        "The real members of a module, class or function (dotted target) in the project's environment: name, "
+        "kind, signature, file:line, inherited-from, source version; private=true adds '_' names. found=false "
+        "comes with nearest names; found=null ('unknown' / 'not_installed') was not decided. Read-only."),
     "runtime_observe": (
-        "Run tests in an isolated copy under the sys.monitoring call tracer and record the observed calls "
-        "(stored under run_id). Tests: test_ids (pytest node ids), else tests selected for symbols/terms "
-        "(static reachability, then test names), else the whole suite. Returns the same compact summary as "
-        "`verinoda observe`: complete (+ breach/degraded_after), target_reach per symbol (tests that reached "
-        "it; 'observed' says whether absence is meaningful), test outcomes, boundary calls in the targets' "
-        "files, limits and cost - never the edge list. Observations are run-scoped, never 'always'; edges "
-        "seen only through test doubles never support production edges."),
+        "Run tests in an isolated copy under the call tracer (test_ids, else tests selected for symbols/terms, "
+        "else the suite): complete, target_reach per symbol, test outcomes, boundary calls, limits and cost. "
+        "Observations are run-scoped; calls seen only through test doubles never support production edges."),
     "reference_resolve": (
-        "Resolve every reference in a message - links, owner/repo, packages with versions, commits, PR/issue "
-        "numbers, papers, docs - to the exact version the user meant (pin + basis); a named version is never "
-        "replaced by the default branch. Returns one line per reference with mismatches (M1-M12), unresolved "
-        "parts with next steps, unbound mentions and questions_for_user. references adds explicit "
-        "'URL[@ref]' items; network: off (cached answers only) | cache (cached first, the network on a miss) "
-        "| on, default from the project config (research.network, else cache); local_intent marks a question "
-        "about this project's own behaviour. The resolution is recorded (id)."),
+        "Resolve every reference in a message (links, owner/repo, packages with versions, commits, PR/issue "
+        "numbers, papers, docs) to the version the user meant (pin + basis); a named version is never replaced "
+        "by the default branch. One line per reference with mismatches, unresolved parts with next steps, "
+        "questions_for_user; recorded (id). network: off | cache | on (default: config research.network)."),
     "reference_research": (
-        "Inspect a reference: a git repository (URL or local path, pinned to ref or the default branch "
-        "HEAD) or a document URL, optionally tracing a topic/mechanism in it; or, with resolution_id + "
-        "reference_id from reference_resolve, exactly that reference at its resolved pin. The research is "
-        "recorded with its pinned commit/hash as evidence. May use the network (git clone / HTTP) and write "
-        "under .verinoda/research."),
+        "Inspect a reference at its pin: a git repository (URL or path; ref, else the default branch HEAD) or a "
+        "document URL, optionally tracing a topic; or resolution_id + reference_id from reference_resolve. "
+        "Recorded with its pinned commit/hash as evidence. May use the network; writes under .verinoda/research."),
     "reference_compare": (
-        "Compare a mechanism's assumptions (topic) between this repository and a reference repository or "
-        "document pinned at ref; findings are recorded with evidence from both sides. May use the network."),
+        "Compare a mechanism (topic) between this repository and a reference repository or document pinned at "
+        "ref; findings are recorded with evidence from both sides. May use the network."),
     "feedback_submit": (
-        "Record critique of an earlier claim (claim_id) or a free statement as a hypothesis to verify - "
-        "never as fact. Optional: correction (the statement the user proposes), reference (+ref) and more "
-        "references ('URL[@ref]') to check against, or a checkable proposition (expect_pattern regex "
-        "expected in files matching expect_in). process=true runs the verification protocol immediately "
-        "(topic narrows reference research); otherwise call feedback_process later."),
+        "Record critique of a claim (claim_id) or a statement as a hypothesis to verify, never as fact; optional "
+        "correction, references to check against, or a checkable proposition (expect_pattern in files matching "
+        "expect_in). process=true runs the verification protocol now (else feedback_process later)."),
     "feedback_process": (
-        "Run the verification protocol for recorded feedback (feedback_id from feedback_submit): resolve the "
-        "references it relies on (network off | cache | on; default from config), inspect them at their "
-        "pins, re-check the claim and propose a verdict with evidence. A named version that cannot be "
-        "pinned makes the verdict unresolved. May use the network."),
+        "Run the verification protocol for recorded feedback: resolve its references (network off | cache | on), "
+        "inspect them at their pins, re-check the claim and propose a verdict with evidence (unresolved when a "
+        "named version cannot be pinned). May use the network."),
     "feedback_resolve": (
-        "Close a feedback item with a verdict (confirmed | qualified | corrected | unresolved), a reason and "
-        "the evidence ids that justify it; 'corrected' can carry the corrected statement (correction)."),
+        "Close feedback with a verdict (confirmed | qualified | corrected | unresolved), a reason and the "
+        "evidence ids that justify it; 'corrected' can carry the corrected statement."),
     "index_update": (
-        "Re-index files changed since the last snapshot, record a new snapshot and mark claims whose files "
-        "changed as stale. Full scan when there is no previous snapshot (requires .verinoda/ to exist). "
-        "Returns mode (noop | incremental | full), changed files and the claims marked stale."),
+        "Re-index the files changed since the last snapshot and mark claims whose files changed as stale (a full "
+        "scan when there is no snapshot). Returns mode (noop | incremental | full), changed files and stale "
+        "claims."),
     "decision_record": (
-        "Decision records (Markdown with a front matter in decisions.dir, default .verinoda/decisions; logged "
-        "append-only). action: list | record (chosen + rationale, optional brief_id, guards, governs, "
-        "revisit_when, supersedes) | import (a record for a hand-written ADR, document=path; guards only "
-        "proposed) | guard (add guards to decision_id) | accept (guard_ids of decision_id) | waive (one guard "
-        "id in guard_ids, at='path[:line]', reason, until) | answer (the user's answer to question_id of a "
-        "decision brief, brief_id). Guard specs: 'only_in calls=sqlite3.connect "
-        "allowed=orders/repository.py', 'no_edge from=src/main/** to=src/client/**', 'dependency "
-        "absent=psycopg'; revisit_when: 'dependency_added=NAME' or 'file_appears=GLOB'. record, guard, accept, "
-        "waive and answer need user_statement: the user's own words, verbatim - Verinoda never decides and "
-        "neither may the agent."),
+        "Decision records (Markdown with front matter in decisions.dir, logged append-only). action: list | "
+        "record (chosen + rationale; optional brief_id, guards, governs, revisit_when, supersedes) | import (a "
+        "record for a hand-written ADR, document=path; guards only proposed) | guard (add guards to decision_id) "
+        "| accept (guard_ids) | waive (one guard id, at='path[:line]', reason, until) | answer (the user's answer "
+        "to question_id of brief_id). Guards: 'only_in calls=sqlite3.connect allowed=orders/repository.py', "
+        "'no_edge from=src/main/** to=src/client/**', 'dependency absent=psycopg'; revisit_when: "
+        "'dependency_added=NAME' / 'file_appears=GLOB'. record, guard, accept, waive and answer need "
+        "user_statement, the user's own words verbatim: never decide for the user."),
     "decision_brief": (
-        "What a human needs to decide a should/which/scale question, collected from the code - never a "
-        "recommendation. forces: facts with evidence that re-checks now (storage sinks and how concentrated they "
-        "are, configuration reads and defaults, declared dependencies and requires-python, decision documents, "
-        "deployment files, concurrency and shared state, tests that pin the implementation, churn, numeric "
-        "limits); absences: what was searched and not found, with the globs; existing_decisions; options: presence "
-        "in the project with evidence, the code a change touches, installed metadata, external claims only as "
-        "quote-checked pins, your own arguments as weak_inference; questions_for_human: at most 5, EN and TR, "
-        "never one the code answers. verdict is always human_decision_required. Stored under brief_id; record the "
-        "user's answers with decision_record(action='answer')."),
+        "What a human needs to decide a should/which/scale question, from the code - never a recommendation: "
+        "forces with re-checkable evidence, absences (searched, not found), existing decisions, options with "
+        "presence and the code a change touches, external claims only as quote-checked pins, your arguments as "
+        "weak_inference, at most 5 questions_for_human (EN and TR). verdict is always human_decision_required; "
+        "record the user's answers with decision_record(action='answer')."),
     "decision_check": (
-        "Check the working tree against every accepted guard of every accepted decision record (the same as "
-        "`verinoda decide check`). violations: VIOLATED sites, statically verified (Python calls bound through "
-        "imports and aliases, Java/Kotlin import-bound calls, EXTRACTED graph edges whose line re-checks, "
-        "declared dependencies); possible: heuristic hits (text matches, INFERRED edges, unresolved receivers); "
-        "reviews: governed code that changed; triggers: revisit conditions that hold; ok: guards that hold, each "
-        "with its scope and limits; waived; unknown. base (a git revision) or changed_only (= HEAD) labels "
-        "findings new/touched or pre-existing, and then only new ones count (exit 1). Refreshes a stale index "
-        "first when a no_edge guard needs the graph (refresh=false skips it). Never edits code or records."),
+        "The working tree against every accepted guard of accepted decision records: violations (VIOLATED, "
+        "statically verified), possible (heuristic hits), reviews (governed code changed), triggers (revisit "
+        "conditions hold), ok (with scope and limits), waived, unknown. changed_only=true (or base=REV) counts "
+        "only new findings (exit 1). Refreshes a stale index first when a guard needs the graph. Never edits code "
+        "or records."),
     "experiment_run": (
-        "Run one command as a recorded experiment in a throw-away copy of the working tree (or, with ref, of that "
-        "commit; overlay lays working-tree files over it): allowlisted test runners only under process isolation, "
-        "anything else needs docker/podman or is refused (the refusal says why). Returns outcome (pass | fail | "
-        "timeout | inconclusive), the tree hash of what ran, log paths and the evidence id; with claim_id the run "
-        "supports or refutes that claim (an inconclusive run only qualifies it)."),
+        "Run one command as a recorded experiment in a throw-away copy of the working tree (or of commit ref, "
+        "with overlay files): allowlisted test runners under process isolation, anything else needs "
+        "docker/podman or is refused. Returns outcome (pass | fail | timeout | inconclusive), tree hash, log "
+        "paths and evidence id; with claim_id the run supports or refutes that claim."),
     "debug_start": (
-        "Open a debug session before the first edit of a bug fix: the symptom, the repro command (argument list) "
-        "and a base commit (default HEAD). The repro runs once as attempt 0 in a throw-away copy (pytest gets a "
-        "failure-signature plugin; trace=true adds the call tracer, which enables the off_path rule). A command "
-        "Verinoda may not run (e.g. Gradle) is reported instead: observed_output (the run's output) + exit_code, "
-        "recorded as agent-reported. Returns the session id and the attempt record (see debug_attempt)."),
+        "Open a debug session before the first edit of a bug fix: symptom, repro command (argument list), base "
+        "commit (default HEAD). The repro runs once as attempt 0 in a throw-away copy (trace=true adds the call "
+        "tracer). A command Verinoda may not run: pass observed_output + exit_code (agent-reported)."),
     "debug_attempt": (
-        "Record one attempt after an edit: hypothesis (what you believe and why) is required; the session's repro "
-        "runs again on the current tree (or give command, or observed_output + exit_code for a run you made). "
-        "Returns outcome, the tree (hash, files changed vs base and since the previous attempt, with symbols), the "
-        "failure signature (exception at file::symbol per failing test), progress (improved | same | regressed | "
-        "unknown), loop findings (definitive: tree_reverted, signature_recurred, no_progress, test_edited, "
-        "failing_tests_skipped, off_path; heuristic: file_reverted, error_moved, masking, hypothesis_repeated, "
-        "possibly_flaky; each cites the attempts it rests on), "
-        "flaky, stop, strategies and questions_for_human. stop=true: stop editing and follow strategies[0]. "
-        "Never reports 'fixed': a pass is 'the repro passed at tree T in run R' plus what was not run."),
+        "Record one attempt after an edit: hypothesis (required); the repro runs again on the current tree (or "
+        "command, or observed_output + exit_code for your own run). Returns outcome, tree, failure signature, "
+        "progress (improved | same | regressed | unknown), loop findings (definitive: tree_reverted, "
+        "signature_recurred, no_progress, test_edited, failing_tests_skipped, off_path; heuristic: file_reverted, "
+        "error_moved, masking, hypothesis_repeated, possibly_flaky), flaky, stop, strategies and "
+        "questions_for_human. stop=true: stop editing, follow strategies[0]. Never 'fixed': 'the repro passed "
+        "at tree T in run R'."),
     "debug_status": (
-        "The ledger of a debug session (default: the latest open one): every attempt with its hypothesis, tree, "
-        "failure, progress and loop findings, the latest stop and strategies, and - when an attempt passed - "
-        "whether that passing tree is still the current one. Show it to the user when a session stops. Read-only."),
+        "The ledger of a debug session (default: the latest open one): every attempt with hypothesis, tree, "
+        "failure, progress and findings, the latest stop and strategies, and whether a passing tree is still "
+        "current. Show it to the user when a session stops. Read-only."),
     "debug_strategy": (
-        "Run a strategy the ledger proposed (each run is recorded as an attempt): differential (the repro on a copy "
-        "of the base commit; when it passes there, the diff's hunks ranked by the failure's traceback; trace=true "
-        "also compares the failing tests' observed calls at the base and in the failing tree; prepare=true only "
-        "writes the copy for a command you run yourself), bisect (binary search over commits in throw-away copies "
-        "from good to bad; commits that cannot run are skipped; returns the first failing commit and its hunks), "
-        "rerun (times runs of the current tree: pass rate, flakiness), observe (one run under the call tracer: "
-        "which failing tests reached each edited function, and the call chain to the crash)."),
+        "Run a proposed strategy (recorded as an attempt): differential (the repro on the base commit; the diff's "
+        "hunks ranked by the failure; trace=true compares observed calls; prepare=true only writes the copy), "
+        "bisect (the first failing commit between good and bad, in throw-away copies), rerun (pass rate over "
+        "times runs), observe (one traced run: which failing tests reached each edited function)."),
 }
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
@@ -1722,9 +1669,52 @@ def _tool_annotations(name: str):
         from mcp.types import ToolAnnotations
     except ImportError:  # pragma: no cover - very old SDK
         return None
-    ro = name in _READ_ONLY
-    return ToolAnnotations(title=name.replace("_", " "), readOnlyHint=ro, destructiveHint=False,
-                           idempotentHint=ro, openWorldHint=name in _OPEN_WORLD)
+    ro = name in _READ_ONLY  # no title: the tool's name says it (every listed byte is standing context)
+    return ToolAnnotations(readOnlyHint=ro, destructiveHint=False, idempotentHint=ro,
+                           openWorldHint=name in _OPEN_WORLD)
+
+
+def resolve_profile(repo: Path | str, profile: str | None = None) -> str:
+    """The tool profile to serve: ``profile`` (``--profile``), else ``mcp.profile`` in the project's
+    config, else :data:`DEFAULT_PROFILE`. An unknown name is an error, never a silent fallback."""
+    if profile is None:
+        from verinoda.paths import load_config
+
+        try:
+            profile = (load_config(Path(repo)).get("mcp") or {}).get("profile")
+        except Exception:  # noqa: BLE001 - an unreadable config serves the default
+            profile = None
+    profile = profile or DEFAULT_PROFILE
+    if profile not in PROFILES:
+        raise ValueError(f"unknown MCP tool profile {profile!r}; choose one of: {', '.join(PROFILES)}")
+    return profile
+
+
+def _drop_titles(schema: Any) -> Any:
+    """A JSON schema without pydantic's generated ``title`` keys (a property named "title" stays)."""
+    if isinstance(schema, dict):
+        out = {}
+        for k, v in schema.items():
+            if k == "title" and isinstance(v, str):
+                continue
+            out[k] = ({pk: _drop_titles(pv) for pk, pv in v.items()} if k in ("properties", "$defs")
+                      and isinstance(v, dict) else _drop_titles(v))
+        return out
+    if isinstance(schema, list):
+        return [_drop_titles(x) for x in schema]
+    return schema
+
+
+def _compact_schemas(srv) -> None:
+    """Drop generated titles from every registered tool's input schema (best effort: SDK internals)."""
+    try:
+        registered = srv._tool_manager._tools
+    except AttributeError:  # pragma: no cover - an SDK that stores tools elsewhere keeps its titles
+        return
+    for tool in registered.values():
+        params = getattr(tool, "parameters", None)
+        if isinstance(params, dict):
+            tool.parameters = _drop_titles(params)
 
 
 def is_text_result(res: Any) -> bool:
@@ -1757,33 +1747,42 @@ def _result_wrapper(major: int) -> Callable[[dict], Any]:
     return emit
 
 
-def build_server(repo: Path | str, tools: AtlasTools | None = None):
-    """An MCP server (SDK object) exposing :data:`TOOL_NAMES` over ``repo``."""
+def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: str | None = None):
+    """An MCP server (SDK object) exposing the tools of a profile (:func:`resolve_profile`; ``core`` by
+    default, ``full`` = :data:`TOOL_NAMES`) over ``repo``."""
     from pydantic import Field
 
     Server, major = _load_sdk()
     t = tools or AtlasTools(repo)
+    profile = resolve_profile(t.repo, profile)
+    served = set(PROFILES[profile])
     emit = _result_wrapper(major)
+    text = instructions(profile).format(repo=t.repo)
     try:
         from verinoda import __version__
     except Exception:  # pragma: no cover
         __version__ = "0"
     try:
-        srv = Server("verinoda", instructions=INSTRUCTIONS.format(repo=t.repo), version=__version__)
+        srv = Server("verinoda", instructions=text, version=__version__)
     except TypeError:  # mcp 1.x FastMCP has no version argument
-        srv = Server("verinoda", instructions=INSTRUCTIONS.format(repo=t.repo))
+        srv = Server("verinoda", instructions=text)
+    srv.verinoda_profile = profile
 
     def register(name: str):
         def deco(fn):
-            kwargs: dict[str, Any] = {"name": name, "description": DESCRIPTIONS[name]}
+            if name not in served:
+                return fn
+            kwargs: dict[str, Any] = {"name": name, "description": DESCRIPTIONS[name],
+                                      "structured_output": False}  # no output schema: results are open objects
             ann = _tool_annotations(name)
             if ann is not None:
                 kwargs["annotations"] = ann
-            try:
-                srv.add_tool(fn, **kwargs)
-            except TypeError:  # pragma: no cover - SDK without annotations support
-                kwargs.pop("annotations", None)
-                srv.add_tool(fn, **kwargs)
+            for drop in ((), ("structured_output",), ("structured_output", "annotations")):
+                try:
+                    srv.add_tool(fn, **{k: v for k, v in kwargs.items() if k not in drop})
+                    break
+                except TypeError:  # pragma: no cover - an older SDK without these arguments
+                    continue
             return fn
         return deco
 
@@ -2177,6 +2176,7 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None):
         return emit(t.debug_strategy(strategy, session_id=session_id, good=good, bad=bad, times=times,
                                      prepare=prepare, trace=trace, overlay=overlay))
 
+    _compact_schemas(srv)
     return srv
 
 
@@ -2265,13 +2265,13 @@ def default_repo(start: Path) -> Path:
     return root
 
 
-def serve(repo: Path) -> None:
-    """Serve the Verinoda tools for ``repo`` over stdio (``verinoda mcp serve``)."""
+def serve(repo: Path, profile: str | None = None) -> None:
+    """Serve the Verinoda tools for ``repo`` over stdio (``verinoda mcp serve [--profile core|full]``)."""
     repo = Path(repo).resolve()
     try:
-        srv = build_server(repo)
+        srv = build_server(repo, profile=profile)
         major = _load_sdk()[1]
-    except RuntimeError as exc:  # SDK missing or shadowed: a clear message, not a traceback
+    except (RuntimeError, ValueError) as exc:  # SDK missing or shadowed, unknown profile: a message
         raise SystemExit(f"error: {exc}") from None
     if major < 2:
         _move_protocol_off_std_fds()
@@ -2281,7 +2281,9 @@ def serve(repo: Path) -> None:
         state = "initialised, not indexed - tools will ask for `verinoda scan`"
     else:
         state = "not scanned - tools will ask for `verinoda scan`"
-    print(f"verinoda mcp: serving {repo} over stdio ({state})", file=sys.stderr, flush=True)
+    served = getattr(srv, "verinoda_profile", DEFAULT_PROFILE)
+    print(f"verinoda mcp: serving {repo} over stdio ({state}; {len(PROFILES[served])} tools, profile {served})",
+          file=sys.stderr, flush=True)
     try:
         srv.run("stdio")
     except KeyboardInterrupt:  # pragma: no cover - interactive stop

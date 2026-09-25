@@ -274,7 +274,7 @@ def test_import_mcp_resolves_to_installed_sdk():
 
 def test_registered_tools_have_descriptions_and_typed_params(repo):
     anyio = pytest.importorskip("anyio")
-    srv = mcp_server.build_server(repo)
+    srv = mcp_server.build_server(repo, profile="full")
     listed = anyio.run(srv.list_tools)
     assert sorted(t.name for t in listed) == sorted(TOOL_NAMES) == sorted(EXPECTED_PARAMS)
     assert set(mcp_server.DESCRIPTIONS) == set(TOOL_NAMES)
@@ -299,9 +299,41 @@ def test_registered_tools_have_descriptions_and_typed_params(repo):
     net = by_name["reference_resolve"]["properties"]["network"]
     assert {"off", "cache", "on"} in [set(o.get("enum", [])) for o in net.get("anyOf", [net])]
     assert net.get("default") is None
-    instructions = mcp_server.INSTRUCTIONS
-    assert all(name in instructions for name in TOOL_NAMES)
+    instructions = mcp_server.instructions("full")
+    assert instructions == mcp_server.INSTRUCTIONS and all(name in instructions for name in TOOL_NAMES)
     assert "question_plan_draft" in instructions and "reference_resolve first" in instructions
+
+
+def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_path):
+    """The tool menu is standing context in every request of many clients: core by default (11 tools),
+    the full set behind --profile full or mcp.profile in the project's config; no output schemas and
+    no generated titles."""
+    anyio = pytest.importorskip("anyio")
+    from verinoda.mcp.server import CORE_TOOLS, instructions, resolve_profile
+
+    def listing(srv):
+        return [t.model_dump(by_alias=True, exclude_none=True, mode="json") if hasattr(t, "model_dump") else t
+                for t in anyio.run(srv.list_tools)]
+
+    core = listing(mcp_server.build_server(repo))
+    assert sorted(t["name"] for t in core) == sorted(CORE_TOOLS) and len(CORE_TOOLS) == 11
+    assert set(CORE_TOOLS) <= set(TOOL_NAMES)
+    wire = json.dumps(core, separators=(",", ":"))
+    assert len(wire) < 12000  # 50,029 chars for the 33 tools before (2026-09-25)
+    assert '"title"' not in wire and "outputSchema" not in wire
+    text = instructions("core")
+    assert all(n in text for n in CORE_TOOLS) and "--profile full" in text and "question_plan_draft" not in text
+    assert len(text) < len(instructions("full"))
+    full = mcp_server.build_server(repo, profile="full")
+    assert full.verinoda_profile == "full" and len(listing(full)) == len(TOOL_NAMES)
+    # the project's config picks the profile when the command line does not
+    proj = tmp_path / "proj"
+    (proj / ".verinoda").mkdir(parents=True)
+    (proj / ".verinoda" / "config.json").write_text('{"mcp": {"profile": "full"}}', encoding="utf-8")
+    assert resolve_profile(proj) == "full" and resolve_profile(proj, "core") == "core"
+    assert resolve_profile(tmp_path) == "core"
+    with pytest.raises(ValueError, match="unknown MCP tool profile"):
+        resolve_profile(proj, "everything")
 
 
 # -- retrieval & graph tools ------------------------------------------------------
@@ -1273,14 +1305,14 @@ def test_cap_response_cuts_a_nested_first_list_before_the_rest():
 
 # -- real stdio round trip ------------------------------------------------------------------
 
-def _server_params(repo: Path):
+def _server_params(repo: Path, *extra: str):
     from mcp.client.stdio import StdioServerParameters
 
     env = {"GRAPHIFY_OUT": os.environ.get("GRAPHIFY_OUT", ".verinoda/index"), "PYTHONIOENCODING": "utf-8"}
     if os.environ.get("PYTHONPATH"):  # the server must import what this test process imports
         env["PYTHONPATH"] = os.environ["PYTHONPATH"]
     return StdioServerParameters(command=sys.executable,
-                                 args=["-m", "verinoda", "mcp", "serve", "--repo", str(repo)],
+                                 args=["-m", "verinoda", "mcp", "serve", "--repo", str(repo), *extra],
                                  cwd=str(repo), env=env)
 
 
@@ -1302,8 +1334,9 @@ def _payload(res) -> dict:
     return data
 
 
-def _session(repo: Path, errlog: Path, body):
-    """Spawn the server, initialize, run ``body(session)``, shut down; return its result."""
+def _session(repo: Path, errlog: Path, body, *extra: str):
+    """Spawn the server (``extra``: more ``mcp serve`` arguments), initialize, run ``body(session)``,
+    shut down; return its result."""
     anyio = pytest.importorskip("anyio")
     from mcp import ClientSession
     from mcp.client.stdio import stdio_client
@@ -1311,7 +1344,7 @@ def _session(repo: Path, errlog: Path, body):
     async def main():
         with open(errlog, "w", encoding="utf-8") as err:
             with anyio.fail_after(STDIO_TIMEOUT):
-                async with stdio_client(_server_params(repo), errlog=err) as (read, write):
+                async with stdio_client(_server_params(repo, *extra), errlog=err) as (read, write):
                     async with ClientSession(read, write) as session:
                         await session.initialize()
                         return await body(session)
@@ -1346,7 +1379,8 @@ def test_stdio_roundtrip(repo, tmp_path):
         rr = await s.call_tool("reference_resolve", {"text": "is this the same in requests 2.31?", "network": "off"})
         return [t.name for t in listed.tools], q, q_again, qj, d, c, a, bad_plan, ci, bad, rr
 
-    names, q, q_again, qj, d, c, a, bad_plan, ci, bad, rr = _session(repo, tmp_path / "server.err", body)
+    names, q, q_again, qj, d, c, a, bad_plan, ci, bad, rr = _session(repo, tmp_path / "server.err", body,
+                                                                      "--profile", "full")
     assert sorted(names) == sorted(TOOL_NAMES)
 
     core = retrieval.retrieve(index.load(repo), QUESTION, retrieval.Budget(max_items=5, max_chars=6000))
@@ -1398,13 +1432,14 @@ def test_stdio_server_starts_in_unscanned_dir(tmp_path):
         out = []
         for name, args in (("project_query", {"question": "anything"}),
                            ("claim_inspect", {"claim_id": "clm_x"}),
-                           ("question_plan_draft", {"question": "anything"}),
+                           ("node_inspect", {"name": "main"}),
                            ("index_update", {})):
             out.append(await s.call_tool(name, args))
         return [t.name for t in listed.tools], out
 
     names, results = _session(plain, tmp_path / "server.err", body)
-    assert sorted(names) == sorted(TOOL_NAMES)
+    assert sorted(names) == sorted(mcp_server.CORE_TOOLS)  # the default profile
+    assert "11 tools, profile core" in (tmp_path / "server.err").read_text(encoding="utf-8", errors="replace")
     for res in results:
         p = _payload(res)
         assert p["error"] == "not_initialised" and "verinoda scan" in p["hint"]

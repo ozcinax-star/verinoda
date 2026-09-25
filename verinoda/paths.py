@@ -69,6 +69,9 @@ DEFAULT_CONFIG: dict = {
     # Debug ledger (docs/DESIGN.md D34): stop after this many fix attempts in a row without measured progress;
     # reruns of the flaky-check strategy; bisect run budget.
     "debug": {"max_no_progress": 3, "rerun_times": 5, "bisect_max_runs": 12},
+    # MCP tools served (`verinoda mcp serve --profile` wins): "core" (11 tools: query, analyze, inspect,
+    # trace, map, claims and evidence, index_update, code_check, decision_check) or "full" (all 33)
+    "mcp": {"profile": "core"},
 }
 
 NETWORK_MODES = ("off", "cache", "on")

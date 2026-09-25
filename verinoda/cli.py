@@ -1945,7 +1945,7 @@ def cmd_uninstall(args) -> int:
 def cmd_mcp(args) -> int:
     from verinoda.mcp.server import default_repo, serve
 
-    serve(_repo(args) if args.repo else default_repo(Path.cwd()))
+    serve(_repo(args) if args.repo else default_repo(Path.cwd()), profile=args.profile)
     return 0
 
 
@@ -2524,6 +2524,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("mcp", help="MCP server for coding agents")
     msub = sp.add_subparsers(dest="mcp_cmd", required=True)
     c = msub.add_parser("serve", help="serve over stdio")
+    c.add_argument("--profile", choices=("core", "full"), default=None,
+                   help="tools to serve: core (default: query, analyze, inspect/trace/map, claims and evidence, "
+                        "index_update, code_check, decision_check) or full (all 33); else mcp.profile in "
+                        ".verinoda/config.json")
     c.set_defaults(fn=cmd_mcp)
     c.add_argument("--repo")
 
