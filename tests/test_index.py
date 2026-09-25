@@ -312,6 +312,41 @@ def _update_once(tmp_path: Path, name: str, memo: bool) -> bytes:
     return graph_path(repo).read_bytes()
 
 
+def test_cached_paths_are_re_anchored_as_the_upstream_function_does(built):
+    """_absolutize_once keeps the answer per path string for a build; every AST cache entry and
+    the odd cases come out as the upstream function leaves them."""
+    import copy
+
+    from verinoda.project_index import cache
+
+    repo, _ = built
+    real = cache._absolutize_source_files_in
+    entries = sorted(cache.cache_dir(repo, "ast").glob("*.json"))
+    assert len(entries) > 5
+    payloads = [json.loads(e.read_text(encoding="utf-8")) for e in entries]
+    payloads += [
+        {"nodes": [{"source_file": "a/b.py"}, {"source_file": str(repo / "abs.py")},
+                   {"source_file": ""}, {"source_file": None}, {"definition_file": "d/e.ts"}, "not-a-dict"],
+         "edges": [{"source_file": "a/b.py", "definition_file": "a/b.py"}],
+         "raw_calls": [{"source_file": "./x/../y.py"}]},
+        {"hyperedges": [{"source_file": "/posix/abs"}]},
+        {},
+    ]
+    with index._absolutize_once():
+        memo = cache._absolutize_source_files_in
+        assert memo is not real
+        for root in (repo, repo.parent, repo):  # a second root is kept apart
+            for p in payloads:
+                a, b = copy.deepcopy(p), copy.deepcopy(p)
+                real(a, root)
+                memo(b, root)
+                assert a == b
+        for fn in (real, memo):  # a value that is not a string raises in both
+            with pytest.raises(TypeError):
+                fn({"nodes": [{"source_file": ["a", "list"]}]}, repo)
+    assert cache._absolutize_source_files_in is real
+
+
 def test_path_identity_memo_keeps_the_graph_byte_identical(tmp_path):
     from verinoda.project_index import watch
 

@@ -18,7 +18,9 @@ Build-time work is done once and not repeated at query time (docs/DESIGN.md D21)
   only applies them. Per-file facts are cached under the file's sha256, so an
   incremental build re-parses only changed files.
 * The vendored rebuild's path-identity helpers are memoised by a monkeypatch
-  applied from :func:`build` (see :func:`install_path_identity_memo`); the
+  applied from :func:`build` (see :func:`install_path_identity_memo`), and so,
+  for the length of a build, are ``Path.resolve`` (:class:`_resolve_once`) and
+  the re-anchoring of cached source paths (:class:`_absolutize_once`); the
   graph it writes is unchanged.
 """
 
@@ -70,7 +72,7 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     buf = io.StringIO()
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
-    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(),             python_facts_cache(index_dir(repo)):
+    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(), _absolutize_once(),             python_facts_cache(index_dir(repo)):
         ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
     gp = graph_path(repo)
     if not ok and not gp.exists():
@@ -124,6 +126,72 @@ class _resolve_once:
 
     def __exit__(self, *a):
         self.cls.resolve = self.real
+        return False
+
+
+class _absolutize_once:
+    """Each cached ``source_file`` re-anchored once per build.
+
+    Every AST cache hit makes its items' ``source_file`` / ``definition_file`` absolute again
+    (``cache._absolutize_source_files_in``: ``str(root / Path(value))`` per item), about 150,000
+    pathlib joins in an update of Verinoda's own repository, although the items of one file share
+    a handful of values. The answer depends only on the resolved root and the string, so it is
+    kept per pair until the build ends. A value that is not a ``str`` takes the original per-item
+    code (and raises where it raises).
+    """
+
+    def __enter__(self):
+        try:
+            from verinoda.project_index import cache as upstream_cache
+        except Exception:  # noqa: BLE001 - nothing to wrap
+            self.mod = None
+            return self
+        self.mod, self.real = upstream_cache, upstream_cache._absolutize_source_files_in
+        memo: dict = {}
+        unknown = object()
+
+        def absolutize(payload: dict, root: Path) -> None:
+            try:
+                root_resolved = Path(root).resolve()
+            except OSError:
+                return
+            known = memo.setdefault(str(root_resolved), {})  # the spelling, not Path equality
+            for bucket in ("nodes", "edges", "hyperedges", "raw_calls"):
+                for item in payload.get(bucket, []):
+                    if not isinstance(item, dict):
+                        continue
+                    for key in ("source_file", "definition_file"):
+                        source = item.get(key)
+                        if not source:
+                            continue
+                        if type(source) is str:
+                            new = known.get(source, unknown)
+                            if new is unknown:
+                                sp = Path(source)
+                                new = None  # None: leave the value as it is
+                                if not sp.is_absolute():
+                                    try:
+                                        new = str(root_resolved / sp)
+                                    except (TypeError, OSError):
+                                        pass
+                                known[source] = new
+                            if new is not None:
+                                item[key] = new
+                            continue
+                        sp = Path(source)  # the original code, item by item
+                        if sp.is_absolute():
+                            continue
+                        try:
+                            item[key] = str(root_resolved / sp)
+                        except (TypeError, OSError):
+                            continue
+
+        upstream_cache._absolutize_source_files_in = absolutize
+        return self
+
+    def __exit__(self, *a):
+        if self.mod is not None:
+            self.mod._absolutize_source_files_in = self.real
         return False
 
 
