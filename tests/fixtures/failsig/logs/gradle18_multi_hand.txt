@@ -1,0 +1,17 @@
+> Task :test
+
+WispTest > tickMovesTheWisp() FAILED
+    java.lang.NullPointerException: Cannot invoke "com.example.glowmod.entity.Wisp$Target.distance()" because "this.target" is null
+        at app//com.example.glowmod.entity.Wisp.tick(Wisp.java:14)
+        at app//com.example.glowmod.WispTest.tickMovesTheWisp(WispTest.java:12)
+
+WispTest > glowLevelCountsTrail() FAILED
+    org.opentest4j.AssertionFailedError: expected: <3> but was: <0>
+        at app//org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+        at app//org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+        at app//org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:531)
+        at app//com.example.glowmod.WispTest.glowLevelCountsTrail(WispTest.java:17)
+
+2 tests completed, 2 failed
+
+> Task :test FAILED

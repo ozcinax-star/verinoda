@@ -1,0 +1,24 @@
+ FAIL  test/cart.jest.test.js
+  cart
+    ✕ total adds line totals (3 ms)
+
+  ● cart › total adds line totals
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 7
+    Received: 6
+
+       5 | describe('cart', () => {
+       6 |   test('total adds line totals', () => {
+    >  7 |     expect(total([{ price: 2, qty: { value: 3 } }])).toBe(7);
+         |                                                      ^
+       8 |   });
+       9 | });
+
+      at Object.toBe (test/cart.jest.test.js:7:54)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 total
+Snapshots:   0 total
+Time:        0.412 s

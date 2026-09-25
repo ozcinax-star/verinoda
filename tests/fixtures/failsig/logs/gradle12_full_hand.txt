@@ -1,0 +1,17 @@
+> Task :compileJava UP-TO-DATE
+> Task :test FAILED
+
+WispTest > tickMovesTheWisp() FAILED
+    java.lang.NullPointerException: Cannot invoke "com.example.glowmod.entity.Wisp$Target.distance()" because "this.target" is null
+        at com.example.glowmod.entity.Wisp.tick(Wisp.java:14)
+        at com.example.glowmod.WispTest.tickMovesTheWisp(WispTest.java:12)
+
+2 tests completed, 1 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///home/dev/glow/build/reports/tests/test/index.html
+
+BUILD FAILED in 3s

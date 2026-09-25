@@ -1,0 +1,29 @@
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.example.glowmod.WispTest
+[ERROR] Tests run: 2, Failures: 1, Errors: 1, Skipped: 0, Time elapsed: 0.052 s <<< FAILURE! -- in com.example.glowmod.WispTest
+[ERROR] com.example.glowmod.WispTest.tickMovesTheWisp -- Time elapsed: 0.011 s <<< ERROR!
+java.lang.NullPointerException: Cannot invoke "com.example.glowmod.entity.Wisp$Target.distance()" because "this.target" is null
+	at com.example.glowmod.entity.Wisp.tick(Wisp.java:14)
+	at com.example.glowmod.WispTest.tickMovesTheWisp(WispTest.java:12)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+[ERROR] com.example.glowmod.WispTest.glowLevelCountsTrail -- Time elapsed: 0.002 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: expected: <3> but was: <0>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:531)
+	at com.example.glowmod.WispTest.glowLevelCountsTrail(WispTest.java:17)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+
+[INFO]
+[INFO] Results:
+[INFO]
+[ERROR] Failures:
+[ERROR]   WispTest.glowLevelCountsTrail:17 expected: <3> but was: <0>
+[ERROR] Errors:
+[ERROR]   WispTest.tickMovesTheWisp:12 NullPointer Cannot invoke "com.example.glowmod.entity.Wisp$Target.distance()"
+[ERROR] Tests run: 2, Failures: 1, Errors: 1, Skipped: 0
