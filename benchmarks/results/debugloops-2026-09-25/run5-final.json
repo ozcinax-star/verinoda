@@ -1,0 +1,1165 @@
+{
+ "summary": {
+  "definitive_findings": 11,
+  "definitive_precision": 1.0,
+  "false_positives": [],
+  "loop_recall": "8/8",
+  "controls_with_stop": "0/4",
+  "top_strategy_correct": "8/8",
+  "strategy_names_cause": "7/8",
+  "overhead_s": {
+   "n": 41,
+   "median": 0.086,
+   "max": 0.301
+  }
+ },
+ "results": [
+  {
+   "id": "L1_key_rename",
+   "looping": true,
+   "attempts": [
+    {
+     "n": 0,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "unknown",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "KeyError@orders/pricing.py::compute_total",
+      "KeyError@orders/pricing.py::compute_total"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.947,
+     "overhead_s": 0.301,
+     "tree": "7ba662130a"
+    },
+    {
+     "n": 1,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "improved",
+     "definitive": [
+      "test_edited"
+     ],
+     "heuristic": [],
+     "suspended": [],
+     "stop": true,
+     "stop_reason": "definitive: test_edited",
+     "strategies": [
+      "differential",
+      "observe",
+      "minimal_repro",
+      "ask_human"
+     ],
+     "flaky": false,
+     "questions": 1,
+     "signature": [
+      "KeyError@orders/pricing.py::compute_total"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.692,
+     "overhead_s": 0.098,
+     "tree": "9cd4c288e3"
+    },
+    {
+     "n": 2,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [],
+     "heuristic": [
+      "error_moved",
+      "masking"
+     ],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_service.py::test_place_and_fetch_roundtrip"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.703,
+     "overhead_s": 0.109,
+     "tree": "8dae3afba2"
+    },
+    {
+     "n": 3,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [
+      "tree_reverted"
+     ],
+     "heuristic": [
+      "error_moved"
+     ],
+     "suspended": [],
+     "stop": true,
+     "stop_reason": "definitive: tree_reverted",
+     "strategies": [
+      "differential",
+      "observe",
+      "minimal_repro"
+     ],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "KeyError@orders/pricing.py::compute_total"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.663,
+     "overhead_s": 0.085,
+     "tree": "9cd4c288e3"
+    }
+   ],
+   "session": "dbg_163251467d43",
+   "strategy_run": {
+    "id": "differential",
+    "outcome_at_base": "pass",
+    "top": "orders/pricing.py:7",
+    "top_symbols": [
+     "compute_total"
+    ],
+    "names_cause": true,
+    "conclusion": "the repro passes at the base 458bccf996de and fails at attempt 3's tree: the cause is in the diff between them (ranked below; run-scoped, one environment)"
+   },
+   "session_wall_s": 3.9
+  },
+  {
+   "id": "L2_regression_in_history",
+   "looping": true,
+   "attempts": [
+    {
+     "n": 0,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "unknown",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_threshold_is_not_discounted"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.793,
+     "overhead_s": 0.129,
+     "tree": "f5a233cd6e"
+    },
+    {
+     "n": 1,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_threshold_is_not_discounted"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.684,
+     "overhead_s": 0.09,
+     "tree": "df0b887e83"
+    },
+    {
+     "n": 2,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [],
+     "heuristic": [
+      "hypothesis_repeated"
+     ],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_threshold_is_not_discounted"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.679,
+     "overhead_s": 0.07,
+     "tree": "b923fb409f"
+    },
+    {
+     "n": 3,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [
+      "no_progress"
+     ],
+     "heuristic": [
+      "hypothesis_repeated"
+     ],
+     "suspended": [],
+     "stop": true,
+     "stop_reason": "definitive: no_progress",
+     "strategies": [
+      "bisect",
+      "observe",
+      "minimal_repro"
+     ],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_threshold_is_not_discounted"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.748,
+     "overhead_s": 0.092,
+     "tree": "5cd8c00f2e"
+    }
+   ],
+   "session": "dbg_acc593ee0682",
+   "strategy_run": {
+    "id": "bisect",
+    "status": "found",
+    "runs": 2,
+    "first_bad": "330dec9d44",
+    "names_cause": true,
+    "conclusion": "the repro passes at bc09af12327e and fails at 330dec9d4457 (c3 inclusive threshold): that commit's change is where to look"
+   },
+   "session_wall_s": 5.1
+  },
+  {
+   "id": "L3_off_path",
+   "looping": true,
+   "attempts": [
+    {
+     "n": 0,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "unknown",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_compute_total"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.825,
+     "overhead_s": 0.147,
+     "tree": "b4291378ce"
+    },
+    {
+     "n": 1,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [
+      "off_path"
+     ],
+     "heuristic": [],
+     "suspended": [],
+     "stop": true,
+     "stop_reason": "definitive: off_path",
+     "strategies": [
+      "differential",
+      "minimal_repro"
+     ],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_compute_total"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.695,
+     "overhead_s": 0.101,
+     "tree": "9abcfa6ecd"
+    },
+    {
+     "n": 2,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [
+      "off_path"
+     ],
+     "heuristic": [
+      "hypothesis_repeated"
+     ],
+     "suspended": [],
+     "stop": true,
+     "stop_reason": "definitive: off_path",
+     "strategies": [
+      "differential",
+      "minimal_repro"
+     ],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_compute_total"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.71,
+     "overhead_s": 0.07,
+     "tree": "187ae0666c"
+    }
+   ],
+   "session": "dbg_e07724ad7980",
+   "strategy_run": {
+    "id": "differential",
+    "outcome_at_base": "pass",
+    "top": "orders/pricing.py:7",
+    "top_symbols": [
+     "compute_total"
+    ],
+    "names_cause": true,
+    "conclusion": "the repro passes at the base 91e431d84ea4 and fails at attempt 2's tree: the cause is in the diff between them (ranked below; run-scoped, one environment)"
+   },
+   "session_wall_s": 3.2
+  },
+  {
+   "id": "L4_flip_flop",
+   "looping": true,
+   "attempts": [
+    {
+     "n": 0,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "unknown",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_discount_applies_above_threshold"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.759,
+     "overhead_s": 0.129,
+     "tree": "08d8045601"
+    },
+    {
+     "n": 1,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "regressed",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_discount_applies_above_threshold",
+      "AssertionError@tests/test_pricing.py::test_no_discount_below_threshold",
+      "AssertionError@tests/test_pricing.py::test_compute_total"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.69,
+     "overhead_s": 0.08,
+     "tree": "17db7e1804"
+    },
+    {
+     "n": 2,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "improved",
+     "definitive": [
+      "signature_recurred"
+     ],
+     "heuristic": [
+      "hypothesis_repeated"
+     ],
+     "suspended": [],
+     "stop": true,
+     "stop_reason": "definitive: signature_recurred",
+     "strategies": [
+      "differential",
+      "observe",
+      "minimal_repro"
+     ],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_discount_applies_above_threshold"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.742,
+     "overhead_s": 0.07,
+     "tree": "cd5c81efdd"
+    }
+   ],
+   "session": "dbg_3371abcc3e1f",
+   "strategy_run": {
+    "id": "differential",
+    "outcome_at_base": "pass",
+    "top": "orders/pricing.py:14",
+    "top_symbols": [
+     "apply_discount"
+    ],
+    "names_cause": true,
+    "conclusion": "the repro passes at the base d126aeffba37 and fails at attempt 2's tree: the cause is in the diff between them (ranked below; run-scoped, one environment)"
+   },
+   "session_wall_s": 3.1
+  },
+  {
+   "id": "L5_no_progress",
+   "looping": true,
+   "attempts": [
+    {
+     "n": 0,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "unknown",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "ValidationError@orders/service.py::validate_items",
+      "Failed@tests/test_service.py::test_empty_order_rejected"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.838,
+     "overhead_s": 0.142,
+     "tree": "e86698df3e"
+    },
+    {
+     "n": 1,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "ValidationError@orders/service.py::validate_items",
+      "Failed@tests/test_service.py::test_empty_order_rejected"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.658,
+     "overhead_s": 0.08,
+     "tree": "bb29900dc1"
+    },
+    {
+     "n": 2,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "ValidationError@orders/service.py::validate_items",
+      "Failed@tests/test_service.py::test_empty_order_rejected"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.666,
+     "overhead_s": 0.072,
+     "tree": "50544c932c"
+    },
+    {
+     "n": 3,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [
+      "no_progress"
+     ],
+     "heuristic": [
+      "hypothesis_repeated"
+     ],
+     "suspended": [],
+     "stop": true,
+     "stop_reason": "definitive: no_progress",
+     "strategies": [
+      "differential",
+      "observe",
+      "minimal_repro"
+     ],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "ValidationError@orders/service.py::validate_items",
+      "Failed@tests/test_service.py::test_empty_order_rejected"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.717,
+     "overhead_s": 0.076,
+     "tree": "c6b7873ca8"
+    }
+   ],
+   "session": "dbg_d136dfb9cb81",
+   "strategy_run": {
+    "id": "differential",
+    "outcome_at_base": "pass",
+    "top": "orders/service.py:13",
+    "top_symbols": [
+     "validate_items"
+    ],
+    "names_cause": true,
+    "conclusion": "the repro passes at the base 1baf090987d9 and fails at attempt 3's tree: the cause is in the diff between them (ranked below; run-scoped, one environment)"
+   },
+   "session_wall_s": 3.8
+  },
+  {
+   "id": "L6_file_reverted",
+   "looping": true,
+   "attempts": [
+    {
+     "n": 0,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "unknown",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_service.py::test_place_and_fetch_roundtrip"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.769,
+     "overhead_s": 0.155,
+     "tree": "81004cb5f4"
+    },
+    {
+     "n": 1,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [],
+     "heuristic": [
+      "error_moved"
+     ],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "ValueError@orders/service.py::fetch_order"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.675,
+     "overhead_s": 0.097,
+     "tree": "91d3ff9a01"
+    },
+    {
+     "n": 2,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [],
+     "heuristic": [
+      "error_moved",
+      "masking"
+     ],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_service.py::test_place_and_fetch_roundtrip"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.646,
+     "overhead_s": 0.084,
+     "tree": "633a5b9ca3"
+    },
+    {
+     "n": 3,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [
+      "tree_reverted",
+      "signature_recurred"
+     ],
+     "heuristic": [
+      "error_moved",
+      "hypothesis_repeated"
+     ],
+     "suspended": [],
+     "stop": true,
+     "stop_reason": "definitive: tree_reverted, signature_recurred",
+     "strategies": [
+      "differential",
+      "observe",
+      "minimal_repro"
+     ],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "ValueError@orders/service.py::fetch_order"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.666,
+     "overhead_s": 0.072,
+     "tree": "4d127cf405"
+    }
+   ],
+   "session": "dbg_2c22ccd4a4cc",
+   "strategy_run": {
+    "id": "differential",
+    "outcome_at_base": "pass",
+    "top": "orders/repository.py:27",
+    "top_symbols": [
+     "OrderRepository.get"
+    ],
+    "names_cause": true,
+    "conclusion": "the repro passes at the base 4455a4dc516d and fails at attempt 3's tree: the cause is in the diff between them (ranked below; run-scoped, one environment)"
+   },
+   "session_wall_s": 3.6
+  },
+  {
+   "id": "L7_java_agent_reported",
+   "looping": true,
+   "attempts": [
+    {
+     "n": 0,
+     "outcome": "fail",
+     "run_by": "agent",
+     "progress": "unknown",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "ClassCastException@src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.242,
+     "overhead_s": 0.203,
+     "tree": "ba5bf47abb"
+    },
+    {
+     "n": 1,
+     "outcome": "fail",
+     "run_by": "agent",
+     "progress": "same",
+     "definitive": [],
+     "heuristic": [
+      "error_moved"
+     ],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "NullPointerException@src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.064,
+     "overhead_s": 0.064,
+     "tree": "e9af7fe88b"
+    },
+    {
+     "n": 2,
+     "outcome": "fail",
+     "run_by": "agent",
+     "progress": "same",
+     "definitive": [
+      "signature_recurred"
+     ],
+     "heuristic": [
+      "error_moved"
+     ],
+     "suspended": [],
+     "stop": true,
+     "stop_reason": "definitive: signature_recurred",
+     "strategies": [
+      "differential"
+     ],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "ClassCastException@src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.086,
+     "overhead_s": 0.086,
+     "tree": "6e374a0c95"
+    }
+   ],
+   "session": "dbg_21fcd29ed99e",
+   "strategy_run": {
+    "id": "differential",
+    "prepared": true,
+    "names_cause": null
+   },
+   "session_wall_s": 0.9
+  },
+  {
+   "id": "L8_expectation_edited",
+   "looping": true,
+   "attempts": [
+    {
+     "n": 0,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "unknown",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_compute_total",
+      "AssertionError@tests/test_service.py::test_place_and_fetch_roundtrip"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.765,
+     "overhead_s": 0.15,
+     "tree": "8411ddb7db"
+    },
+    {
+     "n": 1,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_compute_total",
+      "AssertionError@tests/test_service.py::test_place_and_fetch_roundtrip"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.663,
+     "overhead_s": 0.085,
+     "tree": "9835c5f203"
+    },
+    {
+     "n": 2,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "improved",
+     "definitive": [
+      "test_edited"
+     ],
+     "heuristic": [],
+     "suspended": [],
+     "stop": true,
+     "stop_reason": "definitive: test_edited",
+     "strategies": [
+      "differential",
+      "observe",
+      "minimal_repro",
+      "ask_human"
+     ],
+     "flaky": false,
+     "questions": 1,
+     "signature": [
+      "AssertionError@tests/test_service.py::test_place_and_fetch_roundtrip"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.686,
+     "overhead_s": 0.092,
+     "tree": "37274c73e4"
+    }
+   ],
+   "session": "dbg_62f520efae27",
+   "strategy_run": {
+    "id": "differential",
+    "outcome_at_base": "pass",
+    "top": "orders/pricing.py:7",
+    "top_symbols": [
+     "compute_total"
+    ],
+    "names_cause": true,
+    "conclusion": "the repro passes at the base 815b90ccde55 and fails at attempt 2's tree: the cause is in the diff between them (ranked below; run-scoped, one environment)"
+   },
+   "session_wall_s": 3.0
+  },
+  {
+   "id": "C1_progressing",
+   "looping": false,
+   "attempts": [
+    {
+     "n": 0,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "unknown",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_discount_applies_above_threshold",
+      "AssertionError@tests/test_pricing.py::test_compute_total",
+      "AssertionError@tests/test_service.py::test_place_and_fetch_roundtrip",
+      "Failed@tests/test_service.py::test_empty_order_rejected"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.793,
+     "overhead_s": 0.158,
+     "tree": "66700efef8"
+    },
+    {
+     "n": 1,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "improved",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_pricing.py::test_compute_total",
+      "AssertionError@tests/test_service.py::test_place_and_fetch_roundtrip",
+      "Failed@tests/test_service.py::test_empty_order_rejected"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.669,
+     "overhead_s": 0.075,
+     "tree": "eae3292575"
+    },
+    {
+     "n": 2,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "improved",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "Failed@tests/test_service.py::test_empty_order_rejected"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.645,
+     "overhead_s": 0.083,
+     "tree": "940ba52fcb"
+    },
+    {
+     "n": 3,
+     "outcome": "pass",
+     "run_by": "verinoda",
+     "progress": "improved",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [],
+     "sig_status": "none",
+     "wall_s": 0.585,
+     "overhead_s": 0.053,
+     "tree": "3eadf8f811"
+    }
+   ],
+   "session": "dbg_06477923259f",
+   "session_wall_s": 2.9
+  },
+  {
+   "id": "C2_flaky",
+   "looping": false,
+   "attempts": [
+    {
+     "n": 0,
+     "outcome": "pass",
+     "run_by": "verinoda",
+     "progress": "unknown",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [],
+     "sig_status": "none",
+     "wall_s": 0.727,
+     "overhead_s": 0.127,
+     "tree": "519d765a93"
+    },
+    {
+     "n": 1,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "regressed",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [
+      "rerun",
+      "differential",
+      "observe",
+      "minimal_repro"
+     ],
+     "flaky": true,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_flaky.py::test_discount_is_stable"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.643,
+     "overhead_s": 0.081,
+     "tree": "519d765a93"
+    },
+    {
+     "n": 2,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [
+      "rerun",
+      "differential",
+      "observe",
+      "minimal_repro"
+     ],
+     "flaky": true,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_flaky.py::test_discount_is_stable"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.652,
+     "overhead_s": 0.074,
+     "tree": "519d765a93"
+    },
+    {
+     "n": 3,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [
+      "rerun",
+      "differential",
+      "observe",
+      "minimal_repro"
+     ],
+     "flaky": true,
+     "questions": 0,
+     "signature": [
+      "AssertionError@tests/test_flaky.py::test_discount_is_stable"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.657,
+     "overhead_s": 0.078,
+     "tree": "519d765a93"
+    }
+   ],
+   "session": "dbg_e8b2b156c7b5",
+   "rerun": {
+    "runs": 5,
+    "passed": 2,
+    "pass_rate": 0.4,
+    "conclusion": "flaky: this tree passed 3 of 9 recorded runs (2 of 5 in this series)",
+    "flaky": true
+   },
+   "session_wall_s": 6.5
+  },
+  {
+   "id": "C3_clean_fix",
+   "looping": false,
+   "attempts": [
+    {
+     "n": 0,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "unknown",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "KeyError@orders/pricing.py::compute_total",
+      "KeyError@orders/pricing.py::compute_total"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.772,
+     "overhead_s": 0.154,
+     "tree": "7ba662130a"
+    },
+    {
+     "n": 1,
+     "outcome": "pass",
+     "run_by": "verinoda",
+     "progress": "improved",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [],
+     "sig_status": "none",
+     "wall_s": 0.602,
+     "overhead_s": 0.071,
+     "tree": "3eadf8f811"
+    }
+   ],
+   "session": "dbg_b56db115676e",
+   "session_wall_s": 1.6
+  },
+  {
+   "id": "C4_probe_cleanup",
+   "looping": false,
+   "attempts": [
+    {
+     "n": 0,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "unknown",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "KeyError@orders/pricing.py::compute_total",
+      "KeyError@orders/pricing.py::compute_total"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.757,
+     "overhead_s": 0.144,
+     "tree": "7ba662130a"
+    },
+    {
+     "n": 1,
+     "outcome": "fail",
+     "run_by": "verinoda",
+     "progress": "same",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [
+      "KeyError@orders/pricing.py::compute_total",
+      "KeyError@orders/pricing.py::compute_total"
+     ],
+     "sig_status": "parsed",
+     "wall_s": 0.682,
+     "overhead_s": 0.088,
+     "tree": "fde952e220"
+    },
+    {
+     "n": 2,
+     "outcome": "pass",
+     "run_by": "verinoda",
+     "progress": "improved",
+     "definitive": [],
+     "heuristic": [],
+     "suspended": [],
+     "stop": false,
+     "stop_reason": null,
+     "strategies": [],
+     "flaky": false,
+     "questions": 0,
+     "signature": [],
+     "sig_status": "none",
+     "wall_s": 0.607,
+     "overhead_s": 0.06,
+     "tree": "3eadf8f811"
+    }
+   ],
+   "session": "dbg_905b3c706483",
+   "session_wall_s": 2.3
+  }
+ ]
+}

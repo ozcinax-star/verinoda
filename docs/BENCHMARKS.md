@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,52 @@ Sections: [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-25: debug ledger (debugloops_v1)
+
+Result files: `benchmarks/results/debugloops-2026-09-25/` (its README says how they were produced).
+Everything here is in-sample: the sessions, their gold and the loop rules have one author; the gold
+was fixed before the rules ran on any session, and three fixes followed from the first runs.
+
+**Loop detection, 12 scripted sessions** (8 looping, 4 controls, on git copies of `orders_app` and
+`glow_mod`; L7 is a Gradle session reported by the "agent" because Gradle does not run here):
+
+| run | definitive precision | loop recall (stop at or before the gold attempt) | controls stopped | top strategy correct | first strategy names the cause |
+|---|---|---|---|---|---|
+| 1, first | 10/10 | 7/8 | 0/4 | 7/8 | 6/7 |
+| 5, final | 11/11 | 8/8 | 0/4 | 8/8 | 7/8 |
+
+The misses of run 1: a JVM class-loader identity hash (`'knot' @1a2b3c4d`) in the message made a
+recurring Java failure look new (now normalised); the differential ranked the agent's own edit above
+the cause that was already there when the symptom was recorded (hunks present at attempt 0 now come
+first, matched line by line). Run 4 then showed a rerun series of five passes on a tree that had failed
+reported as "stable"; a series on a tree that disagreed no longer clears flakiness, and the pass rate
+counts every recorded run of the tree. The 7/8: L7's differential can only prepare a copy of the base
+(Gradle is not runnable here). The heuristic rules have no gold; they fired 15 times in the looping
+sessions and never on the controls.
+
+**Failure signatures**: 30 log fixtures (21 real runs of pytest, unittest, Python, Java, Rust and
+Node; 9 hand-written in the Gradle, Maven, Go and Jest formats), exact exception and `path::symbol`:
+18/30 on the first score, 30/30 after format fixes found on them. 10 held-out real logs produced
+after that: 8/10 on their first score (a `--tb=native` pytest section, a bare `Error:` in Node),
+10/10 after two fixes. No crash on any log, and a property test feeds arbitrary text.
+
+**`debug try` overhead** beyond the command's own run (`overhead.json`, 20 attempts per series):
+
+| tree | median | p90 | max | command median |
+|---|---|---|---|---|
+| orders_app (11 files) | 0.12 s | 0.15 s | 0.16 s | 0.58 s |
+| orders_app, `--trace` | 0.12 s | 0.17 s | 0.17 s | 0.59 s |
+| clone of this repository (2,331 files) | 4.5 s | 5.9 s | 7.2 s | 0.63 s |
+
+The design's bar (0.3 s on the examples) holds. On the big tree it does not: every run copies the
+whole tree (per-file open/close dominates; copying with 8 threads took the copy alone from 3.0 s to
+1.8 s, median of 6 alternating runs each). Reusing one copy per session, synced by content id, would
+remove most of it and is not built. Other agents were running on the machine; single attempts took up
+to seconds longer in other runs.
+
+Not measured: a real agent with and without the protocol; container isolation; precision of the
+heuristic rules; Gradle or Maven runs.
 
 ## Update 2026-09-25: analyze keeps what query found, grounded verdicts, Turkish, update time
 

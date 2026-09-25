@@ -1,0 +1,753 @@
+{
+ "_note": "Signature parser on 30 log fixtures (gold written from the logs before the parser was scored) and 10 held-out real logs produced after tuning. 'first' = the first score, before any fix; 'final' = the committed parser. Exact = the set of (exception, path::symbol) equals the gold.",
+ "fixtures": {
+  "first_exact": 18,
+  "n": 30,
+  "final_exact": 30,
+  "cases": [
+   {
+    "case": "py01_keyerror_long",
+    "source": "real",
+    "parser": "pytest_text",
+    "exact": true,
+    "gold": [
+     [
+      "KeyError",
+      "orders/pricing.py::compute_total"
+     ]
+    ],
+    "got": [
+     [
+      "KeyError",
+      "orders/pricing.py::compute_total"
+     ]
+    ]
+   },
+   {
+    "case": "py02_keyerror_short",
+    "source": "real",
+    "parser": "pytest_text",
+    "exact": true,
+    "gold": [
+     [
+      "KeyError",
+      "orders/pricing.py::compute_total"
+     ]
+    ],
+    "got": [
+     [
+      "KeyError",
+      "orders/pricing.py::compute_total"
+     ]
+    ]
+   },
+   {
+    "case": "py03_assert_long",
+    "source": "real",
+    "parser": "pytest_text",
+    "exact": true,
+    "gold": [
+     [
+      "AssertionError",
+      "tests/test_service.py::test_place_and_fetch_roundtrip"
+     ]
+    ],
+    "got": [
+     [
+      "AssertionError",
+      "tests/test_service.py::test_place_and_fetch_roundtrip"
+     ]
+    ]
+   },
+   {
+    "case": "py04_collect_importerror",
+    "source": "real",
+    "parser": "pytest_text",
+    "exact": true,
+    "gold": [
+     [
+      "ImportError",
+      "tests/test_pricing.py::<module>"
+     ]
+    ],
+    "got": [
+     [
+      "ImportError",
+      "tests/test_pricing.py::<module>"
+     ]
+    ]
+   },
+   {
+    "case": "py05_collect_syntaxerror",
+    "source": "real",
+    "parser": "pytest_text",
+    "exact": true,
+    "gold": [
+     [
+      "SyntaxError",
+      "orders/pricing.py::compute_total"
+     ]
+    ],
+    "got": [
+     [
+      "SyntaxError",
+      "orders/pricing.py::compute_total"
+     ]
+    ]
+   },
+   {
+    "case": "py06_setup_error",
+    "source": "real",
+    "parser": "pytest_text",
+    "exact": true,
+    "gold": [
+     [
+      "OperationalError",
+      "tests/test_repo.py::repo"
+     ]
+    ],
+    "got": [
+     [
+      "OperationalError",
+      "tests/test_repo.py::repo"
+     ]
+    ]
+   },
+   {
+    "case": "py07_tb_line",
+    "source": "real",
+    "parser": "pytest_text",
+    "exact": true,
+    "gold": [
+     [
+      "KeyError",
+      "orders/pricing.py::compute_total"
+     ]
+    ],
+    "got": [
+     [
+      "KeyError",
+      "orders/pricing.py::compute_total"
+     ]
+    ]
+   },
+   {
+    "case": "py08_class_param",
+    "source": "real",
+    "parser": "pytest_text",
+    "exact": true,
+    "gold": [
+     [
+      "ProgrammingError",
+      "orders/repository.py::OrderRepository.save"
+     ]
+    ],
+    "got": [
+     [
+      "ProgrammingError",
+      "orders/repository.py::OrderRepository.save"
+     ]
+    ]
+   },
+   {
+    "case": "py09_unittest_fail",
+    "source": "real",
+    "parser": "python_traceback",
+    "exact": true,
+    "gold": [
+     [
+      "AssertionError",
+      "tests/ut_pricing.py::DiscountTest.test_threshold_is_inclusive"
+     ]
+    ],
+    "got": [
+     [
+      "AssertionError",
+      "tests/ut_pricing.py::DiscountTest.test_threshold_is_inclusive"
+     ]
+    ]
+   },
+   {
+    "case": "py10_unittest_error",
+    "source": "real",
+    "parser": "python_traceback",
+    "exact": true,
+    "gold": [
+     [
+      "AttributeError",
+      "orders/service.py::validate_items"
+     ]
+    ],
+    "got": [
+     [
+      "AttributeError",
+      "orders/service.py::validate_items"
+     ]
+    ]
+   },
+   {
+    "case": "py11_script_chained",
+    "source": "real",
+    "parser": "python_traceback",
+    "exact": true,
+    "gold": [
+     [
+      "RuntimeError",
+      "scripts/report.py::threshold"
+     ]
+    ],
+    "got": [
+     [
+      "RuntimeError",
+      "scripts/report.py::threshold"
+     ]
+    ]
+   },
+   {
+    "case": "gradle12_full_hand",
+    "source": "hand",
+    "parser": "jvm",
+    "exact": true,
+    "gold": [
+     [
+      "NullPointerException",
+      "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+     ]
+    ],
+    "got": [
+     [
+      "NullPointerException",
+      "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+     ]
+    ]
+   },
+   {
+    "case": "gradle13_short_hand",
+    "source": "hand",
+    "parser": "jvm",
+    "exact": true,
+    "gold": [
+     [
+      "AssertionFailedError",
+      "src/test/java/com/example/glowmod/WispTest.java::WispTest.glowLevelCountsTrail"
+     ]
+    ],
+    "got": [
+     [
+      "AssertionFailedError",
+      "src/test/java/com/example/glowmod/WispTest.java::WispTest.glowLevelCountsTrail"
+     ]
+    ]
+   },
+   {
+    "case": "java14_npe_real",
+    "source": "real",
+    "parser": "jvm",
+    "exact": true,
+    "gold": [
+     [
+      "NullPointerException",
+      "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+     ]
+    ],
+    "got": [
+     [
+      "NullPointerException",
+      "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+     ]
+    ]
+   },
+   {
+    "case": "maven15_surefire_hand",
+    "source": "hand",
+    "parser": "jvm",
+    "exact": true,
+    "gold": [
+     [
+      "AssertionFailedError",
+      "src/test/java/com/example/glowmod/WispTest.java::WispTest.glowLevelCountsTrail"
+     ],
+     [
+      "NullPointerException",
+      "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+     ]
+    ],
+    "got": [
+     [
+      "AssertionFailedError",
+      "src/test/java/com/example/glowmod/WispTest.java::WispTest.glowLevelCountsTrail"
+     ],
+     [
+      "NullPointerException",
+      "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+     ]
+    ]
+   },
+   {
+    "case": "java16_caused_by_real",
+    "source": "real",
+    "parser": "jvm",
+    "exact": true,
+    "gold": [
+     [
+      "NumberFormatException",
+      "src/main/java/com/example/glowmod/ritual/Ritual.java::Ritual.steps"
+     ]
+    ],
+    "got": [
+     [
+      "NumberFormatException",
+      "src/main/java/com/example/glowmod/ritual/Ritual.java::Ritual.steps"
+     ]
+    ]
+   },
+   {
+    "case": "java17_lambda_real",
+    "source": "real",
+    "parser": "jvm",
+    "exact": true,
+    "gold": [
+     [
+      "ArithmeticException",
+      "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.glowLevel"
+     ]
+    ],
+    "got": [
+     [
+      "ArithmeticException",
+      "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.glowLevel"
+     ]
+    ]
+   },
+   {
+    "case": "gradle18_multi_hand",
+    "source": "hand",
+    "parser": "jvm",
+    "exact": true,
+    "gold": [
+     [
+      "AssertionFailedError",
+      "src/test/java/com/example/glowmod/WispTest.java::WispTest.glowLevelCountsTrail"
+     ],
+     [
+      "NullPointerException",
+      "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+     ]
+    ],
+    "got": [
+     [
+      "AssertionFailedError",
+      "src/test/java/com/example/glowmod/WispTest.java::WispTest.glowLevelCountsTrail"
+     ],
+     [
+      "NullPointerException",
+      "src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.tick"
+     ]
+    ]
+   },
+   {
+    "case": "go18_errorf_hand",
+    "source": "hand",
+    "parser": "go",
+    "exact": true,
+    "gold": [
+     [
+      "go.TestFailure",
+      "pricing_test.go::TestTotal"
+     ]
+    ],
+    "got": [
+     [
+      "go.TestFailure",
+      "pricing_test.go::TestTotal"
+     ]
+    ]
+   },
+   {
+    "case": "go19_index_panic_hand",
+    "source": "hand",
+    "parser": "go",
+    "exact": true,
+    "gold": [
+     [
+      "runtime.Error",
+      "pricing.go::Last"
+     ]
+    ],
+    "got": [
+     [
+      "runtime.Error",
+      "pricing.go::Last"
+     ]
+    ]
+   },
+   {
+    "case": "go20_subtest_hand",
+    "source": "hand",
+    "parser": "go",
+    "exact": true,
+    "gold": [
+     [
+      "go.TestFailure",
+      "pricing_test.go::TestDiscount"
+     ]
+    ],
+    "got": [
+     [
+      "go.TestFailure",
+      "pricing_test.go::TestDiscount"
+     ]
+    ]
+   },
+   {
+    "case": "go21_nil_map_hand",
+    "source": "hand",
+    "parser": "go",
+    "exact": true,
+    "gold": [
+     [
+      "panic",
+      "pricing.go::Save"
+     ]
+    ],
+    "got": [
+     [
+      "panic",
+      "pricing.go::Save"
+     ]
+    ]
+   },
+   {
+    "case": "rust22_assert_eq_real",
+    "source": "real",
+    "parser": "rust",
+    "exact": true,
+    "gold": [
+     [
+      "panic",
+      "src/lib.rs::tests.total_counts_quantities"
+     ]
+    ],
+    "got": [
+     [
+      "panic",
+      "src/lib.rs::tests.total_counts_quantities"
+     ]
+    ]
+   },
+   {
+    "case": "rust23_unwrap_none_real",
+    "source": "real",
+    "parser": "rust",
+    "exact": true,
+    "gold": [
+     [
+      "panic",
+      "src/lib.rs::impl Cart.first_price"
+     ]
+    ],
+    "got": [
+     [
+      "panic",
+      "src/lib.rs::impl Cart.first_price"
+     ]
+    ]
+   },
+   {
+    "case": "rust24_panic_backtrace_real",
+    "source": "real",
+    "parser": "rust",
+    "exact": true,
+    "gold": [
+     [
+      "panic",
+      "src/lib.rs::checked_qty"
+     ]
+    ],
+    "got": [
+     [
+      "panic",
+      "src/lib.rs::checked_qty"
+     ]
+    ]
+   },
+   {
+    "case": "node26_uncaught_typeerror_real",
+    "source": "real",
+    "parser": "node",
+    "exact": true,
+    "gold": [
+     [
+      "TypeError",
+      "src/cart.js::lineTotal"
+     ]
+    ],
+    "got": [
+     [
+      "TypeError",
+      "src/cart.js::lineTotal"
+     ]
+    ]
+   },
+   {
+    "case": "node27_test_spec_real",
+    "source": "real",
+    "parser": "node",
+    "exact": true,
+    "gold": [
+     [
+      "AssertionError",
+      "test/cart.test.js::<module>"
+     ]
+    ],
+    "got": [
+     [
+      "AssertionError",
+      "test/cart.test.js::<module>"
+     ]
+    ]
+   },
+   {
+    "case": "node28_test_tap_real",
+    "source": "real",
+    "parser": "node",
+    "exact": true,
+    "gold": [
+     [
+      "AssertionError",
+      "test/cart.test.js::<module>"
+     ]
+    ],
+    "got": [
+     [
+      "AssertionError",
+      "test/cart.test.js::<module>"
+     ]
+    ]
+   },
+   {
+    "case": "node29_jest_hand",
+    "source": "hand",
+    "parser": "node",
+    "exact": true,
+    "gold": [
+     [
+      "expect",
+      "test/cart.jest.test.js::<module>"
+     ]
+    ],
+    "got": [
+     [
+      "expect",
+      "test/cart.jest.test.js::<module>"
+     ]
+    ]
+   },
+   {
+    "case": "node30_esm_rangeerror_real",
+    "source": "real",
+    "parser": "node",
+    "exact": true,
+    "gold": [
+     [
+      "RangeError",
+      "esm/load.mjs::parseConfig"
+     ]
+    ],
+    "got": [
+     [
+      "RangeError",
+      "esm/load.mjs::parseConfig"
+     ]
+    ]
+   }
+  ]
+ },
+ "heldout": {
+  "first_exact": 8,
+  "n": 10,
+  "final_exact": 10,
+  "cases": [
+   {
+    "case": "h01_pytest_native",
+    "source": "real",
+    "parser": "pytest_text",
+    "exact": true,
+    "gold": [
+     [
+      "AttributeError",
+      "orders/audit.py::audit"
+     ]
+    ],
+    "got": [
+     [
+      "AttributeError",
+      "orders/audit.py::audit"
+     ]
+    ]
+   },
+   {
+    "case": "h02_pytest_custom_exc",
+    "source": "real",
+    "parser": "pytest_text",
+    "exact": true,
+    "gold": [
+     [
+      "LimitExceeded",
+      "orders/limits.py::Limits.check"
+     ]
+    ],
+    "got": [
+     [
+      "LimitExceeded",
+      "orders/limits.py::Limits.check"
+     ]
+    ]
+   },
+   {
+    "case": "h03_unittest_setup",
+    "source": "real",
+    "parser": "python_traceback",
+    "exact": true,
+    "gold": [
+     [
+      "OperationalError",
+      "tests/ut_repo.py::RepoTest.setUp"
+     ]
+    ],
+    "got": [
+     [
+      "OperationalError",
+      "tests/ut_repo.py::RepoTest.setUp"
+     ]
+    ]
+   },
+   {
+    "case": "h04_script_nested",
+    "source": "real",
+    "parser": "python_traceback",
+    "exact": true,
+    "gold": [
+     [
+      "ValueError",
+      "scripts/batch.py::run.parse"
+     ]
+    ],
+    "got": [
+     [
+      "ValueError",
+      "scripts/batch.py::run.parse"
+     ]
+    ]
+   },
+   {
+    "case": "h05_java_unbox",
+    "source": "real",
+    "parser": "jvm",
+    "exact": true,
+    "gold": [
+     [
+      "NullPointerException",
+      "src/main/java/com/example/shop/Basket.java::Basket.count"
+     ]
+    ],
+    "got": [
+     [
+      "NullPointerException",
+      "src/main/java/com/example/shop/Basket.java::Basket.count"
+     ]
+    ]
+   },
+   {
+    "case": "h06_java_cast_nested",
+    "source": "real",
+    "parser": "jvm",
+    "exact": true,
+    "gold": [
+     [
+      "ClassCastException",
+      "src/main/java/com/example/shop/Basket.java::Basket.Printer.render"
+     ]
+    ],
+    "got": [
+     [
+      "ClassCastException",
+      "src/main/java/com/example/shop/Basket.java::Basket.Printer.render"
+     ]
+    ]
+   },
+   {
+    "case": "h07_rust_index_oob",
+    "source": "real",
+    "parser": "rust",
+    "exact": true,
+    "gold": [
+     [
+      "panic",
+      "src/lib.rs::nth_price"
+     ]
+    ],
+    "got": [
+     [
+      "panic",
+      "src/lib.rs::nth_price"
+     ]
+    ]
+   },
+   {
+    "case": "h08_rust_div_zero",
+    "source": "real",
+    "parser": "rust",
+    "exact": true,
+    "gold": [
+     [
+      "panic",
+      "src/lib.rs::ratio"
+     ]
+    ],
+    "got": [
+     [
+      "panic",
+      "src/lib.rs::ratio"
+     ]
+    ]
+   },
+   {
+    "case": "h09_node_unhandled_rejection",
+    "source": "real",
+    "parser": "node",
+    "exact": true,
+    "gold": [
+     [
+      "TypeError",
+      "lib/stock.js::load"
+     ]
+    ],
+    "got": [
+     [
+      "TypeError",
+      "lib/stock.js::load"
+     ]
+    ]
+   },
+   {
+    "case": "h10_node_test_helper_throw",
+    "source": "real",
+    "parser": "node",
+    "exact": true,
+    "gold": [
+     [
+      "Error",
+      "lib/stock.js::reserve"
+     ]
+    ],
+    "got": [
+     [
+      "Error",
+      "lib/stock.js::reserve"
+     ]
+    ]
+   }
+  ]
+ }
+}
