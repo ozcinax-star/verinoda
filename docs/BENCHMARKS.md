@@ -120,6 +120,20 @@ the new code and kept trees, and with the new code and none. The kept file is 1.
 1.7 MB for the standard library. Answers were not re-benchmarked: nothing downstream of graph.json
 changes.
 
+Then the loop in that pass that repoints type references: once per importing file it scanned every
+edge (52k on Verinoda), though only an edge whose relation is a type
+reference (references, inherits, implements, extends) can change. It is now given just those; the
+one step after it that reads every edge, dropping the stubs it repointed edges away from unless some
+edge still names them, runs on a scratch copy of the nodes and is redone over every edge. The pass
+alone, later builds, alternating in one process: Verinoda 0.82-0.95 s → 0.44-0.50 s, the standard
+library 9.2-9.7 s → 2.7-2.8 s (first build there 12.1-13.5 s against upstream 16.9-22.1 s). Output
+identical as above (first build, later builds, after 8 edited files and a new module on Verinoda,
+20 and a new module on the standard library), and the tests cover edges upstream fails on.
+`verinoda update`, 6 more rounds against the code before both changes: 35.4-37.4 s (median 36.3)
+→ 31.1-37.8 s (median 31.2), faster in 5 of 6 (the first run after the code changed was 1.7 s
+slower); graph.json the same in every round, and byte for byte on one copy updated from the same
+saved state with the old code, with kept trees and without.
+
 **A set of Turkish user questions about Verinoda (`verinoda_user_tr`, in-sample).** 12 questions (one
 a user's own words, the rest written in that style), 30 gold facts at commit 3bd1b94: query text
 11/30, analyze 8 → 11 with this round; of 5 questions judged met, 3 have none of their gold facts

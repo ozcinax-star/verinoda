@@ -7,6 +7,8 @@ import shutil
 import sys
 from pathlib import Path
 
+import pytest
+
 import verinoda.python_cross as pc
 from verinoda import index
 from verinoda.paths import graph_path
@@ -87,7 +89,7 @@ def _run(fn, blob: bytes) -> str:
     res._parse_python_tree_cached.cache_clear()  # the upstream parse memo, as a new process would start
     try:
         out = fn(per_file, paths, all_nodes, all_edges)
-    except (RecursionError, TypeError) as exc:  # what a pass that fails part-way leaves behind counts too
+    except (AttributeError, RecursionError, TypeError) as exc:  # what a pass that fails part-way leaves counts too
         out = type(exc).__name__
     # element order and dict key order both count
     return json.dumps([out, all_nodes, all_edges], default=str)
@@ -265,6 +267,67 @@ def test_a_pass_that_fails_part_way_leaves_what_upstream_leaves(tmp_path):
     assert got == want and c.hits > 0
     after = set(json.loads((tmp_path / "index" / FILE).read_text(encoding="utf-8"))["files"])
     assert after == before  # the files the failed pass did not reach are still kept
+
+
+def test_the_repoint_loop_is_given_only_the_edges_it_can_change(tmp_path, monkeypatch):
+    _, blob, want = _project(tmp_path)
+    _, _, all_nodes, all_edges = pickle.loads(blob)
+    assert len(json.loads(want)[1]) < len(all_nodes)  # the pass repoints edges and drops stubs here
+    given = []
+    real = pc._typed_edges
+
+    def typed_edges(edges):
+        given.append(real(edges))
+        return given[-1]
+
+    monkeypatch.setattr(pc, "_typed_edges", typed_edges)
+    assert _cached(tmp_path / "index", blob)[0] == want
+    assert given[0] is not None and 0 < len(given[0]) < len(all_edges)
+    assert all(e["relation"] in pc._TYPE_REPOINT_RELATIONS for e in given[0])
+
+
+def test_a_repointed_stub_another_edge_still_names_is_kept(tmp_path):
+    _, blob, first = _project(tmp_path)
+    per_file, paths, all_nodes, all_edges = pickle.loads(blob)
+    kept_ids = {n["id"] for n in json.loads(first)[1]}
+    dropped = [n["id"] for n in all_nodes if n["id"] not in kept_ids]
+    assert dropped  # stubs the pass repointed edges away from and removed
+    # an edge the repoint loop never changes (not a type reference) still names one: upstream keeps it
+    all_edges.append({"source": all_nodes[0]["id"], "target": dropped[0], "relation": "calls",
+                      "confidence": "EXTRACTED", "source_file": "elsewhere.py"})
+    blob = pickle.dumps((per_file, paths, all_nodes, all_edges))
+    want = _run(res._resolve_cross_file_imports, blob)
+    assert dropped[0] in {n["id"] for n in json.loads(want)[1]}
+    assert _cached(tmp_path / "index", blob)[0] == want  # cold
+    assert _cached(tmp_path / "index", blob)[0] == want  # warm
+
+
+@pytest.mark.parametrize("stubs_named", [False, True], ids=["stubs-dropped", "stubs-kept"])
+@pytest.mark.parametrize("odd", [
+    {"relation": "calls", "source_file": ["unhashable"]},  # the repoint loop fails on it
+    {"relation": "calls", "target": ["unhashable"]},  # the prune after the loop fails on it
+    {"relation": "calls", "source": {"un": "hashable"}},
+    ("not", "a", "dict"),
+], ids=["source_file", "target", "source", "not-a-dict"])
+def test_an_edge_upstream_fails_on_fails_the_same_way(tmp_path, odd, stubs_named):
+    _, blob, first = _project(tmp_path)
+    per_file, paths, all_nodes, all_edges = pickle.loads(blob)
+    if stubs_named:
+        # type references no file's imports resolve name every stub the pass repoints edges away from,
+        # so none is dropped (the prune still reads every edge)
+        kept_ids = {n["id"] for n in json.loads(first)[1]}
+        for stub in [n["id"] for n in all_nodes if n["id"] not in kept_ids]:
+            all_edges.append({"source": all_nodes[0]["id"], "target": stub, "relation": "references",
+                              "source_file": "elsewhere.py"})
+    if isinstance(odd, dict):
+        late = next(str(p) for p in paths if p.name == "types_user.py")
+        odd = {"source": "a", "target": "b", "source_file": late, **odd}
+    all_edges.insert(len(all_edges) // 2, odd)
+    blob = pickle.dumps((per_file, paths, all_nodes, all_edges))
+    want = _run(res._resolve_cross_file_imports, blob)
+    assert json.loads(want)[0] in ("TypeError", "AttributeError")
+    assert _cached(tmp_path / "index", blob)[0] == want  # cold
+    assert _cached(tmp_path / "index", blob)[0] == want  # warm
 
 
 def test_a_build_gives_the_same_graph_with_and_without_the_kept_trees(tmp_path, monkeypatch):

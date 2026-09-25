@@ -20,6 +20,12 @@ the same enclosing symbol, so a later identifier with the same name as an earlie
 (``setdefault``). A definition with none of these below it has no effect and is dropped. This
 relies on what the upstream walk reads, so the pruned trees are used only while the upstream
 function is the one they were checked against (``PINNED``); otherwise the pass runs as upstream.
+
+The pass then repoints type references: for each importing file it scans every edge, but it can
+only change an edge whose relation is a type reference (``_TYPE_REPOINT_RELATIONS``, about 8% of the
+edges here). It is given just those edges; the only step that needs every edge, dropping the stubs
+it repointed edges away from unless some edge still names them, runs on a scratch copy of the nodes
+and is redone over every edge (see ``cross``).
 """
 
 from __future__ import annotations
@@ -39,6 +45,8 @@ FILE = "python_cross.json"
 # until the node types and fields its walk reads are checked again and this is updated.
 PINNED = "d4c06d192b42dc4d"
 DEEP = 400  # a file whose tree is this deep gets its full tree (the upstream walk is recursive)
+# the relations of the edges the upstream repoint loop can change (a copy of its local constant)
+_TYPE_REPOINT_RELATIONS = frozenset({"references", "inherits", "implements", "extends"})
 _KEPT_TYPES = ("identifier", "import_from_statement", "class_definition", "function_definition")
 
 
@@ -228,6 +236,24 @@ def _build(kept: list) -> tuple[bytes, _Node]:
     return bytes(buf), root
 
 
+def _typed_edges(all_edges: list) -> list | None:
+    """The edges the upstream repoint loop can change, in their order; None if it must see them all.
+
+    The loop reads every edge's source file and relation, and the prune after it every edge's
+    source and target. When one of those is not a hashable value upstream may fail on that edge, so
+    it is then given every edge and fails where it fails.
+    """
+    typed = []
+    try:
+        for e in all_edges:
+            hash(e.get("source_file")), hash(e.get("source")), hash(e.get("target"))
+            if e.get("relation") in _TYPE_REPOINT_RELATIONS:
+                typed.append(e)
+    except Exception:
+        return None
+    return typed
+
+
 def _frames() -> int:
     f, n = sys._getframe(), 0
     while f is not None:
@@ -324,12 +350,28 @@ class python_cross_cache:
                     return parsed
                 return _build(kept)
 
+            # The repoint loop scans every edge once per importing file but can only change the typed
+            # ones, so it is given those; the prune of stubs it repointed away from then runs on a
+            # scratch copy of the nodes and is redone below over every edge.
+            nodes_arg, edges_arg = all_nodes, all_edges
+            typed = _typed_edges(all_edges) if all_nodes is not None and all_edges else None
+            if typed is not None:
+                nodes_arg, edges_arg = list(all_nodes), typed
             res._parse_python_tree = parse
             # the upstream walk is recursive, and this wrapper adds one frame below it
             limit = sys.getrecursionlimit()
             sys.setrecursionlimit(limit + 1)
             try:
-                out = real(per_file, paths, all_nodes, all_edges)
+                out = real(per_file, paths, nodes_arg, edges_arg)
+                if nodes_arg is not all_nodes and len(nodes_arg) != len(all_nodes):
+                    # upstream dropped stubs it repointed edges away from that no typed edge names; its
+                    # rule keeps one that any edge names (the typed edges are some of all the edges)
+                    still_referenced = {e.get("source") for e in all_edges} | {e.get("target") for e in all_edges}
+                    dropped = {n.get("id") for n in all_nodes} - {n.get("id") for n in nodes_arg}
+                    all_nodes[:] = [
+                        node for node in all_nodes
+                        if node.get("id") not in dropped or node.get("id") in still_referenced
+                    ]
                 done = True
                 return out
             finally:
