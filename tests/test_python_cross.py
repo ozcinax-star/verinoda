@@ -200,6 +200,64 @@ def test_a_damaged_entry_is_parsed_again(tmp_path):
     assert got == want and c.misses == 4
 
 
+@pytest.mark.parametrize("text", [
+    lambda stamp: json.dumps({"stamp": stamp, "files": None}),
+    lambda stamp: json.dumps({"stamp": stamp, "files": []}),
+    lambda stamp: json.dumps({"stamp": stamp, "files": "x"}),
+    lambda stamp: json.dumps([stamp]),
+    lambda stamp: "[" * 100_000 + "]" * 100_000,  # json.loads raises RecursionError
+], ids=["files-null", "files-list", "files-string", "not-an-object", "too-deep"])
+def test_a_kept_file_of_another_shape_counts_as_empty(tmp_path, text):
+    _, blob, want = _project(tmp_path)
+    cold = _cached(tmp_path / "index", blob)[1]
+    kept = tmp_path / "index" / FILE
+    kept.write_text(text(json.loads(kept.read_text(encoding="utf-8"))["stamp"]), encoding="utf-8")
+    got, c = _cached(tmp_path / "index", blob)
+    assert got == want and c.misses == cold.misses and c.hits == 0  # every file parsed again
+    assert isinstance(json.loads(kept.read_text(encoding="utf-8"))["files"], dict)  # and the file rewritten
+    assert _cached(tmp_path / "index", blob)[1].hits == cold.misses
+
+
+class _FullDisk:
+    def __init__(self, f):
+        self.f = f
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        self.f.close()
+
+    def write(self, text):
+        raise OSError(28, "No space left on device")
+
+
+def _refused(src, dst):  # os.replace on Windows while another process has the file open
+    raise PermissionError(13, "The process cannot access the file", str(dst))
+
+
+@pytest.mark.parametrize("failing", ["write", "replace"])
+def test_a_save_that_fails_leaves_the_old_file_and_no_temp_file(tmp_path, monkeypatch, failing):
+    root, blob, _ = _project(tmp_path)
+    _cached(tmp_path / "index", blob)
+    before = (tmp_path / "index" / FILE).read_bytes()
+    _write(root, {"pkg/extra.py": "class Extra:\n    pass\n"})
+    blob2 = _capture(root, tmp_path / "xcache")
+    want2 = _run(res._resolve_cross_file_imports, blob2)
+    with monkeypatch.context() as m:
+        if failing == "write":
+            real_fdopen = pc.os.fdopen
+            m.setattr(pc.os, "fdopen", lambda fd, *a, **kw: _FullDisk(real_fdopen(fd, *a, **kw)))
+        else:
+            m.setattr(pc.os, "replace", _refused)
+        got, c = _cached(tmp_path / "index", blob2)
+    assert got == want2 and c.misses == 1
+    assert [p.name for p in (tmp_path / "index").iterdir()] == [FILE]
+    assert (tmp_path / "index" / FILE).read_bytes() == before
+    assert _cached(tmp_path / "index", blob2)[1].misses == 1  # the next build saves it
+    assert _cached(tmp_path / "index", blob2)[1].misses == 0
+
+
 def test_deep_files_get_their_full_tree_and_the_same_outcome(tmp_path):
     for depth in (pc.DEEP + 50, 1100, 3000):
         sub = tmp_path / str(depth)
@@ -362,6 +420,9 @@ def test_a_build_gives_the_same_graph_with_and_without_the_kept_trees(tmp_path, 
     trees = kept.read_bytes()
     assert b'"t":["R"' in trees
     assert builds(keep=trees) == without  # warm from the first build on
+    # a kept file of another shape with the right stamp: parsed again, not a pass that fails
+    odd = json.dumps({"stamp": json.loads(trees)["stamp"], "files": None}).encode()
+    assert builds(keep=odd) == without
 
 
 def test_a_kept_file_whose_files_are_not_an_object_is_ignored(tmp_path):

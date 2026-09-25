@@ -110,21 +110,25 @@ class python_facts_cache:
     def _load(self) -> dict:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
             return {}
         files = data.get("files") if isinstance(data, dict) and data.get("stamp") == self.stamp else None
-        return files if isinstance(files, dict) else {}
+        return files if isinstance(files, dict) else {}  # a file of another shape counts as empty
 
     def _save(self, files: dict) -> None:
+        text = json.dumps({"stamp": self.stamp, "files": files}, separators=(",", ":"))
         tmp = None
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp = tempfile.mkstemp(prefix="python_facts.", suffix=".tmp", dir=str(self.path.parent))
             with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(json.dumps({"stamp": self.stamp, "files": files}, separators=(",", ":")))
-            os.replace(tmp, self.path)
-        except OSError:  # a cache: the next build walks the files again
-            if tmp is not None:
+                f.write(text)
+            os.replace(tmp, self.path)  # refused on Windows while another process has the file open
+            tmp = None
+        except OSError:
+            pass  # a cache: the next build walks the files again
+        finally:
+            if tmp is not None:  # not moved into place: no temp file is left behind
                 try:
                     os.unlink(tmp)
                 except OSError:

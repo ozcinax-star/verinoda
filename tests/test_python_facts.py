@@ -4,6 +4,9 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
+import verinoda.python_facts as pf
 from verinoda.project_index.extractors import resolution as res
 from verinoda.project_index.extractors.models import _SymbolResolutionFacts
 from verinoda.python_facts import FILE, python_facts_cache
@@ -87,6 +90,47 @@ def test_a_cache_from_other_code_is_not_used(tmp_path):
     with python_facts_cache(tmp_path / "index") as again:
         _facts(res._collect_python_symbol_resolution_facts, paths, root)
     assert again.hits == 0
+
+
+@pytest.mark.parametrize("text", [
+    lambda stamp: json.dumps({"stamp": stamp, "files": None}),
+    lambda stamp: json.dumps({"stamp": stamp, "files": []}),
+    lambda stamp: json.dumps({"stamp": stamp, "files": "x"}),
+    lambda stamp: json.dumps([stamp]),
+    lambda stamp: "[" * 100_000 + "]" * 100_000,  # json.loads raises RecursionError
+], ids=["files-null", "files-list", "files-string", "not-an-object", "too-deep"])
+def test_a_kept_file_of_another_shape_counts_as_empty(tmp_path, text):
+    root, paths = _project(tmp_path)
+    want = _facts(res._collect_python_symbol_resolution_facts, paths, root)
+    with python_facts_cache(tmp_path / "index"):
+        _facts(res._collect_python_symbol_resolution_facts, paths, root)
+    kept = tmp_path / "index" / FILE
+    kept.write_text(text(json.loads(kept.read_text(encoding="utf-8"))["stamp"]), encoding="utf-8")
+    with python_facts_cache(tmp_path / "index") as again:
+        assert _facts(res._collect_python_symbol_resolution_facts, paths, root) == want
+    assert again.misses == 8 and again.hits == 0  # every file walked again
+    assert isinstance(json.loads(kept.read_text(encoding="utf-8"))["files"], dict)  # and the file rewritten
+
+
+def _refused(src, dst):  # os.replace on Windows while another process has the file open
+    raise PermissionError(13, "The process cannot access the file", str(dst))
+
+
+def test_a_save_that_fails_leaves_the_old_file_and_no_temp_file(tmp_path, monkeypatch):
+    root, paths = _project(tmp_path)
+    with python_facts_cache(tmp_path / "index"):
+        _facts(res._collect_python_symbol_resolution_facts, paths, root)
+    before = (tmp_path / "index" / FILE).read_bytes()
+    (root / "late.py").write_text("def later():\n    pass\n", encoding="utf-8")
+    paths = sorted(p for p in root.rglob("*") if p.is_file())
+    want = _facts(res._collect_python_symbol_resolution_facts, paths, root)
+    with monkeypatch.context() as m:
+        m.setattr(pf.os, "replace", _refused)
+        with python_facts_cache(tmp_path / "index") as c:
+            assert _facts(res._collect_python_symbol_resolution_facts, paths, root) == want
+    assert c.misses == 1
+    assert [p.name for p in (tmp_path / "index").iterdir()] == [FILE]
+    assert (tmp_path / "index" / FILE).read_bytes() == before
 
 
 def test_damaged_kept_entries_are_walked_again(tmp_path):
