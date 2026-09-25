@@ -67,6 +67,8 @@ from pathlib import Path, PurePosixPath
 
 FORMAT_VERSION = 1
 DEFAULT_DIR = ".verinoda/decisions"
+# where the folder comes from when nothing names it (decisions_dir_source): a missing folder is no error then
+DEFAULT_SOURCE = "the default (nothing configured)"
 STATUSES = ("proposed", "accepted", "superseded", "rejected", "deprecated")
 GUARD_KINDS = ("only_in", "no_edge", "dependency")
 REVISIT_KINDS = ("dependency_added", "file_appears")
@@ -176,7 +178,7 @@ def decisions_dir_source(repo: Path, override: str | None = None) -> tuple[Path,
             configured = ""
         where = "decisions.dir in .verinoda/config.json"
     if not configured:
-        configured, where = _committed_dir(repo) or ("", "the default (nothing configured)")
+        configured, where = _committed_dir(repo) or ("", DEFAULT_SOURCE)
     if configured.startswith("-"):
         raise DecisionError(f"decisions folder {configured!r} looks like an option")
     p = Path(configured or DEFAULT_DIR)
@@ -194,12 +196,15 @@ def decisions_dir(repo: Path, override: str | None = None) -> Path:
 _NOT_RECORD_DIRS = {"examples", "example", "samples", "sample", "demo", "demos", "fixtures", "fixture",
                     "__fixtures__", "testdata", "test-data", "vendor", "third_party", "third-party", "node_modules"}
 _RECORD_HEAD = re.compile(r"---[ \t]*\r?\n(?:.*\n)*?verinoda-decision[ \t]*:")
+# a decisions folder's own pages: its README or index, a table of contents, the template new records start from
+# (adr-tools' template.md, MADR's adr-template.md) - no decision of the project
+_NOT_RECORD_NAME = re.compile(r"(?i)(?:readme|index|toc|contents|_sidebar|summary)|.*template.*")
 
 
 def adr_like_files(repo: Path, files: list[str], skip: Path | None = None) -> list[str]:
-    """Markdown files that look like decision records: under an ``adr`` / ``adrs`` / ``decisions`` folder, or
-    with a ``verinoda-decision`` front matter. Sample, fixture, vendored and test folders and ``skip`` (the
-    decisions folder in use) are left out."""
+    """Markdown files that look like decision records: under an ``adr`` / ``adrs`` / ``decisions`` folder (not
+    the folder's README, index or template), or with a ``verinoda-decision`` front matter. Sample, fixture,
+    vendored and test folders and ``skip`` (the decisions folder in use) are left out."""
     from verinoda.architecture_map import is_test_file
 
     repo = Path(repo).resolve()
@@ -212,7 +217,8 @@ def adr_like_files(repo: Path, files: list[str], skip: Path | None = None) -> li
             continue
         if skip is not None and skip in (repo / rel).resolve().parents:
             continue
-        if any(p.lower() in ("adr", "adrs", "decisions", "decision-records") for p in parts):
+        if any(p.lower() in ("adr", "adrs", "decisions", "decision-records") for p in parts) and \
+                not _NOT_RECORD_NAME.fullmatch(PurePosixPath(rel).stem):
             out.append(rel)
             continue
         try:

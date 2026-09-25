@@ -126,7 +126,7 @@ def main() -> None:
         cases["dependency_workspace_package"] = {**r, "silent": not r["violations"]}
         # 5-6 (lead): a fresh CI clone, the records committed under docs/decisions
         o = copy(ORDERS, tmp / "orders")
-        adr = (HERE / "adr-0002.md").read_text(encoding="utf-8")
+        adr = (HERE / "adr-0002.md.txt").read_text(encoding="utf-8")
         write(o, "docs/decisions/ADR-0002-db-access-only-in-repository.md", adr)
         svc = o / "orders/service.py"
         svc.write_bytes(svc.read_bytes() + b"\n\nimport sqlite3 as _db\n\n\ndef audit(path):\n"

@@ -458,3 +458,133 @@ def test_non_python_config_and_relation_claims_are_strong_inference_at_most(tmp_
         assert c["status"] == "strong_inference" and c["confidence"] <= 0.7
     finally:
         st.close()
+
+
+# -- review of the branch (reviewer-a, 2026-09-26) ------------------------------------------------------------
+
+def _pkg(name: str, **deps: str) -> str:
+    """A package.json whose dependencies sit one per line (line 4 holds the first one)."""
+    body = ",\n".join(f'    "{k}": "{v}"' for k, v in deps.items())
+    return f'{{\n  "name": "{name}",\n  "dependencies": {{\n{body}\n  }}\n}}\n'
+
+
+def test_workspace_globs_match_one_path_segment_at_a_time():
+    cases = [("packages/a", "packages/*", True), ("packages/a/template-react", "packages/*", False),
+             ("packages/a/b", "packages/**", True), ("packages", "packages/**", True),
+             ("packages/a", "./packages/*", True), ("packages/a", ".//packages//*/", True),
+             ("apps/web", "{apps,libs}/*", True), ("libs/x", "{apps,libs}/*", True),
+             ("packages/a", "packages/a", True), ("packages/a/b", "packages/a", False),
+             ("packages/a/test/x", "**/test/**", True), ("other/a", "packages/*", False)]
+    for path, glob, want in cases:
+        assert guards.ws_match(path, glob) is want, (path, glob)
+
+
+def test_a_template_below_a_workspace_package_is_no_workspace_package(tmp_path):
+    """reviewer-a h1: pnpm `packages/*` read packages/create-app/template-react/package.json (a scaffolder's
+    template) and gave VIOLATED, exit 1; the package managers match `*` within one path segment."""
+    repo = tmp_path / "h1"
+    _write(repo, "package.json", '{"name": "root", "private": true}\n')
+    _write(repo, "pnpm-workspace.yaml", 'packages:\n  - "packages/*"\n')
+    _write(repo, "packages/create-app/package.json", _pkg("create-app", kleur="1"))
+    _write(repo, "packages/create-app/template-react/package.json", _pkg("tpl", axios="^1"))
+    _git(repo, "init", "-q")
+    res = guards.check(repo, records=[_rec(repo, "dependency absent=axios", "dependency absent=kleur")])
+    assert _at(res["violations"]) == ["packages/create-app/package.json:4"] and res["violations"][0]["guard"] == "g2"
+    (ok,) = res["ok"]
+    assert ok["guard"] == "g1" and ok["scope"]["manifests"] == 2
+    assert any("other manifest(s) are not read" in x and "template-react/package.json" in x for x in ok["limits"])
+
+
+def test_npm_dot_slash_workspace_globs_are_read(tmp_path):
+    """reviewer-a: `"workspaces": ["./packages/*"]` (the form npm's docs use) matched nothing: ok, exit 0."""
+    repo = tmp_path / "dot"
+    _write(repo, "package.json", '{"name": "root", "private": true, "workspaces": ["./packages/*", "!./packages/b"]}\n')
+    _write(repo, "packages/a/package.json", _pkg("a", axios="^1"))
+    _write(repo, "packages/b/package.json", _pkg("b", axios="^1"))
+    _git(repo, "init", "-q")
+    res = guards.check(repo, records=[_rec(repo, "dependency absent=axios")])
+    assert res["exit"] == 1 and _at(res["violations"]) == ["packages/a/package.json:4"]
+
+
+def test_a_declared_workspace_package_is_read_whatever_its_folder_is_called(tmp_path):
+    """reviewer-a h2: packages/build/package.json (package @x/build) was skipped as a build folder, not named
+    anywhere, and the guard said ok."""
+    repo = tmp_path / "h2"
+    _write(repo, "package.json", '{"name": "root", "private": true, "workspaces": ["packages/*", "apps/*"]}\n')
+    _write(repo, "packages/build/package.json", _pkg("@x/build", axios="^1"))
+    _write(repo, "apps/demo/package.json", _pkg("@x/demo", axios="^1"))
+    _write(repo, "examples/starter/package.json", _pkg("starter", axios="^1"))  # declared by nobody
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")  # a tracked build/ folder is source (an untracked one is build output)
+    res = guards.check(repo, records=[_rec(repo, "dependency absent=axios")])
+    assert _at(res["violations"]) == ["apps/demo/package.json:4", "packages/build/package.json:4"]
+    # a manifest a folder rule leaves out is named in the limits, never dropped silently
+    assert any("manifest(s) under test, sample" in x and "examples/starter/package.json" in x
+               for x in res["violations"][0]["limits"])
+    # no git: the file list leaves build/ out, so the declared glob finds nothing - and the ok says so
+    bare = tmp_path / "bare"
+    _write(bare, "package.json", '{"name": "root", "private": true, "workspaces": ["packages/*"]}\n')
+    _write(bare, "packages/build/package.json", _pkg("@x/build", axios="^1"))
+    (ok,) = guards.check(bare, records=[_rec(bare, "dependency absent=axios")])["ok"]
+    assert any("1 declared workspace glob(s) match no package.json" in x and "packages/*" in x for x in ok["limits"])
+
+
+def test_no_edge_from_a_leaf_module_was_looked_at(tmp_path):
+    """reviewer-a h11: `no_edge from=pkg/constants.py` (a leaf: no import, no call) was unknown, exit 3, on
+    every run, although the index extracts Python imports (it has them for pkg/app.py)."""
+    from verinoda import index
+
+    repo = tmp_path / "leaf"
+    _write(repo, "pkg/__init__.py", "")
+    _write(repo, "pkg/constants.py", "LIMIT = 10\n")
+    _write(repo, "pkg/app.py", "from pkg.constants import LIMIT\n\n\ndef run():\n    return LIMIT\n")
+    _write(repo, "tools/run.sh", "echo hi\n")
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+    finally:
+        st.close()
+    g = index.load(repo)
+    res = guards.check(repo, graph=g, records=[_rec(repo, "no_edge from=pkg/constants.py to=pkg/app.py")])
+    (ok,) = res["ok"]
+    assert res["exit"] == 0 and ok["scope"]["edges_checked"] == 0 and ok["scope"]["from_files_looked_at"] == 1
+    assert any("no calls/" in x and "1 was looked at and holds none" in x for x in ok["limits"])
+    # a language the index has no such edge for anywhere: nothing shows the file was looked at
+    res = guards.check(repo, graph=g, records=[_rec(repo, "no_edge from=tools/run.sh to=pkg/app.py")])
+    assert res["exit"] == 3 and "none out of any other file of their language" in res["unknown"][0]["why"]
+
+
+def test_readmes_templates_and_this_repository_s_fixture_are_no_adr(tmp_path):
+    """reviewer-a h9: docs/decisions/README.md alone made `decide check` exit 3; so did the branch's own
+    fixture (benchmarks/results/.../adr-0002.md, a verinoda-decision front matter) on Verinoda itself."""
+    from verinoda.snapshot import list_files
+
+    repo = tmp_path / "r"
+    _write(repo, "app.py", "x = 1\n")
+    _write(repo, "docs/decisions/README.md", "# How we record decisions\n")
+    _write(repo, "docs/decisions/template.md", "# ADR-NNNN: title\n")
+    _write(repo, "docs/adr/adr-template.md", "# Title\n")
+    res = guards.check(repo)
+    assert res["status"] == "ok" and res["exit"] == 0 and not res["unknown"]
+    _write(repo, "docs/decisions/0001-use-sqlite.md", "# 1. Use SQLite\n")
+    assert dm.adr_like_files(repo, list_files(repo)) == ["docs/decisions/0001-use-sqlite.md"]
+    assert dm.adr_like_files(ROOT, list_files(ROOT)) == []
+
+
+def test_a_configured_decisions_folder_that_does_not_exist_is_unknown(tmp_path, capsys):
+    """reviewer-a h8: `--decisions-dir docs/missing` (or a typo in verinoda.toml) gave "0 decision records",
+    exit 0."""
+    from verinoda import cli
+
+    repo = tmp_path / "r"
+    _write(repo, "app.py", "x = 1\n")
+    capsys.readouterr()
+    assert cli.main(["decide", "check", "--decisions-dir", "docs/missing", "--repo", str(repo)]) == 3
+    assert "the decisions folder docs/missing (--decisions-dir) does not exist" in capsys.readouterr().out
+    _write(repo, "verinoda.toml", '[decisions]\ndir = "docs/decisons"\n')
+    res = guards.check(repo)
+    assert res["exit"] == 3 and "docs/decisons (verinoda.toml [decisions] dir) does not exist" in \
+        res["unknown"][0]["why"]
+    (repo / "docs" / "decisons").mkdir(parents=True)
+    assert guards.check(repo)["exit"] == 0  # an empty folder that exists: no record, nothing to check

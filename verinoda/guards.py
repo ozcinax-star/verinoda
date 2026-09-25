@@ -1530,9 +1530,26 @@ def check_no_edge(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
             out.append((POSSIBLE, src, line, f"{rel_name} {target} in {fv} ({conf} edge: a resolver's guess)"))
     scan.files["edges_matched"] = n
     if not scan.files["edges_checked"]:
-        scan.unknown.append(f"the index has no {'/'.join(sorted(rels)) or 'graph'} edge out of the "
-                            f"{len(from_files)} file(s) from={g['from']} matches, so no edge was checked (the index "
-                            "may not extract these relations for their language)")
+        # A from file with no such edge was looked at only when its language's extractor emits these relations:
+        # shown by such an edge out of another file of the same language (a leaf module: constants.py). A
+        # language with no such edge anywhere in the index may not be extracted at all: unknown.
+        kinds = '/'.join(sorted(rels)) or 'graph'
+        langs = {PurePosixPath(f).suffix.lower() for u, _v, _d in ctx.graph.edges(rels or None)
+                 if (f := ctx.graph.file(u))}
+        seen = sorted(f for f in from_files if PurePosixPath(f).suffix.lower() in langs)
+        if not seen:
+            scan.unknown.append(f"the index has no {kinds} edge out of the {len(from_files)} file(s) "
+                                f"from={g['from']} matches, and none out of any other file of their language, so "
+                                "no edge was checked (the index may not extract these relations for it)")
+        else:
+            scan.files["from_files_looked_at"] = len(seen)
+            scan.limit(f"no {kinds} edge leaves the {len(from_files)} from file(s): the index extracts these "
+                       f"relations for their language (it has such edges out of other files), so {len(seen)} "
+                       f"{'was' if len(seen) == 1 else 'were'} looked at and hold{'s' if len(seen) == 1 else ''} none")
+            rest = sorted(from_files - set(seen))
+            if rest:
+                scan.limit(f"{len(rest)} from file(s) are in a language with no {kinds} edge anywhere in the index, "
+                           f"so nothing was checked for them: {', '.join(rest[:5])}{' ...' if len(rest) > 5 else ''}")
     return _strongest(out), scan, what
 
 
@@ -1747,9 +1764,44 @@ def _gradle_maven(root: Path, all_files: list[str] | None = None) -> tuple[list[
     return items, skipped, read
 
 
-def _workspace_packages(root: Path, files: list[str]) -> tuple[list[dict], list[str]]:
+# folders npm, yarn and pnpm never take a workspace package from (whatever the root's globs say)
+_WS_NEVER = {"node_modules", "bower_components", ".verinoda", ".git"}
+
+
+def ws_patterns(glob: str) -> list[str]:
+    """A workspace glob as npm, yarn and pnpm read it: ``./`` and a trailing ``/`` dropped, ``//`` collapsed,
+    and ``{a,b}`` alternatives expanded (``"./packages/*"`` -> ``["packages/*"]``)."""
+    g = re.sub(r"/{2,}", "/", glob.strip().replace("\\", "/"))
+    while g.startswith("./"):
+        g = g[2:]
+    g = g.rstrip("/")
+    m = re.search(r"\{([^{}]*)\}", g)
+    if m is None:
+        return [g] if g and g != "." else []
+    return [x for alt in m.group(1).split(",") for x in ws_patterns(g[:m.start()] + alt + g[m.end():])]
+
+
+def ws_match(path: str, glob: str) -> bool:
+    """Does the directory ``path`` match the workspace glob, one path segment at a time? ``*`` stays inside a
+    segment (``packages/*`` is a direct child of packages/, never packages/a/template), ``**`` crosses any
+    number of them, and a plain path names that directory only."""
+    def seg(parts: tuple[str, ...], pats: tuple[str, ...]) -> bool:
+        if not pats:
+            return not parts
+        if pats[0] == "**":
+            return any(seg(parts[i:], pats[1:]) for i in range(len(parts) + 1))
+        return bool(parts) and fnmatch.fnmatchcase(parts[0], pats[0]) and seg(parts[1:], pats[1:])
+
+    parts = PurePosixPath(path).parts
+    return any(seg(parts, PurePosixPath(p).parts) for p in ws_patterns(glob))
+
+
+def _workspace_packages(root: Path, files: list[str]) -> tuple[list[dict], list[str], list[str]]:
     """Dependencies of the workspace packages a JavaScript monorepo declares (``workspaces`` in the root
-    package.json, ``packages`` in pnpm-workspace.yaml), and the package.json files read."""
+    package.json, ``packages`` in pnpm-workspace.yaml), the package.json files read, and the declared globs
+    that match no package.json of the project's files. The globs are matched as the package managers match
+    them (:func:`ws_match`); a declared package is read whatever its folder is called (``packages/build``,
+    ``apps/demo``): only node_modules and the like are never one."""
     root = Path(root)
     globs: list[str] = []
     try:
@@ -1776,14 +1828,20 @@ def _workspace_packages(root: Path, files: list[str]) -> tuple[list[dict], list[
             m = re.match(r"^\s*-\s*['\"]?([^'\"]+?)['\"]?\s*$", s) if block else None
             if m:
                 globs.append(m.group(1))
-    pos = [g.strip().rstrip("/") for g in globs if g.strip() and not g.startswith("!")]
-    neg = [g[1:].strip().rstrip("/") for g in globs if g.startswith("!")]
+    globs = [g.strip() for g in globs if g.strip()]
+    pos = [g for g in globs if not g.startswith("!")]
+    neg = [g[1:] for g in globs if g.startswith("!")]
     items: list[dict] = []
     read: list[str] = []
+    unmatched = dict.fromkeys(pos)
     for rel in sorted(f for f in files if PurePosixPath(f).name == "package.json" and f != "package.json"):
         d = PurePosixPath(rel).parent.as_posix()
-        if set(PurePosixPath(d).parts) & _NOT_PROJECT_BUILD or not any(glob_match(d, g) for g in pos) or \
-                any(glob_match(d, g) for g in neg):
+        hit = [g for g in pos if ws_match(d, g)]
+        if set(PurePosixPath(d).parts) & _WS_NEVER or not hit:
+            continue
+        for g in hit:
+            unmatched.pop(g, None)
+        if any(ws_match(d, g) for g in neg):
             continue
         raw = _read(root / rel) or ""
         try:
@@ -1799,7 +1857,7 @@ def _workspace_packages(root: Path, files: list[str]) -> tuple[list[dict], list[
                 line = next((i for i, ln in enumerate(lines, 1) if f'"{name}"' in ln), 1)
                 items.append({"name": str(name).lower(), "spec": str(spec), "scope": scope, "at": f"{rel}:{line}",
                               "path": rel, "line": line, "ecosystem": "npm", "build": "project"})
-    return items, read
+    return items, read, list(unmatched)
 
 
 def _optional_lines(root: Path, items: list[dict]) -> None:
@@ -1848,15 +1906,22 @@ def declared_dependencies(root: Path, all_files: list[str] | None = None) -> dic
         base = {"items": [], "manifests": [], "error": f"{type(exc).__name__}: {exc}"[:200]}
     items = [dict(it) for it in base.get("items") or []]
     _optional_lines(root, items)
-    ws, ws_read = _workspace_packages(root, files)
+    ws, ws_read, ws_unmatched = _workspace_packages(root, files)
     extra, skipped, builds_read = _gradle_maven(root, files)
     manifests = list(dict.fromkeys([*(base.get("manifests") or []), *ws_read, *builds_read]))
     read = set(manifests) | set(skipped)
     roots = _excluded_roots(root)
-    unread = sorted(f for f in files if PurePosixPath(f).name in _MANIFEST_NAMES and f not in read
-                    and not set(PurePosixPath(f).parts[:-1]) & _NOT_PROJECT_BUILD and not is_test_file(f)
-                    and not any(f.startswith(r + "/") for r in roots))
+    unread: list[str] = []
+    for f in sorted(files):
+        parts = set(PurePosixPath(f).parts[:-1])
+        if PurePosixPath(f).name not in _MANIFEST_NAMES or f in read or parts & _WS_NEVER:
+            continue  # installed packages (node_modules) are never the project's own manifests
+        if parts & _NOT_PROJECT_BUILD or is_test_file(f) or any(f.startswith(r + "/") for r in roots):
+            skipped.append(f)  # a sample's, a fixture's or a vendored copy's: left out, and the limits say so
+        else:
+            unread.append(f)
     return {"items": items + ws + extra, "manifests": manifests, "skipped": skipped, "unread": unread,
+            **({"workspaces_unmatched": ws_unmatched} if ws_unmatched else {}),
             **({"error": base["error"]} if base.get("error") else {})}
 
 
@@ -1881,8 +1946,13 @@ def check_dependency(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]
     scan.limit(f"manifests read: {', '.join(deps.get('manifests') or []) or 'none found'}", *DEP_LIMITS)
     if deps.get("skipped"):
         sk = deps["skipped"]
-        scan.limit(f"{len(sk)} build file(s) under test, sample, fixture, vendor or output folders (or reference "
-                   f"trees) are not read: {', '.join(sk[:5])}{' ...' if len(sk) > 5 else ''}")
+        scan.limit(f"{len(sk)} build file(s) or manifest(s) under test, sample, fixture, vendor or output folders "
+                   f"(or reference trees) are not read: {', '.join(sk[:5])}{' ...' if len(sk) > 5 else ''}")
+    if deps.get("workspaces_unmatched"):  # a declared workspace whose packages are not among the project's files
+        wu = deps["workspaces_unmatched"]
+        scan.limit(f"{len(wu)} declared workspace glob(s) match no package.json among the project's files (git-"
+                   f"ignored or build-output folders are not listed), so nothing there was read: {', '.join(wu[:5])}"
+                   f"{' ...' if len(wu) > 5 else ''}")
     if deps.get("unread"):
         un = deps["unread"]
         scan.limit(f"{len(un)} other manifest(s) are not read (not the root's, a workspace package or an included "
@@ -2031,6 +2101,13 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
         res["base"] = {"ref": base_label, "commit": base_sha, "changed_files": len(changed)}
     ctx = _Ctx(repo, list_files(repo), graph, ddir)
     today = dm._today()
+    if not recs and ddir_from != dm.DEFAULT_SOURCE and not ddir.is_dir():
+        # a folder the user named (flag, config, verinoda.toml, pyproject) that is not there: a typo or a folder
+        # not created yet, never "0 records, nothing to check"
+        res["unknown"].append({"decision": None, "guard": None, "kind": "records",
+                               "why": f"the decisions folder {_rel_or_abs(ddir, repo)} ({ddir_from}) does not exist, "
+                                      "so no decision record was read: fix the setting, or create the folder "
+                                      "(`verinoda decide record` writes it)"})
     if not recs:
         adrs = dm.adr_like_files(repo, ctx.all_files, skip=ddir)
         if adrs:
