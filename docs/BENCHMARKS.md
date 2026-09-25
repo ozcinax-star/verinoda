@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d31) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d31) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,61 @@ Sections: [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verino
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-25: name check after review
+
+Two reviews of `verinoda check` found code execution and false absents. Each finding was reproduced
+first; the fixes are in docs/DESIGN.md D31 (Safety, Still `unknown`, Not closed at all). Result files:
+`benchmarks/results/codecheck-review-2026-09-25/`. Windows 11, Python 3.12.0, jedi 0.20.0; other runs
+shared the machine, so times are noisy.
+
+**Safety (the reviewers' repros, re-run on the fixed code).** Planted code writes a marker file when it
+runs. Before: a `whoami.exe` copied to `.venv/Scripts/python.exe` was started (jedi's `safe=True` is
+true for any file on Windows); a `.pth` import line in the project's `.venv` ran twice per check; a
+package `__init__` ran when jedi read a compiled submodule, in site-packages, in an editable project,
+and inside Verinoda's own process with no `.venv`; `--diff=--output=FILE` emptied FILE (CLI and MCP).
+After: no marker in any of the five cases, the fake interpreter is never started, and the `--diff`
+value is refused. `tests/test_codecheck.py` has these cases (all new tests fail on commit 0bc9616).
+
+**False absents on real code.** Before = the reviewers' result files (commit 0bc9616), after = this
+code on copies of the same files.
+
+| set (written by) | environment | files | sites | false absents before | after |
+|---|---|---|---|---|---|
+| probes of real Python idioms (reviewer 2) | none | 87 | 352 | 25 | 0 |
+| a sweep over standard-library objects (reviewer 2) | none | 253 | 11,367 | 5 | 0 |
+| a sweep over third-party objects (reviewer 2) | Verinoda's `.venv` | 106 | 6,922 | 4 | 0 |
+| compiled modules with stubs: numpy, pydantic_core (reviewer 2) | Verinoda's `.venv` | 14 | 1,377 | 24 | 0 |
+| click, pluggy, h11, starlette, not used before (reviewer 1) | Verinoda's `.venv` | 71 | 8,525 | 5 | 0 |
+
+The 87-file set also has 26 invented names: 19 absent before and after (the other 7 are `guarded` or
+`unknown`, as designed). In the last set 2 absents remain and are right: `itsdangerous` is not
+installed. These sets are in-sample for this round: rules were changed while looking at them.
+
+**The first measurement again.** The fixture set (144 probes, runtime oracle) gives the same verdict
+and the same nearest names on every probe: precision of `absent` 74/74, recall on closed containers
+74/74, 74/79 invented names decided, intended name in the nearest three 24/26, 0 of 65 real sites
+absent. Warm 0.34 s per 100 sites; `check --diff` of 30 changed lines in a fresh process, median
+1.25 s (1.15-1.34 s, 5 runs; bar 1.5 s); the whole probe directory 3.6 s; again from the disk cache
+0.43 s. Clean sets, every site real:
+
+| body | environment checked | files | sites | absent | not_installed | guarded | unknown | time |
+|---|---|---|---|---|---|---|---|---|
+| Verinoda's own package (this branch) | Verinoda's `.venv` (`--env`) | 161 | 47,596 | 0 | 1 | 58 | 13,922 (29%) | 378 s |
+| Graphify | Verinoda's `.venv` | 388 | 51,943 | 0 | 2 | 58 | 19,150 (37%) | 777 s |
+| the same | none (standard library only) | 388 | 51,841 | 0 | 278 | 121 | 22,828 (44%) | 667 s |
+| `json`, `email`, `http`, `pathlib` copied as a project | none | 40 | 5,210 | 0 | 0 | 0 | 1,370 (26%) | 80 s |
+
+The times are 9-45% above the first measurement's on Graphify and the standard-library copy with the
+same number of jedi calls, and 10% below on Verinoda's package: the machine was busy, so no speed
+change is claimed either way. The retrieval benchmark (`fastbench`, the seven public sets and
+`verinoda_user_tr`) gives the same facts as the current main code on all 258 question×approach rows
+(the check changes no index or query code; the private set was not run).
+
+**Not measured.** Linux and macOS (the new tests run in CI there); a `.venv` whose base interpreter is
+managed by uv, pyenv or conda on a real machine (the rule is unit-tested only through Verinoda's own
+interpreter); how often the new `unknown` reasons (stores through parameters, compiled-module stubs)
+hide a real invented name outside the fixture set.
 
 ## Update 2026-09-25: name-existence check (`verinoda check`, D31)
 
