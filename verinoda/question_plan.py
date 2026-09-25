@@ -706,6 +706,7 @@ _TEXT_SUFFIXES_SKIP = (".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", 
                        ".exe", ".pyc", ".woff", ".woff2", ".ttf", ".db", ".sqlite", ".bin", ".ogg", ".wav", ".mp3")
 _SITE_MAX_BYTES = 1_000_000
 _SITE_SECONDS = 2.0   # a scan that takes longer proves nothing: the name counts as spelled (UNCHECKED)
+_PART_SECONDS = 0.25  # after a dotted name's last part is found, how long the whole name is still looked for
 UNCHECKED = "(not checked: the repository is too large to scan)"
 
 
@@ -758,13 +759,147 @@ def _read_small(p: Path) -> str | None:
         return None
 
 
+def _is_class(g, n: str) -> bool:
+    return g.is_symbol(n) and not g.label(n).rstrip().endswith(")")
+
+
+def _lines_of(g, f: str) -> list[str]:
+    data = _read_small(Path(g.root) / f)
+    return data.splitlines() if data is not None else []
+
+
+def _class_header(lines: list[str], a: int, b: int) -> str:
+    """A class's header: the decorator/annotation lines right above line ``a`` and its lines up to the
+    one that opens the body (``{``, or a line ending with ``:``)."""
+    deco = []
+    for ln in reversed(lines[max(0, a - 4):a - 1]):
+        if not ln.strip().startswith("@"):
+            break
+        deco.append(ln)
+    head = []
+    for ln in lines[a - 1:min(b, a + 4)]:
+        head.append(ln)
+        if "{" in ln or ln.rstrip().endswith(":"):
+            break
+    return " ".join([*reversed(deco), *head])
+
+
+def _has_bases(f: str, header: str) -> bool:
+    """Does a class header (its first lines, with the lines before it) name a base class, or a decorator
+    or annotation (``@dataclass``, Lombok's ``@Data``), ``data``/``case``/``partial`` class, so members
+    may be inherited or generated?"""
+    if re.search(r"(?:^|\s)@\w|\b(?:data|case|partial)\s+class\b", header):
+        return True
+    if f.endswith((".py", ".pyi")):
+        m = re.search(r"\bclass\s+\w+\s*(?:\[[^\]]*\]\s*)?\(([^)]*)", header)
+        return bool(m) and m.group(1).strip() not in ("", "object")
+    head = header.split("{")[0]
+    return bool(re.search(r"\b(?:extends|implements|with)\b|\)\s*:\s*[A-Za-z]|\bclass\s+\w+(?:<[^>]*>)?\s*:\s*[A-Za-z]",
+                          head))
+
+
+def _owner_scopes(g, ix: _Index, owner: str) -> tuple[list[tuple[str, int, int]], bool]:
+    """Where the owner of a dotted name (``Owner.member``) is defined in the graph: ``(scopes, open)``.
+
+    ``scopes`` are ``(file, start, end)`` of the classes named ``owner`` (their lines; another letter
+    case only when no class has this one: ``cart`` for ``Cart``) and of the code modules it names
+    (``service``, ``orders.config``: the whole file, imports included - they re-export; a package:
+    every module in it). ``open`` when a member may be defined elsewhere: a class with a base class or
+    ``__getattr__``, a module with a star import or ``__getattr__``, a file that cannot be read."""
+    last = owner.rpartition(".")[2]
+    classes = [n for n in ix.by_bare.get(last, ()) if _is_class(g, n)]
+    if not classes and _compact(last):
+        classes = [n for n in ix.by_compact.get(_compact(last), ()) if _is_class(g, n)]
+    scopes: list[tuple[str, int, int]] = []
+    is_open = False
+    for n in classes:
+        f, sp = g.file(n), g.span(n)
+        lines = _lines_of(g, f) if f else []
+        if not (f and sp and lines):
+            is_open = True
+            continue
+        a, b = sp
+        if _has_bases(f, _class_header(lines, a, b)) or "__getattr" in "\n".join(lines[a - 1:b]):
+            is_open = True
+        scopes.append((f, a, b))
+    path = owner.replace(".", "/")
+    # a package holds what its modules define (`orders.place_order` for orders/service.py)
+    pkgs = {f.rpartition("/")[0] + "/" for f in ix.files if _names_file(f, {f"{path}/__init__"})}
+    for f, n in ix.files.items():
+        if g.G.nodes[n].get("file_type") != "code" or not (_names_file(f, {path}) or f.startswith(tuple(pkgs))):
+            continue
+        lines = _lines_of(g, f)
+        if not lines:
+            is_open = True
+            continue
+        text = "\n".join(lines)
+        if re.search(r"\bimport\s+\*|\bexport\s+\*|^def\s+__getattr__", text, re.M):
+            is_open = True
+        scopes.append((f, 1, len(lines)))
+    return scopes, is_open
+
+
+def _member_site(g, ix: _Index, name: str) -> tuple[str | None, bool]:
+    """``(site, decided)`` for a dotted name whose owner the graph defines: the member spelled inside
+    the owner (``file:line``), or None when it is not there - ``decided`` is False when the owner is
+    not a class or module of the graph, or a member may come from elsewhere (see :func:`_owner_scopes`)."""
+    owner, _, member = name.rpartition(".")
+    if not owner or not member:
+        return None, False
+    scopes, is_open = _owner_scopes(g, ix, owner)
+    if not scopes:
+        return None, False
+    rx = re.compile(rf"(?<![\w]){re.escape(member)}(?![\w])", re.I)
+    for f, a, b in scopes:
+        lines = _lines_of(g, f)
+        hit = next((i for i in range(a, min(b, len(lines)) + 1) if rx.search(lines[i - 1])), None)
+        if hit is not None:
+            return f"{f}:{hit}", True
+    return None, not is_open
+
+
+def _member_near(g, ix: _Index, text: str) -> list[tuple[str, float]]:
+    """Near misses of a dotted name ``Owner.member``: the owner's members with a similar name
+    (``Cart._check`` for ``Cart.check``), then symbols named ``member`` elsewhere (``place_order`` for
+    ``OrderRepository.place_order``)."""
+    import difflib
+
+    owner, _, member = split_code_name(text)[1].rpartition(".")
+    if not owner or not member:
+        return []
+    out: list[tuple[str, float]] = []
+    last = owner.rpartition(".")[2]
+    for c in [n for n in ix.by_bare.get(last, ()) if _is_class(g, n)]:
+        for v, _ in g.out_edges(c, {"method"}):
+            r = difflib.SequenceMatcher(None, member.lower(), _bare(g.label(v)).lower()).ratio()
+            if r >= 0.75:
+                out.append((v, round(100 * r, 1)))
+    out.sort(key=lambda x: -x[1])
+    out += [(n, 100.0) for n in ix.by_bare.get(member, ()) if g.is_symbol(n) and n not in {m for m, _ in out}]
+    return out[:4]
+
+
+def spells_whole(g, site: str | None, text: str) -> bool:
+    """Does the line at ``site`` (``file:line``) spell the whole code name ``text`` (any letter case)?"""
+    if not site or ":" not in site:
+        return bool(site)
+    f, _, ln = site.rpartition(":")
+    name = split_code_name(text)[1]
+    lines = _lines_of(g, f) if ln.isdigit() else []
+    if not name or not 0 < int(ln or 0) <= len(lines):
+        return False
+    return bool(re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", lines[int(ln) - 1], re.I))
+
+
 def name_site(g, text: str, *, strict: bool = False) -> str | None:
     """Where the repository spells a code-shaped name outside import statements (``file:line``), or a
     file with that path; None when it spells it nowhere (then the name does not exist here).
 
     Lenient on purpose: a dotted name counts when its last part occurs (unless ``strict``: then the
     whole name must occur), any letter case counts. ``path::name`` looks for the name in that file
-    only. Only a name found nowhere is reported as not found.
+    only. A dotted name whose owner is a class or module of the graph (``OrderRepository.place_order``)
+    is looked for inside that owner (:func:`_member_site`) or as a whole, not by its last part alone.
+    Only a name found nowhere is reported as not found.
     """
     ix = _index(g)
     path, name = split_code_name(text)
@@ -794,27 +929,42 @@ def name_site(g, text: str, *, strict: bool = False) -> str | None:
         return site
     as_paths = {name} | ({name.replace(".", "/")} if "." in name else set())
     site = next((f for f in ix.repo_files if _names_file(f, as_paths)), None)
+    if site is None and "." in name and not strict:
+        member, decided = _member_site(g, ix, name)
+        if member is not None or decided:
+            # the owner is a class or module here: its member, or the whole name spelled elsewhere
+            site = member if member is not None else name_site(g, text, strict=True)
+            ix.sites[key] = site
+            return site
     if site is None:
         last = name.rpartition(".")[2] if "." in name and not strict else None
-        pats = [re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])")]
-        if last and len(last) >= 3:
-            pats.append(re.compile(rf"(?<![\w]){re.escape(last)}(?![\w])"))
-        pats.append(re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])", re.I))
+        whole = [re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])"),
+                 re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])", re.I)]
+        part = re.compile(rf"(?<![\w]){re.escape(last)}(?![\w])") if last and len(last) >= 3 else None
+        pats = whole + ([part] if part else [])
         files = _files_to_scan(g, ix, [name] if strict or not last else [name, last])
         deadline = time.perf_counter() + _SITE_SECONDS
+        # the whole name is preferred to its last part (`repo.save` over `def save`), for a short while
+        part_hit, part_deadline = None, None
         for f in files:
             if f.lower().endswith(_TEXT_SUFFIXES_SKIP):
                 continue
-            if time.perf_counter() > deadline:
-                site = UNCHECKED
+            now = time.perf_counter()
+            if now > deadline or (part_deadline is not None and now > part_deadline):
+                site = part_hit or UNCHECKED
                 break
             data = _read_small(Path(g.root) / f)
             if data is None or not any(rx.search(data) for rx in pats):
                 continue
-            hit = next((i for i, ln in _outside_imports(data.splitlines()) if any(rx.search(ln) for rx in pats)), None)
-            if hit is not None:
-                site = f"{f}:{hit}"
+            for i, ln in _outside_imports(data.splitlines()):
+                if any(rx.search(ln) for rx in whole):
+                    site = f"{f}:{i}"
+                    break
+                if part_hit is None and part is not None and part.search(ln):
+                    part_hit, part_deadline = f"{f}:{i}", now + _PART_SECONDS
+            if site is not None:
                 break
+        site = site or part_hit
     ix.sites[key] = site
     return site
 
@@ -1094,14 +1244,17 @@ def link_mention(mention: dict, graph, lexicon=None, *, with_hash: bool = True) 
         # below stays, at most weak) or it does not exist here.
         site = name_site(g, mention.get("text") or "")
         if site is None:
-            near = _near_misses(ix, mention.get("text") or "")
+            near = _member_near(g, ix, mention.get("text") or "")
+            near += [x for x in _near_misses(ix, mention.get("text") or "") if x[0] not in {n for n, _ in near}]
             link["status"] = "not_found"
             link["near_misses"] = [{"node": n, "label": g.label(n), "at": _at(g, n), "site": _site(g, n),
                                     "similarity": round(s, 1)} for n, s in near]
             link["did_you_mean"] = [f"{_bare(nm['label'])} ({nm['site']})" for nm in link["near_misses"]]
             link["not_found"] = not_found_line(g, mention.get("text") or "", link["near_misses"])
             return link
-        if site != UNCHECKED:
+        if site == UNCHECKED:  # existence not checked: never linked by a merely similar name
+            link["existence"] = "unchecked"
+        else:
             link["occurs_at"] = site
     fams = _families(g, ix, scored)
     link["entropy"] = _entropy([f["score"] for f in fams])
@@ -1120,13 +1273,21 @@ def link_mention(mention: dict, graph, lexicon=None, *, with_hash: bool = True) 
     close = [f for f in fams if f["score"] >= THRESHOLDS["link"]
              and best["score"] - f["score"] < THRESHOLDS["margin"]]
     link["_close"] = [f["best"] for f in close]
-    if best["score"] < THRESHOLDS["link"] or link.get("occurs_at"):
+    if best["score"] < THRESHOLDS["link"] or link.get("occurs_at") or link.get("existence"):
         link["status"] = "weak"
         link["uncertainty"] = f"'{mention.get('text')}' linked only by {link['tier']} (score {best['score']:.2f})"
+        written = (mention.get("text") or "").strip().strip("`")
         if link.get("occurs_at"):
-            link["uncertainty"] = (f"no symbol in the index is named `{mention.get('text')}` (the name occurs at "
-                                   f"{link['occurs_at']}); linked by {link['tier']} to {g.label(best['best'])}, "
-                                   "not by its name")
+            # a dotted name found by its last part: say which part occurs, not "the name"
+            where = (f"the name occurs at {link['occurs_at']}" if spells_whole(g, link["occurs_at"], written)
+                     else f"`{split_code_name(written)[1].rpartition('.')[2]}` occurs at {link['occurs_at']}, not the "
+                          "whole name")
+            link["uncertainty"] = (f"no symbol in the index is named `{written}` ({where}); linked by "
+                                   f"{link['tier']} to {g.label(best['best'])}, not by its name")
+        elif link.get("existence"):
+            link["uncertainty"] = (f"no symbol in the index is named `{written}`, and whether the repository spells "
+                                   "it was not checked (the repository is too large to scan); linked by "
+                                   f"{link['tier']} to {g.label(best['best'])}, not by its name")
         link["nodes"] = [f["best"] for f in fams if best["score"] - f["score"] < THRESHOLDS["margin"]][:5]
     elif len(close) == 1:
         link["status"] = "linked"

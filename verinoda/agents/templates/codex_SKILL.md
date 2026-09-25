@@ -81,7 +81,7 @@ Rules:
   source lines (`analyze`, `claim add --source`, `verify`). Confirm a sentence of your own with a
   typed claim (`--kind relation|config|location|order --symbol X`), one positive fact per claim
   ("A calls B", "B is called by A", "`F` calls `A` before `B`"): a negation, "only", an order in
-  a relation, a condition or a count keeps it unverified. Plain text is at most
+  a relation, a condition, a count or another code name keeps it unverified. Plain text is at most
   `weak_inference`; a quote (`"f.py:12 contains: <exact text>"`) verifies only the quoted text,
   so write nothing but the locator next to it. A `contradicted` result states its scope: correct
   the sentence, do not reword it.

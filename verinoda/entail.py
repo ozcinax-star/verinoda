@@ -401,9 +401,10 @@ def _plain_word(text: str, a: int, b: int, *, last: bool) -> tuple[int, str] | N
 def relation_parse(text: str, target: str | None = None) -> dict | None:
     """The caller and the callee a relation claim's text states, when it states them in one clear form.
 
-    ``{"caller", "caller_file", "callee", "reversed"}``: ``caller`` is the one name on the calling side
-    (``caller_file`` a path there instead), ``callee`` the name on the called side (``target`` when the
-    text puts it there), ``reversed`` when the text puts ``target`` on the calling side. The forms: "A
+    ``{"caller", "caller_file", "callee", "reversed", "callees"}``: ``caller`` is the one name on the
+    calling side (``caller_file`` a path there instead), ``callee`` the name on the called side
+    (``target`` when the text puts it there), ``callees`` every name on that side ("A calls B and C"),
+    ``reversed`` when the text puts ``target`` on the calling side. The forms: "A
     calls B", "B is called by/from/in A", "A, B'yi çağırır" (the callee in the accusative) and "B, A
     tarafından çağrılır". None when the text does not say it in one of them: no relation verb, several
     clauses and no target to choose one, several names on the calling side ("both A and B call C",
@@ -488,7 +489,7 @@ def relation_parse(text: str, target: str | None = None) -> dict | None:
     if callee is None and not rev:
         return None
     return {"caller": caller, "caller_file": caller_file, "caller_word": caller_word, "callee": callee,
-            "reversed": rev}
+            "reversed": rev, "callees": callees}
 
 
 def relation_roles(text: str, target: str | None = None) -> tuple[str | None, str | None]:
@@ -1987,6 +1988,58 @@ def _plain_caller_problems(repo, ev: dict, parsed: dict) -> list[str]:
     return [f"the text's caller `{word}` is not a definition around the cited lines"]
 
 
+def _direct_call(repo, path: str, caller: str | None, callee: str | None) -> dict | None:
+    """:func:`caller_scope` of ``caller`` for ``callee`` in ``path``, when its whole body calls it directly."""
+    if not (caller and callee and path):
+        return None
+    try:
+        sc = caller_scope(repo, caller, _token(callee), path=path)
+    except (OSError, ValueError, RecursionError):
+        return None
+    return sc if sc and sc["calls"] else None
+
+
+def unchecked_names(repo, kind: str, spec: dict, ev: dict, text: str, subjects: list[str]) -> list[str]:
+    """Code names written text states besides the roles the typed check of ``kind`` binds: a relation's
+    caller and callee, an order's function and its two calls, a location's symbol, and the definitions
+    around the cited lines (a method's class). A relation's other callee ("A calls B and C") or another
+    clause ("A calls B, and C calls D") counts when the caller's whole body calls it directly
+    (:func:`caller_scope`); any other name is something the check does not establish."""
+    if kind not in ("relation", "location", "behaviour"):
+        return []
+    roles: list[str | None] = [spec.get("symbol"), spec.get("target_label"), spec.get("source_label")]
+    roles += [_subject_parts(s)[1] for s in subjects]
+    if kind == "behaviour":
+        m = _ORDER_PROP.match(str(spec.get("proposition") or ""))
+        if not m:
+            return []  # a pattern claim: its text is not read for names
+        roles += list(m.groups())
+    parsed = relation_parse(text, spec.get("target_label")) if kind == "relation" else None
+    if parsed:
+        roles += [parsed["caller"], parsed["caller_word"], parsed["callee"]]
+    bound = {fold_tr(_token(r)) for r in roles if r}
+    path = str(ev.get("path") or "")
+    try:
+        _t, a, _b, full = _evidence_text(Path(repo) if repo else None, ev)
+        bound |= (_enclosing_names(full, path, int(a)) if full and a else None) or set()
+    except (OSError, ValueError, TypeError):
+        pass
+    extra = [n for n in dict.fromkeys(n for _, _, n in code_names(text))
+             if n.rpartition(".")[2].lower() not in FILE_EXTS and fold_tr(_token(n)) not in bound]
+    if not extra or kind != "relation" or repo is None:
+        return extra
+    ok: set[str] = set()
+    caller = claimed_caller(spec, subjects, text) or (parsed or {}).get("caller_word")
+    for n in extra:  # "A calls B and C": C is another callee of the same caller
+        if parsed and n in parsed["callees"] and _direct_call(repo, path, caller, n):
+            ok.add(n)
+    for ca, cb in _clauses(text):  # "A calls B, and C calls D": the other clause, checked on its own
+        p = relation_parse(text[ca:cb])
+        if p and p["caller"] and p["callee"] and _direct_call(repo, path, p["caller"], p["callee"]):
+            ok |= {n for n in extra if _token(n) in (_token(p["caller"]), _token(p["callee"]))}
+    return [n for n in extra if n not in ok]
+
+
 # Words that frame a quote without adding to it ("the cited source text shows verbatim: ...").
 _QUOTE_FRAME = frozenset(_stem(w) for w in "cited shown show shows source text verbatim exactly literally".split())
 
@@ -2114,9 +2167,13 @@ def assess(kind: str, repo: Path | str | None, spec: dict | None, evidence_row: 
         missing = coverage(Terms(terms.keys, [], [], [], False, False), ev_txt)["missing"]
         if missing:
             problems.append("key terms not in the cited file: " + ", ".join(missing[:4]))
-        # what the text states beyond the typed check (a negation, 'only', an order, a count ...)
+        # what the text states beyond the typed check (a negation, 'only', an order, a count, a name ...)
         extra, nums = unchecked_statements(kind, text)
         problems += extra
+        names = unchecked_names(repo, kind, spec, ev, text, subjects)
+        if names:
+            problems.append(f"the text also names {', '.join(f'`{n}`' for n in names[:3])}, which the {kind} "
+                            "check does not establish")
         if nums:
             read = _env_read_text(_full, spec["env"], int(_a), int(_b or _a)) \
                 if kind == "config" and spec.get("env") and _full and _a and str(ev.get("path")).endswith(".py") \

@@ -657,7 +657,8 @@ def _ungrounded(ctx: _Ctx, sq: dict, links: list[dict], expansions: dict) -> tup
              and not w.startswith(qp._GENERIC_TR_PREFIX)]
     linked_words = set()
     for lk in links:
-        if lk["status"] in ("linked", "weak"):
+        # an ambiguous mention names several things that exist here: its words occur
+        if lk["status"] in ("linked", "weak", "ambiguous"):
             linked_words.update(qp._surface_words(lk.get("text") or ""))
     missing = []
     for w in words:

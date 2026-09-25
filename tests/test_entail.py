@@ -337,8 +337,11 @@ def test_relation_roles_read_the_direction_the_text_states(text, target, roles):
 
 def test_relation_parse_reports_a_target_on_the_calling_side():
     assert entail.relation_parse("place_order calls save", "place_order") == {
-        "caller": "place_order", "caller_file": None, "caller_word": None, "callee": None, "reversed": True}
+        "caller": "place_order", "caller_file": None, "caller_word": None, "callee": None, "reversed": True,
+        "callees": []}  # `save` is a plain word, and not the target: not read as a name
     assert entail.relation_parse("orders/api.py calls place_order", "place_order")["caller_file"] == "orders/api.py"
+    assert entail.relation_parse("place_order calls validate_items and compute_total", "compute_total")["callees"] \
+        == ["validate_items", "compute_total"]
 
 
 @pytest.mark.parametrize("text, target, word", [
@@ -525,6 +528,41 @@ def test_written_text_beyond_the_typed_check_is_not_verified(repo):
     assert g.grade == "partial" and "caller `handler` is not a definition around the cited lines" in g.reason
     assert rel("orders/flow.py calls validate_items", "validate_items", "orders/flow.py:11").grade == "full"
     assert rel("orders/api.py calls validate_items", "validate_items", "orders/flow.py:11").grade == "partial"
+
+
+def test_written_text_naming_more_than_the_check_binds_is_not_verified(repo):
+    def rel(text, target, at):
+        return _written(repo, "relation", text, at, target_label=target, symbol=target, at=at)
+
+    # a name the typed check does not bind (review round 1: these verified)
+    for text, target, at, name in (
+            ("create_order_handler calls place_order and fetch_order", "place_order", "orders/api.py:18", "fetch_order"),
+            ("place_order calls validate_items and fetch_order", "validate_items", "orders/service.py:20", "fetch_order"),
+            ("place_order calls validate_items with MAX_ITEMS_PER_ORDER", "validate_items", "orders/service.py:20",
+             "MAX_ITEMS_PER_ORDER")):
+        g = rel(text, target, at)
+        assert g.grade == "partial" and f"the text also names `{name}`" in g.reason, text
+    g = _written(repo, "behaviour", "`place_order` calls `validate_items` before `save` and `fetch_order`",
+                 "orders/service.py:19-22", proposition="validate_items before save in place_order", holds=True)
+    assert g.grade == "partial" and "`fetch_order`" in g.reason
+    g = _written(repo, "location", "`place_order` is defined in orders/service.py and calls `fetch_order`",
+                 "orders/service.py:19-22", symbol="place_order")
+    assert g.grade == "partial" and "`fetch_order`" in g.reason
+    # other callees and other clauses count when the caller's whole body calls them directly
+    for text, target, at in (("place_order calls validate_items and compute_total", "compute_total",
+                              "orders/service.py:21"),
+                             ("place_order, validate_items ve compute_total'ı çağırır", "compute_total",
+                              "orders/service.py:21"),
+                             ("create_order_handler, get_repo ile place_order'ı çağırır", "place_order",
+                              "orders/api.py:18"),
+                             ("create_order_handler calls place_order, and get_order_handler calls fetch_order",
+                              "fetch_order", "orders/api.py:25")):
+        assert rel(text, target, at).grade == "full", text
+    assert rel("create_order_handler calls fetch_order, and get_order_handler calls fetch_order", "fetch_order",
+               "orders/api.py:25").grade == "partial"
+    # the class around the cited definition is a locator, not an extra statement
+    assert _written(repo, "location", "`save` is a method of `OrderRepository` in orders/repository.py",
+                    "orders/repository.py:15-20", symbol="save").grade == "full"
 
 
 def test_written_config_default_is_compared_with_the_read(repo):

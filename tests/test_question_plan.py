@@ -499,7 +499,14 @@ def test_a_scan_that_runs_out_of_time_never_reports_not_found(orders, monkeypatc
     try:
         assert qp.name_site(g, "compute_totall") == qp.UNCHECKED
         lk = qp.link_mention({"id": "m1", "text": "compute_totall", "kind": "symbol"}, g, lex)
-        assert lk["status"] != "not_found" and "occurs_at" not in lk  # unknown existence: the old linking
+        assert lk["status"] != "not_found" and "occurs_at" not in lk  # unknown existence: not "not found"
+        # ... and never linked to a similar name either: at most weak, saying the check did not run
+        # (review round 1: place_orders was linked to place_order past the cap)
+        for text in ("place_orders", "validate_item", "compute_totals"):
+            lk = qp.link_mention({"id": "m1", "text": text, "kind": "symbol"}, g, lex)
+            assert lk["status"] in ("weak", "unlinked") and lk["existence"] == "unchecked", (text, lk["status"])
+            if lk["status"] == "weak":
+                assert "was not checked" in lk["uncertainty"] and f"`{text}`" in lk["uncertainty"]
     finally:
         ix.sites.clear()
 
@@ -551,6 +558,41 @@ def test_name_site_reads_paths_and_file_scoped_names(orders):
     # strict: a dotted name must occur as written, not only its last part
     assert qp.name_site(g, "Foo.save") is not None and qp.name_site(g, "Foo.save", strict=True) is None
     ix.sites.clear()
+
+
+def test_a_member_of_a_known_owner_is_looked_for_in_that_owner(orders):
+    repo, g, lex = orders
+    ix = qp._index(g)
+    ix.sites.clear()
+    # review round 1: `OrderRepository.place_order` counted as spelled because `place_order` occurs elsewhere
+    for text in ("OrderRepository.place_order", "`OrderRepository.place_order`", "orders.fetch_orders"):
+        assert qp.name_site(g, text) is None, text
+    lk = qp.link_mention({"id": "m1", "text": "`OrderRepository.place_order`", "kind": "symbol"}, g, lex)
+    assert lk["status"] == "not_found" and lk["did_you_mean"][0] == "place_order (orders/service.py:19)"
+    # members that are there (a method, an attribute, a module's name, a package's module) stay found
+    assert qp.name_site(g, "OrderRepository.conn").startswith("orders/repository.py:")
+    assert qp.name_site(g, "config.DISCOUNT_THRESHOLD") == "orders/config.py:7"
+    assert qp.name_site(g, "service.place_order") == "orders/service.py:19"
+    assert qp.name_site(g, "orders.place_order") is not None
+    # a class with a base class may inherit the member: not decided here, the lenient search runs
+    assert qp._member_site(g, ix, "ValidationError.args") == (None, False)
+    assert qp._member_site(g, ix, "OrderRepository.place_order") == (None, True)
+    # an owner the graph does not define: the last part counts, and the link says only it occurs
+    assert qp.name_site(g, "repo.save") == "orders/service.py:22"  # the whole name first
+    assert not qp.spells_whole(g, "orders/repository.py:15", "`Repository.save`")
+    assert qp.spells_whole(g, "orders/service.py:22", "repo.save")
+    ix.sites.clear()
+
+
+@pytest.mark.parametrize("path, header, bases", [
+    ("a.py", "class Cart:", False), ("a.py", "class Cart(object):", False), ("a.py", "class E(ValueError):", True),
+    ("a.py", "class P( Base, ):", True), ("a.py", "@dataclass class P:", True),
+    ("A.java", "public final class Ritual {", False), ("A.java", "public class Wisp extends PathAwareEntity {", True),
+    ("A.java", "@Data public class Order {", True), ("A.kt", "class A(val x: Int) : B() {", True),
+    ("A.kt", "data class A(val x: Int)", True), ("A.kt", "class A(val x: Int) {", False),
+])
+def test_class_headers_that_may_bring_members_from_elsewhere(path, header, bases):
+    assert qp._has_bases(path, header) is bases
 
 
 AMBIG = {

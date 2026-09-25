@@ -155,6 +155,38 @@ answer was "not checked"). Soundness of the index shortcut on that repository: 2
 their lower/upper case forms) taken from 150 random files, outside import lines: none was
 answered "absent" while a file spells it. With a stale `search.db` the old scan runs.
 
+**Second review round (findings the first fix did not see).** Checked again on fresh copies of
+the same apps, against the branch at `098003f`:
+
+- written text that names more code than its check binds verified: "create_order_handler calls
+  place_order and fetch_order", "place_order calls validate_items and fetch_order", "place_order
+  calls validate_items with MAX_ITEMS_PER_ORDER", "`place_order` calls `validate_items` before
+  `save` and `fetch_order`" (order) and "`place_order` is defined in orders/service.py and calls
+  `fetch_order`" (location) were `statically_verified`; they are `strong_inference` now
+  (`entail.unchecked_names`). The true "A calls B and C", its Turkish form and "A calls B, and C
+  calls D" stay verified (each name is a direct call in the caller's body);
+- `analyze "What does OrderRepository.place_order do?"` was `met` from a weak text hit (the name
+  `place_order` exists in orders/service.py); it is `unmet`, with "no symbol named
+  `OrderRepository.place_order` in this repository; nearest: place_order (orders/service.py:19)".
+  `LanternEvents.activate` (glow_mod) went from unlinked to `not_found`, `Cart.check` now offers
+  `_check`. A dotted name whose owner the graph does not define (`Repository.save`, `wisp.count`)
+  stays `weak`, and its uncertainty now says that only the last part occurs ("`save` occurs at
+  orders/repository.py:15, not the whole name");
+- past the 2 s scan cap a code-shaped name was linked to a similar one again (`place_orders` to
+  `place_order`); it is `weak` at most now, saying the existence check did not run;
+- "Where is get_repo defined?" (two definitions) no longer gets the unknown "the question's words
+  'get_repo', 'defined' occur nowhere".
+
+The 101-sentence adversarial set gives the same outcome as at `098003f` (0 false verified, 0 true
+contradicted, 39 true verified, 5 refused). Fast harness, the seven public sets plus
+`verinoda_user_tr` on the prepared indexes (query-time change): facts per question and approach,
+and negatives, identical to `er_new` (analyze 66, 48, 32, 32, 36, 31, 26, 11). Critique
+evaluation: every row identical to the committed `critique_eval.json` (true claims contradicted
+0/23). `name_site` on the 2,305-file repository: names found nowhere 340-460 ms as before; a dotted
+name whose last part occurs but not the whole name (`repo.save`, `wisp.count`) 335-360 ms against
+about 120 ms at `098003f`, since the whole name is still looked for 0.25 s after the part is found.
+In-sample, like the rest of this section.
+
 ## Update 2026-09-25: analyze keeps what query found, grounded verdicts, Turkish, update time
 
 Measured with the fast harness (`benchmarks/results/fast-2026-09-25/`, its README says how): the

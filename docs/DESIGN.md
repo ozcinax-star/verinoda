@@ -168,7 +168,8 @@ Results:
 - **weak**: used, and the resulting claims carry an uncertainty.
 - **unlinked**: reported as `unknown` with a next step.
 - **not_found** (D31): a mention written as code with no exact name, spelled
-  nowhere in the repository; never replaced by a similar name.
+  nowhere in the repository (a member of a known class or module: nowhere in
+  that owner); never replaced by a similar name.
 
 **D4. The same code path with or without a host plan.**
 
@@ -647,6 +648,14 @@ deterministic.
     ("twice"), and a number: a config claim's number must be in the cited
     read itself ("defaults to 50" against `os.environ.get(..., "100.0")` is
     `partial`), other kinds do not compare numbers;
+  - so does a code name the check does not bind (`entail.unchecked_names`,
+    relation, location and order claims): "create_order_handler calls
+    place_order and fetch_order" is `partial` ("the text also names
+    `fetch_order`, which the relation check does not establish"). A
+    relation's other callee ("A calls B and C", TR "B ve C'yi çağırır") or
+    another clause ("A calls B, and C calls D") counts when the caller's whole
+    body calls it directly (`entail.caller_scope`); the definitions around the
+    cited lines (a method's class) are locators;
   - a verbatim quote verifies only the quoted text: written text that says
     more than a locator (`path:line`, or the name of the definition around the
     cited lines) besides `contains: ...` is `partial` (code `quote_rest`).
@@ -703,7 +712,21 @@ deterministic.
   - if it is spelled somewhere (an environment variable, a data key, an
     external name), the link is at most `weak`, with the site in the
     uncertainty ("no symbol in the index is named `X` (the name occurs at
-    ...)");
+    ...)"; for a dotted name found by its last part: "(`save` occurs at
+    ..., not the whole name)"). The whole name is preferred to its last
+    part for 0.25 s after the part is found;
+  - a dotted name whose owner is a class or module of the graph
+    (`OrderRepository.place_order`, `Cart.check`, `orders.config.X`; a
+    package counts with all its modules) is looked for inside that owner (a
+    class's lines, a module's whole file) or as a whole elsewhere, not by its
+    last part (`question_plan._member_site`): absent there, it is
+    `not_found` with the owner's similar members and same-named symbols as
+    `did_you_mean`. A class with a base class, a decorator or annotation, a
+    `data`/`case`/`partial` class, `__getattr__`, or a module with a star
+    import may have the member from elsewhere: then the lenient search runs;
+  - when the scan could not finish (over 2 s), the link is at most `weak`
+    and says that existence was not checked; it is never linked to a
+    similar name;
   - a folded label that differs by more than letter case (`placeOrder` for
     `place_order`) is `weak` with "`placeOrder` is spelled `place_order`
     here".

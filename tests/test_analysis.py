@@ -317,6 +317,20 @@ def test_location_claim_cites_the_full_definition_span(tmp_path):
         st.close()
 
 
+def test_a_name_defined_twice_is_never_said_to_occur_nowhere(tmp_path):
+    # review round 1: an ambiguous link (two definitions) counted as "occurs nowhere"
+    repo = _mini(tmp_path / "two", {"app/api.py": "def get_repo():\n    return 1\n",
+                                    "app/extras.py": "def get_repo():\n    return 2\n"})
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+        res = analysis.analyze(st, repo, "Where is get_repo defined?")
+        assert not [u for u in res["unknowns"] if "occur nowhere" in u["why"]], res["unknowns"]
+    finally:
+        st.close()
+
+
 def test_context_budget_stops_claims_and_names_skipped_subquestions(proj, flow):
     repo, st = proj
     small = analysis.Budget(context_tokens=320)
@@ -517,6 +531,13 @@ def test_a_name_written_as_code_that_does_not_exist_is_unmet_not_substituted(pro
         assert sq["status"] == "unmet" and sq["claim_ids"] == [], q
         assert res["unknowns"][0]["why"] == ("no symbol named `place_orders` in this repository; nearest: "
                                              "place_order (orders/service.py:19)"), q
+    # a member its owner does not have is not found either, even though `place_order` exists elsewhere
+    # (review round 1: it was answered 'met' from a weak text hit)
+    res = analysis.analyze(st, repo, "What does `OrderRepository.place_order` do?")
+    (sq,) = res["subquestions"]
+    assert sq["status"] == "unmet"
+    assert res["unknowns"][0]["why"] == ("no symbol named `OrderRepository.place_order` in this repository; nearest: "
+                                         "place_order (orders/service.py:19)")
     # with another name that does exist the sub-question still runs, but it is not answered as asked
     sq = {"id": "q1", "intent": "locate", "done_when": {"kind": "location_verified"}}
     rows = [{"id": "c1", "kind": "location", "status": "statically_verified"}]
