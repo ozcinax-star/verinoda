@@ -200,8 +200,13 @@ def test_a_damaged_entry_is_parsed_again(tmp_path):
     assert got == want and c.misses == 4
 
 
+# The upstream extractor raises the recursion limit to 10,000; before Python 3.12 a Python frame also uses
+# C stack, and on Windows a walk that deep ends in a stack overflow instead of a RecursionError.
+SHALLOW_STACK = sys.platform == "win32" and sys.version_info < (3, 12)
+
+
 def test_deep_files_get_their_full_tree_and_the_same_outcome(tmp_path):
-    for depth in (pc.DEEP + 50, 1100, 3000):
+    for depth in (pc.DEEP + 50,) if SHALLOW_STACK else (pc.DEEP + 50, 1100, 3000):
         sub = tmp_path / str(depth)
         nested = "from pkg.models import Model\n\ndef f():\n    return " + "(" * depth + "Model" + ")" * depth + "\n"
         _, blob, want = _project(sub, {"nested.py": nested})
@@ -210,6 +215,7 @@ def test_deep_files_get_their_full_tree_and_the_same_outcome(tmp_path):
             assert got == want and c.deep == 1
 
 
+@pytest.mark.skipif(SHALLOW_STACK, reason="limits up to 4,000 overflow the C stack on Windows before Python 3.12")
 def test_the_recursion_limit_is_met_where_upstream_meets_it(tmp_path):
     # the upstream walk is recursive: with the kept trees, a deep file must overflow at exactly the
     # same limit as without them (the wrapper's own frame is made up for)
