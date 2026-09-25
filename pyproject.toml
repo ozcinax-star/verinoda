@@ -54,6 +54,9 @@ dependencies = [
 mcp = ["mcp>=1,<3", "starlette>=1.3.1,<2"]
 # docs/DESIGN.md D29: lazy precise call-site resolution (verinoda/precise.py); pure Python, MIT.
 precise = ["jedi>=0.19.2,<0.21"]
+# docs/DESIGN.md D36: `verinoda probe` generates inputs with hypothesis when it is installed (in Verinoda's own
+# environment only; without it a fixed pseudo-random list from the same seed is used).
+probe = ["hypothesis>=6"]
 neo4j = [
     "neo4j",
 ]

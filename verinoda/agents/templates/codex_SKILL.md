@@ -14,9 +14,9 @@ description: Evidence-first answers about this codebase with Verinoda - how a fe
 - **There is no `/verinoda` slash command in Codex.** Do not tell the user to type one.
 - The question to work on is the rest of the user's message. If there is no question about this repository, ask.
 
-Verinoda indexes the repository (AST, no LLM), answers questions as **claims with evidence**,
-critiques its own claims, and says **unknown** instead of guessing. Your job is to drive it,
-read its structured output, and report exactly what the evidence supports.
+Verinoda indexes the repository (AST, no LLM), answers questions as **claims with evidence**, critiques its own
+claims, and says **unknown** instead of guessing. Your job is to drive it, read its structured output, and report
+exactly what the evidence supports.
 
 ## When to use
 
@@ -44,10 +44,10 @@ On Windows PowerShell, put regular expressions and globs in single quotes.
 
 ## MCP tools
 
-If the `verinoda` MCP server is configured (`[mcp_servers.verinoda]` in `~/.codex/config.toml`,
-or in the project's `.codex/config.toml` when the project is trusted), prefer its tools where they
-cover the task: they call the same core functions as the CLI. For anything else, or without the
-server, run the CLI below, always with `--json`, and read the fields instead of scraping text.
+If the `verinoda` MCP server is configured (`[mcp_servers.verinoda]` in `~/.codex/config.toml`, or in the
+project's `.codex/config.toml` when the project is trusted), prefer its tools where they cover the task: they call
+the same core functions as the CLI. For anything else, or without the server, run the CLI below, always with
+`--json`, and read the fields instead of scraping text.
 
 If the CLI fails inside the Codex sandbox with `PermissionError` or `ModuleNotFoundError` while importing
 `verinoda` (Windows, uv's default hardlinks or an editable install), use the MCP tools (they run outside the
@@ -178,26 +178,25 @@ unresolved, say what evidence would settle it.
 
 ## Budgets and unknowns
 
-- `analyze` is bounded (`--budget-seconds 60 --budget-calls 40 --budget-tokens 6000` by default).
-  When `usage.exhausted` is set, the remaining sub-questions come back as `unknown`: report
-  them as such. Raise a budget only when the user wants more depth.
-- Claims with `challenged: false` ("not challenged: budget") were not critiqued - say so.
-- Keep context small: `--max-items` / `--max-chars` on `query`, `--max-lines` on `map`. Never
-  paste whole files or full logs; experiment logs stay on disk (the result gives the path).
-- Experiments outside the test-runner allowlist are refused without docker/podman. Report the
-  refusal; do not work around it.
+- `analyze` is bounded (`--budget-seconds 60 --budget-calls 40 --budget-tokens 6000` by default). When
+  `usage.exhausted` is set, the remaining sub-questions come back as `unknown`: report them as such. Raise a budget
+  only when the user wants more depth. Claims with `challenged: false` ("not challenged: budget") were not
+  critiqued - say so.
+- Keep context small: `--max-items` / `--max-chars` on `query`, `--max-lines` on `map`. Never paste whole files or
+  full logs; experiment logs stay on disk (the result gives the path). Experiments outside the test-runner
+  allowlist are refused without docker/podman: report the refusal; do not work around it.
 
 ## Check the names code uses (Python)
 
-Invented imports, methods, keyword arguments and dict keys break code that looks right. Before you
-propose Python code, and after every edit:
+Invented imports, methods, keyword arguments and dict keys break code that looks right. Before you propose Python
+code, and after every edit:
 
 1. `verinoda check --diff --json` (MCP `code_check`) checks the changed lines; code not written yet:
    `verinoda check --stdin --as <path> --json` (MCP `code_check` with `snippet` and `as_path`).
 2. Never keep an `absent` site: fix it from `nearest` / `elsewhere`, or pick a real name from
    `verinoda api <module.or.Class> --json` (MCP `api_members`; `found: null` = not decided).
-3. `unknown` is unverified: read the definition or run the tests. `not_installed`: the checked
-   environment lacks the package. `guarded`: the code handles it.
+3. `unknown` is unverified: read the definition or run the tests. `not_installed`: the checked environment lacks
+   the package. `guarded`: the code handles it.
 4. Name the environment checked (`env.python`, `env.packages_checked`, `env.lock_mismatches`). Exit 3:
    something absent or a version differs from the lock (`exit_because`); `incomplete` lists files not
    checked. If `env.note` says a `.venv` was not used, tell the user; never pass `--env` to run what it
@@ -222,15 +221,16 @@ it, then record `--observed-output out.txt --exit-code N -- <command>` (agent-re
 
 ## After editing code
 
-Run `verinoda update .` after you or the user change code. It re-indexes the changed files
-and marks claims whose evidence changed as `stale`; `verify` them again before relying on them.
-Before you finish a code change, run `verinoda decide check --changed --json` (MCP `decision_check`
+Run `verinoda update .` after you or the user change code: it re-indexes the changed files and marks claims whose
+evidence changed as `stale`; `verify` them again before relying on them. Before you finish a code change, run `verinoda decide check --changed --json` (MCP `decision_check`
 with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be
 superseded or the site waived; never edit, supersede or waive a decision record yourself.
 Before editing a function: `verinoda review --target FILE::NAME --change body|signature|remove --json` (MCP
-`change_review`); read its `read_first` in order, not whole files. Before saying done: `verinoda review --json`
-(`--run-tests` for pytest): report every concern and `unknown`, fix or defer each; "no finding" never means safe.
-`tests.reach_unknown` (no static caller) is not "no test reaches it"; `--staged` runs the staged tree or refuses.
+`change_review`), read `read_first` in order. Before saying done: `verinoda review --json` (`--run-tests`): report
+every concern and `unknown`; "no finding" never means safe, `tests.reach_unknown` is not "no test reaches it".
+After editing Python functions: `verinoda probe --changed --json` (MCP `change_probe`; `--property '<expr>'` for
+what the user asked). A difference is a behaviour change, not a bug: compare it with the request and show it. Say
+"no difference found in N inputs", never "verified"; refused/inconclusive is no pass; side effects only if agreed.
 
 ## Answer format
 

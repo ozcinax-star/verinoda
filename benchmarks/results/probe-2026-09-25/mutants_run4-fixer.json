@@ -1,0 +1,326 @@
+{
+ "summary": {
+  "labels_sha256": "ebcc58fde2c47066f55d5d2fdcc195994faf73965f26160cef0304a433ec0b5e",
+  "survivors": 27,
+  "non_equivalent": 25,
+  "equivalent": 0,
+  "message_only": {
+   "chunk:cmp:7:0": "no_difference_found",
+   "chunk:int-1:17:": "no_difference_found"
+  },
+  "kill_rate": "25/25",
+  "not_killed": [],
+  "false_alarms_on_equivalent": "0/0",
+  "false_alarm_ids": [],
+  "time_per_probe_s": {
+   "median": 3.09,
+   "max": 3.985
+  }
+ },
+ "mutants": [
+  {
+   "id": "apply_discount:cmp:6:0",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "apply_discount(100.0)",
+   "duration_s": 3.219,
+   "wall_s": 3.22
+  },
+  {
+   "id": "apply_discount:int+1:21:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary",
+    "value_changed"
+   ],
+   "example": "apply_discount(100.005)",
+   "duration_s": 3.14,
+   "wall_s": 3.14
+  },
+  {
+   "id": "apply_discount:int-1:21:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary",
+    "value_changed"
+   ],
+   "example": "apply_discount(100.05)",
+   "duration_s": 3.0,
+   "wall_s": 3.0
+  },
+  {
+   "id": "validate_items:cmp:8:0",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "new_exception"
+   ],
+   "example": "validate_items(<50 items like {'price': 1.0, 'qty': 1}>)",
+   "duration_s": 3.921,
+   "wall_s": 3.92
+  },
+  {
+   "id": "title_ok:cmp:5:0",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary",
+    "value_changed"
+   ],
+   "example": "title_ok('')",
+   "duration_s": 3.094,
+   "wall_s": 3.09
+  },
+  {
+   "id": "title_ok:cmp:5:1",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "title_ok('a' * 80)",
+   "duration_s": 3.0,
+   "wall_s": 3.0
+  },
+  {
+   "id": "title_ok:int+1:8:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary",
+    "value_changed"
+   ],
+   "example": "title_ok('a')",
+   "duration_s": 2.985,
+   "wall_s": 3.0
+  },
+  {
+   "id": "title_ok:int-1:8:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary",
+    "value_changed"
+   ],
+   "example": "title_ok('')",
+   "duration_s": 2.875,
+   "wall_s": 2.89
+  },
+  {
+   "id": "title_ok:int+1:12:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "title_ok('a' * 81)",
+   "duration_s": 2.813,
+   "wall_s": 2.81
+  },
+  {
+   "id": "title_ok:int-1:12:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "title_ok('a' * 80)",
+   "duration_s": 2.891,
+   "wall_s": 2.91
+  },
+  {
+   "id": "safe_div:int+1:15:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "new_exception",
+    "value_changed_at_mined_boundary",
+    "value_changed",
+    "numeric_drift"
+   ],
+   "example": "safe_div(0.0, 0.0)",
+   "duration_s": 2.859,
+   "wall_s": 2.86
+  },
+  {
+   "id": "safe_div:int-1:15:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "new_exception",
+    "value_changed_at_mined_boundary",
+    "numeric_drift"
+   ],
+   "example": "safe_div(0.0, 0.0)",
+   "duration_s": 2.813,
+   "wall_s": 2.81
+  },
+  {
+   "id": "percent:int+1:7:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed"
+   ],
+   "example": "percent(1.0, 0.045)",
+   "duration_s": 2.953,
+   "wall_s": 2.95
+  },
+  {
+   "id": "percent:int-1:7:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed"
+   ],
+   "example": "percent(1.0, 0.045)",
+   "duration_s": 3.016,
+   "wall_s": 3.02
+  },
+  {
+   "id": "bucket:cmp:7:0",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "bucket(10)",
+   "duration_s": 3.094,
+   "wall_s": 3.09
+  },
+  {
+   "id": "bucket:cmp:9:0",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "bucket(100)",
+   "duration_s": 3.094,
+   "wall_s": 3.09
+  },
+  {
+   "id": "bucket:int+1:16:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "bucket(10)",
+   "duration_s": 3.25,
+   "wall_s": 3.27
+  },
+  {
+   "id": "bucket:int-1:16:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "bucket(9)",
+   "duration_s": 3.343,
+   "wall_s": 3.34
+  },
+  {
+   "id": "bucket:int+1:20:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "bucket(100)",
+   "duration_s": 3.375,
+   "wall_s": 3.38
+  },
+  {
+   "id": "bucket:int-1:20:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "bucket(99)",
+   "duration_s": 2.922,
+   "wall_s": 2.92
+  },
+  {
+   "id": "is_eligible:bool:6:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary",
+    "value_changed"
+   ],
+   "example": "is_eligible(17, True)",
+   "duration_s": 3.25,
+   "wall_s": 3.25
+  },
+  {
+   "id": "is_eligible:cmp:11:0",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "is_eligible(18, True)",
+   "duration_s": 3.547,
+   "wall_s": 3.55
+  },
+  {
+   "id": "is_eligible:int+1:17:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "is_eligible(18, True)",
+   "duration_s": 3.469,
+   "wall_s": 3.47
+  },
+  {
+   "id": "is_eligible:int-1:17:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "value_changed_at_mined_boundary"
+   ],
+   "example": "is_eligible(17, True)",
+   "duration_s": 3.5,
+   "wall_s": 3.5
+  },
+  {
+   "id": "chunk:cmp:7:0",
+   "label": "change_message_only",
+   "status": "no_difference_found",
+   "classes": [],
+   "example": null,
+   "duration_s": 2.922,
+   "wall_s": 2.92
+  },
+  {
+   "id": "chunk:int+1:17:",
+   "label": "change",
+   "status": "differences_found",
+   "classes": [
+    "new_exception"
+   ],
+   "example": "chunk([], 1)",
+   "duration_s": 3.985,
+   "wall_s": 3.98
+  },
+  {
+   "id": "chunk:int-1:17:",
+   "label": "change_message_only",
+   "status": "no_difference_found",
+   "classes": [],
+   "example": null,
+   "duration_s": 3.938,
+   "wall_s": 3.94
+  }
+ ]
+}

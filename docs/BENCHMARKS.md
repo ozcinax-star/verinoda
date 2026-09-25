@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -164,6 +164,97 @@ the four tests that reach `apply_discount` at run time were reported as reached,
 
 Not measured: an agent session with and without the review step; repositories of 2,000+ files; the precision of
 the word heuristics on their own; Java/Kotlin test runs (Gradle is not allowlisted).
+
+## Update 2026-09-25: behaviour probe (D36)
+
+Result files: `benchmarks/results/probe-2026-09-25/` (its README says how they were produced). Everything here
+is in-sample: the fixtures, their gold labels, the mutant labels and the probe have one author. The gold of the
+hand fixtures was fixed, and its sha256 recorded, before the probe ran on any of them (only the design's B1,
+fixture D03, had been run during development); the mutant labels were written after the mutants were filtered by
+the tests and before the probe ran on them.
+
+`verinoda probe` calls one changed Python function on generated inputs at the base commit and in the working
+tree (docs/DESIGN.md section 9). **49 hand fixtures** on git copies of `orders_app` plus small modules: 21
+behaviour changes the existing tests should miss (boundary off-by-one, swapped condition, removed guard, changed
+default, unicode mishandling, a slice bound, a changed module constant, saving per item with side effects
+allowed), 1 quadratic loop, 12 behaviour-preserving edits (each with 5 seeds), 9 functions the side-effect gate
+must refuse (file write, network, process, global counter, module-level cache, database, handlers through the
+repository), 4 it must let run (a file read, a print, pure functions), 2 unsupported (Kotlin, `async def`).
+
+| run (code) | detected | of those the tests miss | differences on equivalent edits (runs) | gate: right refusals / wrong refusals | unsupported | reproduced | time per probe median / p90 / max |
+|---|---|---|---|---|---|---|---|
+| 1, first (gold fixed) | 22/22 | 20/20 | 5/60, all E04 | 9/9 / 0/4 | 2/2 | 37/37 | 1.9 / 3.7 / 23.0 s |
+| 2, two fixes | 22/22 | 20/20 | 5/60, all E04 | 9/9 / 0/4 | 2/2 | 37/37 | 2.4 / 3.8 / 10.6 s |
+| 3, hypothesis blocked (fixed pseudo-random list) | 22/22 | 20/20 | 5/60, all E04 | 9/9 / 0/4 | 2/2 | 36/36 | 1.7 / 3.0 / 10.5 s |
+| 4, interim (780328a) | 22/22 | 20/20 | 5/60, all E04 | 9/9 / 0/4 | 2/2 | 37/37 | 2.6 / 4.0 / 10.8 s |
+| 5, final (c0dbd1f) | 22/22 | 20/20 | 5/60, all E04 | 9/9 / 0/4 | 2/2 | 37/37 | 2.1 / 4.2 / 11.1 s |
+| 6, after the review fixes | 22/22 | 20/20 | 5/60, all E04 (`numeric_drift_only`) | 9/9 / 0/4 | 2/2 | 37/37 | 2.0 / 3.8 / 11.2 s |
+| 7, after the second review round | 22/22 | 20/20 | 5/60, all E04 (`numeric_drift_only`) | 9/9 / 0/4 | 2/2 | 37/37 | 2.1 / 3.3 / 10.9 s |
+
+- **E04 is a wrong gold label, not a false alarm**: turning `subtotal = sum(i["price"] * i["qty"] for i in
+  items)` into a loop was labelled behaviour-preserving, but Python 3.12's `sum()` of floats uses compensated
+  summation (`sum([0.1] * 10) == 1.0`; the loop gives `0.9999999999999999`, checked directly). The probe reported
+  it on every seed as `numeric_drift`, the low-priority class for floats within 1e-9. On the other 11
+  equivalent edits: 0 differences in 55 runs.
+- **D05 and D15 are caught by the fixture project's own tests** (a fixture-writing mistake: an empty-order test
+  and a currency assertion exist). Among the 20 changes the tests miss, 20 are detected.
+- The two fixes between runs 1 and 2 were found in run 1: the scaling run re-measured a size already over its
+  1 s budget in every round (the quadratic fixture took 23 s; now 10.6 s), and a call past the per-call timeout
+  counted as a difference even without `--scaling` (now listed as `timeouts`, never a difference: the design
+  forbids performance claims without `--scaling`). Neither changed a score. Later fixes (a run that reaches its
+  own timeout is not a hang, the run's directory masked in reprs, equal sets equal in any order, hypothesis kept
+  from writing `.hypothesis/` in the working directory and from mixing in constants of imported modules) did
+  not change a score either.
+- **Review round** (two reviewers, 16 findings; run 6): threads that outlive their call and `multiprocessing`
+  children are now blocked at run time (both escaped the audit hook: the reviewer's thread and child wrote files
+  outside the copy and the probe said `no_difference_found`); a module whose import name another module took
+  (`tools/json.py` imported as `json`) is `inconclusive` instead of calling the standard library's `json`; a
+  plugin failure and a process that ends by itself (`os._exit`) are no longer read as hanging inputs; float drift
+  applies to floats only (a `Decimal` or `str` change is `value_changed`) and alone is the status
+  `numeric_drift_only`; the gate lets a returned SQL string and a project object's `.commit()` run; `--changed`
+  is `incomplete` (exit 3) when a changed function was not compared. None of this changed a score above: the
+  49 fixtures and 27 mutants do not contain those shapes. On the second reviewer's 21 adversarial fixtures
+  (written by the reviewer, kept in the review's scratch, not in the repository): the two false refusals now run
+  (`no_difference_found`), float reassociation is `numeric_drift_only`, the off-by-one at a call-site literal
+  that is also a mined boundary (`grade(60)`) is now `value_changed_at_mined_boundary`, and the other 17 are
+  unchanged (5/5 regressions found, 3 refusals, 2 nondeterministic functions reported, `list(set(...))` still
+  "no difference" - the runs pin `PYTHONHASHSEED`, now listed in `not_checked`). One of the two former false
+  refusals loops `range(n)` and hits the hang budget on huge `n`: 16 of 300 inputs ran, 28.5 s.
+- **Second review round** (one reviewer, 8 findings; run 7): a result's `__del__`, a `weakref.finalize`
+  callback and an `atexit` handler ran in the main thread after the call's window had closed (the reviewer's
+  harness counted 1,212 real writes per case while the probe said `differences_found`); they are now released
+  or run under the audit hook and the probe is `refused` at run time, with no write. The gate's syntax-tree SQL
+  rule had let six shapes pass that the line pattern refused (a helper's return value, a parameter default, an
+  instance attribute, another class's constant, a loop over statements); all six are refused again and a
+  statement that is only printed still runs. `[5]` -> `[5.0]`, `0.0` -> `-0.0` and an object's own repr are no
+  longer float drift; a probe where every input hung or ended the process is `inconclusive` instead of "no
+  difference ... in 4 inputs"; `asyncio.run` is no longer refused as network on Windows; `--changed` with a
+  changed file that does not parse is `incomplete`. The scores above and the mutants (25/25) are unchanged. On
+  the second reviewer's 21 adversarial fixtures of the first round only the `range(n)` function changed: 12 of
+  300 inputs returned on both sides, now `inconclusive` ("too few to say anything") instead of
+  `no_difference_found`.
+- **Ablation without boundary mining** (the 22 change fixtures, one seed): 19/22. Missed: the `>=` at 100.0
+  (D01), the 50-item limit that comes from an imported constant (D04) and the 80-character limit (D11) -
+  exactly the inputs mining produces.
+- **Automated mutants** (`mutants.py`): 45 single-point mutants of 12 functions of the fixture project
+  (comparison flips, and/or, `not` removal, `+`/`-`, `*`/`/`, integer constants +-1, float constants +1%); 27
+  survive the tests. Hand labels: 25 change behaviour, 2 change only an exception's message (the probe compares
+  exception types: "no difference" on both, as documented in `not_checked`), 0 equivalent. Kill rate 25/25,
+  first run, final code and after the review fixes; median 3.3 s per probe (3.1 s after the fixes). The functions are the hand fixtures' ones, so this is not
+  independent evidence.
+- Design bars (docs/DESIGN.md D36): B1-B4 and B8 5/5 with minimal examples (`apply_discount(100.0)`: base 100.0,
+  working tree 90.0; `apply_discount(1e+308)`: new `OverflowError`; `validate_items(<50 items>)`: new
+  `ValidationError`; `compute_total(<11 items>)`; `customer_key('a-b_c.d')` and the Turkish inputs;
+  `growth_changed` about 100x vs 10x per 10x more items); kill rate 25/25 (bar 60%); 0 false differences on the
+  genuinely equivalent edits (bar 0); refusal/unsupported right on B6 by default and B7 (a small Kotlin file,
+  not the forge_mod copy) and on the other gate fixtures; every reported class reproduced; the slowest probe 11.1
+  s (bar 20 s).
+
+Not measured: a real agent session with the skill text; repositories other than this fixture project; functions
+whose parameters need objects built from other objects or fixtures (`unsupported` today); the undeclared-exception
+oracle and the `--property` path against gold; the static gate on real code beyond these 13 gate fixtures;
+Linux and macOS; container isolation. Windows 11, Python 3.12.0, hypothesis 6.168.0, a machine shared with other
+agents' runs.
 
 ## Update 2026-09-25: debug ledger (debugloops_v1)
 

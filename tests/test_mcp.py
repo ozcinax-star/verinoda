@@ -84,6 +84,8 @@ EXPECTED_PARAMS = {
     "debug_status": ({"session_id"}, set()),
     "debug_strategy": ({"strategy", "session_id", "good", "bad", "times", "prepare", "trace", "overlay"},
                        {"strategy"}),
+    "change_probe": ({"symbol", "base", "no_base", "changed", "inputs", "seed", "properties", "examples", "scaling",
+                      "allow_side_effects", "emit_test"}, set()),
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
              "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members",
@@ -254,6 +256,7 @@ def _all_calls(t: AtlasTools) -> dict:
         "debug_attempt": lambda: t.debug_attempt("the rename broke it"),
         "debug_status": lambda: t.debug_status(),
         "debug_strategy": lambda: t.debug_strategy("differential"),
+        "change_probe": lambda: t.change_probe(symbol="app.py::main"),
     }
 
 

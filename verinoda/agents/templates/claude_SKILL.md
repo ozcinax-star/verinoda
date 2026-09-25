@@ -266,9 +266,11 @@ Before you finish a code change, run `verinoda decide check --changed --json` (M
 with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be
 superseded or the site waived; never edit, supersede or waive a decision record yourself.
 Before editing a function: `verinoda review --target FILE::NAME --change body|signature|remove --json` (MCP
-`change_review`); read its `read_first` in order, not whole files. Before saying done: `verinoda review --json`
-(`--run-tests` for pytest): report every concern and `unknown`, fix or defer each; "no finding" never means safe.
-`tests.reach_unknown` (no static caller) is not "no test reaches it"; `--staged` runs the staged tree or refuses.
+`change_review`), read `read_first` in order. Before saying done: `verinoda review --json` (`--run-tests`): report
+every concern and `unknown`; "no finding" never means safe, `tests.reach_unknown` is not "no test reaches it".
+After editing Python functions: `verinoda probe --changed --json` (MCP `change_probe`; `--property '<expr>'` for
+what the user asked). A difference is a behaviour change, not a bug: compare it with the request and show it. Say
+"no difference found in N inputs", never "verified"; refused/inconclusive is no pass; side effects only if agreed.
 
 ## Answer format
 

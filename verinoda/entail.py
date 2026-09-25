@@ -36,7 +36,9 @@ Per claim kind:
   ``spec.holds``) is full when, in the whole body of the Python definition F,
   the first call of the call stated first comes before the first call of the
   other one (:func:`call_order`); a pattern claim (``spec.pattern``) like
-  ``exclusive``.
+  ``exclusive``; a probe claim (``spec.probe``, ``verinoda probe``) is full only
+  for its own probe run, input and difference class, reproduced in the
+  confirmation runs, and a probe that found nothing is ``partial`` at most.
 * ``test_run``: full only when the claim spec names the run (``spec.experiment``
   or all ``spec.command`` ids in its command line) and every claim subject is
   exercised by it (test files in the command; code reached through the test
@@ -1465,7 +1467,32 @@ def order_check(repo, ev: dict, proposition: str, holds: bool = True) -> Grade |
                  "order")
 
 
+def _probe_grade(spec: dict, ev: dict, subjects: list[str]) -> Grade:
+    """A ``verinoda probe`` observation (docs/DESIGN.md D36): full only for the claim's own probe, input and
+    class, observed in its runs and again in the confirmation runs; a probe that found nothing is partial."""
+    meta = ev.get("meta") or {}
+    probe = spec.get("probe") or {}
+    if evmod.effective_type(ev) not in ("experiment", "test_result") or \
+            meta.get("kind") not in ("probe_counterexample", "probe_summary"):
+        return Grade("none", "not a probe run")
+    if not probe or meta.get("probe_id") != probe.get("id"):
+        return Grade("none", "the claim names another probe run")
+    if (subjects and meta.get("symbol") and subjects[0] != meta["symbol"]) or \
+            (probe.get("symbol") and meta.get("symbol") != probe["symbol"]):
+        return Grade("none", "the probe ran another function")
+    if meta["kind"] == "probe_summary" or probe.get("class") == "no_difference":
+        return Grade("partial", "a probe that found nothing is a search over its inputs, not a proof")
+    if meta.get("class") != probe.get("class") or meta.get("input_sha256") != probe.get("input"):
+        return Grade("partial", "the probe's runs, but another input or difference class")
+    if meta.get("outcome") == "pass" and meta.get("reproduced"):
+        return Grade("full", "the probe observed these results for this input in its runs and again in the "
+                             "confirmation runs")
+    return Grade("partial", "observed in one pair of runs only")
+
+
 def _behaviour(repo, spec: dict, ev: dict, text: str, subjects: list[str]) -> Grade:
+    if spec.get("probe") or (ev.get("meta") or {}).get("kind") in ("probe_counterexample", "probe_summary"):
+        return _probe_grade(spec, ev, subjects)
     if evmod.effective_type(ev) in evmod.FILE_TYPES and ev.get("path") and spec.get("proposition") \
             and "holds" in spec:
         g = order_check(repo, ev, str(spec["proposition"]), bool(spec.get("holds")))
@@ -2348,7 +2375,7 @@ def typed(kind: str, spec: dict | None, text: str | None = None) -> bool:
     if kind == "config":
         return bool(spec.get("env"))
     if kind == "behaviour":
-        return bool(spec.get("pattern") or (spec.get("proposition") and "holds" in spec))
+        return bool(spec.get("pattern") or (spec.get("proposition") and "holds" in spec) or spec.get("probe"))
     if kind == "exclusive":
         return bool(spec.get("pattern"))
     return kind in ("flow", "test_run")

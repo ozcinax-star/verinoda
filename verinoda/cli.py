@@ -1911,6 +1911,50 @@ def _r_resolution(r: dict) -> None:
         print(f"  ? {r['uncertainty']}")
 
 
+PROBE_QUIET = ("no_difference_found", "nothing_found", "done", "nothing_changed")
+
+
+def _r_probe(res: dict) -> None:
+    from verinoda import probe
+
+    if "probes" in res:  # --changed
+        print(res["headline"])
+        for p in res["probes"]:
+            print(f"  [{p['status']}] {p['symbol']} ({p['change']}): {p['headline']}")
+        for s in res.get("skipped") or []:
+            print(f"  skipped {s['symbol']}: {s['why']}")
+        for lim in res.get("limits") or []:
+            print(f"  limit: {lim}")
+        return
+    _write(probe.render(res))
+
+
+def cmd_probe(args) -> int:
+    """Differential/property probe of one changed Python function (docs/DESIGN.md D36)."""
+    from verinoda import probe
+
+    repo = _repo(args)
+    if not args.symbol and not args.changed:
+        raise SystemExit("error: name the function (path.py::name) or pass --changed")
+    if args.symbol and args.changed:
+        raise SystemExit("error: give a function or --changed, not both")
+    if args.no_base and args.changed:
+        raise SystemExit("error: --changed compares with a base; it cannot be used with --no-base")
+    st = _store(repo, create=True)
+    kw = dict(inputs=args.inputs, seed=args.seed, properties=args.property or [], examples=args.example or [],
+              scaling=args.scaling, timeout=args.timeout, per_call_timeout=args.per_call_timeout,
+              allow_side_effects=args.allow_side_effects, emit_test=args.emit_test, record=not args.no_record)
+    try:
+        if args.changed:
+            res = probe.probe_changed(st, repo, base=args.base or "HEAD", **kw)
+        else:
+            res = probe.probe(st, repo, args.symbol, base=args.base or "HEAD", no_base=args.no_base, **kw)
+    finally:
+        st.close()
+    _emit(args, res, _r_probe)
+    return 0 if res.get("status") in PROBE_QUIET else 3
+
+
 def cmd_resolve_call(args) -> int:
     from verinoda import precise
     from verinoda.paths import db_path
@@ -2631,6 +2675,33 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--timeout", type=float, help="seconds (default: twice the experiment timeout)")
     sp.add_argument("--mode", choices=TRACE_MODES, default="auto",
                     help="tracer: auto (sys.monitoring, else setprofile), monitoring, setprofile, off (baseline)")
+    sp = add("probe", cmd_probe, "call one changed Python function on many generated inputs at the base and in the "
+                                 "working tree (isolated runs) and report behaviour differences, stated properties "
+                                 "that fail and undeclared exceptions (exit 3 unless nothing was found)")
+    sp.add_argument("symbol", nargs="?", metavar="FUNCTION",
+                    help="path.py::name or path.py::Class.method (or a unique name); omit with --changed")
+    sp.add_argument("--changed", action="store_true", help="probe every Python function changed against the base")
+    g = sp.add_mutually_exclusive_group()
+    g.add_argument("--base", help="the commit to compare with (default HEAD)")
+    g.add_argument("--no-base", action="store_true", help="no differential: the working tree only (properties, "
+                                                          "undeclared exceptions, nondeterminism)")
+    sp.add_argument("--inputs", type=int, default=300, help="input budget (default 300)")
+    sp.add_argument("--seed", type=int, default=0, help="seed of the generated inputs (default 0)")
+    sp.add_argument("--property", action="append", metavar="EXPR",
+                    help="a Python expression over the parameters and `result` that must hold (repeatable), e.g. "
+                         "'result <= subtotal'")
+    sp.add_argument("--example", action="append", metavar="ARGS",
+                    help="arguments to try first, as a Python literal tuple, e.g. '(100.0,)' (repeatable)")
+    sp.add_argument("--scaling", action="store_true", help="also time one list/string argument at 10^2..10^4 "
+                                                           "elements (rough growth, both versions)")
+    sp.add_argument("--timeout", type=float, help="seconds per run (default: the experiment timeout)")
+    sp.add_argument("--per-call-timeout", type=float, default=2.0, help="seconds per call (default 2)")
+    sp.add_argument("--allow-side-effects", action="store_true",
+                    help="run even when the side-effect gate refuses (the user's decision: writes, network and "
+                         "processes then run in the throw-away copy with process isolation only)")
+    sp.add_argument("--emit-test", action="store_true", help="print pytest functions that pin the base behaviour "
+                                                             "(nothing is written)")
+    sp.add_argument("--no-record", action="store_true", help="do not record claims for the findings")
     sp = add("resolve-call", cmd_resolve_call, "precise resolution of one call site: which definition does "
                                                "TARGET on PATH:LINE bind to? (exit 3: no precise answer)")
     sp.add_argument("site", metavar="PATH:LINE")
