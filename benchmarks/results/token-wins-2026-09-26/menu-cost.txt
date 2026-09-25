@@ -1,0 +1,30 @@
+Standing per-session cost: doctor output on a Verinoda copy (the agent persona's `vc`), the MCP
+tools/list as it goes on the wire (name, description, input/output schema, annotations; compact JSON)
+with the server instructions, and the skill files. chars/4 and pretok (a lower-bound BPE estimate).
+Before the main (c8da753) run the server had no profiles, so its [core] and [full] lines are the same.
+
+== main (c8da753) ==
+doctor --json: 10738 chars (~2684 tok)
+doctor (text): 3055 chars (~764 tok)
+doctor --brief: 0 chars (~0 tok)
+[core] tools/list: 33 tools, 50029 chars (~12507 tok, 10032 pretok); descriptions 16935, input schemas 23767, output schemas 2624
+[core] instructions: 4648 chars (~1162 tok)
+[core] claude_SKILL.md: 16775 chars, ~4194 tok, 3766 pretok, 275 lines
+[core] codex_SKILL.md: 16336 chars, ~4084 tok, 3703 pretok, 243 lines
+[full] tools/list: 33 tools, 50029 chars (~12507 tok, 10032 pretok); descriptions 16935, input schemas 23767, output schemas 2624
+[full] instructions: 4648 chars (~1162 tok)
+[full] claude_SKILL.md: 16775 chars, ~4194 tok, 3766 pretok, 275 lines
+[full] codex_SKILL.md: 16336 chars, ~4084 tok, 3703 pretok, 243 lines
+
+== night/token-wins (branch head) ==
+doctor --json: 8206 chars (~2052 tok)
+doctor (text): 3055 chars (~764 tok)
+doctor --brief: 385 chars (~96 tok)
+[core] tools/list: 11 tools, 9964 chars (~2491 tok, 2039 pretok); descriptions 3704, input schemas 4496, output schemas 0
+[core] instructions: 2014 chars (~504 tok)
+[core] claude_SKILL.md: 16970 chars, ~4242 tok, 3791 pretok, 277 lines
+[core] codex_SKILL.md: 16439 chars, ~4110 tok, 3715 pretok, 243 lines
+[full] tools/list: 33 tools, 36516 chars (~9129 tok, 7453 pretok); descriptions 10897, input schemas 20253, output schemas 0
+[full] instructions: 3587 chars (~897 tok)
+[full] claude_SKILL.md: 16970 chars, ~4242 tok, 3791 pretok, 277 lines
+[full] codex_SKILL.md: 16439 chars, ~4110 tok, 3715 pretok, 243 lines

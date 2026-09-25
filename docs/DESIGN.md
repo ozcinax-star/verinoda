@@ -465,7 +465,7 @@ apart from `atlas.db` because it is disposable.
   signature when the passage below starts at the item's first line (the signature is that
   line; the header takes it back if the passage is cut); each passage window is dedented on its
   own; the tail says `next: same query, --max-chars N`. The `## path:a-b` and `  path:x-y`
-  locators are unchanged (measured in docs/BENCHMARKS.md, "Token wins, 2026-09-26").
+  locators are unchanged (measured in docs/BENCHMARKS.md, "Update 2026-09-26: token wins").
 - `analyze` follows the same rule (2026-09-26, `analysis_view`): its default text and the MCP
   response carry the answer, not the run - verdicts, answer claims, the other claims, unknowns
   and the query passages; confidence only below its status's cap, evidence only where it adds a
@@ -482,7 +482,7 @@ apart from `atlas.db` because it is disposable.
   behind `query.shape_budget` / `VERINODA_SHAPE_BUDGET`: -8.3% tokens per question on the 8 sets
   with no fact found lost, but one gold line no longer shown, so it stays off (the rule: no gold
   fact lost anywhere, found or shown, in-sample or out). A stop signal that knows when the
-  question is covered is the open lever (docs/BENCHMARKS.md, "Token wins, 2026-09-26").
+  question is covered is the open lever (docs/BENCHMARKS.md, "Update 2026-09-26: token wins").
 
 **D21. Build-time work is not repeated at query time.**
 

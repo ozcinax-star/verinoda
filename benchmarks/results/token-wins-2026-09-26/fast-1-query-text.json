@@ -1,0 +1,544 @@
+{
+ "forge_mod": {
+  "verinoda_analyze": 67,
+  "verinoda_retrieve": 50,
+  "verinoda_retrieve_text": 67,
+  "per_q": {
+   "q01": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 2
+   },
+   "q02": {
+    "verinoda_analyze": 5,
+    "verinoda_retrieve": 5,
+    "verinoda_retrieve_text": 5
+   },
+   "q03": {
+    "verinoda_analyze": 6,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 6
+   },
+   "q04": {
+    "verinoda_analyze": 5,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 5
+   },
+   "q05": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 1,
+    "verinoda_retrieve_text": 4
+   },
+   "q06": {
+    "verinoda_analyze": 5,
+    "verinoda_retrieve": 5,
+    "verinoda_retrieve_text": 5
+   },
+   "q07": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 4
+   },
+   "q08": {
+    "verinoda_analyze": 6,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 6
+   },
+   "q09": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 4
+   },
+   "q10": {
+    "verinoda_analyze": 6,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 6
+   },
+   "q11": {
+    "verinoda_analyze": 6,
+    "verinoda_retrieve": 6,
+    "verinoda_retrieve_text": 6
+   },
+   "q12": {
+    "verinoda_analyze": 6,
+    "verinoda_retrieve": 5,
+    "verinoda_retrieve_text": 6
+   },
+   "q13": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q14": {
+    "verinoda_analyze": 5,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 5
+   }
+  },
+  "negatives": {
+   "verinoda_analyze": 0,
+   "verinoda_retrieve": 0,
+   "verinoda_retrieve_text": 0
+  },
+  "facts": 68,
+  "seconds": 13.1
+ },
+ "glow_mod": {
+  "verinoda_analyze": 48,
+  "verinoda_retrieve": 44,
+  "verinoda_retrieve_text": 48,
+  "per_q": {
+   "q01": {
+    "verinoda_analyze": 6,
+    "verinoda_retrieve": 6,
+    "verinoda_retrieve_text": 6
+   },
+   "q02": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 2
+   },
+   "q03": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 2
+   },
+   "q04": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 4
+   },
+   "q05": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q06": {
+    "verinoda_analyze": 5,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 5
+   },
+   "q07": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 3
+   },
+   "q08": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q09": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 4
+   },
+   "q10": {
+    "verinoda_analyze": 5,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 5
+   },
+   "q11": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q12": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q13": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 3
+   },
+   "q14": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 2
+   }
+  },
+  "negatives": {
+   "verinoda_analyze": 0,
+   "verinoda_retrieve": 0,
+   "verinoda_retrieve_text": 0
+  },
+  "facts": 50,
+  "seconds": 11.8
+ },
+ "orders_app": {
+  "verinoda_analyze": 32,
+  "verinoda_retrieve": 31,
+  "verinoda_retrieve_text": 32,
+  "per_q": {
+   "q01": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q02": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 3
+   },
+   "q03": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q04": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 4
+   },
+   "q05": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q06": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q07": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q08": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 4
+   },
+   "q09": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q10": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   }
+  },
+  "negatives": {
+   "verinoda_analyze": 1,
+   "verinoda_retrieve": 0,
+   "verinoda_retrieve_text": 0
+  },
+  "facts": 32,
+  "seconds": 7.3
+ },
+ "orders_app_tr": {
+  "verinoda_analyze": 32,
+  "verinoda_retrieve": 29,
+  "verinoda_retrieve_text": 32,
+  "per_q": {
+   "q01": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q02": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q03": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q04": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 4
+   },
+   "q05": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q06": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q07": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "q08": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 4
+   },
+   "q09": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 3
+   },
+   "q10": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 1,
+    "verinoda_retrieve_text": 3
+   }
+  },
+  "negatives": {
+   "verinoda_analyze": 1,
+   "verinoda_retrieve": 0,
+   "verinoda_retrieve_text": 0
+  },
+  "facts": 32,
+  "seconds": 7.2
+ },
+ "graphify_core": {
+  "verinoda_analyze": 36,
+  "verinoda_retrieve": 27,
+  "verinoda_retrieve_text": 36,
+  "per_q": {
+   "g01": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 4
+   },
+   "g02": {
+    "verinoda_analyze": 6,
+    "verinoda_retrieve": 6,
+    "verinoda_retrieve_text": 6
+   },
+   "g03": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 4
+   },
+   "g04": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "g05": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 3
+   },
+   "g06": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 3
+   },
+   "g07": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 4
+   },
+   "g08": {
+    "verinoda_analyze": 6,
+    "verinoda_retrieve": 1,
+    "verinoda_retrieve_text": 6
+   },
+   "g09": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 3
+   }
+  },
+  "negatives": {
+   "verinoda_analyze": 0,
+   "verinoda_retrieve": 0,
+   "verinoda_retrieve_text": 0
+  },
+  "facts": 37,
+  "seconds": 34.0
+ },
+ "graphify_core_tr": {
+  "verinoda_analyze": 31,
+  "verinoda_retrieve": 20,
+  "verinoda_retrieve_text": 31,
+  "per_q": {
+   "g01": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 4
+   },
+   "g02": {
+    "verinoda_analyze": 1,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 1
+   },
+   "g03": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 4
+   },
+   "g04": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "g05": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 3
+   },
+   "g06": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 3
+   },
+   "g07": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 4
+   },
+   "g08": {
+    "verinoda_analyze": 6,
+    "verinoda_retrieve": 1,
+    "verinoda_retrieve_text": 6
+   },
+   "g09": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   }
+  },
+  "negatives": {
+   "verinoda_analyze": 0,
+   "verinoda_retrieve": 0,
+   "verinoda_retrieve_text": 0
+  },
+  "facts": 37,
+  "seconds": 32.4
+ },
+ "heldout_repoatlas": {
+  "verinoda_analyze": 27,
+  "verinoda_retrieve": 21,
+  "verinoda_retrieve_text": 26,
+  "per_q": {
+   "h01": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 4
+   },
+   "h02": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 2
+   },
+   "h03": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 4,
+    "verinoda_retrieve_text": 4
+   },
+   "h04": {
+    "verinoda_analyze": 5,
+    "verinoda_retrieve": 5,
+    "verinoda_retrieve_text": 5
+   },
+   "h05": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 2
+   },
+   "h06": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 2
+   },
+   "h07": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 3
+   },
+   "h08": {
+    "verinoda_analyze": 4,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 4
+   }
+  },
+  "negatives": {
+   "verinoda_analyze": 0,
+   "verinoda_retrieve": 0,
+   "verinoda_retrieve_text": 0
+  },
+  "facts": 33,
+  "seconds": 18.7
+ },
+ "verinoda_user_tr": {
+  "verinoda_analyze": 13,
+  "verinoda_retrieve": 9,
+  "verinoda_retrieve_text": 13,
+  "per_q": {
+   "u01": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u02": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u03": {
+    "verinoda_analyze": 3,
+    "verinoda_retrieve": 3,
+    "verinoda_retrieve_text": 3
+   },
+   "u04": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u05": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u06": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u07": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 1,
+    "verinoda_retrieve_text": 2
+   },
+   "u08": {
+    "verinoda_analyze": 0,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 0
+   },
+   "u09": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 1,
+    "verinoda_retrieve_text": 2
+   },
+   "u10": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 0,
+    "verinoda_retrieve_text": 2
+   },
+   "u11": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 2
+   },
+   "u12": {
+    "verinoda_analyze": 2,
+    "verinoda_retrieve": 2,
+    "verinoda_retrieve_text": 2
+   }
+  },
+  "negatives": {
+   "verinoda_analyze": 0,
+   "verinoda_retrieve": 0,
+   "verinoda_retrieve_text": 0
+  },
+  "facts": 30,
+  "seconds": 25.3
+ }
+}

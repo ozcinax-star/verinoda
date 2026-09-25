@@ -1,0 +1,366 @@
+{
+ "q_text": {
+  "v1": {
+   "hits": 1,
+   "facts": 3,
+   "tokens": 1397
+  },
+  "v2": {
+   "hits": 2,
+   "facts": 4,
+   "tokens": 1361
+  },
+  "v3": {
+   "hits": 3,
+   "facts": 3,
+   "tokens": 1416
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 1425
+  },
+  "v5": {
+   "hits": 2,
+   "facts": 3,
+   "tokens": 1367
+  },
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1488
+  },
+  "b2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 1500
+  },
+  "b3": {
+   "hits": 4,
+   "facts": 7,
+   "tokens": 1489
+  },
+  "b4": {
+   "hits": 1,
+   "facts": 2,
+   "tokens": 1495
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 1486
+  }
+ },
+ "q_text4800": {
+  "v1": {
+   "hits": 1,
+   "facts": 3,
+   "tokens": 1159
+  },
+  "v2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 1192
+  },
+  "v3": {
+   "hits": 3,
+   "facts": 3,
+   "tokens": 956
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 1160
+  },
+  "v5": {
+   "hits": 2,
+   "facts": 3,
+   "tokens": 1152
+  },
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1193
+  },
+  "b2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 1184
+  },
+  "b3": {
+   "hits": 4,
+   "facts": 7,
+   "tokens": 1196
+  },
+  "b4": {
+   "hits": 1,
+   "facts": 2,
+   "tokens": 1189
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 1192
+  }
+ },
+ "mcp_query": {
+  "v1": {
+   "hits": 1,
+   "facts": 3,
+   "tokens": 1397
+  },
+  "v2": {
+   "hits": 2,
+   "facts": 4,
+   "tokens": 1361
+  },
+  "v3": {
+   "hits": 3,
+   "facts": 3,
+   "tokens": 1416
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 1425
+  },
+  "v5": {
+   "hits": 2,
+   "facts": 3,
+   "tokens": 1367
+  },
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1488
+  },
+  "b2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 1500
+  },
+  "b3": {
+   "hits": 4,
+   "facts": 7,
+   "tokens": 1489
+  },
+  "b4": {
+   "hits": 1,
+   "facts": 2,
+   "tokens": 1495
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 1486
+  }
+ },
+ "cli_an_text": {
+  "v1": {
+   "hits": 1,
+   "facts": 3,
+   "tokens": 591
+  },
+  "v2": {
+   "hits": 2,
+   "facts": 4,
+   "tokens": 969
+  },
+  "v3": {
+   "hits": 3,
+   "facts": 3,
+   "tokens": 531
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 652
+  },
+  "v5": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 782
+  },
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 852
+  },
+  "b2": {
+   "hits": 0,
+   "facts": 4,
+   "tokens": 601
+  },
+  "b3": {
+   "hits": 4,
+   "facts": 7,
+   "tokens": 563
+  },
+  "b4": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 528
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 902
+  }
+ },
+ "cli_an_json": {
+  "v1": {
+   "hits": 1,
+   "facts": 3,
+   "tokens": 3928
+  },
+  "v2": {
+   "hits": 2,
+   "facts": 4,
+   "tokens": 4409
+  },
+  "v3": {
+   "hits": 3,
+   "facts": 3,
+   "tokens": 3193
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 3442
+  },
+  "v5": {
+   "hits": 2,
+   "facts": 3,
+   "tokens": 3650
+  },
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 3801
+  },
+  "b2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 3417
+  },
+  "b3": {
+   "hits": 4,
+   "facts": 7,
+   "tokens": 3075
+  },
+  "b4": {
+   "hits": 1,
+   "facts": 2,
+   "tokens": 3605
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 3290
+  }
+ },
+ "mcp_analyze": {
+  "v1": {
+   "hits": 1,
+   "facts": 3,
+   "tokens": 2993
+  },
+  "v2": {
+   "hits": 2,
+   "facts": 4,
+   "tokens": 2928
+  },
+  "v3": {
+   "hits": 3,
+   "facts": 3,
+   "tokens": 2626
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 2787
+  },
+  "v5": {
+   "hits": 2,
+   "facts": 3,
+   "tokens": 2929
+  },
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 2994
+  },
+  "b2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 2721
+  },
+  "b3": {
+   "hits": 4,
+   "facts": 7,
+   "tokens": 2494
+  },
+  "b4": {
+   "hits": 1,
+   "facts": 2,
+   "tokens": 2901
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 2769
+  }
+ },
+ "graphify(saved)": {
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1631
+  },
+  "b2": {
+   "hits": 0,
+   "facts": 4,
+   "tokens": 1624
+  },
+  "b3": {
+   "hits": 0,
+   "facts": 7,
+   "tokens": 1982
+  },
+  "b4": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 1616
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 1621
+  },
+  "v1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1610
+  },
+  "v2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 1667
+  },
+  "v3": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1609
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 505
+  },
+  "v5": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1652
+  }
+ }
+}

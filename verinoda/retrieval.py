@@ -78,7 +78,7 @@ TEXT_MAX_EXPANSIONS = 3     # from->to pairs on the text's `expanded:` line (JSO
 
 # The default text budget (`verinoda query`, MCP project_query, analyze's passages). With the
 # question-shape budget on (config query.shape_budget, env VERINODA_SHAPE_BUDGET; off by default,
-# docs/BENCHMARKS.md "Token wins, 2026-09-26" says why) a single-clause question gets
+# docs/BENCHMARKS.md "Update 2026-09-26: token wins" says why) a single-clause question gets
 # SHAPE_CHARS_NARROW; compound, flow and test questions keep QUERY_CHARS.
 QUERY_CHARS = 6000
 SHAPE_CHARS_NARROW = 4800
