@@ -2,7 +2,7 @@
 
 Every command is a thin adapter over a core function (workflow, analysis,
 critique, research, feedback, references, question_plan, precise, runtime,
-agents, mcp). The MCP server calls the same functions, so CLI and MCP never
+agents, mcp, codecheck). The MCP server calls the same functions, so CLI and MCP never
 diverge. ``--json`` prints the structured result; the default is a compact
 human rendering of the same data (``query`` prints the plain-text context the
 model reads, docs/DESIGN.md D20).
@@ -10,7 +10,8 @@ model reads, docs/DESIGN.md D20).
 Exit codes: 0 done; 1 error; 2 usage error, invalid plan, unresolved trace
 endpoint or blocked upstream command; 3 "needs more": a plan that needs
 clarification, a partial reference resolution, a refused experiment, an
-incomplete observation, no precise answer.
+incomplete observation, no precise answer, an absent name (`check`) or an
+unknown target (`api`).
 """
 
 from __future__ import annotations
@@ -1311,6 +1312,98 @@ def cmd_resolve_call(args) -> int:
     return 0
 
 
+CHECK_UNKNOWN_SHOWN = 20
+
+
+def _r_check(r: dict) -> None:
+    s, env = r["summary"], r["env"]
+    print(f"verinoda check: {s['absent']} absent, {s['not_installed']} not installed, {s['unknown']} unknown, "
+          f"{s['guarded']} guarded, {s['exists']} exist ({s['sites']} sites in {s['files']} files; {r['scope']})")
+    print(f"environment: {env.get('python')}" + (f" - {env['note']}" if env.get("note") else ""))
+    for name, text in (env.get("packages_checked") or {}).items():
+        print(f"  {name} {text}")
+    for m in env.get("lock_mismatches") or []:
+        print(f"  ! {m['package']}: installed {m['installed']}, locked {m['locked']} ({m.get('at')})")
+    for f in r.get("files", []):
+        if f.get("error"):
+            print(f"{f['path']}: {f['error']}")
+    unknown = 0
+    for site in r["sites"]:
+        v = site["verdict"]
+        if v == "unknown":
+            unknown += 1
+            if unknown > CHECK_UNKNOWN_SHOWN:
+                continue
+        label = "ABSENT" if v == "absent" else v
+        print(f"{site['at']}  {label}  {site['kind']} {site['expr']}")
+        detail = site.get("message") or site.get("why") or site.get("guard") or site.get("at_def")
+        if detail:
+            print(f"    {detail}")
+        if site.get("nearest"):
+            print("    nearest: " + ", ".join(n["name"] + (f" ({n['at']})" if n.get("at") else "")
+                                         for n in site["nearest"]))
+        if site.get("elsewhere"):
+            print("    defined elsewhere: " + ", ".join(f"{e['qualname']} ({e['at']})" for e in site["elsewhere"]))
+        if site.get("next_step") and v in ("absent", "not_installed"):
+            print(f"    next: {site['next_step']}")
+    if unknown > CHECK_UNKNOWN_SHOWN:
+        print(f"... {unknown - CHECK_UNKNOWN_SHOWN} more unknown sites (--json lists them all)")
+    if unknown:
+        print("unknown = not checked (open container or receiver type not known); read the definition or run "
+              "the tests")
+
+
+def cmd_check(args) -> int:
+    from verinoda import codecheck
+
+    repo = _repo(args)
+    snippet = None
+    if args.stdin:
+        if args.paths or args.diff is not None:
+            raise SystemExit("error: --stdin checks the code on stdin; do not also give PATHs or --diff")
+        snippet = sys.stdin.buffer.read().decode("utf-8", "replace")
+        as_path = _rel_in_repo(repo, args.as_path, "--as") if args.as_path else None
+    elif args.as_path:
+        raise SystemExit("error: --as goes with --stdin")
+    else:
+        as_path = None
+        if args.paths and args.diff is not None:
+            raise SystemExit("error: give PATHs or --diff, not both")
+    res = codecheck.check(repo, args.paths or None, diff=args.diff, snippet=snippet, as_path=as_path,
+                          env=args.env, include_exists=args.all, use_cache=not args.no_cache)
+    _emit(args, res, _r_check)
+    return int(res["exit"])
+
+
+def _r_api(r: dict) -> None:
+    env = r.get("env") or {}
+    if not r.get("found"):
+        print(f"{r['target']}: not found - {r.get('why')}")
+        if r.get("nearest"):
+            print("  nearest: " + ", ".join(n["name"] for n in r["nearest"]))
+        return
+    where = r.get("at") or ""
+    print(f"{r.get('name') or r['target']} ({r.get('kind')}, {r.get('source')}, {where})")
+    if env:
+        print(f"environment: {env.get('python')}")
+    if r.get("signature"):
+        print(f"  {r['signature']}")
+    if r.get("why_open"):
+        print(f"  not closed: {r['why_open']}")
+    for m in r.get("members", []):
+        sig = m.get("signature") or m["name"]
+        extra = f"  (from {m['defined_in']})" if m.get("defined_in") else ""
+        print(f"  {sig:<60} {m.get('kind') or '':<12} {m.get('at') or ''}{extra}")
+
+
+def cmd_api(args) -> int:
+    from verinoda import codecheck
+
+    res = codecheck.api(_repo(args), args.target, env=args.env, private=args.private)
+    _emit(args, res, _r_api)
+    return int(res.get("exit", 0))
+
+
 def cmd_memory(args) -> int:
     from verinoda.memory import Memory
 
@@ -1736,6 +1829,25 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("target", metavar="TARGET", help="the called name (label, Class.method or name)")
     sp.add_argument("--target", dest="target_at", metavar="PATH:LINE",
                     help="the definition the graph claims; adds a confirms/refutes/undetermined verdict")
+
+    env_help = ("auto (the project's .venv, venv or env; else the standard library only), a virtual environment "
+                "or interpreter path, or none (standard library only)")
+    sp = add("check", cmd_check, "check that the modules, names, keyword arguments and dict keys code uses exist "
+                                 "in the project's environment (exit 3: something is absent)")
+    sp.add_argument("paths", nargs="*", metavar="PATH",
+                    help="files or directories to check (default: the lines changed against HEAD, as --diff)")
+    sp.add_argument("--diff", nargs="?", const="HEAD", metavar="REV",
+                    help="only sites on lines changed against REV (default HEAD), and new untracked files")
+    sp.add_argument("--stdin", action="store_true", help="check the code on stdin before it is written")
+    sp.add_argument("--as", dest="as_path", metavar="PATH", help="with --stdin: the file the code is meant for")
+    sp.add_argument("--env", default="auto", help=env_help)
+    sp.add_argument("--all", action="store_true", help="also list the sites that exist")
+    sp.add_argument("--no-cache", action="store_true", help="do not read or write .verinoda/cache/check")
+    sp = add("api", cmd_api, "the real members of a module, class or function in the project's environment, with "
+                             "signatures and locations (exit 3: not found)")
+    sp.add_argument("target", metavar="NAME", help="dotted name, e.g. packaging.specifiers.SpecifierSet")
+    sp.add_argument("--env", default="auto", help=env_help)
+    sp.add_argument("--private", action="store_true", help="also list names that start with an underscore")
 
     sp = sub.add_parser("memory", help="versioned learnings tied to claims")
     msub = sp.add_subparsers(dest="mem_cmd", required=True)

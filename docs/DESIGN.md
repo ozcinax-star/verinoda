@@ -51,6 +51,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D28 | Runtime observation | implemented | CLI `observe` and `analyze --observe`, MCP `runtime_observe`. Deviations: overhead is 1.39× CPU (median) on 533 Graphify tests, against the research's 1.23×, because boundary calls are recorded and the trace is written inside the timed window. The `setprofile` fallback costs about 4.5× and was only forced on CPython 3.12. Child processes are not traced. The container path has not been run against a real docker/podman. The observed-edge retrieval channel is not built. |
 | D29 | Precise resolution | implemented | `verinoda[precise]` (jedi), `resolve-call`, `scan --precise`, `scan --scip FILE`, MCP `resolve_call`, per-analysis budget. Stricter than the research: a method called on a parameter or local receiver is `dynamic`, never definitive. SCIP is used for non-Python files only. |
 | D30 | Measurement harness | implemented | `verinoda benchmark staleness replay\|mutations` and `verinoda benchmark critique-eval`. The replay samples claims whose evidence is in modified files; incoming relations from unchanged files are not sampled. |
+| D31 | Name-existence check | partial | Python only: `verinoda check` (files, `--diff`, `--stdin --as`) and `verinoda api`, MCP `code_check` / `api_members`, skill text. Not done: mod config keys and resource ids, JVM jars, JS/TS, `--against PKG==VER`, the environment fingerprint in snapshots. Measurements in BENCHMARKS.md (the fixture set was written by the rule author: in-sample). |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -592,6 +593,45 @@ catches the benchmark's wrong finding in 6 ms.
 - Staleness recall must be 1.0, and zero claims may be silently wrong while
   shown as verified.
 - Critique precision and recall are measured on a labelled set.
+
+### 4.3 Name existence (added after round 3)
+
+**D31. Name-existence check** (`verinoda check`, `verinoda api`; `codecheck.py`,
+`codecheck_env.py`, `codecheck_facts.py`; needs the `precise` extra).
+
+- Finding: AI-written code imports modules, calls functions, passes keyword
+  arguments and reads dict keys that do not exist, or not in the installed
+  version. `resolve-call` answered "unresolved" both for a missing name and for
+  a receiver of unknown type, never checked imports or keywords, and resolved
+  against Verinoda's own interpreter instead of the project's environment.
+- Sites: imports and from-imports, attribute loads, keyword arguments, and
+  constant keys read from the dict literals a function returns. `--diff`
+  checks the sites on changed lines (plus new files); `--stdin --as PATH`
+  checks code before it is written.
+- Environment: `--env PATH`, else `<project>/.venv`, `venv` or `env` (jedi's
+  safety check must pass), else Verinoda's interpreter for the standard library
+  only; third-party names are then `not_installed`, never `absent`.
+  Standard-library names come from that interpreter itself (`python -I -S`),
+  not from jedi's bundled stubs. The report header names the interpreter, the
+  package versions used and lock-file mismatches.
+- Closed-world rule: `absent` only from a closed container - a module with no
+  `__getattr__`, `exec` or `globals()` writes and closed star imports; a class
+  object; an instance made by a direct constructor call, or held by a single
+  unreassigned local that is not handed to code that sets attributes (slotted
+  instances are closed whatever they are handed to); one known signature
+  without `**kwargs` or an unknown decorator; the keys of dict literals a
+  function returns. A parameter, an annotation or an inferred return value
+  leaves the receiver `unknown`. jedi must also fail to find the name.
+- Guards: try/except ImportError (AttributeError, TypeError, KeyError for the
+  other kinds), `if TYPE_CHECKING`, version and platform tests and `hasattr`
+  make a missing name `guarded`.
+- Output: nearest real names (edit distance with transpositions, shared word
+  parts, a few synonyms) and where the name is defined elsewhere. Wording:
+  "not found in <container> as installed in <env> (<file>)", never "does not
+  exist". Exit 3 when something is absent.
+- Cache: per file in `.verinoda/cache/check/`, keyed by the file's sha256 and
+  the environment fingerprint; an answer is dropped when a project file it was
+  read from, or the set of project files, changes.
 
 ## 5. Delivery plan
 

@@ -1,6 +1,6 @@
 ---
 name: verinoda
-description: Evidence-first answers about this codebase with Verinoda - how a feature works, where something is implemented, how calls or data flow between components (handler -> service -> storage), why a design decision was made, what a change would affect, or whether an earlier conclusion still holds. Every answer is a set of claims with file:line evidence and an explicit status (verified, inference, unknown). Use it before explaining unfamiliar code and when the user disputes an earlier answer; do not use it for pure code-writing tasks.
+description: Evidence-first answers about this codebase with Verinoda - how a feature works, where something is implemented, how calls or data flow between components (handler -> service -> storage), why a design decision was made, what a change would affect, or whether an earlier conclusion still holds. Every answer is a set of claims with file:line evidence and an explicit status (verified, inference, unknown). Use it before explaining unfamiliar code, when the user disputes an earlier answer, and after writing Python code to check that the modules, names and keyword arguments it uses exist.
 ---
 <!-- verinoda-managed v1 -->
 <!-- Managed by `verinoda install`. After a local install, edits are kept: install will not overwrite them and uninstall leaves the file. A copy with no local install record is refreshed by install. Delete the marker line above to take ownership. -->
@@ -26,6 +26,7 @@ read its structured output, and report exactly what the evidence supports.
 - "What breaks if I change X?" (impact view)
 - Verifying, re-checking or challenging an earlier conclusion, yours or the user's.
 - Comparing a mechanism with a reference repository or an official document.
+- Writing or editing Python code: check that the names it uses exist (see below).
 
 ## Setup (once per session)
 
@@ -165,6 +166,11 @@ verinoda feedback add --text "prices are cached" --expect-pattern "lru_cache" --
 verinoda feedback process <feedback-id> --json
 verinoda feedback list --json
 
+# before proposing code and after every edit: do the names it uses exist?
+verinoda check --diff --json
+verinoda check src/module.py --json
+verinoda api packaging.specifiers.SpecifierSet --json
+
 # after code changes
 verinoda update .
 ```
@@ -198,6 +204,23 @@ unresolved, say what evidence would settle it.
   paste whole files or full logs; experiment logs stay on disk (the result gives the path).
 - Experiments outside the test-runner allowlist are refused without docker/podman. Report the
   refusal; do not work around it.
+
+## Check the names code uses (Python)
+
+Invented imports, functions, methods, keyword arguments and dict keys break code that looks right.
+Before you propose Python code, and after every edit:
+
+1. `verinoda check --diff --json` (MCP `code_check`) checks the sites on changed lines; for code
+   not written yet, pipe it to `verinoda check --stdin --as <path> --json` (MCP `code_check` with
+   `snippet` and `as_path`).
+2. Never keep an `absent` site: fix it from `nearest` / `elsewhere`, or list the real names with
+   `verinoda api <module.or.Class> --json` (MCP `api_members`) and use one of those.
+3. `unknown` is unverified, not fine: read the definition or run the tests before relying on it.
+   `not_installed`: the environment checked lacks the package. `guarded`: the code handles it.
+4. Tell the user which environment was checked (`env.python`, `env.packages_checked`,
+   `env.lock_mismatches`). Exit code 3 means something is absent.
+
+Only if the user agrees: a PostToolUse hook on Edit/Write that runs `verinoda check --diff`.
 
 ## After editing code
 

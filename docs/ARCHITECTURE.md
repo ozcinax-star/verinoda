@@ -6,11 +6,11 @@ anchored re-checks, critique, and user corrections handled as hypotheses. The
 knowledge graph comes from the Graphify-derived `project_index`. Everything
 else is Verinoda's own.
 
-The design decisions (D1-D30) and their implementation status are in
+The design decisions (D1-D31) and their implementation status are in
 [DESIGN.md](DESIGN.md). Measured results are in [BENCHMARKS.md](BENCHMARKS.md).
 
 ```
-             verinoda CLI (cli.py)              MCP server (mcp/server.py, 23 tools)
+             verinoda CLI (cli.py)              MCP server (mcp/server.py, 25 tools)
                          \                        /
                           \   same core functions /
   workflow.py (init / scan / update / verify)    analysis.py (budgeted loop per question plan)
@@ -20,6 +20,7 @@ The design decisions (D1-D30) and their implementation status are in
      |  search_index.py (search.db)                  |  retrieval.py     <- search_index.py
      |  lexicon.py (lexicon.json)                    |  architecture_map.py (views)
      |  anchors.py (file_facts)                      |  precise.py / scip_reader.py (optional)
+     |                                               |  codecheck.py (check / api; optional, jedi)
      |                                               |  runtime/ (optional test observation)
      v                                               |  references/ (offline pinning)
   snapshot.py (stat-cached hashes, git state)        v
@@ -65,6 +66,9 @@ The design decisions (D1-D30) and their implementation status are in
 | `callsite.py` | Legacy name-level check that a cited line names the call target, import aliases included. The analysis prefers `entail.call_site`. |
 | `critique.py` | Tries to break a claim (D27): support, entailment, source re-check, existence of cited commits/runs, graph-only support, call site (AST), ambiguity of INFERRED targets, exclusivity, facet staleness, and counter-hypothesis probes (for example "a call after an earlier raise in a `pytest.raises` block cannot run"). A definitive failure attaches refuting evidence and contradicts; a heuristic one lowers one step with an uncertainty. Status and confidence only go down. Critique is idempotent on an unchanged claim and never restores a stale or contradicted claim (`verify` does). Accepts `current_files` so one freshness pass serves the whole analysis. |
 | `precise.py` | Optional (`verinoda[precise]` = jedi, D29). `resolve_call(repo, path, line, target)` returns `definitive` / `dynamic` / `ambiguous` / `external` / `unresolved`, and with the graph's target also `confirms` / `refutes` / `undetermined`. Only a definitive answer confirms or refutes; a method on a parameter or local receiver is `dynamic`. Results are cached in `resolutions` by file sha256. A per-analysis `Budget` (default 20 sites or 1.5 s) bounds fresh work, and a site skipped for budget gets the uncertainty "not resolved (budget)". Without jedi, every call answers `None`. |
+| `codecheck.py` | `verinoda check` / `verinoda api` and MCP `code_check` / `api_members` (D31; needs the `precise` extra). Collects the sites of a file, a diff or a snippet - imports, from-imports, attribute loads, keyword arguments, constant keys read from the dict literal a function returns - resolves them with jedi in the project's own environment and gives each one `exists` / `absent` / `unknown` / `not_installed` / `guarded`. `absent` only from a closed container (a module with no `__getattr__`, `exec` or `globals()` writes and closed star imports; a class object; a direct instance or a single unreassigned local that is not handed to code that sets attributes; one known signature without `**kwargs` or an unknown decorator), and only after jedi also found nothing; then with nearest names (rapidfuzz) and where the name is defined elsewhere. Guards: try/except ImportError, `TYPE_CHECKING`, version and `hasattr` tests. Answers are cached per file in `.verinoda/cache/check/` (file sha256 + environment fingerprint; dropped when a project file an answer was read from, or the set of project files, changes). Without jedi every site is `unknown`. |
+| `codecheck_env.py` | The environment a check runs against: `--env PATH`, else `<project>/.venv`, `venv` or `env` (accepted only when jedi's safety check passes), else Verinoda's interpreter for the standard library only (third-party names are then `not_installed`, never `absent`). The standard-library oracle: a long-lived `python -I -S` child of that interpreter that imports standard-library modules only and reports their names, signatures and whether instances can grow attributes. A static module finder (search-path directories, `.pth` lines, setuptools editable mappings) and the installed distributions with their versions (read from metadata, nothing imported). |
+| `codecheck_facts.py` | What a module, class or instance holds, read from source with `ast` (nothing is run): module-level bindings (compound statements, `global`, walrus, star imports, `__all__`), class bodies, `__slots__`, attributes methods set on `self`, signatures (overloads merged), the keys of returned dict literals, and every reason a container is not closed. |
 | `scip_reader.py` | Dependency-free SCIP protobuf decoder and `ScipResolver` with the `precise` interface (D29), for non-Python files only (SCIP symbols are name-based). Lines are converted to 1-based. Per-document freshness is recorded in `scip_fresh.json`: a document is used only while its file keeps the hash it had when the index was first read. |
 | `runtime/` | Optional runtime observation (D28). `calltrace_plugin.py` is a standalone pytest plugin on `sys.monitoring` (PY_START primary, CALL once per site for boundary calls) with a `setprofile` fallback, budgets on events, edges, bytes and time, and a JSONL trace. `trace.py` has `observe()`, which runs selected tests through `experiments.run` with the project's interpreter, ingests the trace into `runtime_runs` / `runtime_calls` with its sha256, snapshot and commit, and returns observed edges, per-test reach sets, boundary calls and `call_trace` evidence. `select_tests()` and `reach_evidence()` (pass supports, fail refutes, inconclusive qualifies) are also here. An observation is run-scoped and existential: it never supports an "always" claim, and edges seen through test doubles never support production edges. |
 | `memory.py` | Versioned key/value learnings, written by `verinoda memory learn`. One linked to a claim is invalidated (never deleted) when that claim goes stale or is contradicted, and is not restored automatically. |
@@ -83,7 +87,7 @@ The design decisions (D1-D30) and their implementation status are in
 | `usernotes.py` | Notes of your own: Markdown files in `.verinoda/notes/` (config `notes.dir`) with a header (subject, file, lines, anchor, written). Anchored by `anchors` facts (the region's fingerprint) or a hash of the lines; `check()` gives fresh / changed / gone, `keep()` re-anchors after a re-read. Used by `ui/` and `verinoda notes`. |
 | `copies.py` | Folders that copy the project's own code (twin files defining the same names, unused from outside, twins in code that is used). `update()` runs after every scan and update (`workflow._derive`) and writes `copies.json`; `search_index` and `ui/` rank them like configured reference trees; `setup` reports them. |
 | `portable_ids.py` | After each index build (`index.build`), takes the scan root out of graph ids the upstream pipeline minted from absolute paths (the target of a missing import, `.dmf` element ids), so graph.json names no path of the machine; rewrites graph.json in the pipeline's own format. |
-| `mcp/` | MCP server over the same functions: 23 tools, responses capped (12,000 characters by default). The long-lived process keeps the graph (re-deriving spans only for edited files), the lexicon and a warm jedi project. |
+| `mcp/` | MCP server over the same functions: 25 tools, responses capped (12,000 characters by default). The long-lived process keeps the graph (re-deriving spans only for edited files), the lexicon and a warm jedi project. |
 | `agents/` | Claude Code and Codex skill + MCP installers with ownership markers and an install manifest; idempotent install, exact uninstall. The skills carry the understand-first protocol and the references protocol. |
 | `benchmark/` | Harnesses. `runner.py` / `approaches.py` / `metrics.py` / `report.py` / `sanitize.py` / `llm.py` run raw search vs Graphify (vendored renderer and upstream CLI) vs Verinoda on question sets with gold facts. `staleness.py` has the history replay and mutation suite against a from-scratch oracle (D30). `critique_eval.py` measures critique precision and recall on a labelled claim set (D30). They are exposed as `verinoda benchmark run / staleness replay / staleness mutations / critique-eval`. |
 | `setup.py` | `verinoda setup`: one idempotent step per project - `init`, `scan` on the first run or `update` afterwards, then `agents.installer.install` for the agents whose CLI is on PATH (or the ones named), and a checklist of what is left to do by hand. Refuses the home directory unless `--allow-home`. |
@@ -107,6 +111,8 @@ The design decisions (D1-D30) and their implementation status are in
     index.scip              only when the user supplies one (`scan --scip FILE`)
     scip_fresh.json         per-document freshness of that SCIP index
   plans/                    question-plan files (JSON is never passed on the command line)
+  cache/check/              `verinoda check` answers per file (DERIVED; keyed by file sha256 and the
+                            environment fingerprint, written only when .verinoda/ exists)
   runs/<experiment-id>/     stdout.txt / stderr.txt; artifacts/calltrace.jsonl for observe runs
   research/<slug>/          mirror.git (bare), <sha12>/ worktrees, tree-<hash12>/ copies,
                             meta.git (blobless mirror for reference pinning)

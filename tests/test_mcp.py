@@ -58,6 +58,8 @@ EXPECTED_PARAMS = {
     "claim_verify": ({"claim_id", "run"}, {"claim_id"}),
     "claim_challenge": ({"claim_id"}, {"claim_id"}),
     "resolve_call": ({"path", "line", "target", "target_path", "target_line"}, {"path", "line", "target"}),
+    "code_check": ({"paths", "diff", "snippet", "as_path", "env", "include_exists"}, set()),
+    "api_members": ({"target", "env", "private"}, {"target"}),
     "runtime_observe": ({"test_ids", "symbols", "terms", "timeout"}, set()),
     "reference_resolve": ({"text", "references", "network", "local_intent"}, {"text"}),
     "reference_research": ({"reference", "ref", "topic", "kind", "resolution_id", "reference_id"}, set()),
@@ -70,7 +72,7 @@ EXPECTED_PARAMS = {
     "index_update": (set(), set()),
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
-             "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call"}
+             "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members"}
 
 
 # -- fixtures & helpers -----------------------------------------------------------
@@ -218,6 +220,8 @@ def _all_calls(t: AtlasTools) -> dict:
         "claim_verify": lambda: t.claim_verify("clm_000000000000"),
         "claim_challenge": lambda: t.claim_challenge("clm_000000000000"),
         "resolve_call": lambda: t.resolve_call("app.py", 2, "main"),
+        "code_check": lambda: t.code_check(paths=["app.py"]),
+        "api_members": lambda: t.api_members("json"),
         "runtime_observe": lambda: t.runtime_observe(symbols=["main"]),
         "reference_resolve": lambda: t.reference_resolve("requests 2.31", network="off"),
         "reference_research": lambda: t.reference_research("https://example.org/ref.git"),
@@ -1088,7 +1092,7 @@ def test_real_research_and_feedback_modules_through_tools(tmp_path, fresh_repo):
 
 def test_missing_optional_modules_give_structured_error(monkeypatch, tools):
     for mod in ("verinoda.research", "verinoda.feedback", "verinoda.references", "verinoda.runtime.trace",
-                "verinoda.precise"):
+                "verinoda.precise", "verinoda.codecheck"):
         monkeypatch.setitem(sys.modules, mod, None)
     for res in (tools.reference_research("https://example.org/r.git"),
                 tools.reference_compare("https://example.org/r.git", "topic"),
@@ -1097,7 +1101,9 @@ def test_missing_optional_modules_give_structured_error(monkeypatch, tools):
                 tools.feedback_resolve("fb_1", "confirmed", "r", []),
                 tools.reference_resolve("requests 2.31"),
                 tools.runtime_observe(symbols=["apply_discount"]),
-                tools.resolve_call("orders/service.py", 22, "save")):
+                tools.resolve_call("orders/service.py", 22, "save"),
+                tools.code_check(paths=["orders/service.py"]),
+                tools.api_members("orders.service")):
         assert res["error"] == "unavailable" and res["hint"] and "could not be imported" in res["message"]
     assert "text" in tools.project_query("which module computes the order total?")  # the rest still works
 

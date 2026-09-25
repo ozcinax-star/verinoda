@@ -9,7 +9,8 @@ Design rules
   :mod:`verinoda.question_plan` / :func:`verinoda.analysis.audit`,
   ``resolve`` -> :func:`verinoda.references.resolve`, ``observe`` ->
   :func:`verinoda.runtime.trace.observe`, ``resolve-call`` ->
-  :func:`verinoda.precise.resolve_call`, ...). :class:`AtlasTools` holds
+  :func:`verinoda.precise.resolve_call`, ``check``/``api`` ->
+  :func:`verinoda.codecheck.check` / :func:`~verinoda.codecheck.api`, ...). :class:`AtlasTools` holds
   those adapters and has no MCP SDK dependency, so it is testable and usable
   in-process; :func:`build_server` only registers them with the SDK.
 * Small, structured answers: every response is a JSON object capped at
@@ -43,7 +44,7 @@ Design rules
   serialised with a lock (index rebuilds and stdout redirection are global),
   and stdout is redirected to stderr during each call.
 * Optional feature modules (``research``, ``feedback``, ``references``,
-  ``runtime``, ``precise``) are imported lazily inside their tools, so the
+  ``runtime``, ``precise``, ``codecheck``) are imported lazily inside their tools, so the
   server still starts when one of them is missing or broken.
 * SDK: mcp 2.x (``mcp.server.mcpserver.MCPServer``) or 1.x (``FastMCP``).
   ``import mcp`` here is absolute, so it resolves to the SDK, not to this
@@ -85,6 +86,8 @@ TOOL_NAMES: tuple[str, ...] = (
     "claim_verify",
     "claim_challenge",
     "resolve_call",
+    "code_check",
+    "api_members",
     "runtime_observe",
     "reference_resolve",
     "reference_research",
@@ -954,6 +957,35 @@ class AtlasTools:
             return res
         return self._run("resolve_call", go)
 
+    # -- name-existence check (D31) ------------------------------------------------------
+    def code_check(self, paths: list[str] | None = None, diff: str | None = None, snippet: str | None = None,
+                   as_path: str | None = None, env: str | None = None, include_exists: bool = False) -> dict:
+        def go():
+            codecheck = self._optional("verinoda.codecheck")
+            ps = [p.replace("\\", "/") for p in _str_list(paths, "paths")] if paths else None
+            code = snippet if isinstance(snippet, str) and snippet.strip() else None
+            if code is not None and (ps or diff):
+                raise ToolFailure("invalid_argument", "give a snippet, paths or diff - not several",
+                                  "check a snippet alone (with as_path), or files, or the diff")
+            if ps and diff:
+                raise ToolFailure("invalid_argument", "give paths or diff, not both", "drop one of them")
+            ap = _opt_text(as_path)
+            if ap:
+                ap = ap.replace("\\", "/")
+                if Path(ap).is_absolute() or ".." in Path(ap).parts:
+                    raise ToolFailure("invalid_argument", f"as_path {ap!r} must be repository-relative",
+                                      "pass a path such as 'pkg/module.py'")
+            return codecheck.check(self.repo, ps, diff=_opt_text(diff), snippet=code, as_path=ap,
+                                   env=_opt_text(env) or "auto", include_exists=bool(include_exists))
+        return self._run("code_check", go, first=("sites",), keep=("summary", "exit", "env"))
+
+    def api_members(self, target: str, env: str | None = None, private: bool = False) -> dict:
+        def go():
+            codecheck = self._optional("verinoda.codecheck")
+            return codecheck.api(self.repo, _text(target, "target"), env=_opt_text(env) or "auto",
+                                 private=bool(private))
+        return self._run("api_members", go, first=("members",))
+
     def runtime_observe(self, test_ids: list[str] | None = None, symbols: list[str] | None = None,
                         terms: list[str] | None = None, timeout: float | None = None) -> dict:
         def go():
@@ -1174,6 +1206,9 @@ Tools:
 - lexicon_show: which code words the repository associates with a natural-language word.
 - claim_inspect / claim_list / evidence_inspect / claim_verify / claim_challenge: audit claims.
 - resolve_call: which definition a call on path:line binds to (only 'definitive' answers verify).
+- code_check: after editing code, and before proposing it, check that the modules, names, keyword arguments
+  and dict keys it uses exist in the project's environment; fix every absent site (nearest/elsewhere), treat
+  unknown as unverified. api_members: the real members of a module or class before you write calls to it.
 - runtime_observe: run selected tests under the call tracer; which tests reach which symbols.
 - reference_resolve / reference_research / reference_compare: pinned external references.
 - feedback_submit / feedback_process / feedback_resolve: record critique as a hypothesis, verify, resolve.
@@ -1274,6 +1309,22 @@ DESCRIPTIONS: dict[str, str] = {
         "| dynamic | ambiguous | external | unresolved, with the target definitions. With target_path/"
         "target_line a verdict confirms | refutes | undetermined (definitive answers only). 'no precise "
         "answer' with the reason when the resolver is unavailable or the site cannot be read. Read-only."),
+    "code_check": (
+        "Check that the modules, imported names, attributes, keyword arguments and constant dict keys that "
+        "code uses exist - in the project's own environment (.venv/venv/env, or env=PATH; 'none' = standard "
+        "library only). Input: paths (files/directories), or diff (a revision: only sites on changed lines "
+        "plus new files; default when nothing is given: changes against HEAD), or snippet + as_path (code not "
+        "written yet). Each site gets exists | absent | unknown | not_installed | guarded; absent is given only "
+        "for closed containers (a module or class whose names are all known, a direct instance, one known "
+        "signature) and comes with nearest real names and where the name is defined elsewhere; unknown carries "
+        "why. env names the interpreter and package versions checked (and lock mismatches). exit 3 = something "
+        "is absent. Existence and signature shape only, not behaviour. Read-only (answers are cached under "
+        ".verinoda/cache/check)."),
+    "api_members": (
+        "The real members of a module, class or function (dotted target, e.g. 'packaging.specifiers.SpecifierSet' "
+        "or 'orders.service') in the project's environment: name, kind, signature, file:line, inherited-from, "
+        "and the version the source came from. Use it before writing calls to an API you have not read. "
+        "private=true also lists names starting with '_'. found=false comes with nearest names. Read-only."),
     "runtime_observe": (
         "Run tests in an isolated copy under the sys.monitoring call tracer and record the observed calls "
         "(stored under run_id). Tests: test_ids (pytest node ids), else tests selected for symbols/terms "
@@ -1320,7 +1371,8 @@ DESCRIPTIONS: dict[str, str] = {
 }
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
-              "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call"}
+              "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check",
+              "api_members"}
 _OPEN_WORLD = {"reference_research", "reference_compare", "feedback_submit", "feedback_process", "reference_resolve"}
 
 
@@ -1538,6 +1590,35 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None):
         = None,
     ) -> dict[str, Any]:
         return emit(t.resolve_call(path, line, target, target_path=target_path, target_line=target_line))
+
+    EnvArg = Annotated[OptStr, Field(description="'auto' (default: the project's .venv, venv or env), a virtual "
+                                                 "environment path, or 'none' (standard library only).")]
+
+    @register("code_check")
+    def code_check(
+        paths: Annotated[list[str] | None, Field(description="Repository-relative files or directories to check "
+                                                             "(whole files).")] = None,
+        diff: Annotated[OptStr, Field(description="A revision: check only the sites on lines changed "
+                                                  "against it, plus new files (e.g. 'HEAD').")] = None,
+        snippet: Annotated[OptStr, Field(description="Python code not written yet, checked as if it were in "
+                                                     "as_path.")] = None,
+        as_path: Annotated[OptStr, Field(description="With snippet: the repository-relative file it is meant "
+                                                     "for (imports and relative imports resolve from there).")]
+        = None,
+        env: EnvArg = None,
+        include_exists: Annotated[bool, Field(description="Also list the sites that exist.")] = False,
+    ) -> dict[str, Any]:
+        return emit(t.code_check(paths=paths, diff=diff, snippet=snippet, as_path=as_path, env=env,
+                                 include_exists=include_exists))
+
+    @register("api_members")
+    def api_members(
+        target: Annotated[str, Field(description="Dotted module, class or function name "
+                                                 "(e.g. 'packaging.specifiers.SpecifierSet').")],
+        env: EnvArg = None,
+        private: Annotated[bool, Field(description="Also list names starting with '_'.")] = False,
+    ) -> dict[str, Any]:
+        return emit(t.api_members(target, env=env, private=private))
 
     @register("runtime_observe")
     def runtime_observe(
