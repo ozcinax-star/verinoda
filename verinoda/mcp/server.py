@@ -58,6 +58,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -431,6 +432,21 @@ def _spawn(argv: list[str], **kw) -> subprocess.Popen:
     return subprocess.Popen(argv, **kw)
 
 
+_UPDATER_BOOT = "import sys; sys.path.insert(0, sys.argv.pop(1)); from verinoda.cli import main; sys.exit(main())"
+
+
+def _updater_argv(repo: Path) -> list[str]:
+    """``verinoda update --repo <repo>`` in a child Python that imports the Verinoda this server runs,
+    never a module of the analysed project: isolated mode (``-I``: neither the working directory nor
+    PYTHON* variables nor the user site reach ``sys.path``) with this package's own parent put first.
+    ``-m verinoda`` from a folder of the project would import a ``verinoda/`` package the project
+    ships (``.verinoda/index/verinoda/__main__.py``) and run it."""
+    import verinoda
+
+    home = str(Path(verinoda.__file__).resolve().parent.parent)
+    return [sys.executable, "-I", "-c", _UPDATER_BOOT, home, "update", "--repo", str(repo)]
+
+
 def _build_running(repo: Path) -> bool:
     """Is an index build of ``repo`` running in another process (:mod:`verinoda.buildlock`)?"""
     from verinoda import buildlock
@@ -639,9 +655,9 @@ class AtlasTools:
             log.parent.mkdir(parents=True, exist_ok=True)
             with open(log, "ab") as out:
                 self._background = _spawn(
-                    [sys.executable, "-m", "verinoda", "update", "--repo", str(self.repo)],
-                    # not the project folder as cwd: a project with a verinoda/ folder would shadow the package
-                    stdin=subprocess.DEVNULL, stdout=out, stderr=out, cwd=str(log.parent),
+                    _updater_argv(self.repo),
+                    # a working directory outside the project too (the isolated child ignores it anyway)
+                    stdin=subprocess.DEVNULL, stdout=out, stderr=out, cwd=tempfile.gettempdir(),
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except OSError as exc:
             return f"could not start ({type(exc).__name__}): run index_update"

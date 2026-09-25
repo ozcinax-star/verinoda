@@ -522,5 +522,27 @@ def test_mcp_analyze_starts_a_background_update_when_the_refresh_would_be_slow(p
     res = t.analyze("Where is assess_change defined?")
     ref = res["index_refresh"]
     assert ref["ran"] is False and ref["background_update"].startswith("started (pid 4242)")
-    assert started and started[0][1:] == ["-m", "verinoda", "update", "--repo", str(proj.resolve())]
+    argv = started[0]
+    assert argv[1:3] == ["-I", "-c"] and argv[-3:] == ["update", "--repo", str(proj.resolve())]
     assert t._update_in_background() == "running (pid 4242)"  # one at a time
+
+
+_EVIL = "import pathlib\npathlib.Path(r'{marker}').write_text('project code ran')\n"
+
+
+@pytest.mark.e2e
+def test_the_background_update_never_imports_a_verinoda_the_project_ships(proj):
+    # review: the child ran `python -m verinoda` with its working directory in .verinoda/index, so a
+    # project shipping .verinoda/index/verinoda/__main__.py had its own code executed
+    from verinoda.mcp import server as mcp_server
+
+    marker = proj.parent / "EVIL_RAN.txt"
+    for base in (proj / ".verinoda" / "index" / "verinoda", proj / "verinoda"):
+        for mod in ("__init__.py", "__main__.py", "cli.py"):
+            _write(base, mod, _EVIL.format(marker=marker))
+    (proj / "app" / "claims.py").write_text(CLAIMS + "\n# edited\n", encoding="utf-8")
+    t = mcp_server.AtlasTools(proj)
+    assert t._update_in_background().startswith("started (pid ")
+    assert t._background.wait(240) == 0
+    assert not marker.exists(), marker.read_text(encoding="utf-8")
+    assert "app/claims.py" not in freshness.check(proj)["files"]  # the real update ran
