@@ -422,6 +422,22 @@ def test_a_name_of_another_platform_is_unknown_not_absent(proj):
     assert by["forkk_nope"]["verdict"] == "absent"
 
 
+def test_os_path_is_its_platform_module_and_a_sibling_file_does_not_shadow_a_package(proj):
+    res = codecheck.check(proj, snippet="import os\nos.path.join\nos.path.joinz\n", as_path="pkg/p2.py", env="none",
+                          include_exists=True, use_cache=False)
+    by = {s["name"]: s for s in res["sites"] if s["kind"] == "attribute"}
+    assert by["join"]["verdict"] == "exists"
+    assert by["joinz"]["verdict"] == "absent" and "module os.path (" in by["joinz"]["message"]
+    assert "join" in [n["name"] for n in by["joinz"]["nearest"]]
+    # pkg/sub/robot.py is not the `robot` package for pkg/sub/user.py (a package imports absolutely)
+    _write(proj, "pkg/sub/__init__.py", "")
+    _write(proj, "pkg/sub/robot.py", "X = 1\n")
+    _write(proj, "pkg/sub/user.py", "import robot.api\n")
+    r2 = codecheck.check(proj, ["pkg/sub/user.py"], env="none", include_exists=True, use_cache=False)
+    assert {s["verdict"] for s in r2["sites"]} <= {"not_installed", "exists"}
+    assert not [s for s in r2["sites"] if s["verdict"] == "absent"]
+
+
 def test_stdlib_names_come_from_the_interpreter_not_from_stubs(tmp_path):
     env = cenv.own_env("test")
     info = env.oracle().ask("module", name="json")

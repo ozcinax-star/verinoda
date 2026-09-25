@@ -1318,7 +1318,8 @@ CHECK_UNKNOWN_SHOWN = 20
 def _r_check(r: dict) -> None:
     s, env = r["summary"], r["env"]
     print(f"verinoda check: {s['absent']} absent, {s['not_installed']} not installed, {s['unknown']} unknown, "
-          f"{s['guarded']} guarded, {s['exists']} exist ({s['sites']} sites in {s['files']} files; {r['scope']})")
+          f"{s['guarded']} guarded, {s['exists']} exist ({s['sites']} sites in {s['files']} "
+          f"file{'' if s['files'] == 1 else 's'}; {r['scope']})")
     print(f"environment: {env.get('python')}" + (f" - {env['note']}" if env.get("note") else ""))
     for name, text in (env.get("packages_checked") or {}).items():
         print(f"  {name} {text}")

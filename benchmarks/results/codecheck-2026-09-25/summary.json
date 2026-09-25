@@ -1,0 +1,270 @@
+{
+ "what": "verinoda check (docs/DESIGN.md D31): fixture set with a runtime oracle, and clean sets",
+ "machine": "Windows 11, Python 3.12.0, jedi 0.20.0",
+ "fixture": {
+  "in_sample": true,
+  "probes": 144,
+  "invented": 79,
+  "real": 65,
+  "confusion_oracle_x_check": {
+   "exists": {
+    "exists": 62,
+    "unknown": 1,
+    "guarded": 2
+   },
+   "absent": {
+    "absent": 74,
+    "unknown": 5
+   }
+  },
+  "precision_absent": "74/74",
+  "recall_absent_closed": "74/74",
+  "decided_absent": "74/79",
+  "near_name_top3": "24/26",
+  "intended_top3_all": "48/62",
+  "wrong_module_elsewhere": "3/3",
+  "false_absent": 0,
+  "env_regression_violations": [],
+  "by_mutation": {
+   "real": {
+    "oracle exists / check exists": 62,
+    "oracle exists / check unknown": 1,
+    "oracle exists / check guarded": 2
+   },
+   "near": {
+    "oracle absent / check absent": 25,
+    "oracle absent / check unknown": 1
+   },
+   "synonym": {
+    "oracle absent / check absent": 19,
+    "oracle absent / check unknown": 3
+   },
+   "wrong_module": {
+    "oracle absent / check absent": 3
+   },
+   "kwarg": {
+    "oracle absent / check absent": 15,
+    "oracle absent / check unknown": 1
+   },
+   "dict_key": {
+    "oracle absent / check absent": 3
+   },
+   "missing_module": {
+    "oracle absent / check absent": 9
+   }
+  },
+  "undecided_invented": [
+   [
+    68,
+    "synonym",
+    false,
+    "connect_async",
+    "unknown",
+    "module sqlite3 is not closed: the module defines __getattr__ (names can be made on access)"
+   ],
+   [
+    87,
+    "kwarg",
+    false,
+    "sorted",
+    "unknown",
+    "the callee takes **kwargs: dumps(obj, *, skipkeys=False, ensure_ascii=True, check_circular=True, allow_nan=True, cls=None, indent=None, sepa"
+   ],
+   [
+    135,
+    "synonym",
+    false,
+    "missing",
+    "unknown",
+    "module fancylib.lazy is not closed: defines a module-level __getattr__ (line 4)"
+   ],
+   [
+    137,
+    "synonym",
+    false,
+    "save_order",
+    "unknown",
+    "`repo` is a parameter: its runtime type is not known (an annotation does not rule out a subclass that has the name)"
+   ],
+   [
+    138,
+    "near",
+    false,
+    "read_txt",
+    "unknown",
+    "`p` is a parameter: its runtime type is not known (an annotation does not rule out a subclass that has the name)"
+   ]
+  ],
+  "near_misses": [
+   [
+    91,
+    "matchall",
+    "findall",
+    [
+     "Match",
+     "match"
+    ]
+   ],
+   [
+    138,
+    "read_txt",
+    "read_text",
+    []
+   ]
+  ],
+  "environment": ".venv (python 3.12.0)",
+  "packages": {
+   "fancylib": "2.1.0 installed",
+   "idna": "3.20 installed",
+   "packaging": "26.3 installed"
+  },
+  "timing": {
+   "sites": 364,
+   "first_in_process_s": 2.93,
+   "warm_s": 1.2,
+   "warm_s_per_100_sites": 0.329,
+   "disk_cache_s": 0.571,
+   "disk_cache": {
+    "hits": 145,
+    "misses": 0
+   },
+   "cli_cold_whole_dir_s": [
+    3.55,
+    3.56,
+    3.63
+   ],
+   "cli_exit": 3,
+   "diff_changed_lines": 30,
+   "cli_cold_diff_s": [
+    1.33,
+    1.14,
+    1.16,
+    1.32,
+    1.22
+   ],
+   "cli_cold_diff_median_s": 1.22,
+   "diff_sites": {
+    "sites": 35,
+    "absent": 16,
+    "not_installed": 0,
+    "unknown": 0,
+    "guarded": 0,
+    "exists": 19,
+    "files": 30
+   },
+   "diff_elapsed_inside_s": 0.868
+  }
+ },
+ "clean_sets": {
+  "verinoda_package": {
+   "environment": "Verinoda's .venv (--env)",
+   "files": 161,
+   "sites": 46732,
+   "absent": 0,
+   "not_installed": 1,
+   "unknown": 13234,
+   "guarded": 57,
+   "exists": 33440,
+   "unknown_share": 0.283,
+   "guarded_unguarded_verdicts": {
+    "not_installed": 49,
+    "absent": 8
+   },
+   "absent_sites": [],
+   "not_installed_sites": [
+    "verinoda/benchmark/llm.py:86:12 anthropic"
+   ],
+   "elapsed_s": 420.349,
+   "jedi": {
+    "calls": 77228,
+    "seconds": 295.867
+   }
+  },
+  "graphify": {
+   "environment": "Verinoda's .venv (--env; not Graphify's own)",
+   "files": 388,
+   "sites": 51943,
+   "absent": 0,
+   "not_installed": 2,
+   "unknown": 19197,
+   "guarded": 58,
+   "exists": 32686,
+   "unknown_share": 0.37,
+   "guarded_unguarded_verdicts": {
+    "not_installed": 57,
+    "absent": 1
+   },
+   "absent_sites": [],
+   "not_installed_sites": [
+    "tests/test_manifest_tomli_required.py:64:12 tomli",
+    "tests/test_watch.py:4111:10 watchdog"
+   ],
+   "elapsed_s": 713.818,
+   "jedi": {
+    "calls": 79860,
+    "seconds": 605.181
+   }
+  },
+  "graphify_stdlib_only": {
+   "environment": "none (standard library only)",
+   "files": 388,
+   "sites": 51841,
+   "absent": 0,
+   "not_installed": 279,
+   "unknown": 22823,
+   "guarded": 121,
+   "exists": 28618,
+   "unknown_share": 0.44,
+   "guarded_unguarded_verdicts": {
+    "not_installed": 121
+   },
+   "absent_sites": [],
+   "not_installed_sites": [
+    "graphify/_minhash.py:17:8 numpy",
+    "graphify/affected.py:9:8 networkx",
+    "graphify/affected.py:297:10 networkx.readwrite",
+    "graphify/analyze.py:4:8 networkx",
+    "graphify/benchmark.py:4:8 networkx",
+    "graphify/build.py:32:8 networkx",
+    "graphify/cli.py:1208:14 networkx.readwrite",
+    "graphify/cli.py:1558:14 networkx.readwrite",
+    "graphify/cli.py:1559:16 networkx",
+    "graphify/cli.py:1721:14 networkx.readwrite",
+    "graphify/cli.py:2070:14 networkx.readwrite",
+    "graphify/cli.py:2567:16 networkx",
+    "graphify/cli.py:2568:14 networkx.readwrite",
+    "graphify/cli.py:2625:16 networkx",
+    "graphify/cli.py:2626:14 networkx.readwrite",
+    "graphify/cli.py:2930:14 networkx.readwrite",
+    "graphify/cluster.py:8:8 networkx",
+    "graphify/dedup.py:16:6 rapidfuzz.distance",
+    "graphify/dedup.py:87:10 rapidfuzz.distance",
+    "graphify/diagnostics.py:12:8 networkx"
+   ],
+   "elapsed_s": 610.608,
+   "jedi": {
+    "calls": 80505,
+    "seconds": 538.613
+   }
+  },
+  "stdlib_json_email_http_pathlib": {
+   "environment": "none (standard library only)",
+   "files": 40,
+   "sites": 5210,
+   "absent": 0,
+   "not_installed": 0,
+   "unknown": 1360,
+   "guarded": 0,
+   "exists": 3850,
+   "unknown_share": 0.261,
+   "guarded_unguarded_verdicts": {},
+   "absent_sites": [],
+   "not_installed_sites": [],
+   "elapsed_s": 55.023,
+   "jedi": {
+    "calls": 8766,
+    "seconds": 50.607
+   }
+  }
+ }
+}
