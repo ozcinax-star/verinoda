@@ -344,6 +344,51 @@ def test_pytest_exit_codes_are_classified(code, outcome):
     assert experiments._classify_outcome(PYTEST, None, True, "", "")[0] == "timeout"
 
 
+@pytest.mark.parametrize("out", [
+    "ℹ tests 0\nℹ suites 0\nℹ pass 0\n",                     # node --test, spec reporter
+    "TAP version 13\n1..0\n# tests 0\n# pass 0\n",                          # node --test, TAP
+    "No tests found, exiting with code 0\n",                                # jest --passWithNoTests
+    "\nRan 0 tests in 0.000s\n\nOK\n",                                      # unittest
+    "running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n",  # cargo
+    "?   \texample.com/m\t[no test files]\n",                               # go
+])
+def test_a_run_that_ran_no_test_is_no_pass(out):
+    # review finding: a node test file renamed out of the runner's pattern ran 0 tests, exited 0 and "passed"
+    got, why = experiments._classify_outcome(["node", "--test"], 0, False, out, "")
+    assert got == "inconclusive" and "no pass" in why
+
+
+def test_a_run_with_tests_still_passes():
+    for out in ("ℹ tests 3\nℹ pass 3\n", "Ran 2 tests in 0.1s\n\nOK\n",
+                "running 1 test\ntest result: ok. 1 passed; 0 failed; 0 ignored\nrunning 0 tests\n"
+                "test result: ok. 0 passed; 0 failed; 0 ignored\n",
+                "ok  \texample.com/m\t0.01s\n?   \texample.com/n\t[no test files]\n"):
+        assert experiments._classify_outcome(["node", "--test"], 0, False, out, "")[0] == "pass"
+
+
+def test_processes_a_run_leaves_running_are_stopped(proj, tmp_path):
+    # review finding: a server a test started outlived the run, kept the throw-away copy and answered the next run
+    repo, st = proj
+    pidfile = tmp_path / "helper.pid"
+    cwdfile = tmp_path / "helper.cwd"
+    probe = _probe(repo, "test_probe_leak.py", (
+        "import os, subprocess, sys\nfrom pathlib import Path\n\n"
+        "def test_leaves_a_helper():\n"
+        "    child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'],\n"
+        "                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+        f"    Path(r'{pidfile}').write_text(str(child.pid))\n"
+        f"    Path(r'{cwdfile}').write_text(os.getcwd())\n"))
+    res = experiments.run(st, repo, [*PYTEST, probe], hypothesis="the helper is stopped", timeout=60)
+    assert res["outcome"] == "pass"
+    pid = int(pidfile.read_text())
+    deadline = time.monotonic() + 10
+    while _alive(pid) and time.monotonic() < deadline:
+        time.sleep(0.2)
+    assert not _alive(pid), f"helper {pid} outlived the run"
+    assert not Path(cwdfile.read_text()).parent.exists()  # the throw-away directory is gone
+    assert any("left running were stopped" in x for x in res["limits"])
+
+
 def test_missing_pytest_is_inconclusive():
     out, why = experiments._classify_outcome(PYTEST, 1, False, "", "C:\\py\\python.exe: No module named pytest\n")
     assert out == "inconclusive" and "not installed" in why

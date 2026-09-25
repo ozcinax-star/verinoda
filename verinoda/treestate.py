@@ -362,11 +362,18 @@ def commit_entries(repo: Path, commit: str, skipped: list[dict] | None = None) -
     return ents
 
 
+COMMIT_IDS_BATCH = 500   # blobs held in memory at once while computing a commit's content ids
+
+
 def commit_files(repo: Path, commit: str) -> dict[str, str]:
-    """``{path: content id}`` of a commit's regular files (reads every blob once)."""
+    """``{path: content id}`` of a commit's regular files (reads every blob once, a batch at a time)."""
     ents = commit_entries(repo, commit)
-    data = read_blobs(repo, [oid for _, oid, _ in ents])
-    return {p: content_id(data[oid]) for _, oid, p in ents if data.get(oid) is not None}
+    out: dict[str, str] = {}
+    for i in range(0, len(ents), COMMIT_IDS_BATCH):
+        batch = ents[i:i + COMMIT_IDS_BATCH]
+        data = read_blobs(repo, [oid for _, oid, _ in batch])
+        out.update({p: content_id(data[oid]) for _, oid, p in batch if data.get(oid) is not None})
+    return out
 
 
 # -- blobs ------------------------------------------------------------------------------------
@@ -615,14 +622,56 @@ def is_test_file(path: str | None) -> bool:
     return is_test_path(p) or bool(_TEST_FILE_RE.search(p))
 
 
+def _docstring(node: ast.AST) -> ast.Expr | None:
+    body = getattr(node, "body", None)
+    if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and body and \
+            isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant) and \
+            isinstance(body[0].value.value, str):
+        return body[0]
+    return None
+
+
 def _strip_docstrings(tree: ast.AST) -> ast.AST:
+    """Docstrings out, except those holding doctest examples (``>>>``): run with ``--doctest-modules`` they are
+    tests, so a change to one is not "the same code"."""
     for node in ast.walk(tree):
-        body = getattr(node, "body", None)
-        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and body and \
-                isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant) and \
-                isinstance(body[0].value.value, str):
-            node.body = body[1:]
+        doc = _docstring(node)
+        if doc is not None and ">>>" not in doc.value.value:
+            node.body = node.body[1:]  # type: ignore[attr-defined]
     return tree
+
+
+def _doctest_ranges(data: bytes | None) -> list[tuple[int, int]]:
+    """Line ranges (1-based, inclusive) of the docstrings holding doctest examples (``>>>``)."""
+    if data is None or b">>>" not in data or len(data) > 2_000_000:
+        return []
+    try:
+        tree = ast.parse(data.decode("utf-8"))
+    except (SyntaxError, ValueError, UnicodeDecodeError, RecursionError, MemoryError):
+        return []
+    out = []
+    for node in ast.walk(tree):
+        doc = _docstring(node)
+        if doc is not None and ">>>" in doc.value.value:
+            out.append((doc.lineno, getattr(doc, "end_lineno", None) or doc.lineno))
+    return out
+
+
+_INI_CONFIG = re.compile(r"(^|/)(pyproject\.toml|pytest\.ini|setup\.cfg|tox\.ini)$")
+# a header starts its line (the elements of a multi-line array are indented) and names a key, not a list
+_SECTION_LINE = re.compile(r"^\[\[?\s*([\w.\-:\"' ]+?)\s*\]\]?\s*(?:[#;].*)?$")
+
+
+def _sections(lines: list[str]) -> list[str | None]:
+    """The INI / TOML section each line is in (None before the first header)."""
+    out: list[str | None] = []
+    cur = None
+    for ln in lines:
+        m = _SECTION_LINE.match(ln)
+        if m:
+            cur = m.group(1).strip().strip("\"'")
+        out.append(cur)
+    return out
 
 
 _FP_CACHE: dict[str, str | None] = {}
@@ -690,6 +739,11 @@ def diff_file(rel: str, old: bytes | None, new: bytes | None) -> dict:
         rec["too_large"] = True
         return rec
     fa, fb = _facts(rel, old), _facts(rel, new)
+    py = rel.endswith((".py", ".pyi"))
+    # the lines of docstrings that hold doctest examples, per side (1-based)
+    doc_old = {ln for lo, hi in (_doctest_ranges(old) if py else []) for ln in range(lo, hi + 1)}
+    doc_new = {ln for lo, hi in (_doctest_ranges(new) if py else []) for ln in range(lo, hi + 1)}
+    sec_new = _sections(b) if _INI_CONFIG.search(rel) else None
     exact = len(a) <= EXACT_DIFF_LINES and len(b) <= EXACT_DIFF_LINES
     sm = difflib.SequenceMatcher(None, a, b, autojunk=not exact)
     for group in sm.get_grouped_opcodes(0):
@@ -706,10 +760,17 @@ def diff_file(rel: str, old: bytes | None, new: bytes | None) -> dict:
         removed = a[i1:i2]
         added = b[j1:j2]
         if len(rec["hunks"]) < MAX_HUNKS:
-            rec["hunks"].append({"old": [i1 + 1, i2], "new": [j1 + 1, j2], "symbols": syms,
-                                 "removed": removed[:MAX_HUNK_LINES], "added": added[:MAX_HUNK_LINES],
-                                 **({"cut": True} if len(removed) > MAX_HUNK_LINES or len(added) > MAX_HUNK_LINES
-                                    else {})})
+            h = {"old": [i1 + 1, i2], "new": [j1 + 1, j2], "symbols": syms,
+                 "removed": removed[:MAX_HUNK_LINES], "added": added[:MAX_HUNK_LINES],
+                 **({"cut": True} if len(removed) > MAX_HUNK_LINES or len(added) > MAX_HUNK_LINES else {})}
+            # removed / added lines inside a docstring that holds doctest examples (0-based within the hunk)
+            dr = [k for k in range(i2 - i1) if i1 + 1 + k in doc_old] if doc_old else []
+            da = [k for k in range(j2 - j1) if j1 + 1 + k in doc_new] if doc_new else []
+            if dr or da:
+                h["doctest"] = {"removed": dr[:MAX_HUNK_LINES], "added": da[:MAX_HUNK_LINES]}
+            if sec_new is not None:
+                h["added_sections"] = sec_new[j1:j2][:MAX_HUNK_LINES]
+            rec["hunks"].append(h)
         for s in syms:
             if s not in rec["symbols"]:
                 rec["symbols"].append(s)

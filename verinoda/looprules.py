@@ -16,15 +16,21 @@ Every finding names the attempts (and runs) it rests on. Two strengths:
     different trees since the last passing attempt;
   - ``test_edited``: an attempt changed only existing test files (replaced or
     removed lines, or lines that switch a test off: a skip/xfail marker, an
-    early ``return``; a line only added, such as a print, does not count), or
-    changed what an assertion / expected-value line of an existing test says
-    (a change of formatting or quotes alone does not count), or changed the
-    test selection in the test configuration (``addopts``, ``-k``,
-    ``--deselect``, ``collect_ignore``, ...). A test file is one by name or
-    one a failing test of the session lives in;
+    early ``return``; a line only added, such as a print, does not count), or,
+    whatever else it changed, what an assertion line of an existing test says
+    (a change of formatting or quotes alone does not count), a literal value
+    in an existing test file or its data (an expected value in a table, a
+    golden file), a removed test file, a line that switches a test off, a
+    doctest example when the repro runs doctests, or the test selection in the
+    test configuration (``addopts``, ``-k``, ``--deselect``, ``collect_ignore``,
+    ...; in pyproject.toml / setup.cfg / tox.ini only in pytest's own section).
+    A test file is one by name or one a failing test of the session lives in
+    (a module that only holds failing doctests is code, its docstrings tests);
   - ``failing_tests_skipped``: tests that failed at the baseline (or at the
     previous attempt) did not pass here: skipped, xfailed, deselected or not
-    collected (pytest's per-test outcomes; unknown without them);
+    collected (pytest's per-test outcomes; unknown without them). A module that
+    failed to collect counts as run when its tests ran; after an early stop
+    (``-x``, ``--maxfail``) tests that were not reached are not counted;
   - ``off_path``: the functions a fix attempt edited were not called *at all*
     (by no test, not at import time) in a *complete* call trace taken with or
     after that edit, and the run started no child process the tracer saw
@@ -93,16 +99,65 @@ _ASSERT_LINE = re.compile(
 # A line that switches a test off (added to an existing test, it changes what the test checks).
 _DISABLE_LINE = re.compile(
     r"^\s*(@pytest\.mark\.(skip|skipif|xfail)\b|@(unittest\.)?(skip|skipIf|skipUnless|expectedFailure)\b|"
-    r"(pytest\.(skip|xfail)|self\.skipTest|unittest\.skip)\(|return\b\s*(None)?\s*(#.*)?$|"
-    r"(it|test|describe)\.(skip|todo)\(|x(it|describe|test)\(|t\.Skip(Now|f)?\(|#\[ignore\]|"
-    r"@(Disabled|Ignore)\b)")
+    r"(pytest\.(skip|xfail|importorskip)|self\.skipTest|unittest\.skip)\(|"
+    r"(if\b.*[:)]\s*\{?\s*)?return\b\s*(None)?\s*;?\s*\}?\s*((#|//).*)?$|"
+    r"(it|test|describe)\.(skip|todo|only)\(|x(it|describe|test)\(|t\.Skip(Now|f)?\(|#\[ignore\]|"
+    r"@(Disabled|Ignore)\b|.*\b(t|ctx|context|this)\.(skip|todo)\(|.*\{\s*(skip|todo)\s*:\s*(true|['\"`])|"
+    r".*\bAssumptions\.assume(True|False|That)\(|.*\bassume(True|False)\(\s*(true|false)\s*\))")
+# the return forms above: they switch a test off only inside a test function (a helper may return early)
+_RETURNISH = re.compile(r"^\s*(if\b.*[:)]\s*\{?\s*)?return\b")
 # Test configuration files and the settings in them that select, skip or ignore tests.
 _TEST_CONFIG_FILE = re.compile(r"(^|/)(pyproject\.toml|pytest\.ini|setup\.cfg|tox\.ini|conftest\.py|package\.json|"
                                r"(jest|vitest)\.config\.[cm]?[jt]s)$")
-_TEST_CONFIG_LINE = re.compile(r"(addopts|--deselect|--ignore|(^|[\s\"'=\[])-k\b|(^|[\s\"'=\[])-m\b|"
-                               r"collect_ignore|norecursedirs|testpaths|python_files|python_functions|"
-                               r"testPathIgnorePatterns|testMatch|testRegex|modulePathIgnorePatterns|"
-                               r"\bexclude\b|\bskip\b)")
+_SELECT_OPTS = r"--deselect|--ignore|(^|[\s\"'=\[,])-k\b|(^|[\s\"'=\[,])-m\b"
+# pytest's ini keys that select tests; in pyproject.toml / setup.cfg / tox.ini only inside pytest's own section
+_PYTEST_INI_LINE = re.compile(rf"(^\s*(addopts|testpaths|python_files|python_classes|python_functions|norecursedirs)"
+                              rf"\b|{_SELECT_OPTS})")
+_CONFTEST_LINE = re.compile(rf"(collect_ignore|\bskip\b|deselect|{_SELECT_OPTS}|pytest_ignore_collect)")
+_JS_CONFIG_LINE = re.compile(r"(testPathIgnorePatterns|testMatch|testRegex|modulePathIgnorePatterns|testNamePattern|"
+                             r"\bexclude\b|\binclude\b|(^|[\s\"'=\[,])(-t|--testPathPattern)\b)")
+
+
+def _selects_tests(path: str, text: str, section: str | None) -> bool:
+    """An added line of a test configuration file that changes which tests run (a packaging ``exclude`` or a
+    tool's ``skip`` elsewhere in pyproject.toml does not)."""
+    name = path.rsplit("/", 1)[-1]
+    if name == "conftest.py":
+        return bool(_CONFTEST_LINE.search(text))
+    if name == "package.json" or name.startswith(("jest.", "vitest.")):
+        return bool(_JS_CONFIG_LINE.search(text))
+    sec = (section or "").strip().lower()
+    if name == "pytest.ini":
+        pytest_sec = True
+    elif name == "pyproject.toml":
+        pytest_sec = sec.startswith("tool.pytest")
+    elif name == "setup.cfg":
+        pytest_sec = sec == "tool:pytest"
+    else:  # tox.ini: [pytest], or a test environment's commands
+        if sec.startswith("testenv"):
+            return bool(re.search(_SELECT_OPTS, text))
+        pytest_sec = sec == "pytest"
+    return pytest_sec and bool(_PYTEST_INI_LINE.search(text))
+
+
+# literal values of a line (strings by their content, numbers by their value), comments left out
+_LITERAL = re.compile(r"(?P<s>\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')|(?P<c>#|//)|"
+                      r"(?P<n>(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.]))|"
+                      r"(?P<k>\b(?:True|False|None|true|false|null|nil|undefined)\b)")
+
+
+def _literals(text: str) -> list[tuple[str, object]]:
+    out: list[tuple[str, object]] = []
+    for m in _LITERAL.finditer(text):
+        if m.group("c"):
+            break
+        if m.group("s"):
+            out.append(("s", m.group("s")[1:-1]))
+        elif m.group("n"):
+            out.append(("n", float(m.group("n"))))
+        else:
+            out.append(("k", m.group("k").lower()))
+    return out
 _MASKING = [
     (re.compile(r"\.get\(\s*[^,()]+,\s*[^)]+\)"), ".get(key, default)"),
     (re.compile(r"^\s*try\s*:"), "try/except"),
@@ -347,15 +402,38 @@ def _no_progress(hist: list[dict], cur: dict) -> list[dict]:
     return []
 
 
-def test_files_of(attempts: list[dict]) -> set[str]:
-    """The files the failing tests of these attempts live in (``path::name`` test ids)."""
+def _failing_ids(attempts: list[dict]) -> set[str]:
     out = set()
     for a in attempts:
         sig = a.get("signature") or {}
         for t in list(sig.get("failed_tests") or []) + [f.get("test") for f in sig.get("failures") or []]:
             if t and "::" in t:
-                out.add(t.split("::", 1)[0])
+                out.add(t)
     return out
+
+
+def _is_doctest_id(t: str) -> bool:
+    """A pytest doctest item in a Python module: ``orders/pricing.py::orders.pricing.apply_discount`` (the module
+    is not a test file by name, and the item is one dotted name)."""
+    from verinoda.treestate import is_test_file
+
+    path, _, name = t.partition("::")
+    return path.endswith(".py") and not is_test_file(path) and "::" not in name and "." in name.split("[", 1)[0]
+
+
+def doctest_hosts(attempts: list[dict]) -> set[str]:
+    """Python modules whose doctests failed in these attempts: their docstrings are tests, their code is not."""
+    return {t.split("::", 1)[0] for t in _failing_ids(attempts) if _is_doctest_id(t)}
+
+
+def test_files_of(attempts: list[dict]) -> set[str]:
+    """The files the failing tests of these attempts live in (``path::name`` test ids); a module that only holds
+    failing doctests is not one (its code is the code under test; see :func:`doctest_hosts`)."""
+    return {t.split("::", 1)[0] for t in _failing_ids(attempts) if not _is_doctest_id(t)}
+
+
+def _runs_doctests(argv) -> bool:
+    return any(str(a).startswith(("--doctest-modules", "--doctest-glob")) for a in argv or [])
 
 
 def _stmt_key(text: str) -> str:
@@ -374,60 +452,108 @@ def _is_test_change(c: dict, test_paths: set[str]) -> bool:
     return bool(c.get("test")) or c["path"] in test_paths
 
 
+def _value_change(removed: list[str], added: list[str]) -> int | None:
+    """Index of the first removed line whose literal values (numbers, strings, true/false/null) are not all
+    among the added lines' - an expected value or input changed, or a case removed - else None. A change of
+    names or formatting alone keeps the literals; purely added lines (a new case) are not a change."""
+    pool: dict[tuple, int] = {}
+    for text in added:
+        for lit in _literals(text):
+            pool[lit] = pool.get(lit, 0) + 1
+    for i, text in enumerate(removed):
+        for lit in _literals(text):
+            if pool.get(lit, 0) <= 0:
+                return i
+            pool[lit] -= 1
+    return None
+
+
 def _test_edited(hist: list[dict], cur: dict) -> tuple[list[dict], list[dict]]:
-    """(findings, the changed assertion / disabling / selection lines as {path, line, text})."""
+    """(findings, the changed assertion / value / disabling / selection lines as {path, line, text, change}).
+
+    In an existing test file (by name, or the file a failing test of the session lives in), whatever else the
+    attempt changed: a removed or replaced assertion line, a changed literal value (an expected value in a
+    parametrize table, a golden data file under ``tests/``), a removed test file, a line that switches a test
+    off. When the repro runs doctests (``--doctest-modules``, or a failing doctest), a changed line of a
+    docstring's examples is a test edit too; the rest of that module is code. When the attempt changed only
+    test files, any replaced or removed line counts."""
     changes = [c for c in cur.get("vs_prev") or [] if not c.get("content_unknown")]
     if not changes:
         return [], []
     prev = hist[-1] if hist else None
     test_paths = test_files_of(hist)
-    lines = []
+    all_doctests = _runs_doctests(cur.get("command"))
+    doc_hosts = doctest_hosts(hist)
+    lines: list[dict] = []
     existing_tests = []
     for c in changes:
+        path = c["path"]
+        if (all_doctests and path.endswith(".py") or path in doc_hosts) and not c.get("test"):
+            for h in c.get("hunks") or []:
+                dr = (h.get("doctest") or {}).get("removed") or []
+                if dr:
+                    k = dr[0]
+                    text = (h.get("removed") or [""])[k] if k < len(h.get("removed") or []) else ""
+                    lines.append({"path": path, "line": h["old"][0] + k, "text": text.strip()[:200],
+                                  "change": "doctest"})
         if not _is_test_change(c, test_paths) or c.get("no_code_change"):
             continue  # not a test file, or only comments / docstrings / formatting changed
         if c.get("status") == "removed":
             existing_tests.append(c)
+            lines.append({"path": path, "line": 0, "text": "(the whole file)", "change": "removed"})
             continue
         if c.get("status") != "modified":
             continue  # a new test file is not an edit of an existing test
         edited = False
+        # a test file of another language: its tests are callbacks or methods of any name
+        other_lang = bool(c.get("test")) and not path.endswith((".py", ".pyi"))
         for h in c.get("hunks") or []:
             added = h.get("added") or []
+            removed = h.get("removed") or []
             added_keys = {_stmt_key(x) for x in added}
-            if h.get("removed"):
+            if removed:
                 edited = True
-            for i, text in enumerate(h.get("removed") or []):
+            asserted = set()
+            for i, text in enumerate(removed):
                 if _ASSERT_LINE.match(text) and _stmt_key(text) not in added_keys:
-                    lines.append({"path": c["path"], "line": h["old"][0] + i, "text": text.strip()[:200],
+                    asserted.add(i)
+                    lines.append({"path": path, "line": h["old"][0] + i, "text": text.strip()[:200],
                                   "change": "assertion"})
-            in_test_fn = any(s.rsplit(".", 1)[-1].startswith("test") for s in h.get("symbols") or [])
+            k = _value_change(removed, added) if removed else None
+            if k is not None and k not in asserted:
+                lines.append({"path": path, "line": h["old"][0] + k, "text": removed[k].strip()[:200],
+                              "change": "value"})
+            in_test_fn = other_lang or any(s.rsplit(".", 1)[-1].startswith("test") for s in h.get("symbols") or [])
             for i, text in enumerate(added):
                 # an early return only counts inside a test function (a helper or fixture may return early)
-                if _DISABLE_LINE.match(text) and (in_test_fn or not _RETURN.match(text)):
+                if _DISABLE_LINE.match(text) and (in_test_fn or not _RETURNISH.match(text)):
                     edited = True
-                    lines.append({"path": c["path"], "line": h["new"][0] + i, "text": text.strip()[:200],
+                    lines.append({"path": path, "line": h["new"][0] + i, "text": text.strip()[:200],
                                   "change": "switched off"})
         if edited:
             existing_tests.append(c)
-    config = []
     for c in changes:
         if _TEST_CONFIG_FILE.search(c["path"]) and not c.get("no_code_change"):
             for h in c.get("hunks") or []:
+                secs = h.get("added_sections") or []
+                # without the per-line sections, the section the hunk's symbol names (``#tool.pytest.ini_options``)
+                fallback = next((s.lstrip("#") for s in h.get("symbols") or [] if s.startswith("#")), None)
                 for i, text in enumerate(h.get("added") or []):
-                    if _TEST_CONFIG_LINE.search(text):
-                        config.append({"path": c["path"], "line": h["new"][0] + i, "text": text.strip()[:200],
-                                       "change": "test selection"})
-    lines += config
+                    if _selects_tests(c["path"], text, secs[i] if i < len(secs) else fallback):
+                        lines.append({"path": c["path"], "line": h["new"][0] + i, "text": text.strip()[:200],
+                                      "change": "test selection"})
     refs = [_ref(prev), _ref(cur)] if prev else [_ref(cur)]
     if existing_tests and all(_is_test_change(c, test_paths) for c in changes):
         paths = ", ".join(c["path"] for c in changes)
         return [_finding("test_edited", f"attempt {cur['n']} changed only test files ({paths}); whether the test "
                                         "or the code is right is the user's call", refs, lines=lines[:5])], lines
     if lines:
-        at = ", ".join(f"{x['path']}:{x['line']}" for x in lines[:3])
+        at = ", ".join(f"{x['path']}:{x['line']}" if x["line"] else x["path"] for x in lines[:3])
         what = sorted({x["change"] for x in lines})
         kinds = {"assertion": "an assertion or expected value of an existing test",
+                 "value": "an expected value or input of an existing test (a literal in a test file or its data)",
+                 "doctest": "a doctest example or its expected output",
+                 "removed": "the test files (an existing one was removed)",
                  "switched off": "switched an existing test off (skip, xfail or an early return)",
                  "test selection": "the tests the configuration selects"}
         return [_finding("test_edited", f"attempt {cur['n']} changed {' and '.join(kinds[w] for w in what)} ({at}); "
@@ -436,17 +562,47 @@ def _test_edited(hist: list[dict], cur: dict) -> tuple[list[dict], list[dict]]:
     return [], []
 
 
+def _outcome_of(test: str, tests: dict[str, str]) -> str:
+    """A test's outcome in a run; a collector (``tests/test_x.py``, a module that failed to collect before) by its
+    tests: run when any of them ran, skipped when all of them were skipped, else not run."""
+    if test in tests:
+        return tests[test]
+    if "::" in test:
+        return "not run"
+    base = test.rstrip("/")
+    members = [o for t, o in tests.items() if t.startswith(base + "::") or t.startswith(base + "/")]
+    if not members:
+        return "not run"
+    ran = [o for o in members if o in ("passed", "failed", "error")]
+    if ran:
+        return "failed" if any(o in ("failed", "error") for o in ran) else "passed"
+    return members[0]
+
+
 def _skipped_failing(hist: list[dict], cur: dict) -> list[dict]:
     """Tests that failed at the baseline (or at the previous attempt, if they existed at the baseline) and
     did not pass now: skipped, xfailed, deselected or not collected. Needs per-test outcomes (pytest)."""
-    tests = (cur.get("signature") or {}).get("tests")
+    sig = cur.get("signature") or {}
+    tests = sig.get("tests")
     if not hist or not isinstance(tests, dict) or not tests:
         return []
     baseline, prev = hist[0], hist[-1]
     base_tests = (baseline.get("signature") or {}).get("tests") or {}
     required = set(_failed_set(baseline) or ())
     required |= {t for t in (_failed_set(prev) or ()) if not base_tests or t in base_tests}
-    missing = {t: tests.get(t, "not run") for t in sorted(required) if tests.get(t) not in ("passed", "failed", "error")}
+    missing = {}
+    for t in sorted(required):
+        o = _outcome_of(t, tests)
+        if o not in ("passed", "failed", "error"):
+            missing[t] = o
+    stopped = sig.get("stopped_early")
+    if stopped is None and cur.get("outcome") == "fail":
+        stopped = any(a in ("-x", "--exitfirst", "--sw", "--stepwise") or str(a).startswith("--maxfail")
+                      for a in cur.get("command") or [])
+    if stopped:
+        # the run stopped at an earlier failure (-x, --maxfail, --stepwise): later tests were not reached, which
+        # says nothing about them; skipped and xfailed ones still count
+        missing = {t: o for t, o in missing.items() if o != "not run"}
     if not missing:
         return []
     shown = ", ".join(f"{t} ({o})" for t, o in list(missing.items())[:5])

@@ -717,3 +717,186 @@ def test_mcp_debug_tools(tmp_path):
     assert refused["status"] == "refused"
     bad = t.debug_strategy("nope")
     assert bad["error"] == "invalid_argument"
+
+
+# -- review round 3 ------------------------------------------------------------------------------------
+
+DISCOUNT_BUG = ("if subtotal > DISCOUNT_THRESHOLD:", "if subtotal < DISCOUNT_THRESHOLD:")
+
+
+def test_a_baseline_that_fails_at_collection_is_resolved_by_the_real_fix(tmp_path):
+    # review finding: the module id of a collection error was "not run" in the fix, a definitive stop, a question,
+    # and the session could never be closed
+    repo = _repo(tmp_path)
+    _sub(repo, "orders/pricing.py", "def compute_total(", "def compute_order_total(")
+    _sub(repo, "orders/service.py", "from orders.pricing import compute_total",
+         "from orders.pricing import compute_order_total as compute_total")
+    st = open_store(repo)
+    s = debug.start(st, repo, "the test run dies at collection", PT)
+    assert s["outcome"] == "fail" and s["reproduced"] and "collection error" in s["notes"][0]
+    assert s["signature"]["failures"][0]["exc"] == "ImportError"
+    _sub(repo, "orders/pricing.py", "def compute_order_total(", "def compute_total(")
+    _sub(repo, "orders/service.py", "from orders.pricing import compute_order_total as compute_total",
+         "from orders.pricing import compute_total")
+    a = debug.attempt(st, repo, hypothesis="restore the name the tests import")
+    assert a["outcome"] == "pass" and not a["stop"] and a["loop"] == [] and a["progress"] == "improved"
+    assert debug.close(st, repo, resolved_by=1)["status"] == "resolved"
+
+
+def test_a_repro_that_never_failed_resolves_nothing(tmp_path, capsys):
+    # review finding: a session was closed as resolved by its own passing baseline, the bug still in place
+    repo = _repo(tmp_path)
+    _sub(repo, "orders/service.py", "total = compute_total(items)", "total = compute_total(items) * 2")
+    r = str(repo)
+    assert cli.main(["debug", "start", "order totals are doubled", "--repo", r, "--", *PT,
+                     "tests/test_pricing.py"]) == 3
+    assert "did not reproduce" in capsys.readouterr().out
+    st = open_store(repo)
+    with pytest.raises(debug.DebugError, match="baseline"):
+        debug.close(st, repo, resolved_by=0)
+    ok = debug.attempt(st, repo, hypothesis="nothing changed", kind="rerun")
+    assert ok["outcome"] == "pass"
+    with pytest.raises(debug.DebugError, match="never observed"):
+        debug.close(st, repo, resolved_by=1)
+
+
+def test_the_differential_judges_the_base_on_the_symptoms_tests(tmp_path):
+    # review finding: "the repro also fails at the base: the cause predates the working-tree changes" when the base
+    # fails only an unrelated long-red test and the symptom's tests pass there
+    repo = _repo(tmp_path)
+    (repo / "tests" / "test_legacy.py").write_text("def test_legacy_limit():\n    assert 50 == 100\n",
+                                                   encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "a long-red test")
+    _sub(repo, "orders/pricing.py", *DISCOUNT_BUG)
+    st = open_store(repo)
+    debug.start(st, repo, "small orders get a discount", PT)
+    d = debug.differential(st, repo)
+    assert d["status"] == "partly_in_diff" and d["fails_at_base_too"] == ["tests/test_legacy.py::test_legacy_limit"]
+    assert d["hunks"][0]["at"] == "orders/pricing.py:13"
+    assert "predates the working-tree changes: the cause" not in d["conclusion"]
+    # the working tree fixes the red test: the base fails only it, the symptom's tests pass there
+    (repo / "tests" / "test_legacy.py").write_text("def test_legacy_limit():\n    assert 100 == 100\n",
+                                                   encoding="utf-8")
+    debug.attempt(st, repo, hypothesis="the legacy limit is 100", kind="probe")
+    d2 = debug.differential(st, repo)
+    assert d2["status"] == "cause_in_diff" and "failed only other tests" in d2["conclusion"]
+    sess = debug._session(st, d2["session"])
+    assert debug._base_outcome(sess, debug._attempts(st, sess["id"]))[0] == "pass"  # no bisect proposed
+
+
+def test_bisect_does_not_blame_a_commit_that_fails_other_tests(tmp_path):
+    # review finding: bisect named a commit whose failure was a different, already-fixed bug
+    repo = _repo(tmp_path)
+    good = _git(repo, "rev-parse", "HEAD").strip()
+    _sub(repo, "orders/service.py", "    if not items:\n", "    if items is None:\n")
+    _git(repo, "commit", "-qam", "c2 bug A: empty orders accepted")
+    _sub(repo, "orders/service.py", "    if items is None:\n", "    if not items:\n")
+    _git(repo, "commit", "-qam", "c3 bug A fixed")
+    _sub(repo, "orders/pricing.py", *DISCOUNT_BUG)
+    _git(repo, "commit", "-qam", "c4 the discount comparison")
+    c4 = _git(repo, "rev-parse", "HEAD").strip()
+    st = open_store(repo)
+    debug.start(st, repo, "small orders get a discount", PT)
+    b = debug.bisect(st, repo, good=good)
+    assert b["status"] == "found" and b["first_bad_commit"]["commit"] == c4, b["conclusion"]
+    other = [r for r in b["runs"] if r.get("for_the_symptom")]
+    assert all(r["for_the_symptom"].startswith("pass: every test of the symptom passed") for r in other)
+
+
+def test_rerun_prints_in_text_mode(tmp_path, capsys):
+    # review finding: `verinoda debug rerun` crashed with a TypeError in text mode
+    repo = _repo(tmp_path)
+    _sub(repo, "orders/pricing.py", 'i["qty"]', 'i["quantity"]')
+    r = str(repo)
+    assert cli.main(["debug", "start", "totals", "--repo", r, "--", *PT]) == 0
+    capsys.readouterr()
+    assert cli.main(["debug", "rerun", "--repo", r, "--times", "2"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("rerun: stable") and "pass rate 0.0 (0/2)" in out
+
+
+def test_an_attempt_recorded_meanwhile_does_not_lose_this_one(tmp_path, monkeypatch):
+    # review finding: two ledger commands at once crashed with an IntegrityError and lost an attempt
+    repo = _repo(tmp_path)
+    _sub(repo, "orders/pricing.py", 'i["qty"]', 'i["quantity"]')
+    st = open_store(repo)
+    debug.start(st, repo, "totals", PT)
+    real = experiments.run
+    done = []
+
+    def run_while_another_is_recorded(*a, **k):
+        if not done:
+            done.append(1)
+            debug.attempt(open_store(repo), repo, hypothesis="meanwhile", observed_output="1 failed in 0.1s\n",
+                          exit_code=1, command=PT, kind="probe")
+        return real(*a, **k)
+
+    monkeypatch.setattr(experiments, "run", run_while_another_is_recorded)
+    a = debug.attempt(st, repo, hypothesis="default the quantity")
+    assert a["attempt"] == 2 and [x["n"] for x in debug.status(st, repo)["attempts"]] == [0, 1, 2]
+    assert "attempt 2]" in st.get("experiments", a["experiment_id"])["hypothesis"]
+
+
+def test_the_users_accepted_test_change_covers_the_failing_test_it_replaced(tmp_path):
+    # review finding: a failing test the user decided to replace blocked close even with --accept-test-edit
+    repo = _repo(tmp_path)
+    _sub(repo, "tests/test_pricing.py", "def test_compute_total():",
+         "def test_discount_at_threshold():\n    assert apply_discount(100.0) == 90.0\n\n\ndef test_compute_total():")
+    _git(repo, "commit", "-qam", "threshold test")
+    st = open_store(repo)
+    debug.start(st, repo, "no discount at the threshold", PT)
+    _sub(repo, "tests/test_pricing.py", "def test_discount_at_threshold():\n    assert apply_discount(100.0) == 90.0",
+         "def test_no_discount_at_threshold():\n    assert apply_discount(100.0) == 100.0")
+    a = debug.attempt(st, repo, hypothesis="the user says the old test was wrong")
+    assert a["stop"] and {"test_edited", "failing_tests_skipped"} <= set(_rules(a))
+    with pytest.raises(debug.DebugError, match="--accept-test-edit"):
+        debug.close(st, repo, resolved_by=1)
+    closed = debug.close(st, repo, resolved_by=1, accept_test_edit=True, note="the user decided")
+    assert closed["status"] == "resolved" and "removed or renamed" in closed["result"]
+    assert "test_discount_at_threshold" in closed["note"]
+
+
+def test_agent_reports_that_disagree_or_that_verinoda_could_run_do_not_resolve(tmp_path, monkeypatch):
+    # review findings: an agent-reported pass closed a session whose tree the agent also reported failing; an agent
+    # report resolved a repro Verinoda can run itself, although its own run of that tree failed
+    monkeypatch.setattr(experiments, "container_runtime", lambda: None)  # gradlew stays a command Verinoda can't run
+    repo = _repo(tmp_path)
+    st = open_store(repo)
+    npe = "Exception in thread \"main\" java.lang.NullPointerException: drop\n\tat com.example.Wisp.onDeath(Wisp.java:4)\n"
+    debug.start(st, repo, "a dead wisp drops nothing", ["gradlew", "test"], observed_output=npe, exit_code=1)
+    (repo / "orders" / "extra.py").write_text("X = 1\n", encoding="utf-8")
+    debug.attempt(st, repo, hypothesis="drop first", observed_output="BUILD SUCCESSFUL\n", exit_code=0,
+                  command=["gradlew", "test"])
+    debug.attempt(st, repo, hypothesis="again", observed_output=npe, exit_code=1, command=["gradlew", "test"],
+                  kind="rerun")
+    with pytest.raises(debug.DebugError, match="flaky"):
+        debug.close(st, repo, resolved_by=1)
+    debug.close(st, repo, abandoned=True)
+    _sub(repo, "orders/pricing.py", 'i["qty"]', 'i["quantity"]')
+    debug.start(st, repo, "totals", PT)
+    _sub(repo, "orders/pricing.py", 'i["quantity"]', 'i.get("quantity", 1)')  # a tree Verinoda never ran
+    rep = debug.attempt(st, repo, hypothesis="I ran it myself", observed_output="3 passed, 2 skipped in 0.2s\n",
+                        exit_code=0, command=PT)
+    assert any("2 skipped" in x for x in rep["not_run"])
+    with pytest.raises(debug.DebugError, match="Verinoda can run this repro itself"):
+        debug.close(st, repo, resolved_by=1)
+
+
+def test_output_options_do_not_make_another_command():
+    # review finding: -vv / --tb=short made each attempt a different command: no loop rules, no budget, and the
+    # final pass "said nothing about the repro"
+    sess = {"command": PT}
+    assert debug._is_repro({"command": PT + ["-vv", "--tb=short", "-rA"]}, sess)
+    assert debug._is_repro({"command": ["python", "-m", "pytest", "-q"]}, sess)  # -p no:cacheprovider left out
+    assert not debug._is_repro({"command": PT + ["-k", "compute"]}, sess)
+    assert not debug._is_repro({"command": PT + ["-x"]}, sess)
+    assert debug.canonical_command(["gradlew", "test", "-q"]) == ["gradlew", "test", "-q"]
+
+
+def test_printed_commands_are_quoted_and_costs_include_the_overhead():
+    # review findings: `-k 'a or b'` was printed as `-k a or b`; strategy costs left out the copy overhead
+    assert "\"compute or roundtrip\"" in debug.cmd_text(PT + ["-k", "compute or roundtrip"]) or \
+        "'compute or roundtrip'" in debug.cmd_text(PT + ["-k", "compute or roundtrip"])
+    assert debug._duration([{"duration_s": 0.6, "touched": {"cost": {"overhead_s": 17.2}}}]) == pytest.approx(17.8)
+    assert debug._duration([{"duration_s": 0.6}]) == pytest.approx(0.6)

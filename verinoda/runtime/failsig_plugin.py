@@ -11,9 +11,11 @@ exception type (``__qualname__``, module), the first line of its message,
 pytest's crash location (``reprcrash``: path, line, message) and the traceback
 entries inside the repository copy (path relative to the copy, line, the
 function's qualified name). A failed collection records pytest's text report,
-which Verinoda parses. At the end it records each test's outcome and the
-session's exit status. Under pytest-xdist only the controller writes the file
-(outcomes and collection errors; the workers' tracebacks are not in it, and
+which Verinoda parses. At the end it records each test's outcome, the
+session's exit status and whether the run stopped early (``-x``,
+``--maxfail``, ``--stepwise``: later tests were not reached). Under
+pytest-xdist only the controller writes the file (outcomes and collection
+errors; the workers' tracebacks are not in it, and
 Verinoda falls back to pytest's text output for them).
 
 Output: ``$VERINODA_ARTIFACTS/failsig.jsonl`` (JSON lines; schema
@@ -45,7 +47,7 @@ MAX_LONGREPR = 8000
 
 _failures: list = []
 _outcomes: dict = {}
-_state = {"exitstatus": None, "written": False, "collect_errors": 0}
+_state = {"exitstatus": None, "written": False, "collect_errors": 0, "stopped_early": False}
 _quals: dict = {}
 _source_quals: dict = {}
 
@@ -133,7 +135,14 @@ def _frames(excinfo) -> list:
 
 
 def _crash(report) -> dict | None:
-    crash = getattr(getattr(report, "longrepr", None), "reprcrash", None)
+    longrepr = getattr(report, "longrepr", None)
+    crash = getattr(longrepr, "reprcrash", None)
+    if crash is None:
+        # a doctest failure: the location of the failing example (ReprFailDoctest.reprlocation_lines)
+        try:
+            crash = (getattr(longrepr, "reprlocation_lines", None) or [(None, None)])[0][0]
+        except Exception:  # noqa: BLE001
+            crash = None
     if crash is None:
         return None
     try:
@@ -194,7 +203,7 @@ def pytest_runtest_logreport(report):
 def _write() -> None:
     header = {"k": "header", "schema": SCHEMA, "python": sys.version.split()[0], "root": ROOT_RAW,
               "exitstatus": _state["exitstatus"], "collect_errors": _state["collect_errors"],
-              "tests": len(_outcomes), "failures": len(_failures)}
+              "stopped_early": _state["stopped_early"], "tests": len(_outcomes), "failures": len(_failures)}
     lines = [json.dumps(header, separators=(",", ":"))]
     lines += [json.dumps(r, separators=(",", ":")) for r in _failures]
     lines.append(json.dumps({"k": "outcomes", "tests": _outcomes}, separators=(",", ":")))
@@ -209,6 +218,11 @@ def _write() -> None:
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
     _state["exitstatus"] = int(exitstatus)
+    # -x / --maxfail set shouldfail, --stepwise sets shouldstop: the tests after that point were not reached
+    try:
+        _state["stopped_early"] = bool(getattr(session, "shouldfail", False) or getattr(session, "shouldstop", False))
+    except Exception:  # noqa: BLE001
+        pass
     if hasattr(session.config, "workerinput"):  # a pytest-xdist worker: only the controller writes the file
         _state["written"] = True
         return
