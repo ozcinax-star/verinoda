@@ -159,9 +159,11 @@ def test_text_is_the_answer_then_the_passages():
     # where the question's words resolved (the MCP view lists the same links): a locator, weak links left out
     assert "\nplan links: order -> orders/service.py:19-22\n" in text and "x.py:1-2" not in text
     ambiguous = {"mention": "m4", "text": "total", "status": "ambiguous", "at": "orders/pricing.py:6-8"}
+    same = {"mention": "m5", "text": "placed", "status": "linked", "at": "orders/service.py:19-22"}
     more = _result()
-    more["plan_check"]["links"].append(ambiguous)
-    assert ("plan links: order -> orders/service.py:19-22; total -> orders/pricing.py:6-8 (ambiguous)"
+    more["plan_check"]["links"] += [ambiguous, same]
+    # words that resolved to the same place share one locator
+    assert ("plan links: order, placed -> orders/service.py:19-22; total -> orders/pricing.py:6-8 (ambiguous)"
             in av.render_text(more))
     q1 = text.index("\nq1 [met_with_inference] flow: how is an order saved?")
     c1 = text.index("  [statically_verified] `place_order()` calls `compute_total()` (orders/service.py:21)  (c1)\n")

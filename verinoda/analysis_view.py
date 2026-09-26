@@ -287,14 +287,15 @@ def render_text(res: dict) -> str:
     pc = res.get("plan_check") or {}
     if res.get("plan_source") == "host":
         out.append(f"plan {res.get('plan_id')}: {pc.get('status') or status}")
-    linked = []
+    linked: dict[tuple, list[str]] = {}  # (at, status) -> the words that resolved there
     for lk in pc.get("links") or []:
         if lk.get("status") == "not_found":
             out.append("plan check: " + _link(lk))
         elif lk.get("status") != "weak":
-            linked.append(_link(lk, untagged="linked"))
+            linked.setdefault((lk.get("at"), lk.get("status")), []).append(str(lk.get("text")))
     if linked:  # where the question's words resolved in the code (the MCP view lists the same links)
-        out.append("plan links: " + "; ".join(linked))
+        out.append("plan links: " + "; ".join(_link({"text": ", ".join(words), "at": at, "status": st},
+                                                    untagged="linked") for (at, st), words in linked.items()))
     if res.get("index_refresh_error"):
         out.append(f"warning: {res['index_refresh_error']}")
     if status == "invalid_plan":
