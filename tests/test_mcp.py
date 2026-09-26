@@ -1635,7 +1635,7 @@ def test_stdio_server_found_through_repo_of_names_its_build(tmp_path):
         return init.server_info if hasattr(init, "server_info") else init.serverInfo
 
     err = tmp_path / "server.err"
-    info = _session(proj, err, body, params=_server_params(proj, ["--repo-of", ".mcp.json"], cwd=proj / "pkg",
+    info = _session(proj, err, body, params=_server_params(proj, where=["--repo-of", ".mcp.json"], cwd=proj / "pkg",
                                                            launcher=installer._module_argv(sys.executable)))
     want = buildinfo.server_version(buildinfo.collect())  # now, not this process's cached value (HEAD may move)
     assert info.name == "verinoda" and info.version == want
