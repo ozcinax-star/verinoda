@@ -809,6 +809,7 @@ class Snapshot:
                     via[u] = (v, str(data.get("relation")), _at(data))
                     nxt.append(u)
             frontier = nxt
+        truncated = self._impact_callbacks(dist, via, len(seeds), depth, tests) or truncated
         items = []
         for u, d in dist.items():
             if d == 0:
@@ -823,6 +824,32 @@ class Snapshot:
         files = Counter(x.get("file") for x in items if x.get("file"))
         return {"id": nid, "depth": depth, "count": len(items), "files": len(files), "truncated": truncated,
                 "tests": sum(1 for f in files if _is_test(f)), "items": items}
+
+    def _impact_callbacks(self, dist: dict, via: dict, n_seeds: int, depth: int, tests: bool) -> bool:
+        """Continue an impact (``dist`` / ``via``, filled over :data:`USE_RELATIONS`) through callback
+        registrations: the method that hands a changed method over by reference (a ``registers`` edge,
+        relation ``registers (callback)``) and what uses that. Found notes keep their depth; True when
+        :data:`MAX_IMPACT` stopped it."""
+        g = self.g
+        if not any(True for _ in g.edges({"registers"})):
+            return False
+        heap = [(d, n) for n, d in dist.items()]
+        heapq.heapify(heap)
+        rels = set(USE_RELATIONS) | {"registers"}
+        while heap:
+            d, v = heapq.heappop(heap)
+            if d != dist.get(v) or d >= depth:
+                continue
+            for u, data in g.in_edges(v, rels):
+                if u in dist or self.kind(u) in HIDDEN_KINDS or (not tests and _is_test(g.file(u) or "")):
+                    continue
+                if len(dist) - n_seeds >= MAX_IMPACT:
+                    return True
+                rel = str(data.get("relation"))
+                dist[u] = d + 1
+                via[u] = (v, "registers (callback)" if rel == "registers" else rel, _at(data))
+                heapq.heappush(heap, (d + 1, u))
+        return False
 
     def path(self, src: str, dst: str) -> dict:
         """The shortest chain of uses from ``src`` to ``dst`` (it calls / imports / extends / names the
