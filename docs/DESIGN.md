@@ -66,6 +66,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D43 | Name check for Java: classpath, JDK and Mixin targets | implemented | Built 2026-09-26 (section 16): `jvmclass.py`, `codecheck_java.py`. On a real Fabric mod (407 files, 126,848 sites, compiled): 0 absent, 2.3% unknown, 4.7 s; 8 of 8 planted invented names caught (Yarn names, arity, a Mixin target). Not done: Kotlin, Groovy, argument types, Maven's classpath. |
 | D44 | `update --fast`: the changed files now, the graph in the background | implemented | Built 2026-09-26 (section 17): `workflow._deferred`, `workflow.start_background_update`; MCP `index_update` takes it after a graph build over 15 s. 3.4 s instead of 27-33 s on Verinoda's own repository; the background graph equals a forced scan's. Not done: a graph build that reads only the changed files. |
 | D45 | Name check for Kotlin, in the Java check's world | implemented | Built 2026-09-26 (section 18): `codecheck_kotlin.py`; the universe reads Kotlin sources (Java sees them too), `jvmclass` reads `@kotlin.Metadata` names. kotlinpoet: 10 absents, all kotlin-reflect names the given classpath lacked; the Java mod unchanged (0 absent, 8 of 8 caught). Not done: argument counts, receiver-less calls, type inference beyond declarations and constructors. |
+| D46 | Import check for TypeScript and JavaScript | implemented | Built 2026-09-26 (section 19): `codecheck_ts.py`. A planted sample: 6 of 6; ky: 0 false absents over 594 sites. A file is checked for imports only and stays under `not_checked`. Not done: calls, members, types (the TypeScript compiler), bundler aliases, Vue/Svelte files. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -2806,6 +2807,48 @@ project's Kotlin classes: a Java call on a Kotlin class of the same package coul
 
 Argument counts, calls without a receiver, type inference beyond declarations and constructors (a lambda's
 `it`, generic results), Kotlin script files, Kotlin/JS and multiplatform `expect`/`actual`.
+
+## 19. Import check for TypeScript and JavaScript (D46, 2026-09-26)
+
+### 19.1 Why
+
+TypeScript and JavaScript files came back `not_checked`. The invented name an agent writes most often there is an
+import: a helper file that does not exist, a package that is not installed, a hook from another major version
+(`useHistory` after react-router 6), a misspelt export.
+
+### 19.2 Decisions
+
+- **Resolve as TypeScript does, read, never run**: relative paths with the TypeScript and JavaScript extensions
+  and index files (a `.js` path finds its `.ts` source or its `.d.ts`/`.d.cts`/`.d.mts` declaration first),
+  `tsconfig.json`/`jsconfig.json` `baseUrl` and `paths` (comments and `extends` handled), packages in the nearest
+  `node_modules` up to the repository (never above it), their `types`/`typings`, `exports` maps (with `types`,
+  `import`, `default` conditions and `*` patterns), `@types/<name>` before a package's JavaScript, a package
+  imported by its own name, and `declare module "x"` blocks (from the project and `@types`; every declaration in
+  such a block is exported). Node's built-in module names win over packages of the same name.
+- **Closed only where the exports are all known**: a module's own declarations and export lists, `export *` chains
+  that all resolve, `export =` of a namespace that is nothing else, CommonJS `module.exports = { ... }` and
+  `exports.x =` (`unknown`, never `absent`, for a name a CommonJS module lacks). A file that does not parse
+  completely, `export =` of a value, a bundler alias (`@/`, `~`, `virtual:`) and a missing `node_modules` give
+  `unknown` with the reason. A default import is judged only against the project's own source files
+  (`esModuleInterop` can give a package a default).
+- **Imports only, and said so**: each checked file is also listed under `not_checked` ("imports checked; calls,
+  members and types are not"), so `check` exits 4 on a TypeScript change unless something is absent (3) - a
+  renamed function that is only called elsewhere is never passed as checked.
+
+### 19.3 Measured
+
+- A sample with real packages installed (react + @types/react, react-router-dom, zod, axios, lodash + @types,
+  @types/node): `useEfect` (nearest `useEffect`), `useHistory`, a missing export of a project file, a missing
+  file, `readFileSinc` (nearest `readFileSync`), an uninstalled package: 6 of 6. `AxiosErr`, lodash's `debounse`
+  and a name behind zod's `export *` into a declaration file tree-sitter does not parse stay `unknown`.
+- ky (67 files, 594 import sites, its own `node_modules`): 0 absent, 0 wrong `not_installed` (after fixing
+  declared modules' implicit exports, a package imported by its own name, and a lookup that had found a
+  `node_modules` above the repository).
+
+### 19.4 Not done
+
+Calls, members and types (they need the TypeScript compiler), bundler aliases from `vite.config` or `webpack`
+configs, `.vue`/`.svelte` files, and `package.json` `imports` (`#internal`).
 
 ## Sources
 

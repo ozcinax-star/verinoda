@@ -2782,8 +2782,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("check", cmd_check, "Python, Java and Kotlin: check that the modules, names, keyword arguments and "
                                  "dict keys Python code uses exist in the project's environment, and the classes, "
                                  "methods (Java: with their number of arguments), fields, properties and Mixin "
-                                 "targets Java and Kotlin code uses exist in the project, its classpath or the JDK "
-                                 "(exit 3: something is "
+                                 "targets Java and Kotlin code uses exist in the project, its classpath or the JDK; "
+                                 "TypeScript/JavaScript: imports only (exit 3: something is "
                                  "absent, or an installed package version differs from the lock file; exit 4: "
                                  "nothing absent, but a file asked for was not checked - another language, a file "
                                  "that does not parse - it is listed under not_checked, never passed)")

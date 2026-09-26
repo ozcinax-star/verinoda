@@ -350,17 +350,19 @@ def test_check_never_passes_a_file_it_cannot_read(tmp_path, capsys):
     capsys.readouterr()
     assert cli.main(["check", "--repo", str(repo), "--diff", "--json"]) == 4
     d = json.loads(capsys.readouterr().out)
+    # their imports are checked now (D46), the rest is not: still listed, still exit 4
     assert [u["path"] for u in d["not_checked"]] == ["web/new.tsx", "web/orderService.ts"]
-    assert d["status"] == "unsupported_language" and d["summary"]["not_checked"] == 2
+    assert d["status"] == "incomplete" and d["summary"]["not_checked"] == 2
+    assert all("imports checked" in u["why"] for u in d["not_checked"])
     assert cli.main(["check", "--repo", str(repo), "web/orderService.ts"]) == 4
     assert "NOT CHECKED (not Python)" in capsys.readouterr().out
     (repo / ".verinoda").mkdir(exist_ok=True)
     m = AtlasTools(repo).code_check(paths=["web/orderService.ts"], env="none")
-    assert m["status"] == "unsupported_language" and m["exit"] == 4 and m["not_checked"][0]["language"] == "TypeScript"
+    assert m["status"] == "incomplete" and m["exit"] == 4 and m["not_checked"][0]["language"] == "TypeScript"
     # a Python edit next to them is checked as before; the TS files still keep the exit at 4
     _write(repo, "tools/x.py", "import json\n\njson.loads('1')\n")
     mixed = codecheck.check(repo, diff="HEAD", env="none")
-    assert mixed["status"] == "incomplete" and mixed["summary"]["files"] == 1 and mixed["exit"] == 4
+    assert mixed["status"] == "incomplete" and mixed["summary"]["files"] == 3 and mixed["exit"] == 4
     # nothing changed: nothing to check, and the result says so (in CI, compare with the base branch)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "all")
@@ -567,11 +569,12 @@ def test_check_tells_absent_from_not_checked_by_the_exit_code(tmp_path, capsys):
     _write(repo, "app/views.py", "import json\n\n\ndef v():\n    return json.dumps({})\n")
     _write(repo, "app/static/app.js", "export const x = 1;\n")
     res = codecheck.check(repo, ["app"], env="none", use_cache=False)
-    assert res["exit"] == 4 and res["status"] == "incomplete" and res["summary"]["files"] == 1
-    assert "not checked: language not supported (JavaScript 1" in res["exit_because"]
+    assert res["exit"] == 4 and res["status"] == "incomplete" and res["summary"]["files"] == 2
+    assert "1 TypeScript/JavaScript file checked for imports only" in res["exit_because"]
     _write(repo, "app/absent.py", "import json\n\njson.loadz('x')\n")
     res = codecheck.check(repo, ["app"], env="none", use_cache=False)
-    assert res["exit"] == 3 and res["exit_because"].startswith("1 absent; 1 file not checked")
+    assert res["exit"] == 3 and res["exit_because"].startswith("1 absent; 1 TypeScript/JavaScript file checked "
+                                                                 "for imports only")
     # a file that does not parse: not checked, never counted, exit 4 (it was exit 0 and "1 file")
     _write(repo, "bad.py", 'def f(:\n    json.loadz("x")\n')
     capsys.readouterr()

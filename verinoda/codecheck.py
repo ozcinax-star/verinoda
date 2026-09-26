@@ -3483,12 +3483,17 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     unchecked_why: list[str] = []
     java_targets: list[tuple[str, Path, set[int] | None]] = []   # checked by codecheck_java (D43)
     java_overrides: dict[str, bytes] = {}
+    ts_targets: list[tuple[str, Path, set[int] | None]] = []     # imports checked by codecheck_ts (D46)
+    ts_suffixes = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")
     if snippet is not None:
         rel = (as_path or "snippet.py").replace("\\", "/")
         abs_path = (repo / rel).resolve()
         scope = f"a snippet checked as {rel}"
         if rel.lower().endswith((".java", ".kt")):
             java_targets.append((rel, abs_path, None))
+            java_overrides[rel] = snippet.encode("utf-8")
+        elif rel.lower().endswith(ts_suffixes):
+            ts_targets.append((rel, abs_path, None))
             java_overrides[rel] = snippet.encode("utf-8")
         elif other_language(rel):
             others.append(rel)
@@ -3500,12 +3505,16 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     else:
         targets, scope, not_checked, others, skipped = _targets(repo, paths, diff)
         java = [rel for rel in others if rel.lower().endswith((".java", ".kt"))]
-        others = [rel for rel in others if rel not in set(java)]
-        if java and not paths:   # the diff: the changed lines of each Java file
-            jl = changed_lines(repo, diff or "HEAD", None, ("*.java", "*.kt"))
+        web = [rel for rel in others if rel.lower().endswith(ts_suffixes) and not rel.lower().endswith(".d.ts")]
+        others = [rel for rel in others if rel not in set(java) | set(web)]
+        if (java or web) and not paths:   # the diff: the changed lines of each file
+            jl = changed_lines(repo, diff or "HEAD", None, ("*.java", "*.kt", "*.ts", "*.tsx", "*.mts", "*.cts",
+                                                            "*.js", "*.jsx", "*.mjs", "*.cjs"))
             java_targets += [(rel, repo / rel, jl.get(rel)) for rel in java if rel in jl]
+            ts_targets += [(rel, repo / rel, jl.get(rel)) for rel in web if rel in jl]
         else:
             java_targets += [(rel, repo / rel, None) for rel in java]
+            ts_targets += [(rel, repo / rel, None) for rel in web]
         notes += not_checked
         unchecked += [(rel, "Python", why) for rel, why in skipped]
         if not_checked and not skipped:   # the walk stopped at MAX_FILES
@@ -3548,13 +3557,27 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
                                               java_overrides)
         files += java_res["files"]
         sites += java_res["sites"]
+    ts_res = None
+    if ts_targets:
+        from verinoda import codecheck_ts
+
+        ts_res = codecheck_ts.check_files(repo, ts_targets, {k: v for k, v in java_overrides.items()
+                                                             if k.lower().endswith(ts_suffixes)})
+        files += ts_res["files"]
+        sites += ts_res["sites"]
+        # only the imports are checked: the rest of such a file (calls, members, types) is never passed
+        read = [f["path"] for f in ts_res["files"] if not f.get("error")]
+        unchecked += [(rel, other_language(rel) or "TypeScript", "imports checked; calls, members and types are "
+                       "not (they need the TypeScript compiler)") for rel in read]
+        if read:
+            what = f"{len(read)} TypeScript/JavaScript file{'s' if len(read) > 1 else ''} checked for imports only"
+            notes.append(what + " (calls, members and types are not checked)")
+            unchecked_why.append(what)
     bad = [f for f in files if f.get("error")]
     if bad:   # a requested file that could not be read or parsed was not checked: "0 absent" does not cover it
         notes.append(f"{len(bad)} file{'s' if len(bad) > 1 else ''} not checked: " +
                      "; ".join(f"{f['path']} ({f['error']})" for f in bad[:5]) + (" ..." if len(bad) > 5 else ""))
-        unchecked += [(f["path"], "Java" if f["path"].lower().endswith(".java") else "Kotlin"
-                       if f["path"].lower().endswith(".kt") else "Python", str(f["error"]))
-                      for f in bad]
+        unchecked += [(f["path"], other_language(f["path"]) or "Python", str(f["error"])) for f in bad]
     failed = [s for s in sites if s.get("check_error")]
     if failed:   # a defect of the check on some sites: they are unknown, and the result says so
         notes.append(f"the check failed on {len(failed)} site{'s' if len(failed) > 1 else ''} (unknown): " +
@@ -3614,6 +3637,8 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
             *nothing,
             "Python, Java and Kotlin: code in other languages is listed under not_checked, never checked",
             *[f"Java: {n}" for n in (java_res or {}).get("notes", [])],
+            *[f"TypeScript/JavaScript: {n}" for n in (ts_res or {}).get("notes", [])],
+            *(["TypeScript/JavaScript: imports only (a member's type needs the compiler)"] if ts_res else []),
             "existence and signature shape only: a real name used wrongly is not detected",
             "unknown = not checked (open container or receiver type not known), never 'fine'",
             "runtime-made names (setattr, ORM columns, mocks, __getattr__) are unknown by design",

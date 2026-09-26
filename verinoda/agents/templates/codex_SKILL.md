@@ -195,7 +195,7 @@ code, and after every edit:
 2. Never keep an `absent` site: fix it from `nearest` / `elsewhere`, or pick a real name from
    `verinoda api <module.or.Class>` (MCP `api_members`; "not decided" = `found: null`).
 3. `unknown` is unverified: read the definition or run the tests. `not_installed`: the checked environment
-   lacks the package. `guarded`: the code handles it. Python, Java, Kotlin; other languages come back in `not_checked`
+   lacks the package. `guarded`: the code handles it. Python, Java, Kotlin, TS/JS imports; others come back in `not_checked`
    (exit 4), never as checked. Name the environment checked (the `environment:` line; `!` = lock mismatch).
 4. Exit 3: something absent or a version differs from the lock; exit 4: nothing absent, but a file was not
    checked (not Python, no parse). If the environment line says a `.venv` was not used, tell the user; never
