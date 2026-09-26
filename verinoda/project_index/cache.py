@@ -492,6 +492,12 @@ def file_hash(path: Path, root: Path = Path("."), cache_root: "Path | None" = No
             if walked_rel is None:
                 walked_rel = resolved_rel
         salt = walked_rel.as_posix().lower()
+    if p.suffix.lower() in (".pdf", ".docx", ".xlsx", ".pptx"):
+        # extracted from its text view (verinoda/doctext.py): a new view format is a new extraction
+        # (in the salt, so the stat-index memo of an older format is not served either)
+        from verinoda import doctext
+
+        salt += f"\x00doctext-v{doctext.VERSION}"
 
     st: "os.stat_result | None" = None
     try:

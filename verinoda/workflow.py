@@ -213,9 +213,15 @@ def _graph_affected(repo: Path, diff: dict, in_graph: set[str] | None = None) ->
             return True
     if any(f in in_graph for f in diff["modified"] + diff["removed"]):
         return True
+    from verinoda.project_index.extract import _get_extractor
+
     for f in diff["added"]:
         try:
-            if classify_file(repo / f) == FileType.CODE:
+            kind = classify_file(repo / f)
+            if kind == FileType.CODE:
+                return True
+            # a new document the graph reads (Markdown, PDF, Office): its pages and headings
+            if kind in (FileType.DOCUMENT, FileType.PAPER) and _get_extractor(repo / f) is not None:
                 return True
         except OSError:
             return True

@@ -63,6 +63,11 @@ dependencies = [
     "starlette>=1.3.1,<2",
     # PEP 440 version ranges in reference resolution (without it, ranges were matched loosely)
     "packaging>=23",
+    # Leiden communities in native code (abi3 wheels for Windows, macOS and Linux): clustering in an
+    # update of Verinoda's own repository 3.4 -> 1.0 s against networkx's Louvain fallback
+    "graspologic-native>=1.3.1,<2",
+    # the text of PDF documents in the repository (verinoda/doctext.py, docs/DESIGN.md D41); pure Python
+    "pypdf>=6.16.1",
 ]
 
 [project.optional-dependencies]
@@ -212,7 +217,7 @@ include = ["verinoda*"]
 "verinoda.agents" = ["templates/*.md"]
 "verinoda.benchmark" = ["questions/*.json"]
 # round 3 (docs/DESIGN.md): question-plan schema, TR->EN seed lexicon; the build stamp git archive fills in
-"verinoda" = ["schemas/*.json", "data/*.json", "data/*.txt"]
+"verinoda" = ["schemas/*.json", "data/*.json", "data/*.txt", "data/*.ps1"]
 # `verinoda ui`: the page, its script and style (no third-party assets)
 "verinoda.ui" = ["static/*.html", "static/*.js", "static/*.css"]
 

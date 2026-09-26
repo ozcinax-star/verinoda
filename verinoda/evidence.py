@@ -67,7 +67,7 @@ NOT_SUPPORT = {"user_feedback", "search_result", "model_summary"}
 RELATIONS = ("supports", "refutes", "qualifies")
 EXCERPT_MAX = 400
 # Documents, not code: cited lines in these files are design_doc evidence.
-DOC_SUFFIXES = (".md", ".markdown", ".rst", ".adoc")
+DOC_SUFFIXES = (".md", ".markdown", ".rst", ".adoc", ".pdf", ".docx", ".xlsx", ".pptx")  # the last four: doctext.py
 # Evidence whose cited lines can be re-read from a file.
 FILE_TYPES = ("source_code", "design_doc", "dependency_source", "reference_repo")
 
@@ -78,6 +78,10 @@ def content_hash(text: str) -> str:
 
 
 def _file_lines(path: Path) -> list[str] | None:
+    from verinoda import doctext
+
+    if doctext.kind(Path(path).name) is not None:  # a PDF, Office document or image: its text view
+        return doctext.text_lines(Path(path))
     try:
         return path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:

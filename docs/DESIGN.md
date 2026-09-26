@@ -61,6 +61,9 @@ own measurements, with their caveats. The benchmark harness results are in
 | D38 | JVM callbacks and mod entry points | partial | Built 2026-09-26 (section 11): a Java / Kotlin method reference passed as an argument is a `registers` edge (never `calls`), stored in the receiver-call sidecar (version 3); `trace` follows it only when no call path exists, labelled `callback`; impact (map, UI, review dependents) follows it after the other edges, marked `registers (callback)`; a relation claim "A calls B" supported only by a method reference (source line, graph edge or a resolver answer) is graded `registers` (none); the map's entry points know fabric.mod.json, Fabric initializers, `@Mod`, `@EventBusSubscriber` / `@SubscribeEvent`, mixin handlers and registered callbacks, and its sinks JVM file writes, `NbtIo` and dirty flags. fastbench: 0 fact changes on all nine sets. Not built: `analyze` flow claims through callbacks, lambdas passed as callbacks, static initializer blocks, inherited targets. |
 | D39 | Honest verdicts | implemented | Built 2026-09-26 (section 12): `verinoda/verdict_gate.py` runs in `analyze` after the claims are made and only caps or refuses (definitions answer only locate questions; copies and reference trees never make `met`; unresolved call sites are named and cap callers; a commit line is not a reason; set differences are `not_supported`). Verdict audit (`verinoda benchmark verdict-audit`, 17 traps + 22 controls on public material, split before tuning, written by the rule author): wrong met dev 9/23 -> 0/23, held-out 8/16 -> 1/16; controls kept dev 13 -> 12, held-out 7 -> 7. No fastbench fact lost. Not done: reasons in comments, a computed set difference, synonyms. |
 | D40 | Query ranking: tests yield to the code they test, named files and modules, docstring phrases, narrower expansions | implemented | Built 2026-09-26 (section 13) in `search_index.rank` / `analyze_query`, no index change. Dev set (37 questions, written for the change: in-sample): gold file first 13 -> 28, MRR 0.535 -> 0.836, tests in the top 5 of questions not about tests 61/170 -> 26/170. Fastbench: no fact lost, 2 gained. Not done: common English words that are module names get the weak plain-word boost; a lowercase owner still accepts methods (`asyncio.run`). |
+| D41 | Documents and images next to the code: text views of PDF/Office files, Windows OCR | implemented | Built 2026-09-26 (section 14): `doctext.py`; pages, sheets, slides and headings become graph nodes (the markdown extractor over the view), search passages, lexicon words, evidence lines and anchors. Fastbench on fresh indexes: 0 differences over 9 sets. Not done: scanned PDFs (no text layer), audio/video, OCR outside Windows. |
+| D42 | A faster `update` with the same graph | partial | 2026-09-26 (section 15): Leiden in native code by default, compact graph.json writes, memoised path and stem work. Same graph, labels, lexicon and receiver edges as before on four corpora (a 4,690-file mod included). Not done: an update proportional to the change; the cross-file passes still run over the whole corpus. |
+| D43 | Name check for Java: classpath, JDK and Mixin targets | implemented | Built 2026-09-26 (section 16): `jvmclass.py`, `codecheck_java.py`. On a real Fabric mod (407 files, 126,848 sites, compiled): 0 absent, 2.3% unknown, 4.7 s; 8 of 8 planted invented names caught (Yarn names, arity, a Mixin target). Not done: Kotlin, Groovy, argument types, Maven's classpath. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -2616,6 +2619,115 @@ Variants measured and not kept (fastbench against the same baseline):
   `_get_default_tempdir`, and a Turkish question about the search index still finds the Turkish overview first.
 - Copies of the project inside it (upstream Graphify's `worked/mixed-corpus/raw/`) still rank next to the real
   code unless the question writes the path.
+
+## 14. Documents and images next to the code (D41, 2026-09-26)
+
+### 14.1 Why
+
+An outside comparison with Graphify listed as a gap that Verinoda leaves out a repository's PDF reports, design
+documents and screenshots. Graphify reads them through an LLM subagent; Verinoda read none of them (a `.pdf` was
+"binary"). A project's decisions and specifications often live there.
+
+### 14.2 Decisions
+
+- **A text view per file, made the same way every time** (`doctext.py`): PDF through pypdf (added as a
+  dependency; pure Python), `.docx`/`.xlsx`/`.pptx` with the standard library (zip and ElementTree; zip bombs and
+  XML entities refused before reading), with a heading line per page (`# Page 3: <its first line>`), sheet, slide
+  or Word heading. Because the view is deterministic, evidence quoted from it can be checked again, like a
+  Markdown line. Views are cached per content hash under `.verinoda/index/doctext/`.
+- **Images through the OCR engine built into Windows** (`Windows.Media.Ocr`, run by a PowerShell script shipped
+  in the package): no model, no download, no network. Texture, icon and font folders, images under 4 KB or with
+  a side under 120 px (or both under 300 px), and images past 300 per run are skipped with the reason. One OCR
+  process per run; results cached by content. `VERINODA_OCR=0` turns it off. OCR text is what the engine read.
+- **Documents are first-class**: the markdown extractor reads the view, so pages and headings are graph nodes
+  (a new document now triggers a graph rebuild, as a new Markdown file also does since this change); the
+  search index, the lexicon (so `analyze` does not call a document's words absent), evidence (`design_doc`),
+  anchors (Markdown sections of the view) and spans read the view. The view's format version is part of the
+  graph's extraction cache key for documents.
+
+### 14.3 Measured
+
+- A sample project with a PDF, a Word file, a spreadsheet, a deck and a screenshot: `query` finds the PDF page
+  and the OCR'd screenshot (a Turkish question found the Turkish text in the image and the code it names);
+  `analyze "what is the payment retry backoff policy"` answers `met` with the PDF page as a
+  `statically_verified` claim; editing the PDF makes that claim `stale` on `update`.
+- Fastbench on freshly built indexes (the code before and after, each building its own): 0 differences over the
+  9 sets (333 question x approach cells each).
+
+### 14.4 Not done
+
+Scanned PDFs (no text layer), audio and video, OCR on macOS and Linux, and diagrams' structure (only their text).
+
+## 15. A faster update with the same graph (D42, 2026-09-26)
+
+### 15.1 Findings
+
+Profiling `update` after a one-line edit on Verinoda's own repository (about 2,400 files): of 31 s, extraction
+and the cross-file passes took 8.7 s, community detection 3.4 s (networkx's Louvain, because the native Leiden
+package was an optional extra), the file walk 2.7 s, the derived indexes 3.4 s, and writing the 34 MB graph.json
+twice with `indent=2` (Python's pure encoder) about 2.5 s. The path helpers were called 1.4 million times.
+
+### 15.2 Decisions (the output does not change)
+
+- `graspologic-native` (abi3 wheels for Windows, macOS and Linux) is a dependency: Leiden runs in native code
+  (clustering 3.4 -> 1.0 s). A simple graph's edges are ordered by their endpoint pair only (the attribute
+  JSON per edge and per split pass was a second; a pair is unique in a simple graph).
+- graph.json is written on one line through json's C encoder (still JSON, same content).
+- Memoised: a module's stem per node id in the Python member-call pass (350,000 calls), parent path parts in the
+  proximity tie-break, English stems in the lexicon's association pass.
+- Checked: the same graph.json content, community labels, lexicon and receiver-call edges from the old and the new
+  code on four corpora (a 106-file copy, the examples, Verinoda itself, a 4,690-file Java mod).
+
+### 15.3 Measured
+
+The real CLI, the same edits on two identical copies, alternating, both with Leiden installed: 31-38 s before,
+27-33 s after (about 12%); a user without the Leiden extra also saves the clustering difference (about 2.4 s
+here). Earlier, in the first measurement on one copy: 31.3 -> 24.0 s.
+
+### 15.4 Not done
+
+An update proportional to the change: the vendored cross-file passes (about 20 of them) read every file's
+extraction; making them incremental without losing edges is the next step.
+
+## 16. Name check for Java (D43, 2026-09-26)
+
+### 16.1 Why
+
+`verinoda check` was Python only, so invented APIs in Java - the language of Minecraft mods, where an agent
+trained on older mappings writes `PlayerEntity`, `getMainHandStack` or `spawnEntity` for `Player`,
+`getMainHandItem` and `addFreshEntity` - were never caught; a wrong Mixin target only fails at game start.
+
+### 16.2 Decisions
+
+- **Read what the build compiles against, never run the build**: `jvmclass.py` parses class files (constant
+  pool, super types, methods with parameter count, varargs, static and erased return type, fields, member
+  types) from the classpath and the JDK's `lib/ct.sym` for the build's release. The classpath is the configured
+  one or the one a Fabric Loom build left (its run argument files, the Minecraft jars and Minecraft's own
+  libraries); nested jars are read. Cached per jar version.
+- **Closed world as in the Python check**: `absent` only when the type and all its super types are read and the
+  package the name would come from is closed. Java's static typing makes a declared type closed (a method its
+  hierarchy lacks does not compile). Everything else is `unknown` with the reason.
+- **One classpath per build**: a repository can hold several builds (a Fabric mod and a Bukkit plugin); a file
+  belongs to the outermost folder with a Gradle settings file, else the nearest with a build file.
+- **Mixin targets** are checked against the target class's own members (a Mixin reaches only those); an
+  inherited one is `unknown`.
+
+### 16.3 Measured
+
+- A real Fabric mod for Minecraft 26.2 (unobfuscated names; 150 jars, 45,223 library classes, the JDK 25 API):
+  407 files, 126,848 sites, 0 absent (it compiles), 2,981 unknown (2.3%), 4.7 s warm.
+- 8 of 8 planted mistakes caught with the right name as the nearest: `PlayerEntity` (Player), `getMainHandStack`
+  (getMainHandItem), `spawnEntity`, `new ItemStack` with 4 arguments, `Items.DIAMOND_SWORDD` (DIAMOND_SWORD),
+  `getCount(5)`, `substring` with 3 arguments, `@Inject(method = "tickk")` (tick).
+- The example mods without a classpath: 0 absent (library names unknown, as they should be).
+- Bugs found on the way and fixed before release: enums' implicit `values()`/`valueOf()`, a package named
+  `build`, comments counted as arguments, `Outer.this`, Mixin targets written with `+`, local records, member
+  types inherited from unread super types.
+
+### 16.4 Not done
+
+Kotlin and Groovy sources, argument types and overload resolution by type, visibility, a Maven classpath, and
+the classpath of a Gradle build that is not Loom (configure `code_check.classpath`).
 
 ## Sources
 

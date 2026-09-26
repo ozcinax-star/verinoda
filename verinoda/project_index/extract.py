@@ -3602,13 +3602,20 @@ def _resolve_python_member_calls(
             if alias:
                 import_alias_by_filenode.setdefault(e.get("source"), {})[e.get("target")] = _key(alias)
 
+    stem_keys: dict[str, str] = {}  # asked about 350,000 times for a few thousand ids per build
+
     def _module_stem_key(nid: str) -> str:
-        n = node_by_id.get(nid)
-        if not n:
-            return ""
-        sf = n.get("source_file") or ""
-        stem = Path(sf).stem if sf else ""
-        return _key(stem or n.get("label", ""))
+        key = stem_keys.get(nid)
+        if key is None:
+            n = node_by_id.get(nid)
+            if not n:
+                key = ""
+            else:
+                sf = n.get("source_file") or ""
+                stem = Path(sf).stem if sf else ""
+                key = _key(stem or n.get("label", ""))
+            stem_keys[nid] = key
+        return key
 
     existing_pairs = {(e.get("source"), e.get("target")) for e in all_edges}
 
@@ -6338,6 +6345,12 @@ _DISPATCH: dict[str, Any] = {
     ".mdx": extract_markdown,
     ".qmd": extract_markdown,
     ".skill": extract_markdown,
+    # PDF and Office documents: the markdown extractor over their text view (verinoda/doctext.py):
+    # a node per page, sheet, slide or heading
+    ".pdf": extract_markdown,
+    ".docx": extract_markdown,
+    ".xlsx": extract_markdown,
+    ".pptx": extract_markdown,
     ".pas": extract_pascal,
     ".pp": extract_pascal,
     ".dpr": extract_pascal,

@@ -409,6 +409,10 @@ def _graph_files(g) -> list[str]:
 
 
 def _read_lines(p: Path) -> list[str] | None:
+    from verinoda import doctext
+
+    if doctext.kind(p.name) is not None:
+        return doctext.text_lines(p)
     try:
         return p.read_bytes().decode("utf-8", errors="replace").splitlines()
     except OSError:
@@ -456,16 +460,34 @@ def _data_files(repo: Path, graph_files: list[str]) -> tuple[list[str], dict[str
     from verinoda.project_index import detect
     from verinoda.snapshot import list_files
 
+    from verinoda import doctext
+
     in_graph = set(graph_files)
     files = list_files(repo)
     ignored = _ignore_rules(repo)
     data: list[str] = []
     skipped: dict[str, str] = {}
+    ocr = doctext.ocr_available()
     for f in files:
         if f in in_graph:
             continue
         name = f.rsplit("/", 1)[-1]
         suffix = ("." + name.rsplit(".", 1)[-1].lower()) if "." in name else ""
+        dk = doctext.kind(name)
+        if dk is not None:
+            # a PDF, Office document or image: indexed by its text view (verinoda/doctext.py), under
+            # the graph's exclusions (secrets, ignored paths, dependency folders)
+            noise = next((d for d in f.split("/")[:-1]
+                          if d in detect._SKIP_DIRS or d.endswith(".egg-info")), None)
+            if detect._is_sensitive(Path(f)):
+                skipped[f] = "may hold secrets, skipped as the graph skips it"
+            elif noise:
+                skipped[f] = f"in a dependency or output folder ({noise}/)"
+            elif ignored(f):
+                skipped[f] = "excluded by .graphifyignore"
+            elif _doc_wanted(repo, f, dk, ocr, skipped):
+                data.append(f)
+            continue
         if suffix in BINARY_SUFFIXES:
             skipped[f] = "binary"
             continue
@@ -504,6 +526,73 @@ def _data_files(repo: Path, graph_files: list[str]) -> tuple[list[str], dict[str
             continue
         data.append(f)
     return data, skipped, files
+
+
+def _stat_changed(p: Path, prev) -> bool:
+    """Whether a file's size or mtime differs from its stored ``(sha256, gsig, size, mtime_ns)`` row."""
+    try:
+        st = p.stat()
+    except OSError:
+        return False
+    return prev is None or prev[2] != st.st_size or prev[3] != st.st_mtime_ns
+
+
+def _doc_wanted(repo: Path, f: str, dk: str, ocr: bool, skipped: dict[str, str]) -> bool:
+    """True when a document or image is indexed by its text view (:mod:`verinoda.doctext`);
+    otherwise the reason goes to ``skipped``."""
+    from verinoda import doctext
+
+    try:
+        size = (repo / f).stat().st_size
+    except OSError:
+        return False
+    if dk != "image":
+        if size > doctext.MAX_DOC_BYTES:
+            skipped[f] = f"document larger than {doctext.MAX_DOC_BYTES // (1024 * 1024)} MB"
+            return False
+        return True
+    if not ocr:
+        skipped[f] = "image (its text is read with the OCR built into Windows)"
+        return False
+    why = doctext.ocr_candidate(f, b"", size=size)  # the folder and the size first: no read
+    if why:
+        skipped[f] = why
+        return False
+    try:
+        with open(repo / f, "rb") as fh:
+            head = fh.read(65536)
+    except OSError:
+        return False
+    why = doctext.ocr_candidate(f, head, size=size)
+    if why:
+        skipped[f] = why
+        return False
+    return True
+
+
+def _doc_units(g, f: str, lines: list[str]) -> list["_Unit"]:
+    """Units of a document's text view: one per page, sheet, slide or heading (``# ...`` lines), tied
+    to the graph's node for that heading when the graph has the document."""
+    try:
+        by_line = {g.line(n): n for n in g.headings_in(f)} if g is not None else {}
+    except Exception:  # noqa: BLE001 - no heading nodes: units without nodes
+        by_line = {}
+    starts = [i for i, ln in enumerate(lines, 1) if re.match(r"#{1,6} ", ln)]
+    bounds = ([(1, starts[0] - 1)] if starts and starts[0] > 1 else [] if starts else [(1, len(lines))])
+    bounds += [(ln, (starts[k + 1] - 1) if k + 1 < len(starts) else len(lines)) for k, ln in enumerate(starts)]
+    head_lines = set(starts)
+    name_of_file = Path(f).name
+    units: list[_Unit] = []
+    for a, b in bounds:
+        own = [i for i in range(a, b + 1) if lines[i - 1].strip() and i not in head_lines]
+        if not own:
+            continue
+        head = lines[a - 1].lstrip("#").strip() if a in head_lines else ""
+        generic = not head or re.match(r"(?:Page|Slide) \d+\b|Sheet: |Text in the image", head)
+        name = (f"{name_of_file} {head}".strip() if generic else head)[:120]
+        units.append(_Unit(f, by_line.get(a) if a in head_lines else None, "prose", name, "", a, own[-1], own,
+                           sig=lines[own[0] - 1].strip()[:MAX_SIG_CHARS]))
+    return units
 
 
 MISALIGNED_PREFIX = "graph-mismatch:"
@@ -787,12 +876,22 @@ class _Writer:
         self.conn.execute("DELETE FROM refs WHERE file = ?", (f,))
 
     def add_file(self, g, f: str, data: bytes, st: os.stat_result, gsig: str) -> int:
+        from verinoda import doctext
+
         sha = hashlib.sha256(data).hexdigest()
-        lines = data.decode("utf-8", errors="replace").splitlines()
+        doc = doctext.kind(f) is not None
+        if doc:  # a PDF, Office document or image: the lines of its text view
+            lines = doctext.text_lines(g.root / f, data) or []
+        else:
+            lines = data.decode("utf-8", errors="replace").splitlines()
         if lines and lines[0].startswith("\ufeff"):  # a BOM is not part of the first line's text
             lines[0] = lines[0][1:]
         skipped = None
-        if len(data) > MAX_FILE_BYTES:
+        if doc:
+            units = _doc_units(g, f, lines) if lines else []
+            if not units:
+                skipped = doctext.note(g.root / f) or "no text"
+        elif len(data) > MAX_FILE_BYTES:
             units: list[_Unit] = []
             skipped = f"larger than {MAX_FILE_BYTES} bytes"
         elif f in self.data_files and not f.lower().endswith(PROSE_SUFFIXES) and \
@@ -961,6 +1060,13 @@ def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: P
         keymap = resources.KeyMap.build(repo_files)
         key_sig = keymap.signature()
         files = gfiles + data_files
+        from verinoda import doctext
+
+        # images whose text is not read yet: one OCR process for all of them (verinoda/doctext.py)
+        images = [repo / f for f in data_files if doctext.kind(f) == "image"
+                  and (stored.get(f) is None or f in hint or _stat_changed(repo / f, stored.get(f)))]
+        if images:
+            doctext.ocr_images(images)
         w = _Writer(conn, keymap, set(data_files))
         indexed = removed = unchanged = 0
         for f in files:

@@ -325,17 +325,18 @@ def test_check_never_passes_a_file_it_cannot_read(tmp_path, capsys):
     from verinoda.mcp.server import AtlasTools
 
     repo = _copy(GLOW, tmp_path / "glow")
+    # Java is checked (docs/DESIGN.md D43): sites, never "0 sites in 0 files"; with no classpath found the
+    # library's names are unknown and the result says so
     res = codecheck.check(repo, ["src/main/java/com/example/glowmod/ritual/Ritual.java"], env="none")
-    assert res["status"] == "unsupported_language" and res["exit"] == 4 and res["summary"]["files"] == 0
-    assert res["not_checked"] == [{"path": "src/main/java/com/example/glowmod/ritual/Ritual.java", "language": "Java",
-                                   "why": "language not supported: Java (check reads Python only)"}]
-    assert "check reads Python only" in res["exit_because"] and res["incomplete"]
+    assert res["summary"]["files"] == 1 and res["summary"]["sites"] > 0 and "not_checked" not in res
+    assert all(s.get("language") == "Java" for s in res["sites"]) and res["java"]["builds"]
+    assert any(x.startswith("Java: ") and "no classpath" in x for x in res["limits"])
     snip = codecheck.check(repo, snippet="class Foo { void f() { HeatMath.addHeatClamped(1); } }\n",
                            as_path="src/main/java/Foo.java", env="none")
-    assert snip["status"] == "unsupported_language" and snip["exit"] == 4 and not snip["sites"]
+    assert snip["summary"]["files"] == 1 and snip["sites"] and "not_checked" not in snip
     assert not any("does not parse" in str(f) for f in snip["files"])
     whole = codecheck.check(repo, ["src"], env="none")
-    assert whole["status"] == "unsupported_language" and whole["summary"]["not_checked"] >= 15
+    assert whole["summary"]["files"] >= 15 and not any(u["language"] == "Java" for u in whole.get("not_checked", []))
     # `api net.ashvale...EmberForgeBlockEntity` answered "module net is not in the standard library"
     api = codecheck.api(repo, "com.example.glowmod.ritual.Ritual.baslat", env="none")
     assert api["found"] is None and api["decided"] == "unsupported_language" and "Ritual.java" in api["why"]
@@ -367,16 +368,16 @@ def test_check_never_passes_a_file_it_cannot_read(tmp_path, capsys):
     assert none["status"] == "nothing_to_check" and none["exit"] == 0 and "--diff origin/main" in none["limits"][0]
 
 
-def test_python_only_is_said_in_the_help_the_mcp_descriptions_and_the_skill():
+def test_the_languages_check_reads_are_said_in_the_help_the_mcp_descriptions_and_the_skill():
     from verinoda import agents, cli
     from verinoda.mcp import server
 
-    assert "Python only" in cli.build_parser().format_help()
-    assert server.DESCRIPTIONS["code_check"].startswith("Python only")
+    assert "Python and Java" in cli.build_parser().format_help()
+    assert server.DESCRIPTIONS["code_check"].startswith("Python and Java")
     assert server.DESCRIPTIONS["api_members"].startswith("Python only")
     for agent in ("claude", "codex"):
         body = agents.render_skill(agent).decode("utf-8")
-        assert "Python only" in body and "not_checked" in body
+        assert "Python and Java" in body and "not_checked" in body
 
 
 # -- check: a broad handler is no guard ---------------------------------------------------------------------
@@ -608,7 +609,8 @@ def test_a_changed_notebook_or_cython_file_is_listed_as_not_checked(tmp_path):
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "all")
     none = codecheck.check(repo, diff="HEAD", env="none")
-    assert none["exit"] == 0 and none["limits"][0].startswith("no Python file was checked: no .py file changed")
+    assert none["exit"] == 0 and none["limits"][0].startswith("no Python or Java file was checked: no .py or .java "
+                                                             "file changed")
 
 
 def test_a_flow_hop_outside_python_is_strong_inference_at_most(tmp_path):

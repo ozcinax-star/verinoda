@@ -330,14 +330,20 @@ def _doc_units(rel: str, lines: list[str]) -> list[_Unit]:
 
 def _extract(repo: Path, rel: str, graph) -> dict:
     """Units and vocabulary of one file (the unit of incremental rebuilds)."""
+    from verinoda import doctext
+
     p = repo / rel
-    try:
-        if p.stat().st_size > MAX_FILE_BYTES:
-            return {"units": [], "vocab": []}
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return {"units": [], "vocab": []}
     suffix = PurePosixPath(rel).suffix.lower()
+    if doctext.kind(rel) is not None:  # a PDF, Office document or image: the words of its text view
+        text = "\n".join(doctext.text_lines(p) or [])
+        suffix = ".md"
+    else:
+        try:
+            if p.stat().st_size > MAX_FILE_BYTES:
+                return {"units": [], "vocab": []}
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return {"units": [], "vocab": []}
     lines = text.splitlines()
     units: list[_Unit] = []
     if suffix in (".py", ".pyi"):
@@ -407,17 +413,24 @@ def _associate(units: list[list]) -> tuple[dict, dict, list[str], int]:
     sup: Counter = Counter()
     text_sites: dict[str, list[str]] = defaultdict(list)
     kept_parts = []
+    stems: dict[str, str] = {}  # en_stem of each part, once (it was half a million calls)
     for site, words, parts, body in units:
         parts = {p: w for p, w in parts.items() if p not in stop and w >= WEIGHT_CLASS}
         kept_parts.append(parts)
         cw.update(words)
         for p, w in parts.items():
             ci[p] += w
+        stemmed = []
+        for p, w in parts.items():
+            s = stems.get(p)
+            if s is None:
+                s = stems[p] = tn.en_stem(p)
+            stemmed.append((p, w, s))
         for word in words:
             if len(text_sites[word]) < MAX_TEXT_SITES:
                 text_sites[word].append(site)
-            for p, w in parts.items():
-                if p == word or tn.en_stem(p) == word:
+            for p, w, s in stemmed:
+                if p == word or s == word:
                     continue
                 cwi[(word, p)] += w
                 sup[(word, p)] += 1
@@ -846,13 +859,41 @@ def load(repo: Path) -> Lexicon | None:
 
 
 def _candidate_files(repo: Path, graph) -> list[str]:
+    from verinoda.snapshot import list_files
+
     if graph is not None:
         files = {d["source_file"] for _, d in graph.G.nodes(data=True) if d.get("source_file")}
     else:
-        from verinoda.snapshot import list_files
-
         files = set(list_files(repo))
-    return sorted(f for f in files if PurePosixPath(f).suffix.lower() in CODE_SUFFIXES | DOC_SUFFIXES)
+    out = {f for f in files if PurePosixPath(f).suffix.lower() in CODE_SUFFIXES | DOC_SUFFIXES}
+    try:
+        listed = list_files(repo) if graph is not None else files
+    except Exception:  # noqa: BLE001 - no listing: the graph's files only
+        listed = ()
+    return sorted(out | set(_document_files(repo, listed)))
+
+
+def _document_files(repo: Path, files) -> list[str]:
+    """PDF and Office documents, and images that may hold text (:mod:`verinoda.doctext`)."""
+    from verinoda import doctext
+
+    out = []
+    for f in files:
+        k = doctext.kind(f)
+        if k is None:
+            continue
+        if k == "image":
+            try:
+                size = (repo / f).stat().st_size
+            except OSError:
+                continue
+            if doctext.ocr_candidate(f, b"", size=size):
+                continue
+        out.append(f)
+    images = [repo / f for f in out if doctext.kind(f) == "image"]
+    if images:  # read before the lexicon keeps an image's words by its content hash
+        doctext.ocr_images(images)
+    return out
 
 
 def _norm_rel(repo: Path, p) -> str:

@@ -1638,8 +1638,8 @@ _INSTRUCTIONS_HEAD = """Verinoda: evidence-first answers about the repository {r
 - change_review: before editing (targets + change) and before saying done (no arguments): what the change
   touches by concern, tests, unknowns; read read_first in order and report every concern.
 - index_update: re-index after editing files (claims whose files changed become stale).
-- code_check (Python only): after editing Python code, check that the modules, names, keyword arguments and
-  dict keys it uses exist; fix every absent site, treat unknown as unverified; other languages come back
+- code_check (Python, Java): after editing code, check that the modules, names, methods, arguments and
+  keys it uses exist; fix every absent site, treat unknown as unverified; other languages come back
   not_checked (exit 4), never as checked.
 - decision_check(changed_only=true) before finishing a code change; on VIOLATED fix the code or ask the user."""
 
@@ -1757,13 +1757,13 @@ DESCRIPTIONS: dict[str, str] = {
         "other languages): definitive | dynamic | ambiguous | external | unresolved. With target_path/target_line "
         "a verdict: confirms | refutes | undetermined (definitive answers only). Read-only."),
     "code_check": (
-        "Python only: other languages come back under not_checked (exit 4), never as checked. After editing "
-        "Python code: do the modules, imported names, attributes, keyword arguments and constant dict keys it "
-        "uses exist in the project's environment (.venv/venv/env; env=PATH another venv; 'none' = standard "
-        "library only)? Input: paths, or diff (a revision; nothing given: changes against HEAD), or snippet + "
-        "as_path. Each site: exists | absent (with nearest names and where it is defined elsewhere) | unknown "
-        "(why) | not_installed | guarded. exit 3 = absent or a version differs from the lock; 'incomplete' "
-        "lists files the 90 s budget did not reach. Existence and signature shape only. Read-only."),
+        "Python and Java; other languages come back under not_checked (exit 4). Python: do the modules, "
+        "imported names, attributes, keyword arguments and constant dict keys it uses exist in the project's "
+        "environment (.venv/venv/env; env=PATH another venv; 'none' = standard library only)? Java: classes, "
+        "methods (arity), fields, Mixin targets in the project, its classpath (a Loom build or "
+        "code_check.classpath) and the JDK. Input: paths, or diff (a revision; nothing given: changes against "
+        "HEAD), or snippet + as_path. Each site: exists | absent (nearest names) | unknown (why) | "
+        "not_installed | guarded. exit 3 = absent or a version differs from the lock. Read-only."),
     "api_members": (
         "Python only. The real members of a module, class or function (dotted target) in the project's "
         "environment: name, kind, signature, file:line, inherited-from, source version; private=true adds '_' "

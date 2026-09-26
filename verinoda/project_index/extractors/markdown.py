@@ -339,8 +339,13 @@ def extract_markdown(path: Path) -> dict:
 
     No tree-sitter dependency — pure line-by-line parsing.
     """
+    from verinoda import doctext
+
     try:
-        source = path.read_text(encoding="utf-8", errors="replace")
+        if doctext.kind(path.name) is not None:  # PDF / Office document: its text view
+            source = "\n".join(doctext.text_lines(path) or [])
+        else:
+            source = path.read_text(encoding="utf-8", errors="replace")
     except Exception as e:
         return {"nodes": [], "edges": [], "error": str(e)}
 

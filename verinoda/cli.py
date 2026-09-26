@@ -1989,6 +1989,12 @@ def _r_check(r: dict) -> None:
         print(f"status: {r['status']}" + ("" if r["status"] == "unsupported_language"
                                           else f" - {next((x for x in r['limits'] if x.startswith('no Python')), '')}"))
     print(f"environment: {env.get('python')}" + (f" - {env['note']}" if env.get("note") else ""))
+    for b in (r.get("java") or {}).get("builds", []):
+        cls = b.get("classes") or {}
+        print(f"java: {b['build']}: classpath {b['classpath']}" + (" (complete)" if b.get("complete") else
+                                                                  " (not complete: library names are unknown)")
+              + f", {b['jars']} jars, {cls.get('jars', 0)} library classes, {cls.get('project', 0)} project types"
+              + (f", JDK {b['release']} API" if b.get("jdk") else ", no JDK found"))
     for name, text in (env.get("packages_checked") or {}).items():
         print(f"  {name} {text}")
     for m in env.get("lock_mismatches") or []:
@@ -2760,8 +2766,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     env_help = ("auto (the project's .venv, venv or env; else the standard library only), a virtual environment "
                 "or interpreter path, or none (standard library only)")
-    sp = add("check", cmd_check, "Python only: check that the modules, names, keyword arguments and dict keys "
-                                 "Python code uses exist in the project's environment (exit 3: something is "
+    sp = add("check", cmd_check, "Python and Java: check that the modules, names, keyword arguments and dict keys "
+                                 "Python code uses exist in the project's environment, and the classes, methods "
+                                 "(with their number of arguments), fields and Mixin targets Java code uses exist "
+                                 "in the project, its classpath or the JDK (exit 3: something is "
                                  "absent, or an installed package version differs from the lock file; exit 4: "
                                  "nothing absent, but a file asked for was not checked - another language, a file "
                                  "that does not parse - it is listed under not_checked, never passed)")

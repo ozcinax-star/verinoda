@@ -117,7 +117,9 @@ def test_secrets_ignored_dependency_generated_and_bulk_files_are_left_out_with_a
     for f, why in (("config/credentials.json", "may hold secrets"), ("vendor/legacy_payment.py", ".graphifyignore"),
                    ("target/classes/settings.json", "dependency or output folder"),
                    ("benchmarks/results/raw/run1.txt", "generated output"),
-                   ("exports/big.json", "large data file"), (RES + "assets/glow/textures/item/wisp_heart.png", "binary")):
+                   ("exports/big.json", "large data file"),
+                   # an image: its text is read only on Windows (OCR), and never in a texture folder
+                   (RES + "assets/glow/textures/item/wisp_heart.png", "image")):
         assert f not in indexed and why in skipped.get(f, ""), (f, skipped.get(f))
     text = "\n".join(t for (t,) in conn.execute("SELECT text FROM passages")) if _has_text(conn) else ""
     assert "sk_live_SECRET" not in text

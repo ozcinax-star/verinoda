@@ -491,11 +491,24 @@ def scheme_for(path: str | Path) -> str | None:
     suffix = Path(str(path)).suffix.lower()
     if suffix == ".py" or suffix == ".pyi":
         return PY_SCHEME
-    if suffix in MD_SUFFIXES:
+    if suffix in MD_SUFFIXES or suffix in _DOC_VIEW_SUFFIXES:
         return MD_SCHEME
     if suffix in TS_LANGS:
         return TS_SCHEME
     return None
+
+
+_DOC_VIEW_SUFFIXES = (".pdf", ".docx", ".xlsx", ".pptx")
+
+
+def text_of(rel: str, data: bytes) -> str:
+    """The text a file's lines are counted in: its bytes as UTF-8, or for a PDF or Office document
+    its text view (:mod:`verinoda.doctext`), whose headings are Markdown sections."""
+    if Path(str(rel)).suffix.lower() in _DOC_VIEW_SUFFIXES:
+        from verinoda import doctext
+
+        return "\n".join(doctext.convert(Path(str(rel)), data)["lines"])
+    return data.decode("utf-8", errors="replace")
 
 
 def compute_facts(rel: str, data: bytes) -> dict | None:
@@ -503,7 +516,7 @@ def compute_facts(rel: str, data: bytes) -> dict | None:
     scheme = scheme_for(rel)
     if scheme is None:
         return None
-    text = data.decode("utf-8", errors="replace")
+    text = text_of(rel, data)
     suffix = Path(rel).suffix.lower()
     try:
         if scheme == PY_SCHEME:
@@ -915,7 +928,7 @@ def facts_for_path(path: Path, rel: str) -> tuple[dict | None, str | None]:
         data = path.read_bytes()
     except OSError:
         return None, None
-    text = data.decode("utf-8", errors="replace")
+    text = text_of(rel, data)
     scheme = scheme_for(rel)
     if scheme is None:
         return None, text
@@ -952,4 +965,4 @@ def relocate_file(path: Path, rel: str, anchor: dict, content_hash: str | None,
         if facts is not None:
             facts["sha256"] = sha
             _mem_put(sha, scheme, facts)
-    return relocate_in(anchor, facts, data.decode("utf-8", errors="replace"), content_hash, old_start)
+    return relocate_in(anchor, facts, text_of(rel, data), content_hash, old_start)

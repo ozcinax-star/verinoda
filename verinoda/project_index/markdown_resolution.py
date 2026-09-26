@@ -48,7 +48,8 @@ from typing import Any
 
 from verinoda.project_index.extractors.base import _LANGUAGE_BUILTIN_GLOBALS
 
-MARKDOWN_MENTION_SUFFIXES = frozenset({".md", ".mdx", ".qmd", ".skill"})
+# PDF and Office documents are read through their text view by the same extractor (verinoda/doctext.py)
+MARKDOWN_MENTION_SUFFIXES = frozenset({".md", ".mdx", ".qmd", ".skill", ".pdf", ".docx", ".xlsx", ".pptx"})
 
 _CONTAINMENT_RELATIONS = frozenset({"contains", "method"})
 

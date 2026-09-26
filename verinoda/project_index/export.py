@@ -410,9 +410,10 @@ def to_json(G: nx.Graph, communities: dict[int, list[str]], output_path: str, *,
     commit = built_at_commit if built_at_commit is not None else _git_head(Path(output_path).resolve().parent)
     if commit:
         data["built_at_commit"] = commit
-    from verinoda.project_index.paths import write_json_atomic
-    # Atomic write: a crash/ENOSPC mid-write must not truncate a good graph.json.
-    write_json_atomic(output_path, data, indent=2)
+    from verinoda.project_index.paths import write_text_atomic
+    # Atomic write: a crash/ENOSPC mid-write must not truncate a good graph.json. One line through
+    # json's C encoder: with indent=2 (pure-Python encoder) a 34 MB graph took over a second to write.
+    write_text_atomic(output_path, json.dumps(data))
     return True
 
 

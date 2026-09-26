@@ -872,32 +872,20 @@ def test_detect_converts_google_workspace_shortcuts_when_enabled(tmp_path, monke
     assert result["total_words"] > 0
 
 
-def test_detect_office_sidecar_survives_a_gitignored_output_dir(tmp_path, monkeypatch):
-    """#3504: the documented .gitignore advice puts graphify-out/ (and so
-    graphify-out/converted/, where Office sidecars land) inside a gitignored
-    tree. The ignore check exists to keep USER files out of the scan, not to
-    filter output this same pass just produced from an already-admitted
-    source file -- so a sidecar landing under converted/ must survive it,
-    or every .docx/.xlsx silently vanishes from the corpus the moment a repo
-    follows that advice."""
+def test_detect_office_sidecar_survives_a_gitignored_output_dir(tmp_path):
+    """#3504, Verinoda: with graphify-out/ gitignored, an Office document still reaches the corpus. It is
+    read in place (verinoda/doctext.py), so there is no sidecar for the ignore check to drop."""
     (tmp_path / ".gitignore").write_text("graphify-out/\n", encoding="utf-8")
-    src = tmp_path / "report.docx"
-    src.write_text("placeholder", encoding="utf-8")
+    import sys
 
-    def fake_convert(path, out_dir, root=None):
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out = out_dir / "report_converted.md"
-        out.write_text("# Report\n\nConverted content.", encoding="utf-8")
-        return out
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+    from docfixtures import write_docx
 
-    monkeypatch.setattr("verinoda.project_index.detect.convert_office_file", fake_convert)
+    write_docx(tmp_path / "report.docx", [("Heading1", "Report"), ("", "Converted content.")])
 
     result = detect(tmp_path)
 
-    assert len(result["files"]["document"]) == 1, (
-        "the Office sidecar was dropped by the gitignore check on the tool's own output dir"
-    )
-    assert result["files"]["document"][0].endswith("report_converted.md")
+    assert [Path(f).name for f in result["files"]["document"]] == ["report.docx"]
     assert result["total_words"] > 0
 
 
@@ -2797,48 +2785,22 @@ def test_convert_office_file_outside_root_falls_back(tmp_path, monkeypatch):
     assert out1 is not None and out1.name == out2.name
 
 
-def test_detect_office_conversion_respects_cache_root(tmp_path, monkeypatch):
-    """#2787: detect() with cache_root must write converted sidecars under
-    cache_root/GRAPHIFY_OUT/converted, leaving the scanned corpus untouched, while
-    keeping the sidecar filename hash anchored to the scan root."""
-    monkeypatch.setattr(detect_mod, "docx_to_markdown", lambda p: "# Spec\nConverted specification text.")
-
+def test_detect_office_conversion_respects_cache_root(tmp_path):
+    """#2787, Verinoda: detect() with cache_root leaves the scanned corpus untouched. Office documents are
+    read in place through their text view (verinoda/doctext.py), so no sidecar is written anywhere and the
+    document itself is in the corpus."""
     corpus = tmp_path / "corpus"
     corpus.mkdir(parents=True)
     cache_out = tmp_path / "cache_out"
     cache_out.mkdir(parents=True)
-
     doc_path = corpus / "spec.docx"
     doc_path.write_bytes(b"placeholder")
 
     result = detect(corpus, cache_root=cache_out)
 
-    # 1. Scanned corpus tree must not be mutated
-    assert not (corpus / detect_mod.GRAPHIFY_OUT).exists(), (
-        "detect() must not write graphify-out into the scanned corpus tree when cache_root is provided (#2787)"
-    )
-
-    # 2. Converted sidecar must exist under cache_root
-    converted_dir = cache_out / detect_mod.GRAPHIFY_OUT / "converted"
-    assert converted_dir.is_dir(), "converted directory must be created under cache_root"
-
-    # 3. Detection result must point to the redirected sidecar
-    doc_files = result["files"]["document"]
-    assert len(doc_files) == 1
-    sidecar_path = Path(doc_files[0])
-    assert sidecar_path.is_file()
-    assert sidecar_path.parent.resolve() == converted_dir.resolve()
-
-    # 4. Content must match expected conversion
-    content = sidecar_path.read_text(encoding="utf-8")
-    assert "<!-- converted from spec.docx -->" in content
-    assert "# Spec" in content
-
-    # 5. Sidecar filename must remain anchored to the corpus scan root
-    import hashlib
-    expected_hash = hashlib.sha256(unicodedata.normalize("NFC", "spec.docx").encode()).hexdigest()[:8]
-    assert sidecar_path.name == f"spec_{expected_hash}.md"
-
+    assert not (corpus / detect_mod.GRAPHIFY_OUT).exists()
+    assert not (cache_out / detect_mod.GRAPHIFY_OUT / "converted").exists()
+    assert [Path(f).name for f in result["files"]["document"]] == ["spec.docx"]
 
 def test_detect_keeps_env_source_dirs(tmp_path):
     """#2058: a real source directory named env/ or *_env/ with no virtualenv

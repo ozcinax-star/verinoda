@@ -105,13 +105,14 @@ def make_graph_portable(graph_file: Path, root: Path) -> dict:
 
 
 def write_graph(graph_file: Path, data: dict) -> None:
-    """Write graph.json the way the upstream pipeline writes it (indent 2, key order kept), so its
-    own "the graph did not change" comparison on the next update still works."""
+    """Write graph.json with its key order kept, so the upstream pipeline's own "the graph did not
+    change" comparison on the next update still works. One line through json's C encoder (indent=2
+    goes through the pure-Python encoder: over a second for a 34 MB graph)."""
     p = Path(graph_file)
     fd, tmp = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp", dir=str(p.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+            fh.write(json.dumps(data, ensure_ascii=False) + "\n")
         os.replace(tmp, p)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)

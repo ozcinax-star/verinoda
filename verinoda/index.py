@@ -51,7 +51,8 @@ RECEIVER_ORIGIN = "verinoda.receiver"
 JAVA_CALL_ORIGIN = "verinoda.java_calls"
 RECEIVER_SIDECAR_VERSION = 4   # 3: a receiver's class is the one the calling file can see (_visible_class); 4: and JVM method references as `registers` edges
 HEURISTIC_SPAN_CAP = 80        # the next-symbol fallback never spans more lines than this
-PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc")
+PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc",
+                  ".pdf", ".docx", ".xlsx", ".pptx")  # the last four: their text view (doctext.py)
 MARKDOWN_SUFFIXES = (".md", ".markdown", ".mdx")
 _CACHE_MAX = 4096              # per-file caches are cleared when they grow past this
 
@@ -1108,8 +1109,8 @@ class Graph:
             n_lines = _line_count(p)
             if self.is_file_node(nid):
                 end, how = (n_lines or start), "file"
-            elif suffix in MARKDOWN_SUFFIXES:
-                end = _md_section_ends(p).get(start)
+            elif suffix in MARKDOWN_SUFFIXES or suffix in (".pdf", ".docx", ".xlsx", ".pptx"):
+                end = _md_section_ends(p).get(start)  # a document: sections of its text view
                 how = "section" if end is not None else None
             if end is None:  # other prose: up to the next heading node
                 later = [ln for ln, _ in self._docs_by_file_sorted(f) if ln > start]
@@ -1308,7 +1309,12 @@ def _py_def_ends(p: Path) -> dict[int, int]:
 
 
 def _file_lines(p: Path) -> list[str] | None:
-    """Lines of a source file, cached per file version (size and mtime)."""
+    """Lines of a source file, cached per file version (size and mtime). A PDF, Office document or
+    image has the lines of its text view (:mod:`verinoda.doctext`)."""
+    from verinoda import doctext
+
+    if doctext.kind(p.name) is not None:
+        return doctext.text_lines(p)
     try:
         return _cached(_LINES_CACHE, _stat_key(p),
                        lambda: p.read_text(encoding="utf-8", errors="replace").splitlines())
@@ -2362,7 +2368,7 @@ def _write_pruned(gp: Path, data: dict) -> None:
     fd, tmp = tempfile.mkstemp(prefix="graph.", suffix=".tmp", dir=str(gp.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write(json.dumps(data, ensure_ascii=False))  # C encoder: indent=2 was a second per write
         os.replace(tmp, gp)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)

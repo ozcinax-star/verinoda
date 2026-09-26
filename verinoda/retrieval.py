@@ -57,7 +57,8 @@ MAX_LINE_CHARS = 240        # longer excerpt lines are cut and marked (JSON)
 CONTEXT_LINES = 1           # lines shown around the matched ones
 HEAD_LINES = 8              # excerpt of a long item without text hits: its first lines
 DOC_SUFFIXES = (".md", ".rst")
-PROSE_SUFFIXES = (".md", ".rst", ".txt", ".adoc", ".markdown", ".mdx")
+PROSE_SUFFIXES = (".md", ".rst", ".txt", ".adoc", ".markdown", ".mdx",
+                  ".pdf", ".docx", ".xlsx", ".pptx")  # the last four: their text view (doctext.py)
 MAX_PROSE_ITEMS = 3
 RANK_LIMIT = 60             # ranked candidates kept for rendering
 OUTLINE_ITEMS = 3           # JSON items that carry calls / called_by

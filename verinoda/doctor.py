@@ -196,6 +196,15 @@ def run(repo: Path) -> dict:
         opt[mod] = present
         if not present:
             checks.append(_check(f"optional:{mod}", False, f"missing - needed for {why}", "info"))
+    from verinoda import doctext
+
+    ds = doctext.status()
+    checks.append(_check("documents", ds["pdf"],
+                         "PDF, Word, Excel and PowerPoint files are indexed by their text"
+                         + ("" if ds["pdf"] else " (PDF: pypdf is missing, reinstall verinoda)")
+                         + ("; text in images read with the OCR built into Windows" if ds["ocr"] else
+                            "; images: no OCR here (Windows only; VERINODA_OCR=0 turns it off)"),
+                         "ok" if ds["pdf"] else "warn"))
     container = next((rt for rt in ("docker", "podman") if shutil.which(rt)), None)
     checks.append(_check("container_isolation", container is not None,
                          container or "no docker/podman: experiments outside the test-runner allowlist are refused",

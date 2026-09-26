@@ -1,4 +1,5 @@
-"""Name-existence check for Python code: ``verinoda check`` and ``verinoda api`` (docs/DESIGN.md D32).
+"""Name-existence check for Python code: ``verinoda check`` and ``verinoda api`` (docs/DESIGN.md D32);
+Java files are checked by :mod:`verinoda.codecheck_java` (D43) and their sites merged here.
 
 AI-written code imports modules, calls functions, passes keyword arguments and
 reads dict keys that do not exist, or not in the installed version. ``check``
@@ -15,7 +16,7 @@ walks a file, a diff or a snippet and gives every *site* one verdict:
                   argument or dict key inside it stays ``absent`` (the handler would
                   swallow the error at run time; ``swallowed_by`` says where).
 
-Python only: a file in another language (``Foo.java``, ``x.ts``, a notebook,
+Python and Java: a file in another language (``x.ts``, ``Foo.kt``, a notebook,
 a snippet ``--as`` one) is listed under ``not_checked`` with its language
 (status ``unsupported_language`` when nothing else was checked), never parsed
 as Python and never counted as checked; so is a Python file that does not
@@ -3027,7 +3028,7 @@ def not_read_why(path: str) -> str:
         return "a Jupyter notebook: its code cells are not read (check reads .py files only)"
     if lang == "Cython":
         return "Cython: not Python syntax, not read (check reads .py files only)"
-    return f"language not supported: {lang} (check reads Python only)"
+    return f"language not supported: {lang} (check reads Python and Java)"
 
 
 def other_code_files(roots: list[Path], limit: int = MAX_FILES) -> list[Path]:
@@ -3217,7 +3218,8 @@ def _git_path(p: str) -> str:
     return out.decode("utf-8", "replace")
 
 
-def changed_lines(repo: Path, rev: str = "HEAD", others: list[str] | None = None) -> dict[str, set[int] | None]:
+def changed_lines(repo: Path, rev: str = "HEAD", others: list[str] | None = None,
+                  globs: tuple[str, ...] = ("*.py", "*.pyi")) -> dict[str, set[int] | None]:
     """Changed lines of Python files against ``rev`` (None: a new, untracked file - every line). ``rev`` is
     one revision, compared with the working tree; it is resolved to a commit before git diff sees it, so
     it can never be read as an option (``--output=FILE`` would write a file). ``others``: filled with the
@@ -3251,7 +3253,7 @@ def changed_lines(repo: Path, rev: str = "HEAD", others: list[str] | None = None
     # explicit prefixes override the user's diff.noprefix/mnemonicPrefix/srcPrefix/dstPrefix settings, and
     # --relative gives paths relative to (and only under) `repo`, also when it is a subdirectory of the work tree
     for ln in git("diff", "--no-color", "--no-ext-diff", "--no-textconv", "--relative", "--src-prefix=a/",
-                  "--dst-prefix=b/", "-U0", sha, "--", "*.py", "*.pyi").splitlines():
+                  "--dst-prefix=b/", "-U0", sha, "--", *globs).splitlines():
         if ln.startswith("+++ "):
             p = _git_path(ln[4:].rstrip("\t").strip())
             cur = p[2:] if p.startswith("b/") else None   # /dev/null: the file was deleted
@@ -3264,7 +3266,7 @@ def changed_lines(repo: Path, rev: str = "HEAD", others: list[str] | None = None
                 s = out[cur]
                 if s is not None:
                     s.update(range(start, start + count))
-    for p in git("ls-files", "-z", "--others", "--exclude-standard", "--", "*.py", "*.pyi").split("\0"):
+    for p in git("ls-files", "-z", "--others", "--exclude-standard", "--", *globs).split("\0"):
         if p.strip():
             out[p] = None
     if others is not None:
@@ -3479,11 +3481,16 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     # that say so without naming every file (the walk limit, the time budget)
     unchecked: list[tuple[str, str, str]] = []
     unchecked_why: list[str] = []
+    java_targets: list[tuple[str, Path, set[int] | None]] = []   # checked by codecheck_java (D43)
+    java_overrides: dict[str, bytes] = {}
     if snippet is not None:
         rel = (as_path or "snippet.py").replace("\\", "/")
         abs_path = (repo / rel).resolve()
         scope = f"a snippet checked as {rel}"
-        if other_language(rel):
+        if rel.lower().endswith(".java"):
+            java_targets.append((rel, abs_path, None))
+            java_overrides[rel] = snippet.encode("utf-8")
+        elif other_language(rel):
             others.append(rel)
         else:
             with cf.override(abs_path, snippet):   # the snippet's own definitions, not the file on disk
@@ -3492,6 +3499,13 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
             sites += got
     else:
         targets, scope, not_checked, others, skipped = _targets(repo, paths, diff)
+        java = [rel for rel in others if rel.lower().endswith(".java")]
+        others = [rel for rel in others if rel not in set(java)]
+        if java and not paths:   # the diff: the changed lines of each Java file
+            jl = changed_lines(repo, diff or "HEAD", None, ("*.java",))
+            java_targets += [(rel, repo / rel, jl.get(rel)) for rel in java if rel in jl]
+        else:
+            java_targets += [(rel, repo / rel, None) for rel in java]
         notes += not_checked
         unchecked += [(rel, "Python", why) for rel, why in skipped]
         if not_checked and not skipped:   # the walk stopped at MAX_FILES
@@ -3521,11 +3535,25 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
             files.append({"path": rel, "sites": len(got), **({"cached": True} if cached else {}),
                           **({"error": err} if err else {})})
             sites += got
+    java_res = None
+    if java_targets:
+        from verinoda import codecheck_java
+        from verinoda.paths import atlas_dir, load_config
+
+        try:
+            config = load_config(repo)
+        except Exception:  # noqa: BLE001 - no readable config: the build's own classpath is looked for
+            config = None
+        java_res = codecheck_java.check_files(repo, java_targets, config, atlas_dir(repo) / "cache" / "jvm",
+                                              java_overrides)
+        files += java_res["files"]
+        sites += java_res["sites"]
     bad = [f for f in files if f.get("error")]
     if bad:   # a requested file that could not be read or parsed was not checked: "0 absent" does not cover it
         notes.append(f"{len(bad)} file{'s' if len(bad) > 1 else ''} not checked: " +
                      "; ".join(f"{f['path']} ({f['error']})" for f in bad[:5]) + (" ..." if len(bad) > 5 else ""))
-        unchecked += [(f["path"], "Python", str(f["error"])) for f in bad]
+        unchecked += [(f["path"], "Java" if f["path"].lower().endswith(".java") else "Python", str(f["error"]))
+                      for f in bad]
     failed = [s for s in sites if s.get("check_error")]
     if failed:   # a defect of the check on some sites: they are unknown, and the result says so
         notes.append(f"the check failed on {len(failed)} site{'s' if len(failed) > 1 else ''} (unknown): " +
@@ -3536,7 +3564,7 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     by_lang = ", ".join(f"{lang} {n}" for lang, n in sorted(langs.items(), key=lambda x: (-x[1], x[0])))
     if others:   # never parsed as Python, never reported as checked
         notes.append(f"{len(others)} file{'s' if len(others) > 1 else ''} not checked, language not supported "
-                     f"({by_lang}; check reads Python only): " + ", ".join(others[:5])
+                     f"({by_lang}; check reads Python and Java): " + ", ".join(others[:5])
                      + (f" ... (not_checked lists {min(len(others), NOT_CHECKED_LISTED)})" if len(others) > 5 else ""))
     py_unchecked = [u for u in unchecked if u[1] == "Python"]
     if py_unchecked:
@@ -3545,7 +3573,7 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
                              + (f"; {len(py_unchecked) - 1} more" if len(py_unchecked) > 1 else "") + ")")
     if others:
         unchecked_why.append(f"{len(others)} file{'s' if len(others) > 1 else ''} not checked: language not supported "
-                             f"({by_lang}; check reads Python only)")
+                             f"({by_lang}; check reads Python and Java)")
     unchecked = [*[(rel, other_language(rel) or "?", not_read_why(rel)) for rel in others], *unchecked]
     sites = [{k: v for k, v in s.items() if k not in ("_span", "check_error")} for s in sites]
     counts = {v: 0 for v in VERDICTS}
@@ -3566,10 +3594,10 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
               "unsupported_language" if others and not files else "incomplete" if notes else
               "nothing_to_check" if not checked else "checked")
     nothing = [] if status != "nothing_to_check" else [
-        "no Python file was checked: " + ("no .py file changed against the revision (in CI, compare with the "
-                                          "base branch: --diff origin/main)"
-                                          if diff is not None or (not paths and snippet is None)
-                                          else "the paths hold no .py file")]
+        "no Python or Java file was checked: " + ("no .py or .java file changed against the revision (in CI, "
+                                                  "compare with the base branch: --diff origin/main)"
+                                                  if diff is not None or (not paths and snippet is None)
+                                                  else "the paths hold no .py or .java file")]
     res = {
         "status": status,
         "env": header,
@@ -3583,13 +3611,16 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
         "limits": [
             *notes,
             *nothing,
-            "Python only: code in other languages is listed under not_checked, never checked",
+            "Python and Java: code in other languages is listed under not_checked, never checked",
+            *[f"Java: {n}" for n in (java_res or {}).get("notes", [])],
             "existence and signature shape only: a real name used wrongly is not detected",
             "unknown = not checked (open container or receiver type not known), never 'fine'",
             "runtime-made names (setattr, ORM columns, mocks, __getattr__) are unknown by design",
         ],
         "elapsed_s": round(time.perf_counter() - t0, 3),
     }
+    if java_res is not None:
+        res["java"] = {"builds": java_res["builds"], "seconds": java_res["seconds"]}
     if unchecked:
         res["not_checked"] = [{"path": rel, "language": lang, "why": why}
                               for rel, lang, why in unchecked[:NOT_CHECKED_LISTED]]

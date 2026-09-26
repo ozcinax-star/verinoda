@@ -128,13 +128,18 @@ def _partition(G: nx.Graph, resolution: float = 1.0) -> dict[str, int]:
     # first-pass partition, but the cohesion-split pass produced 70 communities
     # under PYTHONHASHSEED=1 and 69 under =2. Sorting the pair itself removes
     # the dependency; for nx.Graph the orientation carries no meaning anyway.
-    edge_rows = sorted(
-        G.edges(data=True),
-        key=lambda row: (
-            *sorted((str(row[0]), str(row[1]))),
-            json.dumps(row[2], sort_keys=True, ensure_ascii=False, default=str),
-        ),
-    )
+    # A simple graph holds one edge per pair, so the pair alone orders it (the attributes, dumped as
+    # JSON per edge and per split pass, were a second of an update); a multigraph also needs them.
+    if G.is_multigraph():
+        edge_rows = sorted(
+            G.edges(data=True),
+            key=lambda row: (
+                *sorted((str(row[0]), str(row[1]))),
+                json.dumps(row[2], sort_keys=True, ensure_ascii=False, default=str),
+            ),
+        )
+    else:
+        edge_rows = sorted(G.edges(data=True), key=lambda row: tuple(sorted((str(row[0]), str(row[1])))))
     for src, tgt, attrs in edge_rows:
         stable.add_edge(src, tgt, **attrs)
 

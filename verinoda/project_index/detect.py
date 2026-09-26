@@ -45,7 +45,7 @@ CODE_EXTENSIONS = {'.py', '.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', 
 DOC_EXTENSIONS = {'.md', '.mdx', '.qmd', '.skill', '.txt', '.rst', '.html', '.yaml', '.yml'}
 PAPER_EXTENSIONS = {'.pdf'}
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
-OFFICE_EXTENSIONS = {'.docx', '.xlsx'}
+OFFICE_EXTENSIONS = {'.docx', '.xlsx', '.pptx'}
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v', '.mp3', '.wav', '.m4a', '.ogg'}
 
 CORPUS_WARN_THRESHOLD = 50_000    # words - below this, warn "you may not need a graph"
@@ -797,12 +797,10 @@ def convert_office_file(path: Path, out_dir: Path, root: "Path | None" = None) -
 def count_words(path: Path) -> int:
     try:
         ext = path.suffix.lower()
-        if ext == ".pdf":
-            return len(extract_pdf_text(path).split())
-        if ext == ".docx":
-            return len(docx_to_markdown(path).split())
-        if ext == ".xlsx":
-            return len(xlsx_to_markdown(path).split())
+        if ext in (".pdf", ".docx", ".xlsx", ".pptx"):
+            from verinoda import doctext
+
+            return len(" ".join(doctext.text_lines(path) or []).split())
         # Only regular files may be opened. A repository can contain named
         # pipes, sockets and device nodes, and `clone <github-url>` exists to
         # point the scan at trees the operator did not write. open() on a FIFO
@@ -1994,20 +1992,11 @@ def detect(root: Path, *, follow_symlinks: bool | None = None, google_workspace:
                 else:
                     skipped_sensitive.append(str(p) + " [Google Workspace export produced no readable text]")
                 continue
-            # Office files: convert to markdown sidecar so subagents can read them
+            # Office files: Verinoda reads them in place through their text view (verinoda/doctext.py),
+            # so their nodes name the document itself; no markdown sidecar is written
             if p.suffix.lower() in OFFICE_EXTENSIONS:
-                md_path = convert_office_file(p, converted_dir, root=root)
-                if md_path:
-                    # #3504: see the matching comment in the Google Workspace
-                    # branch above -- same sidecar-under-a-gitignored-output-dir
-                    # trap, same exemption.
-                    if _ignored_for_scan(md_path) and not md_path.is_relative_to(converted_dir):
-                        continue
-                    files[ftype].append(str(md_path))
-                    total_words += _wc(md_path)
-                else:
-                    # Conversion failed (library not installed) - skip with note
-                    skipped_sensitive.append(str(p) + " [office conversion failed - pip install graphifyy[office]]")
+                files[ftype].append(str(p))
+                total_words += _wc(p)
                 continue
             files[ftype].append(str(p))
             if ftype != FileType.VIDEO:

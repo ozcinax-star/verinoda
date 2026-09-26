@@ -1501,7 +1501,10 @@ def _rebuild_code(
 
         # Include document files that have AST extractors (e.g. .md, .mdx, .qmd)
         ast_doc_files: list[Path] = []
-        for doc_file in detected['files'].get('document', []):
+        # PDFs are classified as papers: read through their text view like the documents above
+        # (verinoda/doctext.py); a Markdown file that looks like a paper stays out as before
+        pdfs = [f for f in detected['files'].get('paper', []) if str(f).lower().endswith(".pdf")]
+        for doc_file in detected['files'].get('document', []) + pdfs:
             p = Path(doc_file)
             if _get_extractor(p) is not None:
                 code_files.append(p)
