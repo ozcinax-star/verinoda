@@ -38,7 +38,7 @@ from pathlib import Path
 from verinoda import jvmclass
 
 CHECK_VERSION = "1"
-SITE_KINDS = ("import", "type", "method", "field", "constructor", "mixin")
+SITE_KINDS = ("import", "type", "method", "field", "constructor", "mixin", "property", "reference")
 SKIP_DIRS = {".git", ".gradle", ".idea", ".verinoda", "node_modules", "out", "bin", "target", "run", ".vscode"}
 MIXIN_INJECTORS = {"Inject", "Redirect", "ModifyArg", "ModifyArgs", "ModifyVariable", "ModifyConstant",
                    "ModifyExpressionValue", "ModifyReturnValue", "WrapOperation", "WrapWithCondition",
@@ -67,7 +67,7 @@ def _t(node, src: bytes) -> str:
 
 # -- the project's own types ------------------------------------------------------------------------
 
-def java_files(repo: Path) -> list[Path]:
+def java_files(repo: Path, suffixes: tuple[str, ...] = (".java",)) -> list[Path]:
     """The project's Java sources: every ``.java`` file outside build output and tool folders. A build's
     output folder is a ``build`` (or ``target``) folder next to a build file; of it only ``generated``
     (annotation processors' sources, compiled with the rest) is read. A package named ``build`` is read."""
@@ -91,7 +91,7 @@ def java_files(repo: Path) -> list[Path]:
         dirnames[:] = keep
         if str(here) in outputs:
             continue
-        out += [here / f for f in filenames if f.endswith(".java")]
+        out += [here / f for f in filenames if f.endswith(suffixes)]
     return sorted(out)
 
 
@@ -156,6 +156,8 @@ class FileCtx:
     ondemand: list[str] = field(default_factory=list)             # dotted
     static_single: dict[str, list[str]] = field(default_factory=dict)  # member -> [dotted class]
     static_ondemand: list[str] = field(default_factory=list)      # dotted class
+    lang: str = "java"                                             # java | kotlin
+    broken: bool = False                                           # the file does not parse completely
 
 
 def _file_ctx(rel: str, root, src: bytes) -> FileCtx:
@@ -307,6 +309,32 @@ class Universe:
             self.ctx[rel] = ctx
             self.trees[rel] = (src, tree)
             self.project.update(types)
+        self.kt_toplevel: dict[str, set[str]] = {}
+        self.kt_extensions: dict[str, set[str]] = {}
+        kt_paths = java_files(root, (".kt",))
+        if kt_paths:
+            from verinoda import codecheck_kotlin as ck
+
+            kparser = ck._parser()
+            for rel in overrides:
+                p = repo / rel
+                if rel.endswith(".kt") and p not in kt_paths and _inside(p, root):
+                    kt_paths.append(p)
+            for p in kt_paths:
+                rel = p.relative_to(repo).as_posix()
+                try:
+                    src = overrides[rel] if rel in overrides else p.read_bytes()
+                except OSError:
+                    continue
+                tree = kparser.parse(src)
+                ctx, types, top, ext = ck.declarations(rel, src, tree)
+                self.ctx[rel] = ctx
+                self.trees[rel] = (src, tree)
+                self.project.update(types)
+                for pkg, names in top.items():
+                    self.kt_toplevel.setdefault(pkg, set()).update(names)
+                for name, recv in ext.items():
+                    self.kt_extensions.setdefault(name, set()).update(recv)
         for jar in cp.jars:
             try:
                 self.lib.update(jvmclass.load_jar(jar, cache_dir))
@@ -318,6 +346,7 @@ class Universe:
                 self.jdk = jvmclass.load_jar(cp.jdk, cache_dir, release=cp.release)
             except (OSError, ValueError):
                 self.jdk = {}
+        self.broken_packages = {c.package for c in self.ctx.values() if getattr(c, "broken", False)}
         self.packages: dict[str, set[str]] = {}
         for origin, table in (("project", self.project), ("lib", self.lib), ("jdk", self.jdk)):
             for name in table:
@@ -336,6 +365,8 @@ class Universe:
         """Every class this package can hold is known: the project's sources are all read, the JDK's API is
         read, and the classpath is complete (a package on none of them does not exist then)."""
         origins = self.packages.get(pkg, set())
+        if pkg in self.broken_packages:
+            return False
         if not origins:  # a package nothing read holds: known not to exist only when everything is read
             return self.cp.complete and bool(self.jdk)
         return "lib" not in origins or self.cp.complete
@@ -415,7 +446,7 @@ class Universe:
         open_places = [p for p in ctx.ondemand if not self._ondemand_closed(p)]
         if open_places:
             return f"unknown: may come from {open_places[0]}.*, which is not read"
-        if not self.jdk:
+        if not self.jdk and not ("java/lang" in self.packages and self.closed_package("java/lang")):
             return "unknown: the JDK's classes are not read (java.lang)"
         if ctx.package and not self.closed_package(ctx.package):
             return f"unknown: package {ctx.package.replace('/', '.')} is not fully read"
@@ -450,6 +481,10 @@ class Universe:
         written = ([c["super_src"]] if c.get("super_src") else []) + list(c.get("ifaces_src") or [])
         for w in written:
             got, _why = self.resolve(w, ctx, scope, tv) if ctx else (None, "")
+            if not got and ctx is not None and ctx.lang == "kotlin":
+                from verinoda import codecheck_kotlin as ck
+
+                got = ck.MAPPED.get(w) if self.get(ck.MAPPED.get(w, "")) else None
             (ok if got else bad).append(got or w)
         kind = c.get("kind")
         implicit = {"enum": "java/lang/Enum", "record": "java/lang/Record"}.get(kind, OBJECT)
@@ -463,6 +498,8 @@ class Universe:
         seen, order, missing = {binary}, [binary], []
         i = 0
         while i < len(order):
+            if (self.get(order[i]) or {}).get("open_members") and order[i] not in missing:
+                missing.append(order[i])  # a Kotlin file facade or type alias: members not all read
             ok, bad = self.supers(order[i])
             missing += [b for b in bad if b not in missing]
             for s in ok:
@@ -471,6 +508,29 @@ class Universe:
                     order.append(s)
             i += 1
         return order, missing
+
+    def subtypes(self, binary: str, limit: int = 2000) -> list[str]:
+        """Every known type below ``binary`` (breadth first, at most ``limit``)."""
+        index = getattr(self, "_subs", None)
+        if index is None:
+            index = {}
+            for table in (self.project, self.lib):
+                for name, c in table.items():
+                    if c.get("origin") == "project":
+                        sups = self.supers(name)[0]
+                    else:
+                        sups = ([c["super"]] if c.get("super") else []) + list(c.get("ifaces") or [])
+                    for s in sups:
+                        index.setdefault(s, []).append(name)
+            self._subs = index
+        out, seen, queue = [], {binary}, [binary]
+        while queue and len(out) < limit:
+            for sub in index.get(queue.pop(0), ()):
+                if sub not in seen:
+                    seen.add(sub)
+                    out.append(sub)
+                    queue.append(sub)
+        return out
 
     def hierarchy_closed(self, binary: str) -> bool:
         return self.get(binary) is not None and not self.ancestors(binary)[1]
@@ -558,6 +618,9 @@ class _FileCheck:
         line, col = node.start_point[0] + 1, node.start_point[1] + 1
         if self.lines is not None and line not in self.lines:
             return
+        if verdict == "absent" and self.tree.root_node.has_error:
+            verdict, why = "unknown", f"{why}; but the file does not parse completely, so this is not decided"
+            nearest = None
         s = {"at": f"{self.rel}:{line}:{col}", "path": self.rel, "line": line, "col": col, "kind": kind,
              "expr": expr[:120], "name": name, "verdict": verdict, "language": "Java"}
         if why:
@@ -1199,8 +1262,8 @@ class _FileCheck:
             self.site(fld, "field", _t(n, self.src)[-80:], name, "exists", where=f"{_src(f[0])} ({u.origin(f[0])})")
             return u.type_of_written(f[1][0], f[0])
         inner = u.member_type(binary, name)
-        if inner:
-            return None
+        if inner:  # `Outer.Inner` (a nested class, a Kotlin companion): the type, for what follows
+            return inner
         if u.hierarchy_closed(binary):
             self.site(fld, "field", _t(n, self.src)[-80:], name, "absent",
                       why=f"{_src(binary)} and its super types declare no field {name}",
@@ -1451,10 +1514,15 @@ def check_files(repo: Path, targets: list[tuple[str, Path, set[int] | None]], co
         u = Universe(repo, cp, cache_dir, root, overrides)
         for rel, _p, lines in group:
             if rel not in u.trees:
-                files.append({"path": rel, "error": "not read (outside the build's Java sources?)"})
+                files.append({"path": rel, "error": "not read (outside the build's sources?)"})
                 continue
             try:
-                got = _FileCheck(u, rel, lines).run()
+                if rel.endswith(".kt"):
+                    from verinoda import codecheck_kotlin as ck
+
+                    got = ck._KtFileCheck(u, rel, lines).run()
+                else:
+                    got = _FileCheck(u, rel, lines).run()
             except RecursionError:
                 files.append({"path": rel, "error": "too deeply nested to walk"})
                 continue

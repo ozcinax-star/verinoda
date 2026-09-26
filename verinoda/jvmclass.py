@@ -31,7 +31,7 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-INDEX_VERSION = 1
+INDEX_VERSION = 2
 MAX_JARS = 400
 MAX_NESTED_DEPTH = 2
 
@@ -95,7 +95,10 @@ def parse_class(b: bytes) -> dict | None:
             i += 3
         elif tag in (8, 16, 19, 20):
             i += 3
-        elif tag in (3, 4, 9, 10, 11, 12, 17, 18):
+        elif tag == 3:
+            cp[k] = struct.unpack(">i", b[i + 1:i + 5])[0]
+            i += 5
+        elif tag in (4, 9, 10, 11, 12, 17, 18):
             i += 5
         elif tag in (5, 6):
             i += 9
@@ -139,10 +142,16 @@ def parse_class(b: bytes) -> dict | None:
     methods_raw, i = members(i)
     inner: dict[str, str] = {}
     name = cname(this)
+    kt_names: list[str] = []
     n_attr = u2(i)
     i += 2
     for _ in range(n_attr):
         ln = u4(i + 2)
+        if cp[u2(i)] == "RuntimeVisibleAnnotations":
+            try:
+                kt_names = _kotlin_metadata_names(b, i + 6, cp, u2)
+            except (IndexError, struct.error, TypeError):
+                kt_names = []
         if cp[u2(i)] == "InnerClasses":
             o = i + 6
             for j in range(u2(o)):
@@ -160,8 +169,65 @@ def parse_class(b: bytes) -> dict | None:
                                               None if _generic_return(sig) else ret])
     fields = {fname: [_descriptor_types(desc)[0] if desc else "?", acc & (ACC_STATIC | ACC_PRIVATE)]
               for fname, desc, acc, _sig in fields_raw if not acc & ACC_SYNTHETIC}
-    return {"name": name, "super": cname(sup), "ifaces": [x for x in ifaces if x], "flags": flags,
-            "methods": methods, "fields": fields, "inner": inner}
+    out = {"name": name, "super": cname(sup), "ifaces": [x for x in ifaces if x], "flags": flags,
+           "methods": methods, "fields": fields, "inner": inner}
+    if kt_names:
+        out["kt_names"] = kt_names
+    return out
+
+
+def _kotlin_metadata_names(b: bytes, o: int, cp: list, u2) -> list[str]:
+    """The ``d2`` strings of a ``@kotlin.Metadata`` of a file facade (kind 2, 4 or 5): the Kotlin names of
+    the functions and properties it declares, among other strings (an over-approximation, used only to say
+    a name *may* be an extension)."""
+
+    def skip(o: int) -> int:
+        tag = chr(b[o])
+        if tag in "BCDFIJSZsc":
+            return o + 3
+        if tag == "e":
+            return o + 5
+        if tag == "@":
+            return ann(o + 1)[0]
+        if tag == "[":
+            o2 = o + 3
+            for _ in range(u2(o + 1)):
+                o2 = skip(o2)
+            return o2
+        raise TypeError(tag)
+
+    def ann(o: int) -> tuple[int, dict]:
+        typ = cp[u2(o)]
+        vals: dict = {}
+        o2 = o + 4
+        for _ in range(u2(o + 2)):
+            key = cp[u2(o2)]
+            start = o2 + 2
+            end = skip(start)
+            vals[key] = (start, end)
+            o2 = end
+        return o2, {"type": typ, **vals}
+
+    n = u2(o)
+    o += 2
+    for _ in range(n):
+        o, a = ann(o)
+        if a["type"] != "Lkotlin/Metadata;":
+            continue
+        kind = 1
+        if "k" in a and chr(b[a["k"][0]]) == "I":
+            kval = cp[u2(a["k"][0] + 1)]
+            kind = kval if isinstance(kval, int) else kind
+        if "d2" not in a:
+            return []
+        s, _e = a["d2"]
+        out = []
+        for j in range(u2(s + 1)):
+            v = s + 3 + 3 * j
+            if chr(b[v]) == "s":
+                out.append(cp[u2(v + 1)])
+        return out
+    return []
 
 
 # -- jars and their cache ---------------------------------------------------------------------------

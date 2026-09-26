@@ -1755,9 +1755,9 @@ DESCRIPTIONS: dict[str, str] = {
         "other languages): definitive | dynamic | ambiguous | external | unresolved. With target_path/target_line "
         "a verdict: confirms | refutes | undetermined (definitive answers only). Read-only."),
     "code_check": (
-        "Python and Java; other languages come back under not_checked (exit 4). Python: do the modules, "
+        "Python, Java, Kotlin; other languages come back under not_checked (exit 4). Python: do the modules, "
         "imported names, attributes, keyword arguments and constant dict keys it uses exist in the project's "
-        "environment (.venv/venv/env; env=PATH another venv; 'none' = standard library only)? Java: classes, "
+        "environment (.venv/venv/env; env=PATH another venv; 'none' = standard library only)? JVM: classes, "
         "methods (arity), fields, Mixin targets in the project, its classpath (a Loom build or "
         "code_check.classpath) and the JDK. Input: paths, or diff (a revision; nothing given: changes against "
         "HEAD), or snippet + as_path. Each site: exists | absent (nearest names) | unknown (why) | "

@@ -65,6 +65,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D42 | A faster `update` with the same graph | partial | 2026-09-26 (section 15): Leiden in native code by default, compact graph.json writes, memoised path and stem work. Same graph, labels, lexicon and receiver edges as before on four corpora (a 4,690-file mod included). Not done: an update proportional to the change; the cross-file passes still run over the whole corpus. |
 | D43 | Name check for Java: classpath, JDK and Mixin targets | implemented | Built 2026-09-26 (section 16): `jvmclass.py`, `codecheck_java.py`. On a real Fabric mod (407 files, 126,848 sites, compiled): 0 absent, 2.3% unknown, 4.7 s; 8 of 8 planted invented names caught (Yarn names, arity, a Mixin target). Not done: Kotlin, Groovy, argument types, Maven's classpath. |
 | D44 | `update --fast`: the changed files now, the graph in the background | implemented | Built 2026-09-26 (section 17): `workflow._deferred`, `workflow.start_background_update`; MCP `index_update` takes it after a graph build over 15 s. 3.4 s instead of 27-33 s on Verinoda's own repository; the background graph equals a forced scan's. Not done: a graph build that reads only the changed files. |
+| D45 | Name check for Kotlin, in the Java check's world | implemented | Built 2026-09-26 (section 18): `codecheck_kotlin.py`; the universe reads Kotlin sources (Java sees them too), `jvmclass` reads `@kotlin.Metadata` names. kotlinpoet: 10 absents, all kotlin-reflect names the given classpath lacked; the Java mod unchanged (0 absent, 8 of 8 caught). Not done: argument counts, receiver-less calls, type inference beyond declarations and constructors. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -2766,6 +2767,45 @@ edges, communities included.
 ### 17.4 Not done
 
 The graph build itself still reads the whole corpus, so the graph lags by one build's time after an edit.
+
+## 18. Name check for Kotlin (D45, 2026-09-26)
+
+### 18.1 Why
+
+After D43 Kotlin files still came back `not_checked`, and Java code in a mixed project could not see the
+project's Kotlin classes: a Java call on a Kotlin class of the same package could have been called absent.
+
+### 18.2 Decisions
+
+- **One world for the JVM**: the Java check's universe also reads the build's Kotlin sources
+  (`codecheck_kotlin.declarations`: classes, interfaces, objects with `INSTANCE`, companions, enum entries,
+  properties with their getters and setters, top-level functions in a `FileNameKt` facade, type aliases).
+- **Kotlin names stay open where the language keeps them open**: a member not found is `absent` only when the
+  receiver's type is a project or library class (not one of Kotlin's built-in types), every super type is read,
+  no extension of that name exists (the project's, with the receiver types they extend; the libraries' from their
+  file facades' static methods and their `@kotlin.Metadata` names, which `jvmclass` now reads), kotlin-stdlib
+  itself is on the classpath, and the receiver was not checked with `is`/`as`/`when` earlier in the function.
+  The number of arguments is never checked (default and named arguments).
+- **A file tree-sitter-kotlin does not parse completely decides nothing**: its types are open, its package is
+  not closed, its own sites are at most `unknown`. The same holds now for Java files that do not parse.
+- Receivers: declared parameters and properties, constructor calls, `this`, string literals, casts, and the
+  declared type of a call or property down a chain (a Java getter for a Kotlin property); `X::class` is a
+  `KClass`, `x::name` a callable reference.
+
+### 18.3 Measured
+
+- A sample with 6 planted names (`stop`, `powr`, `strat`, `unregister`, `startt`, an import `maxx`) against the
+  real kotlin-stdlib and JDK: 6 caught, the project's own extension and a companion's function found.
+- kotlinpoet (86 files, 15,090 sites) with only kotlin-stdlib 1.9.10 as the classpath: first 293 absents; the
+  causes were parse errors of the grammar, smart casts, `X::class`, companions of library classes, nested
+  constructors and extension imports. After the fixes: 10 absents, all extensions of kotlin-reflect
+  (`createType`, `starProjectedType`, `declaredFunctions`), a dependency the given classpath lacked.
+- The Java mod of D43 unchanged: 126,848 sites, 0 absent; 8 of 8 planted names caught.
+
+### 18.4 Not done
+
+Argument counts, calls without a receiver, type inference beyond declarations and constructors (a lambda's
+`it`, generic results), Kotlin script files, Kotlin/JS and multiplatform `expect`/`actual`.
 
 ## Sources
 

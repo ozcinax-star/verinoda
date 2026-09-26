@@ -372,12 +372,12 @@ def test_the_languages_check_reads_are_said_in_the_help_the_mcp_descriptions_and
     from verinoda import agents, cli
     from verinoda.mcp import server
 
-    assert "Python and Java" in cli.build_parser().format_help()
-    assert server.DESCRIPTIONS["code_check"].startswith("Python and Java")
+    assert "Python, Java and Kotlin" in cli.build_parser().format_help()
+    assert server.DESCRIPTIONS["code_check"].startswith("Python, Java, Kotlin")
     assert server.DESCRIPTIONS["api_members"].startswith("Python only")
     for agent in ("claude", "codex"):
         body = agents.render_skill(agent).decode("utf-8")
-        assert "Python and Java" in body and "not_checked" in body
+        assert "Python" in body and "Java" in body and "Kotlin" in body and "not_checked" in body
 
 
 # -- check: a broad handler is no guard ---------------------------------------------------------------------

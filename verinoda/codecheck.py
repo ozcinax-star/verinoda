@@ -16,7 +16,7 @@ walks a file, a diff or a snippet and gives every *site* one verdict:
                   argument or dict key inside it stays ``absent`` (the handler would
                   swallow the error at run time; ``swallowed_by`` says where).
 
-Python and Java: a file in another language (``x.ts``, ``Foo.kt``, a notebook,
+Python, Java and Kotlin: a file in another language (``x.ts``, ``build.gradle.kts``, a notebook,
 a snippet ``--as`` one) is listed under ``not_checked`` with its language
 (status ``unsupported_language`` when nothing else was checked), never parsed
 as Python and never counted as checked; so is a Python file that does not
@@ -3028,7 +3028,7 @@ def not_read_why(path: str) -> str:
         return "a Jupyter notebook: its code cells are not read (check reads .py files only)"
     if lang == "Cython":
         return "Cython: not Python syntax, not read (check reads .py files only)"
-    return f"language not supported: {lang} (check reads Python and Java)"
+    return f"language not supported: {lang} (check reads Python, Java and Kotlin)"
 
 
 def other_code_files(roots: list[Path], limit: int = MAX_FILES) -> list[Path]:
@@ -3487,7 +3487,7 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
         rel = (as_path or "snippet.py").replace("\\", "/")
         abs_path = (repo / rel).resolve()
         scope = f"a snippet checked as {rel}"
-        if rel.lower().endswith(".java"):
+        if rel.lower().endswith((".java", ".kt")):
             java_targets.append((rel, abs_path, None))
             java_overrides[rel] = snippet.encode("utf-8")
         elif other_language(rel):
@@ -3499,10 +3499,10 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
             sites += got
     else:
         targets, scope, not_checked, others, skipped = _targets(repo, paths, diff)
-        java = [rel for rel in others if rel.lower().endswith(".java")]
+        java = [rel for rel in others if rel.lower().endswith((".java", ".kt"))]
         others = [rel for rel in others if rel not in set(java)]
         if java and not paths:   # the diff: the changed lines of each Java file
-            jl = changed_lines(repo, diff or "HEAD", None, ("*.java",))
+            jl = changed_lines(repo, diff or "HEAD", None, ("*.java", "*.kt"))
             java_targets += [(rel, repo / rel, jl.get(rel)) for rel in java if rel in jl]
         else:
             java_targets += [(rel, repo / rel, None) for rel in java]
@@ -3552,7 +3552,8 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     if bad:   # a requested file that could not be read or parsed was not checked: "0 absent" does not cover it
         notes.append(f"{len(bad)} file{'s' if len(bad) > 1 else ''} not checked: " +
                      "; ".join(f"{f['path']} ({f['error']})" for f in bad[:5]) + (" ..." if len(bad) > 5 else ""))
-        unchecked += [(f["path"], "Java" if f["path"].lower().endswith(".java") else "Python", str(f["error"]))
+        unchecked += [(f["path"], "Java" if f["path"].lower().endswith(".java") else "Kotlin"
+                       if f["path"].lower().endswith(".kt") else "Python", str(f["error"]))
                       for f in bad]
     failed = [s for s in sites if s.get("check_error")]
     if failed:   # a defect of the check on some sites: they are unknown, and the result says so
@@ -3564,7 +3565,7 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     by_lang = ", ".join(f"{lang} {n}" for lang, n in sorted(langs.items(), key=lambda x: (-x[1], x[0])))
     if others:   # never parsed as Python, never reported as checked
         notes.append(f"{len(others)} file{'s' if len(others) > 1 else ''} not checked, language not supported "
-                     f"({by_lang}; check reads Python and Java): " + ", ".join(others[:5])
+                     f"({by_lang}; check reads Python, Java and Kotlin): " + ", ".join(others[:5])
                      + (f" ... (not_checked lists {min(len(others), NOT_CHECKED_LISTED)})" if len(others) > 5 else ""))
     py_unchecked = [u for u in unchecked if u[1] == "Python"]
     if py_unchecked:
@@ -3573,7 +3574,7 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
                              + (f"; {len(py_unchecked) - 1} more" if len(py_unchecked) > 1 else "") + ")")
     if others:
         unchecked_why.append(f"{len(others)} file{'s' if len(others) > 1 else ''} not checked: language not supported "
-                             f"({by_lang}; check reads Python and Java)")
+                             f"({by_lang}; check reads Python, Java and Kotlin)")
     unchecked = [*[(rel, other_language(rel) or "?", not_read_why(rel)) for rel in others], *unchecked]
     sites = [{k: v for k, v in s.items() if k not in ("_span", "check_error")} for s in sites]
     counts = {v: 0 for v in VERDICTS}
@@ -3611,7 +3612,7 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
         "limits": [
             *notes,
             *nothing,
-            "Python and Java: code in other languages is listed under not_checked, never checked",
+            "Python, Java and Kotlin: code in other languages is listed under not_checked, never checked",
             *[f"Java: {n}" for n in (java_res or {}).get("notes", [])],
             "existence and signature shape only: a real name used wrongly is not detected",
             "unknown = not checked (open container or receiver type not known), never 'fine'",
