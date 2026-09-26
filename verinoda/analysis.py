@@ -997,7 +997,7 @@ def _h_flow(ctx: _Ctx, sub: _Sub) -> None:
             for t in tgt:
                 if s == t:
                     continue
-                tr = retrieval.trace(g, s, t)
+                tr = retrieval.trace(g, s, t, callbacks=False)  # a flow claim states calls, not callbacks
                 ctx.step("trace", f"{g.label(s)} -> {g.label(t)}: {tr['status']}")
                 found += tr.get("paths") or []
                 if len(found) >= 3:
