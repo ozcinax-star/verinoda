@@ -71,3 +71,16 @@ def test_a_why_answer_quotes_the_section_that_carries_the_reason():
     a, b, quote = analysis._decision_passage(lines, ["retries", "gateway"], ["send_order"])
     assert quote.startswith("The client retries") and a <= 11 and 12 <= b and a >= 9  # the earlier of equal lines
     assert analysis._decision_passage(lines, ["nothing-here"], [])[2] == "An introduction that names nothing asked about."
+
+
+def test_the_file_list_is_read_once_per_moment_not_per_reader(tmp_path, monkeypatch):
+    """The datapack, GameTest and shader readers share one listing (they walked the whole tree each, `.venv`
+    included); a file added after the listing's few seconds is seen."""
+    from verinoda import snapshot
+
+    (tmp_path / "a.mcfunction").write_text("say hi\n", encoding="utf-8")
+    first = snapshot.listed_files(tmp_path)
+    (tmp_path / "b.mcfunction").write_text("say hi\n", encoding="utf-8")
+    assert snapshot.listed_files(tmp_path) is first  # the same moment: the same list
+    monkeypatch.setattr(snapshot, "LISTED_TTL", 0.0)
+    assert "b.mcfunction" in snapshot.listed_files(tmp_path)

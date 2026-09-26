@@ -75,9 +75,11 @@ class Writer:
 
 
 def _files(repo: Path, suffixes) -> list[str]:
+    from verinoda.snapshot import listed_files
+
     out = []
-    for p in sorted(Path(repo).rglob("*")):
-        if p.suffix.lower() in suffixes and p.is_file():
+    for p in [Path(repo) / r for r in listed_files(Path(repo))]:
+        if p.suffix.lower() in suffixes:
             rel = p.relative_to(repo)
             if not any(x in _SKIP for x in rel.parts[:-1]):
                 out.append(rel.as_posix())

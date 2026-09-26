@@ -124,6 +124,24 @@ def list_files(repo: Path) -> list[str]:
     return sorted(rels)
 
 
+_LISTED: dict[str, tuple[float, list[str]]] = {}
+LISTED_TTL = 5.0  # seconds: one analysis asks many times; a long-running server sees new files soon enough
+
+
+def listed_files(repo: Path) -> list[str]:
+    """:func:`list_files`, kept for :data:`LISTED_TTL` seconds per repository: the datapack, GameTest and
+    shader readers each looked for their files with ``rglob`` over the whole tree (``.venv`` included), about
+    fifty walks in one analysis of a large project."""
+    import time
+
+    key = str(Path(repo).resolve())
+    now = time.monotonic()
+    hit = _LISTED.get(key)
+    if hit is None or now - hit[0] > LISTED_TTL:
+        hit = _LISTED[key] = (now, list_files(Path(repo)))
+    return hit[1]
+
+
 class _StatCache:
     """Rows of ``atlas.db``'s ``file_stat`` table (best effort: any SQLite error means "no cache").
 

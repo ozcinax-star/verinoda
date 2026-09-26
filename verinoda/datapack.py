@@ -170,7 +170,9 @@ def functions(repo: Path) -> dict[str, Function]:
     """Every datapack function of the repository by id (a datapack copied into two places lists both files)."""
     repo = Path(repo)
     out: dict[str, Function] = {}
-    for p in sorted(repo.rglob("*.mcfunction")):
+    from verinoda.snapshot import listed_files
+
+    for p in [repo / r for r in listed_files(repo) if r.endswith(".mcfunction")]:
         rel = p.relative_to(repo)
         if _skipped(rel.parts[:-1]):
             continue

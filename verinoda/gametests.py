@@ -31,7 +31,9 @@ def registry(repo: Path) -> dict:
     files: list[str] = []
     classes: dict[str, dict] = {}
     errors: list[str] = []
-    for p in sorted(repo.rglob("fabric.mod.json")):
+    from verinoda.snapshot import listed_files
+
+    for p in [repo / r for r in listed_files(repo) if r.rpartition("/")[2] == "fabric.mod.json"]:
         rel = p.relative_to(repo).as_posix()
         if any(part in _SKIP_DIRS for part in p.relative_to(repo).parts[:-1]):
             continue
