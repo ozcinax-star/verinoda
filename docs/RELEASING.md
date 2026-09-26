@@ -13,12 +13,14 @@ No password or PyPI token is stored anywhere: PyPI accepts the workflow itself t
 1. **PyPI.** Sign in at https://pypi.org, then *Your account -> Publishing -> Add a new pending publisher*:
    PyPI project name `verinoda`, owner `ozcinax-star`, repository `verinoda`, workflow `release.yml`,
    environment `pypi`. Do the same at https://test.pypi.org with environment `testpypi` (for rehearsals).
-2. **GitHub environments.** Repository *Settings -> Environments*: create `pypi` and `testpypi`. Adding
-   yourself as a required reviewer on `pypi` makes every PyPI upload wait for your click.
+2. **GitHub environments (optional).** GitHub creates `pypi` and `testpypi` the first time the workflow uses
+   them. Create them yourself (*Settings -> Environments*) only to add protection: yourself as a required
+   reviewer on `pypi` makes every PyPI upload wait for your click.
 3. **npm.** Sign in at https://www.npmjs.com, create a *granular access token* with read and write access
    to packages (it can be limited to `verinoda` after the first publish), and store it as the repository
    secret `NPM_TOKEN` (*Settings -> Secrets and variables -> Actions*). The package is published with
-   provenance, which links it to this workflow run.
+   provenance, which links it to this workflow run. Without the secret the release still goes to PyPI and
+   GitHub; the npm step only warns.
 
 ## Rehearsal (TestPyPI)
 

@@ -134,4 +134,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::warning::NPM_TOKEN is not set: the npm wrapper was not published (PyPI and the GitHub release were)"
+            exit 0
+          fi
           npm publish --provenance --access public
