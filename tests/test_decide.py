@@ -579,7 +579,10 @@ def test_only_in_never_verifies_a_name_a_def_shadows(tmp_path):
 def test_no_edge_on_glow_mod_import_is_violated_inferred_call_possible_comment_nothing(templates, tmp_path):
     repo, _ = _case(templates, tmp_path, "glow", ["no_edge from=src/main/** to=src/client/**"])
     clean = _check(repo)
-    assert clean["exit"] == 0 and clean["ok"][0]["scope"] == {"edges": 0}
+    # an ok says what it looked at: the files each side matches and the edges out of the `from` files
+    scope = clean["ok"][0]["scope"]
+    assert clean["exit"] == 0 and scope["edges_matched"] == 0 and scope["from_files"] > 5 and \
+        scope["to_files"] >= 1 and scope["edges_checked"] > 0
     assert any("string class loading" in lim for lim in clean["ok"][0]["limits"])
     gm = repo / "src/main/java/com/example/glowmod/GlowMod.java"
     t = gm.read_text(encoding="utf-8").replace(

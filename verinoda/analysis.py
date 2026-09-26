@@ -427,6 +427,11 @@ def _edge_claim(rec: _Recorder, g: index.Graph, u: str, v: str, d: dict, commit:
         status = "strong_inference" if extracted else "weak_inference"
         unc.append("call site line not confirmed to name the target"
                    + (f" ({grade.reason})" if grade is not None else ""))
+    if status in VERIFIED and at and not at.rpartition(":")[0].endswith((".py", ".pyi")):
+        # outside Python the line's check binds no import scope or enclosing caller (entail._python_only):
+        # inference at most, unless a static resolver's definitive answer confirms it below
+        status = "strong_inference"
+        unc.append(f"which definition the call at {at} binds to is checked for Python only")
     if at and rel == "calls":
         res, pev, skipped = _precise(rec, at, label, g.file(v), g.line(v), commit)
         verdict = (res or {}).get("verdict")
@@ -946,6 +951,12 @@ def _path_claim(ctx: _Ctx, hops: list[dict], text: str, *, sink_lines: list[str]
     unc = list(base_unc)
     if inferred:
         unc.append("at least one hop is INFERRED")
+    other = [h["at"] for h in hops if h.get("at") and h.get("relation") != "method"
+             and not h["at"].rpartition(":")[0].endswith((".py", ".pyi"))]
+    if other:  # entail._flow caps such a hop: the binding checks exist for Python only
+        status = "strong_inference"
+        unc.append(f"which definition the call at {other[0]} binds to is checked for Python only"
+                   + (f" ({len(other)} such hops)" if len(other) > 1 else ""))
     unc += aliased + weak
     return ctx.rec.claim(text, kind="flow", status=status, evidence=evs, subjects=subjects,
                          spec={"hops": [{k: h.get(k) for k in ("from", "to", "relation", "confidence", "at")}
@@ -1190,10 +1201,13 @@ def _h_config(ctx: _Ctx, sub: _Sub) -> None:
             continue
         s0 = sites[0]
         path, _, ln = s0["at"].rpartition(":")
+        py = path.endswith((".py", ".pyi"))  # elsewhere a pattern finds the read, nothing binds it (entail)
         ctx.rec.claim(f"`{s0['symbol']}` in {path} reads environment variable {var} ({s0['at']})", kind="config",
-                      status="statically_verified",
+                      status="statically_verified" if py else "strong_inference",
                       evidence=[(_src_ev(ctx.repo, path, int(ln), None, ctx.commit, env=var), "supports")],
-                      subjects=[path], spec={"env": var})
+                      subjects=[path], spec={"env": var},
+                      **({} if py else {"uncertainties": ["the read is found by a pattern; what it is bound to is "
+                                                          "checked for Python only"]}))
     if not hits:
         _unknown(ctx, sub, {"question": SUBQUESTIONS["config"], "why": "no env reads matched",
                             "next_step": "check settings objects / framework config manually; indirect reads "

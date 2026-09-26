@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-26: never ok without looking](#update-2026-09-26-never-ok-without-looking) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,73 @@ Sections: [Update 2026-09-26: change review, second review round](#update-2026-0
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-26: never ok without looking
+
+Result files: `benchmarks/results/no-silent-ok-2026-09-26/` (its README says how they were produced).
+The senior evaluation of 2026-09-25 found checks that said `ok` or passed over what they had not looked
+at (synthesis gaps 3, 4, 11 and 13). Branch `night/no-silent-ok` closes the cases it reported; each case
+below is the evaluator's own repro, so this measurement is in-sample for the change.
+
+| repro (evaluator) | `main` (c8da753) | branch |
+|---|---|---|
+| only_in over the Fabric template's `com.example` package, client call injected (JVM) | `ok`, exit 0 (no file in scope) | VIOLATED at LanternEvents.java:33 |
+| `no_edge ... to=net.minecraft.client.**` (JVM) | `ok (edges 0)`, exit 0 | `unknown`, exit 3, hint to use only_in |
+| `dependency absent=snakeyaml`, Kotlin DSL + version catalog (JVM) | `ok (manifests 0)` | VIOLATED at the `implementation` and `include` lines |
+| `dependency absent=axios`, added in a pnpm workspace package (web) | `ok (manifests 1)` | VIOLATED at apps/web/package.json |
+| fresh CI clone, records committed under docs/decisions, no config (lead) | 0 records, exit 0 | `unknown`, exit 3, the ADR-like files named |
+| the same with a committed `verinoda.toml` (lead) | 0 records, exit 0 | VIOLATED, exit 1 |
+| `check` on a Java file (JVM) | 0 sites in 0 files, exit 0 | `unsupported_language`, exit 4 |
+| `check --stdin --as Foo.java` (JVM) | parsed as Python, exit 0 | `unsupported_language`, exit 4 |
+| `check --diff` after a TypeScript rename (web) | 0 files, exit 0 | `unsupported_language`, exit 4 |
+| invented method and keyword inside `except Exception` (backend) | 2 guarded, exit 0 | 2 absent (`swallowed_by`), exit 3 |
+| "jwtSecret is read from DISCOUNT_THRESHOLD", config.ts:3 (web) | graded full (verified) | partial (strong_inference at most) |
+| Java relation `Ritual.baslat` -> `Wisp.spawn` with the target known (JVM) | full | partial |
+
+Silent outcomes: 12 of 12 on `main`, 0 of 12 on the branch (`repros-main.json`, `repros-branch.json`).
+
+No answer lost a fact: the fast harness on the eight public sets gives the same facts per question and
+approach on both (`fast-main.json`, `fast-branch.json`: 282 compared cells - facts per question and
+approach, negatives per set and approach - 0 differences), and the agent persona's 10 out-of-sample questions (5 on a copy of
+Verinoda, 5 on the standard library, scored with its own gold patterns) give the same facts on both for
+query text (14/32), query JSON (16/32), analyze JSON (14/32) and analyze text (10/32) (`agent-oos.txt`).
+Those sets are Python or ask no JVM relation that analyze grades differently, so they show that nothing
+was lost, not that anything was gained; the gain is the table above.
+
+Behaviour changes a user sees: `decide check` exits 3 when nothing is violated but something was not
+checked (it exited 0); `check` exits 4 for a file in another language or a Python file that does not
+parse (3 stays "absent or lock mismatch"); outside Python a config or relation claim, and a flow's call
+hop, is `strong_inference` at most (a SCIP answer still verifies).
+
+**Review of the branch (reviewer-a, 11 findings; `review-repros.py`, `review-before.json`,
+`review-after.json`).** The reviewer's repros, run on the branch before the fixes (d05c109) and after:
+
+| finding | before the fixes | after |
+|---|---|---|
+| pnpm `packages/*` and a scaffolder's template below a workspace package (medium) | VIOLATED at the template, exit 1 | ok, exit 0; the template is listed as a manifest not read |
+| npm's `"workspaces": ["./packages/*"]` (medium) | ok, exit 0 | VIOLATED at packages/a/package.json |
+| a declared workspace package in `packages/build` / `apps/demo` (medium) | ok, exit 0, not named | VIOLATED at both |
+| `check` exit for "a file is not Python" vs "a name is absent" (medium) | 3 and 3 | 4 and 3 |
+| a Java call graded as a flow hop / as a relation (medium) | full / partial | partial / partial |
+| `no_edge` from a Python leaf module (low) | unknown, exit 3 on every run | ok (edges_checked 0, with a limit) |
+| a changed notebook and Cython file in `--diff` (low) | nothing_to_check, exit 0 | unsupported_language, exit 4 |
+| a decisions folder's README; this repository's own fixture (low) | exit 3; the fixture is ADR-like | exit 0; none |
+| a Python file that does not parse (low) | exit 0, counted as 1 checked file | exit 4, 0 files, listed under not_checked |
+| `--decisions-dir docs/missing` (low) | 0 records, exit 0 | unknown, exit 3 |
+| `api` on a Java class of the project (low) | exit 0 (check: 3) | exit 4 (check: 4) |
+
+11 of 11 reproduce before the fixes, 0 of 11 after (in-sample: the repros came with the findings). The
+workspace globs are now matched one path segment at a time as npm, yarn and pnpm match them, and a
+manifest a folder rule leaves out, or a declared glob that matches nothing, is named in the limits.
+`check`'s new exit 4 lets a CI gate or a hook tell an invented name (3) from a file it does not read (4).
+The fast harness on the eight public sets after the fixes gives the same facts as `main` and as the branch
+before them (`fast-review.json`: 282 cells, 0 differences with `fast-main.json` and `fast-branch.json`);
+the agent persona's 10 out-of-sample questions give the same facts as on main and before the fixes
+(query text 14/32, query JSON 16/32, analyze JSON 14/32, analyze text 10/32; `agent-oos.txt`, `== review`).
+The flow-hop cap was the one change that could alter answers (the status of Java/Kotlin flow claims), but
+analyze makes no flow claim for the forge_mod and glow_mod flow questions (q10), so these sets do not
+exercise it; its tests are a flow hop graded next to the same relation, and analyze's call path from the
+ritual command to a wisp spawn on a glow_mod copy (strong_inference or lower, with the reason).
 
 ## Update 2026-09-26: change review, second review round (D35)
 

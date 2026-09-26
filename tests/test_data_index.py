@@ -361,7 +361,10 @@ public final class Commands {
     assert any("`Ritual.begin()` calls `Datapack.run()`" in t for t in texts), texts        # the loader
     assert any("`Commands.ritual()` calls `Ritual.begin()`" in t for t in texts), texts      # how it is reached
     chain = [c for c in res["claims"] if "calls `Ritual.begin()`" in c["text"]]
-    assert chain[0]["status"] == "statically_verified"  # the import binds Ritual: a verified call
+    # the import binds Ritual, but outside Python the caller and scope checks do not exist: inference at
+    # most, and the claim says why (senior evaluation 2026-09-25, gap 11)
+    assert chain[0]["status"] == "strong_inference"
+    assert any("checked for Python only" in u for u in chain[0]["uncertainties"]), chain[0]["uncertainties"]
 
 
 def test_the_stem_of_an_inflected_turkish_word_is_searched_even_when_the_form_is_known(tmp_path):

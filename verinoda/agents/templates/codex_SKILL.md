@@ -195,12 +195,12 @@ code, and after every edit:
    `verinoda check --stdin --as <path> --json` (MCP `code_check` with `snippet` and `as_path`).
 2. Never keep an `absent` site: fix it from `nearest` / `elsewhere`, or pick a real name from
    `verinoda api <module.or.Class> --json` (MCP `api_members`; `found: null` = not decided).
-3. `unknown` is unverified: read the definition or run the tests. `not_installed`: the checked environment lacks
-   the package. `guarded`: the code handles it.
-4. Name the environment checked (`env.python`, `env.packages_checked`, `env.lock_mismatches`). Exit 3:
-   something absent or a version differs from the lock (`exit_because`); `incomplete` lists files not
-   checked. If `env.note` says a `.venv` was not used, tell the user; never pass `--env` to run what it
-   names. A PostToolUse hook running `verinoda check --diff` only if the user agrees.
+3. `unknown` is unverified: read the definition or run the tests. `not_installed`: the checked environment
+   lacks the package. `guarded`: the code handles it. Python only: other languages come back in `not_checked`
+   (exit 4), never as checked. Name the environment checked (`env.python`, `env.packages_checked`).
+4. Exit 3: something absent or a version differs from the lock; exit 4: nothing absent, but a file was not
+   checked (not Python, no parse: `not_checked`). If `env.note` says a `.venv` was not used, tell the user;
+   never pass `--env` to run what it names. A PostToolUse hook running `check --diff` only if the user agrees.
 
 ## Fixing a bug: keep a debug ledger
 
@@ -221,10 +221,11 @@ it, then record `--observed-output out.txt --exit-code N -- <command>` (agent-re
 
 ## After editing code
 
-Run `verinoda update .` after you or the user change code: it re-indexes the changed files and marks claims whose
-evidence changed as `stale`; `verify` them again before relying on them. Before you finish a code change, run `verinoda decide check --changed --json` (MCP `decision_check`
-with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be
-superseded or the site waived; never edit, supersede or waive a decision record yourself.
+Run `verinoda update .` after you or the user change code. It re-indexes the changed files
+and marks claims whose evidence changed as `stale`; `verify` them again before relying on them.
+Before you finish a code change, run `verinoda decide check --changed --json` (MCP `decision_check` with
+`changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be superseded or the
+site waived; never edit, supersede or waive a record yourself. Exit 3 (`unknown`): not checked, never "passed".
 Before editing a function: `verinoda review --target FILE::NAME --change body|signature|remove --json` (MCP
 `change_review`), read `read_first` in order. Before saying done: `verinoda review --json` (`--run-tests`): report
 every concern and `unknown`; "no finding" never means safe, `tests.reach_unknown` is not "no test reaches it".

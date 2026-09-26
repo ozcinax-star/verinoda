@@ -51,8 +51,8 @@ own measurements, with their caveats. The benchmark harness results are in
 | D28 | Runtime observation | implemented | CLI `observe` and `analyze --observe`, MCP `runtime_observe`. Deviations: overhead is 1.39× CPU (median) on 533 Graphify tests, against the research's 1.23×, because boundary calls are recorded and the trace is written inside the timed window. The `setprofile` fallback costs about 4.5× and was only forced on CPython 3.12. Child processes are not traced. The container path has not been run against a real docker/podman. The observed-edge retrieval channel is not built. |
 | D29 | Precise resolution | implemented | `verinoda[precise]` (jedi), `resolve-call`, `scan --precise`, `scan --scip FILE`, MCP `resolve_call`, per-analysis budget. Stricter than the research: a method called on a parameter or local receiver is `dynamic`, never definitive. SCIP is used for non-Python files only. |
 | D30 | Measurement harness | implemented | `verinoda benchmark staleness replay\|mutations` and `verinoda benchmark critique-eval`. The replay samples claims whose evidence is in modified files; incoming relations from unchanged files are not sampled. |
-| D31 | No laundering (truth rules) | implemented | Python for relation scopes, config bindings, order and location existence; other languages keep their grades. Word overlap alone never verifies; `contains:` verifies only the quoted text; written claims naming more than the typed check binds stay partial. In-sample fixtures; no held-out false-sentence set yet. |
-| D32 | Name-existence check | partial | Python only: `verinoda check` (files, `--diff`, `--stdin --as`) and `verinoda api`, MCP `code_check` / `api_members`, skill text. Not done: mod config keys and resource ids, JVM jars, JS/TS, `--against PKG==VER`, the environment fingerprint in snapshots. Measurements in BENCHMARKS.md (the fixture set was written by the rule author: in-sample). |
+| D31 | No laundering (truth rules) | implemented | Python for relation scopes, config bindings, order and location existence; other languages keep their grades, and their config and relation claims stop at `strong_inference` (2026-09-26). Word overlap alone never verifies; `contains:` verifies only the quoted text; written claims naming more than the typed check binds stay partial. In-sample fixtures; no held-out false-sentence set yet. |
+| D32 | Name-existence check | partial | Python only (other languages and files that do not parse are listed as not checked, exit 4; 2026-09-26): `verinoda check` (files, `--diff`, `--stdin --as`) and `verinoda api`, MCP `code_check` / `api_members`, skill text. Not done: mod config keys and resource ids, JVM jars, JS/TS, `--against PKG==VER`, the environment fingerprint in snapshots. Measurements in BENCHMARKS.md (the fixture set was written by the rule author: in-sample). |
 | D33 | Decisions stay human | partial | Built: the `decide` intent (EN/TR cue tables) with the verdict `human_decision_required`, never `met`; decision records (`verinoda/decisions.py`, schema v5 log, `decide record/import/guard/accept/waive/list`, MCP `decision_record`); guards and `decide check` (`verinoda/guards.py`, MCP `decision_check`, a one-line summary in `update`; critique's exclusivity check and feedback's exclusive corrections use the same engine). Guard mutations (54 cases on the three examples, written by the rule author, plus 22 forms from the two reviews added by the fixer: all in-sample): VIOLATED precision 1.00, recall 1.00 in reach, 13/13 out-of-reach forms named in limits or POSSIBLE; the old raw-regex scan on the same orders_app cases tp 7 fp 8 fn 6. `decide check` median 42 ms per example case, about 2 s (1.8-2.2 s) on the full Verinoda tree (3 guards; results in `benchmarks/results/decide-2026-09-25/`). The decision brief (`verinoda/decision_brief.py`, `decide brief/answer`, MCP `decision_brief`, answers through `decision_record(action='answer')`; `analyze` routes decide sub-questions to it): on orders_app, EN and TR question, 8/8 gold forces, 19/19 cited evidence re-checks, 5/5 gold question kinds - in-sample (the gold came with the design and the probes were written after it). Not built: `analyze` impact questions do not include violations; the UI shows no decision badge; claims for accepted guards (kinds `exclusive` / `layering`); an ADR's reasons are matched by a few phrasings only; `research.dependencies` itself still reads no Gradle/Maven (the guards and the brief read them). Intent routing: the last held-out set (held-out 4, 20 questions by the fixer, hashed before the review fixes' cue rules were written): precision 0.83, recall 0.50 - the recall bar (0.85) is not met; every other set (written, held-out 1-3, the reviewers' 52) is in-sample. Review round 3 (40 new questions, written before running the router: recall 0.55) added cues that make its set in-sample (20/20) and held-out 4 no longer clean (0.86 / 0.60, its new hit a phrasing section 6 had named): no clean held-out set is left. A missed choice question whose words may ask for a choice is at most `met_with_inference`; one without such words can still be judged `met`. |
 | D34 | Debug ledger (loop detection, strategies) | partial | Built 2026-09-25 (section 7): `verinoda debug start/try/status/diff/close`, strategies `differential/bisect/rerun/observe`, MCP `debug_start` / `debug_attempt` / `debug_status` / `debug_strategy` / `experiment_run`, schema v6. debugloops_v1 (12 sessions written by the builder, gold fixed before the rules ran; in-sample after three fixes): definitive precision 11/11, loop recall 8/8, 0/4 controls stopped, top strategy 8/8. A review found 27 problems (25 distinct: false stops, false "passed", unverified bisect ends, git-safety gaps); all fixed with regression tests (section 7.5), the benchmark scores unchanged after the fixes. Not built: a real agent session with and without the protocol. `debug try` overhead is copy-bound on big trees (median 2.4-5.0 s on 2,341 files, depending on machine load). |
 | D35 | Change review (`verinoda review`) | partial | Built 2026-09-25 (section 8): `verinoda review` (working tree vs HEAD, `--base`, `--staged`, a planned change with `--target` + `--change`), MCP `change_review` (34 tools), rule tables in `review_rules.py`, the review stored in `analyses`, a review step in both skills. review fixtures (36 dev + 11 held-out, gold hashed before any rule; one documented gold amendment before the first run): dev, in-sample, precision 0.92 and recall 1.00 at strong_inference or above; held-out, its only run with the rules frozen: precision 0.79 (bar 0.8 not met), recall 18/18, must-say-unknown 2/2; 0.81 after seven later fixes (one from that run, six from reviewing Verinoda's own branch; no longer clean). Time with the graph loaded: 0.19-0.21 s median on the examples, 1.8 s median (5.4 s max) on the 380-file copy. First review round (section 8.5): the 41 findings of two reviewers fixed with regression tests (the time finding partly): `--staged` reads the staged tree everywhere and runs it or refuses, SQL must be SQL-shaped, guard refactors are told apart from removals, removed methods and module-attribute call sites are found, a value changed on one line and saved later is found, `no_test_reaches` only for symbols with a static caller (`reach_unknown` otherwise); after it dev 67/73 = 0.92 and 62/62, held-out 22/27 = 0.81 and 18/18 (no longer clean), 1.7 s median on the copy. Second review round (section 8.6): 20 findings of a second reviewer fixed with regression tests - a check that now runs after the work it protected is `guard-after-work` / `check-call-after-work`, security calls are compared call by call, assigned aliases and renamed re-exports reach the guards engine, callers newer than the snapshot are searched and named (`graph_stale`), edges between a monorepo's packages are kept; dev and held-out numbers unchanged, +9 to +13 % time on the copy. Not built: findings as claims and critique on them, the entail predicate for a carried value, line-level coverage of changed lines, nested-loop and unbounded-append rules, value and parameter flow outside Python. |
@@ -823,7 +823,18 @@ deterministic.
   the claims show where it happens, not that it happens nowhere else.
 
 Limits: Python only for relation scopes, config bindings and order (other
-languages keep their partial grades). Calls through other names, dynamic
+languages keep their partial grades). A config or relation claim graded from
+source lines in another language is `strong_inference` at most
+(`entail._python_only`; analyze asks for no more and says why): a pattern
+finds the environment read and the syntax tree the call, but nothing binds
+the claim's subject, the enclosing caller or the import scope (senior
+evaluation 2026-09-25: "jwtSecret is read from DISCOUNT_THRESHOLD" at a
+TypeScript `config.ts:3` was `statically_verified`, and analyze verified a
+Java relation that `claim add` graded 0.70). A static resolver's definitive
+answer (a SCIP index) still verifies. A call hop of a flow outside Python is
+capped the same way (`entail._flow`, and analyze's `_path_claim`): the same
+Java call was `partial` as a relation claim and `full` as a flow hop (branch
+review, 2026-09-26). Calls through other names, dynamic
 dispatch and runtime order under branches are not followed, and the scope
 text says so. Word overlap still makes evidence relevant, so generated text
 without a typed check stays `strong_inference` and written text
@@ -935,9 +946,12 @@ is a separate, later step.
   (`HAS_X`, `IS_X`, `PY3`, `X_AVAILABLE`), `hasattr`, and a
   `getattr`/`hasattr` test of the same receiver
   (`if getattr(sys, "frozen", False): sys._MEIPASS`) make a missing name
-  `guarded`. A broad handler (bare `except`, `Exception`) guards an import,
-  and another name only when it does not raise again (`except Exception:
-  raise` handles nothing); a flag the module binds once to a constant
+  `guarded`. A broad handler (bare `except`, `Exception`) guards an import
+  only: an attribute, keyword argument or dict key inside `try: ... except
+  Exception: log` stays `absent` with `swallowed_by` naming the handler that
+  would hide the error at run time (senior evaluation 2026-09-25: a request
+  handler's `Path(...).read_json()` and `ThreadPoolExecutor(thread_prefix=)`
+  were `guarded`, exit 0); a flag the module binds once to a constant
   (`IS_PROD = True`) tests nothing (second review round). pytest's
   `pythonpath` option adds its directories to the search path; a
   `conftest.py` above the file (or the file itself) that changes `sys.path` or
@@ -955,6 +969,29 @@ is a separate, later step.
   first). Keywords are judged against the class object (its `__new__`,
   `__init__` and metaclass), not against what may later be added to an
   instance (`threading.Thread(deamon=True)` is absent).
+- Python only, and said so: a file in another language that was named, lies
+  under a directory named, or changed in the diff (`Foo.java`, `x.ts`, a
+  snippet `--as Foo.java`) is listed under `not_checked` with its language,
+  never parsed as Python and never counted as checked; the result's `status`
+  is `unsupported_language` when nothing else was checked, `incomplete`
+  otherwise (senior evaluation 2026-09-25: `check EmberForgeBlockEntity.java`
+  said "0 sites in 0 files", exit 0, and a TS rename passed `check --diff`).
+  A notebook (`.ipynb`), Cython (`.pyx`/`.pxd`) and the other languages the
+  index reads (shell, PowerShell, Objective-C, Fortran, Verilog, ...) count
+  as other languages; a Python file that does not parse or cannot be read,
+  or a snippet that does not parse, is listed too and not counted under
+  `files`. Exit codes: 3 when a name is absent or an installed version
+  differs from the lock (fix the code or the environment), 4 when nothing of
+  that was found but something asked for was not checked (another language, a
+  file that does not parse, the walk limit, the MCP time budget), 0 when
+  everything asked for was checked; `exit_because` names both. `api` on a name
+  of the project's code in another language is `decided:
+  unsupported_language`, exit 4. (The branch first used 3 for both; a review
+  showed that a CI gate or hook could then not tell an invented name from a
+  JavaScript file next to the Python, so `check verinoda/ui` could never
+  pass.) A diff with no changed `.py` file is `nothing_to_check` (exit 0)
+  with a hint to compare with the base branch in CI. The help, the MCP
+  descriptions and the skills say "Python only".
 - Output: nearest real names (edit distance with transpositions, shared word
   parts, a few synonyms) and where the name is defined elsewhere. Wording:
   "not found in <container> as installed in <env> (<file>)", never "does not
@@ -1062,8 +1099,14 @@ records what the human chose and checks the code against it.
   "..., yoksa ..." choices (now one clause) are read differently.
 - *Records.* A decision is a Markdown file with a front matter
   (`verinoda-decision: 1`, id, status, `decided-by: human`, supersedes,
-  governs, guards, revisit-when, waivers) in `decisions.dir` (default
+  governs, guards, revisit-when, waivers) in the decisions folder (default
   `.verinoda/decisions/`, which git does not see; a committed folder for CI).
+  The folder is, in order: `--decisions-dir` (`decide check`, `decide list`),
+  `decisions.dir` in `.verinoda/config.json`, `[decisions] dir` in a committed
+  `verinoda.toml`, `[tool.verinoda.decisions] dir` in `pyproject.toml`; `decide
+  check` prints which (senior evaluation 2026-09-25: with the folder set only
+  in the git-ignored config, a fresh CI clone reported "0 violated (0 decision
+  records)", exit 0, over a committed violation).
   The file is what is checked; every event (record, import, guard, accept,
   waive, supersede) also appends the whole state to the `decisions` table
   (schema v5, append-only), so a hand edit is visible. `decide record` needs
@@ -1085,7 +1128,11 @@ records what the human chose and checks the code against it.
   scope; `conftest.py` is test code; example, sample, demo, fixture and vendor
   folders and generated files - a `*_pb2.py` name, or a head that says
   generated and do not edit - are out of scope too and named in the limits;
-  `scope=all` keeps them all): Python names are resolved by scope as
+  `scope=all` keeps them all. Such a folder counts only above a source root
+  (`src/<set>/java|kotlin|...`) or outside the path a JVM file's `package`
+  line names: `com/example/...` is the Fabric template's package, and an
+  only_in guard over it checked no file and said ok - senior evaluation
+  2026-09-25): Python names are resolved by scope as
   Python does (module, function, lambda, class and comprehension scopes,
   `global`/`nonlocal`; a binding under if/for/while/try/except/match may not
   run, so the last unconditional binding and every conditional one after it
@@ -1105,17 +1152,49 @@ records what the human chose and checks the code against it.
   POSSIBLE), otherwise POSSIBLE; other languages are a regex over the code
   with comments and strings removed, POSSIBLE at most. `no_edge` reads graph edges: an
   EXTRACTED edge whose cited line still names the target in code is
-  VIOLATED, an INFERRED one POSSIBLE. `dependency absent|present` reads the
-  root manifests plus the root Gradle/Maven build and the subprojects it
-  includes (from the project's file list: git-ignored files are not read;
+  VIOLATED, an INFERRED one POSSIBLE. A `from` or `to` that matches no indexed
+  file (an external package such as `net.minecraft.client.**`, which is no
+  node) is `unknown` with a hint (only_in for calls into a package), never
+  ok. No edge out of the `from` files is `ok` (edges_checked 0, with a limit)
+  when the index has edges of the guard's relations out of other files of
+  their language (a leaf module such as `constants.py` was looked at), and
+  `unknown` when it has none for that language anywhere (the extractor may not
+  emit them). `dependency absent|present` reads the
+  root manifests, the package.json of every workspace package the root
+  declares (`workspaces` in package.json, `packages` in pnpm-workspace.yaml;
+  the globs are matched as npm, yarn and pnpm match them - `*` within one path
+  segment, `**` across them, `./` and `{a,b}` understood - and a declared
+  package is read whatever its folder is called, `packages/build` too; a
+  declared glob that matches no package.json is named in the limits),
+  plus the root Gradle/Maven build and the subprojects it includes, with the
+  version catalogs in `gradle/*.versions.toml` (`implementation(libs.x)`,
+  bundles and `alias(libs.plugins.x)` are cited at the build line, with the
+  catalog line); `include`/`jarJar`/`shadow` lines are cited too (from the
+  project's file list: git-ignored files are not read;
   comments - `//`, `/* */`, `<!-- -->` - are blanked first, so a commented-out
   dependency is not declared);
   build files under test, sample, fixture or vendor folders are skipped and
-  named in the limits, another build is POSSIBLE; a Maven item is cited at
-  its `<artifactId>` line, one finding per cited line. `governs` compares
+  named in the limits (so are other manifests under such folders), another
+  build is POSSIBLE, other manifests (not the
+  root's, a workspace package or an included build) are listed as not read; a
+  Maven item is cited at its `<artifactId>` line, one finding per cited line.
+  Every file read counts as a manifest, whether or not it declares anything;
+  with none read, `absent` is `unknown` (it was `ok (manifests 0)` for a
+  Kotlin-DSL build with a version catalog). `governs` compares
   the symbol's anchor fingerprint: REVIEW, never VIOLATED. `revisit-when` fires TRIGGER once its
-  condition starts to hold. Every `ok` states its scope and limits.
-  `decide check` exits 1 on VIOLATED and 2 on an error (with `--json`, also as
+  condition starts to hold. Every `ok` states its scope - what it counted
+  (Python/JVM/text files; from_files, to_files, edges_checked; manifests;
+  files) - and its limits; a guard that checked no file, edge or manifest is
+  `unknown`, never ok. `decide check` exits 1 on VIOLATED, 3 when nothing is
+  violated but something was not checked (status `unknown`: such a guard, a
+  file that could not be read or parsed, a record that cannot be read, a
+  decisions folder that is configured - flag, config, `verinoda.toml`,
+  `pyproject.toml` - but does not exist, or no
+  record while the repository holds ADR-like files - Markdown under
+  `adr`/`adrs`/`decisions` or with a `verinoda-decision` front matter, outside
+  sample and test folders, not a folder's README, index or template; the
+  message names them and the ways to set the
+  folder), and 2 on an error (with `--json`, also as
   a JSON object); its status is `ok` only when every guard was checked - a guard
   or file that was not (a file that does not parse; a byte-order mark is fine),
   or a record that cannot be read, makes it `unknown`, and violations only in

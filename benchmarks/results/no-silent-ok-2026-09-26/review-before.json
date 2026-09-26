@@ -1,0 +1,70 @@
+{
+ "label": "before",
+ "cases": {
+  "workspace_nested_template": {
+   "status": "violated",
+   "exit": 1,
+   "violations": [
+    "packages/create-app/template-react/package.json:4"
+   ],
+   "wrong": true
+  },
+  "workspace_dot_slash": {
+   "status": "ok",
+   "exit": 0,
+   "violations": [],
+   "wrong": true
+  },
+  "workspace_build_demo_folders": {
+   "status": "ok",
+   "exit": 0,
+   "violations": [],
+   "wrong": true
+  },
+  "check_exit_not_checked_vs_absent": {
+   "exit_not_checked": 3,
+   "exit_absent": 3,
+   "wrong": true
+  },
+  "java_flow_hop_grade": {
+   "flow": "full",
+   "relation": "partial",
+   "wrong": true
+  },
+  "no_edge_leaf_module": {
+   "status": "unknown",
+   "exit": 3,
+   "violations": [],
+   "wrong": true
+  },
+  "notebook_cython_diff": {
+   "status": "nothing_to_check",
+   "exit": 0,
+   "wrong": true
+  },
+  "adr_readme_and_own_fixture": {
+   "exit_readme_only": 3,
+   "own_adr_like": [
+    "benchmarks/results/no-silent-ok-2026-09-26/adr-0002.md"
+   ],
+   "wrong": true
+  },
+  "python_file_does_not_parse": {
+   "status": "incomplete",
+   "exit": 0,
+   "files": 1,
+   "wrong": true
+  },
+  "configured_folder_missing": {
+   "exit": 0,
+   "wrong": true
+  },
+  "api_on_java": {
+   "api_exit": 0,
+   "check_exit": 3,
+   "wrong": true
+  }
+ },
+ "wrong": 11,
+ "total": 11
+}

@@ -1045,7 +1045,7 @@ class AtlasTools:
                                    env=_opt_text(env) or "auto", include_exists=bool(include_exists),
                                    budget_s=CODE_CHECK_BUDGET_S, trust_env=False)
         return self._run("code_check", go, first=("sites",),
-                         keep=("summary", "exit", "exit_because", "incomplete", "env"))
+                         keep=("status", "summary", "exit", "exit_because", "incomplete", "not_checked", "env"))
 
     def api_members(self, target: str, env: str | None = None, private: bool = False) -> dict:
         def go():
@@ -1309,7 +1309,9 @@ class AtlasTools:
             try:
                 recs = dm.load_all(self.repo)
             except dm.DecisionError as exc:
-                raise ToolFailure("invalid_argument", str(exc)[:600], "fix decisions.dir in .verinoda/config.json")
+                raise ToolFailure("invalid_argument", str(exc)[:600], "fix the decisions folder (decisions.dir in "
+                                  ".verinoda/config.json, [decisions] dir in verinoda.toml or "
+                                  "[tool.verinoda.decisions] dir in pyproject.toml)")
             note, graph = None, None
             if any(d.enforced and g.get("kind") == "no_edge" and g.get("status") == "accepted"
                    for d in recs for g in d.guards):
@@ -1502,9 +1504,10 @@ Tools:
 - lexicon_show: which code words the repository associates with a natural-language word.
 - claim_inspect / claim_list / evidence_inspect / claim_verify / claim_challenge: audit claims.
 - resolve_call: which definition a call on path:line binds to (only 'definitive' answers verify).
-- code_check: after editing code, and before proposing it, check that the modules, names, keyword arguments
-  and dict keys it uses exist in the project's environment; fix every absent site (nearest/elsewhere), treat
-  unknown as unverified. api_members: the real members of a module or class before you write calls to it.
+- code_check (Python only): after editing Python code, and before proposing it, check that the modules, names,
+  keyword arguments and dict keys it uses exist in the project's environment; fix every absent site
+  (nearest/elsewhere), treat unknown as unverified; other languages come back not_checked, never checked.
+  api_members: the real members of a Python module or class before you write calls to it.
 - runtime_observe: run selected tests under the call tracer; which tests reach which symbols.
 - reference_resolve / reference_research / reference_compare: pinned external references.
 - feedback_submit / feedback_process / feedback_resolve: record critique as a hypothesis, verify, resolve.
@@ -1635,8 +1638,9 @@ DESCRIPTIONS: dict[str, str] = {
         "target_line a verdict confirms | refutes | undetermined (definitive answers only). 'no precise "
         "answer' with the reason when the resolver is unavailable or the site cannot be read. Read-only."),
     "code_check": (
-        "Check that the modules, imported names, attributes, keyword arguments and constant dict keys that "
-        "code uses exist - in the project's own environment (.venv/venv/env, or env=PATH; 'none' = standard "
+        "Python only (files in other languages come back under not_checked, status unsupported_language, exit 4 - "
+        "never as checked). Check that the modules, imported names, attributes, keyword arguments and constant dict "
+        "keys that Python code uses exist - in the project's own environment (.venv/venv/env, or env=PATH; 'none' = standard "
         "library only; env=PATH only a virtual environment whose base interpreter is a known Python "
         "installation outside the project). Input: paths (files/directories), or diff (a revision: only sites "
         "on changed lines plus new files; default when nothing is given: changes against HEAD), or snippet + "
@@ -1645,17 +1649,21 @@ DESCRIPTIONS: dict[str, str] = {
         "for closed containers (a module or class whose names are all known, a direct instance, one known "
         "signature) and comes with nearest real names and where the name is defined elsewhere; unknown carries "
         "why. env names the interpreter and package versions checked (and lock mismatches). exit 3 = something "
-        "is absent, or an installed package version differs from the lock (exit_because says which). Files are "
+        "is absent, or an installed package version differs from the lock; exit 4 = nothing absent, but a file "
+        "asked for was not checked (another language, does not parse; not_checked lists it) - never a pass; "
+        "exit_because says which. Files are "
         "started only within a time budget (90 s): 'incomplete' lists what was not checked - pass fewer paths "
         "or use diff. Existence and signature shape only, not behaviour. Read-only (answers are cached under "
         ".verinoda/cache/check)."),
     "api_members": (
-        "The real members of a module, class or function (dotted target, e.g. 'packaging.specifiers.SpecifierSet' "
+        "Python only. The real members of a module, class or function (dotted target, e.g. 'packaging.specifiers.SpecifierSet' "
         "or 'orders.service') in the project's environment: name, kind, signature, file:line, inherited-from, "
         "and the version the source came from. Use it before writing calls to an API you have not read. "
         "private=true also lists names starting with '_'. found=false (exit 3: missing from a module or class "
         "whose names are all known, or no such module) comes with nearest names; found=null with decided="
-        "'unknown' or 'not_installed' (exit 0) was not decided - treat it as unverified. Read-only."),
+        "'unknown' or 'not_installed' (exit 0) was not decided - treat it as unverified; "
+        "decided='unsupported_language' (exit 4): the name is the project's code in another language, not "
+        "checked. Read-only."),
     "runtime_observe": (
         "Run tests in an isolated copy under the sys.monitoring call tracer and record the observed calls "
         "(stored under run_id). Tests: test_ids (pytest node ids), else tests selected for symbols/terms "
@@ -1727,7 +1735,9 @@ DESCRIPTIONS: dict[str, str] = {
         "declared dependencies); possible: heuristic hits (text matches, INFERRED edges, unresolved receivers); "
         "reviews: governed code that changed; triggers: revisit conditions that hold; ok: guards that hold, each "
         "with its scope and limits; waived; unknown. base (a git revision) or changed_only (= HEAD) labels "
-        "findings new/touched or pre-existing, and then only new ones count (exit 1). Refreshes a stale index "
+        "findings new/touched or pre-existing, and then only new ones count (exit 1). exit 3 (status unknown): "
+        "nothing violated, but something was not checked (a guard that read no file, edge or manifest; no record "
+        "while ADR-like files exist) - never read it as ok. Refreshes a stale index "
         "first when a no_edge guard needs the graph (refresh=false skips it). Never edits code or records."),
     "experiment_run": (
         "Run one command as a recorded experiment in a throw-away copy of the working tree (or, with ref, of that "

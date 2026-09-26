@@ -688,7 +688,8 @@ def test_mcp_tools_call_the_same_core(proj):
     res = t.code_check(paths=["pkg/use.py"], env="none")
     core = codecheck.check(proj, ["pkg/use.py"], env="none")
     assert res["summary"] == core["summary"] and res["exit"] == 3
-    assert list(res)[:4] == ["summary", "exit", "exit_because", "env"] and "absent" in res["exit_because"]
+    assert list(res)[:5] == ["status", "summary", "exit", "exit_because", "env"] and "absent" in res["exit_because"]
+    assert res["status"] == "absent"
     snip = t.code_check(snippet="import json\njson.loadz\n", as_path="pkg/s.py", env="none")
     assert snip["summary"]["absent"] == 1
     assert t.code_check(snippet="x", paths=["pkg/use.py"])["error"] == "invalid_argument"
@@ -1331,8 +1332,12 @@ def test_broad_handlers_that_raise_again_and_constant_flags_are_not_guards(tmp_p
     by = {s["name"]: s for s in res["sites"]}
     for name in ("loads_file", "reversed", "loads_text"):
         assert by[name]["verdict"] == "absent", by[name]
-    # the same invented name: absent where the handler raises again, guarded where it falls back
-    assert sorted(s["verdict"] for s in res["sites"] if s["name"] == "getcwdu") == ["absent", "guarded"]
+    # the same invented name: absent where the handler raises again, and absent where a broad handler falls
+    # back - `except Exception` is no guard for an attribute (it would also swallow a typo); it says so
+    getcwdu = [s for s in res["sites"] if s["name"] == "getcwdu"]
+    assert [s["verdict"] for s in getcwdu] == ["absent", "absent"]
+    assert "swallowed_by" not in getcwdu[0] and getcwdu[1]["swallowed_by"].startswith("try/except Exception")
+    assert "would swallow the error" in getcwdu[1]["message"]
     assert by["dumps_file"]["verdict"] == "guarded"                    # a specific handler guards
     assert by["fast_dumps"]["verdict"] == "guarded"                    # HAS_FAST is set by an import test
     assert by["yaml_not_here_either"]["verdict"] == "guarded"          # an import under a broad handler
@@ -1358,7 +1363,9 @@ def test_a_module_level_receiver_says_so_and_unparsed_files_are_incomplete(tmp_p
     res = codecheck.check(tmp_path, ["mod.py", "broken.py"], env="none", use_cache=False)
     (s,) = [x for x in res["sites"] if x["name"] == "fetch_all"]
     assert s["verdict"] == "unknown" and "module-level" in s["why"]
-    assert res["exit"] == 0 and "broken.py (does not parse" in res["incomplete"][0]
+    # a file that does not parse was not checked: exit 4 (nothing absent, something not checked), never 0
+    assert res["exit"] == 4 and "broken.py (does not parse" in res["incomplete"][0]
+    assert res["summary"]["files"] == 1 and [u["path"] for u in res["not_checked"]] == ["broken.py"]
 
 
 # -- third review round -----------------------------------------------------------------------------------------

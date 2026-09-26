@@ -1,8 +1,10 @@
 """Decision records (docs/DESIGN.md D33): what the human chose, kept beside the code and checked against it.
 
-A record is a Markdown file in ``decisions.dir`` (``.verinoda/decisions/`` by default; set it to a folder
-you commit, such as ``docs/decisions``, when ``verinoda decide check`` should run in CI - ``.verinoda/`` is
-not committed) with a front matter::
+A record is a Markdown file in the decisions folder (``.verinoda/decisions/`` by default; set a folder you
+commit, such as ``docs/decisions``, when ``verinoda decide check`` should run in CI - ``.verinoda/`` is not
+committed - in a committed ``verinoda.toml`` (``[decisions] dir``) or ``pyproject.toml``
+(``[tool.verinoda.decisions] dir``); ``decisions.dir`` in ``.verinoda/config.json`` and ``--decisions-dir``
+take precedence, see :func:`decisions_dir_source`) with a front matter::
 
     ---
     verinoda-decision: 1
@@ -65,6 +67,8 @@ from pathlib import Path, PurePosixPath
 
 FORMAT_VERSION = 1
 DEFAULT_DIR = ".verinoda/decisions"
+# where the folder comes from when nothing names it (decisions_dir_source): a missing folder is no error then
+DEFAULT_SOURCE = "the default (nothing configured)"
 STATUSES = ("proposed", "accepted", "superseded", "rejected", "deprecated")
 GUARD_KINDS = ("only_in", "no_edge", "dependency")
 REVISIT_KINDS = ("dependency_added", "file_appears")
@@ -134,22 +138,97 @@ def norm_id(value: str) -> str:
     return f"ADR-{int(m.group(1)):04d}"
 
 
-def decisions_dir(repo: Path) -> Path:
-    """``decisions.dir`` from ``.verinoda/config.json`` (repository-relative), default ``.verinoda/decisions``.
+def _committed_dir(repo: Path) -> tuple[str, str] | None:
+    """``(dir, where)`` from a file the project commits: ``verinoda.toml`` (``[decisions] dir = ...``), else
+    ``pyproject.toml`` (``[tool.verinoda.decisions] dir = ...``). ``.verinoda/`` is git-ignored, so a
+    folder set only in ``.verinoda/config.json`` is unknown to a fresh clone (a CI run)."""
+    try:
+        import tomllib  # type: ignore[import-not-found]
+    except ImportError:  # pragma: no cover - py3.10
+        import tomli as tomllib  # type: ignore[no-redef]
 
-    A folder outside the repository is refused: the records belong to the project."""
+    for name, path in (("verinoda.toml", ("decisions",)), ("pyproject.toml", ("tool", "verinoda", "decisions"))):
+        p = Path(repo) / name
+        if not p.is_file():
+            continue
+        try:
+            data = tomllib.loads(p.read_bytes().decode("utf-8-sig", errors="replace"))
+        except (OSError, ValueError):
+            continue
+        for key in path:
+            data = data.get(key) if isinstance(data, dict) else None
+        value = data.get("dir") if isinstance(data, dict) else None
+        if isinstance(value, str) and value.strip():
+            return value.strip(), f"{name} [{'.'.join(path)}] dir"
+    return None
+
+
+def decisions_dir_source(repo: Path, override: str | None = None) -> tuple[Path, str]:
+    """``(folder, where it comes from)``. In order: ``override`` (``--decisions-dir``), ``decisions.dir`` in
+    ``.verinoda/config.json``, ``verinoda.toml`` / ``pyproject.toml`` (:func:`_committed_dir`), else
+    ``.verinoda/decisions``. A folder outside the repository is refused: the records belong to the project."""
     from verinoda.paths import load_config
 
     repo = Path(repo).resolve()
-    try:
-        configured = str((load_config(repo).get("decisions") or {}).get("dir") or "").strip()
-    except Exception:  # noqa: BLE001 - an unreadable config: the default folder
-        configured = ""
+    configured, where = str(override or "").strip(), "--decisions-dir"
+    if not configured:
+        try:
+            configured = str((load_config(repo).get("decisions") or {}).get("dir") or "").strip()
+        except Exception:  # noqa: BLE001 - an unreadable config: the committed setting or the default folder
+            configured = ""
+        where = "decisions.dir in .verinoda/config.json"
+    if not configured:
+        configured, where = _committed_dir(repo) or ("", DEFAULT_SOURCE)
+    if configured.startswith("-"):
+        raise DecisionError(f"decisions folder {configured!r} looks like an option")
     p = Path(configured or DEFAULT_DIR)
     p = (p if p.is_absolute() else repo / p).resolve()
     if p != repo and repo not in p.parents:
-        raise DecisionError(f"decisions.dir {configured!r} is outside the repository {repo}")
-    return p
+        raise DecisionError(f"decisions folder {configured!r} ({where}) is outside the repository {repo}")
+    return p, where
+
+
+def decisions_dir(repo: Path, override: str | None = None) -> Path:
+    """The folder of the decision records (:func:`decisions_dir_source`)."""
+    return decisions_dir_source(repo, override)[0]
+
+
+_NOT_RECORD_DIRS = {"examples", "example", "samples", "sample", "demo", "demos", "fixtures", "fixture",
+                    "__fixtures__", "testdata", "test-data", "vendor", "third_party", "third-party", "node_modules"}
+_RECORD_HEAD = re.compile(r"---[ \t]*\r?\n(?:.*\n)*?verinoda-decision[ \t]*:")
+# a decisions folder's own pages: its README or index, a table of contents, the template new records start from
+# (adr-tools' template.md, MADR's adr-template.md) - no decision of the project
+_NOT_RECORD_NAME = re.compile(r"(?i)(?:readme|index|toc|contents|_sidebar|summary)|.*template.*")
+
+
+def adr_like_files(repo: Path, files: list[str], skip: Path | None = None) -> list[str]:
+    """Markdown files that look like decision records: under an ``adr`` / ``adrs`` / ``decisions`` folder (not
+    the folder's README, index or template), or with a ``verinoda-decision`` front matter. Sample, fixture,
+    vendored and test folders and ``skip`` (the decisions folder in use) are left out."""
+    from verinoda.architecture_map import is_test_file
+
+    repo = Path(repo).resolve()
+    out = []
+    for rel in files:
+        if not rel.lower().endswith(".md") or rel.startswith(".verinoda/") or is_test_file(rel):
+            continue
+        parts = PurePosixPath(rel).parts[:-1]
+        if {p.lower() for p in parts} & _NOT_RECORD_DIRS:
+            continue
+        if skip is not None and skip in (repo / rel).resolve().parents:
+            continue
+        if any(p.lower() in ("adr", "adrs", "decisions", "decision-records") for p in parts) and \
+                not _NOT_RECORD_NAME.fullmatch(PurePosixPath(rel).stem):
+            out.append(rel)
+            continue
+        try:
+            with open(repo / rel, "rb") as fh:
+                head = fh.read(400).decode("utf-8", errors="replace")
+        except OSError:
+            continue
+        if _RECORD_HEAD.match(head.lstrip(chr(0xFEFF))):  # a byte-order mark first is still a record
+            out.append(rel)
+    return out
 
 
 def rel_path(repo: Path, value: str, what: str) -> str:
@@ -337,13 +416,14 @@ def parse(path: Path) -> Decision | None:
                     problems=problems, warnings=warnings)
 
 
-def load_all(repo: Path) -> list[Decision]:
-    """Every record in ``decisions.dir``, by number.
+def load_all(repo: Path, directory: str | None = None) -> list[Decision]:
+    """Every record in the decisions folder (``directory``, as ``--decisions-dir`` gives it, else
+    :func:`decisions_dir`), by number.
 
     Records that contradict each other are not both enforced: two files with the same id both carry a
     problem, and an accepted record that another enforced record supersedes is not enforced (its own file
     may still say accepted, e.g. after a merge)."""
-    d = decisions_dir(repo)
+    d = decisions_dir(repo, directory)
     out = [x for p in sorted(d.glob("*.md")) if (x := parse(p)) is not None] if d.is_dir() else []
     by_id: dict[str, list[Decision]] = {}
     for x in out:
@@ -901,14 +981,14 @@ def as_dict(repo: Path, d: Decision, *, store=None) -> dict:
     return out
 
 
-def listing(store, repo: Path) -> dict:
+def listing(store, repo: Path, directory: str | None = None) -> dict:
     """Every record, plus hand-written decision documents that have no record (candidates for import)."""
     from verinoda.architecture_map import DOC_DECISION_RE
     from verinoda.snapshot import list_files
 
     repo = Path(repo).resolve()
-    recs = load_all(repo)
-    d_dir = decisions_dir(repo)
+    recs = load_all(repo, directory)
+    d_dir, where = decisions_dir_source(repo, directory)
     sources = {d.source for d in recs if d.source}
     docs = []
     for rel in list_files(repo):
@@ -917,7 +997,7 @@ def listing(store, repo: Path) -> dict:
             continue
         if re.search(r"(^|/)(adr|adrs|decisions?)/", rel, re.I) and rel.lower().endswith(".md"):
             docs.append(rel)
-    return {"dir": str(d_dir), "decisions": [as_dict(repo, d, store=store) for d in recs],
+    return {"dir": str(d_dir), "dir_from": where, "decisions": [as_dict(repo, d, store=store) for d in recs],
             "unrecorded_docs": docs,
             "note": "records are checked by `verinoda decide check`; a hand-written ADR has no guards until "
                     "`verinoda decide import` proposes some and the human accepts them"}
