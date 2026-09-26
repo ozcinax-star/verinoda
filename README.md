@@ -419,6 +419,17 @@ those files too and follows the strings between them.
   in the repository, calls through typed variables, Kotlin calling Java) are
   added when the file's imports or package bind the class, and graded like any
   call site.
+- **Callbacks** (`docs/DESIGN.md` D-jvm-callbacks): a method reference passed
+  on (`END_SERVER_TICK.register(RepairScheduler::tick)`,
+  `createTickerHelper(..., Block::serverTick)`) is a `registers` edge, never a
+  call and never weighed by the ranking. `trace` follows it when no call path
+  exists and labels the hop `callback`; impact, the UI and `review` list the
+  method that registers a changed one; a claim "A calls B" that only a method
+  reference supports stays `weak_inference`. `map --view dataflow` starts at
+  the mod's entry points (fabric.mod.json, Fabric initializers, `@Mod`,
+  `@SubscribeEvent`, mixin handlers, registered callbacks) and knows JVM
+  file writes, `NbtIo` and dirty flags; all of these are text heuristics,
+  each with its reason.
 - **Reference trees**: `verinoda setup --reference original-plugin/=original,plugin`
   keeps an original implementation searchable but ranks it at 0.6x unless
   the question says "original", "plugin" or the folder name. A folder that holds

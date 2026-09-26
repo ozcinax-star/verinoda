@@ -1554,7 +1554,9 @@ DESCRIPTIONS: dict[str, str] = {
         "(control flow, plus construction -> __init__); mode='any' also follows uses/imports/inherits/"
         "method/references and says whether a path is execution or only structural reachability "
         "('reachability', 'note'). status: found | unresolved (with 'hints': likely symbols) | no directed "
-        "path | ambiguous. No path in the static graph does not prove there is none at runtime."),
+        "path | ambiguous. No path in the static graph does not prove there is none at runtime. When no path "
+        "exists, a callback registration (a JVM method reference handed over: relation 'registers', kind "
+        "'callback', never a call) is followed too and the result has a 'note'."),
     "map_view": (
         "One top-down architecture view. view: hierarchy (subsystems/packages/files), dependencies "
         "(file-level call/import edges), dataflow (entry points -> persistence sinks), config (env vars "

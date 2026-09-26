@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-26: JVM callbacks](#update-2026-09-26-jvm-callbacks-d-jvm-callbacks) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -24,7 +24,29 @@ Sections: [Update 2026-09-26: change review, second review round](#update-2026-0
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
 
-## Update 2026-09-26: change review, second review round (D35)
+## Update 2026-09-26: JVM callbacks (D-jvm-callbacks)
+
+Java / Kotlin method references passed as arguments are now `registers` edges (docs/DESIGN.md section 10). A
+first attempt (d70b801, reverted in 3c066ec) made them `calls` edges and moved two scores; this one keeps them
+out of the ranking. The check is the fast Verinoda-only harness (all nine sets, the three Verinoda approaches, the same
+scoring as the runner) on the prepared corpora of the 2026-09-25 integration run, against that run's result:
+
+| set | analyze | JSON | text | negatives | changed |
+|---|---|---|---|---|---|
+| forge_mod | 66 | 50 | 66 | 0 | 0 |
+| glow_mod | 48 | 44 | 48 | 0 | 0 |
+| private mod set | unchanged | unchanged | unchanged | unchanged | 0 |
+| orders_app | 32 | 31 | 32 | 1 | 0 |
+| orders_app_tr | 32 | 29 | 32 | 1 | 0 |
+| graphify_core | 36 | 27 | 36 | 0 | 0 |
+| graphify_core_tr | 31 | 20 | 31 | 0 | 0 |
+| heldout_repoatlas | 26 | 21 | 25 | 0 | 0 |
+| verinoda_user_tr | 13 | 9 | 13 | 0 | 0 |
+
+0 of 333 set x question x approach cells changed, negatives included. The edges were in the measured graphs:
+the receiver-call sidecar version went from 2 to 3, so every corpus copy recomputed it on its first load, and
+the run counted the `registers` edges it loaded (forge_mod 2, glow_mod 8, the private mod set 463, the Python
+sets 0). Times are not compared: the run shared the machine with other agents' suites.
 
 A second reviewer reported 20 findings on commit 42d9b41 (7 high, 8 medium, 5 low; 11 regressions of the first
 round's relaxations and cost cuts): checks that now run after the write they protected were "the same check"
