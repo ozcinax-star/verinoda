@@ -441,19 +441,13 @@ def _spawn(argv: list[str], **kw) -> subprocess.Popen:
     return subprocess.Popen(argv, **kw)
 
 
-_UPDATER_BOOT = "import sys; sys.path.insert(0, sys.argv.pop(1)); from verinoda.cli import main; sys.exit(main())"
 
 
 def _updater_argv(repo: Path) -> list[str]:
-    """``verinoda update --repo <repo>`` in a child Python that imports the Verinoda this server runs,
-    never a module of the analysed project: isolated mode (``-I``: neither the working directory nor
-    PYTHON* variables nor the user site reach ``sys.path``) with this package's own parent put first.
-    ``-m verinoda`` from a folder of the project would import a ``verinoda/`` package the project
-    ships (``.verinoda/index/verinoda/__main__.py``) and run it."""
-    import verinoda
+    """``verinoda update --repo <repo>`` in an isolated child (:func:`verinoda.buildlock.updater_argv`)."""
+    from verinoda import buildlock
 
-    home = str(Path(verinoda.__file__).resolve().parent.parent)
-    return [sys.executable, "-I", "-c", _UPDATER_BOOT, home, "update", "--repo", str(repo)]
+    return buildlock.updater_argv(repo)
 
 
 def _build_running(repo: Path) -> bool:
@@ -1475,10 +1469,14 @@ class AtlasTools:
     # -- index ----------------------------------------------------------------------
     def index_update(self) -> dict:
         def go():
-            from verinoda import workflow
+            from verinoda import analysis, buildlock, workflow
 
+            # a project whose last graph build was slow takes the changed files in now and rebuilds the
+            # graph in the background (D44): the agent is not held for half a minute per edit
+            last = buildlock.last_build_seconds(self.repo)
+            fast = last is not None and last > analysis.REFRESH_INLINE_SECONDS
             with self._store() as st:
-                return workflow.update(st, self.repo, wait=MCP_BUILD_WAIT, purpose="index_update (MCP)")
+                return workflow.update(st, self.repo, wait=MCP_BUILD_WAIT, purpose="index_update (MCP)", fast=fast)
         return self._run("index_update", go)
 
     # -- experiments and the debug ledger ----------------------------------------------

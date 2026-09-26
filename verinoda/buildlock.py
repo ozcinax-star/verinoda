@@ -199,6 +199,22 @@ def build_lock(repo: Path, *, wait: float = DEFAULT_WAIT_SECONDS, purpose: str =
         _unlock(fh)
 
 
+_UPDATER_BOOT = "import sys; sys.path.insert(0, sys.argv.pop(1)); from verinoda.cli import main; sys.exit(main())"
+
+
+def updater_argv(repo: Path) -> list[str]:
+    """``verinoda update --repo <repo>`` in a child Python that imports the Verinoda running now, never a
+    module of the analysed project: isolated mode (``-I``: neither the working directory nor PYTHON*
+    variables nor the user site reach ``sys.path``) with this package's own parent put first. ``-m
+    verinoda`` from a folder of the project would import a ``verinoda/`` package the project ships."""
+    import sys
+
+    import verinoda
+
+    home = str(Path(verinoda.__file__).resolve().parent.parent)
+    return [sys.executable, "-I", "-c", _UPDATER_BOOT, home, "update", "--repo", str(repo)]
+
+
 def record_build(repo: Path, *, graph_seconds: float | None, files: int | None) -> None:
     """Remember how long the last graph build took (``build_stats.json`` beside the index)."""
     if graph_seconds is None:

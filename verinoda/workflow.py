@@ -229,7 +229,7 @@ def _graph_affected(repo: Path, diff: dict, in_graph: set[str] | None = None) ->
 
 
 def update(store: Store, repo: Path, *, wait: float = buildlock.DEFAULT_WAIT_SECONDS, purpose: str = "update",
-           on_wait=None) -> dict:
+           on_wait=None, fast: bool = False) -> dict:
     """Refresh after edits: rebuild the graph, re-index only the files changed since the last snapshot.
 
     The code graph is rebuilt over the whole corpus whenever a file of the graph (or a
@@ -249,16 +249,83 @@ def update(store: Store, repo: Path, *, wait: float = buildlock.DEFAULT_WAIT_SEC
     One build at a time per project (:mod:`verinoda.buildlock`): while another
     runs this waits up to ``wait`` seconds (0: not at all), then returns
     ``mode: busy`` with who is building, having done nothing.
+
+    ``fast`` (D44): when the graph would be rebuilt, only the changed files are taken in now - the search
+    index, the lexicon, the syntax facts, stale claims - and the graph build runs in a background process
+    (``background``); ``index_mode`` is ``deferred`` and ``graph_behind`` lists the files the graph does
+    not describe yet. No snapshot is recorded until that build ends, so every reading command keeps saying
+    those files changed since the index. The graph the background build makes is the one a full update
+    makes.
     """
     repo = Path(repo).resolve()
     try:
         with buildlock.build_lock(repo, wait=wait, purpose=purpose, on_wait=on_wait):
-            return _update(store, repo)
+            res = _update(store, repo, fast=fast)
     except buildlock.IndexBusy as busy:
         return _busy(store, busy)
+    if res.get("index_mode") == "deferred":  # after the lock is released: the child takes it
+        res["background"] = start_background_update(repo)
+    return res
 
 
-def _update(store: Store, repo: Path) -> dict:
+_BG_LOG = "background_update.log"
+
+
+def _spawn(argv: list[str], **kw):
+    """Start a child process (a seam for tests)."""
+    import subprocess
+
+    return subprocess.Popen(argv, **kw)
+
+
+def start_background_update(repo: Path) -> dict:
+    """Start ``verinoda update`` for ``repo`` in a detached process that outlives this one (its output goes
+    to ``background_update.log`` beside the index). Nothing is started while another build holds the lock:
+    that build, or the next update, takes the changes in."""
+    import subprocess
+    import sys
+    import tempfile
+
+    from verinoda.paths import index_dir
+
+    repo = Path(repo).resolve()
+    if buildlock.is_locked(repo):
+        return {"started": False, "why": "another index build is running; it or the next update takes the changes in"}
+    log = index_dir(repo) / _BG_LOG
+    kw: dict = {"stdin": subprocess.DEVNULL, "cwd": tempfile.gettempdir()}
+    if sys.platform == "win32":
+        kw["creationflags"] = (getattr(subprocess, "DETACHED_PROCESS", 0x8)
+                               | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200)
+                               | getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    else:
+        kw["start_new_session"] = True
+    try:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with open(log, "ab") as out:
+            p = _spawn(buildlock.updater_argv(repo), stdout=out, stderr=out, **kw)
+    except OSError as exc:
+        return {"started": False, "why": f"could not start ({type(exc).__name__}): run `verinoda update`"}
+    return {"started": True, "pid": p.pid, "log": str(log)}
+
+
+def _deferred(store: Store, repo: Path, prev: dict, state: dict, diff: dict, changed: list[str]) -> dict:
+    """``update --fast`` when the graph would be rebuilt: take in the changed files now, leave the graph
+    (and the snapshot) to the background build."""
+    t0 = time.monotonic()
+    stale = invalidate_stale(store, None, files=state["files"], repo=repo)
+    try:
+        in_graph = index.graph_source_files(repo)
+    except Exception:  # noqa: BLE001 - no readable graph: every changed file is behind it
+        in_graph = set()
+    behind = sorted(f for f in changed if f in in_graph or f in diff["added"])
+    derived = _derive(store, repo, changed=changed, all_files=sorted(state["files"]), file_hashes=state["files"],
+                      tree=state.get("tree_hash"))
+    return {"snapshot": prev, "changed": diff, "changed_count": len(changed), "stale": stale, "mode": "incremental",
+            "index_mode": "deferred", "graph_behind": behind, "derived": derived,
+            "index_seconds": 0.0, "seconds": round(time.monotonic() - t0, 3)}
+
+
+def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
     prev = store.latest_snapshot()
     if prev is None or not graph_path(repo).exists():
         res = scan(store, repo)
@@ -281,6 +348,8 @@ def _update(store: Store, repo: Path) -> dict:
     stats = None
     index_mode = "none"
     forced = False
+    if fast and changed and _graph_affected(repo, diff):
+        return _deferred(store, repo, prev, state, diff, changed)
     if changed and _graph_affected(repo, diff):
         # Graphify's incremental pass extracts only the changed files, and its cross-file
         # passes see only that batch: a changed file's imports and calls into unchanged files

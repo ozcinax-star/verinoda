@@ -705,6 +705,7 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
 | Sonuçları iddia olarak saklama | — | SQLite, durumlar, silinmeyen geçmiş, değiştirilemez iddia metni | Çalışıyor |
 | Kanıt kuralları | güven etiketi (EXTRACTED/INFERRED) | etiket + kanıt derecelendirmesi (tam/kısmi/yok) + merkezi durum denetimi | Çalışıyor |
 | Kod değişince eskime | grafik yeniden kurulur | öğe düzeyinde eskime, kanıt bağlama, `verify` ile yeniden bağlama | Çalışıyor |
+| Düzenlemeden sonra güncelleme süresi | tüm grafı yeniden kurar (artımlı yolu dosyalar arası kenarları kaybeder) | `update --fast`: değişen dosyalar hemen alınır (arama, sözlük, eskiyen iddialar; Verinoda'nın kendi deposunda 3,4 sn, tam güncelleme 27-33 sn), graf arka planda kurulur ve tam taramanınkiyle birebir aynıdır; bitene kadar okuyan komutlar grafın geride kaldığı dosyaları söyler. MCP `index_update`, son graf derlemesi 15 sn'yi aşmışsa bu yolu kendisi seçer | Çalışıyor (2026-09-26) |
 | Karşıt kontrol | — | kesin/sezgisel çürütme, karşı-hipotez yoklamaları; güveni asla yükseltmez | Çalışıyor |
 | Test/deney ile doğrulama | — | yalıtılmış çalıştırma → `experiment_verified` | Kısmi (yalnızca süreç yalıtımı denendi) |
 | Çalışma zamanı gözlemi | — | pytest çağrı izleyicisi, test başına erişim | Çalışıyor (Python/pytest) |

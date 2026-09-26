@@ -308,9 +308,18 @@ def _r_update(r: dict) -> None:
     parts = [f"{r.get('mode', 'unknown')}: {r.get('changed_count') or 0} changed file(s)"]
     if r.get("index_mode"):
         parts.append(f"index {r['index_mode']}")
-    if snap.get("id"):
+    if snap.get("id") and r.get("index_mode") != "deferred":
         parts.append(f"snapshot {snap['id']}")
+    if r.get("seconds") is not None and r.get("index_mode") == "deferred":
+        parts.append(f"{r['seconds']:.1f} s")
     print("; ".join(parts))
+    if r.get("index_mode") == "deferred":
+        behind = r.get("graph_behind") or []
+        bg = r.get("background") or {}
+        print(f"  graph: behind on {len(behind)} file(s)" + (f" ({', '.join(behind[:5])}"
+                                                               + (" ..." if len(behind) > 5 else "") + ")" if behind else "")
+              + ("; rebuilding in the background (pid " + str(bg.get("pid")) + f", log {bg.get('log')})"
+                 if bg.get("started") else f"; not rebuilding: {bg.get('why')}"))
     for s in r.get("stale") or []:
         print(f"  stale: {s['id']} {s['text'][:90]}  <- {', '.join(c['file'] for c in s.get('changed') or [])}")
     for w in r.get("warnings") or []:
@@ -519,7 +528,8 @@ def cmd_update(args) -> int:
     given = args.repo or args.path
     repo = Path(given).resolve() if given else find_repo_root()
     st = _store(repo, create=True)
-    res = workflow.update(st, repo, wait=buildlock.CLI_WAIT_SECONDS, on_wait=_waiting_note)
+    res = workflow.update(st, repo, wait=buildlock.CLI_WAIT_SECONDS, on_wait=_waiting_note,
+                          fast=getattr(args, "fast", False))
     if not res.get("error"):
         summary = _decision_summary(repo, noop=res.get("mode") == "noop")
         if summary:
@@ -2373,6 +2383,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("update", cmd_update, "re-index changed files, record a snapshot, mark affected claims stale", repo=False)
     sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
+    sp.add_argument("--fast", action="store_true",
+                    help="take the changed files in now (search, lexicon, stale claims: seconds) and rebuild the "
+                         "graph in the background; until it ends, reading commands say which files it is behind on")
     sp = add("ui", cmd_ui, "notes and graph of the project in the browser (local)", repo=False, js=False)
     sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")

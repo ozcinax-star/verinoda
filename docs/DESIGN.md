@@ -64,6 +64,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D41 | Documents and images next to the code: text views of PDF/Office files, Windows OCR | implemented | Built 2026-09-26 (section 14): `doctext.py`; pages, sheets, slides and headings become graph nodes (the markdown extractor over the view), search passages, lexicon words, evidence lines and anchors. Fastbench on fresh indexes: 0 differences over 9 sets. Not done: scanned PDFs (no text layer), audio/video, OCR outside Windows. |
 | D42 | A faster `update` with the same graph | partial | 2026-09-26 (section 15): Leiden in native code by default, compact graph.json writes, memoised path and stem work. Same graph, labels, lexicon and receiver edges as before on four corpora (a 4,690-file mod included). Not done: an update proportional to the change; the cross-file passes still run over the whole corpus. |
 | D43 | Name check for Java: classpath, JDK and Mixin targets | implemented | Built 2026-09-26 (section 16): `jvmclass.py`, `codecheck_java.py`. On a real Fabric mod (407 files, 126,848 sites, compiled): 0 absent, 2.3% unknown, 4.7 s; 8 of 8 planted invented names caught (Yarn names, arity, a Mixin target). Not done: Kotlin, Groovy, argument types, Maven's classpath. |
+| D44 | `update --fast`: the changed files now, the graph in the background | implemented | Built 2026-09-26 (section 17): `workflow._deferred`, `workflow.start_background_update`; MCP `index_update` takes it after a graph build over 15 s. 3.4 s instead of 27-33 s on Verinoda's own repository; the background graph equals a forced scan's. Not done: a graph build that reads only the changed files. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -2728,6 +2729,43 @@ trained on older mappings writes `PlayerEntity`, `getMainHandStack` or `spawnEnt
 
 Kotlin and Groovy sources, argument types and overload resolution by type, visibility, a Maven classpath, and
 the classpath of a Gradle build that is not Loom (configure `code_check.classpath`).
+
+## 17. The changed files now, the graph in the background (D44, 2026-09-26)
+
+### 17.1 Why
+
+After D42 an update of Verinoda's own repository still took 27-33 s, all of it spent rebuilding the graph:
+the cross-file passes, communities and the graph file read the whole corpus. An agent that calls
+`index_update` after every edit waits that long each time. Making every pass incremental without changing
+the graph is a large rewrite of the vendored pipeline (about 20 cross-file passes; communities would drift
+from a full scan's).
+
+### 17.2 Decisions
+
+- `update --fast`, when the graph would be rebuilt, takes in only the changed files: the search index (a
+  changed file's units follow the new text; the graph's spans for it are older, so the file is marked
+  misaligned and re-indexed by the next build), the lexicon, the syntax facts and the stale claims (checked
+  against the working tree's hashes, as a refused rebuild does). Then it starts `verinoda update` in a
+  detached process (`workflow.start_background_update`: the isolated child the MCP server already used, now
+  shared through `buildlock.updater_argv`), after releasing the build lock.
+- **No snapshot until the graph is built**: every reading command keeps saying which files changed since
+  the index (`freshness`), and the result lists `graph_behind`. Nothing presents the older graph as current.
+- The background build is a plain `update`: the graph is the one a full scan makes.
+- MCP `index_update` takes the fast path when the last graph build took more than 15 s (the threshold
+  `analyze` uses to decide whether to refresh inline). The CLI keeps the full update unless `--fast` is given,
+  so scripts and CI see the graph they asked for.
+
+### 17.3 Measured
+
+Verinoda's own repository (about 2,400 files, one function added to a module): `update --fast` 3.4 s (4.3 s
+with the process start) against 27-33 s for `update`; the new function was found by `query` at once (as a
+module-level passage, with "may not be in the index yet"), and after the background build as a symbol with its
+call edge. The background build's graph and a `scan --force` afterwards: the same 29,039 nodes and 68,611
+edges, communities included.
+
+### 17.4 Not done
+
+The graph build itself still reads the whole corpus, so the graph lags by one build's time after an edit.
 
 ## Sources
 
