@@ -236,6 +236,36 @@ def compare_table(before: dict, after: dict) -> str:
     return md_table(rows)
 
 
+def fact_changes(before: dict, after: dict) -> dict[str, dict[str, list[str]]]:
+    """Per approach, the gold facts (``question/fact`` ids) *before* found or showed and *after* does not
+    (``lost_found`` / ``lost_shown``), and the reverse (``gained_found`` / ``gained_shown``). Equal totals
+    can hide a swap: one fact lost, another gained; a change is judged on these lists, not on sums."""
+    def facts(res: dict) -> dict[tuple[str, str], dict[str, set[str]]]:
+        out = {}
+        for q in res.get("questions") or []:
+            for ap, slot in (q.get("approaches") or {}).items():
+                f = (slot.get("score") or {}).get("facts")
+                if f is not None:
+                    out[(ap, q["id"])] = {"found": set(f.get("found") or []), "shown": set(f.get("shown") or [])}
+        return out
+
+    fb, fa = facts(before), facts(after)
+    out: dict[str, dict[str, list[str]]] = {}
+    for (ap, qid) in sorted(fb.keys() & fa.keys()):
+        row = out.setdefault(ap, {"lost_found": [], "lost_shown": [], "gained_found": [], "gained_shown": []})
+        for k in ("found", "shown"):
+            row[f"lost_{k}"] += [f"{qid}/{x}" for x in sorted(fb[(ap, qid)][k] - fa[(ap, qid)][k])]
+            row[f"gained_{k}"] += [f"{qid}/{x}" for x in sorted(fa[(ap, qid)][k] - fb[(ap, qid)][k])]
+    return out
+
+
+def fact_change_lines(before: dict, after: dict) -> list[str]:
+    """One line per approach: the facts lost by id (found, shown), and how many were gained."""
+    return [f"{label(ap)}: lost found {c['lost_found'] or 'none'}, lost shown {c['lost_shown'] or 'none'}; "
+            f"gained found {len(c['gained_found'])}, shown {len(c['gained_shown'])}"
+            for ap, c in fact_changes(before, after).items()]
+
+
 def md_table(rows: list[tuple]) -> str:
     head, *body = rows
     lines = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]

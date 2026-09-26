@@ -66,10 +66,12 @@ def main(argv: list[str] | None = None) -> int:
         print(markdown(json.loads(Path(args.results).read_text(encoding="utf-8"))))
         return 0
     if args.cmd == "compare":
-        from verinoda.benchmark.report import compare_table
+        from verinoda.benchmark.report import compare_table, fact_change_lines
 
         before, after = (json.loads(Path(f).read_text(encoding="utf-8")) for f in (args.before, args.after))
         print(compare_table(before, after))
+        print("\nper fact (totals can hide a swap):")
+        print("\n".join(fact_change_lines(before, after)))
         return 0
     if args.cmd == "sanitize":
         from verinoda.benchmark.sanitize import sanitize_result_file

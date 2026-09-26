@@ -571,6 +571,32 @@ def test_module_entry_passes_sweep_pin_and_compares(monkeypatch, tmp_path, capsy
     # schema-1 results have no facts_per_1k_tokens: it is computed from their totals
     assert "| raw grep+read | 2/4 -> 3/4 | 1 -> 1 | n/a -> n/a | 500 -> 500 | 2.00 -> 3.00 |" in out
     assert "| Verinoda retrieve (text) | n/a -> 3/4 |" in out
+    assert "per fact" in out
+
+
+def test_compare_names_each_fact_lost_even_when_the_totals_are_equal(tmp_path, capsys):
+    """A swap (one fact lost, another gained) leaves the totals equal: the per-fact lines show it."""
+    from verinoda.benchmark.__main__ import main
+
+    def res(found_q1, shown_q1, found_q2):
+        def slot(found, shown):
+            return {"score": {"facts": {"found": found, "shown": shown}}}
+        return {"approaches": ["verinoda_analyze"], "summary": {},
+                "questions": [{"id": "h03", "approaches": {"verinoda_analyze": slot(found_q1, shown_q1)}},
+                              {"id": "h08", "approaches": {"verinoda_analyze": slot(found_q2, [])}}]}
+
+    before = res(["h03.build", "h03.rebuild"], ["h03.build"], ["h08.modify"])
+    after = res(["h03.build"], ["h03.build"], ["h08.modify", "h08.cli"])
+    ch = report.fact_changes(before, after)["verinoda_analyze"]
+    assert ch == {"lost_found": ["h03/h03.rebuild"], "lost_shown": [], "gained_found": ["h08/h08.cli"],
+                  "gained_shown": []}
+    assert report.fact_changes(before, before)["verinoda_analyze"]["lost_found"] == []
+    a, b = tmp_path / "a.json", tmp_path / "b.json"
+    a.write_text(json.dumps(before), encoding="utf-8")
+    b.write_text(json.dumps(after), encoding="utf-8")
+    assert main(["compare", str(a), str(b)]) == 0
+    assert ("Verinoda analyze: lost found ['h03/h03.rebuild'], lost shown none; gained found 1, shown 0"
+            in capsys.readouterr().out)
 
 
 def test_a_final_answer_from_any_command_is_scored_for_facts_and_wrong_statements(orders_copy, orders_questions, tmp_path):
