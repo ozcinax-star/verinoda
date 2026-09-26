@@ -148,7 +148,7 @@ def for_change(g, seeds: set[str], *, depth: int = 2, limit: int = 12) -> dict |
         for m, (c, u) in near.items():
             for tid in covers.get(m, ()):
                 best.setdefault(tid, {"distance": dd + 1, "reaches": g.label(m).strip(),
-                                      "via": f"{g.label(c).strip()}.{g.label(u).strip(".()")} calls the change",
+                                      "via": f"{g.label(c).strip()}.{g.label(u).strip('.()')} calls the change",
                                       "pkg": min(_pkg_distance(g.file(c), f) for f in changed_files)})
     rows: list[dict] = []
     for cls, e in classes.items():
