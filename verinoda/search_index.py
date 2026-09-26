@@ -1043,7 +1043,7 @@ class Handle:
     by_file: dict[str, list[tuple[int, int, int, int]]] | None = None   # file -> (span, a, b, uid), innermost first
     copies: dict[str, list[str]] | None = None    # file -> other files with byte-identical content
     unindexed: list[tuple[str, str, frozenset]] | None = None   # (file, reason, name tokens), loaded once
-    file_table: "_FileTable | None" = None        # indexed files by path, stem and package (named files)
+    file_table: _FileTable | None = None          # indexed files by path, stem and package (named files)
     _pin: threading.local = field(default_factory=threading.local, repr=False, compare=False)
 
     def connect(self) -> sqlite3.Connection:

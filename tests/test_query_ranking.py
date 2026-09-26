@@ -11,8 +11,8 @@ import pytest
 
 os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
-from verinoda import index, search_index, workflow  # noqa: E402
-from verinoda.store import open_store  # noqa: E402
+from verinoda import index, search_index, workflow
+from verinoda.store import open_store
 
 CLIENT = '''class Connection:
     def request(self, method, url):
