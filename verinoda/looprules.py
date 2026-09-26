@@ -416,7 +416,7 @@ def _is_doctest_id(t: str) -> bool:
     """A pytest doctest item in a Python module: ``orders/pricing.py::orders.pricing.apply_discount`` (the module
     is not a test file by name, and the item is one dotted name)."""
     path, _, name = t.partition("::")
-    return path.endswith(".py") and not testcode.is_test_file(path) and "::" not in name and \
+    return path.endswith(".py") and not testcode.is_test_or_support_file(path) and "::" not in name and \
         "." in name.split("[", 1)[0]
 
 

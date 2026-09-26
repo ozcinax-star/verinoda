@@ -47,7 +47,7 @@ from pathlib import Path, PurePosixPath
 from verinoda import anchors, testcode
 from verinoda import review_rules as rr
 from verinoda.architecture_map import CONFIG_FILE_RE, ENV_PATTERNS, entry_reasons
-from verinoda.testcode import is_test_file as _is_test
+from verinoda.testcode import is_test_or_support_file as _is_test
 
 CONCERNS = ("persistence", "security", "performance", "public_api", "config", "entry_points")
 PLANNED_KINDS = ("body", "signature", "remove")
@@ -4053,13 +4053,6 @@ def _hot_paths(ctx: _Ctx, changes: list[Change], walk: dict) -> dict[str, dict]:
 
 # -- tests -------------------------------------------------------------------------------------------------
 
-_EXTRA_BASIS = {
-    "python": "the test calls it through a module path (pkg.mod.f()), read from the test's syntax tree",
-    "rust": "the test calls it by name inside a macro (assert_eq!(f(..), ..)), same file",
-    "js": "the it()/test() body names it from a project file its file imports (a name match, not a resolved call)",
-}
-
-
 def _test_id(ctx: _Ctx, n: str) -> str | None:
     """How the test ``n`` is named to its runner (:func:`verinoda.testcode.test_id`); None when it is no test."""
     return testcode.test_id(ctx.g, n)
@@ -4079,10 +4072,13 @@ def _static_tests(ctx: _Ctx, changes: list[Change]) -> tuple[dict[str, dict], di
     changed_tests = [f for f in ctx.base_texts if _is_test(f) and f.endswith(".py") and ctx.text(f) is not None]
 
     def add(tid: str, dist: int, c: Change, basis: str | None = None) -> None:
-        t = tests.setdefault(tid, {"distance": dist, "reaches": []})
-        t["distance"] = min(t["distance"], dist)
-        if basis and "basis" not in t:
-            t["basis"] = basis
+        t = tests.get(tid)
+        if t is None or dist < t["distance"]:   # the basis of the nearest reach (none: the graph's edges)
+            t = tests.setdefault(tid, {"distance": dist, "reaches": []})
+            t["distance"] = dist
+            t.pop("basis", None)
+            if basis:
+                t["basis"] = basis
         if c.symbol not in t["reaches"]:
             t["reaches"].append(c.symbol)
         if tid not in per[c.symbol]:
@@ -4123,11 +4119,12 @@ def _static_tests(ctx: _Ctx, changes: list[Change]) -> tuple[dict[str, dict], di
         for dist in range(1, DEPTH + 1):
             nxt = set()
             for v in frontier | (later if dist == 2 else set()):
-                for x in extra.get(v, ()):   # a call the graph does not hold (pkg.main.run(), a JS it())
+                for x in extra.get(v, ()):   # a call the graph does not hold (pkg.main.run(), a fixture, a JS it())
                     if x.node is None or x.node not in seen:
                         if x.node is not None:
                             seen.add(x.node)
-                        add(x.id, dist, c, basis=_EXTRA_BASIS.get(x.lang, _EXTRA_BASIS["python"]))
+                        what = "it" if dist == 1 else f"`{_clean_label(g.label(v))}` (which reaches it)"
+                        add(x.id, dist, c, basis=testcode.reach_basis(testcode.extra_kind(g, x.id, v), what))
                 for u, _d in _in_edges(ctx, v, {"calls", "uses", "references"}):
                     if u in seen:
                         continue

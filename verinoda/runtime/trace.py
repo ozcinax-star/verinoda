@@ -49,8 +49,9 @@ from verinoda import evidence as evmod
 from verinoda import testcode
 from verinoda.store import Store, new_id, now
 
-# test code, by the one rule of verinoda.testcode (tests/, testing/, test_x.py, x_test.py, conftest.py ...)
-is_test_path = testcode.is_test_file
+# test code and test support, by the one rule of verinoda.testcode (tests/, test_x.py, x_test.py, conftest.py
+# ..., and a testing/ folder outside a main source set)
+is_test_path = testcode.is_test_or_support_file
 
 PLUGIN_MODULE = "verinoda_calltrace"
 TRACE_FILE = "calltrace.jsonl"

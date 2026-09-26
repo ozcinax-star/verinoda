@@ -1206,6 +1206,8 @@ def _h_tests(ctx: _Ctx, sub: _Sub) -> None:
         return
     tv = ctx.view("tests")
     ctx.step("tests_view", f"{tv['tests']} test functions")
+    reach = testcode.reach(g)   # the tests view's reach (same depth), by test id: a same-named test elsewhere
+    silent = (tv.get("test_files_without_recognised_tests") or {}).get("count") or 0
     observe: list[tuple[dict, list[str], str | None]] = []  # one tracer run for all targets
     for t in _targets(ctx, sub):
         if testcode.is_test_file(g.file(t)):
@@ -1216,24 +1218,34 @@ def _h_tests(ctx: _Ctx, sub: _Sub) -> None:
         label, f = g.label(t), g.file(t)
         key = f"{label} ({f}:{g.line(t)})"
         tests = tv["covered"].get(key, [])
-        units = [u for u in testcode.test_units(g) if u.name in tests]
+        ids = reach["covers"].get(t, set())
+        units = [u for u in testcode.test_units(g) if u.id in ids and u.name in tests]
         test_nodes = [u.node for u in units if u.node is not None]
         it = {"id": t, "symbol": label, "file": f}
         if not tests:
             # Adding or changing a test file can falsify this: it watches the tests. Its only support
             # is a pointer to the tests view (a search result), so it stays an inference at best.
+            unc = ["static reachability misses mocks, parametrized indirection and fixtures other than the pytest "
+                   "fixtures a test requests"]
+            if silent:
+                unc.append(f"{silent} test file(s) hold no test verinoda recognises (helpers, or a framework such "
+                           "as Kotest, Spock or ScalaTest): a test there is not looked at")
             ctx.rec.claim(f"No test statically reaches `{label}`", kind="tests", status="weak_inference",
                           evidence=[(_tests_view_pointer(ctx, tv, key), "supports")], subjects=[f"{f}::{label}"],
-                          spec={"watch": "tests"},
-                          uncertainties=["static reachability misses fixtures, mocks, parametrized indirection"])
+                          spec={"watch": "tests"}, uncertainties=unc)
             observe.append((it, [], None))
             continue
         evs = [(_src_ev(ctx.repo, u.file, u.line, None, ctx.commit, test=u.name), "supports") for u in units[:3]]
+        # a reach that starts with a step the graph does not hold says which (a name match is weaker)
+        kinds = {reach["via"].get((t, u.id)) for u in units}
+        unc = ["static call reachability, not runtime coverage: a test may stop (raise, return, mock) before it "
+               "runs this code"]
+        unc += [f"reached through a step the call graph does not hold: {testcode.reach_basis(k, 'it or its caller')}"
+                for k in sorted(x for x in kinds if x)]
         static = ctx.rec.claim(f"Test code statically reaches `{label}` from: {', '.join(tests[:4])}", kind="tests",
-                               status="strong_inference", evidence=evs, subjects=[f"{f}::{label}"],
-                               spec={"tests": [u.id for u in units], "target": t},
-                               uncertainties=["static call reachability, not runtime coverage: a test may stop "
-                                              "(raise, return, mock) before it runs this code"])
+                               status="weak_inference" if kinds == {"name_match"} else "strong_inference",
+                               evidence=evs, subjects=[f"{f}::{label}"],
+                               spec={"tests": [u.id for u in units], "target": t}, uncertainties=unc)
         if ctx.run_tests:
             _run_tests(ctx.store, ctx.repo, g, it, test_nodes, ctx.commit, ctx.budget, ctx.rec, ctx.step,
                        lambda u: _unknown(ctx, sub, u), ctx.cfg)
@@ -1980,7 +1992,16 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
         if it["id"] in anchored or score >= RELEVANCE_MIN:
             rel.append(it)
     sub.items = rel
-    sub.prod = [i for i in rel if not testcode.is_test_file(i["file"])]
+    # product items; and a test-code item whose name the question spells (a fixture in conftest.py) when no
+    # product item of that name is relevant: "where is db_session defined?" is answered by the fixture
+    prod_names = {qp._bare(i.get("symbol") or "") for i in rel if not testcode.is_test_file(i["file"])}
+
+    def spelled(i: dict) -> bool:
+        name = qp._bare(i.get("symbol") or "")
+        return len(name) >= 3 and i["id"] in anchored and name not in prod_names and \
+            re.search(rf"(?<![\w.]){re.escape(name)}(?!\w)", sq.get("text") or "") is not None
+
+    sub.prod = [i for i in rel if not testcode.is_test_file(i["file"]) or spelled(i)]
     sub.words = list(dict.fromkeys(content + [t for v in inputs["expansions"].values() for t in v]
                                    + [p for n in subject_nodes for p in tn.split_identifier(qp._bare(g.label(n)))]))
     out["retrieval"] = {"items": len(raw), "relevant": len(rel)}

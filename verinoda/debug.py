@@ -716,8 +716,8 @@ def _questions(cur: dict, prev: dict | None, ev: dict, hist: list[dict] | None =
     code_side = []
     for f in ((prev or {}).get("signature") or {}).get("failures") or []:
         # the code under test: the innermost frame outside test files, else where the test itself failed
-        code = [fr for fr in f.get("frames") or [] if fr.get("path") and not testcode.is_test_file(fr["path"])
-                and fr["path"] not in test_paths]
+        code = [fr for fr in f.get("frames") or []
+                if fr.get("path") and not testcode.is_test_or_support_file(fr["path"]) and fr["path"] not in test_paths]
         if code:
             fr = code[-1]
             code_side.append(f"{fr['path']}:{fr.get('line')} ({fr.get('symbol')}; {f.get('exc')} raised at "
@@ -951,7 +951,7 @@ def _suspects(repo: Path, sess: dict, prior: list[dict], cur: dict) -> list[dict
     """Traceback symbols and symbols changed since the last passing state (else since the base), with evidence;
     a Python function that a complete trace saw called nowhere in the run (no test, not at import time, no
     child process started) is marked ruled out."""
-    is_test_path = testcode.is_test_file
+    is_test_path = testcode.is_test_or_support_file
     found: dict[tuple[str, str], dict] = {}
     functions: set[tuple[str, str]] = set()  # changed Python functions: the only suspects a trace can rule out
 

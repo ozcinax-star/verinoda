@@ -1539,8 +1539,10 @@ still not built.
   These are the review's grades in the claims vocabulary; the findings are not stored as claims
   (**deviation**, 8.4). An empty concern says "no finding from rules: ..." with the rules that ran.
 - **Tests**: static reach (the tracer's selection rule; tests as `verinoda/testcode.py` recognises them:
-  JUnit/GameTest methods by annotation, vitest/jest `it()` calls, and calls through a dotted module path
-  such as `pkg.main.run()` that the graph does not hold), the tracer's
+  JUnit/GameTest methods by annotation, vitest/jest `it()` calls, and steps the graph does not hold - calls
+  through a dotted module path such as `pkg.main.run()`, what the pytest fixtures a test requests call, the
+  names an `it()` body uses from its imports - each with a basis that names what the test reaches beyond
+  distance 1), the tracer's
   latest complete run (tests that reached each changed Python function, labelled run-scoped and with its
   commit), `--observe` (runs the selected pytest tests under the tracer: reached, and selected-but-not-reaching
   in a complete trace) and `--run-tests` (the selected pytest tests through `experiments.run`); symbols no test

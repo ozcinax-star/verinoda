@@ -291,34 +291,29 @@ REACH_RELATIONS = testcode.REACH_RELATIONS
 
 
 def test_reach(g: Graph, depth: int = 3) -> dict[str, set[str]]:
-    """Product symbol -> names of the tests that statically reach it: from each test
-    (:func:`verinoda.testcode.test_units`) over call/use/reference edges and the calls the graph does not hold
-    (:func:`verinoda.testcode.first_hop`), ``depth`` steps, only through code that is not test code."""
-    covers: dict[str, set[str]] = defaultdict(set)
-    for u in testcode.test_units(g):
-        frontier = {v for v in testcode.first_hop(g, u, REACH_RELATIONS)
-                    if g.file(v) and not testcode.is_test_code(g, v)}
-        seen = frontier | ({u.node} if u.node else set())
-        for v in frontier:
-            covers[v].add(u.name)
-        for _ in range(depth - 1):
-            nxt = set()
-            for n in frontier:
-                for v, _ in g.out_edges(n, REACH_RELATIONS):
-                    if v not in seen and g.file(v) and not testcode.is_test_code(g, v):
-                        seen.add(v)
-                        nxt.add(v)
-                        covers[v].add(u.name)
-            frontier = nxt
-    return covers
+    """Product symbol -> ids of the tests that statically reach it (:func:`verinoda.testcode.reach`: from each
+    test over call/use/reference edges and the calls the graph does not hold, ``depth`` steps, only through code
+    that is not test code)."""
+    return testcode.reach(g, depth)["covers"]
 
 
 def tests_view(g: Graph, depth: int = 3) -> dict:
     units = testcode.test_units(g)
+    name_of = {u.id: u.name for u in units}
     covers = test_reach(g, depth)
     prod = [n for n in g.G.nodes if g.is_symbol(n) and not testcode.is_test_code(g, n)]
     untested = [_loc(g, n) + f" {g.label(n)}" for n in prod if n not in covers]
     runtime = _coverage_xml(g.root)
+    silent = testcode.files_without_tests(g)
+    limits = ["static reachability is not runtime coverage; mocks are invisible, and so are fixtures other than the "
+              "pytest fixtures a test requests (a pytest test reaches what those call)",
+              ("a JS/TS it()/test() reaches the symbols its body names from the project files its file imports (a "
+               "name match, not a resolved call)"),
+              "run `verinoda verify` with experiments or provide coverage.xml for runtime evidence"]
+    if silent:
+        limits.insert(0, f"{len(silent)} test file(s) hold no recognised test (helpers, or tests of a framework "
+                         "verinoda.testcode does not know, such as Kotest, Spock or ScalaTest): not_reached_by_tests "
+                         "means not reached by a recognised test")
     return {
         "view": "tests",
         "coverage": {
@@ -326,15 +321,13 @@ def tests_view(g: Graph, depth: int = 3) -> dict:
                       "verinoda.testcode: pytest-named functions, Go Test/Benchmark functions, @Test/"
                       "@ParameterizedTest/@GameTest methods (JUnit, TestNG, Minecraft game tests), [Test]/[Fact] "
                       "methods, Rust #[test] functions, and the it()/test() calls of JS/TS test files",
-            "limits": ["static reachability is not runtime coverage; mocks and fixtures are invisible",
-                       ("a JS/TS it()/test() reaches the symbols its body names from the project files its file "
-                        "imports (a name match, not a resolved call)"),
-                       "run `verinoda verify` with experiments or provide coverage.xml for runtime evidence"],
+            "limits": limits,
             "runtime_coverage_file": runtime.get("file"),
         },
         "tests": len(units),
         "tests_by_language": dict(sorted(Counter(u.lang for u in units).items())),
-        "covered": {g.label(n) + f" ({_loc(g, n)})": sorted(ts)[:6]
+        "test_files_without_recognised_tests": {"count": len(silent), "files": silent[:10]},
+        "covered": {g.label(n) + f" ({_loc(g, n)})": sorted({name_of.get(t, t) for t in ts})[:6]
                     for n, ts in sorted(covers.items(), key=lambda kv: _loc(g, kv[0]))},
         "not_reached_by_tests": untested[:50],
         "runtime": runtime,
@@ -451,11 +444,21 @@ def impact(g: Graph, targets: list[str], depth: int = 4) -> dict:
         affected_files[f] += 1
         if is_test_file(f):
             tests.add(f)
-    # tests that reach an affected symbol through a call the graph does not hold (pkg.main.run(), a JS it())
+    # tests that reach an affected symbol through a call the graph does not hold (pkg.main.run(), a pytest
+    # fixture, a JS it()): listed with what they reach and how, since the graph walk above does not show them
     callers = testcode.extra_callers(g)
-    for n, dd in dist.items():
-        if dd < depth:
-            tests.update(u.file for u in callers.get(n, ()))
+    basis: dict[str, dict] = {}
+    for n, dd in sorted(dist.items(), key=lambda kv: (kv[1], _loc(g, kv[0]))):
+        if dd >= depth:
+            continue
+        for u in callers.get(n, ()):
+            tests.add(u.file)
+            if u.id not in basis and len(basis) < 40:
+                what = "it" if dd == 0 else f"`{g.label(n)}` (which reaches the target)"
+                basis[u.id] = {"test": u.id, "at": u.at, "reaches": g.label(n), "reaches_at": _loc(g, n),
+                               "distance": dd + 1, "basis": testcode.reach_basis(testcode.extra_kind(g, u.id, n),
+                                                                                 what)}
+    out_basis = {"tests_basis": list(basis.values())} if basis else {}
     return {
         "view": "impact",
         "coverage": {
@@ -470,6 +473,7 @@ def impact(g: Graph, targets: list[str], depth: int = 4) -> dict:
             key=lambda x: (x["distance"], x["at"]))[:80],
         "affected_files": dict(affected_files.most_common(40)),
         "tests_to_run": sorted(tests),
+        **out_basis,
     }
 
 

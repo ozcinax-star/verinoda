@@ -55,8 +55,9 @@ from pathlib import Path
 
 from verinoda.snapshot import _GIT_SKIP_DIRS, _SKIP_DIRS, git, hash_files, list_files
 
-# the ledger's test files ("test" on a changed file, the test_edited rule): the one rule of verinoda.testcode
-from verinoda.testcode import is_test_file
+# the ledger's test files ("test" on a changed file, the test_edited rule): the one rule of verinoda.testcode,
+# test support (a testing/ folder) included
+from verinoda.testcode import is_test_or_support_file as is_test_file
 
 LF_SCHEME = "lf1"          # file_facts scheme of the raw sha256 -> content id memo
 TREE_PREFIX = b"verinoda-tree/1\n"
