@@ -812,6 +812,41 @@ def cmd_datapack(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_trace_log(args) -> int:
+    from verinoda import index, trace_log
+
+    repo = _repo(args)
+    _need_graph(repo)
+    log = Path(args.file)
+    if not log.is_file():
+        raise SystemExit(f"error: {args.file} is not a file")
+    res = trace_log.analyze(index.load(repo), log.read_text(encoding="utf-8", errors="replace"), source=args.file)
+    if not args.no_store and (res["traces"] or res["results"]):
+        st = _store(repo)
+        try:
+            res["claims"] = trace_log.store(st, repo, log, res)
+        finally:
+            st.close()
+
+    def render(r: dict) -> None:
+        print(trace_log.render(r))
+        for c in r.get("claims") or []:
+            print(f"  stored {c['id']} [{c['status']}]")
+
+    _emit(args, res, render)
+    return 0 if res["traces"] or res["results"] else 2
+
+
+def cmd_shader(args) -> int:
+    from verinoda import shaders
+
+    res = shaders.lookup(_repo(args), args.name, check_only=args.check)
+    _emit(args, res, lambda r: print(shaders.render(r)))
+    if res["kind"] == "check":
+        return 3 if res["issues"] else 0
+    return 0 if res["status"] == "found" else 2
+
+
 def cmd_when(args) -> int:
     from verinoda import freshness, index, when
 
@@ -2490,6 +2525,15 @@ def build_parser() -> argparse.ArgumentParser:
                                        "across mcfunction and Java")
     sp.add_argument("what", nargs="?", choices=["tag", "score", "function"], help="look one up (default: the summary)")
     sp.add_argument("name", nargs="?", help="the tag, objective or function id (ns:path)")
+    sp = add("trace-log", cmd_trace_log, "the stack traces and GameTest results of a log mapped onto the code: project "
+                                         "frames with their callers, the rest folded, a trace through a test's "
+                                         "succeed/fail tied to that test; stored as claims with the log as evidence")
+    sp.add_argument("file", help="the log (latest.log, a GameTest run's output, a pasted trace)")
+    sp.add_argument("--no-store", action="store_true", help="report only; record no claim")
+    sp = add("shader", cmd_shader, "GLSL uniform blocks and the Java that fills them: where a field (Hava.y) comes "
+                                   "from; --check: blocks and writers that differ, mirrored constants that disagree")
+    sp.add_argument("name", nargs="?", help="Field, Field.x or Block.Field")
+    sp.add_argument("--check", action="store_true", help="list what disagrees between the shaders and Java (exit 3)")
     sp = add("when", cmd_when, "when a method runs: the events and callers that lead to it, with the conditions "
                                "around each call")
     sp.add_argument("symbol")

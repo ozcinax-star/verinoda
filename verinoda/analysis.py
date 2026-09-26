@@ -933,9 +933,49 @@ def _mixin_claims(ctx: _Ctx, sub: _Sub) -> None:
         ctx.step("mixin", f"{_disp(g, u)} -> {cls}.{method}")
 
 
+_HAS_SHADERS: dict[str, bool] = {}   # repository -> whether it has shader files (asked once per process)
+
+
+def _shader_claims(ctx: _Ctx, sub: _Sub) -> int:
+    """"Where does ``Hava.y`` come from" (docs/DESIGN.md D54): a uniform block field the question names, with the Java
+    expression that fills it (verinoda/shaders.py), as a claim on the writer's line and the field's declaration."""
+    text = sub.sq.get("text_user_lang") or sub.sq.get("text") or ""
+    if sub.extra.get("shader_done") is not None:
+        return sub.extra["shader_done"]
+    sub.extra["shader_done"] = 0
+    names = [n for n in re.findall(r"\b([A-Z]\w*(?:\.[A-Z]\w*)?(?:\.[xyzw])?)\b", text) if "." in n]
+    if not names:
+        return 0
+    from verinoda import shaders
+
+    has = _HAS_SHADERS.get(str(ctx.repo))
+    if has is None:
+        has = _HAS_SHADERS[str(ctx.repo)] = bool(shaders._files(ctx.repo, shaders.SHADER_SUFFIXES))
+    if not has:
+        return 0
+
+    for nm in dict.fromkeys(names):
+        res = shaders.where_from(ctx.repo, nm)
+        if res.get("status") != "found" or not _begin(ctx, sub, "shaders"):
+            continue
+        path, _, ln = res["at"].rpartition(":")
+        dpath, _, dln = res["declared_at"].rpartition(":")
+        evs = [e for e in (_src_ev(ctx.repo, path, int(ln), None, ctx.commit),
+                           _src_ev(ctx.repo, dpath, int(dln), None, ctx.commit)) if e]
+        what = f"{res['block']}.{res['field']}" + (f".{res['component']}" if res.get("component") else "")
+        ctx.rec.claim(f"`{what}` is filled at {res['at']} by `{res['expr']}` (the field is declared at "
+                      f"{res['declared_at']})", kind="location", status="strong_inference",
+                      evidence=[(e, "supports") for e in evs], subjects=[f"{path}::{what}"],
+                      spec={"symbol": what, "shader_field": res["field"]},
+                      uncertainties=["paired by the order of the block's fields and the writer's put calls"
+                                     + ("" if res.get("exact") else "; the two differ in length")])
+        ctx.step("shader", f"{what} <- {res['expr'][:60]}")
+        sub.extra["shader_done"] += 1
+    return sub.extra["shader_done"]
+
+
 def _context_claims(ctx: _Ctx, sub: _Sub, raw_items: list[dict]) -> None:
     g, rec, commit, repo = ctx.g, ctx.rec, ctx.commit, ctx.repo
-    _mixin_claims(ctx, sub)
     items = sub.prod or sub.items
     module_blocks = [i for i in sub.items if i["symbol"] == "(module level)"]
     graph_items = [i for i in items if i["id"] in g.G]
@@ -2113,6 +2153,8 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
                             "next_step": "read that version with `verinoda research <repository> --ref <version>` "
                                          "(or `verinoda resolve` the reference first)"})
     if required_unlinked and not usable and not subject_nodes:
+        if _shader_claims(ctx, sub):  # a uniform field (`Hava.y`) is no graph node: its writer answers
+            return _finish_sub(ctx, sub, out, "shader")
         sub.flags["unlinked"] = [lk["mention"] for lk in required_unlinked]
         return _finish_sub(ctx, sub, out, "none")
     inputs = qp.retrieval_inputs(ctx.plan, ctx.check, sq, ctx.lex, subject_nodes=subject_nodes)
@@ -2167,6 +2209,9 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
                                    f"(relevance < {RELEVANCE_MIN})",
                             "next_step": "rephrase with a symbol/file name, or check the plan's mention links"})
     handler_names = []
+    # what the question names in a Mixin target or a shader's uniform block does not depend on retrieval
+    _mixin_claims(ctx, sub)
+    _shader_claims(ctx, sub)
     if rel or subject_nodes:
         _context_claims(ctx, sub, raw)
         for intent in [sq["intent"]] + [i for i in sq.get("secondary_intents") or [] if i in SECONDARY_OK]:

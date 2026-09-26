@@ -73,6 +73,8 @@ own measurements, with their caveats. The benchmark harness results are in
 | D50 | Backlog items and code comments | implemented | Built 2026-09-26 (section 23): `backlog.py`; `verinoda backlog <item | file:line | symbol>`, `backlog:` lines in query, `backlog` in node_inspect; a line is explained by the comments on and above it and the declaration comments of the fields it uses. Not done: analyze claims from an item, other backlog formats. |
 | D51 | Java access, constructor types, `api` for Java | implemented | Built 2026-09-26 (section 24): class files keep access bits and parameter types; protected/private/package members out of reach and constructors no argument list fits are absent; `verinoda api` lists a Java class's real members from the classpath. A private mod: 0 absent over 127,176 sites. Not done: method argument types, SCIP. |
 | D52 | Datapacks: function calls, tags, scoreboard | implemented | Built 2026-09-26 (section 25): `.mcfunction` files in the graph (`calls`, `schedule` as `registers` with ticks, `#minecraft:tick` / `load` as events); `datapack.py` links entity tags and objectives across mcfunction and Java; `verinoda datapack` lists tags checked but never added, objectives written but never read, missing functions. fastbench: 0 differences after keeping mcfunction files out of search names. |
+| D53 | Stack traces and GameTest results of a log | implemented | Built 2026-09-26 (section 26): `trace_log.py`; `verinoda trace-log FILE` maps project frames, folds the rest, ties a trace through a test's succeed/fail to that test, stores claims with the log as agent-report evidence. |
+| D54 | Shaders: uniform blocks and their Java writers | implemented | Built 2026-09-26 (section 27): `shaders.py`; `verinoda shader FIELD` / `--check`; analyze answers "where does `Block.Field.x` come from". Not done: shader functions in the graph, blocks filled in loops. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3126,6 +3128,74 @@ and scoreboard objectives - was two unrelated piles of text. The bug this hides:
 
 Advancement and predicate JSON (a function run as an advancement reward), `return run`, macros' arguments, Java
 running a function by a built string, NBT `Tags` set from Java.
+
+## 26. Stack traces and GameTest results of a log (D53, 2026-09-26)
+
+### 26.1 Why
+
+A GameTest run's log says what happened: a stack trace printed where an NPC was discarded, and the result line of
+every test. Read by hand, the trace is sixty frames of Minecraft with two of the mod's in between, and nothing
+connects "discarded by `GameTestInfo.succeed`" to the neighbouring test whose `succeed()` cleared its area at that
+moment.
+
+### 26.2 Decisions
+
+- **`verinoda trace-log FILE`** (`verinoda/trace_log.py`): every stack trace (an exception, or a bare
+  `java.lang.Throwable` after a marker line such as `[GUARDREMOVE] DISCARDED ...`, whose marker becomes the
+  trace's title) and every GameTest result line (`... passed`, `... failed`).
+- **Frames**: a frame whose class the project has (by its package path) is mapped to the method node (by name and
+  the line; a `lambda$m$3` frame to the method around the line), shown with its callers; the frames outside the
+  project are folded into one line naming the first, the last and the ones that matter (`GameTestInfo.succeed`,
+  `Entity.discard`, a tick).
+- **Tests**: a result line is matched to its `@GameTest` method (the id's last parts, case-insensitive). A trace
+  through `GameTestInfo.succeed` / `fail` or `GameTestHelper.succeed` is tied to a test: the one whose method is on
+  the stack, else the one whose result line is nearest (the same timestamp first).
+- **Stored**: one claim per trace tied to a test or to a project method. A log is a run Verinoda did not make, so
+  its lines are evidence of the `agent_report` kind (D34): the excerpt with its hash, the log kept under
+  `.verinoda/logs/`; such evidence never verifies, and the claim that asks for `observed` gets what the rules
+  allow (`weak_inference`). `--no-store` reports only.
+
+### 26.3 Measured
+
+A synthetic log of the acceptance case on a private mod (the original log was not kept): the discard trace is tied
+"via GameTestInfo.succeed" to the neighbouring test whose result line has the same timestamp, the mod's frame shown
+and six game frames folded into one line.
+
+### 26.4 Not done
+
+Traces interleaved from several threads, `Caused by` chains shown as their own traces, NeoForge's GameTest log
+lines, obfuscated (intermediary) frame names.
+
+## 27. Shaders: uniform blocks, their Java writers and mirrored constants (D54, 2026-09-26)
+
+### 27.1 Why
+
+"Where does `Weather.y` come from?" A shader reads it from a `std140` uniform block; Java fills that block with a
+run of `putMat4f` / `putVec4` calls in the same order. Only the order links a field to the expression that fills
+it, so a field added on one side shifts every later field without an error, and a constant table the shader
+mirrors from Java (`#define MAT_STONE 1`, `STONE(1, ...)`) can drift the same way.
+
+### 27.2 Decisions
+
+- **`verinoda/shaders.py`**: the uniform blocks of `.glsl` / `.fsh` / `.vsh` / `.vert` / `.frag` files (field
+  types, names, lines), the runs of `put...` calls on one builder in Java, a block paired with the run whose types
+  match it in order (exactly, or on the fields before its first array); every field and each `x/y/z/w` of a
+  vector then has the Java expression that fills it. Mirrored tables: a shader `#define PREFIX_NAME n` group and a
+  Java enum whose constants take the same names with their number first.
+- **`verinoda shader NAME`** answers `Field`, `Field.x`, `Block.Field.x` with the expression and its line;
+  **`verinoda shader --check`** lists what disagrees (exit 3): a block and a writer that differ in length or type
+  from some field on, constants with different values or on one side only.
+
+### 27.3 Measured
+
+A private mod: 4 blocks, 2 writers, the 20-field frame block paired exactly; its wetness component answered with
+the Java call that fills it (by `verinoda shader` and by `analyze` for the question as asked), and the 16-entry material table agrees on every value. A one-sided change in the test
+fixture (a field added to the block, a constant renumbered) is reported by `--check`.
+
+### 27.4 Not done
+
+Graph nodes for shader functions and `#moj_import` edges, blocks filled in loops or through helpers, `uniform`
+variables outside blocks, post-effect JSON.
 
 ## Sources
 
