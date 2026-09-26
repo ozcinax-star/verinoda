@@ -27,6 +27,7 @@ Build-time work is done once and not repeated at query time (docs/DESIGN.md D21)
 from __future__ import annotations
 
 import ast
+import bisect
 import hashlib
 import io
 import json
@@ -48,7 +49,7 @@ CODE_RELATIONS = {"calls", "imports", "imports_from", "uses", "inherits", "metho
 FLOW_RELATIONS = {"calls"}
 RECEIVER_ORIGIN = "verinoda.receiver"
 JAVA_CALL_ORIGIN = "verinoda.java_calls"
-RECEIVER_SIDECAR_VERSION = 2
+RECEIVER_SIDECAR_VERSION = 3   # 3: JVM method references as `registers` edges
 HEURISTIC_SPAN_CAP = 80        # the next-symbol fallback never spans more lines than this
 PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc")
 MARKDOWN_SUFFIXES = (".md", ".markdown", ".mdx")
@@ -1726,13 +1727,321 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
     return out
 
 
+# -- JVM method references handed over as callbacks (docs/DESIGN.md D-jvm-callbacks) -----------------
+
+JAVA_REFS_ORIGIN = "verinoda.java_refs"
+CALLBACK_RELATION = "registers"   # never "calls": the method is handed over, the framework calls it later
+# `Cls::m`, `this::m`, `var::m`, Kotlin `::m`; a dotted receiver (`a.B::m`) is left out, `::new` is a
+# constructor and `::class` a class literal, `::m.name` / `::m(` are not a reference passed on
+_JVM_METHOD_REF = re.compile(r"(?<![\w$.:])(?:([A-Za-z_$][\w$]*)\s*)?::\s*([a-z_$][\w$]*)\b(?!\s*[.(])")
+_JVM_KEYWORDS = frozenset("return throw else case yield in is as if while for do try new".split())
+_JAVA_CLASS_HEAD = re.compile(r"(?:^|[^\w$.:@])(?:@?interface|class|enum|record)\s+([A-Za-z_$][\w$]*)")
+_JAVA_ANON_HEAD = re.compile(r"\bnew\s+[\w$.]+\s*(?:<[^;{}]*>)?\s*\([^;{}]*\)\s*$", re.S)
+_KT_CLASS_HEAD = re.compile(r"(?:^|[^\w.:])(?:class|interface)\s+([A-Za-z_]\w*)")
+_KT_OBJECT_HEAD = re.compile(r"(?:^|[^\w.:])(companion\s+)?object\b\s*([A-Za-z_]\w*)?")
+_KT_BLOCK_HEAD = re.compile(r"(?:\bfun\b[^=]*\)(?:\s*:\s*[^=]+?)?|\b(?:if|for|while|catch|when)\s*\(.*\)|"
+                            r"\b(?:else|try|finally|do|init|when)|\bget\s*\(\s*\)|\bset\s*\([^)]*\)|->)\s*$"
+                            r"|\bconstructor\b", re.S)
+_KT_CONTINUES = re.compile(r"[,(:=.+\-*/|&?]\s*$")
+
+
+def _kotlin_head(head: str) -> str:
+    """The statement before a Kotlin ``{``: the head's last line and the lines it continues
+    (Kotlin ends statements at line ends, so earlier lines are other statements)."""
+    lines = head.split("\n")
+    out = [lines.pop()]
+    while lines:
+        text = "\n".join(out)
+        if text.count(")") <= text.count("(") and not _KT_CONTINUES.search(lines[-1]) \
+                and not re.match(r"\s*(?:[.:)]|\?[.:]|&&|\|\||where\b)", out[0]) and out[0].strip():
+            break
+        out.insert(0, lines.pop())
+    return "\n".join(out)
+
+
+def _jvm_brace_kind(head: str, kotlin: bool) -> tuple[str, str | None]:
+    """What a ``{`` opens, from the code before it: ``class`` (with its name; a Kotlin ``object Name``
+    too, its ``this`` is that object), ``anon`` (a Java anonymous class, a Kotlin object expression),
+    ``object`` (a companion object), ``lambda`` (Kotlin: no declaration or control block) or ``block``."""
+    if kotlin:
+        head = _kotlin_head(head)
+        m = _KT_CLASS_HEAD.search(head)
+        if m:
+            return "class", m.group(1)
+        m = _KT_OBJECT_HEAD.search(head)
+        if m:
+            if m.group(1):
+                return "object", None
+            return ("class", m.group(2)) if m.group(2) else ("anon", None)
+        return ("block", None) if _KT_BLOCK_HEAD.search(head) else ("lambda", None)
+    m = _JAVA_CLASS_HEAD.search(head)
+    if m:
+        return "class", m.group(1)
+    if _JAVA_ANON_HEAD.search(head):
+        return "anon", None
+    return "block", None
+
+
+def _jvm_scopes(flat: str, kotlin: bool) -> list[tuple[int, int, str, str | None]]:
+    """``(open, close, kind, class name)`` of every brace pair of comment- and string-free code."""
+    out: list[tuple[int, int, str, str | None]] = []
+    stack: list[tuple[int, str, str | None]] = []
+    head = 0
+    for i, ch in enumerate(flat):
+        if ch == "{":
+            kind, name = _jvm_brace_kind(flat[head:i], kotlin)
+            stack.append((i, kind, name))
+            head = i + 1
+        elif ch == "}":
+            if stack:
+                a, kind, name = stack.pop()
+                out.append((a, i, kind, name))
+            head = i + 1
+        elif ch == ";":
+            head = i + 1
+    out += [(a, len(flat), kind, name) for a, kind, name in stack]
+    return out
+
+
+def _this_class(scopes, pos: int, kotlin: bool) -> str | None:
+    """The named class ``this`` means at ``pos``; None inside an anonymous class, an object expression,
+    a companion object or (Kotlin) a lambda, whose ``this`` may be another object."""
+    for _a, _b, kind, name in sorted((s for s in scopes if s[0] < pos < s[1]), key=lambda s: -s[0]):
+        if kind == "class":
+            return name
+        if kind in ("anon", "object") or (kotlin and kind == "lambda"):
+            return None
+    return None
+
+
+def _callee_chain(flat: str, paren: int) -> str | None:
+    """The call before the ``(`` at ``paren``: ``ServerTickEvents.END_SERVER_TICK.register``,
+    ``CommandManager.literal().executes`` (argument lists shown empty), ``new Thread``."""
+    toks: list[str] = []
+    k = paren
+    while len(toks) < 16:
+        k -= 1
+        while k >= 0 and flat[k].isspace():
+            k -= 1
+        end = k + 1
+        while k >= 0 and (flat[k].isalnum() or flat[k] in "_$"):
+            k -= 1
+        name = flat[k + 1:end]
+        if not name or name[0].isdigit():
+            break
+        toks.append(name)
+        j = k
+        while j >= 0 and flat[j].isspace():
+            j -= 1
+        if j < 0 or flat[j] != ".":
+            if flat[max(0, j - 2):j + 1] == "new" and (j < 3 or not (flat[j - 3].isalnum() or flat[j - 3] in "_$")):
+                toks.append("new ")
+            break
+        j -= 1
+        while j >= 0 and flat[j].isspace():
+            j -= 1
+        if j >= 0 and flat[j] == ")":  # `literal(...).executes`: the receiver is a call
+            depth = 0
+            while j >= 0:
+                depth += (flat[j] == ")") - (flat[j] == "(")
+                if depth == 0:
+                    break
+                j -= 1
+            if j < 0:
+                break
+            toks.append("()")
+            k = j
+        else:
+            k = j + 1
+    if not toks or toks[0] in _JVM_KEYWORDS | {"switch", "catch", "synchronized", "when"}:
+        return None
+    out = ""
+    for t in reversed(toks):
+        out += t if t in ("()", "new ") else ("." if out and not out.endswith(" ") else "") + t
+    return out
+
+
+def _call_around(flat: str, start: int) -> str | None:
+    """The call a method reference at ``start`` is an argument of (:func:`_callee_chain`), else None."""
+    j = start - 1
+    while j >= 0 and flat[j].isspace():
+        j -= 1
+    named = re.search(r"[(,]\s*[A-Za-z_]\w*\s*=\s*$", flat[max(0, start - 80):start])  # Kotlin `f(handler = ::m)`
+    if not (j >= 0 and flat[j] in "(,") and not named:
+        return None
+    depth = 0
+    while j >= 0:
+        c = flat[j]
+        if c == ")":
+            depth += 1
+        elif c == "(":
+            if depth == 0:
+                return _callee_chain(flat, j)
+            depth -= 1
+        elif c in ";{}" and depth == 0:
+            return None
+        j -= 1
+    return None
+
+
+def java_registers_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
+    """``registers`` edges for Java / Kotlin method references passed as arguments (not applied).
+
+    ``createTickerHelper(type, t, Block::serverTick)``, ``END_SERVER_TICK.register(this::tick)``,
+    ``registrar.playToServer(..., Net::handle)``, Kotlin ``f(::onTick)``: the enclosing method hands
+    the referenced method over; the framework calls it later. That is never a ``calls`` edge (the call
+    does not happen there) and the ranking does not weigh it. A class is resolved like
+    :func:`java_call_edges` does (an import, the file's package, a ``pkg.*`` import; else no edge);
+    ``var::m`` follows the declared type; ``this::m`` / Kotlin ``::m`` only where ``this`` is the
+    named class the method is in (not an anonymous class, an object expression, a companion object
+    or a Kotlin lambda); an overloaded name is no edge. Comments, strings, Java text blocks and
+    Kotlin raw strings are not code. Edges are ``INFERRED`` with ``_origin=verinoda.java_refs``;
+    ``registrar`` names the call the reference is passed to.
+    """
+    classes: dict[str, list[tuple[str, str]]] = {}
+    for n, d in g.G.nodes(data=True):
+        f = d.get("source_file") or ""
+        if f.endswith(JVM_SUFFIXES) and d.get("_callable_class"):
+            classes.setdefault(d.get("label", ""), []).append((n, f))
+    if not classes:
+        return []
+    by_file: dict[str, list[str]] = {}
+    for n, d in g.G.nodes(data=True):
+        f = d.get("source_file") or ""
+        if f.endswith(JVM_SUFFIXES) and d.get("_callable") and not d.get("_callable_class"):
+            by_file.setdefault(f, []).append(n)
+    class_spans: dict[str, list[tuple[int, int, str]]] = {}
+    for lst in classes.values():
+        for cid, cf in lst:
+            sp = g.span(cid)
+            if sp:
+                class_spans.setdefault(cf, []).append((sp[0], sp[1], cid))
+
+    def owner_of(f: str, line: int | None) -> str | None:
+        owners = [(b - a, cid) for a, b, cid in class_spans.get(f, []) if line and a <= line <= b]
+        return min(owners)[1] if owners else None
+
+    # (class, name) -> methods; the class is the extractor's (`method` edge: an object expression's methods are
+    # its own), else the innermost class span; "<top>:file" for a Kotlin top-level function. Overloads are one node.
+    methods: dict[tuple[str, str], list[str]] = {}
+    for f, ms in by_file.items():
+        for m in ms:
+            own = [u for u, _ in g.in_edges(m, {"method"}) if g.G.nodes[u].get("_callable_class")]
+            cid = own[0] if len(own) == 1 else owner_of(f, g.line(m))
+            methods.setdefault((cid or f"<top>:{f}", g.label(m).strip(".()")), []).append(m)
+
+    def unique(cid: str | None, name: str) -> str | None:
+        hit = methods.get((cid, name)) if cid else None
+        return hit[0] if hit and len(hit) == 1 else None
+
+    if read is None:
+        def read(f: str) -> str | None:
+            try:
+                return (g.root / f).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                return None
+    out: list[tuple[str, str, dict]] = []
+    have: set[tuple[str, str]] = set()
+    for f in sorted(by_file):
+        text = read(f)
+        if not text or "::" not in text:
+            continue
+        kotlin = f.endswith(".kt")
+        code = _java_code_lines(text, kotlin=True)  # a Java text block is blanked like a Kotlin raw string
+        flat = "\n".join(code)
+        if "::" not in flat:
+            continue
+        starts = [0]
+        for ln in code:
+            starts.append(starts[-1] + len(ln) + 1)
+        imports = [m.groups() for ln in code if (m := _JAVA_IMPORT.match(ln))]
+        pkg = next((m.group(1) for ln in code if (m := _JAVA_PACKAGE_DECL.match(ln))), None)
+        here = str(PurePosixPath(f).parent)
+
+        def pkg_of(cf: str, name: str) -> bool:
+            parent = str(PurePosixPath(cf).parent).replace("\\", "/")
+            return parent.endswith("/" + name.replace(".", "/")) or parent == name.replace(".", "/")
+
+        def resolve(cls: str) -> str | None:
+            cands = classes.get(cls) or []
+            explicit = [p for st, p, c in imports if c == cls and not st]
+            if explicit:
+                hit = [cid for cid, cf in cands if any(pkg_of(cf, p) for p in explicit)]
+            else:
+                hit = [cid for cid, cf in cands if str(PurePosixPath(cf).parent) == here
+                       or (pkg is not None and pkg_of(cf, pkg))]
+                if not hit:
+                    wild = [p for st, p, c in imports if c == "*" and not st]
+                    hit = [cid for cid, cf in cands if any(pkg_of(cf, p) for p in wild)]
+            return hit[0] if len(hit) == 1 else None
+
+        if kotlin:
+            fields = {m.group(1): m.group(2) or m.group(3) for ln in code for m in _KOTLIN_PROP.finditer(ln)}
+        else:
+            fields = {m.group(2): m.group(1) for ln in code for m in _JAVA_DECL.finditer(ln)
+                      if re.match(r"\s*(?:(?:private|protected|public|static|final|volatile|transient)\s+)+", ln)}
+        spans = sorted(((sp[1] - sp[0], sp[0], sp[1], n) for n in by_file[f] if (sp := g.span(n))))
+        scopes = None
+        for m in _JVM_METHOD_REF.finditer(flat):
+            recv, meth = m.group(1), m.group(2)
+            start = m.start()
+            if recv in _JVM_KEYWORDS:
+                recv, start = None, m.start(0) + m.group(0).index("::")
+            if meth in ("new", "class") or recv == "super" or (recv is None and not kotlin):
+                continue
+            line = bisect.bisect_right(starts, m.start(2)) or 1
+            n = next((x for _s, a, b, x in spans if a <= line <= b), None)
+            if n is None:  # a field initializer or a static block: no method hands it over
+                continue
+            registrar = _call_around(flat, start)
+            if registrar is None:
+                continue
+            target, how = None, "class"
+            if recv is None or recv == "this":
+                if scopes is None:
+                    scopes = _jvm_scopes(flat, kotlin)
+                name = _this_class(scopes, start, kotlin)
+                cid = owner_of(f, line)
+                if name and cid and g.label(cid) == name:
+                    target = unique(cid, meth)
+                elif recv is None and not any(s[0] < start < s[1] and s[2] != "block" for s in scopes):
+                    target = unique(f"<top>:{f}", meth)  # Kotlin `::m` in top-level code: a function
+                how = "this"
+            elif recv[0].isupper():
+                target = unique(resolve(recv), meth)
+            else:
+                local = dict(fields)
+                a, b = g.span(n) or (line, line)
+                for i in range(a, min(b, len(code)) + 1):
+                    if kotlin:
+                        local.update({mm.group(1) or mm.group(3): mm.group(2) or mm.group(4)
+                                      for mm in _KOTLIN_DECL.finditer(code[i - 1])})
+                    else:
+                        local.update({mm.group(2): mm.group(1) for mm in _JAVA_DECL.finditer(code[i - 1])})
+                typ = local.get(recv)
+                target = unique(resolve(typ), meth) if typ else None
+                how = "typed"
+            if not target or target == n or (n, target) in have:
+                continue
+            have.add((n, target))
+            ref = f"{recv}::{meth}" if recv else f"::{meth}"
+            out.append((n, target, {"relation": CALLBACK_RELATION, "confidence": "INFERRED",
+                                    "confidence_score": 0.75 if how == "typed" else 0.8,
+                                    "_origin": JAVA_REFS_ORIGIN, "source_file": f, "source_location": f"L{line}",
+                                    "context": f"{ref} passed to {registrar}(...)"
+                                               + (f" on {typ}" if how == "typed" else ""),
+                                    "registrar": registrar}))
+    return out
+
+
 def _apply_edges(g: Graph, edges) -> int:
     g.__dict__.pop("_ppr_adj", None)  # search_index caches weighted neighbours per graph
     added = 0
     for u, v, d in edges:
         if u not in g.G or v not in g.G:
             continue
-        if any(dd.get("relation") == "calls" for dd in (g.G.get_edge_data(u, v) or {}).values()):
+        # one edge per relation: a `registers` edge and a later direct call are both kept
+        if any(dd.get("relation") == d.get("relation", "calls") for dd in (g.G.get_edge_data(u, v) or {}).values()):
             continue
         g.G.add_edge(u, v, **d)
         added += 1
@@ -1740,8 +2049,11 @@ def _apply_edges(g: Graph, edges) -> int:
 
 
 def augment_python_receiver_calls(g: Graph) -> int:
-    """Compute and add the receiver-call (and Java call) edges in memory; returns the number added."""
-    return _apply_edges(g, receiver_call_edges(g) + java_call_edges(g))
+    """Compute and add the receiver-call (and Java call) edges in memory; returns the number added.
+    The JVM ``registers`` edges (:func:`java_registers_edges`) are added too and not counted."""
+    added = _apply_edges(g, receiver_call_edges(g) + java_call_edges(g))
+    _apply_edges(g, java_registers_edges(g))
+    return added
 
 
 def _read_sidecar(repo: Path) -> dict | None:
@@ -1782,10 +2094,12 @@ def refresh_receiver_sidecar(repo: Path, g: Graph | None = None) -> dict:
         return files[f]["facts"]
 
     edges = receiver_call_edges(g, facts_for) + java_call_edges(g)
+    regs = java_registers_edges(g)  # kept apart: they are not calls
     sidecar = {"version": RECEIVER_SIDECAR_VERSION, "graph": graph_identity(g.path),
-               "files": files, "edges": [[u, v, d] for u, v, d in edges]}
+               "files": files, "edges": [[u, v, d] for u, v, d in edges], "registers": [[u, v, d] for u, v, d in regs]}
     write_json_atomic(receiver_calls_path(repo), sidecar)
-    return {"edges": len(edges), "files_parsed": parsed, "files_reused": len(files) - parsed}
+    return {"edges": len(edges), "files_parsed": parsed, "files_reused": len(files) - parsed,
+            **({"registers": len(regs)} if regs else {})}
 
 
 def apply_receiver_calls(g: Graph) -> int:
@@ -1796,16 +2110,23 @@ def apply_receiver_calls(g: Graph) -> int:
     """
     side = _read_sidecar(g.root)
     if side and same_graph(g.path, side.get("graph")):
-        return _apply_edges(g, [(u, v, d) for u, v, d in side.get("edges") or []])
+        return _apply_sidecar(g, side)
     try:
         if g.path == graph_path(g.root):
             refresh_receiver_sidecar(g.root, g)
             side = _read_sidecar(g.root)
             if side and same_graph(g.path, side.get("graph")):
-                return _apply_edges(g, [(u, v, d) for u, v, d in side.get("edges") or []])
+                return _apply_sidecar(g, side)
     except OSError:
         pass
     return augment_python_receiver_calls(g)
+
+
+def _apply_sidecar(g: Graph, side: dict) -> int:
+    """Add a sidecar's call edges (counted) and its ``registers`` edges (not counted)."""
+    added = _apply_edges(g, [(u, v, d) for u, v, d in side.get("edges") or []])
+    _apply_edges(g, [(u, v, d) for u, v, d in side.get("registers") or []])
+    return added
 
 
 # -- deleted files ------------------------------------------------------------------------------------
