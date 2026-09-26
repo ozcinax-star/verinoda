@@ -628,6 +628,32 @@ def _hay(item: dict) -> str:
     return tn.fold_tr(" ".join([item.get("symbol") or "", base, item.get("excerpt") or ""]))
 
 
+def _decision_passage(lines: list[str], terms: list[str], names: list[str],
+                      width: int = 12) -> tuple[int, int, str]:
+    """``(first line, last line, quoted line)`` of a decision document for a why-question: the line that carries
+    the most of the question's topic words and matched names (names count double), inside the heading section
+    with the most of them, with the lines around it; no such line: the document's first lines."""
+    heads = [i for i, ln in enumerate(lines, 1) if ln.startswith("#")]
+    bounds = list(zip([1] + heads, [h - 1 for h in heads] + [len(lines)]))
+
+    def score(text: str) -> int:
+        folded = tn.fold_tr(text).lower()
+        return sum(2 for nm in names if nm and re.search(rf"(?<![\w]){re.escape(nm)}(?![\w])", text)) + \
+            sum(1 for t in terms if _has_term(folded, t))
+
+    best = max(((score("\n".join(lines[a - 1:b])), a, b) for a, b in bounds if b >= a), default=(0, 1, 1))
+    if best[0] > 0:
+        _s, a, b = best
+        rows = [(score(lines[i - 1]), -i, i) for i in range(a, b + 1)
+                if lines[i - 1].strip() and not lines[i - 1].startswith("#")]
+        if rows and max(rows)[0] > 0:
+            q = max(rows)[2]
+            lo = max(a, q - 2)
+            return lo, min(b, lo + width - 1), lines[q - 1].strip()
+    body = next((ln for ln in lines[1:] if ln.strip() and not ln.lower().startswith("status")), "")
+    return 1, max(1, min(len(lines), width)), body.strip()
+
+
 def _has_term(hay: str, term: str) -> bool:
     t = tn.en_stem(tn.fold_tr(term))
     if len(t) < 3 and t not in tn.SHORT_TECH:
@@ -1751,9 +1777,10 @@ def _h_why(ctx: _Ctx, sub: _Sub) -> None:
         if not ctx.budget.ok:
             rec.skipped["why"] += 1
             continue
-        body = next((ln for ln in text.splitlines()[1:] if ln.strip() and not ln.lower().startswith("status")), "")
-        ev = evmod.source_evidence(repo, dec["doc"], 1, min(len(text.splitlines()), 12), commit=ctx.commit,
-                                   source_type="design_doc")
+        # the section that carries the question's words and the names it matched, quoted and cited there
+        # (a long design document's first lines are its introduction, not the reason asked about)
+        a, b, body = _decision_passage(text.splitlines(), topic_hits, sym_hit + [Path(f).stem for f in file_hit])
+        ev = evmod.source_evidence(repo, dec["doc"], a, b, commit=ctx.commit, source_type="design_doc")
         if explains:
             c = rec.claim(f"Decision record {dec['doc']} (status: {dec['status']}) explains it: {body.strip()[:160]}",
                           kind="decision", status="primary_source_verified", evidence=[(ev, "supports")],

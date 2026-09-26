@@ -59,3 +59,15 @@ def test_a_module_qualified_name_links_to_the_function_of_that_module(tmp_path):
     assert [(g.file(n), tier) for n, _s, tier in hits if tier == "qualified"] == [("pkg/naming.py", "qualified")]
     hits = qp._match_string(g, ix, "pkg.naming.resolve")
     assert any(g.file(n) == "pkg/naming.py" and tier == "qualified" for n, _s, tier in hits)
+
+
+def test_a_why_answer_quotes_the_section_that_carries_the_reason():
+    from verinoda import analysis
+
+    lines = ["# Design", "", "An introduction that names nothing asked about.", "",
+             "## Storage", "", "Orders are kept in SQLite.", "",
+             "## Retries", "", "The client retries three times because the gateway drops idle sockets.",
+             "`send_order` backs off between tries."]
+    a, b, quote = analysis._decision_passage(lines, ["retries", "gateway"], ["send_order"])
+    assert quote.startswith("The client retries") and a <= 11 and 12 <= b and a >= 9  # the earlier of equal lines
+    assert analysis._decision_passage(lines, ["nothing-here"], [])[2] == "An introduction that names nothing asked about."

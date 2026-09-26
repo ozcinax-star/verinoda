@@ -78,7 +78,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D55 | English questions over Turkish-named code | implemented | Built 2026-09-26 (section 28): a symbol's leading comment is its own search text (schema 5); the seed dictionary read backwards with Turkish endings; 16 generic seed words. 30 mixed questions: top-3 8 -> 18 (English 0 -> 8). fastbench: analyze and text unchanged, JSON retrieval -4 facts. Not done: comment-learned pairs, a Turkish stemmer in the tokenizer. |
 | D56 | An analysis said once | implemented | Built 2026-09-26 (section 29): changed files listed once, uncertainties without repeats, six context claims, critique clipped; analyze facts unchanged, -1.6 % characters. Smaller passage budgets measured and dropped (facts lost). |
 | D57 | Java overloads; answers read as a person would | implemented | Built 2026-09-27 (section 30): each Java overload is its own node and a call binds to the overload its argument count fits; `when`, `trace` and name lookups take the whole overload group; "how does X work" with one subject is answered by what X calls (inference), entry-to-storage paths are matched by node, not label; a storage question gets the entry-to-storage paths through its own code; impact names the callers of the method asked about; a symbol's doc comment above its span prints where it is; the JSON answer keeps room for the next two candidates. JSON retrieve facts 253 -> 262, text and analyze unchanged. |
-| D58 | Less noise in an answer | implemented | Built 2026-09-27 (section 31): context the critique refuted is counted, not printed; a changed file is an unknown only when it spells a name that looks like one (not a plain word that happens to name a function); "how does X decide ..." is a mechanism, not a setting; `module.function` links to that module's function; no empty quote claims. |
+| D58 | Less noise in an answer | implemented | Built 2026-09-27 (section 31): context the critique refuted is counted, not printed; a changed file is an unknown only when it spells a name that looks like one (not a plain word that happens to name a function); "how does X decide ..." is a mechanism, not a setting; `module.function` links to that module's function; no empty quote claims; the history view 100x faster; a why-answer quotes the section with the reason. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3342,6 +3342,10 @@ decide which passages fit the character budget?", "which tests cover naming.reso
 - `naming.resolve` not linked by its name ("no symbol in the index is named `naming.resolve`"), although
   `verinoda trace` resolves it;
 - a claim "`naming.py:210-212` contains: " with nothing quoted (the lines had moved in a changed file).
+- a why-question took 100 s and ran out of its 60 s budget: the history view searched the whole design document
+  once per symbol of the graph (30,000 regular-expression searches over 3,300 lines);
+- the decision record a why-answer cited was quoted by its first line (the introduction), not where it gives
+  the reason.
 
 ### 31.2 Decisions
 
@@ -3353,6 +3357,10 @@ decide which passages fit the character budget?", "which tests cover naming.reso
 - The linker matches `module.function` and `package.module.function` to the function of the file that module
   names ("qualified", a name tier).
 - A module-block claim with no text to quote is not made.
+- The history view reads each decision document's words once and looks the symbol names up in that set:
+  90 s -> 0.9 s on Verinoda's own repository, the same decisions and mentions.
+- A why-answer quotes and cites the line of the decision document that carries the most of the question's
+  topic words and matched names (names count double), inside the heading section with the most of them.
 
 ### 31.3 Measured
 

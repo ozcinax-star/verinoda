@@ -496,8 +496,8 @@ def dataflow(g: Graph, max_depth: int = 6, max_paths: int = 20) -> dict:
     """Entry points -> call paths -> persistence sinks. The project's own entry points come first: one in a
     detected copy of the project or a configured reference tree is listed after them (``"in"``) and its
     paths only fill what ``max_paths`` leaves (a frozen copy never crowds out the project's own flows)."""
-    sinks = _sinks(g)
-    entries = entry_points(g)
+    sinks = _cached(g, "sinks", _sinks)
+    entries = _cached(g, "entries", entry_points)
     roots = _aside_roots(g)
     if roots:
         entries = ([e for e in entries if not e["at"].startswith(roots)]
@@ -679,13 +679,19 @@ def history(g: Graph, n_commits: int = 30) -> dict:
                 churn[line.strip()] += 1
     decisions = []
     code_files = [f for f in _files(g) if Path(f).suffix not in (".md", ".rst", ".txt")]
+    labels: set[str] | None = None  # symbol names, read once (a large graph has tens of thousands)
     for f in _files(g):
         if not DOC_DECISION_RE.search(f):
             continue
         text = "\n".join(_read(root, f))
         mentions = sorted({cf for cf in code_files if cf in text or Path(cf).stem in text.split("`")})
-        syms = sorted({g.label(n).strip(".()") for n in g.G.nodes if g.is_symbol(n)
-                       and len(g.label(n).strip(".()")) > 3 and re.search(rf"\b{re.escape(g.label(n).strip('.()'))}\b", text)})
+        if labels is None:
+            labels = {lab for n in g.G.nodes if g.is_symbol(n) and len(lab := g.label(n).strip(".()")) > 3}
+        # a name is mentioned when the text has it as a whole word: one word set per document, not a regex
+        # search of the whole document per symbol (90 s on a 30k-node graph with a long design document)
+        words = set(re.findall(r"\w+", text))
+        syms = sorted(lab for lab in labels if (lab in words if re.fullmatch(r"\w+", lab)
+                                                 else re.search(rf"\b{re.escape(lab)}\b", text)))
         status = re.search(r"^\s*Status:\s*(\w+)", text, re.M | re.I)
         decisions.append({"doc": f, "status": status.group(1) if status else None,
                           "mentions_files": mentions[:20], "mentions_symbols": syms[:20]})
