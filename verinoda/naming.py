@@ -432,9 +432,8 @@ def resolve(g, text: str, *, stale: Iterable[str] = ()) -> Resolution:
         if roots and (g.file(n) or "").startswith(roots):  # only a copy defines it: say so
             notes.append(f"'{text}' is defined only in a copy of the project or a reference tree "
                          f"({_loc(g, n)})")
-        if aside:
-            notes.append(f"'{text}' resolved to {g.label(n)} ({_loc(g, n)}); set aside: "
-                         + _aside_summary(g, text, aside))
+        if aside:  # the node itself is shown next to the note (trace's `resolved`, impact's `node`)
+            notes.append("also defined, set aside: " + _aside_summary(g, text, aside))
         if g.file(n) in stale:
             notes.append(f"{g.file(n)} changed since the index: its lines may have moved (run `verinoda update`)")
         return Resolution(text, EXACT, n, [n], "; ".join(notes) or None, aside)

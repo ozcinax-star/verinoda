@@ -610,7 +610,7 @@ def test_what_gives_way_is_set_aside_and_said(ties, name, at, why):
     r = naming.resolve(g, name)
     assert r.exact and naming._loc(g, r.node) == at, r
     assert r.set_aside and all(naming._aside_kind(g, name, n) == why for n in r.set_aside)
-    assert "set aside" in r.note and "resolved to" in r.note and at in r.note
+    assert r.note.startswith("also defined, set aside: ") and why in r.note
     im = architecture_map.impact(g, [name])  # every name target says what it resolved to
     row = im["resolution"][0]
     assert row["status"] == "exact" and row["node"]["at"] == at and row["set_aside"][0]["in"] == why
