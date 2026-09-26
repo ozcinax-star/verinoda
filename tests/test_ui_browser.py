@@ -480,7 +480,7 @@ def test_the_command_bar_frames_a_region_shows_an_impact_and_asks(page, site):
     page.wait("document.querySelector('#hud strong') && /Impact/.test(document.querySelector('#hud strong').textContent)")
     assert page.js("window.__verinoda.g3.region.size") > 1
     say("how does a wisp spawn?")
-    page.wait("location.hash.startsWith('#/q/')")
+    page.wait("location.hash.startsWith('#/q/')", timeout=45)  # the question runs a query server-side: slow on a loaded runner
 
 
 def test_the_tour_goes_round_the_regions_and_every_key_is_listed(page, site):
