@@ -39,6 +39,7 @@ from verinoda import textnorm as tn
 
 WEAK = "weak"          # flags key: claim ids that cannot make the sub-question met
 CAPPED = "capped"      # flags key: reasons the sub-question is at most met_with_inference
+WEAK_COPY = "weak_copy"  # flags key: the weak claims that are about what was asked, but only in a copy
 SCAN_MAX_FILES = 8000          # the call-site search reads at most this many code files ...
 SCAN_MAX_TOTAL = 96_000_000    # ... and this many bytes, then stops and says so
 SCAN_MAX_BYTES = 2_000_000     # a larger file (generated, minified) is not read
@@ -77,9 +78,16 @@ _ANAPHORS = frozenset("it its this that these those they them their".split())
 _ARTICLES = frozenset("the a an our my your".split())
 
 
+_INVERTED_USE = re.compile(r"\b(?:which|what)\b[^?]{0,60}?\b(?:do|does|did)\s+(?!not\b)[\w.$'-]+(?:\s+[\w.$'-]+){0,3}?"
+                           r"\s+(?:use|call|read|import|invoke|depend on)\b")
+
+
 def usage_question(text: str) -> bool:
-    """Does ``text`` ask which code uses or calls something (rather than where it is)?"""
+    """Does ``text`` ask which code uses or calls something (rather than where it is)? "Which config does
+    apply_discount read / use?" asks what the named code uses, not who uses it."""
     low = tn.nfc(text or "").lower()
+    if _INVERTED_USE.search(low):
+        return False
     if _USAGE_EN.search(low):
         return True
     return bool(_USAGE_TR.search(tn.fold_tr(tn.nfc(text or ""))))
@@ -130,17 +138,43 @@ _ENUM_TR = re.compile(r"\bhangi\w*|\bneler\w*|\blistele\w*")
 _WHY_TR = re.compile(r"\bneden\b|\bnicin\b|\bniye\b")
 
 
+_RELATIVE_EN = re.compile(r"(?:\bthat|\bwho|\bwhose|\bwhere|(?<=\w)\s+which)\s*$")
+_TR_NEG_PREDICATE = re.compile(r"(?:\w+m[ae]m[iu]s\w*|\w+m[iu]yor\w*|\beksik\w*|\byok\w*|\bdegil\w*|\bolmayan\w*"
+                               r"|\w+m[ae]y[ae]n(?:lar|ler)?)\s*[?.!]*\s*$")
+_TR_NEG_HEAD = re.compile(r"\b(?:\w+m[ae]y[ae]n|\w+m[ae]m[iu]s|eksik\s+olan|olmayan)(?:\s+\w+){0,2}\s+(?:\w+l[ae]r\w*|hangi\w*|neler\w*)\s*[?.!]*\s*$")
+
+
+def _relative_on_head(before: str) -> bool:
+    """Does the relative clause ending ``before`` attach to the enumerated head ("list the files which ...",
+    "which classes that ...") rather than to a later object ("which files call functions that ...")?"""
+    m = re.search(r"\b(?:which|what|list|show|name|find|give)\b(.*)$", before)
+    if not m:
+        return False
+    between = [w for w in re.findall(r"[\w'-]+", m.group(1)) if w not in ("the", "a", "an", "all", "of")]
+    return len(between) <= 2  # the head noun and the relative pronoun
+
+
 def asks_set_difference(text: str) -> str | None:
-    """The words that make ``text`` ask for a set difference ("which X are not listed in Y"), else None."""
+    """The words that make ``text`` ask for a set difference ("which X are not listed in Y"), else None.
+
+    Only when the negation is the question's own predicate: "which files call functions that are not tested"
+    asks for callers (the negation sits in a relative clause), "hangi dosya test edilmeyen kodu çağırıyor" too.
+    In Turkish the negated predicate ends the question ("hangi mixinler listelenmemiş?", "hangileri eksik?") or
+    a negated participle names the enumerated head ("kullanılmayan metodlar hangileri?")."""
     raw = tn.nfc(text or "").replace("’", "'")
     low = raw.lower()
-    m = _SETDIFF_EN.search(low)
-    if m and _ENUM_EN.search(low) and not _CONDITIONAL_EN.search(low[:m.start()]):
+    for m in _SETDIFF_EN.finditer(low):
+        before = low[:m.start()]
+        if not _ENUM_EN.search(low) or _CONDITIONAL_EN.search(before):
+            continue
+        if _RELATIVE_EN.search(before.rstrip()) and not _relative_on_head(before):
+            continue  # "which files call functions that are not tested": the negation is about the object
         return m.group(0).strip()
     folded = tn.fold_tr(raw)
-    m = _SETDIFF_TR.search(folded)
-    if m and _ENUM_TR.search(folded) and not _WHY_TR.search(folded):
-        return m.group(0)
+    if _ENUM_TR.search(folded) and not _WHY_TR.search(folded) and _SETDIFF_TR.search(folded):
+        m = _TR_NEG_PREDICATE.search(folded) or _TR_NEG_HEAD.search(folded)
+        if m:
+            return m.group(0).strip(" ?.!")
     return None
 
 
@@ -521,7 +555,8 @@ def apply(ctx, sq: dict, rows: list[dict], flags: dict, s: dict, res: dict, gate
                 weak[c["id"]] = "callee"
         elif kind == "config":
             # the question's words and their expansions (a Turkish word's English code words included)
-            words = [w for w in dict.fromkeys(tn.words(en_text) + [str(x) for x in gate.get("words") or []])
+            raw_words = tn.words(en_text) + [str(x) for x in gate.get("words") or []]
+            words = [w for w in dict.fromkeys(raw_words + ident_parts(*raw_words))
                      if w not in _CONFIG_GENERIC and len(w) >= 3]
             if words:
                 spec = c.get("spec") or {}
@@ -576,11 +611,11 @@ def apply(ctx, sq: dict, rows: list[dict], flags: dict, s: dict, res: dict, gate
                                    "answer with `verinoda decide record`"})
 
     # callers: call sites of the callee the graph did not resolve
-    if intent == "callers" and not flags.get("not_found"):
-        targets = [t for t in dict.fromkeys((c.get("spec") or {}).get("target") for c in answers
-                                            if c.get("kind") == "relation") if t]
-        targets = targets or [n for n in gate.get("subjects") or [] if n in g.G and g.is_symbol(n)]
-        targets = [t for t in targets if t in g.G][:2]
+    if intent == "callers" and not flags.get("not_found") and strong:  # no strong claim: a cap changes nothing
+        named = [n for n in gate.get("subjects") or [] if n in g.G and g.is_symbol(n)]
+        claimed = [t for t in dict.fromkeys((c.get("spec") or {}).get("target") for c in answers
+                                            if c.get("kind") == "relation" and weak.get(c["id"]) != "callee") if t]
+        targets = [t for t in (named or claimed) if t in g.G][:2]
         if targets:
             scan = unresolved_call_sites(g, repo, targets, skip_roots=roots)
             if step is not None:
@@ -610,6 +645,9 @@ def apply(ctx, sq: dict, rows: list[dict], flags: dict, s: dict, res: dict, gate
                               "next_step": f"search the code for '{scan['name']}('"})
     if weak:
         flags[WEAK] = sorted(set(flags.get(WEAK) or []) | set(weak))
+        copies = [i for i, why in weak.items() if why == "copy"]
+        if copies:
+            flags[WEAK_COPY] = sorted(set(flags.get(WEAK_COPY) or []) | set(copies))
     if capped:
         flags[CAPPED] = list(dict.fromkeys((flags.get(CAPPED) or []) + capped))
     for u in notes:

@@ -2348,7 +2348,9 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
     weak = set(flags.get(verdict_gate.WEAK) or [])
     strong = [c for c in live if c["id"] not in weak]
     if not strong:
-        return "met_with_inference"  # claims exist, but none shown to answer what was asked
+        # claims about what was asked but found only in a copy or reference tree: inference; claims about something
+        # else (another callee, a definition for a usage question, a commit line for a why): not an answer
+        return "met_with_inference" if weak & set(flags.get(verdict_gate.WEAK_COPY) or []) else "unmet"
     best = min(strong, key=lambda c: _RANK[c["status"]])["status"]
     if best in VERIFIED and _RANK[best] <= _RANK.get(min_status, _RANK[MIN_STATUS_DEFAULT]) \
             and not flags.get("may_ask_for_choice") and not flags.get(verdict_gate.CAPPED):

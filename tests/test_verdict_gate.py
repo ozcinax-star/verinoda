@@ -154,7 +154,9 @@ def test_weak_claims_never_make_a_subquestion_met():
     rows = [_claim("c1", "location"), _claim("c2", "location")]
     assert analysis.judge(sq, rows, {}) == "met"
     assert analysis.judge(sq, rows, {"weak": ["c1"]}) == "met"
-    assert analysis.judge(sq, rows, {"weak": ["c1", "c2"]}) == "met_with_inference"
+    # every claim about something else: no answer (review 2026-09-26); only in a copy: inference
+    assert analysis.judge(sq, rows, {"weak": ["c1", "c2"]}) == "unmet"
+    assert analysis.judge(sq, rows, {"weak": ["c1", "c2"], "weak_copy": ["c2"]}) == "met_with_inference"
     assert analysis.judge(sq, rows, {"capped": ["callers: 3 call sites unresolved"]}) == "met_with_inference"
 
 
@@ -250,7 +252,7 @@ def test_where_is_x_ticked_needs_a_tick_of_x(fixtures):
 def test_a_commit_line_is_not_a_reason(fixtures):
     repo, st = fixtures["pyloop"]
     s = _sub(analysis.analyze(st, repo, "why does Transport pause reading?"))
-    assert s["status"] == "met_with_inference"
+    assert s["status"] == "unmet"  # the only answer is a commit line: no reason was found
     assert "the reason was not found" in _unknowns(s)
 
 
@@ -297,3 +299,38 @@ def test_audit_scoring():
     assert va.overall(["met", "met"]) == "met"
     assert va.overall(["met", "unmet"]) == "met_with_inference"
     assert va.overall(["not_supported", "unmet"]) == "not_supported"
+
+
+# -- review fixes (2026-09-26): the negation must be the question's own predicate -------------------------------
+
+@pytest.mark.parametrize("q", [
+    "which files call functions that are not tested?",
+    "which handler processes a request that has no body?",
+    "what does the service do when the item is not found?",
+    "hangi dosya test edilmeyen kodu çağırıyor?",
+    "hangi test edilmeyen fonksiyon en çok çağrılıyor?",
+    "hangi sınıflarda eksik çeviri anahtarı var?",
+])
+def test_a_negation_in_a_relative_clause_or_an_object_is_not_a_set_difference(q):
+    assert vg.asks_set_difference(q) is None
+
+
+@pytest.mark.parametrize("q", [
+    "list the files which are not tested",
+    "which classes have no tests?",
+    "kullanılmayan metodlar hangileri?",
+    "eksik olan dosyalar hangileri?",
+    "hangileri eksik?",
+])
+def test_the_enumerated_head_negated_is_a_set_difference(q):
+    assert vg.asks_set_difference(q)
+
+
+@pytest.mark.parametrize("q,expected", [
+    ("which config does apply_discount read?", False),
+    ("which settings does the loader use?", False),
+    ("which components use useAuth?", True),
+    ("what calls openPalette?", True),
+])
+def test_which_x_does_y_use_asks_what_y_uses(q, expected):
+    assert vg.usage_question(q) is expected
