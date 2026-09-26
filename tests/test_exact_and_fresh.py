@@ -723,7 +723,7 @@ def test_analyze_gives_the_refresh_time_back_to_the_budget(proj, monkeypatch):
     real = workflow.update
 
     def slow_update(*a, **kw):
-        time.sleep(6.0)
+        time.sleep(12.0)  # longer than the budget: counted, it would exhaust it
         return real(*a, **kw)
 
     monkeypatch.setattr(workflow, "update", slow_update)
@@ -731,14 +731,14 @@ def test_analyze_gives_the_refresh_time_back_to_the_budget(proj, monkeypatch):
     st = open_store(proj)
     try:
         t0 = time.perf_counter()
-        res = analysis.analyze(st, proj, "Where is assess_change defined?", budget=analysis.Budget(seconds=5.0))
+        res = analysis.analyze(st, proj, "Where is assess_change defined?", budget=analysis.Budget(seconds=10.0))  # a slow runner answers in ~5 s
         wall = time.perf_counter() - t0
     finally:
         st.close()
     ref = res["index_refresh"]
-    assert ref["ran"] is True and ref["seconds"] >= 6.0
+    assert ref["ran"] is True and ref["seconds"] >= 12.0
     assert res["usage"]["exhausted"] is None or "time" not in res["usage"]["exhausted"], res["usage"]
-    assert res["usage"]["elapsed_s"] <= wall - 6.0 + 0.5  # the refresh is not in the answer's time
+    assert res["usage"]["elapsed_s"] <= wall - 12.0 + 0.5  # the refresh is not in the answer's time
 
 
 def test_analyze_answers_from_the_previous_index_when_a_refresh_would_be_slow(proj, monkeypatch):
