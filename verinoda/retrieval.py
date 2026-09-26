@@ -36,10 +36,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
+import textwrap
 from collections import defaultdict
 from dataclasses import dataclass, field
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 import networkx as nx
 
@@ -72,6 +74,16 @@ TEXT_SHORT_BODY = 24
 TEXT_PASSAGE_LINES = 14
 TEXT_LINE_CHARS = 160
 TEXT_MAX_PROSE = 2
+TEXT_MAX_EXPANSIONS = 3     # from->to pairs on the text's `expanded:` line (JSON lists all, with why)
+
+# The default text budget (`verinoda query`, MCP project_query, analyze's passages). With the
+# question-shape budget on (config query.shape_budget, env VERINODA_SHAPE_BUDGET; off by default,
+# docs/BENCHMARKS.md "Update 2026-09-26: token wins" says why) a single-clause question gets
+# SHAPE_CHARS_NARROW; compound, flow and test questions keep QUERY_CHARS.
+QUERY_CHARS = 6000
+SHAPE_CHARS_NARROW = 4800
+_WIDE_QUESTION_RX = re.compile(r",|\b(?:and|ve|how does|nasil|what happens|ne oluyor|ends? up|down to|kadar|"
+                               r"which tests?|hangi test\w*)\b|\bfrom\b.+\bto\b")
 
 FLOW_RX = re.compile(r"\b(call|calls|called|calling|path|flow|pipeline|turn\w*|how does|how is|steps?|"
                      r"cagir\w*|akis\w*|nasil calis\w*|hangi fonksiyon\w*)\b", re.I)
@@ -407,6 +419,29 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
 
 # -- plain-text rendering (D20) -----------------------------------------------------------------
 
+def shape_budget_enabled(repo: Path | str | None = None) -> bool:
+    """Is the question-shape budget on? ``VERINODA_SHAPE_BUDGET`` (1/0) wins, else the project's
+    ``query.shape_budget``; off by default."""
+    env = os.environ.get("VERINODA_SHAPE_BUDGET")
+    if env is not None and env.strip():
+        return env.strip().lower() in ("1", "true", "on", "yes")
+    if repo is None:
+        return False
+    from verinoda.paths import load_config
+
+    try:
+        return bool((load_config(Path(repo)).get("query") or {}).get("shape_budget"))
+    except Exception:  # noqa: BLE001 - an unreadable config keeps the default
+        return False
+
+
+def question_chars(question: str, repo: Path | str | None = None) -> int:
+    """The default character budget of the text for ``question`` (see :data:`QUERY_CHARS`)."""
+    if not shape_budget_enabled(repo):
+        return QUERY_CHARS
+    return QUERY_CHARS if _WIDE_QUESTION_RX.search(fold_tr(question or "")) else SHAPE_CHARS_NARROW
+
+
 def _clip(s: str, n: int) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
@@ -498,9 +533,13 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
 
     Works on the result of :func:`retrieve`. A result that went through JSON
     (no ranking attached) is rendered from its items alone.
+
+    Nothing is printed twice: the question is not echoed, an item's ``## path:a-b`` header carries
+    only its name when the passage below starts at its first line (the signature is that line),
+    and each passage window is dedented on its own. ``## path:a-b`` / ``  path:x-y`` locators are
+    kept exactly: they are what an agent (and the benchmark's locator parser) cites.
     """
     rd: _RenderData | None = getattr(result, "render", None)
-    q = result.get("question", "")
     out: list[str] = []
     used = 0
 
@@ -512,11 +551,10 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
         used += len(block) + 1
         return True
 
-    head = f"# {q}" if q else "# query"
+    # no echo of the question (the model asked it); expansions stay visible, compactly
     expansions = (result.get("budget") or {}).get("expansions")
     if expansions:
-        head += "\nexpanded: " + "; ".join(expansions[:6])
-    add(_clip(head, 600))
+        add(_clip(_expanded_line(expansions), 300))
     for line in stale_lines(result):
         add(line)
     if rd is None:
@@ -532,6 +570,7 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
     rank = prose = 0
     rest: list[str] = []
     outlined = False
+    sig_back: dict[int, tuple[int, str]] = {}  # passage block -> (its short header block, header with signature)
     for i, h in enumerate(rd.ranking.hits):
         if h.file.lower().endswith(PROSE_SUFFIXES):
             if prose >= TEXT_MAX_PROSE:
@@ -582,14 +621,32 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
                 wins.append((pa, min(pb, pa + TEXT_PASSAGE_LINES - 1)))
                 if len(wins) >= k:
                     break
+        # A passage that starts at the item's first line prints the signature itself: the header only
+        # names the item (it gets the signature back below if that passage does not fit).
+        short = bool(wins) and min(wins)[0] == a and bool(h.sig)
+        if short:
+            parts[0] = f"## {h.file}:{a}-{b} {_clip(name, 80)}{ref_tag}"
         if not add("\n".join(parts)):
             if not add(f"{h.file}:{a}-{b} {_clip(h.sig or name, 120)}"):
                 rest = [f"{x.file}:{x.a}-{x.b} {x.qual or x.name}" for x in rd.ranking.hits[i:]]
                 break
             continue
+        at = len(out) - 1
         for x, y in sorted(wins):
-            body = "\n".join(_clip(lines[j - 1], TEXT_LINE_CHARS) for j in range(x, min(y, len(lines)) + 1))
-            add((f"  {h.file}:{x}-{y}\n" if (x, y) != (a, b) else "") + body)
+            # each window dedented on its own: the path:lines header keeps the place, indentation is noise
+            body = textwrap.dedent("\n".join(_clip(lines[j - 1], TEXT_LINE_CHARS)
+                                             for j in range(x, min(y, len(lines)) + 1)))
+            added = add((f"  {h.file}:{x}-{y}\n" if (x, y) != (a, b) else "") + body)
+            if short and x == a:
+                with_sig = "\n".join([f"## {h.file}:{a}-{b} {sig}{ref_tag}", *parts[1:]])
+                if added:  # should the note at the end push this passage out, the header takes it back
+                    sig_back[len(out) - 1] = (at, with_sig)
+                else:  # the section with its signature, else the one line an item gets when that does not fit
+                    for block in (with_sig, f"{h.file}:{a}-{b} {_clip(h.sig, 120)}"):
+                        now = _swap_block(out, at, block, used, budget_chars)
+                        if out[at] == block:
+                            used = now
+                            break
         # the lines printed, not the whole span: a method of a long class whose section showed two
         # other passages still gets its own section (with its callers)
         shown[h.file].extend(wins)
@@ -603,20 +660,82 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
     if outlined:
         add("(calls / called by: static call graph, '?' = inferred edge; may be incomplete)")
     if more:
-        nxt = f'next: verinoda query "{_clip(q, 120)}" --max-chars {budget_chars * 2}'
-        while True:
-            tail = f"… {more} more candidates not shown" + (": " + "; ".join(rest[:4]) if rest else "")
-            tail = _clip(tail, 400) + "\n" + nxt
+        # the CLI command, named as such: MCP clients read this text too, and project_query takes no budget
+        nxt = f"next: verinoda query \"…\" --max-chars {budget_chars * 2}"
+
+        def drop_last() -> None:
+            """Make room for the note: the last block goes (an item's section or line is listed instead)."""
+            nonlocal used, more
+            dropped = out.pop()
+            used -= len(dropped) + 1
+            if len(out) in sig_back:  # the passage that printed a signature went: its header shows it again
+                at, with_sig = sig_back.pop(len(out))
+                used = _swap_block(out, at, with_sig, used, budget_chars, force=True)
+            m = _ITEM_HEAD_RX.match(dropped)
+            if m:
+                rest.insert(0, f"{m.group(1)} {m.group(2) or ''}".strip()[:120])
+                more += 1
+
+        while True:  # the whole note, keeping the top block
+            tail = _tail_forms(more, rest, nxt, budget_chars, _any_item(out))[0]
             if used + len(tail) + 1 <= budget_chars or len(out) <= 1:
                 break
-            dropped = out.pop()  # make room for the note: the last block goes to the list instead
-            used -= len(dropped) + 1
-            first = dropped.splitlines()[0].lstrip("# ").split(" ", 1)
-            if first and ":" in first[0] and not dropped.startswith("  "):
-                rest.insert(0, " ".join(first)[:120])
-                more += 1
-        add(tail)
+            drop_last()
+        # the top block (or a header that took its signature back) can leave too little room: a shorter
+        # note, else that block goes as well; the note itself is never left out
+        while True:
+            room = budget_chars - used - 1
+            tail = next((t for t in _tail_forms(more, rest, nxt, room, _any_item(out)) if len(t) <= room), None)
+            if tail is not None or not out:
+                break
+            drop_last()
+        add(tail if tail is not None else _clip(_tail_forms(more, [], nxt, 0, False)[-1], max(1, budget_chars - 1)))
+    if not out:
+        add("no candidate locations to show for this question")
     return "\n".join(out)
+
+
+def _any_item(out: list[str]) -> bool:
+    """Does the text show at least one item (a section or an item line)?"""
+    return any(_ITEM_HEAD_RX.match(b) for b in out)
+
+
+def _tail_forms(more: int, rest: list[str], nxt: str, room: int, shown: bool) -> list[str]:
+    """The note on the candidates left out, longest form first: the count with the first of them and the
+    next step, the same list cut to ``room``, the count and the next step, the count alone."""
+    head = (f"… {more} more candidates not shown" if shown
+            else f"… {more} candidates not shown (budget too small)")
+    forms = []
+    if rest:
+        listed = head + ": " + "; ".join(rest[:4])
+        forms.append(_clip(listed, 400) + "\n" + nxt)
+        if room - len(nxt) - 1 >= len(head) + 24:
+            forms.append(_clip(listed, room - len(nxt) - 1) + "\n" + nxt)
+    return forms + [head + "\n" + nxt, head]
+
+
+# the first line of a rendered item: "## path:a-b name" (a section) or "path:a-b signature" (a line)
+_ITEM_HEAD_RX = re.compile(r"(?:## )?([^\s:]+:\d+-\d+)(?: ([^\n]*))?")
+
+
+def _swap_block(out: list[str], at: int, block: str, used: int, budget_chars: int, *, force: bool = False) -> int:
+    """Replace ``out[at]`` with ``block`` when the budget allows (always with ``force``: the caller is
+    making room and cuts again); returns the new character count."""
+    grow = len(block) - len(out[at])
+    if force or used + grow <= budget_chars:
+        out[at] = block
+        return used + grow
+    return used
+
+
+def _expanded_line(expansions: list[str]) -> str:
+    """The query-side expansions as ``from->to`` pairs, at most :data:`TEXT_MAX_EXPANSIONS`.
+
+    Why each was made (abbreviation, Turkish stem, gloss) and the full list are in the JSON
+    result's ``budget.expansions``; the text says how many were left out."""
+    pairs = [e.split(" (", 1)[0] for e in expansions]
+    left = len(pairs) - TEXT_MAX_EXPANSIONS
+    return "expanded: " + ", ".join(pairs[:TEXT_MAX_EXPANSIONS]) + (f" (+{left} more)" if left > 0 else "")
 
 
 def _render_items(result: dict, out: list[str], add, budget_chars: int) -> str:
@@ -636,8 +755,7 @@ def _render_items(result: dict, out: list[str], add, budget_chars: int) -> str:
             add(f"… {left} more items not shown")
             break
     if (result.get("budget") or {}).get("truncated"):
-        add(f'… more candidates exist: verinoda query "{_clip(result.get("question", ""), 120)}" '
-            f'--max-chars {budget_chars * 2}')
+        add(f"… more candidates exist: verinoda query \"…\" --max-chars {budget_chars * 2}")
     return "\n".join(out)
 
 

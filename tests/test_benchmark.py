@@ -123,6 +123,18 @@ def test_score_facts_reports_found_missed_and_how():
     assert s["via"]["a"] == "loc x.py:1-5"
 
 
+def test_a_fact_is_shown_only_when_its_gold_line_is_in_the_context():
+    """found can be met by a pointer (a locator whose span covers the fact); shown needs the line itself."""
+    fact = {"id": "a", "match_any": [{"loc": "x.py:3"}], "source": {"at": "x.py:3", "contains": "return  total * 0.9"}}
+    pointer = mx.score_facts([fact], "x.py:1-40 def price()")
+    assert pointer["found_n"] == 1 and pointer["shown_n"] == 0 and pointer["shown"] == []
+    lines = mx.score_facts([fact], "## x.py:1-5 price\ndef price():\n    return total * 0.9\n")
+    assert lines["shown"] == ["a"]  # whitespace-normalised
+    js = mx.score_facts([fact], json.dumps({"passages": ["def price():", "    return total * 0.9"]}))
+    assert js["shown_n"] == 1  # a JSON output's strings are read unescaped
+    assert mx.score_facts([{"id": "b", "match_any": [{"text": "x"}]}], "x")["shown_n"] == 0  # no source line
+
+
 # -- negative facts and citation checks --------------------------------------------------
 
 def test_negative_relations_match_graphify_edges_and_claims_by_direction():
@@ -240,7 +252,7 @@ def test_run_benchmark_end_to_end_on_example_copy(orders_copy, orders_questions,
     res = run_benchmark(orders_copy, questions=subset, out=out, graphify_cmd=None, llm="none", repeat=1,
                         workdir=work, sweep=[750])
     assert res["status"] == "ok", res.get("gold_validation")
-    assert res["schema"] == 2
+    assert res["schema"] == 3
     # The Graphify CLI is not given, so it is left out of the sweep too.
     assert res["approaches"] == ["raw", "graphify_vendored", "verinoda_analyze", "verinoda_retrieve",
                                  "verinoda_retrieve_text", "verinoda_retrieve_text@750", "graphify_vendored@750",
@@ -263,6 +275,11 @@ def test_run_benchmark_end_to_end_on_example_copy(orders_copy, orders_questions,
     # facts per 1k tokens is facts_found / tokens_total, for every approach
     for a, sa in s.items():
         assert sa["facts_per_1k_tokens"] == round(1000 * sa["facts_found"] / sa["tokens_total"], 2), a
+        # and next to it what a pointer line cannot game: the gold lines shown, the facts pinpointed
+        assert sa["shown_per_1k_tokens"] == round(1000 * sa["facts_shown"] / sa["tokens_total"], 2), a
+        assert sa["pinpointed_per_1k_tokens"] == round(1000 * sa["facts_pinpointed"] / sa["tokens_total"], 2), a
+        assert sa["facts_shown"] <= sa["facts_total"]
+    assert s["verinoda_retrieve_text"]["facts_shown"] > s["graphify_vendored"]["facts_shown"]
     # the text approach delivers exactly what `verinoda query` prints, scored with its outline relations
     rt = res["questions"][0]["approaches"]["verinoda_retrieve_text"]["score"]
     assert rt["claims"].startswith("n/a (no claims)") and rt["retrieve_text"]["params"]["max_chars"] == 6000
@@ -291,6 +308,7 @@ def test_run_benchmark_end_to_end_on_example_copy(orders_copy, orders_questions,
     assert "facts found" in printed and "not measured" in printed and "budget sweep" in printed
     md = report.markdown(res)
     assert "| Verinoda analyze |" in md and "| Verinoda retrieve (text) |" in md and "Budget sweep" in md
+    assert "| shown/1k tok | pinpointed/1k tok |" in report.summary_table(res) and "shown per 1k" in md
     assert "@750" not in report.summary_table(res)  # sweep points only in the sweep table
     cmp = report.compare_table(saved, saved)
     assert "| Verinoda retrieve (text) |" in cmp and " -> " in cmp
@@ -553,6 +571,32 @@ def test_module_entry_passes_sweep_pin_and_compares(monkeypatch, tmp_path, capsy
     # schema-1 results have no facts_per_1k_tokens: it is computed from their totals
     assert "| raw grep+read | 2/4 -> 3/4 | 1 -> 1 | n/a -> n/a | 500 -> 500 | 2.00 -> 3.00 |" in out
     assert "| Verinoda retrieve (text) | n/a -> 3/4 |" in out
+    assert "per fact" in out
+
+
+def test_compare_names_each_fact_lost_even_when_the_totals_are_equal(tmp_path, capsys):
+    """A swap (one fact lost, another gained) leaves the totals equal: the per-fact lines show it."""
+    from verinoda.benchmark.__main__ import main
+
+    def res(found_q1, shown_q1, found_q2):
+        def slot(found, shown):
+            return {"score": {"facts": {"found": found, "shown": shown}}}
+        return {"approaches": ["verinoda_analyze"], "summary": {},
+                "questions": [{"id": "h03", "approaches": {"verinoda_analyze": slot(found_q1, shown_q1)}},
+                              {"id": "h08", "approaches": {"verinoda_analyze": slot(found_q2, [])}}]}
+
+    before = res(["h03.build", "h03.rebuild"], ["h03.build"], ["h08.modify"])
+    after = res(["h03.build"], ["h03.build"], ["h08.modify", "h08.cli"])
+    ch = report.fact_changes(before, after)["verinoda_analyze"]
+    assert ch == {"lost_found": ["h03/h03.rebuild"], "lost_shown": [], "gained_found": ["h08/h08.cli"],
+                  "gained_shown": []}
+    assert report.fact_changes(before, before)["verinoda_analyze"]["lost_found"] == []
+    a, b = tmp_path / "a.json", tmp_path / "b.json"
+    a.write_text(json.dumps(before), encoding="utf-8")
+    b.write_text(json.dumps(after), encoding="utf-8")
+    assert main(["compare", str(a), str(b)]) == 0
+    assert ("Verinoda analyze: lost found ['h03/h03.rebuild'], lost shown none; gained found 1, shown 0"
+            in capsys.readouterr().out)
 
 
 def test_a_final_answer_from_any_command_is_scored_for_facts_and_wrong_statements(orders_copy, orders_questions, tmp_path):

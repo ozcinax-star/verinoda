@@ -62,7 +62,12 @@ def env(tmp_path, monkeypatch):
     which = {"verinoda": str(exe), "claude": None}
     monkeypatch.setattr(ins, "_which", lambda name: which.get(name))
     monkeypatch.setattr(ins, "_run", _no_run)
-    ns = SimpleNamespace(tmp=tmp_path, home=home, proj=proj, exe=str(exe), which=which, bindir=bindir)
+    from verinoda import doctor
+
+    layout = {"path": str(bindir), "hardlinked": False, "editable": False}  # a copy-mode install by default
+    monkeypatch.setattr(doctor, "install_layout", lambda: dict(layout))
+    ns = SimpleNamespace(tmp=tmp_path, home=home, proj=proj, exe=str(exe), which=which, bindir=bindir,
+                         layout=layout)
     yield ns
     assert not guard.exists(), "the real home directory would have been touched"
 
@@ -187,7 +192,7 @@ def test_skills_understand_the_question_and_resolve_references_first(agent):
     assert order == sorted(order)
     refs = body.split("## References the user gives", 1)[1].split("\n## ", 1)[0]
     for needle in ("links", "package names", "versions", "commits", "PR/issue", "papers", "docs",
-                   'verinoda resolve "<message>" --json', "reference_resolve", "<name> @ <pin> (basis: <basis>)",
+                   'verinoda resolve "<message>"', "reference_resolve", "<name> @ <pin> (basis: <basis>)",
                    "mismatch", "Never substitute the default branch", "questions_for_user", "next_step",
                    "verinoda research --resolution <id> --reference-id <rN>"):
         assert needle in refs, needle
@@ -211,12 +216,15 @@ def test_skill_examples_parse_with_the_real_cli(agent):
         argv = shlex.split(ln)[1:]
         build_parser().parse_args(argv)  # SystemExit (argparse error) fails the test
         seen.add(" ".join(argv[:2]) if argv[0] in ("feedback", "experiment", "claim") else argv[0])
-        if argv[0] not in ("scan", "update"):
-            assert "--json" in argv, ln
+        # text by default (2026-09-26): the CLI's text is written for the model; JSON cost 2-5x the tokens
+        # (analyze 3,824 vs 717, decide brief 13,206 vs 2,985) and the skill reads no field the text leaves out
+        assert "--json" not in argv, ln
     for cmd in ("analyze", "trace", "verify", "research", "challenge", "query", "map", "update",
                 "feedback add", "feedback process", "experiment run", "compare", "claim show",
                 "plan", "resolve", "observe", "resolve-call"):
         assert cmd in seen, cmd
+    assert "Add `--json` only for a field the text" in " ".join(text.split())
+    assert "doctor --brief" in text and "doctor --json" not in text
     # the plan flow is shown end to end: draft, check, then analyze with the plan file
     assert any(ln.startswith("verinoda plan draft ") for ln in lines)
     assert any(ln.startswith("verinoda plan check ") for ln in lines)
@@ -719,6 +727,30 @@ def test_server_command_uses_real_installation(tmp_path):
         assert cmd[1:3] == ["-m", "verinoda"]
     user = agents.server_command("user", tmp_path)
     assert user[-2:] == ["mcp", "serve"] and "--repo" not in user
+    assert agents.server_command("user", tmp_path, "full")[-4:] == ["mcp", "serve", "--profile", "full"]
+
+
+@pytest.mark.parametrize("layout", ["editable", "hardlinked"])
+def test_codex_gets_the_full_mcp_profile_when_its_sandbox_may_not_import_verinoda(env, layout):
+    """Where the CLI can fail inside the Codex sandbox, MCP is the way in: it must serve every tool the
+    skill makes mandatory (debug ledger, plans, references, decisions), so install registers --profile full.
+    Claude, and Codex on a copy-mode install, keep the default (core)."""
+    r = agents.install("codex", "user", project_dir=env.proj, home=env.home)
+    args = tomllib.loads((env.home / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    assert r["ok"] and args["mcp_servers"]["verinoda"]["args"] == ["mcp", "serve"]
+    assert not any("--profile" in n for n in r["notes"])
+    env.layout[layout] = True
+    r = agents.install("codex", "user", project_dir=env.proj, home=env.home)
+    args = tomllib.loads((env.home / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    assert r["ok"] and r["result"] == "updated", r
+    assert args["mcp_servers"]["verinoda"]["args"] == ["mcp", "serve", "--profile", "full"]
+    assert any("--profile full" in n and "sandbox" in n for n in r["notes"])
+    claude = agents.install("claude", "project", project_dir=env.proj, home=env.home)
+    entry = json.loads((env.proj / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["verinoda"]
+    assert claude["ok"] and "--profile" not in entry["args"]
+    # the skills say what to do when a mandated tool is not served (the core profile)
+    for agent in ("claude", "codex"):
+        assert '`"mcp": {"profile": "full"}`' in agents.render_skill(agent).decode("utf-8"), agent
 
 
 # -- end to end on the example project -------------------------------------------------------------------------

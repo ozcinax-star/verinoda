@@ -283,7 +283,7 @@ def _drive_installed_cli(ra: Path, base: Path, *, full: bool) -> dict:
         r = _run([ra, "plan", "check", plan_file.name, "--json"], cwd=repo, env=env)
         assert r.returncode in (0, 3) and json.loads(r.stdout)["status"] in ("ready", "needs_clarification"), r.stderr
         q = _ok(_run([ra, "query", "where is the discount applied"], cwd=repo, env=env), "query").stdout
-        assert q.startswith("# where is the discount applied") and "orders/pricing.py" in q
+        assert q.startswith("## orders/pricing.py:") and "where is the discount applied" not in q  # no echo
         r = _run([ra, "resolve", "orders/pricing.py'deki apply_discount", "--network", "off", "--json"], cwd=repo,
                  env=env)
         assert r.returncode == 0 and json.loads(r.stdout)["status"] == "complete", r.stderr

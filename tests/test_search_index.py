@@ -504,7 +504,8 @@ def test_a_qualified_name_floors_the_method_of_that_owner_only(tmp_path):
                         if "question names 'summon'" in h.reasons}
     # the method of a long class gets its own section (with its callers) after the class's
     text = retrieval.render_text(retrieval.retrieve(g, "Who calls Wisp.spawn?"), 6000)
-    assert "## game/wisp.py:122-123 def spawn(self, world)" in text
+    # the passage below starts at the signature, so the header only names the method
+    assert "## game/wisp.py:122-123 Wisp.spawn\n" in text and "def spawn(self, world):" in text
     assert "called by: summon (game/rituals.py:5)" in text
 
 

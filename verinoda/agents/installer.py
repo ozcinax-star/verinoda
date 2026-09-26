@@ -209,11 +209,26 @@ def _verinoda_exe() -> str | None:
     return str(cand) if cand.is_file() else None
 
 
-def server_command(scope: str, project_dir: Path) -> list[str]:
-    """Command line that starts the Verinoda MCP server for this scope."""
+def server_command(scope: str, project_dir: Path, profile: str | None = None) -> list[str]:
+    """Command line that starts the Verinoda MCP server for this scope (``profile``: its tool profile,
+    None = the server's default)."""
     exe = _verinoda_exe()
     base = [exe] if exe else [sys.executable, "-m", NAME]
-    return base + ["mcp", "serve"] + (["--repo", str(project_dir)] if scope == "project" else [])
+    return (base + ["mcp", "serve"] + (["--repo", str(project_dir)] if scope == "project" else [])
+            + (["--profile", profile] if profile else []))
+
+
+def mcp_profile(agent: str) -> str | None:
+    """The MCP tool profile to register for ``agent``: ``full`` for Codex when this install may not import
+    inside its sandbox (editable or hardlinked: ``verinoda doctor``'s sandbox_readable check). There the
+    CLI can fail and MCP is the only way in, so it must serve every protocol the skill makes mandatory
+    (the debug ledger, question plans, references, decisions). Otherwise None: the default (core)."""
+    if agent != "codex":
+        return None
+    from verinoda.doctor import install_layout
+
+    lay = install_layout()
+    return "full" if lay.get("editable") or lay.get("hardlinked") else None
 
 
 def cli_hint() -> str:
@@ -689,8 +704,14 @@ def install(agent: str, scope: str, *, project_dir, home=None, with_mcp: bool = 
     plan = Plan()
     _plan_skill(plan, t, prev_items)
     if with_mcp:
-        cmd = server_command(scope, project_dir)
+        profile = mcp_profile(agent)
+        cmd = server_command(scope, project_dir, profile)
         {"json": _plan_json, "toml": _plan_toml, "claude_cli": _plan_claude_cli}[t.mcp_kind](plan, t, cmd, prev_items)
+        if profile:
+            plan.notes.append(f"The MCP server is registered with --profile {profile}: this Verinoda install is "
+                              "editable or hardlinked, so the Codex sandbox may not import it and MCP is the "
+                              "way in; it then serves every tool the skill uses (debug ledger, plans, "
+                              "references, decisions). After a copy-mode reinstall, run install again.")
     else:
         for it in prev_items:
             if it.get("role") == "mcp":

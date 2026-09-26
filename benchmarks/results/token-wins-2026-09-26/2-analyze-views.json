@@ -1,0 +1,11656 @@
+{
+ "forge_mod": {
+  "q_text": {
+   "found": 67,
+   "pin": 59,
+   "shown": 48,
+   "tokens": 20781,
+   "pretok": 16227,
+   "chars": 83104,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "pin": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "shown": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "tokens": 1485,
+     "pretok": 1024
+    },
+    "q02": {
+     "found": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "pin": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "shown": [
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "tokens": 1480,
+     "pretok": 1128
+    },
+    "q03": {
+     "found": [
+      "q03.codec",
+      "q03.hammer",
+      "q03.ingots",
+      "q03.lookup",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "pin": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "shown": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "tokens": 1498,
+     "pretok": 1242
+    },
+    "q04": {
+     "found": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.slot",
+      "q04.tick"
+     ],
+     "pin": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.tick"
+     ],
+     "shown": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.tick"
+     ],
+     "tokens": 1481,
+     "pretok": 1142
+    },
+    "q05": {
+     "found": [
+      "q05.biomes",
+      "q05.configured",
+      "q05.modifier",
+      "q05.placed"
+     ],
+     "pin": [
+      "q05.biomes",
+      "q05.configured",
+      "q05.modifier",
+      "q05.placed"
+     ],
+     "shown": [
+      "q05.configured",
+      "q05.modifier"
+     ],
+     "tokens": 1482,
+     "pretok": 1317
+    },
+    "q06": {
+     "found": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "pin": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "shown": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "tokens": 1484,
+     "pretok": 1298
+    },
+    "q07": {
+     "found": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "pin": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "shown": [
+      "q07.check",
+      "q07.declare",
+      "q07.toml"
+     ],
+     "tokens": 1493,
+     "pretok": 1124
+    },
+    "q08": {
+     "found": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.lit_state",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "pin": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "shown": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "tokens": 1473,
+     "pretok": 1171
+    },
+    "q09": {
+     "found": [
+      "q09.block",
+      "q09.container",
+      "q09.en",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.block",
+      "q09.container",
+      "q09.en",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.container",
+      "q09.tr"
+     ],
+     "tokens": 1497,
+     "pretok": 1167
+    },
+    "q10": {
+     "found": [
+      "q10.button",
+      "q10.handler",
+      "q10.payload",
+      "q10.register",
+      "q10.send",
+      "q10.stoke"
+     ],
+     "pin": [
+      "q10.button",
+      "q10.handler",
+      "q10.payload",
+      "q10.register",
+      "q10.send",
+      "q10.stoke"
+     ],
+     "shown": [
+      "q10.button",
+      "q10.send"
+     ],
+     "tokens": 1499,
+     "pretok": 1167
+    },
+    "q11": {
+     "found": [
+      "q11.cool",
+      "q11.forge",
+      "q11.fuel",
+      "q11.lit",
+      "q11.source",
+      "q11.ticker"
+     ],
+     "pin": [
+      "q11.cool",
+      "q11.lit",
+      "q11.ticker"
+     ],
+     "shown": [
+      "q11.lit",
+      "q11.ticker"
+     ],
+     "tokens": 1469,
+     "pretok": 1191
+    },
+    "q12": {
+     "found": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.nbt",
+      "q12.run"
+     ],
+     "pin": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "shown": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "tokens": 1476,
+     "pretok": 1111
+    },
+    "q13": {
+     "found": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "pin": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "shown": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "tokens": 1479,
+     "pretok": 1180
+    },
+    "q14": {
+     "found": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "pin": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "shown": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "tokens": 1485,
+     "pretok": 965
+    }
+   },
+   "found_runner": 67,
+   "n_q": 14,
+   "total": 68
+  },
+  "q_json": {
+   "found": 50,
+   "pin": 45,
+   "shown": 40,
+   "tokens": 19955,
+   "pretok": 17194,
+   "chars": 79800,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "pin": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "shown": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "tokens": 1424,
+     "pretok": 1112
+    },
+    "q02": {
+     "found": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "pin": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "shown": [
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "tokens": 1433,
+     "pretok": 1226
+    },
+    "q03": {
+     "found": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "pin": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "shown": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "tokens": 1427,
+     "pretok": 1294
+    },
+    "q04": {
+     "found": [
+      "q04.file",
+      "q04.heat",
+      "q04.key"
+     ],
+     "pin": [
+      "q04.file",
+      "q04.heat",
+      "q04.key"
+     ],
+     "shown": [
+      "q04.file",
+      "q04.heat",
+      "q04.key"
+     ],
+     "tokens": 1420,
+     "pretok": 1280
+    },
+    "q05": {
+     "found": [
+      "q05.placed"
+     ],
+     "pin": [
+      "q05.placed"
+     ],
+     "shown": [],
+     "tokens": 1412,
+     "pretok": 1267
+    },
+    "q06": {
+     "found": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "pin": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "shown": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "tokens": 1426,
+     "pretok": 1342
+    },
+    "q07": {
+     "found": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "pin": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "shown": [
+      "q07.check",
+      "q07.declare",
+      "q07.toml"
+     ],
+     "tokens": 1426,
+     "pretok": 1183
+    },
+    "q08": {
+     "found": [
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "pin": [
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "shown": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "tokens": 1418,
+     "pretok": 1249
+    },
+    "q09": {
+     "found": [
+      "q09.container",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.container",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.container"
+     ],
+     "tokens": 1424,
+     "pretok": 1224
+    },
+    "q10": {
+     "found": [
+      "q10.button",
+      "q10.payload",
+      "q10.send"
+     ],
+     "pin": [
+      "q10.button",
+      "q10.payload",
+      "q10.send"
+     ],
+     "shown": [
+      "q10.button",
+      "q10.send"
+     ],
+     "tokens": 1419,
+     "pretok": 1223
+    },
+    "q11": {
+     "found": [
+      "q11.cool",
+      "q11.forge",
+      "q11.fuel",
+      "q11.lit",
+      "q11.source",
+      "q11.ticker"
+     ],
+     "pin": [
+      "q11.ticker"
+     ],
+     "shown": [
+      "q11.ticker"
+     ],
+     "tokens": 1416,
+     "pretok": 1257
+    },
+    "q12": {
+     "found": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "pin": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "shown": [
+      "q12.command",
+      "q12.fill",
+      "q12.messages",
+      "q12.run"
+     ],
+     "tokens": 1440,
+     "pretok": 1192
+    },
+    "q13": {
+     "found": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "pin": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "shown": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "tokens": 1426,
+     "pretok": 1170
+    },
+    "q14": {
+     "found": [
+      "q14.bus",
+      "q14.menu",
+      "q14.serializer"
+     ],
+     "pin": [
+      "q14.bus",
+      "q14.menu",
+      "q14.serializer"
+     ],
+     "shown": [
+      "q14.bus",
+      "q14.menu",
+      "q14.serializer"
+     ],
+     "tokens": 1444,
+     "pretok": 1175
+    }
+   },
+   "found_runner": 50,
+   "n_q": 14,
+   "total": 68
+  },
+  "an_bench": {
+   "found": 67,
+   "pin": 59,
+   "shown": 49,
+   "tokens": 29208,
+   "pretok": 24389,
+   "chars": 116807,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "pin": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "shown": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "tokens": 1769,
+     "pretok": 1277
+    },
+    "q02": {
+     "found": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "pin": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "shown": [
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "tokens": 1955,
+     "pretok": 1589
+    },
+    "q03": {
+     "found": [
+      "q03.codec",
+      "q03.hammer",
+      "q03.ingots",
+      "q03.lookup",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "pin": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "shown": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "tokens": 2006,
+     "pretok": 1756
+    },
+    "q04": {
+     "found": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.slot",
+      "q04.tick"
+     ],
+     "pin": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.tick"
+     ],
+     "shown": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.tick"
+     ],
+     "tokens": 2119,
+     "pretok": 1808
+    },
+    "q05": {
+     "found": [
+      "q05.biomes",
+      "q05.configured",
+      "q05.modifier",
+      "q05.placed"
+     ],
+     "pin": [
+      "q05.biomes",
+      "q05.configured",
+      "q05.modifier",
+      "q05.placed"
+     ],
+     "shown": [
+      "q05.configured",
+      "q05.modifier"
+     ],
+     "tokens": 1817,
+     "pretok": 1642
+    },
+    "q06": {
+     "found": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "pin": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "shown": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "tokens": 2448,
+     "pretok": 2274
+    },
+    "q07": {
+     "found": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "pin": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "shown": [
+      "q07.check",
+      "q07.declare",
+      "q07.toml"
+     ],
+     "tokens": 2054,
+     "pretok": 1656
+    },
+    "q08": {
+     "found": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.lit_state",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "pin": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "shown": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "tokens": 2480,
+     "pretok": 2117
+    },
+    "q09": {
+     "found": [
+      "q09.block",
+      "q09.container",
+      "q09.en",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.block",
+      "q09.container",
+      "q09.en",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.block",
+      "q09.container",
+      "q09.tr"
+     ],
+     "tokens": 2589,
+     "pretok": 2183
+    },
+    "q10": {
+     "found": [
+      "q10.button",
+      "q10.handler",
+      "q10.payload",
+      "q10.register",
+      "q10.send",
+      "q10.stoke"
+     ],
+     "pin": [
+      "q10.button",
+      "q10.handler",
+      "q10.payload",
+      "q10.register",
+      "q10.send",
+      "q10.stoke"
+     ],
+     "shown": [
+      "q10.button",
+      "q10.send"
+     ],
+     "tokens": 2063,
+     "pretok": 1718
+    },
+    "q11": {
+     "found": [
+      "q11.cool",
+      "q11.forge",
+      "q11.fuel",
+      "q11.lit",
+      "q11.source",
+      "q11.ticker"
+     ],
+     "pin": [
+      "q11.cool",
+      "q11.lit",
+      "q11.ticker"
+     ],
+     "shown": [
+      "q11.lit",
+      "q11.ticker"
+     ],
+     "tokens": 1877,
+     "pretok": 1580
+    },
+    "q12": {
+     "found": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.nbt",
+      "q12.run"
+     ],
+     "pin": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "shown": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "tokens": 1999,
+     "pretok": 1615
+    },
+    "q13": {
+     "found": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "pin": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "shown": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "tokens": 2150,
+     "pretok": 1809
+    },
+    "q14": {
+     "found": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "pin": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "shown": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "tokens": 1882,
+     "pretok": 1365
+    }
+   },
+   "found_runner": 67,
+   "n_q": 14,
+   "total": 68
+  },
+  "mcp_query": {
+   "found": 67,
+   "pin": 59,
+   "shown": 48,
+   "tokens": 20781,
+   "pretok": 16227,
+   "chars": 83104,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "pin": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "shown": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "tokens": 1485,
+     "pretok": 1024
+    },
+    "q02": {
+     "found": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "pin": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "shown": [
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "tokens": 1480,
+     "pretok": 1128
+    },
+    "q03": {
+     "found": [
+      "q03.codec",
+      "q03.hammer",
+      "q03.ingots",
+      "q03.lookup",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "pin": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "shown": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "tokens": 1498,
+     "pretok": 1242
+    },
+    "q04": {
+     "found": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.slot",
+      "q04.tick"
+     ],
+     "pin": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.tick"
+     ],
+     "shown": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.tick"
+     ],
+     "tokens": 1481,
+     "pretok": 1142
+    },
+    "q05": {
+     "found": [
+      "q05.biomes",
+      "q05.configured",
+      "q05.modifier",
+      "q05.placed"
+     ],
+     "pin": [
+      "q05.biomes",
+      "q05.configured",
+      "q05.modifier",
+      "q05.placed"
+     ],
+     "shown": [
+      "q05.configured",
+      "q05.modifier"
+     ],
+     "tokens": 1482,
+     "pretok": 1317
+    },
+    "q06": {
+     "found": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "pin": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "shown": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "tokens": 1484,
+     "pretok": 1298
+    },
+    "q07": {
+     "found": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "pin": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "shown": [
+      "q07.check",
+      "q07.declare",
+      "q07.toml"
+     ],
+     "tokens": 1493,
+     "pretok": 1124
+    },
+    "q08": {
+     "found": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.lit_state",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "pin": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "shown": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "tokens": 1473,
+     "pretok": 1171
+    },
+    "q09": {
+     "found": [
+      "q09.block",
+      "q09.container",
+      "q09.en",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.block",
+      "q09.container",
+      "q09.en",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.container",
+      "q09.tr"
+     ],
+     "tokens": 1497,
+     "pretok": 1167
+    },
+    "q10": {
+     "found": [
+      "q10.button",
+      "q10.handler",
+      "q10.payload",
+      "q10.register",
+      "q10.send",
+      "q10.stoke"
+     ],
+     "pin": [
+      "q10.button",
+      "q10.handler",
+      "q10.payload",
+      "q10.register",
+      "q10.send",
+      "q10.stoke"
+     ],
+     "shown": [
+      "q10.button",
+      "q10.send"
+     ],
+     "tokens": 1499,
+     "pretok": 1167
+    },
+    "q11": {
+     "found": [
+      "q11.cool",
+      "q11.forge",
+      "q11.fuel",
+      "q11.lit",
+      "q11.source",
+      "q11.ticker"
+     ],
+     "pin": [
+      "q11.cool",
+      "q11.lit",
+      "q11.ticker"
+     ],
+     "shown": [
+      "q11.lit",
+      "q11.ticker"
+     ],
+     "tokens": 1469,
+     "pretok": 1191
+    },
+    "q12": {
+     "found": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.nbt",
+      "q12.run"
+     ],
+     "pin": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "shown": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "tokens": 1476,
+     "pretok": 1111
+    },
+    "q13": {
+     "found": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "pin": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "shown": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "tokens": 1479,
+     "pretok": 1180
+    },
+    "q14": {
+     "found": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "pin": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "shown": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "tokens": 1485,
+     "pretok": 965
+    }
+   },
+   "n_q": 14,
+   "total": 68
+  },
+  "mcp_analyze": {
+   "found": 67,
+   "pin": 59,
+   "shown": 49,
+   "tokens": 32293,
+   "pretok": 25900,
+   "chars": 129152,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "pin": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "shown": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "tokens": 1881,
+     "pretok": 1325
+    },
+    "q02": {
+     "found": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "pin": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "shown": [
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "tokens": 2099,
+     "pretok": 1661
+    },
+    "q03": {
+     "found": [
+      "q03.codec",
+      "q03.hammer",
+      "q03.ingots",
+      "q03.lookup",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "pin": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "shown": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "tokens": 2259,
+     "pretok": 1878
+    },
+    "q04": {
+     "found": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.slot",
+      "q04.tick"
+     ],
+     "pin": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.tick"
+     ],
+     "shown": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.tick"
+     ],
+     "tokens": 2361,
+     "pretok": 1938
+    },
+    "q05": {
+     "found": [
+      "q05.biomes",
+      "q05.configured",
+      "q05.modifier",
+      "q05.placed"
+     ],
+     "pin": [
+      "q05.biomes",
+      "q05.configured",
+      "q05.modifier",
+      "q05.placed"
+     ],
+     "shown": [
+      "q05.configured",
+      "q05.modifier"
+     ],
+     "tokens": 2017,
+     "pretok": 1730
+    },
+    "q06": {
+     "found": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "pin": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "shown": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "tokens": 2657,
+     "pretok": 2344
+    },
+    "q07": {
+     "found": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "pin": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "shown": [
+      "q07.check",
+      "q07.declare",
+      "q07.toml"
+     ],
+     "tokens": 2250,
+     "pretok": 1737
+    },
+    "q08": {
+     "found": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.lit_state",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "pin": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "shown": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "tokens": 2782,
+     "pretok": 2281
+    },
+    "q09": {
+     "found": [
+      "q09.block",
+      "q09.container",
+      "q09.en",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.block",
+      "q09.container",
+      "q09.en",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.block",
+      "q09.container",
+      "q09.tr"
+     ],
+     "tokens": 2848,
+     "pretok": 2309
+    },
+    "q10": {
+     "found": [
+      "q10.button",
+      "q10.handler",
+      "q10.payload",
+      "q10.register",
+      "q10.send",
+      "q10.stoke"
+     ],
+     "pin": [
+      "q10.button",
+      "q10.handler",
+      "q10.payload",
+      "q10.register",
+      "q10.send",
+      "q10.stoke"
+     ],
+     "shown": [
+      "q10.button",
+      "q10.send"
+     ],
+     "tokens": 2331,
+     "pretok": 1875
+    },
+    "q11": {
+     "found": [
+      "q11.cool",
+      "q11.forge",
+      "q11.fuel",
+      "q11.lit",
+      "q11.source",
+      "q11.ticker"
+     ],
+     "pin": [
+      "q11.cool",
+      "q11.lit",
+      "q11.ticker"
+     ],
+     "shown": [
+      "q11.lit",
+      "q11.ticker"
+     ],
+     "tokens": 2018,
+     "pretok": 1634
+    },
+    "q12": {
+     "found": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.nbt",
+      "q12.run"
+     ],
+     "pin": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "shown": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "tokens": 2213,
+     "pretok": 1719
+    },
+    "q13": {
+     "found": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "pin": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "shown": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "tokens": 2371,
+     "pretok": 1915
+    },
+    "q14": {
+     "found": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "pin": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "shown": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "tokens": 2206,
+     "pretok": 1554
+    }
+   },
+   "n_q": 14,
+   "total": 68
+  },
+  "cli_an_text": {
+   "found": 67,
+   "pin": 59,
+   "shown": 49,
+   "tokens": 29211,
+   "pretok": 24348,
+   "chars": 116821,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "pin": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "shown": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "tokens": 1769,
+     "pretok": 1284
+    },
+    "q02": {
+     "found": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "pin": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "shown": [
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "tokens": 1955,
+     "pretok": 1591
+    },
+    "q03": {
+     "found": [
+      "q03.codec",
+      "q03.hammer",
+      "q03.ingots",
+      "q03.lookup",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "pin": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "shown": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "tokens": 2006,
+     "pretok": 1756
+    },
+    "q04": {
+     "found": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.slot",
+      "q04.tick"
+     ],
+     "pin": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.tick"
+     ],
+     "shown": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.tick"
+     ],
+     "tokens": 2119,
+     "pretok": 1791
+    },
+    "q05": {
+     "found": [
+      "q05.biomes",
+      "q05.configured",
+      "q05.modifier",
+      "q05.placed"
+     ],
+     "pin": [
+      "q05.biomes",
+      "q05.configured",
+      "q05.modifier",
+      "q05.placed"
+     ],
+     "shown": [
+      "q05.configured",
+      "q05.modifier"
+     ],
+     "tokens": 1818,
+     "pretok": 1648
+    },
+    "q06": {
+     "found": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "pin": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "shown": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "tokens": 2448,
+     "pretok": 2264
+    },
+    "q07": {
+     "found": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "pin": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "shown": [
+      "q07.check",
+      "q07.declare",
+      "q07.toml"
+     ],
+     "tokens": 2055,
+     "pretok": 1646
+    },
+    "q08": {
+     "found": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.lit_state",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "pin": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "shown": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "tokens": 2480,
+     "pretok": 2114
+    },
+    "q09": {
+     "found": [
+      "q09.block",
+      "q09.container",
+      "q09.en",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.block",
+      "q09.container",
+      "q09.en",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.block",
+      "q09.container",
+      "q09.tr"
+     ],
+     "tokens": 2589,
+     "pretok": 2179
+    },
+    "q10": {
+     "found": [
+      "q10.button",
+      "q10.handler",
+      "q10.payload",
+      "q10.register",
+      "q10.send",
+      "q10.stoke"
+     ],
+     "pin": [
+      "q10.button",
+      "q10.handler",
+      "q10.payload",
+      "q10.register",
+      "q10.send",
+      "q10.stoke"
+     ],
+     "shown": [
+      "q10.button",
+      "q10.send"
+     ],
+     "tokens": 2063,
+     "pretok": 1718
+    },
+    "q11": {
+     "found": [
+      "q11.cool",
+      "q11.forge",
+      "q11.fuel",
+      "q11.lit",
+      "q11.source",
+      "q11.ticker"
+     ],
+     "pin": [
+      "q11.cool",
+      "q11.lit",
+      "q11.ticker"
+     ],
+     "shown": [
+      "q11.lit",
+      "q11.ticker"
+     ],
+     "tokens": 1877,
+     "pretok": 1581
+    },
+    "q12": {
+     "found": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.nbt",
+      "q12.run"
+     ],
+     "pin": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "shown": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "tokens": 2000,
+     "pretok": 1613
+    },
+    "q13": {
+     "found": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "pin": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "shown": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "tokens": 2150,
+     "pretok": 1799
+    },
+    "q14": {
+     "found": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "pin": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "shown": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "tokens": 1882,
+     "pretok": 1364
+    }
+   },
+   "n_q": 14,
+   "total": 68
+  },
+  "cli_an_json": {
+   "found": 67,
+   "pin": 59,
+   "shown": 49,
+   "tokens": 58640,
+   "pretok": 55126,
+   "chars": 234536,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "pin": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "shown": [
+      "q01.hammer",
+      "q01.network"
+     ],
+     "tokens": 2936,
+     "pretok": 2490
+    },
+    "q02": {
+     "found": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "pin": [
+      "q02.fuel",
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "shown": [
+      "q02.overload",
+      "q02.source",
+      "q02.stoke",
+      "q02.test"
+     ],
+     "tokens": 3678,
+     "pretok": 3317
+    },
+    "q03": {
+     "found": [
+      "q03.codec",
+      "q03.hammer",
+      "q03.ingots",
+      "q03.lookup",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "pin": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "shown": [
+      "q03.hammer",
+      "q03.ingots",
+      "q03.serializer",
+      "q03.type"
+     ],
+     "tokens": 4076,
+     "pretok": 3999
+    },
+    "q04": {
+     "found": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.slot",
+      "q04.tick"
+     ],
+     "pin": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.tick"
+     ],
+     "shown": [
+      "q04.file",
+      "q04.heat",
+      "q04.key",
+      "q04.tick"
+     ],
+     "tokens": 4216,
+     "pretok": 4119
+    },
+    "q05": {
+     "found": [
+      "q05.biomes",
+      "q05.configured",
+      "q05.modifier",
+      "q05.placed"
+     ],
+     "pin": [
+      "q05.biomes",
+      "q05.configured",
+      "q05.modifier",
+      "q05.placed"
+     ],
+     "shown": [
+      "q05.configured",
+      "q05.modifier"
+     ],
+     "tokens": 3305,
+     "pretok": 3193
+    },
+    "q06": {
+     "found": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "pin": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "shown": [
+      "q06.declare",
+      "q06.fuel",
+      "q06.heatmath",
+      "q06.sync",
+      "q06.toml"
+     ],
+     "tokens": 5160,
+     "pretok": 5114
+    },
+    "q07": {
+     "found": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "pin": [
+      "q07.check",
+      "q07.declare",
+      "q07.registered",
+      "q07.toml"
+     ],
+     "shown": [
+      "q07.check",
+      "q07.declare",
+      "q07.toml"
+     ],
+     "tokens": 4236,
+     "pretok": 3902
+    },
+    "q08": {
+     "found": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.lit_state",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "pin": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "shown": [
+      "q08.item",
+      "q08.lit",
+      "q08.lit_model",
+      "q08.model",
+      "q08.unlit"
+     ],
+     "tokens": 5047,
+     "pretok": 4774
+    },
+    "q09": {
+     "found": [
+      "q09.block",
+      "q09.container",
+      "q09.en",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.block",
+      "q09.container",
+      "q09.en",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.block",
+      "q09.container",
+      "q09.tr"
+     ],
+     "tokens": 5812,
+     "pretok": 5495
+    },
+    "q10": {
+     "found": [
+      "q10.button",
+      "q10.handler",
+      "q10.payload",
+      "q10.register",
+      "q10.send",
+      "q10.stoke"
+     ],
+     "pin": [
+      "q10.button",
+      "q10.handler",
+      "q10.payload",
+      "q10.register",
+      "q10.send",
+      "q10.stoke"
+     ],
+     "shown": [
+      "q10.button",
+      "q10.send"
+     ],
+     "tokens": 4113,
+     "pretok": 3835
+    },
+    "q11": {
+     "found": [
+      "q11.cool",
+      "q11.forge",
+      "q11.fuel",
+      "q11.lit",
+      "q11.source",
+      "q11.ticker"
+     ],
+     "pin": [
+      "q11.cool",
+      "q11.lit",
+      "q11.ticker"
+     ],
+     "shown": [
+      "q11.lit",
+      "q11.ticker"
+     ],
+     "tokens": 3489,
+     "pretok": 3286
+    },
+    "q12": {
+     "found": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.nbt",
+      "q12.run"
+     ],
+     "pin": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "shown": [
+      "q12.command",
+      "q12.fill",
+      "q12.id",
+      "q12.messages",
+      "q12.run"
+     ],
+     "tokens": 4341,
+     "pretok": 4009
+    },
+    "q13": {
+     "found": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "pin": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "shown": [
+      "q13.advancement",
+      "q13.tag",
+      "q13.trigger"
+     ],
+     "tokens": 4267,
+     "pretok": 3941
+    },
+    "q14": {
+     "found": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "pin": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "shown": [
+      "q14.be",
+      "q14.bus",
+      "q14.menu",
+      "q14.screen",
+      "q14.serializer"
+     ],
+     "tokens": 3964,
+     "pretok": 3652
+    }
+   },
+   "n_q": 14,
+   "total": 68
+  },
+  "_seconds": 36.6
+ },
+ "glow_mod": {
+  "q_text": {
+   "found": 48,
+   "pin": 48,
+   "shown": 39,
+   "tokens": 20802,
+   "pretok": 17174,
+   "chars": 83187,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "pin": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "shown": [
+      "q01.command"
+     ],
+     "tokens": 1489,
+     "pretok": 1287
+    },
+    "q02": {
+     "found": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "pin": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "shown": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "tokens": 1493,
+     "pretok": 1195
+    },
+    "q03": {
+     "found": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "pin": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "shown": [
+      "q03.heart",
+      "q03.namespace",
+      "q03.ondeath"
+     ],
+     "tokens": 1479,
+     "pretok": 1287
+    },
+    "q04": {
+     "found": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "pin": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "shown": [
+      "q04.baslat",
+      "q04.execute"
+     ],
+     "tokens": 1487,
+     "pretok": 1318
+    },
+    "q05": {
+     "found": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "pin": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "shown": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "tokens": 1478,
+     "pretok": 1259
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "shown": [
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "tokens": 1471,
+     "pretok": 1217
+    },
+    "q07": {
+     "found": [
+      "q07.parse",
+      "q07.use",
+      "q07.yml"
+     ],
+     "pin": [
+      "q07.parse",
+      "q07.use",
+      "q07.yml"
+     ],
+     "shown": [
+      "q07.parse",
+      "q07.use"
+     ],
+     "tokens": 1482,
+     "pretok": 1168
+    },
+    "q08": {
+     "found": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "pin": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "shown": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "tokens": 1482,
+     "pretok": 1287
+    },
+    "q09": {
+     "found": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "tokens": 1473,
+     "pretok": 1292
+    },
+    "q10": {
+     "found": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.register",
+      "q10.send"
+     ],
+     "pin": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.register",
+      "q10.send"
+     ],
+     "shown": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.send"
+     ],
+     "tokens": 1489,
+     "pretok": 1094
+    },
+    "q11": {
+     "found": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "pin": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "shown": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "tokens": 1494,
+     "pretok": 1160
+    },
+    "q12": {
+     "found": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "pin": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "shown": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "tokens": 1491,
+     "pretok": 1151
+    },
+    "q13": {
+     "found": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "pin": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "shown": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "tokens": 1495,
+     "pretok": 1280
+    },
+    "q14": {
+     "found": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "pin": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "shown": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "tokens": 1499,
+     "pretok": 1179
+    }
+   },
+   "found_runner": 48,
+   "n_q": 14,
+   "total": 50
+  },
+  "q_json": {
+   "found": 44,
+   "pin": 44,
+   "shown": 30,
+   "tokens": 19986,
+   "pretok": 17679,
+   "chars": 79924,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "pin": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "shown": [
+      "q01.command"
+     ],
+     "tokens": 1438,
+     "pretok": 1326
+    },
+    "q02": {
+     "found": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "pin": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "shown": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "tokens": 1430,
+     "pretok": 1243
+    },
+    "q03": {
+     "found": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "pin": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "shown": [
+      "q03.heart"
+     ],
+     "tokens": 1424,
+     "pretok": 1311
+    },
+    "q04": {
+     "found": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "pin": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "shown": [
+      "q04.baslat",
+      "q04.execute"
+     ],
+     "tokens": 1428,
+     "pretok": 1283
+    },
+    "q05": {
+     "found": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "pin": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "shown": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "tokens": 1426,
+     "pretok": 1222
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "shown": [
+      "q06.default_file",
+      "q06.fallback"
+     ],
+     "tokens": 1436,
+     "pretok": 1297
+    },
+    "q07": {
+     "found": [
+      "q07.use",
+      "q07.yml"
+     ],
+     "pin": [
+      "q07.use",
+      "q07.yml"
+     ],
+     "shown": [
+      "q07.use",
+      "q07.yml"
+     ],
+     "tokens": 1427,
+     "pretok": 1248
+    },
+    "q08": {
+     "found": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "pin": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "shown": [
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "tokens": 1426,
+     "pretok": 1251
+    },
+    "q09": {
+     "found": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "tokens": 1418,
+     "pretok": 1292
+    },
+    "q10": {
+     "found": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.send"
+     ],
+     "pin": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.send"
+     ],
+     "shown": [
+      "q10.key",
+      "q10.payload",
+      "q10.send"
+     ],
+     "tokens": 1434,
+     "pretok": 1174
+    },
+    "q11": {
+     "found": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "pin": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "shown": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "tokens": 1423,
+     "pretok": 1255
+    },
+    "q12": {
+     "found": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "pin": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "shown": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "tokens": 1415,
+     "pretok": 1240
+    },
+    "q13": {
+     "found": [
+      "q13.check",
+      "q13.cooldown"
+     ],
+     "pin": [
+      "q13.check",
+      "q13.cooldown"
+     ],
+     "shown": [
+      "q13.check"
+     ],
+     "tokens": 1432,
+     "pretok": 1278
+    },
+    "q14": {
+     "found": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "pin": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "shown": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "tokens": 1429,
+     "pretok": 1259
+    }
+   },
+   "found_runner": 44,
+   "n_q": 14,
+   "total": 50
+  },
+  "an_bench": {
+   "found": 48,
+   "pin": 48,
+   "shown": 40,
+   "tokens": 28455,
+   "pretok": 24582,
+   "chars": 113803,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "pin": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "shown": [
+      "q01.command"
+     ],
+     "tokens": 2325,
+     "pretok": 2099
+    },
+    "q02": {
+     "found": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "pin": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "shown": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "tokens": 1704,
+     "pretok": 1411
+    },
+    "q03": {
+     "found": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "pin": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "shown": [
+      "q03.heart",
+      "q03.namespace",
+      "q03.ondeath"
+     ],
+     "tokens": 2435,
+     "pretok": 2214
+    },
+    "q04": {
+     "found": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "pin": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "shown": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute"
+     ],
+     "tokens": 2030,
+     "pretok": 1821
+    },
+    "q05": {
+     "found": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "pin": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "shown": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "tokens": 1740,
+     "pretok": 1496
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "shown": [
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "tokens": 2456,
+     "pretok": 2192
+    },
+    "q07": {
+     "found": [
+      "q07.parse",
+      "q07.use",
+      "q07.yml"
+     ],
+     "pin": [
+      "q07.parse",
+      "q07.use",
+      "q07.yml"
+     ],
+     "shown": [
+      "q07.parse",
+      "q07.use"
+     ],
+     "tokens": 1970,
+     "pretok": 1649
+    },
+    "q08": {
+     "found": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "pin": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "shown": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "tokens": 2311,
+     "pretok": 2105
+    },
+    "q09": {
+     "found": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "tokens": 2060,
+     "pretok": 1847
+    },
+    "q10": {
+     "found": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.register",
+      "q10.send"
+     ],
+     "pin": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.register",
+      "q10.send"
+     ],
+     "shown": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.send"
+     ],
+     "tokens": 1794,
+     "pretok": 1383
+    },
+    "q11": {
+     "found": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "pin": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "shown": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "tokens": 1891,
+     "pretok": 1536
+    },
+    "q12": {
+     "found": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "pin": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "shown": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "tokens": 1939,
+     "pretok": 1588
+    },
+    "q13": {
+     "found": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "pin": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "shown": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "tokens": 1845,
+     "pretok": 1600
+    },
+    "q14": {
+     "found": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "pin": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "shown": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "tokens": 1955,
+     "pretok": 1641
+    }
+   },
+   "found_runner": 48,
+   "n_q": 14,
+   "total": 50
+  },
+  "mcp_query": {
+   "found": 48,
+   "pin": 48,
+   "shown": 39,
+   "tokens": 20802,
+   "pretok": 17174,
+   "chars": 83187,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "pin": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "shown": [
+      "q01.command"
+     ],
+     "tokens": 1489,
+     "pretok": 1287
+    },
+    "q02": {
+     "found": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "pin": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "shown": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "tokens": 1493,
+     "pretok": 1195
+    },
+    "q03": {
+     "found": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "pin": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "shown": [
+      "q03.heart",
+      "q03.namespace",
+      "q03.ondeath"
+     ],
+     "tokens": 1479,
+     "pretok": 1287
+    },
+    "q04": {
+     "found": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "pin": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "shown": [
+      "q04.baslat",
+      "q04.execute"
+     ],
+     "tokens": 1487,
+     "pretok": 1318
+    },
+    "q05": {
+     "found": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "pin": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "shown": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "tokens": 1478,
+     "pretok": 1259
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "shown": [
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "tokens": 1471,
+     "pretok": 1217
+    },
+    "q07": {
+     "found": [
+      "q07.parse",
+      "q07.use",
+      "q07.yml"
+     ],
+     "pin": [
+      "q07.parse",
+      "q07.use",
+      "q07.yml"
+     ],
+     "shown": [
+      "q07.parse",
+      "q07.use"
+     ],
+     "tokens": 1482,
+     "pretok": 1168
+    },
+    "q08": {
+     "found": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "pin": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "shown": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "tokens": 1482,
+     "pretok": 1287
+    },
+    "q09": {
+     "found": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "tokens": 1473,
+     "pretok": 1292
+    },
+    "q10": {
+     "found": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.register",
+      "q10.send"
+     ],
+     "pin": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.register",
+      "q10.send"
+     ],
+     "shown": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.send"
+     ],
+     "tokens": 1489,
+     "pretok": 1094
+    },
+    "q11": {
+     "found": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "pin": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "shown": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "tokens": 1494,
+     "pretok": 1160
+    },
+    "q12": {
+     "found": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "pin": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "shown": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "tokens": 1491,
+     "pretok": 1151
+    },
+    "q13": {
+     "found": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "pin": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "shown": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "tokens": 1495,
+     "pretok": 1280
+    },
+    "q14": {
+     "found": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "pin": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "shown": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "tokens": 1499,
+     "pretok": 1179
+    }
+   },
+   "n_q": 14,
+   "total": 50
+  },
+  "mcp_analyze": {
+   "found": 48,
+   "pin": 48,
+   "shown": 40,
+   "tokens": 31176,
+   "pretok": 25935,
+   "chars": 124682,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "pin": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "shown": [
+      "q01.command"
+     ],
+     "tokens": 2777,
+     "pretok": 2387
+    },
+    "q02": {
+     "found": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "pin": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "shown": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "tokens": 1807,
+     "pretok": 1455
+    },
+    "q03": {
+     "found": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "pin": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "shown": [
+      "q03.heart",
+      "q03.namespace",
+      "q03.ondeath"
+     ],
+     "tokens": 2678,
+     "pretok": 2345
+    },
+    "q04": {
+     "found": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "pin": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "shown": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute"
+     ],
+     "tokens": 2193,
+     "pretok": 1909
+    },
+    "q05": {
+     "found": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "pin": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "shown": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "tokens": 1854,
+     "pretok": 1557
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "shown": [
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "tokens": 2662,
+     "pretok": 2283
+    },
+    "q07": {
+     "found": [
+      "q07.parse",
+      "q07.use",
+      "q07.yml"
+     ],
+     "pin": [
+      "q07.parse",
+      "q07.use",
+      "q07.yml"
+     ],
+     "shown": [
+      "q07.parse",
+      "q07.use"
+     ],
+     "tokens": 2117,
+     "pretok": 1709
+    },
+    "q08": {
+     "found": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "pin": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "shown": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "tokens": 2537,
+     "pretok": 2194
+    },
+    "q09": {
+     "found": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "tokens": 2255,
+     "pretok": 1923
+    },
+    "q10": {
+     "found": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.register",
+      "q10.send"
+     ],
+     "pin": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.register",
+      "q10.send"
+     ],
+     "shown": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.send"
+     ],
+     "tokens": 2036,
+     "pretok": 1522
+    },
+    "q11": {
+     "found": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "pin": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "shown": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "tokens": 1999,
+     "pretok": 1572
+    },
+    "q12": {
+     "found": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "pin": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "shown": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "tokens": 2068,
+     "pretok": 1634
+    },
+    "q13": {
+     "found": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "pin": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "shown": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "tokens": 1973,
+     "pretok": 1612
+    },
+    "q14": {
+     "found": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "pin": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "shown": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "tokens": 2220,
+     "pretok": 1833
+    }
+   },
+   "n_q": 14,
+   "total": 50
+  },
+  "cli_an_text": {
+   "found": 48,
+   "pin": 48,
+   "shown": 40,
+   "tokens": 28458,
+   "pretok": 24558,
+   "chars": 113817,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "pin": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "shown": [
+      "q01.command"
+     ],
+     "tokens": 2325,
+     "pretok": 2097
+    },
+    "q02": {
+     "found": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "pin": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "shown": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "tokens": 1704,
+     "pretok": 1411
+    },
+    "q03": {
+     "found": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "pin": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "shown": [
+      "q03.heart",
+      "q03.namespace",
+      "q03.ondeath"
+     ],
+     "tokens": 2435,
+     "pretok": 2208
+    },
+    "q04": {
+     "found": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "pin": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "shown": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute"
+     ],
+     "tokens": 2030,
+     "pretok": 1826
+    },
+    "q05": {
+     "found": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "pin": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "shown": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "tokens": 1741,
+     "pretok": 1501
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "shown": [
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "tokens": 2456,
+     "pretok": 2192
+    },
+    "q07": {
+     "found": [
+      "q07.parse",
+      "q07.use",
+      "q07.yml"
+     ],
+     "pin": [
+      "q07.parse",
+      "q07.use",
+      "q07.yml"
+     ],
+     "shown": [
+      "q07.parse",
+      "q07.use"
+     ],
+     "tokens": 1970,
+     "pretok": 1651
+    },
+    "q08": {
+     "found": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "pin": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "shown": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "tokens": 2311,
+     "pretok": 2096
+    },
+    "q09": {
+     "found": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "tokens": 2060,
+     "pretok": 1846
+    },
+    "q10": {
+     "found": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.register",
+      "q10.send"
+     ],
+     "pin": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.register",
+      "q10.send"
+     ],
+     "shown": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.send"
+     ],
+     "tokens": 1795,
+     "pretok": 1384
+    },
+    "q11": {
+     "found": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "pin": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "shown": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "tokens": 1891,
+     "pretok": 1535
+    },
+    "q12": {
+     "found": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "pin": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "shown": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "tokens": 1939,
+     "pretok": 1579
+    },
+    "q13": {
+     "found": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "pin": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "shown": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "tokens": 1845,
+     "pretok": 1598
+    },
+    "q14": {
+     "found": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "pin": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "shown": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "tokens": 1956,
+     "pretok": 1634
+    }
+   },
+   "n_q": 14,
+   "total": 50
+  },
+  "cli_an_json": {
+   "found": 48,
+   "pin": 48,
+   "shown": 40,
+   "tokens": 56453,
+   "pretok": 53850,
+   "chars": 225790,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "pin": [
+      "q01.chunk",
+      "q01.command",
+      "q01.gametest",
+      "q01.lantern",
+      "q01.network",
+      "q01.ritual"
+     ],
+     "shown": [
+      "q01.command"
+     ],
+     "tokens": 4676,
+     "pretok": 4428
+    },
+    "q02": {
+     "found": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "pin": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "shown": [
+      "q02.init",
+      "q02.reload"
+     ],
+     "tokens": 2796,
+     "pretok": 2605
+    },
+    "q03": {
+     "found": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "pin": [
+      "q03.heart",
+      "q03.ondeath"
+     ],
+     "shown": [
+      "q03.heart",
+      "q03.namespace",
+      "q03.ondeath"
+     ],
+     "tokens": 4983,
+     "pretok": 4824
+    },
+    "q04": {
+     "found": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "pin": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute",
+      "q04.helper"
+     ],
+     "shown": [
+      "q04.baslat",
+      "q04.command",
+      "q04.execute"
+     ],
+     "tokens": 4109,
+     "pretok": 4000
+    },
+    "q05": {
+     "found": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "pin": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "shown": [
+      "q05.java",
+      "q05.self",
+      "q05.start"
+     ],
+     "tokens": 4330,
+     "pretok": 4104
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "shown": [
+      "q06.copy",
+      "q06.default_file",
+      "q06.fallback",
+      "q06.load"
+     ],
+     "tokens": 4958,
+     "pretok": 4833
+    },
+    "q07": {
+     "found": [
+      "q07.parse",
+      "q07.use",
+      "q07.yml"
+     ],
+     "pin": [
+      "q07.parse",
+      "q07.use",
+      "q07.yml"
+     ],
+     "shown": [
+      "q07.parse",
+      "q07.use"
+     ],
+     "tokens": 3440,
+     "pretok": 3212
+    },
+    "q08": {
+     "found": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "pin": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "shown": [
+      "q08.file",
+      "q08.keys",
+      "q08.pattern"
+     ],
+     "tokens": 4728,
+     "pretok": 4668
+    },
+    "q09": {
+     "found": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "pin": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "shown": [
+      "q09.en",
+      "q09.item",
+      "q09.model",
+      "q09.tr"
+     ],
+     "tokens": 3665,
+     "pretok": 3550
+    },
+    "q10": {
+     "found": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.register",
+      "q10.send"
+     ],
+     "pin": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.register",
+      "q10.send"
+     ],
+     "shown": [
+      "q10.handler",
+      "q10.key",
+      "q10.payload",
+      "q10.send"
+     ],
+     "tokens": 3622,
+     "pretok": 3310
+    },
+    "q11": {
+     "found": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "pin": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "shown": [
+      "q11.clear",
+      "q11.hook",
+      "q11.restore"
+     ],
+     "tokens": 3527,
+     "pretok": 3247
+    },
+    "q12": {
+     "found": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "pin": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "shown": [
+      "q12.fields",
+      "q12.helper",
+      "q12.init"
+     ],
+     "tokens": 3590,
+     "pretok": 3355
+    },
+    "q13": {
+     "found": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "pin": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "shown": [
+      "q13.check",
+      "q13.cooldown",
+      "q13.spawn"
+     ],
+     "tokens": 3624,
+     "pretok": 3472
+    },
+    "q14": {
+     "found": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "pin": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "shown": [
+      "q14.listener",
+      "q14.spawn"
+     ],
+     "tokens": 4405,
+     "pretok": 4242
+    }
+   },
+   "n_q": 14,
+   "total": 50
+  },
+  "_seconds": 37.9
+ },
+ "orders_app": {
+  "q_text": {
+   "found": 32,
+   "pin": 32,
+   "shown": 28,
+   "tokens": 8246,
+   "pretok": 8079,
+   "chars": 32964,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 880,
+     "pretok": 844
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler"
+     ],
+     "tokens": 807,
+     "pretok": 799
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db"
+     ],
+     "tokens": 711,
+     "pretok": 695
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 662,
+     "pretok": 675
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 743,
+     "pretok": 713
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 1041,
+     "pretok": 1028
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 666,
+     "pretok": 652
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 1022,
+     "pretok": 1027
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "tokens": 781,
+     "pretok": 742
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "tokens": 933,
+     "pretok": 904
+    }
+   },
+   "found_runner": 32,
+   "n_q": 10,
+   "total": 32
+  },
+  "q_json": {
+   "found": 31,
+   "pin": 31,
+   "shown": 26,
+   "tokens": 13981,
+   "pretok": 13824,
+   "chars": 55914,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [],
+     "tokens": 1412,
+     "pretok": 1378
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler"
+     ],
+     "tokens": 1405,
+     "pretok": 1444
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "tokens": 1384,
+     "pretok": 1361
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 1322,
+     "pretok": 1333
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 1413,
+     "pretok": 1366
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 1423,
+     "pretok": 1396
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 1406,
+     "pretok": 1377
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 1409,
+     "pretok": 1455
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default"
+     ],
+     "tokens": 1404,
+     "pretok": 1344
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "tokens": 1403,
+     "pretok": 1370
+    }
+   },
+   "found_runner": 31,
+   "n_q": 10,
+   "total": 32
+  },
+  "an_bench": {
+   "found": 32,
+   "pin": 32,
+   "shown": 31,
+   "tokens": 15035,
+   "pretok": 14824,
+   "chars": 60134,
+   "neg": 1,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 1754,
+     "pretok": 1728
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler",
+      "q02.sink"
+     ],
+     "tokens": 1617,
+     "pretok": 1603
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "tokens": 1202,
+     "pretok": 1216
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 1529,
+     "pretok": 1469
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 1701,
+     "pretok": 1693
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 2032,
+     "pretok": 1939
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 954,
+     "pretok": 968
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 1616,
+     "pretok": 1618
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "tokens": 1436,
+     "pretok": 1427
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "tokens": 1194,
+     "pretok": 1163
+    }
+   },
+   "found_runner": 32,
+   "n_q": 10,
+   "total": 32
+  },
+  "mcp_query": {
+   "found": 32,
+   "pin": 32,
+   "shown": 28,
+   "tokens": 8246,
+   "pretok": 8079,
+   "chars": 32964,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 880,
+     "pretok": 844
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler"
+     ],
+     "tokens": 807,
+     "pretok": 799
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db"
+     ],
+     "tokens": 711,
+     "pretok": 695
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 662,
+     "pretok": 675
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 743,
+     "pretok": 713
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 1041,
+     "pretok": 1028
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 666,
+     "pretok": 652
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 1022,
+     "pretok": 1027
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "tokens": 781,
+     "pretok": 742
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "tokens": 933,
+     "pretok": 904
+    }
+   },
+   "n_q": 10,
+   "total": 32
+  },
+  "mcp_analyze": {
+   "found": 32,
+   "pin": 32,
+   "shown": 31,
+   "tokens": 16824,
+   "pretok": 15724,
+   "chars": 67273,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 1941,
+     "pretok": 1790
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler",
+      "q02.sink"
+     ],
+     "tokens": 1811,
+     "pretok": 1695
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "tokens": 1387,
+     "pretok": 1364
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 1720,
+     "pretok": 1584
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 1874,
+     "pretok": 1722
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 2229,
+     "pretok": 2004
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 1109,
+     "pretok": 1097
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 1799,
+     "pretok": 1694
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "tokens": 1628,
+     "pretok": 1546
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "tokens": 1326,
+     "pretok": 1228
+    }
+   },
+   "n_q": 10,
+   "total": 32
+  },
+  "cli_an_text": {
+   "found": 32,
+   "pin": 32,
+   "shown": 31,
+   "tokens": 15041,
+   "pretok": 14797,
+   "chars": 60144,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 1755,
+     "pretok": 1738
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler",
+      "q02.sink"
+     ],
+     "tokens": 1618,
+     "pretok": 1603
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "tokens": 1202,
+     "pretok": 1213
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 1530,
+     "pretok": 1463
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 1701,
+     "pretok": 1693
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 2033,
+     "pretok": 1929
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 954,
+     "pretok": 957
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 1617,
+     "pretok": 1616
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "tokens": 1436,
+     "pretok": 1422
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "tokens": 1195,
+     "pretok": 1163
+    }
+   },
+   "n_q": 10,
+   "total": 32
+  },
+  "cli_an_json": {
+   "found": 32,
+   "pin": 32,
+   "shown": 31,
+   "tokens": 39788,
+   "pretok": 41652,
+   "chars": 159134,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 4347,
+     "pretok": 4508
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler",
+      "q02.sink"
+     ],
+     "tokens": 4212,
+     "pretok": 4463
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "tokens": 3700,
+     "pretok": 3956
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 3319,
+     "pretok": 3381
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 4577,
+     "pretok": 4737
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 4167,
+     "pretok": 4228
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 3453,
+     "pretok": 3741
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 3973,
+     "pretok": 4219
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "tokens": 4785,
+     "pretok": 5040
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "tokens": 3255,
+     "pretok": 3379
+    }
+   },
+   "n_q": 10,
+   "total": 32
+  },
+  "_seconds": 37.6
+ },
+ "orders_app_tr": {
+  "q_text": {
+   "found": 32,
+   "pin": 32,
+   "shown": 30,
+   "tokens": 8182,
+   "pretok": 7992,
+   "chars": 32719,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 820,
+     "pretok": 784
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "tokens": 843,
+     "pretok": 815
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "tokens": 911,
+     "pretok": 868
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 663,
+     "pretok": 686
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 736,
+     "pretok": 702
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 908,
+     "pretok": 899
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 701,
+     "pretok": 682
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 947,
+     "pretok": 966
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "tokens": 818,
+     "pretok": 781
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.test"
+     ],
+     "tokens": 835,
+     "pretok": 809
+    }
+   },
+   "found_runner": 32,
+   "n_q": 10,
+   "total": 32
+  },
+  "q_json": {
+   "found": 29,
+   "pin": 29,
+   "shown": 29,
+   "tokens": 14155,
+   "pretok": 14013,
+   "chars": 56609,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 1421,
+     "pretok": 1411
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "tokens": 1425,
+     "pretok": 1454
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "tokens": 1415,
+     "pretok": 1391
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 1409,
+     "pretok": 1400
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 1407,
+     "pretok": 1343
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 1416,
+     "pretok": 1392
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 1412,
+     "pretok": 1387
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 1418,
+     "pretok": 1451
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default"
+     ],
+     "tokens": 1421,
+     "pretok": 1377
+    },
+    "q10": {
+     "found": [
+      "q10.test"
+     ],
+     "pin": [
+      "q10.test"
+     ],
+     "shown": [
+      "q10.test"
+     ],
+     "tokens": 1411,
+     "pretok": 1407
+    }
+   },
+   "found_runner": 29,
+   "n_q": 10,
+   "total": 32
+  },
+  "an_bench": {
+   "found": 32,
+   "pin": 32,
+   "shown": 30,
+   "tokens": 15215,
+   "pretok": 14823,
+   "chars": 60844,
+   "neg": 1,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 1585,
+     "pretok": 1548
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "tokens": 1398,
+     "pretok": 1350
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "tokens": 1522,
+     "pretok": 1497
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 1441,
+     "pretok": 1377
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 1785,
+     "pretok": 1738
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 1929,
+     "pretok": 1813
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 1224,
+     "pretok": 1233
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 1524,
+     "pretok": 1520
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "tokens": 1546,
+     "pretok": 1525
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.test"
+     ],
+     "tokens": 1261,
+     "pretok": 1222
+    }
+   },
+   "found_runner": 32,
+   "n_q": 10,
+   "total": 32
+  },
+  "mcp_query": {
+   "found": 32,
+   "pin": 32,
+   "shown": 30,
+   "tokens": 8182,
+   "pretok": 7992,
+   "chars": 32719,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 820,
+     "pretok": 784
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "tokens": 843,
+     "pretok": 815
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "tokens": 911,
+     "pretok": 868
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 663,
+     "pretok": 686
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 736,
+     "pretok": 702
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 908,
+     "pretok": 899
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 701,
+     "pretok": 682
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 947,
+     "pretok": 966
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "tokens": 818,
+     "pretok": 781
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.test"
+     ],
+     "tokens": 835,
+     "pretok": 809
+    }
+   },
+   "n_q": 10,
+   "total": 32
+  },
+  "mcp_analyze": {
+   "found": 32,
+   "pin": 32,
+   "shown": 30,
+   "tokens": 16871,
+   "pretok": 15565,
+   "chars": 67466,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 1730,
+     "pretok": 1575
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "tokens": 1533,
+     "pretok": 1418
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "tokens": 1720,
+     "pretok": 1620
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 1568,
+     "pretok": 1428
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 1986,
+     "pretok": 1797
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 2145,
+     "pretok": 1916
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 1383,
+     "pretok": 1338
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 1666,
+     "pretok": 1567
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "tokens": 1742,
+     "pretok": 1626
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.test"
+     ],
+     "tokens": 1398,
+     "pretok": 1280
+    }
+   },
+   "n_q": 10,
+   "total": 32
+  },
+  "cli_an_text": {
+   "found": 32,
+   "pin": 32,
+   "shown": 30,
+   "tokens": 15218,
+   "pretok": 14817,
+   "chars": 60854,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 1585,
+     "pretok": 1540
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "tokens": 1399,
+     "pretok": 1348
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "tokens": 1522,
+     "pretok": 1498
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 1441,
+     "pretok": 1374
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 1785,
+     "pretok": 1738
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 1930,
+     "pretok": 1813
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 1224,
+     "pretok": 1235
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 1524,
+     "pretok": 1526
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "tokens": 1547,
+     "pretok": 1526
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.test"
+     ],
+     "tokens": 1261,
+     "pretok": 1219
+    }
+   },
+   "n_q": 10,
+   "total": 32
+  },
+  "cli_an_json": {
+   "found": 32,
+   "pin": 32,
+   "shown": 30,
+   "tokens": 40920,
+   "pretok": 42583,
+   "chars": 163667,
+   "neg": 0,
+   "per_q": {
+    "q01": {
+     "found": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "pin": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "shown": [
+      "q01.commit",
+      "q01.insert",
+      "q01.save"
+     ],
+     "tokens": 4299,
+     "pretok": 4437
+    },
+    "q02": {
+     "found": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "pin": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "shown": [
+      "q02.handler",
+      "q02.service",
+      "q02.sink"
+     ],
+     "tokens": 3525,
+     "pretok": 3720
+    },
+    "q03": {
+     "found": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "pin": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "shown": [
+      "q03.db",
+      "q03.discount",
+      "q03.max"
+     ],
+     "tokens": 4435,
+     "pretok": 4682
+    },
+    "q04": {
+     "found": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "pin": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "shown": [
+      "q04.above",
+      "q04.below",
+      "q04.roundtrip",
+      "q04.total"
+     ],
+     "tokens": 3513,
+     "pretok": 3604
+    },
+    "q05": {
+     "found": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "pin": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "shown": [
+      "q05.accepted",
+      "q05.only_repo",
+      "q05.zero_ops"
+     ],
+     "tokens": 4845,
+     "pretok": 4987
+    },
+    "q06": {
+     "found": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "pin": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "shown": [
+      "q06.caller",
+      "q06.handler",
+      "q06.test"
+     ],
+     "tokens": 4307,
+     "pretok": 4347
+    },
+    "q07": {
+     "found": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "pin": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "shown": [
+      "q07.apply",
+      "q07.caller",
+      "q07.threshold"
+     ],
+     "tokens": 4129,
+     "pretok": 4389
+    },
+    "q08": {
+     "found": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "pin": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "shown": [
+      "q08.handler",
+      "q08.missing",
+      "q08.select",
+      "q08.service"
+     ],
+     "tokens": 3753,
+     "pretok": 3980
+    },
+    "q09": {
+     "found": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "pin": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "shown": [
+      "q09.connect",
+      "q09.default",
+      "q09.env"
+     ],
+     "tokens": 4870,
+     "pretok": 5132
+    },
+    "q10": {
+     "found": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "pin": [
+      "q10.raise",
+      "q10.status",
+      "q10.test"
+     ],
+     "shown": [
+      "q10.test"
+     ],
+     "tokens": 3244,
+     "pretok": 3305
+    }
+   },
+   "n_q": 10,
+   "total": 32
+  },
+  "_seconds": 33.0
+ },
+ "graphify_core": {
+  "q_text": {
+   "found": 36,
+   "pin": 22,
+   "shown": 26,
+   "tokens": 12820,
+   "pretok": 12725,
+   "chars": 51270,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [],
+     "shown": [
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "tokens": 1486,
+     "pretok": 1553
+    },
+    "g02": {
+     "found": [
+      "g02.entry",
+      "g02.render",
+      "g02.score",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "pin": [
+      "g02.entry",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "shown": [
+      "g02.entry",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "tokens": 1377,
+     "pretok": 1440
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 1480,
+     "pretok": 1370
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [
+      "g04.load"
+     ],
+     "tokens": 1327,
+     "pretok": 1297
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check",
+      "g05.default"
+     ],
+     "shown": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "tokens": 1499,
+     "pretok": 1490
+    },
+    "g06": {
+     "found": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 1320,
+     "pretok": 1297
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 1487,
+     "pretok": 1466
+    },
+    "g08": {
+     "found": [
+      "g08.build",
+      "g08.cluster",
+      "g08.detect",
+      "g08.entry",
+      "g08.extract",
+      "g08.write"
+     ],
+     "pin": [
+      "g08.entry"
+     ],
+     "shown": [
+      "g08.entry"
+     ],
+     "tokens": 1365,
+     "pretok": 1373
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "tokens": 1479,
+     "pretok": 1439
+    }
+   },
+   "found_runner": 36,
+   "n_q": 9,
+   "total": 37
+  },
+  "q_json": {
+   "found": 27,
+   "pin": 17,
+   "shown": 16,
+   "tokens": 12872,
+   "pretok": 13020,
+   "chars": 51479,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [
+      "g01.caller"
+     ],
+     "shown": [
+      "g01.ratio"
+     ],
+     "tokens": 1426,
+     "pretok": 1497
+    },
+    "g02": {
+     "found": [
+      "g02.entry",
+      "g02.render",
+      "g02.score",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "pin": [
+      "g02.entry",
+      "g02.terms"
+     ],
+     "shown": [
+      "g02.entry",
+      "g02.terms"
+     ],
+     "tokens": 1432,
+     "pretok": 1398
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 1429,
+     "pretok": 1421
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [],
+     "tokens": 1412,
+     "pretok": 1437
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check"
+     ],
+     "shown": [
+      "g05.env"
+     ],
+     "tokens": 1429,
+     "pretok": 1453
+    },
+    "g06": {
+     "found": [
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.reason"
+     ],
+     "tokens": 1439,
+     "pretok": 1439
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 1429,
+     "pretok": 1464
+    },
+    "g08": {
+     "found": [
+      "g08.entry"
+     ],
+     "pin": [
+      "g08.entry"
+     ],
+     "shown": [
+      "g08.entry"
+     ],
+     "tokens": 1438,
+     "pretok": 1428
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.over"
+     ],
+     "tokens": 1438,
+     "pretok": 1483
+    }
+   },
+   "found_runner": 27,
+   "n_q": 9,
+   "total": 37
+  },
+  "an_bench": {
+   "found": 36,
+   "pin": 23,
+   "shown": 26,
+   "tokens": 17317,
+   "pretok": 17507,
+   "chars": 69248,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [
+      "g01.caller"
+     ],
+     "shown": [
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "tokens": 1748,
+     "pretok": 1847
+    },
+    "g02": {
+     "found": [
+      "g02.entry",
+      "g02.render",
+      "g02.score",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "pin": [
+      "g02.entry",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "shown": [
+      "g02.entry",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "tokens": 1884,
+     "pretok": 1986
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 2140,
+     "pretok": 2059
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [
+      "g04.load"
+     ],
+     "tokens": 1896,
+     "pretok": 1931
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check",
+      "g05.default"
+     ],
+     "shown": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "tokens": 2136,
+     "pretok": 2167
+    },
+    "g06": {
+     "found": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 1578,
+     "pretok": 1581
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 2050,
+     "pretok": 2048
+    },
+    "g08": {
+     "found": [
+      "g08.build",
+      "g08.cluster",
+      "g08.detect",
+      "g08.entry",
+      "g08.extract",
+      "g08.write"
+     ],
+     "pin": [
+      "g08.entry"
+     ],
+     "shown": [
+      "g08.entry"
+     ],
+     "tokens": 1954,
+     "pretok": 2015
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "tokens": 1931,
+     "pretok": 1873
+    }
+   },
+   "found_runner": 36,
+   "n_q": 9,
+   "total": 37
+  },
+  "mcp_query": {
+   "found": 36,
+   "pin": 22,
+   "shown": 26,
+   "tokens": 12820,
+   "pretok": 12725,
+   "chars": 51270,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [],
+     "shown": [
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "tokens": 1486,
+     "pretok": 1553
+    },
+    "g02": {
+     "found": [
+      "g02.entry",
+      "g02.render",
+      "g02.score",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "pin": [
+      "g02.entry",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "shown": [
+      "g02.entry",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "tokens": 1377,
+     "pretok": 1440
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 1480,
+     "pretok": 1370
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [
+      "g04.load"
+     ],
+     "tokens": 1327,
+     "pretok": 1297
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check",
+      "g05.default"
+     ],
+     "shown": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "tokens": 1499,
+     "pretok": 1490
+    },
+    "g06": {
+     "found": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 1320,
+     "pretok": 1297
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 1487,
+     "pretok": 1466
+    },
+    "g08": {
+     "found": [
+      "g08.build",
+      "g08.cluster",
+      "g08.detect",
+      "g08.entry",
+      "g08.extract",
+      "g08.write"
+     ],
+     "pin": [
+      "g08.entry"
+     ],
+     "shown": [
+      "g08.entry"
+     ],
+     "tokens": 1365,
+     "pretok": 1373
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "tokens": 1479,
+     "pretok": 1439
+    }
+   },
+   "n_q": 9,
+   "total": 37
+  },
+  "mcp_analyze": {
+   "found": 36,
+   "pin": 23,
+   "shown": 26,
+   "tokens": 19301,
+   "pretok": 18631,
+   "chars": 77188,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [
+      "g01.caller"
+     ],
+     "shown": [
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "tokens": 1961,
+     "pretok": 1955
+    },
+    "g02": {
+     "found": [
+      "g02.entry",
+      "g02.render",
+      "g02.score",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "pin": [
+      "g02.entry",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "shown": [
+      "g02.entry",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "tokens": 2137,
+     "pretok": 2122
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 2386,
+     "pretok": 2217
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [
+      "g04.load"
+     ],
+     "tokens": 2177,
+     "pretok": 2122
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check",
+      "g05.default"
+     ],
+     "shown": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "tokens": 2400,
+     "pretok": 2349
+    },
+    "g06": {
+     "found": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 1736,
+     "pretok": 1648
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 2229,
+     "pretok": 2119
+    },
+    "g08": {
+     "found": [
+      "g08.build",
+      "g08.cluster",
+      "g08.detect",
+      "g08.entry",
+      "g08.extract",
+      "g08.write"
+     ],
+     "pin": [
+      "g08.entry"
+     ],
+     "shown": [
+      "g08.entry"
+     ],
+     "tokens": 2188,
+     "pretok": 2152
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "tokens": 2087,
+     "pretok": 1947
+    }
+   },
+   "n_q": 9,
+   "total": 37
+  },
+  "cli_an_text": {
+   "found": 36,
+   "pin": 23,
+   "shown": 26,
+   "tokens": 17317,
+   "pretok": 17544,
+   "chars": 69257,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [
+      "g01.caller"
+     ],
+     "shown": [
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "tokens": 1748,
+     "pretok": 1854
+    },
+    "g02": {
+     "found": [
+      "g02.entry",
+      "g02.render",
+      "g02.score",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "pin": [
+      "g02.entry",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "shown": [
+      "g02.entry",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "tokens": 1884,
+     "pretok": 1993
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 2140,
+     "pretok": 2046
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [
+      "g04.load"
+     ],
+     "tokens": 1896,
+     "pretok": 1951
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check",
+      "g05.default"
+     ],
+     "shown": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "tokens": 2136,
+     "pretok": 2169
+    },
+    "g06": {
+     "found": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 1578,
+     "pretok": 1581
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 2050,
+     "pretok": 2050
+    },
+    "g08": {
+     "found": [
+      "g08.build",
+      "g08.cluster",
+      "g08.detect",
+      "g08.entry",
+      "g08.extract",
+      "g08.write"
+     ],
+     "pin": [
+      "g08.entry"
+     ],
+     "shown": [
+      "g08.entry"
+     ],
+     "tokens": 1954,
+     "pretok": 2023
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "tokens": 1931,
+     "pretok": 1877
+    }
+   },
+   "n_q": 9,
+   "total": 37
+  },
+  "cli_an_json": {
+   "found": 36,
+   "pin": 23,
+   "shown": 26,
+   "tokens": 37110,
+   "pretok": 39116,
+   "chars": 148432,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [
+      "g01.caller"
+     ],
+     "shown": [
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "tokens": 3695,
+     "pretok": 3992
+    },
+    "g02": {
+     "found": [
+      "g02.entry",
+      "g02.render",
+      "g02.score",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "pin": [
+      "g02.entry",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "shown": [
+      "g02.entry",
+      "g02.seeds",
+      "g02.terms",
+      "g02.traverse"
+     ],
+     "tokens": 3629,
+     "pretok": 3947
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 4484,
+     "pretok": 4554
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [
+      "g04.load"
+     ],
+     "tokens": 4295,
+     "pretok": 4634
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check",
+      "g05.default"
+     ],
+     "shown": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "tokens": 4987,
+     "pretok": 5254
+    },
+    "g06": {
+     "found": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 3473,
+     "pretok": 3639
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 3874,
+     "pretok": 4024
+    },
+    "g08": {
+     "found": [
+      "g08.build",
+      "g08.cluster",
+      "g08.detect",
+      "g08.entry",
+      "g08.extract",
+      "g08.write"
+     ],
+     "pin": [
+      "g08.entry"
+     ],
+     "shown": [
+      "g08.entry"
+     ],
+     "tokens": 4208,
+     "pretok": 4523
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "tokens": 4465,
+     "pretok": 4549
+    }
+   },
+   "n_q": 9,
+   "total": 37
+  },
+  "_seconds": 180.7
+ },
+ "graphify_core_tr": {
+  "q_text": {
+   "found": 31,
+   "pin": 18,
+   "shown": 21,
+   "tokens": 12995,
+   "pretok": 12676,
+   "chars": 51965,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [
+      "g01.caller"
+     ],
+     "shown": [
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "tokens": 1353,
+     "pretok": 1411
+    },
+    "g02": {
+     "found": [
+      "g02.entry"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1488,
+     "pretok": 1496
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 1482,
+     "pretok": 1368
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [
+      "g04.load"
+     ],
+     "tokens": 1472,
+     "pretok": 1485
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check",
+      "g05.default"
+     ],
+     "shown": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "tokens": 1485,
+     "pretok": 1444
+    },
+    "g06": {
+     "found": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 1479,
+     "pretok": 1400
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 1355,
+     "pretok": 1341
+    },
+    "g08": {
+     "found": [
+      "g08.build",
+      "g08.cluster",
+      "g08.detect",
+      "g08.entry",
+      "g08.extract",
+      "g08.write"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1392,
+     "pretok": 1306
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "tokens": 1489,
+     "pretok": 1425
+    }
+   },
+   "found_runner": 31,
+   "n_q": 9,
+   "total": 37
+  },
+  "q_json": {
+   "found": 20,
+   "pin": 15,
+   "shown": 13,
+   "tokens": 12928,
+   "pretok": 12874,
+   "chars": 51698,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.func"
+     ],
+     "pin": [
+      "g01.caller"
+     ],
+     "shown": [],
+     "tokens": 1438,
+     "pretok": 1488
+    },
+    "g02": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1432,
+     "pretok": 1367
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.path"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path"
+     ],
+     "tokens": 1427,
+     "pretok": 1417
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [],
+     "tokens": 1438,
+     "pretok": 1379
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check"
+     ],
+     "shown": [
+      "g05.env"
+     ],
+     "tokens": 1440,
+     "pretok": 1432
+    },
+    "g06": {
+     "found": [
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 1440,
+     "pretok": 1447
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 1433,
+     "pretok": 1448
+    },
+    "g08": {
+     "found": [
+      "g08.entry"
+     ],
+     "pin": [
+      "g08.entry"
+     ],
+     "shown": [
+      "g08.entry"
+     ],
+     "tokens": 1434,
+     "pretok": 1431
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.over"
+     ],
+     "tokens": 1446,
+     "pretok": 1465
+    }
+   },
+   "found_runner": 20,
+   "n_q": 9,
+   "total": 37
+  },
+  "an_bench": {
+   "found": 31,
+   "pin": 20,
+   "shown": 21,
+   "tokens": 17704,
+   "pretok": 17507,
+   "chars": 70800,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [
+      "g01.caller"
+     ],
+     "shown": [
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "tokens": 1641,
+     "pretok": 1721
+    },
+    "g02": {
+     "found": [
+      "g02.entry"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 2038,
+     "pretok": 2051
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 1971,
+     "pretok": 1861
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [
+      "g04.load"
+     ],
+     "tokens": 2048,
+     "pretok": 2085
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "shown": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "tokens": 2154,
+     "pretok": 2139
+    },
+    "g06": {
+     "found": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 1812,
+     "pretok": 1759
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 1755,
+     "pretok": 1721
+    },
+    "g08": {
+     "found": [
+      "g08.build",
+      "g08.cluster",
+      "g08.detect",
+      "g08.entry",
+      "g08.extract",
+      "g08.write"
+     ],
+     "pin": [
+      "g08.entry"
+     ],
+     "shown": [],
+     "tokens": 2115,
+     "pretok": 2106
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "tokens": 2170,
+     "pretok": 2064
+    }
+   },
+   "found_runner": 31,
+   "n_q": 9,
+   "total": 37
+  },
+  "mcp_query": {
+   "found": 31,
+   "pin": 18,
+   "shown": 21,
+   "tokens": 12995,
+   "pretok": 12676,
+   "chars": 51965,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [
+      "g01.caller"
+     ],
+     "shown": [
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "tokens": 1353,
+     "pretok": 1411
+    },
+    "g02": {
+     "found": [
+      "g02.entry"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1488,
+     "pretok": 1496
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 1482,
+     "pretok": 1368
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [
+      "g04.load"
+     ],
+     "tokens": 1472,
+     "pretok": 1485
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check",
+      "g05.default"
+     ],
+     "shown": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "tokens": 1485,
+     "pretok": 1444
+    },
+    "g06": {
+     "found": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 1479,
+     "pretok": 1400
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 1355,
+     "pretok": 1341
+    },
+    "g08": {
+     "found": [
+      "g08.build",
+      "g08.cluster",
+      "g08.detect",
+      "g08.entry",
+      "g08.extract",
+      "g08.write"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1392,
+     "pretok": 1306
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "tokens": 1489,
+     "pretok": 1425
+    }
+   },
+   "n_q": 9,
+   "total": 37
+  },
+  "mcp_analyze": {
+   "found": 31,
+   "pin": 20,
+   "shown": 21,
+   "tokens": 19360,
+   "pretok": 18266,
+   "chars": 77431,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [
+      "g01.caller"
+     ],
+     "shown": [
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "tokens": 1813,
+     "pretok": 1786
+    },
+    "g02": {
+     "found": [
+      "g02.entry"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 2242,
+     "pretok": 2147
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 2167,
+     "pretok": 1973
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [
+      "g04.load"
+     ],
+     "tokens": 2292,
+     "pretok": 2224
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "shown": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "tokens": 2363,
+     "pretok": 2254
+    },
+    "g06": {
+     "found": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 1947,
+     "pretok": 1797
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 1891,
+     "pretok": 1788
+    },
+    "g08": {
+     "found": [
+      "g08.build",
+      "g08.cluster",
+      "g08.detect",
+      "g08.entry",
+      "g08.extract",
+      "g08.write"
+     ],
+     "pin": [
+      "g08.entry"
+     ],
+     "shown": [],
+     "tokens": 2343,
+     "pretok": 2198
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "tokens": 2302,
+     "pretok": 2099
+    }
+   },
+   "n_q": 9,
+   "total": 37
+  },
+  "cli_an_text": {
+   "found": 31,
+   "pin": 20,
+   "shown": 21,
+   "tokens": 17705,
+   "pretok": 17534,
+   "chars": 70809,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [
+      "g01.caller"
+     ],
+     "shown": [
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "tokens": 1641,
+     "pretok": 1715
+    },
+    "g02": {
+     "found": [
+      "g02.entry"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 2038,
+     "pretok": 2058
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 1971,
+     "pretok": 1865
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [
+      "g04.load"
+     ],
+     "tokens": 2048,
+     "pretok": 2090
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "shown": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "tokens": 2154,
+     "pretok": 2136
+    },
+    "g06": {
+     "found": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 1813,
+     "pretok": 1761
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 1755,
+     "pretok": 1731
+    },
+    "g08": {
+     "found": [
+      "g08.build",
+      "g08.cluster",
+      "g08.detect",
+      "g08.entry",
+      "g08.extract",
+      "g08.write"
+     ],
+     "pin": [
+      "g08.entry"
+     ],
+     "shown": [],
+     "tokens": 2115,
+     "pretok": 2112
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "tokens": 2170,
+     "pretok": 2066
+    }
+   },
+   "n_q": 9,
+   "total": 37
+  },
+  "cli_an_json": {
+   "found": 31,
+   "pin": 20,
+   "shown": 21,
+   "tokens": 36616,
+   "pretok": 37993,
+   "chars": 146454,
+   "neg": 0,
+   "per_q": {
+    "g01": {
+     "found": [
+      "g01.caller",
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "pin": [
+      "g01.caller"
+     ],
+     "shown": [
+      "g01.cut",
+      "g01.func",
+      "g01.ratio"
+     ],
+     "tokens": 3351,
+     "pretok": 3599
+    },
+    "g02": {
+     "found": [
+      "g02.entry"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 4134,
+     "pretok": 4332
+    },
+    "g03": {
+     "found": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "pin": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "shown": [
+      "g03.disable",
+      "g03.enable",
+      "g03.path",
+      "g03.responses"
+     ],
+     "tokens": 4254,
+     "pretok": 4307
+    },
+    "g04": {
+     "found": [
+      "g04.dir",
+      "g04.load",
+      "g04.save"
+     ],
+     "pin": [
+      "g04.dir"
+     ],
+     "shown": [
+      "g04.load"
+     ],
+     "tokens": 4725,
+     "pretok": 5013
+    },
+    "g05": {
+     "found": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "pin": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "shown": [
+      "g05.check",
+      "g05.default",
+      "g05.env"
+     ],
+     "tokens": 4823,
+     "pretok": 5015
+    },
+    "g06": {
+     "found": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "pin": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "shown": [
+      "g06.fallback",
+      "g06.list",
+      "g06.reason"
+     ],
+     "tokens": 3480,
+     "pretok": 3567
+    },
+    "g07": {
+     "found": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "pin": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "shown": [
+      "g07.bench",
+      "g07.cli",
+      "g07.mcp",
+      "g07.query"
+     ],
+     "tokens": 3239,
+     "pretok": 3369
+    },
+    "g08": {
+     "found": [
+      "g08.build",
+      "g08.cluster",
+      "g08.detect",
+      "g08.entry",
+      "g08.extract",
+      "g08.write"
+     ],
+     "pin": [
+      "g08.entry"
+     ],
+     "shown": [],
+     "tokens": 4317,
+     "pretok": 4483
+    },
+    "g09": {
+     "found": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "pin": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "shown": [
+      "g09.default",
+      "g09.env",
+      "g09.over"
+     ],
+     "tokens": 4293,
+     "pretok": 4308
+    }
+   },
+   "n_q": 9,
+   "total": 37
+  },
+  "_seconds": 110.8
+ },
+ "heldout_repoatlas": {
+  "q_text": {
+   "found": 26,
+   "pin": 19,
+   "shown": 14,
+   "tokens": 11356,
+   "pretok": 11005,
+   "chars": 45416,
+   "neg": 0,
+   "per_q": {
+    "h01": {
+     "found": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "pin": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "shown": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "tokens": 1272,
+     "pretok": 1253
+    },
+    "h02": {
+     "found": [
+      "h02.allow",
+      "h02.scrub"
+     ],
+     "pin": [],
+     "shown": [
+      "h02.scrub"
+     ],
+     "tokens": 1484,
+     "pretok": 1414
+    },
+    "h03": {
+     "found": [
+      "h03.build",
+      "h03.cli",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "pin": [
+      "h03.build",
+      "h03.cli",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "shown": [
+      "h03.build",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "tokens": 1483,
+     "pretok": 1431
+    },
+    "h04": {
+     "found": [
+      "h04.check",
+      "h04.feedback",
+      "h04.research",
+      "h04.source",
+      "h04.url"
+     ],
+     "pin": [
+      "h04.check",
+      "h04.feedback",
+      "h04.source",
+      "h04.url"
+     ],
+     "shown": [],
+     "tokens": 1437,
+     "pretok": 1383
+    },
+    "h05": {
+     "found": [
+      "h05.caller",
+      "h05.inv"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1361,
+     "pretok": 1436
+    },
+    "h06": {
+     "found": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "pin": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "shown": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "tokens": 1498,
+     "pretok": 1356
+    },
+    "h07": {
+     "found": [
+      "h07.level",
+      "h07.refuse",
+      "h07.runtime"
+     ],
+     "pin": [
+      "h07.refuse"
+     ],
+     "shown": [
+      "h07.refuse"
+     ],
+     "tokens": 1333,
+     "pretok": 1250
+    },
+    "h08": {
+     "found": [
+      "h08.cli",
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "pin": [
+      "h08.cli",
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "shown": [
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "tokens": 1488,
+     "pretok": 1482
+    }
+   },
+   "found_runner": 26,
+   "n_q": 8,
+   "total": 33
+  },
+  "q_json": {
+   "found": 21,
+   "pin": 17,
+   "shown": 10,
+   "tokens": 11538,
+   "pretok": 11069,
+   "chars": 46137,
+   "neg": 0,
+   "per_q": {
+    "h01": {
+     "found": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "pin": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "shown": [
+      "h01.call",
+      "h01.container"
+     ],
+     "tokens": 1434,
+     "pretok": 1365
+    },
+    "h02": {
+     "found": [
+      "h02.allow",
+      "h02.scrub"
+     ],
+     "pin": [],
+     "shown": [
+      "h02.scrub"
+     ],
+     "tokens": 1436,
+     "pretok": 1371
+    },
+    "h03": {
+     "found": [
+      "h03.build",
+      "h03.cli",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "pin": [
+      "h03.build",
+      "h03.cli",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "shown": [
+      "h03.build",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "tokens": 1432,
+     "pretok": 1352
+    },
+    "h04": {
+     "found": [
+      "h04.check",
+      "h04.feedback",
+      "h04.research",
+      "h04.source",
+      "h04.url"
+     ],
+     "pin": [
+      "h04.check",
+      "h04.feedback",
+      "h04.source",
+      "h04.url"
+     ],
+     "shown": [],
+     "tokens": 1454,
+     "pretok": 1331
+    },
+    "h05": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1442,
+     "pretok": 1496
+    },
+    "h06": {
+     "found": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "pin": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "shown": [
+      "h06.trigger"
+     ],
+     "tokens": 1444,
+     "pretok": 1368
+    },
+    "h07": {
+     "found": [
+      "h07.refuse",
+      "h07.runtime"
+     ],
+     "pin": [
+      "h07.refuse"
+     ],
+     "shown": [
+      "h07.refuse"
+     ],
+     "tokens": 1449,
+     "pretok": 1323
+    },
+    "h08": {
+     "found": [
+      "h08.delete",
+      "h08.modify"
+     ],
+     "pin": [
+      "h08.delete",
+      "h08.modify"
+     ],
+     "shown": [
+      "h08.delete",
+      "h08.modify"
+     ],
+     "tokens": 1447,
+     "pretok": 1463
+    }
+   },
+   "found_runner": 21,
+   "n_q": 8,
+   "total": 33
+  },
+  "an_bench": {
+   "found": 27,
+   "pin": 19,
+   "shown": 15,
+   "tokens": 15419,
+   "pretok": 14917,
+   "chars": 61661,
+   "neg": 0,
+   "per_q": {
+    "h01": {
+     "found": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "pin": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "shown": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "tokens": 1524,
+     "pretok": 1518
+    },
+    "h02": {
+     "found": [
+      "h02.allow",
+      "h02.scrub",
+      "h02.set"
+     ],
+     "pin": [],
+     "shown": [
+      "h02.scrub",
+      "h02.set"
+     ],
+     "tokens": 2115,
+     "pretok": 2048
+    },
+    "h03": {
+     "found": [
+      "h03.build",
+      "h03.cli",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "pin": [
+      "h03.build",
+      "h03.cli",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "shown": [
+      "h03.build",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "tokens": 2460,
+     "pretok": 2378
+    },
+    "h04": {
+     "found": [
+      "h04.check",
+      "h04.feedback",
+      "h04.research",
+      "h04.source",
+      "h04.url"
+     ],
+     "pin": [
+      "h04.check",
+      "h04.feedback",
+      "h04.source",
+      "h04.url"
+     ],
+     "shown": [],
+     "tokens": 2090,
+     "pretok": 1961
+    },
+    "h05": {
+     "found": [
+      "h05.caller",
+      "h05.inv"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1870,
+     "pretok": 1892
+    },
+    "h06": {
+     "found": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "pin": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "shown": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "tokens": 1712,
+     "pretok": 1562
+    },
+    "h07": {
+     "found": [
+      "h07.level",
+      "h07.refuse",
+      "h07.runtime"
+     ],
+     "pin": [
+      "h07.refuse"
+     ],
+     "shown": [
+      "h07.refuse"
+     ],
+     "tokens": 2020,
+     "pretok": 1932
+    },
+    "h08": {
+     "found": [
+      "h08.cli",
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "pin": [
+      "h08.cli",
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "shown": [
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "tokens": 1628,
+     "pretok": 1626
+    }
+   },
+   "found_runner": 27,
+   "n_q": 8,
+   "total": 33
+  },
+  "mcp_query": {
+   "found": 26,
+   "pin": 19,
+   "shown": 14,
+   "tokens": 11356,
+   "pretok": 11005,
+   "chars": 45416,
+   "neg": 0,
+   "per_q": {
+    "h01": {
+     "found": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "pin": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "shown": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "tokens": 1272,
+     "pretok": 1253
+    },
+    "h02": {
+     "found": [
+      "h02.allow",
+      "h02.scrub"
+     ],
+     "pin": [],
+     "shown": [
+      "h02.scrub"
+     ],
+     "tokens": 1484,
+     "pretok": 1414
+    },
+    "h03": {
+     "found": [
+      "h03.build",
+      "h03.cli",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "pin": [
+      "h03.build",
+      "h03.cli",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "shown": [
+      "h03.build",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "tokens": 1483,
+     "pretok": 1431
+    },
+    "h04": {
+     "found": [
+      "h04.check",
+      "h04.feedback",
+      "h04.research",
+      "h04.source",
+      "h04.url"
+     ],
+     "pin": [
+      "h04.check",
+      "h04.feedback",
+      "h04.source",
+      "h04.url"
+     ],
+     "shown": [],
+     "tokens": 1437,
+     "pretok": 1383
+    },
+    "h05": {
+     "found": [
+      "h05.caller",
+      "h05.inv"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1361,
+     "pretok": 1436
+    },
+    "h06": {
+     "found": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "pin": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "shown": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "tokens": 1498,
+     "pretok": 1356
+    },
+    "h07": {
+     "found": [
+      "h07.level",
+      "h07.refuse",
+      "h07.runtime"
+     ],
+     "pin": [
+      "h07.refuse"
+     ],
+     "shown": [
+      "h07.refuse"
+     ],
+     "tokens": 1333,
+     "pretok": 1250
+    },
+    "h08": {
+     "found": [
+      "h08.cli",
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "pin": [
+      "h08.cli",
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "shown": [
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "tokens": 1488,
+     "pretok": 1482
+    }
+   },
+   "n_q": 8,
+   "total": 33
+  },
+  "mcp_analyze": {
+   "found": 28,
+   "pin": 20,
+   "shown": 15,
+   "tokens": 17030,
+   "pretok": 15722,
+   "chars": 68111,
+   "neg": 0,
+   "per_q": {
+    "h01": {
+     "found": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "pin": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "shown": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "tokens": 1719,
+     "pretok": 1638
+    },
+    "h02": {
+     "found": [
+      "h02.allow",
+      "h02.scrub",
+      "h02.set"
+     ],
+     "pin": [],
+     "shown": [
+      "h02.scrub",
+      "h02.set"
+     ],
+     "tokens": 2415,
+     "pretok": 2214
+    },
+    "h03": {
+     "found": [
+      "h03.build",
+      "h03.cli",
+      "h03.rebuild",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "pin": [
+      "h03.build",
+      "h03.cli",
+      "h03.rebuild",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "shown": [
+      "h03.build",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "tokens": 2720,
+     "pretok": 2519
+    },
+    "h04": {
+     "found": [
+      "h04.check",
+      "h04.feedback",
+      "h04.research",
+      "h04.source",
+      "h04.url"
+     ],
+     "pin": [
+      "h04.check",
+      "h04.feedback",
+      "h04.source",
+      "h04.url"
+     ],
+     "shown": [],
+     "tokens": 2193,
+     "pretok": 2016
+    },
+    "h05": {
+     "found": [
+      "h05.caller",
+      "h05.inv"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 2073,
+     "pretok": 1979
+    },
+    "h06": {
+     "found": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "pin": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "shown": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "tokens": 1883,
+     "pretok": 1641
+    },
+    "h07": {
+     "found": [
+      "h07.level",
+      "h07.refuse",
+      "h07.runtime"
+     ],
+     "pin": [
+      "h07.refuse"
+     ],
+     "shown": [
+      "h07.refuse"
+     ],
+     "tokens": 2220,
+     "pretok": 2024
+    },
+    "h08": {
+     "found": [
+      "h08.cli",
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "pin": [
+      "h08.cli",
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "shown": [
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "tokens": 1807,
+     "pretok": 1691
+    }
+   },
+   "n_q": 8,
+   "total": 33
+  },
+  "cli_an_text": {
+   "found": 27,
+   "pin": 19,
+   "shown": 15,
+   "tokens": 15420,
+   "pretok": 14933,
+   "chars": 61669,
+   "neg": 0,
+   "per_q": {
+    "h01": {
+     "found": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "pin": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "shown": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "tokens": 1524,
+     "pretok": 1515
+    },
+    "h02": {
+     "found": [
+      "h02.allow",
+      "h02.scrub",
+      "h02.set"
+     ],
+     "pin": [],
+     "shown": [
+      "h02.scrub",
+      "h02.set"
+     ],
+     "tokens": 2115,
+     "pretok": 2055
+    },
+    "h03": {
+     "found": [
+      "h03.build",
+      "h03.cli",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "pin": [
+      "h03.build",
+      "h03.cli",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "shown": [
+      "h03.build",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "tokens": 2460,
+     "pretok": 2385
+    },
+    "h04": {
+     "found": [
+      "h04.check",
+      "h04.feedback",
+      "h04.research",
+      "h04.source",
+      "h04.url"
+     ],
+     "pin": [
+      "h04.check",
+      "h04.feedback",
+      "h04.source",
+      "h04.url"
+     ],
+     "shown": [],
+     "tokens": 2090,
+     "pretok": 1969
+    },
+    "h05": {
+     "found": [
+      "h05.caller",
+      "h05.inv"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1870,
+     "pretok": 1885
+    },
+    "h06": {
+     "found": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "pin": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "shown": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "tokens": 1713,
+     "pretok": 1562
+    },
+    "h07": {
+     "found": [
+      "h07.level",
+      "h07.refuse",
+      "h07.runtime"
+     ],
+     "pin": [
+      "h07.refuse"
+     ],
+     "shown": [
+      "h07.refuse"
+     ],
+     "tokens": 2020,
+     "pretok": 1935
+    },
+    "h08": {
+     "found": [
+      "h08.cli",
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "pin": [
+      "h08.cli",
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "shown": [
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "tokens": 1628,
+     "pretok": 1627
+    }
+   },
+   "n_q": 8,
+   "total": 33
+  },
+  "cli_an_json": {
+   "found": 28,
+   "pin": 20,
+   "shown": 15,
+   "tokens": 28612,
+   "pretok": 29244,
+   "chars": 114435,
+   "neg": 0,
+   "per_q": {
+    "h01": {
+     "found": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "pin": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "shown": [
+      "h01.call",
+      "h01.container",
+      "h01.drain",
+      "h01.kill"
+     ],
+     "tokens": 3433,
+     "pretok": 3559
+    },
+    "h02": {
+     "found": [
+      "h02.allow",
+      "h02.scrub",
+      "h02.set"
+     ],
+     "pin": [],
+     "shown": [
+      "h02.scrub",
+      "h02.set"
+     ],
+     "tokens": 4829,
+     "pretok": 4955
+    },
+    "h03": {
+     "found": [
+      "h03.build",
+      "h03.cli",
+      "h03.rebuild",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "pin": [
+      "h03.build",
+      "h03.cli",
+      "h03.rebuild",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "shown": [
+      "h03.build",
+      "h03.snapshot",
+      "h03.stale"
+     ],
+     "tokens": 4580,
+     "pretok": 4675
+    },
+    "h04": {
+     "found": [
+      "h04.check",
+      "h04.feedback",
+      "h04.research",
+      "h04.source",
+      "h04.url"
+     ],
+     "pin": [
+      "h04.check",
+      "h04.feedback",
+      "h04.source",
+      "h04.url"
+     ],
+     "shown": [],
+     "tokens": 3220,
+     "pretok": 3224
+    },
+    "h05": {
+     "found": [
+      "h05.caller",
+      "h05.inv"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 3001,
+     "pretok": 3142
+    },
+    "h06": {
+     "found": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "pin": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "shown": [
+      "h06.rule",
+      "h06.trigger"
+     ],
+     "tokens": 3003,
+     "pretok": 2968
+    },
+    "h07": {
+     "found": [
+      "h07.level",
+      "h07.refuse",
+      "h07.runtime"
+     ],
+     "pin": [
+      "h07.refuse"
+     ],
+     "shown": [
+      "h07.refuse"
+     ],
+     "tokens": 3830,
+     "pretok": 3903
+    },
+    "h08": {
+     "found": [
+      "h08.cli",
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "pin": [
+      "h08.cli",
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "shown": [
+      "h08.commit",
+      "h08.delete",
+      "h08.modify"
+     ],
+     "tokens": 2716,
+     "pretok": 2818
+    }
+   },
+   "n_q": 8,
+   "total": 33
+  },
+  "_seconds": 67.8
+ },
+ "verinoda_user_tr": {
+  "q_text": {
+   "found": 13,
+   "pin": 8,
+   "shown": 7,
+   "tokens": 17428,
+   "pretok": 17956,
+   "chars": 69696,
+   "neg": 0,
+   "per_q": {
+    "u01": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1253,
+     "pretok": 1316
+    },
+    "u02": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1435,
+     "pretok": 1525
+    },
+    "u03": {
+     "found": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "pin": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "shown": [
+      "u03.poll",
+      "u03.version"
+     ],
+     "tokens": 1481,
+     "pretok": 1562
+    },
+    "u04": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1493,
+     "pretok": 1522
+    },
+    "u05": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1479,
+     "pretok": 1496
+    },
+    "u06": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1483,
+     "pretok": 1456
+    },
+    "u07": {
+     "found": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "pin": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "shown": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "tokens": 1490,
+     "pretok": 1411
+    },
+    "u08": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1446,
+     "pretok": 1538
+    },
+    "u09": {
+     "found": [
+      "u09.full",
+      "u09.update"
+     ],
+     "pin": [
+      "u09.update"
+     ],
+     "shown": [
+      "u09.update"
+     ],
+     "tokens": 1491,
+     "pretok": 1567
+    },
+    "u10": {
+     "found": [
+      "u10.reject",
+      "u10.token"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1463,
+     "pretok": 1538
+    },
+    "u11": {
+     "found": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "pin": [
+      "u11.file"
+     ],
+     "shown": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "tokens": 1478,
+     "pretok": 1579
+    },
+    "u12": {
+     "found": [
+      "u12.burst",
+      "u12.sig"
+     ],
+     "pin": [
+      "u12.sig"
+     ],
+     "shown": [],
+     "tokens": 1436,
+     "pretok": 1446
+    }
+   },
+   "found_runner": 13,
+   "n_q": 12,
+   "total": 30
+  },
+  "q_json": {
+   "found": 9,
+   "pin": 7,
+   "shown": 5,
+   "tokens": 17157,
+   "pretok": 17241,
+   "chars": 68604,
+   "neg": 0,
+   "per_q": {
+    "u01": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1435,
+     "pretok": 1499
+    },
+    "u02": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1443,
+     "pretok": 1435
+    },
+    "u03": {
+     "found": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "pin": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "shown": [
+      "u03.poll",
+      "u03.version"
+     ],
+     "tokens": 1439,
+     "pretok": 1499
+    },
+    "u04": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1398,
+     "pretok": 1453
+    },
+    "u05": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1432,
+     "pretok": 1419
+    },
+    "u06": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1441,
+     "pretok": 1383
+    },
+    "u07": {
+     "found": [
+      "u07.switch"
+     ],
+     "pin": [
+      "u07.switch"
+     ],
+     "shown": [
+      "u07.switch"
+     ],
+     "tokens": 1423,
+     "pretok": 1412
+    },
+    "u08": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1440,
+     "pretok": 1423
+    },
+    "u09": {
+     "found": [
+      "u09.update"
+     ],
+     "pin": [
+      "u09.update"
+     ],
+     "shown": [
+      "u09.update"
+     ],
+     "tokens": 1404,
+     "pretok": 1430
+    },
+    "u10": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1446,
+     "pretok": 1408
+    },
+    "u11": {
+     "found": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "pin": [
+      "u11.file"
+     ],
+     "shown": [
+      "u11.file"
+     ],
+     "tokens": 1420,
+     "pretok": 1475
+    },
+    "u12": {
+     "found": [
+      "u12.burst",
+      "u12.sig"
+     ],
+     "pin": [
+      "u12.sig"
+     ],
+     "shown": [],
+     "tokens": 1436,
+     "pretok": 1405
+    }
+   },
+   "found_runner": 9,
+   "n_q": 12,
+   "total": 30
+  },
+  "an_bench": {
+   "found": 13,
+   "pin": 8,
+   "shown": 7,
+   "tokens": 20473,
+   "pretok": 21038,
+   "chars": 81879,
+   "neg": 0,
+   "per_q": {
+    "u01": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1420,
+     "pretok": 1473
+    },
+    "u02": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1760,
+     "pretok": 1860
+    },
+    "u03": {
+     "found": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "pin": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "shown": [
+      "u03.poll",
+      "u03.version"
+     ],
+     "tokens": 1653,
+     "pretok": 1730
+    },
+    "u04": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1682,
+     "pretok": 1713
+    },
+    "u05": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1829,
+     "pretok": 1799
+    },
+    "u06": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1691,
+     "pretok": 1654
+    },
+    "u07": {
+     "found": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "pin": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "shown": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "tokens": 1624,
+     "pretok": 1548
+    },
+    "u08": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1727,
+     "pretok": 1852
+    },
+    "u09": {
+     "found": [
+      "u09.full",
+      "u09.update"
+     ],
+     "pin": [
+      "u09.update"
+     ],
+     "shown": [
+      "u09.update"
+     ],
+     "tokens": 1803,
+     "pretok": 1899
+    },
+    "u10": {
+     "found": [
+      "u10.reject",
+      "u10.token"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1731,
+     "pretok": 1796
+    },
+    "u11": {
+     "found": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "pin": [
+      "u11.file"
+     ],
+     "shown": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "tokens": 1872,
+     "pretok": 2015
+    },
+    "u12": {
+     "found": [
+      "u12.burst",
+      "u12.sig"
+     ],
+     "pin": [
+      "u12.sig"
+     ],
+     "shown": [],
+     "tokens": 1681,
+     "pretok": 1699
+    }
+   },
+   "found_runner": 13,
+   "n_q": 12,
+   "total": 30
+  },
+  "mcp_query": {
+   "found": 13,
+   "pin": 8,
+   "shown": 7,
+   "tokens": 17428,
+   "pretok": 17956,
+   "chars": 69696,
+   "neg": 0,
+   "per_q": {
+    "u01": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1253,
+     "pretok": 1316
+    },
+    "u02": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1435,
+     "pretok": 1525
+    },
+    "u03": {
+     "found": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "pin": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "shown": [
+      "u03.poll",
+      "u03.version"
+     ],
+     "tokens": 1481,
+     "pretok": 1562
+    },
+    "u04": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1493,
+     "pretok": 1522
+    },
+    "u05": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1479,
+     "pretok": 1496
+    },
+    "u06": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1483,
+     "pretok": 1456
+    },
+    "u07": {
+     "found": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "pin": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "shown": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "tokens": 1490,
+     "pretok": 1411
+    },
+    "u08": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1446,
+     "pretok": 1538
+    },
+    "u09": {
+     "found": [
+      "u09.full",
+      "u09.update"
+     ],
+     "pin": [
+      "u09.update"
+     ],
+     "shown": [
+      "u09.update"
+     ],
+     "tokens": 1491,
+     "pretok": 1567
+    },
+    "u10": {
+     "found": [
+      "u10.reject",
+      "u10.token"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1463,
+     "pretok": 1538
+    },
+    "u11": {
+     "found": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "pin": [
+      "u11.file"
+     ],
+     "shown": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "tokens": 1478,
+     "pretok": 1579
+    },
+    "u12": {
+     "found": [
+      "u12.burst",
+      "u12.sig"
+     ],
+     "pin": [
+      "u12.sig"
+     ],
+     "shown": [],
+     "tokens": 1436,
+     "pretok": 1446
+    }
+   },
+   "n_q": 12,
+   "total": 30
+  },
+  "mcp_analyze": {
+   "found": 13,
+   "pin": 8,
+   "shown": 7,
+   "tokens": 22260,
+   "pretok": 21735,
+   "chars": 89027,
+   "neg": 0,
+   "per_q": {
+    "u01": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1513,
+     "pretok": 1498
+    },
+    "u02": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1950,
+     "pretok": 1933
+    },
+    "u03": {
+     "found": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "pin": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "shown": [
+      "u03.poll",
+      "u03.version"
+     ],
+     "tokens": 1798,
+     "pretok": 1778
+    },
+    "u04": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1837,
+     "pretok": 1759
+    },
+    "u05": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1947,
+     "pretok": 1837
+    },
+    "u06": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1816,
+     "pretok": 1700
+    },
+    "u07": {
+     "found": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "pin": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "shown": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "tokens": 1772,
+     "pretok": 1589
+    },
+    "u08": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1850,
+     "pretok": 1908
+    },
+    "u09": {
+     "found": [
+      "u09.full",
+      "u09.update"
+     ],
+     "pin": [
+      "u09.update"
+     ],
+     "shown": [
+      "u09.update"
+     ],
+     "tokens": 1947,
+     "pretok": 1974
+    },
+    "u10": {
+     "found": [
+      "u10.reject",
+      "u10.token"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1906,
+     "pretok": 1860
+    },
+    "u11": {
+     "found": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "pin": [
+      "u11.file"
+     ],
+     "shown": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "tokens": 2085,
+     "pretok": 2138
+    },
+    "u12": {
+     "found": [
+      "u12.burst",
+      "u12.sig"
+     ],
+     "pin": [
+      "u12.sig"
+     ],
+     "shown": [],
+     "tokens": 1839,
+     "pretok": 1761
+    }
+   },
+   "n_q": 12,
+   "total": 30
+  },
+  "cli_an_text": {
+   "found": 13,
+   "pin": 8,
+   "shown": 7,
+   "tokens": 20480,
+   "pretok": 21073,
+   "chars": 81891,
+   "neg": 0,
+   "per_q": {
+    "u01": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1420,
+     "pretok": 1476
+    },
+    "u02": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1761,
+     "pretok": 1864
+    },
+    "u03": {
+     "found": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "pin": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "shown": [
+      "u03.poll",
+      "u03.version"
+     ],
+     "tokens": 1654,
+     "pretok": 1733
+    },
+    "u04": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1682,
+     "pretok": 1713
+    },
+    "u05": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1830,
+     "pretok": 1797
+    },
+    "u06": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1692,
+     "pretok": 1655
+    },
+    "u07": {
+     "found": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "pin": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "shown": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "tokens": 1624,
+     "pretok": 1551
+    },
+    "u08": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 1728,
+     "pretok": 1847
+    },
+    "u09": {
+     "found": [
+      "u09.full",
+      "u09.update"
+     ],
+     "pin": [
+      "u09.update"
+     ],
+     "shown": [
+      "u09.update"
+     ],
+     "tokens": 1804,
+     "pretok": 1903
+    },
+    "u10": {
+     "found": [
+      "u10.reject",
+      "u10.token"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 1731,
+     "pretok": 1796
+    },
+    "u11": {
+     "found": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "pin": [
+      "u11.file"
+     ],
+     "shown": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "tokens": 1872,
+     "pretok": 2036
+    },
+    "u12": {
+     "found": [
+      "u12.burst",
+      "u12.sig"
+     ],
+     "pin": [
+      "u12.sig"
+     ],
+     "shown": [],
+     "tokens": 1682,
+     "pretok": 1702
+    }
+   },
+   "n_q": 12,
+   "total": 30
+  },
+  "cli_an_json": {
+   "found": 13,
+   "pin": 8,
+   "shown": 7,
+   "tokens": 37907,
+   "pretok": 40289,
+   "chars": 151608,
+   "neg": 0,
+   "per_q": {
+    "u01": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 2511,
+     "pretok": 2728
+    },
+    "u02": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 3190,
+     "pretok": 3413
+    },
+    "u03": {
+     "found": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "pin": [
+      "u03.poll",
+      "u03.route",
+      "u03.version"
+     ],
+     "shown": [
+      "u03.poll",
+      "u03.version"
+     ],
+     "tokens": 3349,
+     "pretok": 3580
+    },
+    "u04": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 3525,
+     "pretok": 3694
+    },
+    "u05": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 3077,
+     "pretok": 3193
+    },
+    "u06": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 2910,
+     "pretok": 3019
+    },
+    "u07": {
+     "found": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "pin": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "shown": [
+      "u07.switch",
+      "u07.var"
+     ],
+     "tokens": 2350,
+     "pretok": 2314
+    },
+    "u08": {
+     "found": [],
+     "pin": [],
+     "shown": [],
+     "tokens": 3103,
+     "pretok": 3395
+    },
+    "u09": {
+     "found": [
+      "u09.full",
+      "u09.update"
+     ],
+     "pin": [
+      "u09.update"
+     ],
+     "shown": [
+      "u09.update"
+     ],
+     "tokens": 3636,
+     "pretok": 3866
+    },
+    "u10": {
+     "found": [
+      "u10.reject",
+      "u10.token"
+     ],
+     "pin": [],
+     "shown": [],
+     "tokens": 3787,
+     "pretok": 4124
+    },
+    "u11": {
+     "found": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "pin": [
+      "u11.file"
+     ],
+     "shown": [
+      "u11.file",
+      "u11.strip"
+     ],
+     "tokens": 3311,
+     "pretok": 3639
+    },
+    "u12": {
+     "found": [
+      "u12.burst",
+      "u12.sig"
+     ],
+     "pin": [
+      "u12.sig"
+     ],
+     "shown": [],
+     "tokens": 3158,
+     "pretok": 3324
+    }
+   },
+   "n_q": 12,
+   "total": 30
+  },
+  "_seconds": 84.9
+ }
+}

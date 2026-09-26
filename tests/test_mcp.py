@@ -279,7 +279,7 @@ def test_import_mcp_resolves_to_installed_sdk():
 
 def test_registered_tools_have_descriptions_and_typed_params(repo):
     anyio = pytest.importorskip("anyio")
-    srv = mcp_server.build_server(repo)
+    srv = mcp_server.build_server(repo, profile="full")
     listed = anyio.run(srv.list_tools)
     assert sorted(t.name for t in listed) == sorted(TOOL_NAMES) == sorted(EXPECTED_PARAMS)
     assert set(mcp_server.DESCRIPTIONS) == set(TOOL_NAMES)
@@ -304,9 +304,83 @@ def test_registered_tools_have_descriptions_and_typed_params(repo):
     net = by_name["reference_resolve"]["properties"]["network"]
     assert {"off", "cache", "on"} in [set(o.get("enum", [])) for o in net.get("anyOf", [net])]
     assert net.get("default") is None
-    instructions = mcp_server.INSTRUCTIONS
-    assert all(name in instructions for name in TOOL_NAMES)
+    instructions = mcp_server.instructions("full")
+    assert instructions == mcp_server.INSTRUCTIONS and all(name in instructions for name in TOOL_NAMES)
     assert "question_plan_draft" in instructions and "reference_resolve first" in instructions
+
+
+def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_path):
+    """The tool menu is standing context in every request of many clients: core by default (11 tools),
+    the full set behind --profile full or mcp.profile in the project's config; no output schemas and
+    no generated titles."""
+    anyio = pytest.importorskip("anyio")
+    from verinoda.mcp.server import CORE_TOOLS, instructions, resolve_profile
+
+    def listing(srv):
+        return [t.model_dump(by_alias=True, exclude_none=True, mode="json") if hasattr(t, "model_dump") else t
+                for t in anyio.run(srv.list_tools)]
+
+    core = listing(mcp_server.build_server(repo))
+    assert sorted(t["name"] for t in core) == sorted(CORE_TOOLS) and len(CORE_TOOLS) == 11
+    assert set(CORE_TOOLS) <= set(TOOL_NAMES)
+    wire = json.dumps(core, separators=(",", ":"))
+    assert len(wire) < 12000  # 50,029 chars for the 33 tools before (2026-09-25)
+    assert '"title"' not in wire and "outputSchema" not in wire
+    text = instructions("core")
+    assert all(n in text for n in CORE_TOOLS) and "--profile full" in text and "question_plan_draft" not in text
+    assert len(text) < len(instructions("full"))
+    full = mcp_server.build_server(repo, profile="full")
+    assert full.verinoda_profile == "full" and len(listing(full)) == len(TOOL_NAMES)
+    # the project's config picks the profile when the command line does not
+    proj = tmp_path / "proj"
+    (proj / ".verinoda").mkdir(parents=True)
+    (proj / ".verinoda" / "config.json").write_text('{"mcp": {"profile": "full"}}', encoding="utf-8")
+    assert resolve_profile(proj) == "full" and resolve_profile(proj, "core") == "core"
+    assert resolve_profile(tmp_path) == "core"
+    with pytest.raises(ValueError, match="unknown MCP tool profile"):
+        resolve_profile(proj, "everything")
+
+
+@pytest.mark.parametrize("config, why", [('{"mcp": "full"}', "mcp is not a JSON object"),
+                                         ('["mcp"]', "the file is not a JSON object"),
+                                         ('{"mcp": {"profile": ["full"]}}', "must be a string"),
+                                         ('{"mcp": {"profile": "full"', "cannot read the MCP tool profile"),
+                                         ('{"mcp": {"profile": "Full"}}', "unknown MCP tool profile")])
+def test_a_malformed_mcp_setting_is_an_error_not_the_default(tmp_path, config, why):
+    """Only a missing config file (or one without mcp.profile) serves the default profile silently."""
+    from verinoda.mcp.server import resolve_profile
+
+    (tmp_path / ".verinoda").mkdir()
+    cfg = tmp_path / ".verinoda" / "config.json"
+    cfg.write_text(config, encoding="utf-8")
+    with pytest.raises(ValueError, match=why):
+        resolve_profile(tmp_path)
+    assert resolve_profile(tmp_path, "full") == "full"  # --profile wins without reading the file
+    cfg.write_text('{"research": {"network": "off"}}', encoding="utf-8")
+    assert resolve_profile(tmp_path) == "core"
+
+
+def test_the_core_profile_names_only_tools_it_serves(repo):
+    """Descriptions, instructions and hints of the core profile point to core tools or the CLI."""
+    anyio = pytest.importorskip("anyio")
+    import re
+
+    from verinoda.mcp.server import CORE_TOOLS, PLAN_HINT
+
+    others = [n for n in TOOL_NAMES if n not in CORE_TOOLS]
+    srv = mcp_server.build_server(repo)
+    listed = json.dumps([t.model_dump(by_alias=True, exclude_none=True, mode="json")
+                         for t in anyio.run(srv.list_tools)])
+    for text in (listed, srv.instructions or ""):
+        assert not [n for n in others if re.search(rf"\b{n}\b", text)]
+    full = mcp_server.build_server(repo, profile="full")
+    listed_full = json.dumps([t.model_dump(by_alias=True, exclude_none=True, mode="json")
+                              for t in anyio.run(full.list_tools)])
+    assert "see question_plan_check" in listed_full and "`verinoda plan check`" in listed
+    # the invalid-plan hint names the CLI, and the MCP tools with the profile that serves them
+    assert "`verinoda plan draft`" in PLAN_HINT and "profile full" in PLAN_HINT
+    bad = AtlasTools(repo).analyze(plan_json="not json")
+    assert bad["error"] == "invalid_plan" and bad["hint"] == PLAN_HINT
 
 
 # -- retrieval & graph tools ------------------------------------------------------
@@ -317,7 +391,7 @@ def test_project_query_text_and_json_equal_core(repo, tools):
     core = retrieval.retrieve(index.load(repo), QUESTION, retrieval.Budget(max_items=5, max_chars=6000))
     text = tools.project_query(QUESTION, max_items=5)  # text is the default (D20)
     assert text == {"format": "text", "question": QUESTION, "text": retrieval.render_text(core, 6000)}
-    assert text["text"].startswith(f"# {QUESTION}") and "orders/repository.py:" in text["text"]
+    assert QUESTION not in text["text"] and "\n## orders/repository.py:" in text["text"]  # no question echo
     res = tools.project_query(QUESTION, max_items=5, format="json")
     assert res == _norm(core)
     assert 0 < len(res["items"]) <= 5
@@ -330,11 +404,30 @@ def test_project_query_text_and_json_equal_core(repo, tools):
     assert fmt["error"] == "invalid_argument" and set(fmt["valid"]) == {"text", "json"}
 
 
+def test_project_query_follows_the_question_shape_budget_when_it_is_on(repo, monkeypatch):
+    from verinoda import index, retrieval
+
+    q = "where is compute_total defined?"  # one clause
+    monkeypatch.setattr(retrieval, "SHAPE_CHARS_NARROW", 900)  # the example is too small to fill 4800
+    t = AtlasTools(repo)
+    monkeypatch.setenv("VERINODA_SHAPE_BUDGET", "0")
+    wide = t.project_query(q)
+    monkeypatch.setenv("VERINODA_SHAPE_BUDGET", "1")
+    res = t.project_query(q)  # the same server: the kept answer is not served for another budget
+    assert len(res["text"]) <= 900 < len(wide["text"])
+    for chars, got in ((6000, wide), (900, res)):
+        core = retrieval.retrieve(index.load(repo), q, retrieval.Budget(max_items=8, max_chars=chars))
+        assert got["text"] == retrieval.render_text(core, chars), chars
+
+
 def test_project_query_text_fits_a_small_cap(repo):
     small = AtlasTools(repo, max_chars=2000)
     res = small.project_query(QUESTION)
     assert "truncated" not in res and _size(res) <= 2000  # render_text packs to the budget itself
     assert "more candidates not shown" in res["text"] or len(res["text"]) < 1500
+    # the follow-up an MCP client reads names the CLI (project_query takes no budget)
+    many = small.project_query("order")
+    assert "candidates not shown" in many["text"] and 'next: verinoda query "…" --max-chars' in many["text"]
 
 
 def test_node_inspect_location_excerpt_and_edges(repo, tools):
@@ -645,16 +738,23 @@ def test_lexicon_show_equals_core(repo, tools):
 # -- analysis & claims ------------------------------------------------------------
 
 def test_analyze_records_claims_like_core(repo, tools, analysis):
+    from verinoda import analysis_view
     from verinoda.claims import STATUSES, VERIFIED, Claims
 
     assert analysis["analysis_id"].startswith("ana_")
-    assert {"question", "intents", "snapshot", "claims", "unknowns", "critique", "usage"} <= set(analysis)
-    assert list(analysis)[:3] == ["understood_as", "subquestions", "plan_check"]
-    assert analysis["claims"] and analysis["usage"]["tool_calls"] > 0
+    # the lean response (verinoda.analysis_view): the answer, not the run
+    assert list(analysis)[:4] == ["analysis_id", "snapshot", "understood_as", "subquestions"]
+    assert {"claims", "passages", "plan_check", "status"} <= set(analysis)
+    assert not {"steps", "usage", "question", "intents", "plan_source"} & set(analysis)
+    assert all(set(s) <= set(analysis_view.SUB_KEYS) for s in analysis["subquestions"])
+    assert analysis["claims"]
     with _store(repo) as st:
         cl = Claims(st, repo)
         row = st.get("analyses", analysis["analysis_id"])
-        assert row["result"]["claims"] == [c["id"] for c in analysis["claims"]]
+        ids = [c["id"] for c in analysis["claims"]]
+        # verified context claims the passages print are left out and counted, never silently
+        assert set(ids) <= set(row["result"]["claims"])
+        assert len(row["result"]["claims"]) == len(ids) + analysis.get("claims_in_passages", 0)
         for c in analysis["claims"]:
             shown = tools.claim_inspect(c["id"])
             assert shown == _norm(cl.show(c["id"]))
@@ -710,9 +810,9 @@ def test_analyze_with_a_host_plan(repo, tools):
     plan = tools.question_plan_draft("where is compute_total defined?")["plan"]
     plan["restated_goal_user_lang"] = "Understood as: the location of compute_total"
     res = tools.analyze(plan_json=json.dumps(plan))
-    assert "error" not in res and res["status"] == "answered" and res["plan_source"] == "host"
-    assert res["question"] == plan["user_message"] and res["understood_as"] == plan["restated_goal_user_lang"]
-    assert list(res)[:3] == ["understood_as", "subquestions", "plan_check"]
+    assert "error" not in res and res["status"] == "answered" and res["plan_id"].startswith("qpl_")
+    assert res["understood_as"] == plan["restated_goal_user_lang"] and "question" not in res
+    assert list(res)[:4] == ["analysis_id", "snapshot", "understood_as", "subquestions"]
     assert any(c["text"].startswith("`compute_total()` is defined at orders/pricing.py") for c in res["claims"])
     with _store(repo) as st:
         assert qp.get_plan(st, res["plan_id"])["source"] == "host"
@@ -736,12 +836,36 @@ def test_analyze_keeps_the_interpretation_under_a_small_cap(repo, analysis):
     small = AtlasTools(repo, max_chars=4000)
     res = small.analyze(QUESTION)
     assert res["truncated"] is True and _size(res) <= 4000
-    assert list(res)[:3] == ["understood_as", "subquestions", "plan_check"]
+    assert list(res)[:4] == ["analysis_id", "snapshot", "understood_as", "subquestions"]
     assert res["understood_as"] == analysis["understood_as"]
     assert [s["id"] for s in res["subquestions"]] == [s["id"] for s in analysis["subquestions"]]
     cut = res["truncation"]["cut"]
-    assert not any(k.startswith(("understood_as", "subquestions", "plan_check")) for k in cut), cut
-    assert any(k.startswith(("steps", "critique", "claims")) for k in cut)
+    assert not any(k.startswith(("understood_as", "subquestions", "analysis_id", "snapshot")) for k in cut), cut
+    # bookkeeping and passages go before claims: passages are cut from the end (the top-ranked stay)
+    assert "passages" in cut and res["passages"] == analysis["passages"][:len(res["passages"])]
+    assert list(cut)[0] in ("critique", "plan_check.links", "passages")
+
+
+def test_analyze_under_a_cap_never_hides_a_claim_the_cut_passages_no_longer_print(repo, monkeypatch):
+    """A verified claim left out as printed by the passages comes back when the cap cuts its lines:
+    every claim is listed, printed by the passages kept, or counted in the cut note."""
+    from verinoda import analysis_view as av
+
+    seen = {}
+    real = av.lean_capped
+    monkeypatch.setattr(av, "lean_capped", lambda res, cap: seen.update(res=res) or real(res, cap))
+    q = "how does an order get persisted and where is the discount applied?"
+    for limit in (5000, 7000):
+        out = AtlasTools(repo, max_chars=limit).analyze(q)
+        res = seen["res"]
+        assert _size(out) <= limit and out["truncated"] is True, limit
+        assert len(res["passages"]) > len(out["passages"]), limit  # the cap did cut the passages
+        listed = {c["id"] for c in out["claims"]}
+        printed = av.shown_by_passages({**res, "passages": out["passages"]})
+        cut = out["truncation"]["cut"].get("claims")
+        missing = [c["id"] for c in res["claims"] if c["id"] not in listed and c["id"] not in printed]
+        assert len(missing) <= (cut["total"] - cut["kept"] if cut else 0), (limit, missing)
+        assert out.get("claims_in_passages", 0) <= len(printed), limit
 
 
 def test_plan_audit_equals_core(repo, tools, analysis):
@@ -1260,16 +1384,26 @@ def test_cap_response_keeps_named_keys_first_and_cuts_them_last():
     assert tight["understood_as"] == big["understood_as"]
 
 
+def test_cap_response_cuts_a_nested_first_list_before_the_rest():
+    big = {"claims": [{"id": f"clm_{i}", "text": "c" * 80} for i in range(10)],
+           "plan_check": {"status": "ready", "links": [f"m{i} -> f.py:{i} (linked)" * 3 for i in range(60)]},
+           "passages": [f"line {i} " + "p" * 60 for i in range(40)]}
+    res = cap_response(big, 4000, first=("plan_check.links", "passages"))
+    assert _size(res) <= 4000 and res["claims"] == big["claims"]  # evidence last
+    assert list(res["truncation"]["cut"])[0] == "plan_check.links" and res["plan_check"]["status"] == "ready"
+    assert res["plan_check"]["links"] == big["plan_check"]["links"][:len(res["plan_check"]["links"])]
+
+
 # -- real stdio round trip ------------------------------------------------------------------
 
-def _server_params(repo: Path):
+def _server_params(repo: Path, *extra: str):
     from mcp.client.stdio import StdioServerParameters
 
     env = {"GRAPHIFY_OUT": os.environ.get("GRAPHIFY_OUT", ".verinoda/index"), "PYTHONIOENCODING": "utf-8"}
     if os.environ.get("PYTHONPATH"):  # the server must import what this test process imports
         env["PYTHONPATH"] = os.environ["PYTHONPATH"]
     return StdioServerParameters(command=sys.executable,
-                                 args=["-m", "verinoda", "mcp", "serve", "--repo", str(repo)],
+                                 args=["-m", "verinoda", "mcp", "serve", "--repo", str(repo), *extra],
                                  cwd=str(repo), env=env)
 
 
@@ -1291,8 +1425,9 @@ def _payload(res) -> dict:
     return data
 
 
-def _session(repo: Path, errlog: Path, body):
-    """Spawn the server, initialize, run ``body(session)``, shut down; return its result."""
+def _session(repo: Path, errlog: Path, body, *extra: str):
+    """Spawn the server (``extra``: more ``mcp serve`` arguments), initialize, run ``body(session)``,
+    shut down; return its result."""
     anyio = pytest.importorskip("anyio")
     from mcp import ClientSession
     from mcp.client.stdio import stdio_client
@@ -1300,7 +1435,7 @@ def _session(repo: Path, errlog: Path, body):
     async def main():
         with open(errlog, "w", encoding="utf-8") as err:
             with anyio.fail_after(STDIO_TIMEOUT):
-                async with stdio_client(_server_params(repo), errlog=err) as (read, write):
+                async with stdio_client(_server_params(repo, *extra), errlog=err) as (read, write):
                     async with ClientSession(read, write) as session:
                         await session.initialize()
                         return await body(session)
@@ -1335,7 +1470,8 @@ def test_stdio_roundtrip(repo, tmp_path):
         rr = await s.call_tool("reference_resolve", {"text": "is this the same in requests 2.31?", "network": "off"})
         return [t.name for t in listed.tools], q, q_again, qj, d, c, a, bad_plan, ci, bad, rr
 
-    names, q, q_again, qj, d, c, a, bad_plan, ci, bad, rr = _session(repo, tmp_path / "server.err", body)
+    names, q, q_again, qj, d, c, a, bad_plan, ci, bad, rr = _session(repo, tmp_path / "server.err", body,
+                                                                      "--profile", "full")
     assert sorted(names) == sorted(TOOL_NAMES)
 
     core = retrieval.retrieve(index.load(repo), QUESTION, retrieval.Budget(max_items=5, max_chars=6000))
@@ -1355,7 +1491,8 @@ def test_stdio_roundtrip(repo, tmp_path):
 
     ap = _payload(a)
     assert not _is_error(a) and ap["analysis_id"].startswith("ana_") and ap["claims"]
-    assert ap["plan_source"] == "host" and list(ap)[:3] == ["understood_as", "subquestions", "plan_check"]
+    assert ap["plan_id"].startswith("qpl_") and list(ap)[:4] == ["analysis_id", "snapshot", "understood_as",
+                                                                 "subquestions"]
     bpp = _payload(bad_plan)
     assert bpp["error"] == "invalid_plan" and bpp["problems"]
     if hasattr(bad_plan, "is_error"):
@@ -1386,13 +1523,14 @@ def test_stdio_server_starts_in_unscanned_dir(tmp_path):
         out = []
         for name, args in (("project_query", {"question": "anything"}),
                            ("claim_inspect", {"claim_id": "clm_x"}),
-                           ("question_plan_draft", {"question": "anything"}),
+                           ("node_inspect", {"name": "main"}),
                            ("index_update", {})):
             out.append(await s.call_tool(name, args))
         return [t.name for t in listed.tools], out
 
     names, results = _session(plain, tmp_path / "server.err", body)
-    assert sorted(names) == sorted(TOOL_NAMES)
+    assert sorted(names) == sorted(mcp_server.CORE_TOOLS)  # the default profile
+    assert "11 tools, profile core" in (tmp_path / "server.err").read_text(encoding="utf-8", errors="replace")
     for res in results:
         p = _payload(res)
         assert p["error"] == "not_initialised" and "verinoda scan" in p["hint"]

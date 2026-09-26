@@ -176,9 +176,22 @@ def test_query_prints_model_text_by_default_even_on_a_legacy_code_page(repo):
                        stdin=subprocess.DEVNULL, check=False)
     out = r.stdout.decode("utf-8").replace("\r\n", "\n")  # text-mode stdout on Windows
     assert r.returncode == 0 and b"Traceback" not in r.stderr, r.stderr[-2000:]
-    assert out.startswith(f"# {q}\n") and "## orders/pricing.py:6-8 def compute_total" in out
+    # no echo of the question; the passage starts at the signature, so the header names the function
+    assert q not in out and "## orders/pricing.py:6-8 compute_total\n" in out
+    assert "\ndef compute_total(" in out.split("## orders/pricing.py:6-8 compute_total\n", 1)[1]
     assert "apply_discount" in out and "calls: " in out
     assert len(out) <= 1500 + 200 and not out.lstrip().startswith("{")
+
+
+def test_query_default_budget_follows_the_question_shape_when_it_is_on(repo):
+    q = "where is the order total computed?"  # one clause: 4800 characters with the shape budget on
+    on = ra("query", q, "--repo", str(repo), "--max-items", "25", cwd=repo, env=_env(VERINODA_SHAPE_BUDGET="1"))
+    narrow = ra("query", q, "--repo", str(repo), "--max-items", "25", "--max-chars", "4800", cwd=repo,
+                env=_env(VERINODA_SHAPE_BUDGET="0"))
+    wide = ra("query", q, "--repo", str(repo), "--max-items", "25", cwd=repo, env=_env(VERINODA_SHAPE_BUDGET="0"))
+    assert on.returncode == 0 and on.stdout == narrow.stdout
+    assert wide.stdout == ra("query", q, "--repo", str(repo), "--max-items", "25", "--max-chars", "6000",
+                             cwd=repo, env=_env(VERINODA_SHAPE_BUDGET="0")).stdout  # off: 6000, as before
 
 
 def test_write_falls_back_to_utf8_bytes(monkeypatch):
@@ -244,8 +257,13 @@ def test_analyze_json(repo):
                      str(repo), "--budget-calls", "3", "--json", cwd=repo)
     assert budget["usage"]["exhausted"] == "tool-call budget 3 spent"
     assert any(u["why"] == "tool-call budget 3 spent" for u in budget["unknowns"])
+    r = ra("analyze", "How does an order get from the API handler to the database?", "--repo", str(repo),
+           "--budget-calls", "3", cwd=repo)
+    assert "budget exhausted: tool-call budget 3 spent" in r.stdout and "unknown: " in r.stdout
+    # the default text is what a model reads: verdicts, claims, passages; no run bookkeeping
     r = ra("analyze", "Why does OrderRepository use SQLite?", "--repo", str(repo), "--no-challenge", cwd=repo)
-    assert r.returncode == 0 and "[primary_source_verified" in r.stdout and "usage:" in r.stdout
+    assert r.returncode == 0 and "[primary_source_verified" in r.stdout and "\npassages (" in r.stdout
+    assert "usage:" not in r.stdout and '"steps"' not in r.stdout and r.stdout.startswith("analysis ana_")
     # Critique was switched off, not cut by the budget: the rendering must not claim a reason it lacks.
     assert "[not challenged" in r.stdout and "[not challenged: budget]" not in r.stdout
 
@@ -655,7 +673,7 @@ def test_plan_draft_check_analyze_and_audit(repo, capsys):
     assert "changed: none" in out and "  q1 [" in out
     # the human rendering: understood as, one line per sub-question verdict
     r = ra("analyze", "--plan", str(path), "--no-challenge", "--repo", str(repo), cwd=repo)
-    assert r.returncode == 0 and "understood as: " in r.stdout and "\nsub-questions:\n  q1 [" in r.stdout
+    assert r.returncode == 0 and "understood as: " in r.stdout and "\nq1 [" in r.stdout and "\nq2 [" in r.stdout
     assert "Sipariş" in r.stdout
 
 
@@ -995,6 +1013,9 @@ def test_names_written_as_code_are_never_replaced_by_similar_ones(repo):
     link = res["plan_check"]["links"][0]
     assert link["status"] == "not_found" and link["did_you_mean"] == ["place_order (orders/service.py:19)"]
     assert not any("place_order()" in c["text"] for c in res["claims"])  # nothing about the similar name
+    # the default text says so too (the skill reads the text): not_found with its did_you_mean
+    r = ra("analyze", "Where is place_orders defined?", "--repo", str(repo), cwd=repo)
+    assert "plan check: place_orders: not_found (did you mean place_order (orders/service.py:19))" in r.stdout
     r = ra("trace", "create_order_handler", "place_orders", "--repo", str(repo), cwd=repo)
     assert r.returncode == 2 and "[unresolved" in r.stdout
     assert "target: no symbol named `place_orders` in this repository; nearest: place_order " \
@@ -1303,3 +1324,14 @@ def test_no_index_is_made_outside_a_project_or_when_turned_off(tmp_path, capsys,
     repo = _git_copy(tmp_path / "app")
     with pytest.raises(SystemExit, match="has no index yet"):
         cli.main(["query", "anything", "--repo", str(repo)])
+
+
+def test_json_is_compact_off_a_terminal_and_indented_on_one(monkeypatch):
+    from verinoda import cli
+
+    obj = {"a": [1, 2], "b": "ç"}
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False, raising=False)
+    assert cli._dump(obj) == '{"a":[1,2],"b":"ç"}'  # captured, as an agent or a pipe reads it
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
+    assert cli._dump(obj) == '{\n  "a": [\n    1,\n    2\n  ],\n  "b": "ç"\n}'
+    assert cli._dump(obj, pretty=False) == '{"a":[1,2],"b":"ç"}'

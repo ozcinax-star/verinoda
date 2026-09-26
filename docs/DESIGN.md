@@ -463,6 +463,48 @@ apart from `atlas.db` because it is disposable.
 - The rest: one skeleton line each.
 - Truncation is always stated, with the follow-up command.
 - JSON output stays for programs.
+- Nothing is printed twice (2026-09-26): no echo of the question; `expanded:` shows at most
+  three `from->to` pairs (the JSON keeps all, with why); the header names the item without its
+  signature when the passage below starts at the item's first line (the signature is that
+  line; the header takes it back if the passage is cut); each passage window is dedented on its
+  own; the tail says `next: verinoda query "…" --max-chars N` (the CLI named as such: MCP
+  clients read the same text, and project_query takes no budget). The `## path:a-b` and
+  `  path:x-y` locators are unchanged (measured in docs/BENCHMARKS.md, "Update 2026-09-26:
+  token wins").
+- The note on what is left out is never dropped (review fix, 2026-09-26): at a budget too small
+  for the whole note it takes a shorter form (the list cut to the room, the count with the next
+  step, the count alone), and when even that does not fit next to the top block the block goes
+  to the list; with no block left the text says "N candidates not shown (budget too small)",
+  never "no candidate locations".
+- `analyze` follows the same rule (2026-09-26, `analysis_view`): its default text and the MCP
+  response carry the answer, not the run - verdicts, answer claims, the other claims, unknowns
+  and the query passages; confidence only below its status's cap, evidence only where it adds a
+  locator, a verified context claim whose lines a printed passage shows left out and counted.
+  Over the MCP cap the critique log and the plan's links are cut before the passages, and the
+  passages (from the end) before any claim. `--json` keeps the full record. Review fixes: the
+  text prints the plan's links (not the weak ones) as MCP does - a linked word's locator can be
+  the only place a fact is found (heldout h03.rebuild); claims are left out as printed only on
+  the passage lines the cap keeps (`lean_capped` recounts after the cut, and a window counts only
+  the lines that follow it), so a claim whose lines the cut removed is listed again; evidence is
+  left out only for the same whole locator (line 18 is not line 180).
+- A profile's texts name only what it serves (review fix): hints and parameter descriptions in
+  the core profile name the CLI command, and the MCP tool with the profile that serves it. Where
+  MCP is the only way in - Codex on an editable or hardlinked install, whose sandbox may not
+  import verinoda - install registers `--profile full`, so every protocol the skill makes
+  mandatory stays reachable; the skills tell the agent to ask for the full profile when a
+  mandated tool is not listed. A config whose `mcp` setting cannot be read is an error, never a
+  silent core.
+- The skills read the CLI's text, not its JSON (2026-09-26): JSON cost 2-5x the tokens for the
+  same content (analyze 3,824 vs 717 tokens, decide brief 13,206 vs 2,985, doctor 2,711 vs 795),
+  and the text carries every field the protocol reads. `--json` stays for programs and prints
+  compact JSON off a terminal (indentation was a quarter of the bytes); `doctor --brief` prints
+  the graph and snapshot lines and every problem, nothing else.
+- The budget still does not follow the question by default. A question-shape budget (4,800
+  characters for a single-clause question, 6,000 for compound, flow and test questions) exists
+  behind `query.shape_budget` / `VERINODA_SHAPE_BUDGET`: -8.3% tokens per question on the 8 sets
+  with no fact found lost, but one gold line no longer shown, so it stays off (the rule: no gold
+  fact lost anywhere, found or shown, in-sample or out). A stop signal that knows when the
+  question is covered is the open lever (docs/BENCHMARKS.md, "Update 2026-09-26: token wins").
 
 **D21. Build-time work is not repeated at query time.**
 

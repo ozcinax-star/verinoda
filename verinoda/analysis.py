@@ -588,7 +588,7 @@ def _retrieve(ctx: _Ctx, inputs: dict, include_tests: bool) -> dict:
     return retrieval.retrieve(ctx.g, query, budget, **kw)
 
 
-PASSAGE_CHARS = 6000  # the budget `verinoda query` renders its passages with
+PASSAGE_CHARS = 6000  # the budget `verinoda query` renders its passages with (retrieval.question_chars)
 
 
 def _passages(g, question: str) -> list[str]:
@@ -600,8 +600,10 @@ def _passages(g, question: str) -> list[str]:
     (on the seven public benchmark sets analyze had lost 62 gold facts query found, over 33 of 74
     questions)."""
     try:
-        res = retrieval.retrieve(g, question, retrieval.Budget(max_items=10, max_chars=PASSAGE_CHARS))
-        return retrieval.render_text(res, PASSAGE_CHARS).splitlines()
+        chars = retrieval.question_chars(question, g.root) if hasattr(retrieval, "question_chars") \
+            else PASSAGE_CHARS
+        res = retrieval.retrieve(g, question, retrieval.Budget(max_items=10, max_chars=chars))
+        return retrieval.render_text(res, chars).splitlines()
     except Exception:  # noqa: BLE001 - passages are an addition; the claims stand without them
         return []
 

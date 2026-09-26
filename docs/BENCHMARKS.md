@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-26: exact names and a fresh index](#update-2026-09-26-exact-names-and-a-fresh-index-d37) · [Update 2026-09-26: never ok without looking](#update-2026-09-26-never-ok-without-looking) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-26: token wins](#update-2026-09-26-token-wins) · [Update 2026-09-26: exact names and a fresh index](#update-2026-09-26-exact-names-and-a-fresh-index-d37) · [Update 2026-09-26: never ok without looking](#update-2026-09-26-never-ok-without-looking) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,131 @@ Sections: [Update 2026-09-26: exact names and a fresh index](#update-2026-09-26-
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-26: token wins
+
+Result files: `benchmarks/results/token-wins-2026-09-26/` (its README says how they were produced).
+One commit per change, each measured on the eight public sets (86 questions, 319 gold facts) for
+facts found **and** shown (the gold line's text is in the context; defined under
+[Metrics](#metrics-exact-definitions)), and on the agent persona's 10 out-of-sample questions (5 on
+a CPython standard-library copy, 5 on a Verinoda copy; 32 facts, regex gold). Tokens are chars/4 as
+the benchmark counts them. Graphify's numbers are the token economist's fresh-index run at c8da753,
+not re-run. The rule for every change: if it loses a gold fact anywhere - found or shown, in-sample or
+out - it is not turned on.
+
+### Per commit
+
+All eight sets, found / shown, tokens per question. "Analyze as read" is what the skill had the agent
+read: `verinoda analyze --json` on main, the default text from commit 2 on.
+
+| commit | query text | analyze as read | benchmark `verinoda_analyze` | MCP analyze |
+|---|---|---|---|---|
+| main c8da753 | 283 / 213, 1,313 | 286 / 219, 3,901 (--json) | 284 / 219, 2,349 (JSON) | 272 / 207, 2,832 |
+| 1 query text without repeats | 285 / 213, 1,309 | 287 / 219, 3,907 | 286 / 219, 2,349 | 273 / 208, 2,826 |
+| 2 analyze: the answer, not the run | 285 / 213, 1,309 | 286 / 219, **1,847** (text) | 286 / 219, **1,847** (text) | **287 / 219, 2,036** |
+| 3 MCP core profile | no answer changes | | | |
+| 4 skills read text | no answer changes | (`--json` 3,908 -> 3,208: compact) | | |
+| 5 shown metric | measurement only | | | |
+| 6 question-shape budget, default off | no answer changes | | | |
+| 6 with the budget on (not kept on) | 285 / **212**, 1,201 | 286 / **218**, 1,741 | 286 / 218, 1,741 | 287 / **218**, 1,927 |
+| 7-12 review fixes (fd30f5b) | 285 / 213, 1,310 | **287** / 219, 1,873 (text) | 287 / 219, 1,873 (text) | 287 / 219, 2,037 |
+
+Out of sample (hits of 32, tokens per question): main query 14 at 1,482, analyze `--json` 14 at 3,615,
+analyze's old text 10 at 714 (it printed passage headers only), MCP analyze 14 at 2,794; commit 1: query
+14 at 1,442; commit 2: analyze text 14 at 1,908, MCP analyze 14 at 2,087; branch head: `--json` 14 at
+2,907; the shape budget on: query 14 at 1,259, analyze text 14 at 1,721, MCP analyze 14 at 1,896;
+review fixes: query 14 at 1,442, analyze text 14 at 1,949, MCP analyze 14 at 2,087, per fact the same
+hits as main and as the branch head. Graphify's saved answers to the same questions: 1 of 32 at 1,552.
+
+- **Commit 1 (query text).** No question echo, at most three `expanded:` pairs, `next: same query`,
+  a header without the signature when the passage below starts with it, each window dedented. At
+  the fixed 6,000-character budget the saved characters buy content: +2 found (forge q12, heldout
+  h08), no fact lost, tokens per question -0.3% overall (-7.4% and -8.7% on the two orders sets,
+  which do not fill the budget; +4.9% on verinoda_user_tr, which now fills it). One transient: at
+  this commit the old analyze text, which printed only the passages' header lines, lost 19 shown
+  lines (the headers no longer carry signatures); commit 2 prints the passages themselves.
+- **Commit 2 (analyze).** MCP analyze no longer loses evidence to its cap: 272 -> 287 found, 207 ->
+  219 shown, -28.1% tokens. Analyze's default text carries everything the JSON record did for the
+  benchmark (286 / 219) at 1,847 tokens per question against 2,349 for the JSON approach (-21.4%)
+  and 3,901 for the `--json` output the skill used to read (-52.7%); out of sample -47.2%. Where the
+  text still spends: passages 1,330 of the 1,847 tokens, claims 351. **Correction (review):** the
+  equal totals hid a swap. Per fact, the text lost heldout `h03.rebuild`, which `--json` and MCP
+  found only through the plan's link `build -> repoatlas/index.py:55-84` (the text printed only
+  not_found links), and gained `h08.cli`; the "nothing lost" above was a comparison of totals. The
+  review fixes print the plan's links in the text (below), and comparisons are now per fact
+  (`python -m verinoda.benchmark compare` lists the facts lost and gained by id).
+- **Commit 3 (MCP core profile)** and **commit 4 (skills read text)**: no answer changes (the branch
+  head's run equals commit 2's except the compact `--json`); see the standing cost below.
+- **Commit 6 (question-shape budget): not turned on.** 4,800 characters for a single-clause
+  question, 6,000 for compound, flow and test questions: -8.3% tokens for query, -5.7% for analyze,
+  -5.4% for MCP analyze, no fact found lost in or out of sample, but heldout h06's `h06.rule` line is
+  no longer shown. The switch stays (`query.shape_budget`, `VERINODA_SHAPE_BUDGET=1`) for anyone who
+  prefers the trade.
+- **Review fixes (commits 7-12, `7-review-fixes.json`).** Compared per fact with main and with the
+  branch head, for every approach (query text and JSON, the benchmark's analyze, MCP query and
+  analyze, `analyze` text and `--json`): no fact lost, found or shown; out of sample the same hits
+  per fact; the fast harness per question: only gains over main. What changed:
+  - the analyze text prints the plan's links (`plan links: build -> repoatlas/index.py:55-84; ...`,
+    words resolving to one place share it, weak links left out): h03.rebuild is found again, so
+    analyze as read is 287 / 219 against `--json`'s 287 / 219, for +26 tokens per question (1,847
+    -> 1,873, +1.4%; out of sample 1,907 -> 1,949). Against main's `--json` 3,901: -52.0%.
+  - MCP analyze counts claims as printed by the passages only on the passage lines its cap keeps.
+    The benchmark's 12,000-character cap does not bind on these sets (2,036 -> 2,037); where it
+    binds it did lose claims: on orders_app at a 5,000-character cap, "how does an order get
+    persisted and where is the discount applied?" kept 1 of 61 passage lines and 9 verified claims
+    were neither listed nor printed, now none (the cut note counts every claim it cuts).
+  - the query text's note on what it leaves out always fits: over budgets 100-1,200 in steps of 50,
+    9 budgets on orders_app and 5 on graphify_core left candidates out without a note at the branch
+    head; swept again over 20-1,200 in steps of 10, none does now (at 20 characters the note itself
+    is clipped). "no candidate locations" is no longer printed when there are candidates. The follow-up names the CLI (`next: verinoda query "…" --max-chars N`), +7
+    characters where a note is printed: query text 1,309 -> 1,310 tokens per question.
+  - standing cost: the core tools/list 9,964 -> 9,967 characters (analyze's plan_json names
+    `verinoda plan check`, not a tool the profile lacks); the Claude skill 16,970 -> 17,180, the
+    Codex skill 16,439 -> 16,462 (what to do when a mandated tool is not listed). On an editable or
+    hardlinked install Codex is registered with the full profile (36,516 characters of tools/list):
+    there the sandbox may not import Verinoda and MCP must carry every protocol the skill mandates.
+
+Against Graphify, query text per set (found / shown, tokens per question; branch head = commit 1's
+numbers, which commits 2-6 do not change):
+
+| set | main | branch head | shape budget on | Graphify vendored | Graphify CLI |
+|---|---|---|---|---|---|
+| forge_mod | 66/48 1,476 | 67/48 1,484 | 67/48 1,395 | 12/0 1,344 | 12/0 1,322 |
+| glow_mod | 48/39 1,486 | 48/39 1,486 | 48/39 1,357 | 13/0 1,200 | 15/0 2,086 |
+| orders_app | 32/28 891 | 32/28 825 | 32/28 825 | 16/1 2,234 | 15/1 1,651 |
+| orders_app_tr | 32/30 896 | 32/30 818 | 32/30 818 | 6/1 1,218 | 5/1 926 |
+| graphify_core | 36/26 1,410 | 36/26 1,424 | 36/26 1,271 | 7/2 1,667 | 7/2 1,940 |
+| graphify_core_tr | 31/21 1,432 | 31/21 1,444 | 31/21 1,309 | 2/2 1,288 | 2/2 1,526 |
+| heldout_repoatlas | 25/14 1,422 | 26/14 1,420 | 26/13 1,244 | 8/2 1,647 | 8/2 1,644 |
+| verinoda_user_tr | 13/7 1,385 | 13/7 1,452 | 13/7 1,266 | 5/0 813 | 4/0 788 |
+| **all** | **283/213 1,313** | **285/213 1,309** | **285/212 1,201** | **69/8 1,391** | **68/8 1,480** |
+
+Found per 1k tokens (shown per 1k): query 2.51 (1.89) -> 2.53 (1.89), Graphify vendored 0.58 (0.07);
+analyze as read 0.85 (0.65) -> 1.80 (1.38); MCP analyze 1.12 (0.85) -> 1.64 (1.25). Per question, query text is still under both Graphify
+renderers' tokens on 4 of 8 sets (the orders sets, graphify_core, heldout), as on main: the format
+savings went into content, and the budget that would spend fewer tokens loses a line.
+
+### Standing cost per session
+
+What an agent carries before its first question (`menu-cost.txt`; chars, about chars/4 tokens):
+
+| item | main | branch head |
+|---|---|---|
+| MCP tools/list, default | 33 tools, 50,029 (~12,500) | 11 tools (core), 9,964 (~2,490); all 33: 36,516 |
+| MCP server instructions | 4,648 (~1,160) | 2,014 (~500); full profile 3,587 |
+| Claude skill | 16,775 (~4,190) | 16,970 (~4,240) |
+| doctor at session start | `--json` 10,738 (~2,680) | `--brief` 385 (~100) |
+| **total** | **~20,500** | **~7,330** |
+
+Graphify's: its skill 10,500-10,900 plus its MCP menu about 1,070, about 11,600-12,000 (the token
+economist's count). How much of the menu a client really sends per request depends on the client
+(some defer tool schemas); not measured.
+
+### Not measured here
+
+- A real tokenizer (chars/4 and a lower-bound pre-token count only), and any model in the loop.
+- Whether Claude Code or Codex forward a text result twice (content and structured content).
+- The question-shape rule, and any stop signal, on a held-out set larger than 10 questions.
 
 ## Update 2026-09-26: exact names and a fresh index (D37)
 
@@ -2513,9 +2638,9 @@ scored.
 | `raw` | A deterministic simulation of an agent with no tools beyond grep and read. It extracts the question terms with the same function Verinoda uses (`verinoda.retrieval.terms_for`, built on Graphify's `_query_terms`; duplicates removed), drops terms shorter than 3 chars and greps the rest case-insensitively as substrings. It ranks files by (distinct terms matched, matching lines, path), shows the first 40 grep hits (`path:line: text`), then reads the top 5 files in full with line numbers (`cat -n` style) until 24,000 characters. The grep listing counts toward the cap. | none |
 | `graphify_vendored` | Graphify's own query renderer (`_query_graph_text` at the pinned commit 20a20d30, called through `verinoda.index.graphify_query_text`) with the defaults of Graphify's MCP `query_graph` tool: BFS, depth 3, 2,000-token budget. It reads the graph built by Verinoda's scan (the vendored Graphify pipeline, same commit). | Verinoda scan |
 | `graphify_cli` | The real upstream CLI, `graphify query "<question>"`, with the CLI's defaults (BFS, depth 2, 2,000-token budget). It runs as a subprocess in a *separate* copy of the corpus indexed with `graphify update .`, installed from the upstream checkout at the same commit (`graphify 0.9.65`). Its environment has `GRAPHIFY_OUT` removed (so it uses its own `graphify-out/`), every `*_API_KEY` / `*_AUTH_TOKEN` removed, and `GRAPHIFY_QUERY_LOG_DISABLE=1`. | `graphify update .` |
-| `verinoda_analyze` | `verinoda.analysis.analyze` with the default budget (60 s, 40 internal tool calls, ~6,000 tokens), critique on, no test runs, no host plan (the rule-drafted question plan is used). The delivered context is compact JSON of `question`, `intents`, `claims` (id, text, status, confidence, evidence locators, uncertainties) and `unknowns`, the same fields as in the earlier runs. The round-3 plan fields of `verinoda analyze --json` (`understood_as`, `subquestions`, `plan_check`) are **not** included, so they cost no tokens here. | Verinoda scan |
+| `verinoda_analyze` | `verinoda.analysis.analyze` with the default budget (60 s, 40 internal tool calls, ~6,000 tokens), critique on, no test runs, no host plan (the rule-drafted question plan is used). The delivered context is compact JSON of `question`, `intents`, `claims` (id, text, status, confidence, evidence locators, uncertainties) and `unknowns`, the same fields as in the earlier runs. The round-3 plan fields of `verinoda analyze --json` (`understood_as`, `subquestions`, `plan_check`) are **not** included, so they cost no tokens here. **Since 2026-09-26** the delivered context is the default text of `verinoda analyze` (`analysis_view.render_text`: snapshot, understood as, one block per sub-question with verdict, answer claims and unknowns, the other claims, then the passages `query` gives), which is what the skills read; results written before that date measured the JSON. | Verinoda scan |
 | `verinoda_retrieve` | `verinoda.retrieval.retrieve` with the CLI defaults of `verinoda query` (10 items, 6,000 chars). The delivered context is its JSON: items with reasons, an excerpt window, the full definition `span`, and the relations among the items. | Verinoda scan |
-| `verinoda_retrieve_text` | **New in round 3.** The model-facing text of the same retrieval: `retrieval.render_text(retrieve(g, q, Budget(10, 6000)), 6000)`, the default output of `verinoda query`. Skeleton first: the top 3 items with `path:a-b` header, signature, first doc line, `calls:` / `called by:` outlines and matching passages; items 4-7 with one passage; the rest as one `path:a-b name` line each; truncation stated with the follow-up command. | Verinoda scan |
+| `verinoda_retrieve_text` | **New in round 3.** The model-facing text of the same retrieval: `retrieval.render_text(retrieve(g, q, Budget(10, 6000)), 6000)`, the default output of `verinoda query` (the budget is `retrieval.question_chars`: 6000 unless the question-shape budget is on). Skeleton first: the top 3 items with `path:a-b` header, signature, first doc line, `calls:` / `called by:` outlines and matching passages; items 4-7 with one passage; the rest as one `path:a-b name` line each; truncation stated with the follow-up command. | Verinoda scan |
 
 **Budget sweep** (`--sweep 750,1500,3000`). `<approach>@<tokens>` runs a
 budgeted approach with a context cap of `4 x tokens` **characters**, i.e.
@@ -2583,6 +2708,17 @@ spans at most 30 lines: a pointer to the spot rather than a whole file.
 delivered for that set, times 1,000 (`summary.<approach>.facts_per_1k_tokens`).
 It is a ratio of what was delivered, not a cost saving: it says nothing about
 whether a model answers correctly from it.
+
+**Shown** (schema 3, 2026-09-26). The fact's gold line is in the delivered
+context itself: its `source.contains` text occurs, whitespace-normalised (a
+JSON output's string values are read unescaped, one per line). *Found* can be
+met by a pointer - a locator whose span merely overlaps the fact's lines, such
+as a `path:1064-4842 dispatch_command` header - and a context shrunk to a list
+of pointers scores well on found per token while the model still has to open
+every file. Shown cannot be gamed that way. `facts_shown`,
+`shown_per_1k_tokens` and `pinpointed_per_1k_tokens` sit next to
+`facts_per_1k_tokens` in every summary, the report and the sweep table; a token
+change is judged on found *and* shown.
 
 **Gold verification.** Before anything is scored, every fact is re-checked
 against the benchmark copy (`validate_gold`): `source.at` must exist and

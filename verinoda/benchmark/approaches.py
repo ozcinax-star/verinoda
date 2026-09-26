@@ -399,15 +399,12 @@ def graphify_cli_context(cmd: str, root: Path, question: str, budget: int | None
 # -- 3. Verinoda ---------------------------------------------------------------------
 
 def analyze_context(res: dict) -> str:
-    """What an agent receives from ``verinoda analyze --json``, minus run bookkeeping."""
-    claims = []
-    for c in res["claims"]:
-        claims.append({k: c[k] for k in ("id", "text", "status", "confidence", "evidence", "uncertainties", "challenged")
-                       if k in c})
-    body = {"question": res["question"], "intents": res["intents"], "claims": claims, "unknowns": res["unknowns"]}
-    if res.get("passages"):
-        body["passages"] = res["passages"]
-    return json.dumps(body, ensure_ascii=False, separators=(",", ":"))
+    """What an agent reads of ``verinoda analyze``: its default text (``analysis_view.render_text``:
+    sub-question verdicts, claims, unknowns and the passages ``query`` gives). Until 2026-09-26 this
+    was the ``--json`` result minus run bookkeeping; docs/BENCHMARKS.md has both."""
+    from verinoda import analysis_view
+
+    return analysis_view.render_text(res)
 
 
 def verinoda_analyze(store, root: Path, question: str) -> tuple[str, dict]:
@@ -437,11 +434,14 @@ def verinoda_retrieve(root: Path, question: str, *, max_items: int = 10, max_cha
 
 
 def verinoda_retrieve_text(root: Path, question: str, *, max_items: int = 10,
-                            max_chars: int = 6000) -> tuple[str, dict]:
-    """The model-facing text of ``verinoda query``: ``render_text(retrieve(g, q, Budget(10, 6000)), 6000)``."""
+                            max_chars: int | None = None) -> tuple[str, dict]:
+    """The model-facing text of ``verinoda query``: ``render_text(retrieve(g, q, Budget(10, N)), N)``, N the
+    command's default budget for the question (6000; ``retrieval.question_chars``) unless given."""
     from verinoda import index, retrieval
     from verinoda.benchmark import metrics as mx
 
+    if max_chars is None:
+        max_chars = retrieval.question_chars(question, Path(root)) if hasattr(retrieval, "question_chars") else 6000
     g = index.load(Path(root))
     res = retrieval.retrieve(g, question, retrieval.Budget(max_items=max_items, max_chars=max_chars))
     text = retrieval.render_text(res, max_chars)

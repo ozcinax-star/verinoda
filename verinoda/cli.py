@@ -51,8 +51,17 @@ OBSERVE_LIST_CAP = 10
 
 # -- output helpers -------------------------------------------------------------
 
-def _dump(obj) -> str:
-    return json.dumps(obj, indent=2, ensure_ascii=False, default=str)
+def _dump(obj, pretty: bool | None = None) -> str:
+    """``--json`` output: indented on a terminal, compact otherwise (an agent or a pipe reads it; indentation
+    was a quarter of the bytes)."""
+    if pretty is None:
+        try:
+            pretty = sys.stdout.isatty()
+        except (AttributeError, ValueError):
+            pretty = False
+    if pretty:
+        return json.dumps(obj, indent=2, ensure_ascii=False, default=str)
+    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
 def _write(text: str) -> None:
@@ -168,128 +177,31 @@ def _path_line(repo: Path, spec: str, what: str) -> tuple[str, int]:
 
 # -- renderers ------------------------------------------------------------------
 
-def _not_challenged_mark(c: dict) -> str:
-    """`[not challenged: <reason>]` for a claim whose critique was skipped.
-
-    The reason ("budget" | "claim_limit" | "disabled") comes from the analysis
-    (``not_challenged_reason``); when a result carries only ``challenged: false``
-    no reason is guessed.
-    """
-    reason = c.get("not_challenged_reason")
-    if reason:
-        return f"  [not challenged: {reason}]"
-    return "  [not challenged]" if c.get("challenged", True) is False else ""
-
-
 def _r_problems(problems: list[dict], indent: str = "  ") -> None:
-    for p in problems:
-        fix = f"  fix: {p['fix']}" if p.get("fix") else ""
-        print(f"{indent}{p.get('at', '/')}: {p.get('msg')}{fix}")
+    from verinoda.analysis_view import problem_lines
+
+    for ln in problem_lines(problems, indent):
+        print(ln)
 
 
 def _r_clarifications(clar: list[dict], indent: str = "  ") -> None:
-    for c in clar:
-        print(f"{indent}{c['id']}: {c.get('question_user_lang') or c.get('question_en')}")
-        for o in c.get("options") or []:
-            ev = f"  [{o['evidence']}]" if o.get("evidence") else ""
-            print(f"{indent}   - {o.get('value')}: {o.get('label')}{ev}")
+    from verinoda.analysis_view import clarification_lines
 
-
-CONTEXT_LINES = 8  # context claims shown in the text output of an analysis
+    for ln in clarification_lines(clar, indent):
+        print(ln)
 
 
 def _r_claims(res: dict) -> None:
-    snap = res.get("snapshot") or {}
-    head = f"analysis {res['analysis_id']}"
-    if snap:
-        head += (f"  snapshot {snap['id']} commit {(snap.get('commit') or 'no-git')[:10]}"
-                 f"{' (dirty)' if snap.get('dirty') else ''}")
-    print(head)
-    if res.get("understood_as"):
-        print(f"understood as: {res['understood_as']}")
-    print(f"intents: {', '.join(res.get('intents') or [])}")
+    """``verinoda analyze`` without ``--json``: the model-facing text (verinoda.analysis_view)."""
+    from verinoda.analysis_view import render_text
+
     ref = res.get("index_refresh") or {}
-    if ref.get("ran"):
-        print(f"index: refreshed first ({ref.get('changed_count')} changed file(s), {ref.get('seconds')} s, "
-              "not charged to the budget)")
-    elif ref.get("skipped"):
+    if ref.get("skipped"):  # never answer silently from an older tree
         files = ref.get("stale_files") or []
         print(f"index: NOT refreshed ({ref['skipped']}); answered from the previous index; "
               f"{ref.get('stale_count', 0)} file(s) changed since it: " + ", ".join(files[:5])
               + (" ..." if ref.get("stale_count", 0) > 5 else ""))
-    status = res.get("status")
-    pc = res.get("plan_check") or {}
-    if res.get("plan_id"):
-        print(f"plan {res['plan_id']} ({res.get('plan_source')}): {pc.get('status') or status}")
-    if status == "invalid_plan":
-        print("\nthe plan is invalid; nothing was analysed:")
-        _r_problems(res.get("errors") or pc.get("errors") or [])
-        print("  next: fix the plan file (`verinoda plan schema`, `verinoda plan check FILE`)")
-    elif status == "needs_clarification":
-        print("\nclarification needed before analysing (ask the user, record the choice in the plan's answers[] "
-              "with its clarification_id, then re-run):")
-        _r_clarifications(res.get("clarifications") or pc.get("clarifications") or [])
-    elif status == "no_index":
-        print("\nno index to analyse: run `verinoda scan` first")
-    subs = res.get("subquestions") or []
-    if subs:
-        print("\nsub-questions:")
-        for s in subs:
-            n_claims = len(s.get("claim_ids") or [])
-            n_unknowns = len(s.get("unknowns") or [])
-            print(f"  {s['id']} [{s.get('status') or '?'}] {s.get('intent')}: {s.get('text') or ''}  "
-                  f"({n_claims} claim(s){f', {n_unknowns} unknown(s)' if n_unknowns else ''})")
-    for s in subs:  # a choice: what the human decides with (no recommendation)
-        b = s.get("decision_brief") or {}
-        if b.get("forces") is None:
-            continue
-        print(f"\ndecision brief {b['brief_id']} ({s['id']}) [{b['verdict']}]: {b.get('understood_as')}")
-        for f in b["forces"]:
-            print(f"  [{f['status']}] {f['fact'][:200]}  ({', '.join(f['at'][:3])})")
-        for a in b.get("absences") or []:
-            print(f"  absent: {a['what']}")
-        for q in b.get("questions_for_human") or []:
-            print(f"  ask the user {q['id']}: {q['text']}")
-    print()
-    answering = {cid for s in subs for cid in s.get("answer_claim_ids") or []}
-    shown_head, context_shown, context_more = None, 0, 0
-    for c in res.get("claims") or []:
-        is_context = bool(answering) and c["id"] not in answering
-        head = ("context (found on the way; not what answers):" if is_context else "answer:") if answering else None
-        if head and head != shown_head:
-            print(("" if shown_head is None else "\n") + head)
-            shown_head = head
-        if is_context:  # one line each, and not all of them: the answer is what a reader came for
-            if context_shown >= CONTEXT_LINES:
-                context_more += 1
-                continue
-            context_shown += 1
-            print(f"  [{c['status']}] {c['text'][:140]}  ({c['id']})")
-            continue
-        print(f"[{c['status']} {c['confidence']:.2f}] {c['text']}  ({c['id']}){_not_challenged_mark(c)}")
-        for e in c["evidence"][:3]:
-            print(f"      {e}")
-        for u in c["uncertainties"][:2]:
-            print(f"      ? {u}")
-    if context_more:
-        print(f"  +{context_more} more (all of them, with evidence: --json)")
-    if res.get("unknowns"):
-        print("\nunknown:")
-        for u in res["unknowns"]:
-            print(f"  - {u['question']}: {u['why']}\n    next: {u['next_step']}")
-    heads = [ln[3:] for ln in res.get("passages") or [] if ln.startswith("## ")]
-    if heads:  # the passages themselves are in --json; here, where they are
-        print("\npassages (as `verinoda query` gives them; full text with --json):")
-        for h in heads[:10]:
-            print(f"  {h[:150]}")
-    if res.get("critique"):
-        print("\ncritique:")
-        for c in res["critique"]:
-            print(f"  {c['claim']}: {c['before']} -> {c['after']}  " + "; ".join((c["fails"] + c["warns"])[:2]))
-    u = res.get("usage")
-    if u:
-        print(f"\nusage: {u['elapsed_s']}s, {u['tool_calls']} tool calls, ~{u['context_tokens_est']} tokens "
-              f"({u['token_count_method']}){'; budget: ' + u['exhausted'] if u['exhausted'] else ''}")
+    _write(render_text(res))
 
 
 def _stale_note(res: dict) -> None:
@@ -440,10 +352,10 @@ def _r_derived(r: dict) -> None:
 # -- commands -------------------------------------------------------------------
 
 def cmd_doctor(args) -> int:
-    from verinoda.doctor import render, run
+    from verinoda.doctor import render, render_brief, run
 
     res = run(_repo(args))
-    _emit(args, res, render)
+    _emit(args, res, render_brief if args.brief else render)
     return 0 if res["ok"] else 1
 
 
@@ -786,8 +698,7 @@ def cmd_map(args) -> int:
     # all views at once: a short summary of each; one view: more lines of it
     cap = args.max_lines or (40 if args.view else 12)
     for name, v in res.items():
-        _write(map_text.render({name: v}, cap).rstrip("
-"))
+        _write(map_text.render({name: v}, cap).rstrip("\n"))
         _stale_note(v)
         for r in v.get("resolution") or []:
             if r["status"] == "exact":
@@ -850,12 +761,13 @@ def cmd_query(args) -> int:
     repo = _repo(args)
     _need_graph(repo)
     g = index.load(repo)
-    res = retrieval.retrieve(g, args.question, retrieval.Budget(max_items=args.max_items, max_chars=args.max_chars))
+    chars = args.max_chars or retrieval.question_chars(args.question, repo)
+    res = retrieval.retrieve(g, args.question, retrieval.Budget(max_items=args.max_items, max_chars=chars))
     retrieval.attach_freshness(res, g, freshness.check(repo))  # never silently answer from an older tree
     if args.json:
         _write(_dump(res))
     else:  # the skeleton-first plain text a model reads (docs/DESIGN.md D20)
-        _write(retrieval.render_text(res, budget_chars=args.max_chars))
+        _write(retrieval.render_text(res, budget_chars=chars))
     return 0
 
 
@@ -938,6 +850,8 @@ def _r_plan_check(r: dict) -> None:
     for lk in r.get("links") or []:
         where = f" {lk['label']} at {lk['at']} ({lk.get('tier')}, {lk.get('score')})" if lk.get("at") else ""
         extra = f"; rejected candidates: {', '.join(lk['rejected'])}" if lk.get("rejected") else ""
+        if lk.get("did_you_mean"):
+            extra += f"; did you mean: {', '.join(map(str, lk['did_you_mean'][:5]))}"
         print(f"  {lk['mention']} {lk['text']!r}: {lk['status']}{where}{extra}")
     for ref in r.get("references") or []:
         ver = f" @ {ref['version_used']}" if ref.get("version_used") else ""
@@ -2203,7 +2117,7 @@ def cmd_uninstall(args) -> int:
 def cmd_mcp(args) -> int:
     from verinoda.mcp.server import default_repo, serve
 
-    serve(_repo(args) if args.repo else default_repo(Path.cwd()))
+    serve(_repo(args) if args.repo else default_repo(Path.cwd()), profile=args.profile)
     return 0
 
 
@@ -2389,7 +2303,9 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--json", action="store_true", help="print structured JSON")
         return sp
 
-    add("doctor", cmd_doctor, "check installation, index, agent skills and MCP configuration")
+    sp = add("doctor", cmd_doctor, "check installation, index, agent skills and MCP configuration")
+    sp.add_argument("--brief", action="store_true",
+                    help="the graph and snapshot lines and every failed or warning check, nothing else")
     sp = add("setup", cmd_setup, "one step for a project: init + scan/update + skills for the agents found "
                                  "on PATH (safe to re-run)", repo=False)
     sp.add_argument("path", nargs="?", default=".")
@@ -2466,7 +2382,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("query", cmd_query, "bounded, justified retrieval for a question (plain text; --json for programs)")
     sp.add_argument("question")
     sp.add_argument("--max-items", type=int, default=10)
-    sp.add_argument("--max-chars", type=int, default=6000)
+    sp.add_argument("--max-chars", type=int, default=None,
+                    help="character budget (default 6000; with query.shape_budget on, 4800 for a single-clause "
+                         "question)")
     sp = add("trace", cmd_trace, "directed paths between two symbols/files with edge locations")
     sp.add_argument("source")
     sp.add_argument("target")
@@ -2857,6 +2775,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("mcp", help="MCP server for coding agents")
     msub = sp.add_subparsers(dest="mcp_cmd", required=True)
     c = msub.add_parser("serve", help="serve over stdio")
+    c.add_argument("--profile", choices=("core", "full"), default=None,
+                   help="tools to serve: core (default: query, analyze, inspect/trace/map, claims and evidence, "
+                        "index_update, code_check, decision_check) or full (all 33); else mcp.profile in "
+                        ".verinoda/config.json")
     c.set_defaults(fn=cmd_mcp)
     c.add_argument("--repo")
 

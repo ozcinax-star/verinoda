@@ -1,0 +1,314 @@
+{
+ "q_text": {
+  "v1": {
+   "hits": 1,
+   "facts": 3,
+   "tokens": 1397
+  },
+  "v2": {
+   "hits": 2,
+   "facts": 4,
+   "tokens": 1361
+  },
+  "v3": {
+   "hits": 3,
+   "facts": 3,
+   "tokens": 956
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 1160
+  },
+  "v5": {
+   "hits": 2,
+   "facts": 3,
+   "tokens": 1152
+  },
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1488
+  },
+  "b2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 1500
+  },
+  "b3": {
+   "hits": 4,
+   "facts": 7,
+   "tokens": 1196
+  },
+  "b4": {
+   "hits": 1,
+   "facts": 2,
+   "tokens": 1189
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 1192
+  }
+ },
+ "mcp_query": {
+  "v1": {
+   "hits": 1,
+   "facts": 3,
+   "tokens": 1397
+  },
+  "v2": {
+   "hits": 2,
+   "facts": 4,
+   "tokens": 1361
+  },
+  "v3": {
+   "hits": 3,
+   "facts": 3,
+   "tokens": 956
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 1160
+  },
+  "v5": {
+   "hits": 2,
+   "facts": 3,
+   "tokens": 1152
+  },
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1488
+  },
+  "b2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 1500
+  },
+  "b3": {
+   "hits": 4,
+   "facts": 7,
+   "tokens": 1196
+  },
+  "b4": {
+   "hits": 1,
+   "facts": 2,
+   "tokens": 1189
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 1192
+  }
+ },
+ "cli_an_text": {
+  "v1": {
+   "hits": 1,
+   "facts": 3,
+   "tokens": 1751
+  },
+  "v2": {
+   "hits": 2,
+   "facts": 4,
+   "tokens": 1696
+  },
+  "v3": {
+   "hits": 3,
+   "facts": 3,
+   "tokens": 1271
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 1664
+  },
+  "v5": {
+   "hits": 2,
+   "facts": 3,
+   "tokens": 2110
+  },
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1937
+  },
+  "b2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 1853
+  },
+  "b3": {
+   "hits": 4,
+   "facts": 7,
+   "tokens": 1427
+  },
+  "b4": {
+   "hits": 1,
+   "facts": 2,
+   "tokens": 1521
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 1980
+  }
+ },
+ "cli_an_json": {
+  "v1": {
+   "hits": 1,
+   "facts": 3,
+   "tokens": 3117
+  },
+  "v2": {
+   "hits": 2,
+   "facts": 4,
+   "tokens": 3512
+  },
+  "v3": {
+   "hits": 3,
+   "facts": 3,
+   "tokens": 2138
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 2515
+  },
+  "v5": {
+   "hits": 2,
+   "facts": 3,
+   "tokens": 2877
+  },
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 3036
+  },
+  "b2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 2722
+  },
+  "b3": {
+   "hits": 4,
+   "facts": 7,
+   "tokens": 2190
+  },
+  "b4": {
+   "hits": 1,
+   "facts": 2,
+   "tokens": 2586
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 2467
+  }
+ },
+ "mcp_analyze": {
+  "v1": {
+   "hits": 1,
+   "facts": 3,
+   "tokens": 1991
+  },
+  "v2": {
+   "hits": 2,
+   "facts": 4,
+   "tokens": 1892
+  },
+  "v3": {
+   "hits": 3,
+   "facts": 3,
+   "tokens": 1602
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 1885
+  },
+  "v5": {
+   "hits": 2,
+   "facts": 3,
+   "tokens": 2236
+  },
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 2102
+  },
+  "b2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 1990
+  },
+  "b3": {
+   "hits": 4,
+   "facts": 7,
+   "tokens": 1529
+  },
+  "b4": {
+   "hits": 1,
+   "facts": 2,
+   "tokens": 1645
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 2086
+  }
+ },
+ "graphify(saved)": {
+  "b1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1631
+  },
+  "b2": {
+   "hits": 0,
+   "facts": 4,
+   "tokens": 1624
+  },
+  "b3": {
+   "hits": 0,
+   "facts": 7,
+   "tokens": 1982
+  },
+  "b4": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 1616
+  },
+  "b5": {
+   "hits": 0,
+   "facts": 2,
+   "tokens": 1621
+  },
+  "v1": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1610
+  },
+  "v2": {
+   "hits": 1,
+   "facts": 4,
+   "tokens": 1667
+  },
+  "v3": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1609
+  },
+  "v4": {
+   "hits": 0,
+   "facts": 1,
+   "tokens": 505
+  },
+  "v5": {
+   "hits": 0,
+   "facts": 3,
+   "tokens": 1652
+  }
+ }
+}
