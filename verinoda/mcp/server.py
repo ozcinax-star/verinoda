@@ -128,7 +128,8 @@ ANALYZE_KEEP = ("analysis_id", "snapshot", "understood_as", "subquestions")
 # over the cap, bookkeeping goes before evidence: the critique log and the plan's links first, then the
 # passages (from the end: the top-ranked stay; `project_query` gives them in full), claims last
 ANALYZE_FIRST_CUT = ("critique", "plan_check.links", "passages")
-PLAN_HINT = "call question_plan_draft, or see `verinoda plan schema` for the plan format"
+PLAN_HINT = ("draft and check a plan with `verinoda plan draft` / `verinoda plan check` (MCP, profile full: "
+             "question_plan_draft / question_plan_check); the format: `verinoda plan schema`")
 # A file modified this close to (or after) the start of a call may have changed while it was read, or
 # within the file system's timestamp granularity: what was derived from it is not kept (git's racy-clean rule).
 RACY_NS = 2_000_000_000
@@ -218,7 +219,7 @@ def _plan_text(plan_json: Any) -> str | None:
     if not isinstance(plan_json, str) or not plan_json.lstrip().startswith("{"):
         raise ToolFailure("invalid_plan", "plan_json must be the plan's JSON text (a JSON object)", PLAN_HINT,
                           problems=[{"at": "/", "code": "schema", "msg": "not a JSON object",
-                                     "fix": "pass the plan returned by question_plan_draft, edited, as JSON text"}])
+                                     "fix": "pass a drafted plan (`verinoda plan draft`), edited, as JSON text"}])
     return plan_json
 
 
@@ -309,8 +310,8 @@ def cap_response(obj: dict, limit: int = MAX_RESPONSE_CHARS, *, first: tuple[str
     obj = _jsonable(obj)
     if keep:
         obj = {**{k: obj[k] for k in keep if k in obj}, **{k: v for k, v in obj.items() if k not in keep}}
-    if _size(obj) <= limit:
-        return obj
+    if _size(obj) <= limit or (obj.get("truncated") is True and isinstance(obj.get("truncation"), dict)):
+        return obj  # fits, or was cut already (a tool that caps its own response): never cut twice
     notes: dict[str, dict] = {}
 
     def note() -> dict:
@@ -744,7 +745,7 @@ class AtlasTools:
                 res.setdefault("next_step", ("retry with mode='any' for structural relations; " if mode == "flow"
                                              else "")
                                + "no path in the static graph does not prove there is none at runtime "
-                                 "(dynamic dispatch, callbacks and DI are not resolved; runtime_observe records "
+                                 "(dynamic dispatch, callbacks and DI are not resolved; `verinoda observe` records "
                                  "what the tests actually call)")
             return res
         return self._run("relation_trace", go, need="graph")
@@ -859,9 +860,12 @@ class AtlasTools:
                 raise ToolFailure("invalid_plan", f"the plan failed validation ({len(problems)} problem(s)); "
                                                   "nothing was analysed", PLAN_HINT, problems=problems,
                                   analysis_id=res.get("analysis_id"), plan_id=res.get("plan_id"))
-            from verinoda.analysis_view import lean
+            from verinoda.analysis_view import lean_capped
 
-            return lean(res)  # the answer, not the run (verinoda.analysis_view); plan_audit / claim_inspect for more
+            # the answer, not the run (verinoda.analysis_view); plan_audit / claim_inspect for more. Capped
+            # here: a claim left out as printed by the passages comes back when the cut removes its lines.
+            return lean_capped(res, lambda d: cap_response(d, self.max_chars, first=ANALYZE_FIRST_CUT,
+                                                           keep=ANALYZE_KEEP))
         return self._run("analyze", go, need="graph", first=ANALYZE_FIRST_CUT, keep=ANALYZE_KEEP)
 
     def plan_audit(self, analysis_id: str, refresh: bool = True) -> dict:
@@ -939,7 +943,7 @@ class AtlasTools:
             else:
                 recheck = {"performed": False,
                            "reason": f"not file/line evidence (source_type={stype}); "
-                                     + ("re-fetch the URL with reference_research to compare"
+                                     + ("re-fetch the URL with `verinoda research` to compare"
                                         if ev.get("url") else "there is nothing on disk to re-read")}
             out["recheck"] = recheck
             return out
@@ -1677,14 +1681,25 @@ def _tool_annotations(name: str):
 
 def resolve_profile(repo: Path | str, profile: str | None = None) -> str:
     """The tool profile to serve: ``profile`` (``--profile``), else ``mcp.profile`` in the project's
-    config, else :data:`DEFAULT_PROFILE`. An unknown name is an error, never a silent fallback."""
+    config, else :data:`DEFAULT_PROFILE`. An unknown name, or a config the setting cannot be read from
+    (not JSON, ``mcp`` not an object), is an error, never a silent fallback; only a missing config file
+    or a config without ``mcp.profile`` serves the default."""
     if profile is None:
-        from verinoda.paths import load_config
-
-        try:
-            profile = (load_config(Path(repo)).get("mcp") or {}).get("profile")
-        except Exception:  # noqa: BLE001 - an unreadable config serves the default
-            profile = None
+        cfg = atlas_dir(Path(repo)) / "config.json"
+        fix = 'write it as {"mcp": {"profile": "full"}} (or "core"), or pass --profile'
+        user: Any = {}
+        if cfg.is_file():
+            try:
+                user = json.loads(cfg.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise ValueError(f"cannot read the MCP tool profile from {cfg}: {exc}; {fix}") from None
+        mcp = user.get("mcp") if isinstance(user, dict) else None
+        if not isinstance(user, dict) or not isinstance(mcp, (dict, type(None))):
+            raise ValueError(f"cannot read the MCP tool profile from {cfg}: "
+                             f"{'the file' if not isinstance(user, dict) else 'mcp'} is not a JSON object; {fix}")
+        profile = (mcp or {}).get("profile")
+        if profile is not None and not isinstance(profile, str):
+            raise ValueError(f"mcp.profile in {cfg} must be a string, not {profile!r}; {fix}")
     profile = profile or DEFAULT_PROFILE
     if profile not in PROFILES:
         raise ValueError(f"unknown MCP tool profile {profile!r}; choose one of: {', '.join(PROFILES)}")
@@ -1768,6 +1783,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     except TypeError:  # mcp 1.x FastMCP has no version argument
         srv = Server("verinoda", instructions=text)
     srv.verinoda_profile = profile
+    # a description names only what this profile serves (else the CLI)
+    plan_check = "see question_plan_check" if "question_plan_check" in served else "from `verinoda plan check`"
 
     def register(name: str):
         def deco(fn):
@@ -1848,8 +1865,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         budget_seconds: Annotated[float, Field(description="Wall-time budget in seconds (1-600).")] = 60,
         budget_calls: Annotated[int, Field(description="Internal tool-call budget (1-200).")] = 40,
         # plain `str`: the SDK would parse a JSON string into an object for an optional (str | None) field
-        plan_json: Annotated[str, Field(description="A checked question plan as JSON text (see "
-                                                    "question_plan_check); used instead of drafting one.")] = "",
+        plan_json: Annotated[str, Field(description=f"A checked question plan as JSON text ({plan_check}); "
+                                                    "used instead of drafting one.")] = "",
         observe: Annotated[bool, Field(description="Trace the tests that reach the answer with the runtime "
                                                    "call tracer (isolated copy) and attach what they observed.")]
         = False,

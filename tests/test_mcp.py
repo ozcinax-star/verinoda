@@ -336,6 +336,48 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
         resolve_profile(proj, "everything")
 
 
+@pytest.mark.parametrize("config, why", [('{"mcp": "full"}', "mcp is not a JSON object"),
+                                         ('["mcp"]', "the file is not a JSON object"),
+                                         ('{"mcp": {"profile": ["full"]}}', "must be a string"),
+                                         ('{"mcp": {"profile": "full"', "cannot read the MCP tool profile"),
+                                         ('{"mcp": {"profile": "Full"}}', "unknown MCP tool profile")])
+def test_a_malformed_mcp_setting_is_an_error_not_the_default(tmp_path, config, why):
+    """Only a missing config file (or one without mcp.profile) serves the default profile silently."""
+    from verinoda.mcp.server import resolve_profile
+
+    (tmp_path / ".verinoda").mkdir()
+    cfg = tmp_path / ".verinoda" / "config.json"
+    cfg.write_text(config, encoding="utf-8")
+    with pytest.raises(ValueError, match=why):
+        resolve_profile(tmp_path)
+    assert resolve_profile(tmp_path, "full") == "full"  # --profile wins without reading the file
+    cfg.write_text('{"research": {"network": "off"}}', encoding="utf-8")
+    assert resolve_profile(tmp_path) == "core"
+
+
+def test_the_core_profile_names_only_tools_it_serves(repo):
+    """Descriptions, instructions and hints of the core profile point to core tools or the CLI."""
+    anyio = pytest.importorskip("anyio")
+    import re
+
+    from verinoda.mcp.server import CORE_TOOLS, PLAN_HINT
+
+    others = [n for n in TOOL_NAMES if n not in CORE_TOOLS]
+    srv = mcp_server.build_server(repo)
+    listed = json.dumps([t.model_dump(by_alias=True, exclude_none=True, mode="json")
+                         for t in anyio.run(srv.list_tools)])
+    for text in (listed, srv.instructions or ""):
+        assert not [n for n in others if re.search(rf"\b{n}\b", text)]
+    full = mcp_server.build_server(repo, profile="full")
+    listed_full = json.dumps([t.model_dump(by_alias=True, exclude_none=True, mode="json")
+                              for t in anyio.run(full.list_tools)])
+    assert "see question_plan_check" in listed_full and "`verinoda plan check`" in listed
+    # the invalid-plan hint names the CLI, and the MCP tools with the profile that serves them
+    assert "`verinoda plan draft`" in PLAN_HINT and "profile full" in PLAN_HINT
+    bad = AtlasTools(repo).analyze(plan_json="not json")
+    assert bad["error"] == "invalid_plan" and bad["hint"] == PLAN_HINT
+
+
 # -- retrieval & graph tools ------------------------------------------------------
 
 def test_project_query_text_and_json_equal_core(repo, tools):
@@ -378,6 +420,9 @@ def test_project_query_text_fits_a_small_cap(repo):
     res = small.project_query(QUESTION)
     assert "truncated" not in res and _size(res) <= 2000  # render_text packs to the budget itself
     assert "more candidates not shown" in res["text"] or len(res["text"]) < 1500
+    # the follow-up an MCP client reads names the CLI (project_query takes no budget)
+    many = small.project_query("order")
+    assert "candidates not shown" in many["text"] and 'next: verinoda query "…" --max-chars' in many["text"]
 
 
 def test_node_inspect_location_excerpt_and_edges(repo, tools):
@@ -791,6 +836,28 @@ def test_analyze_keeps_the_interpretation_under_a_small_cap(repo, analysis):
     # bookkeeping and passages go before claims: passages are cut from the end (the top-ranked stay)
     assert "passages" in cut and res["passages"] == analysis["passages"][:len(res["passages"])]
     assert list(cut)[0] in ("critique", "plan_check.links", "passages")
+
+
+def test_analyze_under_a_cap_never_hides_a_claim_the_cut_passages_no_longer_print(repo, monkeypatch):
+    """A verified claim left out as printed by the passages comes back when the cap cuts its lines:
+    every claim is listed, printed by the passages kept, or counted in the cut note."""
+    from verinoda import analysis_view as av
+
+    seen = {}
+    real = av.lean_capped
+    monkeypatch.setattr(av, "lean_capped", lambda res, cap: seen.update(res=res) or real(res, cap))
+    q = "how does an order get persisted and where is the discount applied?"
+    for limit in (5000, 7000):
+        out = AtlasTools(repo, max_chars=limit).analyze(q)
+        res = seen["res"]
+        assert _size(out) <= limit and out["truncated"] is True, limit
+        assert len(res["passages"]) > len(out["passages"]), limit  # the cap did cut the passages
+        listed = {c["id"] for c in out["claims"]}
+        printed = av.shown_by_passages({**res, "passages": out["passages"]})
+        cut = out["truncation"]["cut"].get("claims")
+        missing = [c["id"] for c in res["claims"] if c["id"] not in listed and c["id"] not in printed]
+        assert len(missing) <= (cut["total"] - cut["kept"] if cut else 0), (limit, missing)
+        assert out.get("claims_in_passages", 0) <= len(printed), limit
 
 
 def test_plan_audit_equals_core(repo, tools, analysis):
