@@ -297,6 +297,14 @@ def exact_nodes(g, text: str, *, fallback: bool = True) -> tuple[list[str], list
         return [], []
     pool, aside = list(exact), []
     if len(pool) > 1:
+        # names that differ only in case are distinct symbols (verinoda.case_ids): the one written with the
+        # text's own case is meant (`orderService` the const, `OrderService` the class)
+        bare = text.rsplit("::", 1)[-1].rsplit(".", 1)[-1].rstrip("()")
+        cased = [n for n in pool if g.label(n).strip(".()").rsplit(".", 1)[-1] == bare]
+        if cased and len(cased) < len(pool) and \
+                {g.label(n).strip(".()").rsplit(".", 1)[-1].lower() for n in pool} == {bare.lower()}:
+            aside += [n for n in pool if n not in cased]
+            pool = cased
         for why in (COPY, NOT_PRODUCT, LOCAL):
             gone = [n for n in pool if _gives_way(g, text, n, why)]
             if gone and len(gone) < len(pool):
