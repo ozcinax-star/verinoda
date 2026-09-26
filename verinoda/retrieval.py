@@ -469,10 +469,16 @@ def stale_lines(result: dict) -> list[str]:
     changed since the index (project-wide when :func:`attach_freshness` ran, else the answer's own)."""
     out = []
     missing = result.get("not_in_index") or []
-    if missing:
-        out.append(_clip("not in the index yet (spelled in a file changed since it was built; run "
-                         "`verinoda update`; the passages below are not about it): "
-                         + "; ".join(f"`{m['name']}` at {m['at']}" for m in missing[:3]), 400))
+    new = [m for m in missing if m.get("new")]
+    maybe = [m for m in missing if not m.get("new")]
+    if new:  # the index's version of the file was read and does not spell it
+        out.append(_clip("not in the index yet (spelled in a file changed since it was built, not in the version "
+                         "it describes; run `verinoda update`; the passages below are not about it): "
+                         + "; ".join(f"`{m['name']}` at {m['at']}" for m in new[:3]), 400))
+    if maybe:
+        out.append(_clip("may not be in the index yet (spelled in a file changed since it was built; whether the "
+                         "version it describes spells it could not be read; run `verinoda update`): "
+                         + "; ".join(f"`{m['name']}` at {m['at']}" for m in maybe[:3]), 400))
     rd: _RenderData | None = getattr(result, "render", None)
     if result.get("stale_count"):
         files = result.get("stale_files") or []
@@ -704,24 +710,6 @@ def _names_exactly(g: Graph, query: str, node: str) -> bool:
     return _names_symbol(g, name, node)
 
 
-def _exact_nodes(g: Graph, text: str) -> list[str]:
-    """The nodes that ``text`` names exactly (:func:`_names_exactly`), found through the linking index."""
-    from verinoda import question_plan as qp
-
-    ix = qp._index(g)
-    path, name = qp.split_code_name(text)
-    cands: set[str] = set()
-    if path:
-        files = [f for f in ix.files if qp._names_file(f, {path})]
-        cands = {ix.files[f] for f in files} if not name else {n for f in files for n in g.symbols_in(f)}
-    elif name:
-        for form in {name, name.rpartition(".")[2]}:
-            cands |= {n for n, _s, tier in qp._match_string(g, ix, form) if tier in qp.NAME_TIERS}
-        if "." in name:
-            cands |= {ix.files[f] for f in ix.files if qp._names_file(f, {name.replace(".", "/")})}
-    return sorted(n for n in cands if _names_exactly(g, text, n))
-
-
 def _code_written(text: str) -> bool:
     from verinoda import question_plan as qp
 
@@ -763,8 +751,8 @@ def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int
             notes[key[r.status]][side] = r.note
     s, t = res["source"].node, res["target"].node
     out = {"source": source, "target": target,
-           "resolved": {"source": s and {"id": s, "at": f"{g.file(s)}:{g.line(s)}"},
-                        "target": t and {"id": t, "at": f"{g.file(t)}:{g.line(t)}"}},
+           "resolved": {"source": s and {"id": s, "label": g.label(s), "at": f"{g.file(s)}:{g.line(s)}"},
+                        "target": t and {"id": t, "label": g.label(t), "at": f"{g.file(t)}:{g.line(t)}"}},
            "candidates": {side: list(r.candidates) for side, r in res.items()},
            "paths": [], "direction": "directed", "mode": mode, **dict(notes)}
     if not s or not t:

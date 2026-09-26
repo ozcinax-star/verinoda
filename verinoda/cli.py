@@ -302,6 +302,9 @@ def _stale_note(res: dict) -> None:
 def _r_trace(res: dict) -> None:
     print(f"{res['source']} -> {res['target']}  [{res['status']}, mode={res['mode']}]")
     _stale_note(res)
+    ends = [f"{side} {e.get('label') or e['id']} {e['at']}" for side, e in (res.get("resolved") or {}).items() if e]
+    if ends:  # the nodes the names resolved to, so a wrong pick is visible
+        print(" resolved: " + "; ".join(ends))
     for key in ("not_found", "not_indexed", "not_a_symbol", "ambiguous", "fuzzy", "resolution_notes"):
         for side, line in (res.get(key) or {}).items():
             print(f" {side}: {line}")
@@ -781,7 +784,10 @@ def cmd_map(args) -> int:
         _stale_note(v)
         for r in v.get("resolution") or []:
             if r["status"] == "exact":
-                print(f"   target {r['text']!r}: {r.get('note')}")
+                node = r.get("node") or {}
+                print(f"   target {r['text']!r} resolved: {node.get('label')}  {node.get('at')}  (id {node.get('id')})")
+                if r.get("note"):
+                    print(f"     note: {r['note']}")
                 continue
             print(f"   target {r['text']!r} not used ({r['status']})" + (f": {r['note']}" if r.get("note") else ""))
             for c in r.get("candidates") or []:
@@ -1138,20 +1144,24 @@ def _decide_check(args, repo: Path) -> int:
     from verinoda.paths import db_path, graph_path
 
     recs = dm.load_all(repo)
-    graph, note = None, None
+    graph, note, stale_graph = None, None, None
     if any(d.enforced and g.get("kind") == "no_edge" and g.get("status") == "accepted"
            for d in recs for g in d.guards):
         if not args.no_refresh and db_path(repo).is_file():
-            from verinoda import workflow
+            from verinoda import buildlock, workflow
             from verinoda.snapshot import current_state
 
             st = _store(repo)
             try:
                 snap = st.latest_snapshot()
                 if snap is None or snap["tree_hash"] != current_state(repo, store=st)["tree_hash"]:
-                    up = workflow.update(st, repo, wait=0, purpose="decide check refresh")
+                    # a gate: a build already running is waited for (bounded), never checked around
+                    up = workflow.update(st, repo, wait=buildlock.GATE_WAIT_SECONDS, purpose="decide check refresh",
+                                         on_wait=_waiting_note)
                     note = f"refreshed first ({up.get('mode')}, {up.get('changed_count') or 0} changed file(s))" \
                         if not up.get("error") else f"could not be refreshed: {up['error']}"
+                    if up.get("error"):
+                        stale_graph = guards.stale_graph_note(up)
             finally:
                 st.close()
         if graph_path(repo).exists():
@@ -1159,7 +1169,8 @@ def _decide_check(args, repo: Path) -> int:
 
             graph = index.load(repo)
     try:
-        res = guards.check(repo, graph=graph, base=args.base, changed_only=args.changed, records=recs)
+        res = guards.check(repo, graph=graph, base=args.base, changed_only=args.changed, records=recs,
+                           graph_stale=stale_graph)
     except ValueError as exc:
         if getattr(args, "json", False):  # like every other error of decide check: JSON on stdout too
             print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
@@ -2339,7 +2350,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--budget-tokens", type=int, default=6000)
     sp.add_argument("--refresh", choices=("auto", "inline", "skip"), default="auto",
                     help="index refresh first when files changed: auto (unless it would be slow: then the answer "
-                         "uses the previous index and names the changed files), inline (always), skip (never); "
+                         "uses the previous index and names the changed files), inline (always, waiting for a "
+                         "build already running, at most 10 min), skip (never); "
                          "its time is not charged to --budget-seconds")
 
     sp = sub.add_parser("plan", help="question plans: draft, check, schema, audit (exit 0 ready, 2 invalid, "

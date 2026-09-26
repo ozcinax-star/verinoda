@@ -215,6 +215,41 @@ def test_cli_impact_and_trace_exit_non_zero_with_candidates(built):
     assert "app/extra_a.py" in r.stdout and "app/extra_b.py" in r.stdout
 
 
+def test_the_dataflow_view_lists_the_projects_own_flows_before_a_reference_trees(tmp_path):
+    # review: `map --view dataflow` gave 20 paths, all from the detected copy, whose folder sorts first
+    from verinoda.paths import atlas_dir
+
+    root = tmp_path / "proj"
+    for base, pkg in (("app", "app"), ("aaa_old/app", "aaa_old.app")):
+        _write(root, f"{base}/__init__.py", "")
+        _write(root, f"{base}/cli.py", f"from {pkg}.store import save_order\n\n\ndef cmd_save(x):\n"
+                                       "    return save_order(x)\n")
+        _write(root, f"{base}/store.py", "def save_order(x):\n    with open('orders.txt', 'w') as fh:\n"
+                                         "        fh.write(str(x))\n")
+    _write(root, "aaa_old/__init__.py", "")
+    _write(root, ".gitignore", ".verinoda/\n")
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "init")
+    workflow.init(root)
+    (atlas_dir(root) / "config.json").write_text(json.dumps({"index": {"reference": ["aaa_old/"]}}),
+                                                 encoding="utf-8")
+    st = open_store(root)
+    try:
+        assert not workflow.scan(st, root).get("error")
+    finally:
+        st.close()
+    g = index.load(root)
+    view = architecture_map.dataflow(g)
+    ats = [e["at"] for e in view["entries"]]
+    assert ats[0].startswith("app/") and any(a.startswith("aaa_old/") for a in ats), ats
+    assert all(("in" in e) == e["at"].startswith("aaa_old/") for e in view["entries"])
+    assert view["paths"][0]["entry"].startswith("app/cli.py") and "in" not in view["paths"][0]
+    one = architecture_map.dataflow(g, max_paths=1)  # the copy only fills what is left
+    assert [p["entry"].split(":")[0] for p in one["paths"]] == ["app/cli.py"]
+    assert any("reference trees" in lim for lim in view["coverage"]["limits"])
+
+
 def test_the_receiver_pass_stays_inside_the_package_it_imports_from(g):
     # review: the copy's `cl.set_status` was linked to the project's Claims.set_status
     recv = [(u, v) for u, v, d in g.G.edges(data=True) if d.get("_origin") == index.RECEIVER_ORIGIN]
@@ -298,20 +333,89 @@ def test_the_lock_is_reentrant_in_one_thread(proj):
 @pytest.mark.e2e
 def test_two_cli_updates_do_not_collide_and_never_suggest_force(proj):
     # review: two `update` runs a second apart: [WinError 2] and "hint: verinoda scan ... --force"
+    # the holder keeps the lock until the second update says it waits (a fixed sleep raced a slow start)
     holder = subprocess.Popen(
-        [sys.executable, "-c", "import sys, time; from verinoda import buildlock\n"
+        [sys.executable, "-c", "import sys; from verinoda import buildlock\n"
                                "with buildlock.build_lock(sys.argv[1], wait=0, purpose='update'):\n"
-                               "    print('locked', flush=True); time.sleep(3)", str(proj)],
-        cwd=str(proj.parent), env={**os.environ, "PYTHONPATH": str(ROOT)}, stdout=subprocess.PIPE, text=True)
+                               "    print('locked', flush=True); sys.stdin.readline()", str(proj)],
+        cwd=str(proj.parent), env={**os.environ, "PYTHONPATH": str(ROOT)}, stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE, text=True)
+
+    def release():
+        try:
+            holder.stdin.write("\n")
+            holder.stdin.flush()
+        except (OSError, ValueError):
+            pass
+
+    safety = threading.Timer(120, release)  # never hang the suite if no note comes
+    safety.start()
     try:
         assert holder.stdout.readline().strip() == "locked"
         assert buildlock.is_locked(proj)
-        r = _cli_run(proj, "update")
+        env = {**os.environ, "PYTHONPATH": str(ROOT), "VERINODA_NO_AUTO_INDEX": "1"}
+        cli = subprocess.Popen([sys.executable, "-m", "verinoda", "update", "--repo", str(proj)],
+                               cwd=str(proj.parent), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                               encoding="utf-8", errors="replace", env=env)
+        seen = []
+        for line in cli.stderr:
+            seen.append(line)
+            if "waiting for another index build" in line:
+                break
+        release()
+        out, err = cli.communicate(timeout=300)
+        err = "".join(seen) + err
     finally:
+        safety.cancel()
+        release()
         holder.wait(30)
-    assert r.returncode == 0, r.stderr
-    assert "waiting for another index build of this project (update" in r.stderr
-    assert "--force" not in r.stdout + r.stderr
+    assert cli.returncode == 0, err
+    assert "waiting for another index build of this project (update" in err
+    assert "--force" not in out + err
+
+
+def _no_edge_case(proj: Path) -> None:
+    """A no_edge guard (app/cli.py must not use app/extra_a.py), then an edit that breaks it."""
+    from verinoda import decisions as dm
+
+    st = open_store(proj)
+    try:
+        dm.record(st, proj, chosen="c", rationale="r", guards=["no_edge from=app/cli.py to=app/extra_a.py"])
+    finally:
+        st.close()
+    _write(proj, "app/cli.py", _cli("app").replace("from app.billing", "from app.extra_a import shared_name\n"
+                                                    "from app.billing")
+           + "\n\ndef cmd_shared():\n    return shared_name()\n")
+
+
+def test_decide_check_never_passes_on_edges_it_could_not_refresh(proj, monkeypatch, capsys):
+    # review: decide check did not wait for a running build and checked no_edge on the previous graph (ok, exit 0)
+    from verinoda import cli
+
+    _no_edge_case(proj)
+    monkeypatch.setattr(buildlock, "GATE_WAIT_SECONDS", 0.3)
+    th, _ = _hold(proj, 4.0, purpose="update")
+    try:
+        code = cli.main(["decide", "check", "--repo", str(proj), "--json"])
+    finally:
+        th.join(10)
+    res = json.loads(capsys.readouterr().out)
+    assert code == 2 and res["exit"] == 2 and res["status"] == "unknown" and not res["ok"], res
+    assert "another index build was still running" in res["graph_stale"]
+    assert any(u["kind"] == "no_edge" and "not seen" in u["why"] for u in res["unknown"])
+
+
+def test_decide_check_waits_for_a_running_build_then_checks_the_new_edges(proj, capsys):
+    from verinoda import cli
+
+    _no_edge_case(proj)
+    th, _ = _hold(proj, 1.0, purpose="update")
+    try:
+        code = cli.main(["decide", "check", "--repo", str(proj), "--json"])
+    finally:
+        th.join(10)
+    res = json.loads(capsys.readouterr().out)
+    assert code == 1 and res["violations"][0]["at"].startswith("app/cli.py:") and "graph_stale" not in res, res
 
 
 def test_the_ui_watcher_skips_a_busy_round_and_tries_again(tmp_path):
@@ -361,6 +465,30 @@ def test_edits_new_files_and_deletions_are_listed_and_ignored_files_are_not(proj
     assert "app/run.log" not in res["files"]
 
 
+def test_files_the_snapshot_never_lists_are_not_reported_so_update_clears_the_note(proj):
+    # review: a nested repository and untracked build/ and dist/ output were "changed since the index"
+    # forever, and `verinoda update` was a noop
+    _write(proj, "nested_repo/src/cart.js", "export const cart = 1;\n")
+    _write(proj, "nested_repo/package.json", "{}\n")
+    _git(proj / "nested_repo", "init", "-q")
+    _write(proj, "app/vendored/.git", "gitdir: ../../.git/modules/vendored\n")  # a submodule's work tree
+    _write(proj, "app/vendored/lib.py", "def lib():\n    return 1\n")
+    _write(proj, "build/lib/app/billing.py", _module("billing"))
+    _write(proj, "dist/app-1.0.tar.gz", "not really\n")
+    _write(proj, "app/build/tool.py", "def tool():\n    return 1\n")  # tracked: a package named build is source
+    _git(proj, "add", "app/build/tool.py")
+    _write(proj, "app/newmod.py", "def brand_new():\n    return 1\n")
+    res = freshness.check(proj)
+    assert res["files"] == ["app/build/tool.py", "app/newmod.py"], res["files"]
+    assert freshness.check(proj)["files"] == res["files"]  # the answers are remembered per snapshot
+    st = open_store(proj)
+    try:
+        up = workflow.update(st, proj)
+    finally:
+        st.close()
+    assert not up.get("error") and freshness.check(proj)["count"] == 0
+
+
 def test_query_says_which_files_changed_and_names_the_index_does_not_have(proj):
     # review: after an edit `query "where is frobnicate_widget defined?"` returned an unrelated test, silently
     cli = proj / "app" / "cli.py"
@@ -370,7 +498,7 @@ def test_query_says_which_files_changed_and_names_the_index_does_not_have(proj):
     res = retrieval.retrieve(g, "where is frobnicate_widget defined?", retrieval.Budget(max_items=8))
     retrieval.attach_freshness(res, g, freshness.check(proj))
     assert res["stale_count"] == 1 and res["stale_files"] == ["app/cli.py"]
-    assert res["not_in_index"] == [{"name": "frobnicate_widget", "at": "app/cli.py:10"}]
+    assert res["not_in_index"] == [{"name": "frobnicate_widget", "at": "app/cli.py:10", "new": True}]
     text = retrieval.render_text(res)
     head = text.splitlines()[:4]
     assert any(ln.startswith("not in the index yet") and "`frobnicate_widget` at app/cli.py:10" in ln for ln in head)
@@ -389,6 +517,124 @@ def test_trace_never_substitutes_a_similar_name_for_one_in_a_changed_file(proj):
     assert res["not_indexed"]["target"].startswith("`frobnicate_widget` is not in the index yet: it occurs at "
                                                    "app/cli.py:10")
     assert "verinoda update" in res["next_step"] and "target" not in res["hints"]  # no similar names offered
+    # review: node_inspect and impact still offered a similar name as a candidate for it
+    from verinoda.mcp.server import AtlasTools
+
+    ni = AtlasTools(proj).node_inspect("frobnicate_widget")
+    assert ni["error"] == "not_indexed" and "candidates" not in ni, ni
+    im = architecture_map.impact(g, ["frobnicate_widget"], stale=fresh["files"])
+    assert im["unresolved"] == ["frobnicate_widget"] and im["resolution"][0]["status"] == "not_indexed"
+    assert "candidates" not in im["resolution"][0]
+
+
+def test_a_long_standing_name_in_a_file_with_an_unrelated_edit_is_not_called_new(proj):
+    # review: after a comment-only edit, query said the passages for MAX_RESPONSE_CHARS "are not about it"
+    # and trace called it not_indexed ("run update"), although the index's version of the file spelled it
+    claims = proj / "app" / "claims.py"
+    claims.write_text(CLAIMS + "# a trailing comment\n", encoding="utf-8")
+    g = index.load(proj)
+    fresh = freshness.check(proj)
+    assert fresh["files"] == ["app/claims.py"]
+    assert naming.indexed_spells(g, "app/claims.py", "STATUS_LIMIT") is True
+    res = retrieval.retrieve(g, "where is STATUS_LIMIT set?", retrieval.Budget(max_items=8))
+    retrieval.attach_freshness(res, g, fresh)
+    assert "not_in_index" not in res and res["stale_files"] == ["app/claims.py"]
+    text = retrieval.render_text(res)
+    assert "not in the index yet" not in text and "not about it" not in text
+    tr = retrieval.trace(g, "cmd_update", "STATUS_LIMIT", stale=fresh["files"])
+    assert "not_indexed" not in tr and "occurs at app/claims.py:16" in tr["not_a_symbol"]["target"]
+    assert "changed since the index" in tr["not_a_symbol"]["target"]
+    # a name the edit added is new: the index's version of the file does not spell it
+    claims.write_text(CLAIMS + "NEW_LIMIT = 7\n", encoding="utf-8")
+    fresh = freshness.check(proj)
+    assert naming.indexed_spells(g, "app/claims.py", "NEW_LIMIT") is False
+    res = retrieval.retrieve(g, "where is NEW_LIMIT set?", retrieval.Budget(max_items=8))
+    retrieval.attach_freshness(res, g, fresh)
+    assert res["not_in_index"] == [{"name": "NEW_LIMIT", "at": "app/claims.py:17", "new": True}]
+    assert naming.resolve(g, "NEW_LIMIT", stale=fresh["files"]).status == naming.NOT_INDEXED
+
+
+# -- tie-breaks only where they hold -------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def ties(tmp_path_factory):
+    """Names the product defines once or twice, next to a test's nested helper, a product function's
+    nested helper and an example fixture of the same names."""
+    root = tmp_path_factory.mktemp("ties") / "proj"
+    _write(root, "app/__init__.py", "")
+    _write(root, "app/loop.py", "class BaseLoop:\n    def call_soon(self, cb):\n        return cb\n\n"
+                                "    def run_once(self):\n        return self.call_soon(1)\n\n\n"
+                                "class AbstractLoop:\n    def call_soon(self, cb):\n        raise NotImplementedError\n")
+    _write(root, "app/sched.py", "class Sched:\n    def tick_once(self):\n        return 1\n")
+    _write(root, "app/runner.py", "def run():\n    def tick_once():\n        return 2\n    return tick_once()\n")
+    _write(root, "app/store.py", "def update(x):\n    return x\n")
+    _write(root, "app/cli.py", "from app.loop import BaseLoop\nfrom app.store import update\n\n\n"
+                               "def main():\n    BaseLoop().run_once()\n    return update(1)\n")
+    _write(root, "tests/test_loop.py", "def test_error_in_call_soon():\n    def call_soon(cb):\n        return cb\n"
+                                       "    assert call_soon(1) == 1\n\n\ndef test_run_once():\n"
+                                       "    def run_once():\n        return 0\n    assert run_once() == 0\n")
+    _write(root, "examples/fixtures/sample.py", "def update(record):\n    return record\n")
+    _write(root, ".gitignore", ".verinoda/\n")
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "init")
+    workflow.init(root)
+    st = open_store(root)
+    try:
+        assert not workflow.scan(st, root).get("error")
+    finally:
+        st.close()
+    return root
+
+
+def test_a_tests_nested_helper_never_wins_over_two_real_methods(ties):
+    # review: `call_soon` resolved to a test's nested helper (no method in-edge counted as top-level)
+    g = index.load(ties)
+    r = naming.resolve(g, "call_soon")
+    assert r.status == naming.AMBIGUOUS and {g.file(n) for n in r.candidates} == {"app/loop.py"}
+    assert len(r.candidates) == 2 and [g.file(n) for n in r.set_aside] == ["tests/test_loop.py"]
+    im = architecture_map.impact(g, ["call_soon"])
+    assert im["unresolved"] == ["call_soon"] and im["affected_symbols"] == []
+    assert im["resolution"][0]["status"] == "ambiguous" and len(im["resolution"][0]["candidates"]) == 2
+    tr = retrieval.trace(g, "main", "call_soon")
+    assert tr["status"] == "ambiguous" and tr["paths"] == []
+
+
+@pytest.mark.parametrize("name, at, why", [
+    ("run_once", "app/loop.py:5", naming.NOT_PRODUCT),      # a test's nested helper gives way
+    ("tick_once", "app/sched.py:2", naming.LOCAL),          # a product function's local helper gives way
+    ("update", "app/store.py:1", naming.NOT_PRODUCT),       # an example fixture gives way
+])
+def test_what_gives_way_is_set_aside_and_said(ties, name, at, why):
+    g = index.load(ties)
+    r = naming.resolve(g, name)
+    assert r.exact and naming._loc(g, r.node) == at, r
+    assert r.set_aside and all(naming._aside_kind(g, name, n) == why for n in r.set_aside)
+    assert "set aside" in r.note and "resolved to" in r.note and at in r.note
+    im = architecture_map.impact(g, [name])  # every name target says what it resolved to
+    row = im["resolution"][0]
+    assert row["status"] == "exact" and row["node"]["at"] == at and row["set_aside"][0]["in"] == why
+
+
+def test_a_class_is_kept_over_its_own_constructor_and_file_only(ties):
+    g = index.load(ties)
+    loop = next(n for n in g.symbols_in("app/loop.py") if g.label(n) == "BaseLoop")
+    fnode = next(n for n in g.G.nodes if g.is_file_node(n) and g.file(n) == "app/loop.py")
+    assert naming._same_file(g, [loop, fnode]) == [loop]
+    other = next(n for n in g.symbols_in("app/sched.py") if g.label(n) == "Sched")
+    assert sorted(naming._same_file(g, [loop, other])) == sorted([loop, other])  # other files: a tie
+
+
+@pytest.mark.e2e
+def test_cli_names_the_node_a_name_resolved_to(ties):
+    r = _cli_run(ties, "map", "--view", "impact", "--target", "call_soon")
+    assert r.returncode == 2 and "not used (ambiguous)" in r.stdout and "app/loop.py:2" in r.stdout
+    r = _cli_run(ties, "map", "--view", "impact", "--target", "update")
+    assert r.returncode == 0 and "target 'update' resolved: update()  app/store.py:1" in r.stdout
+    assert "set aside: 1 in test, example or fixture code (examples/fixtures/sample.py:1)" in r.stdout
+    r = _cli_run(ties, "trace", "main", "update")
+    assert r.returncode == 0 and " resolved: source main() app/cli.py:5; target update() app/store.py:1" in r.stdout
+    assert "set aside: 1 in test, example or fixture code" in r.stdout
 
 
 @pytest.mark.e2e
@@ -464,6 +710,29 @@ def test_analyze_answers_from_the_previous_index_when_a_refresh_would_be_slow(pr
     assert not any(any("changed since the index" in x for x in c["uncertainties"]) for c in others)
 
 
+def test_a_new_caller_in_a_file_the_answer_did_not_read_is_said_and_caps_the_verdict(proj, monkeypatch):
+    # review: analyze from a stale index said `met` for a callers question while a changed file held a
+    # caller it did not look at, and only the generic "does the index describe the tree?" was unknown
+    monkeypatch.setattr(analysis, "REFRESH_SMALL_PROJECT", 0)
+    buildlock.record_build(proj, graph_seconds=120.0, files=40)
+    q = "What calls assess_change?"
+    st = open_store(proj)
+    try:
+        fresh_res = analysis.analyze(st, proj, q)
+        billing = proj / "app" / "billing.py"
+        billing.write_text(_module("billing") + "\n\ndef frobnicate_bill(c):\n    return assess_change(c)\n",
+                           encoding="utf-8")
+        res = analysis.analyze(st, proj, q)
+    finally:
+        st.close()
+    assert fresh_res["subquestions"][0]["status"] == "met"  # the same question on a current index
+    assert res["index_refresh"]["skipped"] and res["index_refresh"]["stale_files"] == ["app/billing.py"]
+    sub = res["subquestions"][0]
+    assert sub["status"] == "met_with_inference" and sub["flags"]["stale_subject"] == ["app/billing.py:14"]
+    u = next(u for u in res["unknowns"] if "app/billing.py:14" in u["why"])
+    assert "`assess_change`" in u["why"] and "not in this answer" in u["why"] and "verinoda update" in u["next_step"]
+
+
 def test_analyze_does_not_wait_for_another_build(proj, monkeypatch):
     monkeypatch.setattr(analysis, "REFRESH_SMALL_PROJECT", 0)  # a big project: no wait at all
     (proj / "app" / "claims.py").write_text(CLAIMS + "\n# edited\n", encoding="utf-8")
@@ -482,6 +751,23 @@ def test_analyze_does_not_wait_for_another_build(proj, monkeypatch):
     assert ref["skipped"] == "another index build is running" and ref["busy"]["holder"]["purpose"] == "update"
     assert ref["seconds"] < 1.0 and took > 0 and "--force" not in json.dumps(res)
     assert ref["stale_files"] == ["app/claims.py"]
+
+
+def test_analyze_inline_waits_for_another_build_even_on_a_big_project(proj, monkeypatch):
+    # review: --refresh inline ("always") did not wait on a project of 300+ files: busy, previous index
+    monkeypatch.setattr(analysis, "REFRESH_SMALL_PROJECT", 0)
+    (proj / "app" / "claims.py").write_text(CLAIMS + "\n# edited\n", encoding="utf-8")
+    th, _ = _hold(proj, 1.5, purpose="update")
+    try:
+        st = open_store(proj)
+        try:
+            res = analysis.analyze(st, proj, "Where is assess_change defined?", refresh="inline")
+        finally:
+            st.close()
+    finally:
+        th.join(10)
+    ref = res["index_refresh"]
+    assert ref["ran"] is True and "skipped" not in ref and ref["seconds"] >= 1.0, ref
 
 
 def test_analyze_of_a_small_project_waits_briefly_for_another_build(proj):

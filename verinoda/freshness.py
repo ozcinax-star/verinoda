@@ -10,10 +10,14 @@ each file's size and modification time) and the stat-cached hashes of ``atlas.db
 :mod:`verinoda.snapshot`, read in the same query as the snapshot's files): a file whose size and
 time match its cached row is not read; one that differs is hashed and compared with the
 snapshot, so a file that was only touched is not reported. New files are those a listed folder
-holds that the snapshot does not, git-ignored ones left out (``git check-ignore`` with the paths
-on stdin, only for a path not asked about before; the answers are kept in
-``fresh_ignored.json`` beside the index). A new folder is looked into up to
-:data:`MAX_NEW_FOLDER_FILES` files.
+holds that the snapshot does not and that the snapshot's own rule (:func:`verinoda.snapshot.list_files`)
+would list, so that ``verinoda update`` can always clear what is reported: in a git work tree git
+must list the file (tracked, or untracked and not ignored: ``git ls-files`` with the paths as
+literal pathspecs) and an untracked file under build/ or dist/ is build output; a folder that is
+another repository (a nested clone, a submodule) is not looked into. Git is asked only about a
+path not asked about before; the answers are kept in ``fresh_ignored.json`` beside the index, per
+snapshot. A new folder git ignores is not walked (``git check-ignore``); one that is walked is
+looked into up to :data:`MAX_NEW_FOLDER_FILES` files.
 """
 
 from __future__ import annotations
@@ -94,10 +98,41 @@ def _git_ignored(repo: str, rels: list[str]) -> set[str] | None:
     return {p for p in r.stdout.split("\0") if p}
 
 
-def _ignored(repo: str, snap: str, rels: list[str]) -> set[str]:
-    """The paths among ``rels`` git ignores, remembered per snapshot (asked once per path)."""
-    if not rels:
-        return set()
+_ARGS_CHARS = 16_000  # paths per git call (a Windows command line holds 32,767 characters)
+_MEMO_VERSION = 2     # 1 kept a new file git did not ignore, although the snapshot would not list it
+
+
+def _git_listed(repo: str, rels: list[str]) -> dict[str, bool] | None:
+    """Per path of ``rels``, would :func:`verinoda.snapshot.list_files` list it: git lists it (tracked, or
+    untracked and not ignored; a file inside a nested repository or a submodule is not listed) and no
+    folder of it is skipped (for an untracked path build/ and dist/ too, which are build output).
+    None when git could not tell. Paths are literal pathspecs after ``--``, never options."""
+    out: dict[str, bool] = {r: False for r in rels}
+    i = 0
+    while i < len(rels):
+        chunk, size = [], 0
+        while i < len(rels) and (not chunk or size + len(rels[i]) < _ARGS_CHARS):
+            chunk.append(rels[i])
+            size += len(rels[i]) + 3
+            i += 1
+        try:
+            r = subprocess.run(["git", "-C", repo, "--literal-pathspecs", "ls-files", "-z", "-t", "--cached",
+                                "--others", "--exclude-standard", "--", *chunk],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20,
+                               stdin=subprocess.DEVNULL)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if r.returncode != 0:
+            return None
+        for entry in r.stdout.split("\0"):
+            tag, _, rel = entry.partition(" ")
+            if rel in out:
+                out[rel] = not set(rel.split("/")) & (_SKIP_DIRS if tag == "?" else _GIT_SKIP_DIRS)
+    return out
+
+
+def _memo(repo: str, snap: str) -> tuple[Path, set[str], set[str]]:
+    """``(file, left out, kept)``: what was asked about new paths since snapshot ``snap``."""
     from verinoda.paths import index_dir
 
     p = index_dir(Path(repo)) / IGNORED_NAME
@@ -105,9 +140,27 @@ def _ignored(repo: str, snap: str, rels: list[str]) -> set[str]:
         memo = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         memo = {}
-    if not isinstance(memo, dict) or memo.get("snapshot") != snap:
+    if not isinstance(memo, dict) or memo.get("snapshot") != snap or memo.get("v") != _MEMO_VERSION:
         memo = {"snapshot": snap, "ignored": [], "kept": []}
-    ignored, kept = set(memo.get("ignored") or ()), set(memo.get("kept") or ())
+    return p, set(memo.get("ignored") or ()), set(memo.get("kept") or ())
+
+
+def _save_memo(p: Path, snap: str, ignored: set[str], kept: set[str]) -> None:
+    try:
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(json.dumps({"v": _MEMO_VERSION, "snapshot": snap, "ignored": sorted(ignored),
+                                   "kept": sorted(kept)}), encoding="utf-8")
+        tmp.replace(p)
+    except OSError:
+        pass
+
+
+def _ignored(repo: str, snap: str, rels: list[str]) -> set[str]:
+    """The folders (``dir/``) among ``rels`` git ignores, remembered per snapshot (asked once per path):
+    a new folder git ignores is not walked."""
+    if not rels:
+        return set()
+    p, ignored, kept = _memo(repo, snap)
     ask = [r for r in rels if r not in ignored and r not in kept]
     if ask:
         got = _git_ignored(repo, ask)
@@ -115,14 +168,34 @@ def _ignored(repo: str, snap: str, rels: list[str]) -> set[str]:
             return ignored & set(rels)
         ignored |= got
         kept |= set(ask) - got
-        try:
-            tmp = p.with_name(p.name + ".tmp")
-            tmp.write_text(json.dumps({"snapshot": snap, "ignored": sorted(ignored), "kept": sorted(kept)}),
-                           encoding="utf-8")
-            tmp.replace(p)
-        except OSError:
-            pass
+        _save_memo(p, snap, ignored, kept)
     return ignored & set(rels)
+
+
+def _new_listed(repo: str, snap: str, rels: list[str], git_mode: bool) -> list[str]:
+    """The new files among ``rels`` that the snapshot's own rule would list (:func:`_git_listed`,
+    remembered per snapshot; without git, or when git cannot tell, the folder rule of a tree that is
+    not a git work tree): a file an update cannot add is never reported as changed."""
+    if not rels:
+        return []
+    if not git_mode:
+        return sorted(rels)  # the walk already applied the non-git skip rules
+    p, ignored, kept = _memo(repo, snap)
+    ask = [r for r in rels if r not in ignored and r not in kept]
+    if ask:
+        got = _git_listed(repo, ask)
+        if got is None:
+            return sorted(r for r in rels if r in kept or (r not in ignored and not set(r.split("/")) & _SKIP_DIRS))
+        kept |= {r for r, ok in got.items() if ok}
+        ignored |= {r for r, ok in got.items() if not ok}
+        _save_memo(p, snap, ignored, kept)
+    return sorted(r for r in rels if r in kept)
+
+
+def _own_repo(path: str) -> bool:
+    """Is the folder at ``path`` another git repository (a nested clone, or a submodule's work tree,
+    whose ``.git`` is a file)? The snapshot never lists its files."""
+    return os.path.exists(os.path.join(path, ".git"))
 
 
 def _skip(name: str, skip_dirs=_GIT_SKIP_DIRS) -> bool:
@@ -151,7 +224,8 @@ def check(repo: Path, *, with_new: bool = True) -> dict:
     if snap is None:
         return {"checked": False, "why": "no snapshot yet", "count": 0, "files": []}
     # outside a git work tree the file list also skipped build output folders (snapshot.list_files)
-    skip_dirs = _GIT_SKIP_DIRS if os.path.exists(os.path.join(root, ".git")) else _SKIP_DIRS
+    git_mode = os.path.exists(os.path.join(root, ".git"))
+    skip_dirs = _GIT_SKIP_DIRS if git_mode else _SKIP_DIRS
     by_dir: dict[str, list[str]] = {}
     for rel in known:
         d, _, name = rel.rpartition("/")
@@ -196,7 +270,7 @@ def check(repo: Path, *, with_new: bool = True) -> dict:
             rel = f"{d}/{n}" if d else n
             try:
                 if e.is_dir():
-                    if rel not in known_dirs:
+                    if rel not in known_dirs and not _own_repo(e.path):
                         new_dirs.append(rel)
                 elif e.is_file():
                     new.append(rel)
@@ -214,7 +288,8 @@ def check(repo: Path, *, with_new: bool = True) -> dict:
                 continue
             n_files = 0
             for dirpath, dirnames, filenames in os.walk(os.path.join(root, d)):
-                dirnames[:] = sorted(x for x in dirnames if not _skip(x, skip_dirs))
+                dirnames[:] = sorted(x for x in dirnames
+                                     if not _skip(x, skip_dirs) and not _own_repo(os.path.join(dirpath, x)))
                 base = os.path.relpath(dirpath, root).replace(os.sep, "/")
                 for f in sorted(filenames):
                     if not _skip(f, skip_dirs):
@@ -222,9 +297,7 @@ def check(repo: Path, *, with_new: bool = True) -> dict:
                         n_files += 1
                 if n_files >= MAX_NEW_FOLDER_FILES:
                     break
-    if new:
-        ignored = _ignored(root, snap, sorted(new))
-        new = sorted(r for r in new if r not in ignored)
+    new = _new_listed(root, snap, sorted(new), git_mode)
     files = modified + new + sorted(removed)
     return {"checked": True, "snapshot": snap, "count": len(files), "files": files,
             "modified": len(modified), "added": len(new), "removed": len(removed),

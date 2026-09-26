@@ -1390,21 +1390,26 @@ class AtlasTools:
                 recs = dm.load_all(self.repo)
             except dm.DecisionError as exc:
                 raise ToolFailure("invalid_argument", str(exc)[:600], "fix decisions.dir in .verinoda/config.json")
-            note, graph = None, None
+            note, graph, stale_graph = None, None, None
             if any(d.enforced and g.get("kind") == "no_edge" and g.get("status") == "accepted"
                    for d in recs for g in d.guards):
                 with self._store() as st:
                     graph = self._graph_for_analysis(st)
                     if graph is None and refresh:
-                        from verinoda import workflow
+                        from verinoda import buildlock, workflow
 
-                        up = workflow.update(st, self.repo, wait=0, purpose="decision_check refresh (MCP)")
+                        # a gate: a build already running is waited for (bounded), never checked around
+                        up = workflow.update(st, self.repo, wait=buildlock.GATE_WAIT_SECONDS_MCP,
+                                             purpose="decision_check refresh (MCP)")
                         note = (f"refreshed first ({up.get('mode')}, {up.get('changed_count') or 0} changed "
                                 "file(s))") if not up.get("error") else f"could not be refreshed: {up['error']}"
+                        if up.get("error"):
+                            stale_graph = guards.stale_graph_note(up)
                 if graph is None and graph_path(self.repo).exists():
                     graph = self._graph()
             try:
-                res = guards.check(self.repo, graph=graph, base=b, changed_only=bool(changed_only), records=recs)
+                res = guards.check(self.repo, graph=graph, base=b, changed_only=bool(changed_only), records=recs,
+                                   graph_stale=stale_graph)
             except ValueError as exc:
                 raise ToolFailure("invalid_argument", str(exc)[:600], "base is a git revision such as HEAD~1 or "
                                                                        "origin/main") from None

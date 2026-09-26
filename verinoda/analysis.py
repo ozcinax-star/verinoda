@@ -2028,7 +2028,74 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
     if not sub.flags.get("not_found"):
         _exclusive_guard(ctx, sub, links)
     _choice_guard(ctx, sub)
+    _stale_guard(ctx, sub, links)
     return _finish_sub(ctx, sub, out, "+".join(h[3:] for h in handler_names) or "location")
+
+
+STALE_GUARD_FILES = 200   # changed files read for the subject's names (a skipped refresh leaves 1-5 as a rule)
+STALE_GUARD_NAMES = 6
+
+
+def _stale_guard(ctx: _Ctx, sub: _Sub, links: list[dict]) -> None:
+    """The index was not refreshed for this answer (``rec.stale_files``): a changed file that spells the
+    sub-question's subject may hold what was asked (a new caller, a changed definition) and the answer
+    did not read it. Each such file is said as an unknown ("verinoda/textnorm.py:296 (changed since the
+    index) spells `split_identifier`: not in this answer") and the verdict is at most
+    met_with_inference (``flags["stale_subject"]``, :func:`judge`)."""
+    stale = sorted(ctx.rec.stale_files or ())
+    if not stale:
+        return
+    g = ctx.g
+    nodes = list(sub.subject_nodes)
+    for lk in links:
+        if lk.get("status") in ("linked", "weak", "ambiguous"):
+            nodes += qp.mention_nodes(lk)
+    names = []
+    for n in nodes:
+        if n in g.G and not g.is_file_node(n):
+            bare = qp._bare(g.label(n))
+            if len(bare) >= 3 and bare not in names:
+                names.append(bare)
+    for lk in links:
+        t = (lk.get("text") or "").strip("`'\" ")
+        if qp.code_shape(t) == "name":
+            bare = qp.split_code_name(t)[1].rpartition(".")[2]
+            if len(bare) >= 3 and bare not in names:
+                names.append(bare)
+    if not names:
+        return
+    rxs = [(nm, re.compile(rf"(?<![\w]){re.escape(nm)}(?![\w])"),
+            re.compile(rf"^\s*(?:async\s+def|def|class|function|func|fun|fn)\s+{re.escape(nm)}(?![\w])"))
+           for nm in names[:STALE_GUARD_NAMES]]
+    hits: list[tuple[str, str]] = []
+    texts = ctx.rec.__dict__.setdefault("_stale_texts", {})  # read once per analysis, not per sub-question
+    for f in stale[:STALE_GUARD_FILES]:
+        if f not in texts:
+            texts[f] = qp._lines_of(g, f)
+        uses, defs = [], []
+        for i, line in enumerate(texts[f], 1):
+            for nm, rx, drx in rxs:
+                if rx.search(line):
+                    (defs if drx.search(line) else uses).append((i, nm))
+                    break
+        # where the name is used first (a new caller), else where it is defined
+        found = uses[:3] or defs[:1]
+        if found:
+            hits.append((f"{f}:" + ", ".join(str(i) for i, _ in found), found[0][1]))
+    if not hits:
+        return
+    sub.flags["stale_subject"] = [at for at, _ in hits]
+    for at, nm in hits[:3]:
+        _unknown(ctx, sub, {"question": f"what does {at.rpartition(':')[0]} (changed since the index) do with `{nm}`?",
+                            "why": f"{at} spells `{nm}` and changed since the index; the index was not refreshed "
+                                   "for this answer, so what it holds there (a new caller, a changed definition) "
+                                   "is not in this answer",
+                            "next_step": "run `verinoda update` (or MCP index_update), then ask again"})
+    if len(hits) > 3:
+        _unknown(ctx, sub, {"question": "do other changed files hold what was asked?",
+                            "why": f"{len(hits) - 3} more file(s) changed since the index spell the subject: "
+                                   + ", ".join(at for at, _ in hits[3:8]),
+                            "next_step": "run `verinoda update`, then ask again"})
 
 
 def _choice_guard(ctx: _Ctx, sub: _Sub) -> None:
@@ -2337,7 +2404,7 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
         return "unmet"
     best = min(live, key=lambda c: _RANK[c["status"]])["status"]
     if best in VERIFIED and _RANK[best] <= _RANK.get(min_status, _RANK[MIN_STATUS_DEFAULT]) \
-            and not flags.get("may_ask_for_choice"):
+            and not flags.get("may_ask_for_choice") and not flags.get("stale_subject"):
         return "met"
     return "met_with_inference"
 
@@ -2505,7 +2572,7 @@ def _refresh_index(store: Store, repo: Path, snap: dict | None, state: dict, mod
     Returns what happened (``ran``, ``seconds``, ``skipped``, ``stale_files``...) plus ``_snapshot``,
     the snapshot the analysis stands on. The time a refresh takes is given back to the budget.
     ``g``: the graph already loaded (the MCP server's), if any."""
-    from verinoda import workflow
+    from verinoda import buildlock, workflow
 
     if mode not in REFRESH_MODES:
         raise ValueError(f"refresh must be one of {', '.join(REFRESH_MODES)}, not {mode!r}")
@@ -2526,7 +2593,9 @@ def _refresh_index(store: Store, repo: Path, snap: dict | None, state: dict, mod
         t0 = time.monotonic()
         try:
             small = snap is None or (snap.get("file_count") or 0) < REFRESH_SMALL_PROJECT
-            res = workflow.update(store, repo, wait=REFRESH_BUSY_WAIT_SMALL if small else 0, purpose="analyze refresh")
+            # inline means "refresh first": a build already running is waited for (as `verinoda update` does)
+            wait = buildlock.CLI_WAIT_SECONDS if mode == "inline" else REFRESH_BUSY_WAIT_SMALL if small else 0
+            res = workflow.update(store, repo, wait=wait, purpose="analyze refresh")
         except Exception as exc:  # noqa: BLE001 - a failed refresh is reported, not raised
             res = {"error": f"{type(exc).__name__}: {exc}"[:300], "snapshot": snap}
         took = time.monotonic() - t0

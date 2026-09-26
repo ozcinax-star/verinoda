@@ -33,6 +33,8 @@ STATS_NAME = "build_stats.json"
 POLL_SECONDS = 0.2
 CLI_WAIT_SECONDS = 600.0     # scan / update from a terminal: wait up to 10 minutes for another build
 DEFAULT_WAIT_SECONDS = 600.0
+GATE_WAIT_SECONDS = 120.0    # `decide check`'s refresh (a gate): wait this long for a build already running
+GATE_WAIT_SECONDS_MCP = 30.0  # the same from the MCP server (decision_check)
 
 _local = threading.local()   # per thread: repo key -> [file object, depth]
 
