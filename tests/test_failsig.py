@@ -256,3 +256,40 @@ def test_test_ids_lose_the_runs_throw_away_paths():
     assert failsig.norm_test_id("tests/t.py::test_x[/tmp/verinoda-exp-1a2b/repo/tests/c/x.json]") == \
         "tests/t.py::test_x[tests/c/x.json]"
     assert failsig.norm_test_id("tests/t.py::test_x[1-2]") == "tests/t.py::test_x[1-2]"
+
+
+GAMETEST_LOG = """[03:53:51] [main/ERROR] (Minecraft) Failed to load properties from file: server.properties
+
+java.nio.file.NoSuchFileException: server.properties
+\tat java.base/sun.nio.fs.WindowsException.translateToIOException(WindowsException.java:85)
+[03:54:57] [Server thread/INFO] (Minecraft) ========= 374 GAME TESTS COMPLETE IN 55.77 s ======================
+[03:54:57] [Server thread/INFO] (Minecraft) 2 required tests failed :(
+[03:54:57] [Server thread/INFO] (Minecraft)    - glowmod-gametest:wisp_tests_wisp_glows_at_night: the wisp stayed dark after 12 ticks on tick 40
+[03:54:57] [Server thread/INFO] (Minecraft)    - glowmod-gametest:unknown_tests_something: boom on tick 3
+FAILURE: Build failed with an exception.
+"""
+
+WISP_TESTS = b"""package com.example.glowmod.gametest;
+
+public final class WispTests {
+    @GameTest
+    public void wispGlowsAtNight(GameTestHelper helper) {
+        helper.succeed();
+    }
+}
+"""
+
+
+def test_gametest_summary_is_the_failure_not_a_start_up_exception():
+    files = ["src/gametest/java/com/example/glowmod/gametest/WispTests.java", "src/main/java/Other.java"]
+    sig = failsig.extract(GAMETEST_LOG, "", outcome="fail", files=files,
+                          reader=lambda rel: WISP_TESTS if rel.endswith("WispTests.java") else None)
+    assert sig["parser"] == "gametest", sig
+    assert sig["failed_tests"] == ["glowmod-gametest:unknown_tests_something",
+                                   "glowmod-gametest:wisp_tests_wisp_glows_at_night"]
+    wisp = next(f for f in sig["failures"] if "wisp" in f["test"])
+    assert wisp["exc"] == "GameTestAssertException" and wisp["msg"] == "the wisp stayed dark after 12 ticks"
+    assert wisp["path"].endswith("WispTests.java") and wisp["line"] == 5 and "wispGlowsAtNight" in wisp["symbol"]
+    other = next(f for f in sig["failures"] if "unknown" in f["test"])
+    assert other["path"] is None  # no test class spells it: unknown, never a guess
+    assert sig["status"] == "partial" and failsig.keys(sig) == (None, None)

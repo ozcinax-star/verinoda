@@ -1838,6 +1838,16 @@ def close(store: Store, repo: Path, session_id: str | None = None, *, resolved_b
     if not shown:
         raise DebugError(f"no run of the repro failed in this session before attempt {resolved_by}: the symptom was "
                          "never observed, so a pass resolves nothing; close with --abandoned")
+    base = next((x for x in attempts if x["kind"] == "baseline"), None)
+    if base is not None and base["outcome"] == "pass":
+        # the baseline passed: a failure seen only after an edit is one the session's own edits introduced (a flaky
+        # symptom that never showed here), not the symptom; a failure of the unchanged tree or a rerun is
+        shown = [x for x in shown if x["kind"] in ("rerun", "probe") or x.get("tree_hash") == base.get("tree_hash")]
+        if not shown:
+            raise DebugError(f"the baseline passed and every failing run before attempt {resolved_by} came after an "
+                             "edit: those failures are the edits' own, the symptom was never observed, so a pass "
+                             "resolves nothing; show the symptom first (`verinoda debug rerun` on the base tree for a "
+                             "flaky one) or close with --abandoned --note ...")
     cur = treestate.current(repo, store=store)
     if cur["hash"] != a.get("tree_hash"):
         raise DebugError(f"the working tree changed since attempt {resolved_by} passed (tree "
