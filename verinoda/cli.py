@@ -740,16 +740,12 @@ def cmd_map(args) -> int:
     if args.json:
         _write(_dump(res))
         return 0
-    for name, v in res.items():
-        print(f"== {name} ==  ({v['coverage']['method']})")
-        for lim in v["coverage"].get("limits", []):
-            print(f"   limit: {lim}")
-        body = {k: val for k, val in v.items() if k not in ("view", "coverage")}
-        text = _dump(body)
-        lines = text.splitlines()
-        _write("\n".join(lines[: args.max_lines]))
-        if len(lines) > args.max_lines:
-            print(f"   ... {len(lines) - args.max_lines} more lines (use --json or --view)")
+    from verinoda import map_text
+
+    # all views at once: a short summary of each; one view: more lines of it
+    _write(map_text.render(res, args.max_lines or (40 if args.view else 12)))
+    if not args.view:
+        print("one view in more detail: --view NAME [--max-lines N]; everything: --json")
     return 0
 
 
@@ -2382,7 +2378,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--view", choices=["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact"])
     sp.add_argument("--target", action="append", help="impact view: file or symbol (repeatable); default: git changes")
     sp.add_argument("--base", help="impact view: diff base (default HEAD + untracked)")
-    sp.add_argument("--max-lines", type=int, default=60)
+    sp.add_argument("--max-lines", type=int, default=None,
+                    help="summary lines per view (default 12 for all views, 40 for one --view)")
     sp = add("review", cmd_review, "what a change touches, by concern: changed symbols, dependents, persistence, "
                                    "security, performance, public API, config, entry points, tests, unknowns "
                                    "(exit 3 = findings or unknowns to report)", repo=False)

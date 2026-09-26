@@ -140,7 +140,10 @@ def test_map_impact_and_human_rendering(repo):
     assert ok_json("map", str(repo), "--view", "impact", "--json", cwd=repo)["impact"]["targets"] == []
     r = ra("map", str(repo), "--max-lines", "5", cwd=repo)
     assert r.returncode == 0 and "== hierarchy ==" in r.stdout and "== history ==" in r.stdout
-    assert "limit:" in r.stdout and "more lines" in r.stdout
+    assert "limit:" in r.stdout and " more " in r.stdout and "--view NAME" in r.stdout
+    assert "{" not in r.stdout.split("== dependencies ==")[0]  # a summary, not a JSON dump
+    one = ra("map", str(repo), "--view", "tests", cwd=repo)
+    assert one.returncode == 0 and "test functions" in one.stdout and "--view NAME" not in one.stdout
     cfg = ok_json("map", str(repo), "--view", "config", "--json", cwd=repo)["config"]
     assert {"ORDERS_DATABASE_URL", "ORDERS_MAX_ITEMS", "ORDERS_DISCOUNT_THRESHOLD"} <= set(cfg["env_vars"])
 

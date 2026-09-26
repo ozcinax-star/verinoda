@@ -139,6 +139,11 @@ def dependencies(g: Graph, level: str = "file", limit: int = 60) -> dict:
         {"from": a, "to": b, "relation": r, "count": c, "confidence": dict(conf[(a, b, r)])}
         for (a, b, r), c in agg.most_common(limit)
     ]
+    top = Counter()  # between top-level folders, over every edge (the rows above are cut at `limit`)
+    for (a, b, _r), c in agg.items():
+        sa, sb = PurePosixPath(a).parts[0], PurePosixPath(b).parts[0]
+        if sa != sb:
+            top[(sa, sb)] += c
     ext = Counter()
     for u, v, d in g.edges({"imports", "imports_from"}):
         if not g.file(v) and g.file(u):
@@ -152,6 +157,7 @@ def dependencies(g: Graph, level: str = "file", limit: int = 60) -> dict:
         },
         "level": level,
         "internal": rows,
+        "between_subsystems": [{"from": a, "to": b, "count": c} for (a, b), c in top.most_common(20)],
         "external_imports": dict(ext.most_common(25)),
     }
 
@@ -271,7 +277,15 @@ def config(g: Graph) -> dict:
                     sym = _symbol_at(g, f, i)
                     env[m.group(1)].append({"at": f"{f}:{i}", "symbol": g.label(sym) if sym else "(module)",
                                             "line": text.strip()[:120]})
-    cfg_files = [f for f in _files(g) if CONFIG_FILE_RE.search(f)]
+    # config files are often data, not graph nodes (a .yml or .toml has no symbols): take them from the file list
+    from verinoda.snapshot import list_files
+
+    known = set(_files(g))
+    try:
+        known |= set(list_files(g.root)) if g.root and Path(g.root).is_dir() else set()
+    except OSError:
+        pass
+    cfg_files = sorted(f for f in known if CONFIG_FILE_RE.search(f))
     # modules that import a config-ish module
     readers = defaultdict(set)
     for u, v, d in g.edges({"imports", "imports_from"}):

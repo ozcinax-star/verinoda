@@ -193,3 +193,43 @@ def test_read_uses_the_line_cache_but_sees_edits(tmp_path):
     f.write_bytes(b"a = 1\nb = 2\nc = 3\n")  # size changes: a new cache key
     assert am._read(tmp_path, "m.py")[-1] == "c = 3"
     assert am._read(tmp_path, "missing.py") == []
+
+
+def test_config_lists_data_config_files_that_have_no_graph_node(tmp_path):
+    """A .yml or .toml has no symbols, so it is not a graph node; the config view still lists it."""
+    repo = tmp_path / "cfg"
+    (repo / "src").mkdir(parents=True)
+    (repo / "src" / "app.py").write_text("import os\nX = os.environ.get('APP_MODE')\n", encoding="utf-8")
+    (repo / "src" / "defaults.yml").write_text("mode: fast\n", encoding="utf-8")
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+    finally:
+        st.close()
+    g = index.load(repo)
+    assert "src/defaults.yml" not in am._files(g)
+    c = am.config(g)
+    assert "src/defaults.yml" in c["config_files"] and "APP_MODE" in c["env_vars"]
+
+
+def test_between_subsystems_counts_every_edge_not_only_the_top_rows(full):
+    d = full["dependencies"]
+    assert isinstance(d["between_subsystems"], list)
+    for r in d["between_subsystems"]:
+        assert r["from"] != r["to"] and r["count"] > 0
+
+
+def test_text_summary_is_bounded_and_says_what_it_left_out(full):
+    from verinoda import map_text
+
+    text = map_text.render(full, 4)
+    for view in full:
+        assert f"== {view} ==" in text
+    assert "{" not in text.split("== dependencies ==")[0]
+    big = {"hierarchy": {"coverage": {"method": "m", "limits": []}, "subsystems": {
+        f"s{i}": {"files": 1, "packages": {f"s{i}/p": {f"s{i}/p/f.py": {"symbols": i, "top": [], "kind": "code"}}}}
+        for i in range(30)}}}
+    out = map_text.render(big, 6)
+    assert "... 27 more folders" in out and "s29" in out and "s0 " not in out
+    assert len(out.splitlines()) <= 6 + 2 + 2
