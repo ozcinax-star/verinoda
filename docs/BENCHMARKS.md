@@ -50,12 +50,14 @@ read: `verinoda analyze --json` on main, the default text from commit 2 on.
 | 5 shown metric | measurement only | | | |
 | 6 question-shape budget, default off | no answer changes | | | |
 | 6 with the budget on (not kept on) | 285 / **212**, 1,201 | 286 / **218**, 1,741 | 286 / 218, 1,741 | 287 / **218**, 1,927 |
+| 7-12 review fixes (fd30f5b) | 285 / 213, 1,310 | **287** / 219, 1,873 (text) | 287 / 219, 1,873 (text) | 287 / 219, 2,037 |
 
 Out of sample (hits of 32, tokens per question): main query 14 at 1,482, analyze `--json` 14 at 3,615,
 analyze's old text 10 at 714 (it printed passage headers only), MCP analyze 14 at 2,794; commit 1: query
 14 at 1,442; commit 2: analyze text 14 at 1,908, MCP analyze 14 at 2,087; branch head: `--json` 14 at
-2,907; the shape budget on: query 14 at 1,259, analyze text 14 at 1,721, MCP analyze 14 at 1,896.
-Graphify's saved answers to the same questions: 1 of 32 at 1,552.
+2,907; the shape budget on: query 14 at 1,259, analyze text 14 at 1,721, MCP analyze 14 at 1,896;
+review fixes: query 14 at 1,442, analyze text 14 at 1,949, MCP analyze 14 at 2,087, per fact the same
+hits as main and as the branch head. Graphify's saved answers to the same questions: 1 of 32 at 1,552.
 
 - **Commit 1 (query text).** No question echo, at most three `expanded:` pairs, `next: same query`,
   a header without the signature when the passage below starts with it, each window dedented. At
@@ -68,7 +70,12 @@ Graphify's saved answers to the same questions: 1 of 32 at 1,552.
   219 shown, -28.1% tokens. Analyze's default text carries everything the JSON record did for the
   benchmark (286 / 219) at 1,847 tokens per question against 2,349 for the JSON approach (-21.4%)
   and 3,901 for the `--json` output the skill used to read (-52.7%); out of sample -47.2%. Where the
-  text still spends: passages 1,330 of the 1,847 tokens, claims 351.
+  text still spends: passages 1,330 of the 1,847 tokens, claims 351. **Correction (review):** the
+  equal totals hid a swap. Per fact, the text lost heldout `h03.rebuild`, which `--json` and MCP
+  found only through the plan's link `build -> repoatlas/index.py:55-84` (the text printed only
+  not_found links), and gained `h08.cli`; the "nothing lost" above was a comparison of totals. The
+  review fixes print the plan's links in the text (below), and comparisons are now per fact
+  (`python -m verinoda.benchmark compare` lists the facts lost and gained by id).
 - **Commit 3 (MCP core profile)** and **commit 4 (skills read text)**: no answer changes (the branch
   head's run equals commit 2's except the compact `--json`); see the standing cost below.
 - **Commit 6 (question-shape budget): not turned on.** 4,800 characters for a single-clause
@@ -76,6 +83,29 @@ Graphify's saved answers to the same questions: 1 of 32 at 1,552.
   -5.4% for MCP analyze, no fact found lost in or out of sample, but heldout h06's `h06.rule` line is
   no longer shown. The switch stays (`query.shape_budget`, `VERINODA_SHAPE_BUDGET=1`) for anyone who
   prefers the trade.
+- **Review fixes (commits 7-12, `7-review-fixes.json`).** Compared per fact with main and with the
+  branch head, for every approach (query text and JSON, the benchmark's analyze, MCP query and
+  analyze, `analyze` text and `--json`): no fact lost, found or shown; out of sample the same hits
+  per fact; the fast harness per question: only gains over main. What changed:
+  - the analyze text prints the plan's links (`plan links: build -> repoatlas/index.py:55-84; ...`,
+    words resolving to one place share it, weak links left out): h03.rebuild is found again, so
+    analyze as read is 287 / 219 against `--json`'s 287 / 219, for +26 tokens per question (1,847
+    -> 1,873, +1.4%; out of sample 1,907 -> 1,949). Against main's `--json` 3,901: -52.0%.
+  - MCP analyze counts claims as printed by the passages only on the passage lines its cap keeps.
+    The benchmark's 12,000-character cap does not bind on these sets (2,036 -> 2,037); where it
+    binds it did lose claims: on orders_app at a 5,000-character cap, "how does an order get
+    persisted and where is the discount applied?" kept 1 of 61 passage lines and 9 verified claims
+    were neither listed nor printed, now none (the cut note counts every claim it cuts).
+  - the query text's note on what it leaves out always fits: over budgets 100-1,200 in steps of 50,
+    9 budgets on orders_app and 5 on graphify_core left candidates out without a note at the branch
+    head; swept again over 20-1,200 in steps of 10, none does now (at 20 characters the note itself
+    is clipped). "no candidate locations" is no longer printed when there are candidates. The follow-up names the CLI (`next: verinoda query "…" --max-chars N`), +7
+    characters where a note is printed: query text 1,309 -> 1,310 tokens per question.
+  - standing cost: the core tools/list 9,964 -> 9,967 characters (analyze's plan_json names
+    `verinoda plan check`, not a tool the profile lacks); the Claude skill 16,970 -> 17,180, the
+    Codex skill 16,439 -> 16,462 (what to do when a mandated tool is not listed). On an editable or
+    hardlinked install Codex is registered with the full profile (36,516 characters of tools/list):
+    there the sandbox may not import Verinoda and MCP must carry every protocol the skill mandates.
 
 Against Graphify, query text per set (found / shown, tokens per question; branch head = commit 1's
 numbers, which commits 2-6 do not change):

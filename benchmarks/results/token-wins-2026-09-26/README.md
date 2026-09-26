@@ -33,13 +33,18 @@ Files:
   and the flag change no answer: identical to 2 except `cli_an_json`, now compact);
 - `6b-shape-budget-on.json`: the branch head with `VERINODA_SHAPE_BUDGET=1` (the question-shape
   budget, not turned on: it loses one shown gold line, heldout h06);
+- `7-review-fixes.json`: fd30f5b, the fixes of the review round (the analyze text prints the plan's
+  links, MCP analyze recounts hidden claims after its cap, the query note always fits, the follow-up
+  names the CLI); compared per fact (the ids in `per_q`, not the totals) with `0-main.json` and
+  `6a-branch-flag-off.json`: nothing lost, found or shown, for any approach;
 - `oos-*.json`: the same code states on the agent persona's 10 out-of-sample questions (5 on a
   CPython 3.12 standard-library copy, 5 on a Verinoda copy; 32 facts, scored by the persona's regular
   expressions), `{approach: {question: {hits, facts, tokens}}}`; `graphify(saved)` scores the
   persona's saved Graphify answers;
-- `fast-*.json`: the fast harness (`{set: {approach: facts found, per_q, negatives}}`) for commit 1
-  and the branch head, compared per question with main's run of the same harness: only gains
-  (forge q12 +1, heldout h08 +1, for query and analyze);
+- `fast-*.json`: the fast harness (`{set: {approach: facts found, per_q, negatives}}`) for commit 1,
+  the branch head and the review fixes, compared per question with main's run of the same harness:
+  only gains (forge q12 +1, heldout h08 +1, for query and analyze; with the review fixes also heldout
+  h03 +1 for analyze, the fact the plan's links carry);
 - `graphify-baseline-c8da753.txt`: the token economist's fresh-index table at c8da753 that the
   Graphify columns quote (vendored renderer and the upstream CLI 0.9.65); not re-run here;
 - `menu-cost.txt`: the standing per-session cost (skills, MCP tools/list and instructions, doctor
