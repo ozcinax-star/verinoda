@@ -1699,18 +1699,18 @@ DESCRIPTIONS: dict[str, str] = {
         "Directed paths (up to 3, at most 8 hops) from source to target; each hop has relation, confidence "
         "(EXTRACTED/INFERRED) and call-site file:line. mode='flow': calls only; 'any': also uses/imports/inherits/"
         "references, saying whether a path is execution or structure. status: found | unresolved (with hints) | "
-        "no directed path | ambiguous; no static path does not prove there is none at runtime. With no path, a JVM callback registration "
-        "(relation 'registers', kind 'callback', never a call) is followed and the result has a 'note'."),
+        "no directed path | ambiguous; no static path does not prove there is none at runtime. With no path, JVM "
+        "callbacks ('registers' hops, not calls) are followed."),
     "map_view": (
         "One architecture view: hierarchy, dependencies (file-level calls/imports), dataflow (entry points -> "
         "persistence), config (env vars, config files), tests (static reachability), history (git log, decision "
         "records), impact (reverse dependents of targets; default: the working-tree changes). 'coverage' states "
         "the method and its limits."),
     "change_review": (
-        "What a change touches, by concern (as `verinoda review`): the working tree against HEAD, base=REV, "
-        "staged, or targets ('path.py[::Name]') + change (body|signature|remove) before editing. Changed "
-        "definitions, dependents, findings per concern (no finding is never 'safe'), tests reaching it, "
-        "unknowns, read_first. exit 3 = findings or unknowns to report. Never edits code."),
+        "What a change touches, by concern (`verinoda review`): the working tree vs HEAD, base=REV, "
+        "staged, or targets ('path.py[::Name]') + change (body|signature|remove), planned. Changed "
+        "definitions, dependents, findings per concern ('no finding' is not 'safe'), tests reaching it, "
+        "unknowns, read_first. exit 3 = something to report. Never edits code."),
     "question_plan_draft": (
         "Draft a question plan (verinoda.question_plan/1) from the user's message by deterministic Turkish/English "
         "rules: sub-questions with intent and done_when, mentions with candidate names, references with the "

@@ -83,7 +83,7 @@ rows are the token economist's fresh-index run of 2026-09-25, whose code did not
 Per question, the default query text is 6% smaller than Graphify's vendored renderer and 11% smaller than its
 CLI while it finds 4.1 times the facts. It is not smaller on every set: on forge_mod, glow_mod,
 graphify_core_tr and verinoda_user_tr Graphify's answer is shorter (the fixed 6,000-character budget is spent
-on content). Standing context: the MCP core profile (12 tools, the default) is 11,952 characters of tool menu
+on content). Standing context: the MCP core profile (12 tools, the default) is 11,999 characters of tool menu
 (about 3,000 tokens), the full profile 42,016; Graphify's menu is about a tenth of the full one. The skills are
 18,306 (Claude Code) and 17,318 (Codex) characters. The fast benchmark on all nine sets (the private one
 included) against the evening's integration branch: 5 facts gained (forge q12 for query and analyze, heldout
