@@ -41,13 +41,16 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
-import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Iterable
 
 from verinoda import evidence as evmod
+from verinoda import testcode
 from verinoda.store import Store, new_id, now
+
+# test code, by the one rule of verinoda.testcode (tests/, testing/, test_x.py, x_test.py, conftest.py ...)
+is_test_path = testcode.is_test_file
 
 PLUGIN_MODULE = "verinoda_calltrace"
 TRACE_FILE = "calltrace.jsonl"
@@ -59,7 +62,6 @@ MAX_RESULT_EDGES = 300       # edges returned inline (all of them are in runtime
 MAX_REACH_PER_TEST = 200
 MAX_EVIDENCE = 200
 EXT = "<ext>"
-TEST_PATH_RE = re.compile(r"(^|/)(tests?|testing|__tests__|spec)/|(^|/)test_[^/]*\.py$|_test\.py$|(^|/)conftest\.py$")
 MOCK_PREFIXES = ("unittest.mock.", "mock.", "pytest_mock.")
 LIMITS_TEXT = [
     "observation is run-scoped: it shows what these tests executed at this commit, never what always happens",
@@ -74,10 +76,6 @@ def plugin_source() -> bytes:
     return (Path(__file__).with_name("calltrace_plugin.py")).read_bytes()
 
 
-def is_test_path(path: str | None) -> bool:
-    return bool(path) and bool(TEST_PATH_RE.search(path.replace("\\", "/")))
-
-
 # -- test selection ------------------------------------------------------------------------
 
 def _clean_label(label: str) -> str:
@@ -85,9 +83,8 @@ def _clean_label(label: str) -> str:
 
 
 def _is_test_function(g, n: str) -> bool:
-    f = g.file(n)
-    return bool(f) and f.endswith(".py") and is_test_path(f) and g.is_symbol(n) \
-        and _clean_label(g.label(n)).rpartition(".")[2].startswith(("test", "Test"))
+    """A pytest test (the tracer runs pytest): a Python test by :func:`verinoda.testcode.is_test_function`."""
+    return (g.file(n) or "").endswith(".py") and testcode.is_test_function(g, n)
 
 
 def pytest_id(g, n: str) -> str:
@@ -102,8 +99,10 @@ def select_tests(g, symbols: Iterable[str], *, terms: Iterable[str] = (), limit:
     """Pytest node ids of tests likely to run ``symbols``, at most ``limit`` (<= 50).
 
     First the tests that statically reach a symbol - the rule of
-    :func:`verinoda.architecture_map.tests_view`: call/uses/references edges,
-    depth ``depth``, only through non-test code - nearest first; then test
+    :func:`verinoda.architecture_map.tests_view`: call/uses/references edges
+    and the calls through a dotted module path the graph does not hold
+    (:func:`verinoda.testcode.extra_callers`), depth ``depth``, only through
+    non-test code - nearest first; then test
     functions whose name contains a symbol name or one of ``terms`` (3+
     characters). Static reachability is only a *selection* heuristic: the
     trace decides what really ran.
@@ -115,18 +114,21 @@ def select_tests(g, symbols: Iterable[str], *, terms: Iterable[str] = (), limit:
         if nid and nid not in targets:
             targets.append(nid)
     found: dict[str, int] = {}
+    extra = testcode.extra_callers(g)   # calls the graph does not hold: pkg.main.run() in a test
     for t in targets:
         frontier, seen = {t}, {t}
         for dist in range(1, depth + 1):
             nxt = set()
             for v in frontier:
-                for u, _ in g.in_edges(v, {"calls", "uses", "references"}):
+                callers = [u for u, _ in g.in_edges(v, {"calls", "uses", "references"})]
+                callers += [x.node for x in extra.get(v, ()) if x.node is not None]
+                for u in callers:
                     if u in seen:
                         continue
                     seen.add(u)
                     if _is_test_function(g, u):
                         found[u] = min(found.get(u, dist), dist)
-                    elif g.file(u) and not is_test_path(g.file(u)):
+                    elif g.file(u) and not testcode.is_test_code(g, u):
                         nxt.add(u)
             frontier = nxt
     ordered = [n for n, _ in sorted(found.items(), key=lambda kv: (kv[1], pytest_id(g, kv[0])))]

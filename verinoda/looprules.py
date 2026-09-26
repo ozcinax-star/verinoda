@@ -80,7 +80,7 @@ from __future__ import annotations
 
 import re
 
-from verinoda import textnorm
+from verinoda import testcode, textnorm
 
 LOOP_KINDS = ("baseline", "fix", "probe", "rerun")
 DEFINITIVE = ("tree_reverted", "signature_recurred", "no_progress", "test_edited", "failing_tests_skipped",
@@ -415,10 +415,9 @@ def _failing_ids(attempts: list[dict]) -> set[str]:
 def _is_doctest_id(t: str) -> bool:
     """A pytest doctest item in a Python module: ``orders/pricing.py::orders.pricing.apply_discount`` (the module
     is not a test file by name, and the item is one dotted name)."""
-    from verinoda.treestate import is_test_file
-
     path, _, name = t.partition("::")
-    return path.endswith(".py") and not is_test_file(path) and "::" not in name and "." in name.split("[", 1)[0]
+    return path.endswith(".py") and not testcode.is_test_file(path) and "::" not in name and \
+        "." in name.split("[", 1)[0]
 
 
 def doctest_hosts(attempts: list[dict]) -> set[str]:
@@ -523,7 +522,8 @@ def _test_edited(hist: list[dict], cur: dict) -> tuple[list[dict], list[dict]]:
             if k is not None and k not in asserted:
                 lines.append({"path": path, "line": h["old"][0] + k, "text": removed[k].strip()[:200],
                               "change": "value"})
-            in_test_fn = other_lang or any(s.rsplit(".", 1)[-1].startswith("test") for s in h.get("symbols") or [])
+            in_test_fn = other_lang or any(testcode.is_test_name(s.rsplit(".", 1)[-1])
+                                           for s in h.get("symbols") or [])
             for i, text in enumerate(added):
                 # an early return only counts inside a test function (a helper or fixture may return early)
                 if _DISABLE_LINE.match(text) and (in_test_fn or not _RETURNISH.match(text)):

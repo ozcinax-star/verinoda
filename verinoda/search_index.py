@@ -67,7 +67,7 @@ from functools import lru_cache
 from pathlib import Path, PurePosixPath
 
 from verinoda import textnorm
-from verinoda.architecture_map import is_test_file
+from verinoda.testcode import is_test_file
 
 SCHEMA_VERSION = 4
 TOKENIZER_VERSION = 4  # 3: y-final words meet their -ies/-ied forms (query/queries); 4: clustered/cluster

@@ -43,7 +43,7 @@ from pathlib import PurePosixPath
 
 import networkx as nx
 
-from verinoda import search_index
+from verinoda import search_index, testcode
 from verinoda.index import Graph, file_lines
 from verinoda.search_index import named_identifiers, stem  # noqa: F401 - re-exported API
 from verinoda.textnorm import fold_tr
@@ -209,7 +209,7 @@ def call_outline(g: Graph, nid: str, *, impact: bool = False) -> tuple[list[str]
     seen_callers: set[str] = set()
     # product code before tests (a mod's gametest callers sort before src/main), one line per caller
     for u, d in sorted(g.in_edges(nid, {"calls"}),
-                       key=lambda x: (search_index.is_test_file(g.file(x[0]) or ""), _at(x[1]) or "", x[0])):
+                       key=lambda x: (testcode.is_test_file(g.file(x[0]) or ""), _at(x[1]) or "", x[0])):
         if u in seen_callers:
             continue
         seen_callers.add(u)
@@ -380,7 +380,7 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
     for h in rk.hits[rest_from:]:
         if len(more) >= MAX_MORE or h.key in shown:
             continue
-        if not include_tests and search_index.is_test_file(h.file):
+        if not include_tests and testcode.is_test_file(h.file):
             continue
         entry = f"{h.file}:{h.a}-{h.b} {_clip(h.qual or h.name or '(module level)', 60)}"
         if not budget.take(_cost(entry) + more_cost):

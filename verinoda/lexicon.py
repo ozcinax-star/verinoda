@@ -381,7 +381,7 @@ def g2(k11: float, k1_: float, k_1: float, n: float) -> float:
 
 
 def _associate(units: list[list]) -> tuple[dict, dict, list[str], int]:
-    from verinoda.architecture_map import is_test_file
+    from verinoda.testcode import is_test_file
 
     # Identical units (the same doc line copied into many files) count once.
     seen: set[tuple] = set()

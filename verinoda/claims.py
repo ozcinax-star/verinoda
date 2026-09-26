@@ -64,6 +64,7 @@ from pathlib import Path
 from verinoda import anchors, entail
 from verinoda import evidence as evmod
 from verinoda.store import Store, new_id, now
+from verinoda.testcode import is_test_file as _is_test_file
 
 STATUSES = (
     "observed", "experiment_verified", "statically_verified", "primary_source_verified",
@@ -634,12 +635,6 @@ class Claims:
 
 
 # -- claim dependencies (D24) --------------------------------------------------------
-
-def _is_test_file(path: str) -> bool:
-    from verinoda.architecture_map import is_test_file
-
-    return is_test_file(path)
-
 
 def testset_fp(files: dict[str, str]) -> str:
     """Fingerprint of the test files (path and content) in a file map."""

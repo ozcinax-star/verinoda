@@ -44,10 +44,10 @@ from collections import deque
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
-from verinoda import anchors
+from verinoda import anchors, testcode
 from verinoda import review_rules as rr
 from verinoda.architecture_map import CONFIG_FILE_RE, ENV_PATTERNS, entry_reasons
-from verinoda.architecture_map import is_test_file as _map_test_file
+from verinoda.testcode import is_test_file as _is_test
 
 CONCERNS = ("persistence", "security", "performance", "public_api", "config", "entry_points")
 PLANNED_KINDS = ("body", "signature", "remove")
@@ -160,12 +160,6 @@ def _last(qual: str) -> str:
 
 def _clean_label(label: str) -> str:
     return label.strip().lstrip(".").split("(")[0].strip()
-
-
-def _is_test(rel: str) -> bool:
-    from verinoda.treestate import is_test_file
-
-    return is_test_file(rel) or _map_test_file(rel)
 
 
 def _suffix(rel: str) -> str:
@@ -4059,31 +4053,29 @@ def _hot_paths(ctx: _Ctx, changes: list[Change], walk: dict) -> dict[str, dict]:
 
 # -- tests -------------------------------------------------------------------------------------------------
 
-def _test_id(ctx: _Ctx, n: str) -> str | None:
-    from verinoda.runtime.trace import _is_test_function, pytest_id
+_EXTRA_BASIS = {
+    "python": "the test calls it through a module path (pkg.mod.f()), read from the test's syntax tree",
+    "rust": "the test calls it by name inside a macro (assert_eq!(f(..), ..)), same file",
+    "js": "the it()/test() body names it from a project file its file imports (a name match, not a resolved call)",
+}
 
-    g = ctx.g
-    f = g.file(n) or ""
-    if f.endswith(".py"):
-        return pytest_id(g, n) if _is_test_function(g, n) else None
-    if not _is_test(f) or g.G.nodes[n].get("_callable_class"):
-        return None
-    name = _clean_label(g.label(n))
-    src = g.source(n, max_lines=3)
-    if name.lower().startswith("test") or (src and re.search(r"@(Test|GameTest|ParameterizedTest)\b", src[2])):
-        return f"{f}::{name}"
-    return None
+
+def _test_id(ctx: _Ctx, n: str) -> str | None:
+    """How the test ``n`` is named to its runner (:func:`verinoda.testcode.test_id`); None when it is no test."""
+    return testcode.test_id(ctx.g, n)
 
 
 def _static_tests(ctx: _Ctx, changes: list[Change]) -> tuple[dict[str, dict], dict[str, list[str]]]:
-    """(test id -> {distance, reaches, basis?}, changed symbol -> [test ids]) over calls/uses/references, depth 3,
-    through non-test code (the rule of runtime.trace.select_tests). A function nested in another one is reached
+    """(test id -> {distance, reaches, basis?}, changed symbol -> [test ids]) over calls/uses/references and the
+    calls the graph does not hold (:func:`verinoda.testcode.extra_callers`), depth 3, through non-test code (the
+    rule of runtime.trace.select_tests). A function nested in another one is reached
     through its enclosing function; a definition the snapshot does not have (added, renamed) through its callers
     in the changed files; test functions in the changed test files that call a changed symbol are read from their
     syntax trees. A removed symbol's tests are the ones that called it."""
     tests: dict[str, dict] = {}
     per: dict[str, list[str]] = {}
     g = ctx.g
+    extra = testcode.extra_callers(g) if g is not None else {}
     changed_tests = [f for f in ctx.base_texts if _is_test(f) and f.endswith(".py") and ctx.text(f) is not None]
 
     def add(tid: str, dist: int, c: Change, basis: str | None = None) -> None:
@@ -4114,7 +4106,7 @@ def _static_tests(ctx: _Ctx, changes: list[Change]) -> tuple[dict[str, dict], di
         if py and changed_tests and c.kind != "removed":
             for srel, call, _how, _st in _py_call_sites(ctx, Change(c.file, c.qual, c.kind), files=changed_tests):
                 q = ctx.label_at(srel, call.lineno)
-                if q and _last(q).startswith(("test", "Test")):
+                if q and testcode.is_test_name(_last(q)):
                     add(f"{srel}::{q.replace('.', '::')}", 1, c, basis="a test in the changed files calls it (syntax "
                                                                        "tree of the tree under review)")
         if g is None:
@@ -4131,6 +4123,11 @@ def _static_tests(ctx: _Ctx, changes: list[Change]) -> tuple[dict[str, dict], di
         for dist in range(1, DEPTH + 1):
             nxt = set()
             for v in frontier | (later if dist == 2 else set()):
+                for x in extra.get(v, ()):   # a call the graph does not hold (pkg.main.run(), a JS it())
+                    if x.node is None or x.node not in seen:
+                        if x.node is not None:
+                            seen.add(x.node)
+                        add(x.id, dist, c, basis=_EXTRA_BASIS.get(x.lang, _EXTRA_BASIS["python"]))
                 for u, _d in _in_edges(ctx, v, {"calls", "uses", "references"}):
                     if u in seen:
                         continue
@@ -4138,7 +4135,7 @@ def _static_tests(ctx: _Ctx, changes: list[Change]) -> tuple[dict[str, dict], di
                     tid = _test_id(ctx, u)
                     if tid:
                         add(tid, dist, c)
-                    elif g.file(u) and not _is_test(g.file(u)):
+                    elif g.file(u) and not testcode.is_test_code(g, u):
                         nxt.add(u)
             frontier = nxt
     return tests, per
@@ -4588,8 +4585,10 @@ def _tests(ctx: _Ctx, changes: list[Change], *, run_tests: bool, observe: bool, 
     out: dict = {"static": [{"test": t, **v} for t, v in sorted(static.items(), key=lambda kv: (kv[1]["distance"],
                                                                                                  kv[0]))],
                  "changed_tests": [c.symbol for c in changes if c.test],
-                 "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code), and "
-                          "the tests of the changed test files that call a changed symbol"}
+                 "basis": "static: reverse reach over calls/uses/references (depth 3, through non-test code) and the "
+                          "calls the graph does not hold (verinoda.testcode: a dotted module path in a Python test, "
+                          "the names a JS/TS it() body uses from its imports), and the tests of the changed test "
+                          "files that call a changed symbol"}
     if observed:
         out["observed"] = observed
     reached_any = {c.symbol for c in code_changes if per.get(c.symbol)} | \

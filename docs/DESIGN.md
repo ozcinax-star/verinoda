@@ -1258,8 +1258,8 @@ records what the human chose and checks the code against it.
     that switch a test off (a skip/xfail marker, `pytest.skip(`, an early `return` inside a test
     function), or a test configuration whose added lines change the selection (`addopts`, `-k`,
     `--deselect`, `collect_ignore`, `testpaths`, Jest's `testPathIgnorePatterns`, ...). A test file is
-    one by name (Python, `x.test.js` / `x.spec.ts`, `x_test.go`, `FooTest.java`) or the file a failing
-    test of the session lives in. Adding a new test, only adding lines to one (a print, a comment), or
+    one by the shared rule of `verinoda/testcode.py` (Python, `x.test.js` / `x.spec.ts`, `x_test.go`,
+    `FooTest.java`, `src/test/` and `src/gametest/`, ...) or the file a failing test of the session lives in. Adding a new test, only adding lines to one (a print, a comment), or
     a change of formatting alone (the file's syntax tree unchanged; an assertion line whose statement
     is the same after parsing) is not flagged. "An assertion or expected value" = a removed/changed
     line matching assertion forms (`assert`, `self.assert*`, `expect(`, `assertThat`, `assert_eq!`,
@@ -1538,7 +1538,9 @@ still not built.
   bound through an import); everything else is at most `strong_inference`, word heuristics `weak_inference`.
   These are the review's grades in the claims vocabulary; the findings are not stored as claims
   (**deviation**, 8.4). An empty concern says "no finding from rules: ..." with the rules that ran.
-- **Tests**: static reach (the tracer's selection rule; JUnit/GameTest methods by annotation), the tracer's
+- **Tests**: static reach (the tracer's selection rule; tests as `verinoda/testcode.py` recognises them:
+  JUnit/GameTest methods by annotation, vitest/jest `it()` calls, and calls through a dotted module path
+  such as `pkg.main.run()` that the graph does not hold), the tracer's
   latest complete run (tests that reached each changed Python function, labelled run-scoped and with its
   commit), `--observe` (runs the selected pytest tests under the tracer: reached, and selected-but-not-reaching
   in a complete trace) and `--run-tests` (the selected pytest tests through `experiments.run`); symbols no test

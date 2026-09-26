@@ -31,7 +31,7 @@ from functools import lru_cache
 from pathlib import Path, PurePosixPath
 
 from verinoda import index
-from verinoda.architecture_map import is_test_file
+from verinoda.testcode import is_test_file
 
 _is_test = lru_cache(maxsize=1 << 16)(is_test_file)  # asked for every link of every note
 RACY_NS = 2_000_000_000  # a file written this close to now may change again within the same clock tick

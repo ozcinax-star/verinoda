@@ -1728,6 +1728,7 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
 
 def _apply_edges(g: Graph, edges) -> int:
     g.__dict__.pop("_ppr_adj", None)  # search_index caches weighted neighbours per graph
+    g.__dict__.pop("_testcode_cache", None)  # and testcode the tests and the reach the graph lacks
     added = 0
     for u, v, d in edges:
         if u not in g.G or v not in g.G:

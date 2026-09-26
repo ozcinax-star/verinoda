@@ -43,7 +43,7 @@ import time
 from pathlib import Path
 
 from verinoda import evidence as evmod
-from verinoda import experiments, failsig, looprules, treestate
+from verinoda import experiments, failsig, looprules, testcode, treestate
 from verinoda.paths import load_config, runs_dir
 from verinoda.store import Store, new_id, now
 
@@ -716,7 +716,7 @@ def _questions(cur: dict, prev: dict | None, ev: dict, hist: list[dict] | None =
     code_side = []
     for f in ((prev or {}).get("signature") or {}).get("failures") or []:
         # the code under test: the innermost frame outside test files, else where the test itself failed
-        code = [fr for fr in f.get("frames") or [] if fr.get("path") and not treestate.is_test_file(fr["path"])
+        code = [fr for fr in f.get("frames") or [] if fr.get("path") and not testcode.is_test_file(fr["path"])
                 and fr["path"] not in test_paths]
         if code:
             fr = code[-1]
@@ -951,7 +951,7 @@ def _suspects(repo: Path, sess: dict, prior: list[dict], cur: dict) -> list[dict
     """Traceback symbols and symbols changed since the last passing state (else since the base), with evidence;
     a Python function that a complete trace saw called nowhere in the run (no test, not at import time, no
     child process started) is marked ruled out."""
-    is_test_path = treestate.is_test_file
+    is_test_path = testcode.is_test_file
     found: dict[tuple[str, str], dict] = {}
     functions: set[tuple[str, str]] = set()  # changed Python functions: the only suspects a trace can rule out
 

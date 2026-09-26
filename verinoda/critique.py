@@ -777,8 +777,8 @@ def challenge(store: Store, repo: Path, cid: str, *, graph=None, actor: str = "c
         else:
             rels = {f for f in claim_files(store, c) | dep_paths if f in old or (repo / f).is_file()}
             if tests_watched:  # the set of test files is part of this claim: list them, hash only them
-                from verinoda.architecture_map import is_test_file
                 from verinoda.snapshot import list_files
+                from verinoda.testcode import is_test_file
 
                 rels |= {f for f in list_files(repo) if is_test_file(f)} | {f for f in old if is_test_file(f)}
             cur = _claim_file_hashes(repo, rels)
