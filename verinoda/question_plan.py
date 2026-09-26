@@ -551,6 +551,11 @@ def clause_cues(text: str, lexicon=None) -> list[dict]:
     # code does, a usage verb): the clause keeps its other intents
     if "decide" in found and not asks_for_choice(text) and (_decide_vetoed(text) or _enough_only(text)):
         del found["decide"]
+    # "how does the renderer decide which passages fit?": the verb of a mechanism, not "what decides / controls
+    # X" (a setting); the clause is a flow question
+    if "config" in found and "flow" in found and re.fullmatch(r"decides?|determines?|controls?", found["config"]["cue"]) \
+            and re.search(r"\bhow (?:does|do|is|are)\b[^?.!]*\b(?:decide|determine|control)\b", low):
+        del found["config"]
     # "who calls X" / "X kimler tarafından çağrılıyor": the call verb is the callers cue, not a flow one
     if "callers" in found and "flow" in found and \
             re.fullmatch(r"calls?|called|cagir\w*|cagri\w*", found["flow"]["cue"]):
@@ -890,6 +895,16 @@ def _match_string(g, ix: _Index, cand: str) -> list[tuple[str, float, str]]:
                 for v, _ in g.out_edges(n, {"method"}):
                     if _bare(g.label(v)) == meth:
                         put(v, "qualified")
+        # `naming.resolve`, `verinoda.naming.resolve`: a function of the module that file names
+        mod = c.rpartition(".")[0]
+        stem = mod.rpartition(".")[2]
+        for ext in _CODE_EXTS:
+            for f in ix.by_base.get(f"{stem}.{ext}", ()):
+                if not f[:-len(ext) - 1].endswith(mod.replace(".", "/")):
+                    continue
+                for n in g.symbols_in(f):
+                    if _bare(g.label(n)) == meth:
+                        put(n, "qualified")
     bare = _bare(c)
     for n in ix.by_bare.get(bare, ()):
         put(n, "exact_label" if n not in ix.prose else "text_hit")

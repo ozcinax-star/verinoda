@@ -78,6 +78,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D55 | English questions over Turkish-named code | implemented | Built 2026-09-26 (section 28): a symbol's leading comment is its own search text (schema 5); the seed dictionary read backwards with Turkish endings; 16 generic seed words. 30 mixed questions: top-3 8 -> 18 (English 0 -> 8). fastbench: analyze and text unchanged, JSON retrieval -4 facts. Not done: comment-learned pairs, a Turkish stemmer in the tokenizer. |
 | D56 | An analysis said once | implemented | Built 2026-09-26 (section 29): changed files listed once, uncertainties without repeats, six context claims, critique clipped; analyze facts unchanged, -1.6 % characters. Smaller passage budgets measured and dropped (facts lost). |
 | D57 | Java overloads; answers read as a person would | implemented | Built 2026-09-27 (section 30): each Java overload is its own node and a call binds to the overload its argument count fits; `when`, `trace` and name lookups take the whole overload group; "how does X work" with one subject is answered by what X calls (inference), entry-to-storage paths are matched by node, not label; a storage question gets the entry-to-storage paths through its own code; impact names the callers of the method asked about; a symbol's doc comment above its span prints where it is; the JSON answer keeps room for the next two candidates. JSON retrieve facts 253 -> 262, text and analyze unchanged. |
+| D58 | Less noise in an answer | implemented | Built 2026-09-27 (section 31): context the critique refuted is counted, not printed; a changed file is an unknown only when it spells a name that looks like one (not a plain word that happens to name a function); "how does X decide ..." is a mechanism, not a setting; `module.function` links to that module's function; no empty quote claims. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3324,6 +3325,39 @@ fastbench, fresh indexes built by each code (fb_base57 / fb_new57b): text and an
 JSON retrieve 253 -> 262 (the `more` room: +9, no loss), characters within 0.2 %. The first expansion filter
 (every route) lost a fact where a lexicon identifier's part (`not` of `not_a_forge`) mattered: it applies to stems
 and prefixes only. The TR/EN ranking set (bench_tr) stays at top-3 18/30.
+
+## 31. Less noise in an answer (D58, 2026-09-27)
+
+### 31.1 Why
+
+Asking Verinoda about its own code with a working tree ahead of the index ("how does the text answer of query
+decide which passages fit the character budget?", "which tests cover naming.resolve?") showed:
+
+- four unknowns "what does .github/workflows/release.yml (changed since the index) do with `query`?": the plain
+  words "query" and "text" had linked to functions of those names, and every changed file spells them;
+- context claims the critique itself had refuted ("`test_...()` reads environment variable X" -> contradicted),
+  each with its critique line: the reader learns nothing about the question from them;
+- "how does X decide ..." read as a configuration question ("what decides / controls X"), answered with
+  environment variables;
+- `naming.resolve` not linked by its name ("no symbol in the index is named `naming.resolve`"), although
+  `verinoda trace` resolves it;
+- a claim "`naming.py:210-212` contains: " with nothing quoted (the lines had moved in a changed file).
+
+### 31.2 Decisions
+
+- The stale-file guard keeps a name the question linked only when it looks like an identifier (an underscore, a
+  digit or an inner capital) or is a carried subject; a name written as code keeps its own path.
+- A contradicted claim that is not an answer is counted after the context ("+N context claim(s) the critique
+  refuted"), not printed, and neither is its critique line; `--json` has them.
+- "how does/do/is ... decide/determine/control" drops the config cue when the clause is also a flow question.
+- The linker matches `module.function` and `package.module.function` to the function of the file that module
+  names ("qualified", a name tier).
+- A module-block claim with no text to quote is not made.
+
+### 31.3 Measured
+
+fastbench on the same indexes: analyze facts 318 -> 317, characters -0.3 %; the fact lost matched only a token
+inside a refuted claim about a test file (the fact's own lines are elsewhere): a scorer artifact, kept as measured.
 
 ## Sources
 

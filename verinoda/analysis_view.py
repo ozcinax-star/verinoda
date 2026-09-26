@@ -344,18 +344,25 @@ def render_text(res: dict) -> str:
             out.append("  " + _unknown(u))
     hidden = shown_by_passages(res)
     rest = [c for c in claims.values() if c["id"] not in printed and c["id"] not in hidden]
-    if rest or hidden:
+    # context the critique refuted on the way is not part of the answer: counted, not printed (nor its critique)
+    refuted = {c["id"] for c in rest if c.get("status") == "contradicted"} if printed else set()
+    rest = [c for c in rest if c["id"] not in refuted]
+    if rest or hidden or refuted:
         out.append("context (found on the way; not what answers):" if printed else "claims:")
         shown = rest if not printed else rest[:CONTEXT_SHOWN]
         out += ["  " + claim_line(c) for c in shown]
         if len(rest) > len(shown):
             out.append(f"  +{len(rest) - len(shown)} more context claim(s) (--json lists them)")
+        if refuted:
+            out.append(f"  +{len(refuted)} context claim(s) the critique refuted (--json lists them)")
         if hidden:
             out.append(f"  +{len(hidden)} verified claim(s) about lines the passages below print (--json lists them)")
     loose = [u for u in unknowns if not u.get("sub_question")]
     if loose:
         out += [_unknown(u) for u in loose]
     for c in res.get("critique") or []:
+        if c.get("claim") in refuted:
+            continue
         out.append(f"critique {c['claim']}: {c['before']} -> {c['after']}  "
                    + "; ".join((c.get("fails") or []) + (c.get("warns") or []))[:CRITIQUE_CHARS])
     exhausted = (res.get("usage") or {}).get("exhausted")

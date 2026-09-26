@@ -1008,6 +1008,8 @@ def _context_claims(ctx: _Ctx, sub: _Sub, raw_items: list[dict]) -> None:
                 continue
             a, b = it["lines"]
             first = next((ln.strip() for ln in (it["excerpt"] or "").splitlines() if ln.strip()), "")
+            if not first:  # nothing to quote (the lines moved in a file changed since the index): no claim
+                continue
             _mark_context(ctx, sub, it, rec.claim(f"{it['file']}:{a}" + (f"-{b}" if b != a else "") + f" contains: {first[:120]}",
                                                   kind="location", status="statically_verified",
                                                   evidence=[(_src_ev(repo, it["file"], a, b, commit), "supports")],
@@ -2304,14 +2306,16 @@ def _stale_guard(ctx: _Ctx, sub: _Sub, links: list[dict]) -> None:
     if not stale:
         return
     g = ctx.g
-    nodes = list(sub.subject_nodes)
-    for lk in links:
-        if lk.get("status") in ("linked", "weak", "ambiguous"):
-            nodes += qp.mention_nodes(lk)
+    carried = list(sub.subject_nodes)
+    linked = [n for lk in links if lk.get("status") in ("linked", "weak", "ambiguous") for n in qp.mention_nodes(lk)]
     names = []
-    for n in nodes:
+    for n in carried + linked:
         if n in g.G and not g.is_file_node(n):
             bare = qp._bare(g.label(n))
+            # a plain word the question used ("query", "text") that happened to name a function is spelled by
+            # every changed file: only a name that looks like one (or a carried subject) says the file is about it
+            if n not in carried and not re.search(r"[_\dA-Z]", bare[1:]):
+                continue
             if len(bare) >= 3 and bare not in names:
                 names.append(bare)
     for lk in links:
