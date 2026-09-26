@@ -90,6 +90,55 @@ holds indexed files once; a file is hashed only when its size or time moved.
 
 Not measured: a model in the loop; the background update's effect on the next question's latency.
 
+### Review of the branch (reviewer-b) and its fixes
+
+A review of this branch reproduced eleven findings on copies of Verinoda's tree (2,260 files) and of
+Python's standard library (2,305 files, 79,535 nodes); DESIGN.md section 8.5 lists them. Each is
+fixed with a regression test in `tests/test_exact_and_fresh.py`. On the reviewer's repros, both
+copies indexed from scratch by the fixed code:
+
+| repro (reviewer-b) | before the fixes | after |
+|---|---|---|
+| `map --view impact --target call_soon` (standard library) | resolved to a test's nested helper (test_tasks.py:2218), 0 affected, nothing unresolved, exit 0, no `resolution` | `ambiguous`: asyncio/base_events.py:762 and asyncio/events.py:264 listed, the test's helper set aside, exit 2 |
+| `_run_once`, `call_later` (standard library) | test_events.py:1712 / test_tasks.py:1626 (nested test helpers) | `_run_once`: `BaseEventLoop._run_once` (base_events.py:1874), the test's two set aside; `call_later`: ambiguous between the two methods |
+| `node_inspect` / `trace` / impact of `update` (Verinoda) | the Apex fixture's DML statement (tests_upstream/fixtures/sample.cls:22) | `ambiguous` among five product definitions; three in the detected copy and the fixture set aside |
+| `main` (Verinoda) | the Fortran fixture (sample.f90:62) over 24 `main()` | `ambiguous` among 10; 5 in the copy and 9 in tests/fixtures set aside |
+| background update on a project shipping `.verinoda/index/verinoda/__main__.py` | the project's module ran (`EVIL_RAN.txt` written) | the server's own Verinoda runs (`-I`, temp folder); nothing of the project is imported |
+| comment-only edit to server.py, then `query "where is MAX_RESPONSE_CHARS set ..."` | "not in the index yet ... the passages below are not about it" | only "1 file(s) changed since the index"; `trace cap_response MAX_RESPONSE_CHARS`: `not_a_symbol` with where it occurs, not "run update" |
+| a nested git repository in Verinoda's tree | 5 files "changed since the index", `update` could not clear them | 0 |
+| untracked `build/lib/foo.py`, `dist/pkg-1.0.tar.gz` (standard library) | 2 files, `update` a noop, the note stayed | 0 |
+| `analyze "what calls split_identifier?"` after adding a caller to textnorm.py (refresh skipped) | `met`, one generic unknown | `met_with_inference`; unknown "verinoda/textnorm.py:297 spells `split_identifier` ... not in this answer" |
+| `map --view dataflow` (Verinoda, with the detected copy) | all 20 paths start in the copy | 0 of 20; the copy's 97 entry points listed after the project's, marked `in` |
+| `node_inspect` of a function added to an edited file | `not_indexed` plus a similar-name candidate | `not_indexed`, no candidates (impact too) |
+| `decide check` while another build runs | checked the previous graph: ok, exit 0 | waits up to 120 s; still busy: no_edge `unknown`, exit 2 |
+
+**Answers.** fastbench on the eight public sets against the main run of the day
+(`scratchpad/fb/int0925c.json`, `cmp_ab.py`): 0 differences on 86 questions x 3 approaches,
+negatives unchanged (private_mod was not run). The agent persona's ten out-of-sample questions on the
+two copies: query text 14/32, query JSON 16/32, analyze JSON 14/32, analyze text 10/32, every
+question and approach equal to main's run.
+
+**Cold CLI time on the standard library copy** (79,535 nodes; interleaved cold processes, the fixed
+branch and the main code each on its own copy, 5 runs each, medians; a loaded machine):
+
+| command | main | fixed branch | first version of the branch (the review's run) |
+|---|---|---|---|
+| `trace BaseEventLoop.run_forever BaseEventLoop._run_once` | 3.14 s | 3.65 s (1.16x) | 1.49x |
+| `trace BaseEventLoop.run_forever frob_unknown_name` | 14.53 s | 7.38 s (0.51x) | 1.06x |
+| `map --view impact --target BaseEventLoop.call_soon` | 2.96 s | 3.27 s (1.10x) | 1.77x |
+| `query "where is BaseEventLoop.call_soon defined?"` | 3.68 s | 4.33 s (1.18x) | 0.89x |
+
+The query path is unchanged but for the freshness check; an earlier run of the same comparison,
+during the fixes, gave 0.86x for it (and 1.21x / 0.82x / 1.16x for the other three): at this load
+the medians move by about 0.5 s between runs.
+
+In one process on the same graph (after load): the exact-name lookup is built in 0.3 s (question_plan's
+linking index, which the first version built on the first exact lookup, took about 4 s there);
+resolving `BaseEventLoop.run_forever` then takes 0.02 s, `call_soon` 0.05 s; the freshness check
+0.04 s. A code name that names nothing still pays the existence check and the nearest-name search
+(the linking index and a scan of the files, 5-8 s on the standard library copy), where main returned
+nothing for it; plain words run the fuzzy scorer once instead of twice.
+
 ## Update 2026-09-25: debug ledger (debugloops_v1)
 
 Result files: `benchmarks/results/debugloops-2026-09-25/` (its README says how they were produced).
