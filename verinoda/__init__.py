@@ -7,4 +7,4 @@ try:
 
     __version__ = _v("verinoda")
 except Exception:  # pragma: no cover - running from a source tree
-    __version__ = "0.3.1"
+    __version__ = "0.3.2"

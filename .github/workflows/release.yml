@@ -41,7 +41,9 @@ jobs:
             echo "tag ${GITHUB_REF_NAME} does not match pyproject.toml version $V" >&2; exit 1
           fi
       - name: stamp the build with its commit (verinoda --version names it; not in git)
-        run: echo "{\"commit\": \"$GITHUB_SHA\", \"ref\": \"$GITHUB_REF_NAME\"}" > verinoda/data/build_stamp.json
+        run: |
+          echo "{\"commit\": \"$GITHUB_SHA\", \"ref\": \"$GITHUB_REF_NAME\"}" > verinoda/data/build_stamp.json
+          cat verinoda/data/build_stamp.json
       - name: build sdist and wheel
         run: uv build --out-dir dist
       - name: metadata check
