@@ -223,7 +223,10 @@ def test_a_listener_caller_is_named(fixtures):
     assert s["status"] == "met_with_inference"
     assert "1 call site unresolved: static/app.js:35" in _unknowns(s)
     s = _sub(analysis.analyze(st, repo, "What calls renderList?"))
-    assert s["status"] == "met"
+    # a JS call is strong_inference at most (D31: nothing binds the caller outside Python), so not "met"; but no
+    # call site is left unresolved here, unlike openPalette's
+    assert s["status"] == "met_with_inference"
+    assert "call site" not in _unknowns(s)
 
 
 def test_definitions_do_not_answer_which_code_uses_a_hook(fixtures):
@@ -285,7 +288,11 @@ def test_the_audit_on_the_fixture_cases(tmp_path):
     assert got["above_ceiling"] == 0
     # the ADR's quoted line negates ("never inside the call"): its claim is graded below verified (an entail
     # rule, not this gate), and the commit line that made it met before is not a reason
-    assert set(got["controls_lost_ids"]) <= {"pyloop-why-adr"}
+    # and outside Python a relation claim is strong_inference at most (D31), so a control in the JS or Java
+    # fixture is met_with_inference, never wrong
+    cases = {c["id"]: c for c in data["cases"]}
+    lost = {i for i in got["controls_lost_ids"] if cases[i]["project"] == "pyloop"}
+    assert lost <= {"pyloop-why-adr"}
 
 
 def test_audit_scoring():
