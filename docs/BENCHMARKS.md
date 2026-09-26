@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-26: case-distinct graph ids](#update-2026-09-26-case-distinct-graph-ids) · [Update 2026-09-26: check --diff with an absent name](#update-2026-09-26-check---diff-with-an-absent-name) · [Update 2026-09-26: honest verdicts (D39)](#update-2026-09-26-honest-verdicts-wrong-met-d39) · [Update 2026-09-26: JVM callbacks (D38)](#update-2026-09-26-jvm-callbacks-d38) · [Update 2026-09-26: the merged night, tokens against Graphify](#update-2026-09-26-the-merged-night-tokens-against-graphify) · [Update 2026-09-26: token wins](#update-2026-09-26-token-wins) · [Update 2026-09-26: exact names and a fresh index](#update-2026-09-26-exact-names-and-a-fresh-index-d37) · [Update 2026-09-26: never ok without looking](#update-2026-09-26-never-ok-without-looking) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-26: query ranking](#update-2026-09-26-query-ranking-d40) · [Update 2026-09-26: case-distinct graph ids](#update-2026-09-26-case-distinct-graph-ids) · [Update 2026-09-26: check --diff with an absent name](#update-2026-09-26-check---diff-with-an-absent-name) · [Update 2026-09-26: honest verdicts (D39)](#update-2026-09-26-honest-verdicts-wrong-met-d39) · [Update 2026-09-26: JVM callbacks (D38)](#update-2026-09-26-jvm-callbacks-d38) · [Update 2026-09-26: the merged night, tokens against Graphify](#update-2026-09-26-the-merged-night-tokens-against-graphify) · [Update 2026-09-26: token wins](#update-2026-09-26-token-wins) · [Update 2026-09-26: exact names and a fresh index](#update-2026-09-26-exact-names-and-a-fresh-index-d37) · [Update 2026-09-26: never ok without looking](#update-2026-09-26-never-ok-without-looking) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,37 @@ Sections: [Update 2026-09-26: case-distinct graph ids](#update-2026-09-26-case-d
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-26: query ranking (D40)
+
+The senior review found that `verinoda query` put tests first and ignored module names outside the benchmark
+sets (docs/DESIGN.md section 13). Four ranking rules changed: tests move just below the non-test code that
+matches the same question words (unless the question is about tests, callers or the impact of a change), a
+file or module the question names counts x2 (a plain word that is a file stem or package x1.3), a docstring
+that writes the question's words side by side counts more, and prefix / Turkish-stem expansions stay narrower.
+No index change.
+
+**Dev set** (in-sample: written for this change, 37 questions on a CPython `Lib` copy, upstream Graphify,
+Verinoda's own repository at 343a00d and the examples; gold file and symbol per question). Ranked list = the
+items of `verinoda query --json`, then `budget.more`:
+
+| metric | base 343a00d | this change |
+|---|---|---|
+| gold file first / top 3 / top 10 | 13 / 25 / 32 of 37 | 28 / 34 / 36 of 37 |
+| MRR (gold file) | 0.535 | 0.836 |
+| gold symbol in top 3 | 19/35 | 27/35 |
+| tests in the top 5 (34 questions not about tests) | 61/170 | 26/170 |
+| first result is a test | 10 of 34 | 1 of 34 |
+
+**Fastbench** (the 9 retrieval sets, 333 set x question x approach rows, analyze / query JSON / query text):
+no fact lost, 2 gained (`heldout_repoatlas` h05 JSON 0 -> 1, `orders_app_tr` q10 JSON 1 -> 2); negative facts
+unchanged. Private set: the same facts; a test is ranked first for 1 of its 16 questions not about tests (4
+before). Five variants that lost 1-4 facts were not kept (docs/DESIGN.md 10.3), among them multiplying test
+scores by 0.7 (-4). Warm query time did not change beyond noise. Result files, the dev set and its scorer:
+`benchmarks/results/query-ranking-2026-09-26/` (public sets only).
+
+**Not measured here.** The held-out question set (written by someone else, run after this change); agents with a
+model in the loop; languages other than Python, Java and Kotlin in the question sets.
 
 ## Update 2026-09-26: case-distinct graph ids
 

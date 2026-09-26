@@ -60,6 +60,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D37 | Exact names, one build at a time, freshness on every read (section 10) | implemented | Built 2026-09-26: `naming.resolve` for trace, impact and `node_inspect` (copies give way, ties listed), the copy rule in plan linking, the receiver pass bound to what a file can see, `buildlock` around scan/update, `freshness.check` on query/trace/map and the MCP read tools, analyze's refresh outside its budget (skipped with the stale files named when slow; MCP refreshes in the background). Tests from the evaluators' repros (`tests/test_exact_and_fresh.py`); the eight benchmark sets unchanged. Not done: per-file incremental update (the refresh is still a full rebuild). |
 | D38 | JVM callbacks and mod entry points | partial | Built 2026-09-26 (section 11): a Java / Kotlin method reference passed as an argument is a `registers` edge (never `calls`), stored in the receiver-call sidecar (version 3); `trace` follows it only when no call path exists, labelled `callback`; impact (map, UI, review dependents) follows it after the other edges, marked `registers (callback)`; a relation claim "A calls B" supported only by a method reference (source line, graph edge or a resolver answer) is graded `registers` (none); the map's entry points know fabric.mod.json, Fabric initializers, `@Mod`, `@EventBusSubscriber` / `@SubscribeEvent`, mixin handlers and registered callbacks, and its sinks JVM file writes, `NbtIo` and dirty flags. fastbench: 0 fact changes on all nine sets. Not built: `analyze` flow claims through callbacks, lambdas passed as callbacks, static initializer blocks, inherited targets. |
 | D39 | Honest verdicts | implemented | Built 2026-09-26 (section 12): `verinoda/verdict_gate.py` runs in `analyze` after the claims are made and only caps or refuses (definitions answer only locate questions; copies and reference trees never make `met`; unresolved call sites are named and cap callers; a commit line is not a reason; set differences are `not_supported`). Verdict audit (`verinoda benchmark verdict-audit`, 17 traps + 22 controls on public material, split before tuning, written by the rule author): wrong met dev 9/23 -> 0/23, held-out 8/16 -> 1/16; controls kept dev 13 -> 12, held-out 7 -> 7. No fastbench fact lost. Not done: reasons in comments, a computed set difference, synonyms. |
+| D40 | Query ranking: tests yield to the code they test, named files and modules, docstring phrases, narrower expansions | implemented | Built 2026-09-26 (section 13) in `search_index.rank` / `analyze_query`, no index change. Dev set (37 questions, written for the change: in-sample): gold file first 13 -> 28, MRR 0.535 -> 0.836, tests in the top 5 of questions not about tests 61/170 -> 26/170. Fastbench: no fact lost, 2 gained. Not done: common English words that are module names get the weak plain-word boost; a lowercase owner still accepts methods (`asyncio.run`). |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -2505,6 +2506,116 @@ of the CPython standard library, 79,535 nodes) found, and the fixer changed:
 - Set differences are refused, not computed (mixin configs, registries, locale keys would be the first).
 - The ADR negation grading above is an entail rule (D31), outside this gate; fixing it would raise verdicts and
   was left to that rule's owner.
+
+## 13. Query ranking (D40, 2026-09-26)
+
+### 13.1 Findings that drive the design
+
+The senior review (gap 10, high) found that `verinoda query` ranks tests first and ignores module names on
+code outside the benchmark sets:
+
+- CPython standard library copy, 8 new questions: the right answer first in 2, in the top 3 in 3, missing in 3.
+  "where does subprocess on Windows build the command line string" gave `test/test_cmd_line.py`, `cmd.py`,
+  `pdb.py`, not `list2cmdline` (whose docstring says "command line string").
+- Verinoda's own repository: a test at rank 1 or 2 in 4 of 4 questions. Upstream Graphify: a test first even with
+  `graphify/cluster.py` written in the question.
+- Out of sample (agent persona): 127 of 201 listed standard-library items were tests. `http.client.HTTPConnection.request`
+  gave every symbol named `client` the score of a named symbol, and `client -> cli`, `request -> req` prefix
+  expansions flooded the list.
+- A large Minecraft mod (private): a test class first for a "how does X work" question; an inflected Turkish
+  word expanded to unrelated names that begin with its four-letter stem, and to a three-letter prefix of it.
+- A flat 0.8 factor on test files had been tried and reverted (2026-09-24: heldout +3, glow_mod -2,
+  orders_app_tr -1 facts).
+
+Why: test names repeat the words of the code they test (`test_update_after_edit_marks_claim_stale_via_cli`,
+`TestTemporaryDirectory.test_del_on_shutdown`), and BM25F's name field rewards that. The path field (weight
+0.5) is too weak for a module the question names, and a dotted name's module parts were taken for symbol names.
+
+### 13.2 Decisions
+
+All in `search_index.rank` and `analyze_query`; no index change (no re-index needed).
+
+- **Tests yield to the code that matches the same words** (`_tests_yield`). For a question that is not about
+  tests and not about callers or the impact of a change, a test function or class among the 180 best-scored
+  units moves just below the best non-test code unit that scores less than it, but at least 0.7 of its score,
+  and matches at least 0.75 of the test's matched question words (weighted by idf; a joined pair such as
+  `temporary_directory` stands for both of its words). A test with no such unit keeps its score: it is the only
+  place those words meet, or far ahead of any code that has them. It runs after the graph prior, so tests still
+  seed the PageRank that reaches the code they call. Module-level blocks of test files (fixture text) keep their
+  rank.
+- **What the question asks** (`asks_about_tests`, `asks_about_callers`, English and Turkish). A question about
+  tests (tests, coverage, `HeatMathTest`, `hangi testler`) or about callers / impact (who calls, what calls,
+  affected, retest, `if ... changes`, `kimler tarafından çağrılıyor`, `değişirse`): tests keep their rank there,
+  since they are the answer, or callers and what to re-run. A question about tests also gets the test file of a
+  module it names (`shutil.copytree` -> `test_shutil.py`).
+- **Files and modules the question names** (`_mentions`). Units of a file the question writes as a path
+  (`graphify/cluster.py`, `HeatMath.kt`) or a dotted module (`http.client`, `search_index.rank`, `json.dumps` ->
+  the `json` package) score x2.0, and the result says "question names ...". The module parts of a dotted name are
+  no longer symbol names (`client` in `http.client` is not every `client()`); each later part is owned by the one
+  before it (`HTTPConnection` by module `client`). A plain word that is the stem of at most 3 code files that are
+  not tests, or a Python package (`subprocess`, `logging's`), scores x1.3 with no reason line. A folder or package
+  that holds more than a quarter of the indexed files (the project itself) names nothing. The factors apply after
+  the scale is set, so a boost does not push every other unit down.
+- **Docstring phrases** (`_doc_phrases`). A non-test symbol among the 300 best whose docstring (first paragraph)
+  writes two adjacent question words side by side (one filler word allowed) scores x1.25 per pair, at most two
+  pairs. Test docstrings do not count (they state the scenario in the code's words), and a question about tests
+  gets no docstring boost.
+- **Narrower expansions** (`analyze_query`, `_stem_terms`). No prefix or abbreviation expansion of an expansion
+  (`paramet -> param`). No corpus-prefix expansion of a word the code itself names things with (`client`,
+  `request`, `connection`), unless the rest is also a name (`emberforge` -> `ember` + `forge`). No corpus-prefix
+  expansion of an inflected Turkish word (`parayı` -> `par`). A four-letter Turkish stem reaches a corpus term only
+  when the rest is Turkish inflection (`textnorm.TR_SUFFIXES`), not the looser suffix chain that also took single
+  consonants (`parameter` and `parallel` for `para`).
+
+### 13.3 Measurements
+
+A dev set of 37 questions (16 on a CPython `Lib` copy, 5 on upstream Graphify, 11 on Verinoda's own repository at
+343a00d, 5 on the examples; 3 ask about tests), written for this change with gold files and symbols; scored with
+the query as `verinoda query --json` returns it (items, then `budget.more`). Base 343a00d -> this branch:
+
+| metric | base | branch |
+|---|---|---|
+| gold file first | 13/37 | 28/37 |
+| gold file in top 3 | 25/37 | 34/37 |
+| gold file in top 10 | 32/37 | 36/37 |
+| MRR (gold file) | 0.535 | 0.836 |
+| gold symbol in top 3 | 19/35 | 27/35 |
+| tests in the top 5, 34 questions not about tests | 61/170 | 26/170 |
+| questions whose first result is a test | 10/34 | 1/34 |
+
+The dev set is in-sample: the rules were written while looking at it. A held-out set written by someone else is
+run after this change (not reported here).
+
+Fastbench (9 sets, 333 set x question x approach rows, against integrate/0925): no fact lost, 2 gained
+(`heldout_repoatlas` h05 JSON 0 -> 1, `orders_app_tr` q10 JSON 1 -> 2), negatives unchanged. On the private mod
+set the facts are unchanged, and a test is ranked first for 1 of its 16 questions not about tests (4 before).
+Warm `retrieve` time on the CPython copy and Verinoda's repository did not change beyond noise (median
+0.30-0.35 s vs 0.27-0.31 s, and 0.250 s vs 0.246 s).
+
+Variants measured and not kept (fastbench against the same baseline):
+
+- tests multiplied by 0.7 when covered (instead of moving just below the covering code): dev a little better
+  (top 1 29/37, tests in top 5 20/170), fastbench -4 facts (`heldout_repoatlas` h02 x3, `orders_app` q01 JSON)
+  and +5;
+- code yielding to tests on questions about tests: -1 (`graphify_core_tr` g09 JSON: the code item carries the
+  `called_by` list of the tests);
+- docstring boost on tests: a test ranked first on `heldout_repoatlas` h02 (-2);
+- boosts before the scale was set: -1 (`graphify_core` g01 JSON);
+- no prefix expansion of an identifier word at all: -1 (`forge_mod` q03 JSON, `emberforge -> ember`).
+
+### 13.4 Not done / limits
+
+- A plain word that is also an English word names its module when a file has that stem (`string`, `copy`,
+  `select` in the standard library): x1.3 only, but it is noise there.
+- Test files are what `is_test_file` says (the night/test-predicate branch replaces it); a test helper outside
+  a test folder is code.
+- A dotted name whose first part is a class (`Wisp.spawn`) boosts no file; the owner rule picks the method.
+  A lowercase owner still accepts a method of any class in that module or package (`asyncio.run` also matches
+  `REPLThread.run` in `asyncio/__main__.py`).
+- Vocabulary gaps stay: "allowed" does not reach `allowlist`, "choose a temporary directory" does not reach
+  `_get_default_tempdir`, and a Turkish question about the search index still finds the Turkish overview first.
+- Copies of the project inside it (upstream Graphify's `worked/mixed-corpus/raw/`) still rank next to the real
+  code unless the question writes the path.
 
 ## Sources
 
