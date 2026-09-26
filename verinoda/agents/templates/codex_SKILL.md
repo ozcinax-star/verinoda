@@ -52,9 +52,9 @@ tools (query, analyze, inspect/trace/map, claims, index_update, code_check, deci
 the rest. The CLI prints plain text written for you: read it as it is. Add `--json` only for a field the
 text leaves out (every unknown site of `check`, an analysis' full record): JSON costs 2-5x the tokens.
 
-If the CLI fails inside the Codex sandbox with `PermissionError` or `ModuleNotFoundError` while importing
-`verinoda` (Windows, uv's default hardlinks or an editable install), use the MCP tools (they run outside the
-sandbox) and tell the user `verinoda doctor` explains the fix (`uv tool install --link-mode copy ...`).
+If the CLI fails inside the Codex sandbox (`PermissionError`/`ModuleNotFoundError` importing `verinoda`), use the
+MCP tools (they run outside it); `verinoda doctor` tells the user the fix. A tool named below that the server does
+not list (core profile): ask the user for `"mcp": {"profile": "full"}` in `.verinoda/config.json` and a restart.
 
 ## Evidence discipline (non-negotiable)
 
