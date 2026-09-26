@@ -4,15 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 # Formerly developed under the working name "RepoAtlas" (see docs/NAMING.md).
-# Not published to a package index yet.
+# Published by .github/workflows/release.yml (a tag v<version>); docs/RELEASING.md.
 name = "verinoda"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Evidence-first codebase analysis for coding agents: knowledge graph, architecture map, claims with evidence, critique and experiments. Derived from Graphify."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "LICENSE-MIT", "NOTICE"]
 requires-python = ">=3.10"
 keywords = ["code-analysis", "knowledge-graph", "claude-code", "codex", "mcp", "evidence", "tree-sitter"]
+authors = [{ name = "Verinoda contributors" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Quality Assurance",
+]
 dependencies = [
     "networkx>=3.4",
     "numpy>=1.21",
@@ -173,6 +188,13 @@ all = [
     "tree-sitter-commonlisp",
     "robotframework>=4.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ozcinax-star/verinoda"
+Documentation = "https://github.com/ozcinax-star/verinoda#readme"
+Source = "https://github.com/ozcinax-star/verinoda"
+Issues = "https://github.com/ozcinax-star/verinoda/issues"
+Changelog = "https://github.com/ozcinax-star/verinoda/blob/main/docs/UPGRADING.md"
 
 [project.scripts]
 verinoda = "verinoda.cli:main"

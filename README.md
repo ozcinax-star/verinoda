@@ -106,28 +106,41 @@ are pinned to the exact version the user meant before anything is compared.
 > (commit `20a20d30`, Apache-2.0). It is an independent project, **not** an
 > official Graphify release. See [docs/UPSTREAM.md](docs/UPSTREAM.md).
 > The name "Verinoda" was checked as free on PyPI, npm and GitHub on 2026-09-23 (see
-> [docs/NAMING.md](docs/NAMING.md)). Nothing has been published to a package index.
+> [docs/NAMING.md](docs/NAMING.md)) and again free on 2026-09-26. Packages are published from release tags
+> ([docs/RELEASING.md](docs/RELEASING.md)); until the first tag, nothing is on PyPI or npm.
 
 ## Install
 
-No git and no Python needed beforehand; [uv](https://docs.astral.sh/uv/) installs
-Verinoda as an isolated tool and downloads a suitable Python if there is none.
-
-**Windows (PowerShell or cmd)**
-
-```powershell
-winget install --id astral-sh.uv -e   # only if `uv --version` does not work yet; then open a new terminal
-uv tool install --force --reinstall-package verinoda --link-mode copy "verinoda[precise] @ https://github.com/ozcinax-star/verinoda/archive/main.zip"
-uv tool update-shell                  # once: puts verinoda on PATH for new terminals
-```
-
-**macOS / Linux (or Git Bash on Windows)**
+Verinoda is a Python package (`verinoda` on PyPI, with a small `verinoda` wrapper on npm). Pick one:
 
 ```bash
+uv tool install --link-mode copy "verinoda[precise]"   # recommended: isolated, uv fetches a Python if needed
+pipx install "verinoda[precise]"                       # the same with pipx
+pip install "verinoda[precise]"                        # into the current environment (Python 3.10+)
+npx -y verinoda --version                              # Node users: runs the PyPI release through uvx / pipx / a private venv
+uvx --from "verinoda[precise]" verinoda --version      # run once without installing
+```
+
+On Windows, get uv first with `winget install --id astral-sh.uv -e` (then open a new terminal) and run
+`uv tool update-shell` once so `verinoda` is on PATH. `[precise]` adds the optional precise call-site resolver
+(jedi); leave it out for a smaller install. Upgrade with `uv tool upgrade verinoda`, `pipx upgrade verinoda` or
+`pip install -U verinoda`. Releases are published from tags by `.github/workflows/release.yml`
+([docs/RELEASING.md](docs/RELEASING.md)); if `pip` says there is no matching distribution, the first release
+is not out yet - use the development version below.
+
+**The development version (main)**, straight from GitHub:
+
+```powershell
+# Windows (PowerShell or cmd)
+uv tool install --force --reinstall-package verinoda --link-mode copy "verinoda[precise] @ https://github.com/ozcinax-star/verinoda/archive/main.zip"
+```
+
+```bash
+# macOS / Linux (or Git Bash on Windows)
 curl -LsSf https://raw.githubusercontent.com/ozcinax-star/verinoda/main/install.sh | sh
 ```
 
-Both install from the GitHub archive with the optional precise resolver and copy files
+Both development-version commands install from the GitHub archive with the optional precise resolver and copy files
 instead of hardlinking them (so sandboxed agents such as Codex can import the package).
 Run the same `uv tool install ...` line, or the script, again to upgrade. The script
 ([install.sh](install.sh), read it first) installs uv if it is missing, runs that
@@ -170,10 +183,10 @@ Graphify (`graphifyy`) is **not** required; the extractor is part of this
 package.
 
 ```bash
-# from a checkout or a built wheel (not on PyPI)
+# from a checkout or a wheel you built (uv build)
 uv tool install --link-mode copy .                                   # or a wheel path
-pipx install ./dist/verinoda-0.1.0.dev0-py3-none-any.whl
-pip install ./dist/verinoda-0.1.0.dev0-py3-none-any.whl             # into an existing venv
+pipx install ./dist/verinoda-*-py3-none-any.whl
+pip install ./dist/verinoda-*-py3-none-any.whl                      # into an existing venv
 
 # optional: precise call-site resolution (jedi)
 uv tool install --link-mode copy --with "jedi>=0.19.2,<0.21" .
@@ -641,6 +654,7 @@ in this project's environment?
 - [docs/AGENT-VERIFICATION.md](docs/AGENT-VERIFICATION.md) — what was verified with the real agents
 - [docs/GENEL-BAKIS.md](docs/GENEL-BAKIS.md) — Türkçe genel bakış (ürün sahibi için)
 - [docs/NAMING.md](docs/NAMING.md) — name availability
+- [docs/RELEASING.md](docs/RELEASING.md) — how a release reaches PyPI, npm and GitHub
 
 ## License
 
