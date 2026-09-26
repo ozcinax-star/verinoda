@@ -477,7 +477,9 @@ def test_the_command_bar_frames_a_region_shows_an_impact_and_asks(page, site):
     say(f"region {region}")
     page.wait(f"window.__verinoda.g3.region && document.querySelector('#hud strong').textContent === {json.dumps(region)}")
     say("impact spawn")
-    page.wait("document.querySelector('#hud strong') && /Impact/.test(document.querySelector('#hud strong').textContent)")
+    # the impact is computed server-side: slow on a loaded runner (timed out at 15 s on Windows, Python 3.10)
+    page.wait("document.querySelector('#hud strong') && /Impact/.test(document.querySelector('#hud strong').textContent)",
+              timeout=45)
     assert page.js("window.__verinoda.g3.region.size") > 1
     say("how does a wisp spawn?")
     page.wait("location.hash.startsWith('#/q/')", timeout=45)  # the question runs a query server-side: slow on a loaded runner
