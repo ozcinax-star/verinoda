@@ -49,13 +49,13 @@ allowed-tools:
 
 Request: $ARGUMENTS
 
-When the user types `/verinoda <question>`, their question is the request above. When you
-loaded this skill on your own, the request may be empty: then work on the user's latest
-question about this repository, and if there is none, ask what they want to know.
+When the user types `/verinoda <question>`, their question is the request above. When you loaded this skill on
+your own, the request may be empty: then work on the user's latest question about this repository, and if there
+is none, ask what they want to know.
 
-Verinoda indexes the repository (AST, no LLM), answers questions as **claims with evidence**,
-critiques its own claims, and says **unknown** instead of guessing. Your job is to drive it,
-read its structured output, and report exactly what the evidence supports.
+Verinoda indexes the repository (AST, no LLM), answers questions as **claims with evidence**, critiques its own
+claims, and says **unknown** instead of guessing. Your job is to drive it, read its output, and report exactly
+what the evidence supports.
 
 ## When to use
 
@@ -77,10 +77,9 @@ For pure code-writing tasks skip the question workflow; the name check, the debu
 2. No index yet: `verinoda scan .` (local, no network, no LLM).
 3. Snapshot does not match the working tree: `verinoda update .`
 
-Commands find the project root from the working directory (nearest `.verinoda` or `.git`);
-pass `--repo <dir>` otherwise. The CLI command recorded at install time is `{{VERINODA_CLI}}`.
-If that does not run here (not on PATH, sandboxed shell), use the MCP tools: their server entry
-stores the absolute path of the installed program.
+Commands find the project root from the working directory (nearest `.verinoda` or `.git`); pass `--repo <dir>`
+otherwise. The CLI command recorded at install time is `{{VERINODA_CLI}}`. If that does not run here (not on PATH,
+sandboxed shell), use the MCP tools: their server entry stores the absolute path of the installed program.
 
 ## MCP tools
 
@@ -116,21 +115,18 @@ Rules:
 - Cite `path:line` (or `path:start-end`) for every statement, taken from the evidence locators.
 - Never present `weak_inference` or `unknown` as fact. Never invent a relation, call path,
   file, line, test result or benchmark number.
-- A graph edge alone is never verification: `trace` and `query` give leads; confirm them with
-  source lines (`analyze`, `claim add --source`, `verify`). Confirm your own sentence with a typed
-  claim (`--kind relation|config|location|order --symbol X`), one positive fact per claim ("A calls
-  B", "`F` calls `A` before `B`"): a negation, "only", a condition or bound, a count, call
-  arguments, a definition kind, another file or code name keeps it unverified. Plain text is at
-  most `weak_inference`; a quote (`"f.py:12 contains: <exact text>"`) verifies only the quoted
-  text. A `contradicted` result states its scope: correct the sentence, do not reword it.
+- A graph edge alone is never verification: `trace` and `query` give leads; confirm them with source lines (`analyze`,
+  `claim add --source`, `verify`). Confirm your own sentence with a typed claim (`--kind
+  relation|config|location|order --symbol X`), one positive fact per claim ("A calls B", "`F` calls `A` before `B`"):
+  a negation, "only", a condition or bound, a count, call arguments, a definition kind, another file or code name
+  keeps it unverified. Plain text is at most `weak_inference`; a quote (`"f.py:12 contains: <exact text>"`) verifies
+  only the quoted text. A `contradicted` result states its scope: correct the sentence, do not reword it.
 - A code name `plan check`/`trace`/`node_inspect` reports `not_found` does not exist (say so with
   `did_you_mean`); `not_indexed`: `update` first; `ambiguous`: pass `path::Name`. Never use a similar name.
-- Do not upgrade a status by wording. Change status only through Verinoda (`verify`,
-  `experiment run`, `claim add --source`, which downgrades a requested status the evidence
-  does not allow).
-- Heuristics are labelled: map views (impact included) carry `coverage.method` and
-  `coverage.limits`, and `analyze` shows the intent it guessed per sub-question. Repeat those limits when you
-  rely on them.
+- Do not upgrade a status by wording. Change status only through Verinoda (`verify`, `experiment run`, `claim add
+  --source`, which downgrades a requested status the evidence does not allow).
+- Heuristics are labelled: map views (impact included) carry `coverage.method` and `coverage.limits`, and `analyze`
+  shows the intent it guessed per sub-question. Repeat those limits when you rely on them.
 - If Verinoda returns `unknown`, report it with its `next_step`; do not fill the gap yourself.
 
 ## Understand the question first
@@ -147,19 +143,17 @@ For any question that is more than a name lookup, check your reading before anal
 4. Ask only the returned clarifications, with their options, using `AskUserQuestion`. Record each
    answer in the plan's `answers` (`clarification_id`, `choice`, `answered_by: "user"`), check again.
 5. `verinoda analyze --plan <file>` (MCP `analyze` with `plan_json`).
-6. Start the answer with "Understood as / Anladığım: ..." (`understood_as`), then one block per
-   sub-question with its verdict (`met`, `met_with_inference`, `unmet`, `not_supported`,
-   `blocked_by_clarification`, `human_decision_required`) and its claims and unknowns.
-   `human_decision_required` is a choice between options: never pick one yourself.
+6. Start with "Understood as / Anladığım: ..." (`understood_as`), then one block per sub-question with its verdict
+   (`met`, `met_with_inference`, `unmet`, `not_supported`, `blocked_by_clarification`, `human_decision_required`)
+   and its claims and unknowns. `human_decision_required` is a choice between options: never pick one yourself.
 
 ## References the user gives
 
-Whenever the message has links, repository or package names, versions, commits, PR/issue
-numbers, papers or docs, run `verinoda resolve "<message>"` (MCP `reference_resolve`)
-before researching or answering. Report each reference as `<name> @ <pin> (basis: <basis>)` and
-each mismatch on its own line. Never substitute the default branch for a version the user named.
-Ask the user only the `questions_for_user`. State every unresolved part with its `next_step`;
-read a pinned reference with `verinoda research --resolution <id> --reference-id <rN>`.
+Whenever the message has links, repository or package names, versions, commits, PR/issue numbers, papers or docs, run
+`verinoda resolve "<message>"` (MCP `reference_resolve`) before researching or answering. Report each reference as
+`<name> @ <pin> (basis: <basis>)` and each mismatch on its own line. Never substitute the default branch for a version
+the user named. Ask the user only the `questions_for_user`. State every unresolved part with its `next_step`; read a
+pinned reference with `verinoda research --resolution <id> --reference-id <rN>`.
 
 ## Decisions are the user's
 
@@ -188,9 +182,9 @@ verinoda plan check .verinoda/plans/plan-001.json
 verinoda analyze --plan .verinoda/plans/plan-001.json
 verinoda analyze "why is pricing separate from the service?" --run-tests
 verinoda analyze "which tests reach apply_discount?" --observe
+verinoda trace create_order save_order --mode any
 verinoda observe --for apply_discount
 verinoda resolve-call src/service.py:22 save
-verinoda trace create_order save_order --mode any
 verinoda claim show <claim-id>
 verinoda claim add "place_order calls validate_items" --kind relation --source src/service.py:20
 verinoda verify <claim-id> --run
@@ -265,19 +259,18 @@ it, then record `--observed-output out.txt --exit-code N -- <command>` (agent-re
 
 ## After editing code
 
-Run `verinoda update .` after you or the user change code. It re-indexes the changed files
-and marks claims whose evidence changed as `stale`; `verify` them again before relying on them.
-Until then reads say "N file(s) changed since the index" and analyze may say it was not refreshed.
-Before you finish a code change, run `verinoda decide check --changed` (MCP `decision_check`
-with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be
-superseded or the site waived; never edit, supersede or waive a decision record yourself. Exit 3
-(`unknown`): something was not checked (see `unknown`) - report that, never a pass.
-Before editing a function: `verinoda review --target FILE::NAME --change body|signature|remove` (MCP
-`change_review`), read `read_first` in order. Before saying done: `verinoda review` (`--run-tests`): report
-every concern and `unknown`; "no finding" never means safe, `tests.reach_unknown` is not "no test reaches it".
-After editing Python functions: `verinoda probe --changed` (MCP `change_probe`; `--property '<expr>'` for
-what the user asked). A difference is a behaviour change, not a bug: compare it with the request and show it. Say
-"no difference found in N inputs", never "verified"; refused/inconclusive is no pass; side effects only if agreed.
+Run `verinoda update .` after you or the user change code. It re-indexes the changed files and marks claims whose
+evidence changed as `stale`; `verify` them again before relying on them. Until then reads say "N file(s) changed
+since the index" and analyze may say it was not refreshed. Before you finish a code change, run `verinoda decide
+check --changed` (MCP `decision_check` with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the
+decision should be superseded or the site waived; never edit, supersede or waive a decision record yourself. Exit 3
+(`unknown`): something was not checked (see `unknown`) - report that, never a pass. Before editing a function:
+`verinoda review --target FILE::NAME --change body|signature|remove` (MCP `change_review`), read `read_first` in
+order. Before saying done: `verinoda review` (`--run-tests`): report every concern and `unknown`; "no finding" never
+means safe, `tests.reach_unknown` is not "no test reaches it". After editing Python functions: `verinoda probe
+--changed` (MCP `change_probe`; `--property '<expr>'` for what the user asked). A difference is a behaviour change,
+not a bug: compare it with the request and show it. Say "no difference found in N inputs", never "verified";
+refused/inconclusive is no pass; side effects only if agreed.
 
 ## Answer format
 

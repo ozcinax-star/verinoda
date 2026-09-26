@@ -78,13 +78,12 @@ Rules:
 - Cite `path:line` (or `path:start-end`) for every statement, taken from the evidence locators.
 - Never present `weak_inference` or `unknown` as fact. Never invent a relation, call path,
   file, line, test result or benchmark number.
-- A graph edge alone is never verification: `trace` and `query` give leads; confirm them with
-  source lines (`analyze`, `claim add --source`, `verify`). Confirm your own sentence with a typed
-  claim (`--kind relation|config|location|order --symbol X`), one positive fact per claim ("A calls
-  B", "`F` calls `A` before `B`"): a negation, "only", a condition or bound, a count, call
-  arguments, a definition kind, another file or code name keeps it unverified. Plain text is at
-  most `weak_inference`; a quote (`"f.py:12 contains: <exact text>"`) verifies only the quoted
-  text. A `contradicted` result states its scope: correct the sentence, do not reword it.
+- A graph edge alone is never verification: `trace` and `query` give leads; confirm them with source lines
+  (`analyze`, `claim add --source`, `verify`). Confirm your own sentence with a typed claim (`--kind
+  relation|config|location|order --symbol X`), one positive fact per claim ("A calls B", "`F` calls `A` before `B`"):
+  a negation, "only", a condition or bound, a count, call arguments, a definition kind, another file or code name
+  keeps it unverified. Plain text is at most `weak_inference`; a quote (`"f.py:12 contains: <exact text>"`) verifies
+  only the quoted text. A `contradicted` result states its scope: correct the sentence, do not reword it.
 - A code name `plan check`/`trace`/`node_inspect` reports `not_found` does not exist (say so with
   `did_you_mean`); `not_indexed`: `update` first; `ambiguous`: pass `path::Name`. Never use a similar name.
 - Do not upgrade a status by wording. Change status only through Verinoda (`verify`, `experiment run`,
@@ -115,11 +114,10 @@ For any question that is more than a name lookup, check your reading before anal
 
 ## References the user gives
 
-Whenever the message has links, repository or package names, versions, commits, PR/issue
-numbers, papers or docs, run `verinoda resolve "<message>"` (MCP `reference_resolve`)
-before researching or answering. Report each reference as `<name> @ <pin> (basis: <basis>)` and
-each mismatch on its own line. Never substitute the default branch for a version the user named.
-Ask the user only the `questions_for_user`. State every unresolved part with its `next_step`;
+Whenever the message has links, repository or package names, versions, commits, PR/issue numbers, papers or docs, run
+`verinoda resolve "<message>"` (MCP `reference_resolve`) before researching or answering. Report each reference as
+`<name> @ <pin> (basis: <basis>)` and each mismatch on its own line. Never substitute the default branch for a
+version the user named. Ask the user only the `questions_for_user`. State every unresolved part with its `next_step`;
 read a pinned reference with `verinoda research --resolution <id> --reference-id <rN>`.
 
 ## Decisions are the user's
@@ -147,9 +145,9 @@ verinoda plan check .verinoda/plans/plan-001.json
 verinoda analyze --plan .verinoda/plans/plan-001.json
 verinoda analyze "why is pricing separate from the service?" --run-tests
 verinoda analyze "which tests reach apply_discount?" --observe
+verinoda trace create_order save_order --mode any
 verinoda observe --for apply_discount
 verinoda resolve-call src/service.py:22 save
-verinoda trace create_order save_order --mode any
 verinoda claim show <claim-id>
 verinoda claim add "place_order calls validate_items" --kind relation --source src/service.py:20
 verinoda verify <claim-id> --run
