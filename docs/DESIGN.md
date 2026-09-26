@@ -57,6 +57,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D34 | Debug ledger (loop detection, strategies) | partial | Built 2026-09-25 (section 7): `verinoda debug start/try/status/diff/close`, strategies `differential/bisect/rerun/observe`, MCP `debug_start` / `debug_attempt` / `debug_status` / `debug_strategy` / `experiment_run`, schema v6. debugloops_v1 (12 sessions written by the builder, gold fixed before the rules ran; in-sample after three fixes): definitive precision 11/11, loop recall 8/8, 0/4 controls stopped, top strategy 8/8. A review found 27 problems (25 distinct: false stops, false "passed", unverified bisect ends, git-safety gaps); all fixed with regression tests (section 7.5), the benchmark scores unchanged after the fixes. Not built: a real agent session with and without the protocol. `debug try` overhead is copy-bound on big trees (median 2.4-5.0 s on 2,341 files, depending on machine load). |
 | D35 | Change review (`verinoda review`) | partial | Built 2026-09-25 (section 8): `verinoda review` (working tree vs HEAD, `--base`, `--staged`, a planned change with `--target` + `--change`), MCP `change_review` (34 tools), rule tables in `review_rules.py`, the review stored in `analyses`, a review step in both skills. review fixtures (36 dev + 11 held-out, gold hashed before any rule; one documented gold amendment before the first run): dev, in-sample, precision 0.92 and recall 1.00 at strong_inference or above; held-out, its only run with the rules frozen: precision 0.79 (bar 0.8 not met), recall 18/18, must-say-unknown 2/2; 0.81 after seven later fixes (one from that run, six from reviewing Verinoda's own branch; no longer clean). Time with the graph loaded: 0.19-0.21 s median on the examples, 1.8 s median (5.4 s max) on the 380-file copy. First review round (section 8.5): the 41 findings of two reviewers fixed with regression tests (the time finding partly): `--staged` reads the staged tree everywhere and runs it or refuses, SQL must be SQL-shaped, guard refactors are told apart from removals, removed methods and module-attribute call sites are found, a value changed on one line and saved later is found, `no_test_reaches` only for symbols with a static caller (`reach_unknown` otherwise); after it dev 67/73 = 0.92 and 62/62, held-out 22/27 = 0.81 and 18/18 (no longer clean), 1.7 s median on the copy. Second review round (section 8.6): 20 findings of a second reviewer fixed with regression tests - a check that now runs after the work it protected is `guard-after-work` / `check-call-after-work`, security calls are compared call by call, assigned aliases and renamed re-exports reach the guards engine, callers newer than the snapshot are searched and named (`graph_stale`), edges between a monorepo's packages are kept; dev and held-out numbers unchanged, +9 to +13 % time on the copy. Not built: findings as claims and critique on them, the entail predicate for a carried value, line-level coverage of changed lines, nested-loop and unbounded-append rules, value and parameter flow outside Python. |
 | D36 | Behaviour probe of changed functions | partial | Built 2026-09-25 (section 9): `verinoda probe FILE::NAME` / `--changed`, MCP `change_probe` (the design named it `behaviour_probe`): inputs from the syntax tree only (annotations, call-site literals and recipes, boundaries mined from comparisons, `len` checks, slices and imported constants of both versions and their callees, standard edges, then hypothesis or a fixed pseudo-random list), one corpus run at the base commit copy and in the working tree through `experiments.run` with a pytest plugin (no new allowlist entry), difference classes with minimal examples reproduced in a second pair of runs and recorded as run-scoped `experiment_verified` claims, properties, undeclared exceptions, nondeterminism, `--scaling`; a static side-effect gate (closure + module-level statements) and an audit hook in the run. No schema change (the design's `probes` table: runs are experiments, results are files under `runs/<probe id>/`). Hand fixtures (49, gold first, in-sample): 22/22 detected (20/20 of those the tests miss), 0 differences on 11 behaviour-preserving edits x 5 seeds (a 12th, labelled equivalent, really changes floats on Python 3.12: reported as `numeric_drift_only`), gate 9/9 refusals and 0/4 wrong ones, median 2.0 s per probe; automated mutants 25/25 killed; unchanged after a review round whose 16 findings were fixed or documented (threads and `multiprocessing` children blocked at run time, a taken module name, process exits, plugin errors, float drift, SQL strings in the gate, `--changed` no pass when a function was not compared), and after a second round of 8 (finalizers and exit handlers blocked at run time, the gate's SQL rule following helpers, defaults, attributes and loops again, float drift only between float literals, no pass when fewer than half of the inputs returned or raised, `asyncio.run` not network, an unparseable changed file, class-state writes, emitted tests for sets and long integers). Not built: `review --probe` (D35), the second minimisation round, the static concurrency signal; methods need a literal-argument constructor call. |
+| D-query-ranking | Query ranking: tests yield to the code they test, named files and modules, docstring phrases, narrower expansions | implemented | Built 2026-09-26 (section 10) in `search_index.rank` / `analyze_query`, no index change. Dev set (37 questions, written for the change: in-sample): gold file first 13 -> 28, MRR 0.535 -> 0.836, tests in the top 5 of questions not about tests 61/170 -> 26/170. Fastbench: no fact lost, 2 gained. Not done: common English words that are module names get the weak plain-word boost; a lowercase owner still accepts methods (`asyncio.run`). |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -2019,6 +2020,116 @@ had been run once during development before.
   when the run ends are never finalized (their side effects are neither made nor reported).
 - `--changed` lists functions whose own body or signature changed; timing (`--scaling`) is rough and on a
   shared machine; the fixtures and mutants are in-sample (see 9.3).
+
+## 10. Query ranking (D-query-ranking, 2026-09-26)
+
+### 10.1 Findings that drive the design
+
+The senior review (gap 10, high) found that `verinoda query` ranks tests first and ignores module names on
+code outside the benchmark sets:
+
+- CPython standard library copy, 8 new questions: the right answer first in 2, in the top 3 in 3, missing in 3.
+  "where does subprocess on Windows build the command line string" gave `test/test_cmd_line.py`, `cmd.py`,
+  `pdb.py`, not `list2cmdline` (whose docstring says "command line string").
+- Verinoda's own repository: a test at rank 1 or 2 in 4 of 4 questions. Upstream Graphify: a test first even with
+  `graphify/cluster.py` written in the question.
+- Out of sample (agent persona): 127 of 201 listed standard-library items were tests. `http.client.HTTPConnection.request`
+  gave every symbol named `client` the score of a named symbol, and `client -> cli`, `request -> req` prefix
+  expansions flooded the list.
+- A large Minecraft mod (private): a test class first for a "how does X work" question; an inflected Turkish
+  word expanded to unrelated names that begin with its four-letter stem, and to a three-letter prefix of it.
+- A flat 0.8 factor on test files had been tried and reverted (2026-09-24: heldout +3, glow_mod -2,
+  orders_app_tr -1 facts).
+
+Why: test names repeat the words of the code they test (`test_update_after_edit_marks_claim_stale_via_cli`,
+`TestTemporaryDirectory.test_del_on_shutdown`), and BM25F's name field rewards that. The path field (weight
+0.5) is too weak for a module the question names, and a dotted name's module parts were taken for symbol names.
+
+### 10.2 Decisions
+
+All in `search_index.rank` and `analyze_query`; no index change (no re-index needed).
+
+- **Tests yield to the code that matches the same words** (`_tests_yield`). For a question that is not about
+  tests and not about callers or the impact of a change, a test function or class among the 180 best-scored
+  units moves just below the best non-test code unit that scores less than it, but at least 0.7 of its score,
+  and matches at least 0.75 of the test's matched question words (weighted by idf; a joined pair such as
+  `temporary_directory` stands for both of its words). A test with no such unit keeps its score: it is the only
+  place those words meet, or far ahead of any code that has them. It runs after the graph prior, so tests still
+  seed the PageRank that reaches the code they call. Module-level blocks of test files (fixture text) keep their
+  rank.
+- **What the question asks** (`asks_about_tests`, `asks_about_callers`, English and Turkish). A question about
+  tests (tests, coverage, `HeatMathTest`, `hangi testler`) or about callers / impact (who calls, what calls,
+  affected, retest, `if ... changes`, `kimler tarafından çağrılıyor`, `değişirse`): tests keep their rank there,
+  since they are the answer, or callers and what to re-run. A question about tests also gets the test file of a
+  module it names (`shutil.copytree` -> `test_shutil.py`).
+- **Files and modules the question names** (`_mentions`). Units of a file the question writes as a path
+  (`graphify/cluster.py`, `HeatMath.kt`) or a dotted module (`http.client`, `search_index.rank`, `json.dumps` ->
+  the `json` package) score x2.0, and the result says "question names ...". The module parts of a dotted name are
+  no longer symbol names (`client` in `http.client` is not every `client()`); each later part is owned by the one
+  before it (`HTTPConnection` by module `client`). A plain word that is the stem of at most 3 code files that are
+  not tests, or a Python package (`subprocess`, `logging's`), scores x1.3 with no reason line. A folder or package
+  that holds more than a quarter of the indexed files (the project itself) names nothing. The factors apply after
+  the scale is set, so a boost does not push every other unit down.
+- **Docstring phrases** (`_doc_phrases`). A non-test symbol among the 300 best whose docstring (first paragraph)
+  writes two adjacent question words side by side (one filler word allowed) scores x1.25 per pair, at most two
+  pairs. Test docstrings do not count (they state the scenario in the code's words), and a question about tests
+  gets no docstring boost.
+- **Narrower expansions** (`analyze_query`, `_stem_terms`). No prefix or abbreviation expansion of an expansion
+  (`paramet -> param`). No corpus-prefix expansion of a word the code itself names things with (`client`,
+  `request`, `connection`), unless the rest is also a name (`emberforge` -> `ember` + `forge`). No corpus-prefix
+  expansion of an inflected Turkish word (`parayı` -> `par`). A four-letter Turkish stem reaches a corpus term only
+  when the rest is Turkish inflection (`textnorm.TR_SUFFIXES`), not the looser suffix chain that also took single
+  consonants (`parameter` and `parallel` for `para`).
+
+### 10.3 Measurements
+
+A dev set of 37 questions (16 on a CPython `Lib` copy, 5 on upstream Graphify, 11 on Verinoda's own repository at
+343a00d, 5 on the examples; 3 ask about tests), written for this change with gold files and symbols; scored with
+the query as `verinoda query --json` returns it (items, then `budget.more`). Base 343a00d -> this branch:
+
+| metric | base | branch |
+|---|---|---|
+| gold file first | 13/37 | 28/37 |
+| gold file in top 3 | 25/37 | 34/37 |
+| gold file in top 10 | 32/37 | 36/37 |
+| MRR (gold file) | 0.535 | 0.836 |
+| gold symbol in top 3 | 19/35 | 27/35 |
+| tests in the top 5, 34 questions not about tests | 61/170 | 26/170 |
+| questions whose first result is a test | 10/34 | 1/34 |
+
+The dev set is in-sample: the rules were written while looking at it. A held-out set written by someone else is
+run after this change (not reported here).
+
+Fastbench (9 sets, 333 set x question x approach rows, against integrate/0925): no fact lost, 2 gained
+(`heldout_repoatlas` h05 JSON 0 -> 1, `orders_app_tr` q10 JSON 1 -> 2), negatives unchanged. On the private mod
+set the facts are unchanged, and a test is ranked first for 1 of its 16 questions not about tests (4 before).
+Warm `retrieve` time on the CPython copy and Verinoda's repository did not change beyond noise (median
+0.30-0.35 s vs 0.27-0.31 s, and 0.250 s vs 0.246 s).
+
+Variants measured and not kept (fastbench against the same baseline):
+
+- tests multiplied by 0.7 when covered (instead of moving just below the covering code): dev a little better
+  (top 1 29/37, tests in top 5 20/170), fastbench -4 facts (`heldout_repoatlas` h02 x3, `orders_app` q01 JSON)
+  and +5;
+- code yielding to tests on questions about tests: -1 (`graphify_core_tr` g09 JSON: the code item carries the
+  `called_by` list of the tests);
+- docstring boost on tests: a test ranked first on `heldout_repoatlas` h02 (-2);
+- boosts before the scale was set: -1 (`graphify_core` g01 JSON);
+- no prefix expansion of an identifier word at all: -1 (`forge_mod` q03 JSON, `emberforge -> ember`).
+
+### 10.4 Not done / limits
+
+- A plain word that is also an English word names its module when a file has that stem (`string`, `copy`,
+  `select` in the standard library): x1.3 only, but it is noise there.
+- Test files are what `is_test_file` says (the night/test-predicate branch replaces it); a test helper outside
+  a test folder is code.
+- A dotted name whose first part is a class (`Wisp.spawn`) boosts no file; the owner rule picks the method.
+  A lowercase owner still accepts a method of any class in that module or package (`asyncio.run` also matches
+  `REPLThread.run` in `asyncio/__main__.py`).
+- Vocabulary gaps stay: "allowed" does not reach `allowlist`, "choose a temporary directory" does not reach
+  `_get_default_tempdir`, and a Turkish question about the search index still finds the Turkish overview first.
+- Copies of the project inside it (upstream Graphify's `worked/mixed-corpus/raw/`) still rank next to the real
+  code unless the question writes the path.
 
 ## Sources
 

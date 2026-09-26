@@ -1,0 +1,719 @@
+{
+ "summary": {
+  "questions": 37,
+  "top1": 13,
+  "top3": 25,
+  "top10": 32,
+  "MRR": 0.535,
+  "sym_top3": "19/35",
+  "no_test_questions": 34,
+  "tests_top5": "61/170",
+  "test_first": 10
+ },
+ "rows": [
+  {
+   "id": "big-rollover",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 11,
+   "top": [
+    "logging/handlers.py .shouldRollover()",
+    "logging/handlers.py .__init__()",
+    "logging/handlers.py .getFilesToDelete()",
+    "logging/handlers.py BaseRotatingHandler",
+    "logging/handlers.py RotatingFileHandler"
+   ],
+   "seconds": 0.81
+  },
+  {
+   "id": "big-chunked",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 6,
+   "sym_rank": 6,
+   "has_sym": true,
+   "tests_top5": 4,
+   "test_first": true,
+   "n_ranked": 9,
+   "top": [
+    "test/test_asyncio/test_events.py client()",
+    "test/test_asyncio/test_server.py client()",
+    "test/test_asyncio/test_server.py client()",
+    "test/test_asyncio/test_buffered_proto.py client()",
+    "multiprocessing/connection.py Client()"
+   ],
+   "seconds": 0.5
+  },
+  {
+   "id": "big-cmdline",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": null,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": true,
+   "n_ranked": 10,
+   "top": [
+    "test/test_cmd_line.py CmdLineTest",
+    "test/support/__init__.py optim_args_from_interpreter_flags()",
+    "cmd.py .parseline()",
+    "test/support/__init__.py args_from_interpreter_flags()",
+    "pdb.py .handle_command_def()"
+   ],
+   "seconds": 0.79
+  },
+  {
+   "id": "big-scanstring",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 2,
+   "test_first": false,
+   "n_ranked": 10,
+   "top": [
+    "pickle.py ._decode_string()",
+    "json/decoder.py py_scanstring()",
+    "test/test_string_literals.py .test_eval_str_invalid_escape()",
+    "test/test_string_literals.py .test_eval_str_invalid_octal_escape()",
+    "pickle.py .load_string()"
+   ],
+   "seconds": 0.44
+  },
+  {
+   "id": "big-workers",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 9,
+   "top": [
+    "concurrent/futures/thread.py ThreadPoolExecutor",
+    "concurrent/futures/thread.py .__init__()",
+    "concurrent/futures/thread.py ._adjust_thread_count()",
+    "concurrent/futures/thread.py BrokenThreadPool",
+    "concurrent/futures/thread.py .submit()"
+   ],
+   "seconds": 0.3
+  },
+  {
+   "id": "big-cancel",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 7,
+   "has_sym": true,
+   "tests_top5": 1,
+   "test_first": false,
+   "n_ranked": 20,
+   "top": [
+    "asyncio/__main__.py .run()",
+    "asyncio/runners.py .run()",
+    "asyncio/runners.py run()",
+    "test/test_asyncio/test_runners.py .test_asyncio_run_cancels_hanging_tasks()",
+    "asyncio/events.py ._run()"
+   ],
+   "seconds": 0.5
+  },
+  {
+   "id": "big-makekey",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 20,
+   "top": [
+    "functools.py lru_cache()",
+    "ipaddress.py IPv4Address",
+    "functools.py _lru_cache_wrapper()",
+    "importlib/metadata/_functools.py method_cache()",
+    "ipaddress.py IPv4Network"
+   ],
+   "seconds": 0.55
+  },
+  {
+   "id": "big-tempdir",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 4,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 4,
+   "test_first": true,
+   "n_ranked": 8,
+   "top": [
+    "test/test_compileall.py .temporary_directory()",
+    "test/test_tempfile.py .do_create()",
+    "test/test_tempfile.py .test_del_on_shutdown()",
+    "tempfile.py TemporaryDirectory",
+    "test/test_tempfile.py .test_exit_on_shutdown()"
+   ],
+   "seconds": 0.25
+  },
+  {
+   "id": "big-cencoder",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 7,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 2,
+   "test_first": false,
+   "n_ranked": 20,
+   "top": [
+    "importlib/metadata/_adapters.py .json()",
+    "json/__init__.py dumps()",
+    "importlib/metadata/_meta.py .json()",
+    "test/test_json/test_dump.py .test_dump_skipkeys()",
+    "test/test_ordered_dict.py PurePythonOrderedDictSubclassTests"
+   ],
+   "seconds": 0.42
+  },
+  {
+   "id": "big-asynciorun",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 1,
+   "test_first": false,
+   "n_ranked": 18,
+   "top": [
+    "asyncio/__main__.py .run()",
+    "asyncio/runners.py .run()",
+    "asyncio/runners.py run()",
+    "asyncio/events.py ._run()",
+    "test/test_asyncio/test_base_events.py .test_create_task()"
+   ],
+   "seconds": 0.52
+  },
+  {
+   "id": "big-loglock",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": false,
+   "n_ranked": 10,
+   "top": [
+    "logging/__init__.py _acquireLock()",
+    "logging/__init__.py _releaseLock()",
+    "test/test_logging.py ModuleLevelMiscTest",
+    "test/_test_multiprocessing.py setUpModule()",
+    "test/test_fork1.py .test_nested_import_lock_fork()"
+   ],
+   "seconds": 0.42
+  },
+  {
+   "id": "big-httprequest",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 4,
+   "sym_rank": 7,
+   "has_sym": true,
+   "tests_top5": 4,
+   "test_first": true,
+   "n_ranked": 10,
+   "top": [
+    "test/audit-tests.py test_http_client()",
+    "test/test_asyncio/test_events.py client()",
+    "test/test_asyncio/test_server.py client()",
+    "http/client.py HTTPConnection",
+    "test/test_asyncio/test_buffered_proto.py client()"
+   ],
+   "seconds": 0.21
+  },
+  {
+   "id": "big-status",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": null,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 4,
+   "test_first": true,
+   "n_ranked": 13,
+   "top": [
+    "test/test_asyncio/test_events.py client()",
+    "test/test_asyncio/test_server.py client()",
+    "test/test_asyncio/test_server.py client()",
+    "test/test_asyncio/test_buffered_proto.py client()",
+    "multiprocessing/connection.py Client()"
+   ],
+   "seconds": 0.3
+  },
+  {
+   "id": "big-usage",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 19,
+   "top": [
+    "argparse.py ._format_usage()",
+    "argparse.py .format_usage()",
+    "argparse.py .format_usage()",
+    "argparse.py .format_usage()",
+    "optparse.py .format_usage()"
+   ],
+   "seconds": 0.36
+  },
+  {
+   "id": "big-sniff",
+   "corpus": "big",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 1,
+   "test_first": false,
+   "n_ranked": 11,
+   "top": [
+    "csv.py ._guess_delimiter()",
+    "csv.py .sniff()",
+    "test/test_csv.py .test_guess_quote_and_delimiter()",
+    "csv.py ._guess_quote_and_delimiter()",
+    "csv.py Sniffer"
+   ],
+   "seconds": 0.34
+  },
+  {
+   "id": "big-t-copytree",
+   "corpus": "big",
+   "asks_tests": true,
+   "file_rank": 3,
+   "sym_rank": null,
+   "has_sym": false,
+   "tests_top5": 3,
+   "test_first": false,
+   "n_ranked": 10,
+   "top": [
+    "shutil.py _copytree()",
+    "shutil.py copytree()",
+    "test/test_shutil.py .test_copytree_dangling_symlinks()",
+    "test/test_shutil.py .test_copytree_symlink_dir()",
+    "test/test_shutil.py .test_copytree_symlinks()"
+   ],
+   "seconds": 0.78
+  },
+  {
+   "id": "gfy-split",
+   "corpus": "gfy",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 9,
+   "top": [
+    "graphify/cluster.py cluster()",
+    "worked/mixed-corpus/raw/cluster.py cluster()",
+    "worked/mixed-corpus/raw/cluster.py (module level)",
+    "worked/mixed-corpus/raw/cluster.py _split_community()",
+    "worked/mixed-corpus/GRAPH_REPORT.md Community 0 - \"Community 0\""
+   ],
+   "seconds": 0.47
+  },
+  {
+   "id": "gfy-cohesion",
+   "corpus": "gfy",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 1,
+   "test_first": false,
+   "n_ranked": 7,
+   "top": [
+    "worked/mixed-corpus/raw/cluster.py cohesion_score()",
+    "graphify/cluster.py cohesion_score()",
+    "tests/test_cluster.py test_cohesion_score_range()",
+    "worked/mixed-corpus/raw/analyze.py suggest_questions()",
+    "worked/mixed-corpus/raw/cluster.py score_all()"
+   ],
+   "seconds": 0.18
+  },
+  {
+   "id": "gfy-secrets",
+   "corpus": "gfy",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 4,
+   "test_first": true,
+   "n_ranked": 7,
+   "top": [
+    "tests/test_detect.py test_sensitive_secret_handler_txt()",
+    "graphify/detect.py _is_sensitive()",
+    "tests/test_detect.py test_sensitive_filter_still_excludes_real_secrets()",
+    "tests/test_detect.py test_sensitive_still_flags_data_under_secrets_dir()",
+    "tests/test_detect.py test_sensitive_flags_underscore_secret()"
+   ],
+   "seconds": 0.37
+  },
+  {
+   "id": "gfy-mtime",
+   "corpus": "gfy",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": true,
+   "n_ranked": 8,
+   "top": [
+    "tests/test_office_incremental.py test_unchanged_docx_sidecar_not_rewritten()",
+    "graphify/detect.py _mtime_may_hide_a_rewrite()",
+    "graphify/detect.py detect_incremental()",
+    "tests/test_incremental_mtime_collision.py test_same_size_rewrite_in_one_tick_is_requeued()",
+    "tests/test_detect.py test_detect_incremental_legacy_float_skips_when_mtime_matches()"
+   ],
+   "seconds": 4.53
+  },
+  {
+   "id": "gfy-t-selfloop",
+   "corpus": "gfy",
+   "asks_tests": true,
+   "file_rank": 3,
+   "sym_rank": 3,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": false,
+   "n_ranked": 7,
+   "top": [
+    "graphify/cluster.py cohesion_score()",
+    "worked/mixed-corpus/raw/cluster.py cohesion_score()",
+    "tests/test_cluster.py test_cohesion_score_ignores_self_loops()",
+    "tests/test_cluster.py test_cohesion_score_self_loops_only_is_zero()",
+    "tests/test_cluster.py test_cohesion_score_range_with_self_loops()"
+   ],
+   "seconds": 0.26
+  },
+  {
+   "id": "vn-mcplimit",
+   "corpus": "vn",
+   "asks_tests": false,
+   "file_rank": 5,
+   "sym_rank": 5,
+   "has_sym": true,
+   "tests_top5": 2,
+   "test_first": false,
+   "n_ranked": 6,
+   "top": [
+    "verinoda/project_index/security.py safe_fetch()",
+    "tests/test_mcp.py test_cap_response_keeps_named_keys_first_and_cuts_them_last()",
+    "verinoda/project_index/cli.py _enforce_graph_size_cap_or_exit()",
+    "tests/test_mcp.py test_map_view_respects_small_response_cap()",
+    "verinoda/mcp/server.py cap_response()"
+   ],
+   "seconds": 0.81
+  },
+  {
+   "id": "vn-querypath",
+   "corpus": "vn",
+   "asks_tests": false,
+   "file_rank": 5,
+   "sym_rank": 5,
+   "has_sym": true,
+   "tests_top5": 2,
+   "test_first": true,
+   "n_ranked": 10,
+   "top": [
+    "tests/test_analysis.py test_an_analysis_carries_the_passages_query_gives()",
+    "verinoda/analysis.py _passages()",
+    "tests/test_ui.py test_a_question_is_answered_with_the_passages_of_verinoda_query()",
+    "verinoda/project_index/mcp_ingest.py _emit_server()",
+    "verinoda/search_index.py rank()"
+   ],
+   "seconds": 0.92
+  },
+  {
+   "id": "vn-assess",
+   "corpus": "vn",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 1,
+   "test_first": false,
+   "n_ranked": 7,
+   "top": [
+    "verinoda/claims.py assess_change()",
+    "verinoda/workflow.py verify()",
+    "tests/test_workflow_index.py (module level)",
+    "verinoda/entail.py assess()",
+    "docs/BENCHMARKS.md Question sets"
+   ],
+   "seconds": 0.59
+  },
+  {
+   "id": "vn-mcplock",
+   "corpus": "vn",
+   "asks_tests": false,
+   "file_rank": 3,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 7,
+   "top": [
+    "verinoda/analysis.py analyze()",
+    "verinoda/analysis.py ._check()",
+    "verinoda/mcp/server.py _result_wrapper()",
+    "verinoda/analysis.py .work_ok()",
+    "verinoda/analysis.py Budget"
+   ],
+   "seconds": 0.3
+  },
+  {
+   "id": "vn-ranksig",
+   "corpus": "vn",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": false,
+   "n_ranked": 5,
+   "top": [
+    "verinoda/search_index.py rank()",
+    "verinoda/doctor.py _search_index()",
+    "tests/test_copies.py test_search_ranks_the_copy_below_the_real_code_unless_named()",
+    "tests/test_search_index.py test_version_change_rebuilds_and_foreign_graph_is_synced_on_open()",
+    "tests/test_data_index.py test_reference_trees_rank_lower_unless_the_question_names_t…"
+   ],
+   "seconds": 0.29
+  },
+  {
+   "id": "vn-stale",
+   "corpus": "vn",
+   "asks_tests": false,
+   "file_rank": null,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 4,
+   "test_first": false,
+   "n_ranked": 11,
+   "top": [
+    "verinoda/feedback.py decide()",
+    "tests/test_cli.py test_update_after_edit_marks_claim_stale_via_cli()",
+    "tests/test_mcp.py test_edit_makes_evidence_changed_and_claim_stale()",
+    "tests/test_snapshot_stale.py test_modifying_a_cited_file_marks_exactly_its_claims_stale()",
+    "tests/test_store.py test_record_transition_updates_claim_and_appends_history()"
+   ],
+   "seconds": 0.3
+  },
+  {
+   "id": "vn-policy",
+   "corpus": "vn",
+   "asks_tests": false,
+   "file_rank": null,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": true,
+   "n_ranked": 6,
+   "top": [
+    "tests/test_data_index.py test_generic_data_files_count_less_than_code_unless_the_question_names_them()",
+    "tests/test_debug.py test_mcp_commands_keep_repeated_and_empty_arguments()",
+    "verinoda/project_index/extractors/bash.py _bash_call_in_command_allowed()",
+    "verinoda/cli.py cmd_experiment()",
+    "tests/test_experiments.py test_non_allowlisted_command_is_refused_without_container()"
+   ],
+   "seconds": 0.66
+  },
+  {
+   "id": "vn-apostrophe",
+   "corpus": "vn",
+   "asks_tests": false,
+   "file_rank": 4,
+   "sym_rank": 5,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": true,
+   "n_ranked": 8,
+   "top": [
+    "tests/test_textnorm.py test_apostrophe_suffix_is_split_off()",
+    "tests/test_retrieval.py test_turkish_normalisation_and_apostrophe_suffixes()",
+    "tests/test_search_index.py test_query_drops_english_and_turkish_stopwords_and_apostrophe_suffixes()",
+    "verinoda/textnorm.py raw_tokens()",
+    "verinoda/textnorm.py split_apostrophe()"
+   ],
+   "seconds": 0.37
+  },
+  {
+   "id": "vn-ppr",
+   "corpus": "vn",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 2,
+   "test_first": false,
+   "n_ranked": 6,
+   "top": [
+    "verinoda/search_index.py personalized_pagerank()",
+    "tests/test_search_index.py test_personalized_pagerank_is_local_deterministic_and_weights_inferred_edges_less()",
+    "verinoda/search_index.py rank()",
+    "docs/DESIGN.md 3.2 Decisions",
+    "benchmarks/corpora/heldout_repoatlas_7371990/tests/test_search_index.py test_personalized_pagerank_is_local_de"
+   ],
+   "seconds": 0.12
+  },
+  {
+   "id": "vn-t-stem",
+   "corpus": "vn",
+   "asks_tests": true,
+   "file_rank": 2,
+   "sym_rank": null,
+   "has_sym": false,
+   "tests_top5": 5,
+   "test_first": true,
+   "n_ranked": 9,
+   "top": [
+    "tests/test_data_index.py test_the_stem_of_an_inflected_turkish_word_is_searched_even_when_the_form_is_known()",
+    "tests/test_search_index.py test_turkish_words_unknown_to_the_index_use_a_vocabulary_confirmed_stem()",
+    "tests/test_search_index.py test_tokens_are_identifier_aware_and_folded()",
+    "tests/test_search_index.py stems()",
+    "tests/test_search_index.py test_caller_expansions_and_the_lexicon_are_weighted_below_the_question()"
+   ],
+   "seconds": 0.2
+  },
+  {
+   "id": "vn-tr-update",
+   "corpus": "vn",
+   "asks_tests": false,
+   "file_rank": null,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 7,
+   "top": [
+    "docs/GENEL-BAKIS.md 4.1 Arama motoru (`search_index`, `retrieval`) — Çalışıyor",
+    "docs/GENEL-BAKIS.md 4.1b Notlar ve graf görünümü (`verinoda ui`)",
+    "docs/GENEL-BAKIS.md 4.9 Yalıtılmış deneyler (`experiments`) — Kısmi (yalnızca süreç yalıtımı denendi)",
+    "verinoda/ui/static/app.js (module level)",
+    "verinoda/data/seed_lexicon_tr_en.json seed_lexicon_tr_en.json"
+   ],
+   "seconds": 0.7
+  },
+  {
+   "id": "ord-discount",
+   "corpus": "orders",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": false,
+   "n_ranked": 11,
+   "top": [
+    "orders/pricing.py apply_discount()",
+    "tests/test_pricing.py test_discount_applies_above_threshold()",
+    "orders/pricing.py compute_total()",
+    "tests/test_pricing.py test_no_discount_below_threshold()",
+    "tests/test_pricing.py test_compute_total()"
+   ],
+   "seconds": 6.33
+  },
+  {
+   "id": "ord-tr-total",
+   "corpus": "orders",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 1,
+   "test_first": false,
+   "n_ranked": 11,
+   "top": [
+    "orders/pricing.py compute_total()",
+    "tests/test_pricing.py test_compute_total()",
+    "orders/service.py place_order()",
+    "orders/repository.py .save()",
+    "orders/pricing.py apply_discount()"
+   ],
+   "seconds": 0.05
+  },
+  {
+   "id": "glow-spawn",
+   "corpus": "glow",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 9,
+   "top": [
+    "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java Wisp",
+    "src/main/java/com/example/glowmod/entity/Wisp.java .spawn()",
+    "src/main/java/com/example/glowmod/entity/Wisp.java Wisp",
+    "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java .spawn()",
+    "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java .Wisp()"
+   ],
+   "seconds": 0.05
+  },
+  {
+   "id": "forge-heat",
+   "corpus": "forge",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 7,
+   "top": [
+    "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt HeatMath",
+    "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt .addHeat()",
+    "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt .progressPerTick()",
+    "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt .heatForFuel()",
+    "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java .serverTick()"
+   ],
+   "seconds": 0.11
+  },
+  {
+   "id": "forge-tr-heat",
+   "corpus": "forge",
+   "asks_tests": false,
+   "file_rank": 3,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 7,
+   "top": [
+    "src/main/resources/assets/emberforge/lang/tr_tr.json emberforge:tr_tr",
+    "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt .reportHeat()",
+    "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt HeatMath",
+    "src/main/resources/assets/emberforge/models/item/ember_forge.json emberforge:item/ember_forge",
+    "src/main/resources/assets/emberforge/lang/en_us.json emberforge:en_us"
+   ],
+   "seconds": 0.09
+  }
+ ],
+ "code": "base 343a00d"
+}
