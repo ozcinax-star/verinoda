@@ -1530,7 +1530,7 @@ def test_stdio_server_starts_in_unscanned_dir(tmp_path):
 
     names, results = _session(plain, tmp_path / "server.err", body)
     assert sorted(names) == sorted(mcp_server.CORE_TOOLS)  # the default profile
-    assert "11 tools, profile core" in (tmp_path / "server.err").read_text(encoding="utf-8", errors="replace")
+    assert "12 tools, profile core" in (tmp_path / "server.err").read_text(encoding="utf-8", errors="replace")
     for res in results:
         p = _payload(res)
         assert p["error"] == "not_initialised" and "verinoda scan" in p["hint"]

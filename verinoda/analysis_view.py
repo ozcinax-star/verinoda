@@ -186,7 +186,7 @@ def lean(res: dict, *, shown_by: list[str] | None = None) -> dict:
     if snap:
         out["snapshot"] = {"id": snap.get("id"), "commit": snap.get("commit"), **({"dirty": True} if snap.get("dirty")
                                                                                    else {})}
-    for k in ("errors", "clarifications", "index_refresh_error"):
+    for k in ("errors", "clarifications", "index_refresh_error", "index_refresh"):  # a stale answer is never silent
         if res.get(k):
             out[k] = res[k]
     if res.get("plan_check"):
