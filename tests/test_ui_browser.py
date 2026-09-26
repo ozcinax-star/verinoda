@@ -144,7 +144,7 @@ class Browser:
         if hasattr(os, "geteuid") and os.geteuid() == 0:
             args.insert(1, "--no-sandbox")  # a root CI container
         self.proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        port_file, end = profile / "DevToolsActivePort", time.monotonic() + 30
+        port_file, end = profile / "DevToolsActivePort", time.monotonic() + 45
         while not _port_file_text(port_file):
             if self.proc.poll() is not None or time.monotonic() > end:
                 self.close()
@@ -222,7 +222,15 @@ def browser(tmp_path_factory):
     exe = _find_browser()
     if not exe:
         pytest.skip("no Chrome, Edge or Chromium found (VERINODA_BROWSER names one)")
-    b = Browser(exe, tmp_path_factory.mktemp("profile"))
+    # a CI runner's browser sometimes does not come up in time: try once more with a fresh profile, then skip
+    # (the tests check the pages, not the machine's browser start-up)
+    for attempt in (1, 2):
+        try:
+            b = Browser(exe, tmp_path_factory.mktemp("profile"))
+            break
+        except RuntimeError as exc:
+            if attempt == 2:
+                pytest.skip(f"{exc} ({exe}, two tries)")
     yield b
     b.close()
 

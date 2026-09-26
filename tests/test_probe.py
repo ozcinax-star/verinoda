@@ -1441,3 +1441,39 @@ def test_finalizers_and_exit_handlers_the_gate_cannot_see_are_blocked_end_to_end
     assert res["status"] == "differences_found", res["headline"]  # asyncio's loopback pair is not network
     st.close()
     assert not victim.exists()
+
+
+def test_env_changes_while_a_library_module_loads_are_not_side_effects(tmp_path, monkeypatch):
+    """numpy sets OPENBLAS_MAIN_FREE in os.environ when it is imported; that refused every function in a
+    project that uses numpy. Project code that sets an environment variable is still a side effect."""
+    import importlib
+
+    run, lib = tmp_path / "run", tmp_path / "env" / "Lib" / "site-packages"
+    (run / "repo").mkdir(parents=True)
+    lib.mkdir(parents=True)
+    probe_line = "from verinoda.runtime import probe_plugin as p\nKIND = p._classify('os.putenv', ('X', '1'))\n"
+    (lib / "vn_fakelib_a.py").write_text(probe_line, encoding="utf-8")
+    (lib / "vn_fakelib_b.py").write_text(probe_line, encoding="utf-8")
+    (lib / "vn_fakelib_c.py").write_text("from verinoda.runtime import probe_plugin as p\n\n\n"
+                                         "def setenv():\n    return p._classify('os.putenv', ('X', '1'))\n",
+                                         encoding="utf-8")
+    (run / "repo" / "vn_projmod.py").write_text(
+        probe_line + "\n\ndef direct():\n    return p._classify('os.putenv', ('X', '1'))\n\n\n"
+        "def lazy_library_import():\n    import vn_fakelib_b\n    return vn_fakelib_b.KIND\n\n\n"
+        "def through_a_library_function():\n    import vn_fakelib_c\n    return vn_fakelib_c.setenv()\n",
+        encoding="utf-8")
+    monkeypatch.setattr(plug._S, "allowed_root", os.path.normcase(str(run)) + os.sep)
+    monkeypatch.syspath_prepend(str(lib))
+    monkeypatch.syspath_prepend(str(run / "repo"))
+    names = ("vn_fakelib_a", "vn_fakelib_b", "vn_fakelib_c", "vn_projmod")
+    try:
+        assert importlib.import_module("vn_fakelib_a").KIND is None
+        proj = importlib.import_module("vn_projmod")
+        assert proj.KIND == "global-state"  # the project's own module body
+        assert proj.direct() == "global-state"
+        assert proj.lazy_library_import() is None  # a library loading inside a call
+        assert proj.through_a_library_function() == "global-state"  # dotenv.load_dotenv() and the like
+        assert plug._classify("os.chdir", ("x",)) == "global-state"
+    finally:
+        for n in names:
+            sys.modules.pop(n, None)
