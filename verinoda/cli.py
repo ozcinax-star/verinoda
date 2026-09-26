@@ -2268,6 +2268,21 @@ def cmd_benchmark(args) -> int:
               lambda r: (print(f"review fixtures, split {args.split}" + (f" (full result: {args.out})" if args.out
                                                                          else "")), _render_flat(r)))
         return 0 if not any("error" in r for r in res["rows"]) else 1
+    if args.bench_cmd == "verdict-audit":
+        from verinoda.benchmark import verdict_audit
+
+        def progress(row: dict) -> None:
+            state = row.get("skipped") or f"{row['verdict']}{' WRONG MET' if row['wrong_met'] else ''} {row['seconds']} s"
+            print(f"[verdict-audit] {row['id']}: {state}", file=sys.stderr, flush=True)
+
+        res = verdict_audit.evaluate(args.split, work=Path(args.work).resolve() if args.work else None,
+                                     only=[s.strip() for s in args.only.split(",")] if args.only else None,
+                                     progress=progress)
+        _bench_out(args.out, res)
+        _emit(args, _bench_compact(res["summary"], args.out),
+              lambda r: (print(f"verdict audit, split {args.split}" + (f" (full result: {args.out})" if args.out
+                                                                       else "")), _render_flat(r)))
+        return 0
     if args.bench_cmd == "critique-eval":
         from verinoda.benchmark import critique_eval
 
@@ -2832,6 +2847,15 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--work", help="work directory for the copies (default: a temporary one, removed afterwards)")
     c.add_argument("--vcopy", help="a git repository of Verinoda to clone for the vcopy fixtures (else skipped)")
     c.add_argument("--only", help="comma list of fixture ids")
+    c.add_argument("--out", help="write the full result JSON here")
+    c.add_argument("--json", action="store_true")
+    c = bsub.add_parser("verdict-audit", help="`verinoda analyze` verdicts on the wrong-'met' regression set "
+                                              "(benchmarks/verdict_audit): wrong met, controls kept, per split")
+    c.set_defaults(fn=cmd_benchmark)
+    c.add_argument("--split", choices=["dev", "held_out", "all"], default="dev")
+    c.add_argument("--work", help="work directory for the indexed copies (default: a temporary one, removed "
+                                  "afterwards; reused when given)")
+    c.add_argument("--only", help="comma list of case ids")
     c.add_argument("--out", help="write the full result JSON here")
     c.add_argument("--json", action="store_true")
     c = bsub.add_parser("critique-eval", help="critique precision/recall on the labelled claim set")

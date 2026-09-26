@@ -1,0 +1,9 @@
+{
+  "name": "webui-verdict-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Notes page and a React auth hook, used by the verdict audit",
+  "dependencies": {
+    "react": "^18.3.1"
+  }
+}

@@ -59,6 +59,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D36 | Behaviour probe of changed functions | partial | Built 2026-09-25 (section 9): `verinoda probe FILE::NAME` / `--changed`, MCP `change_probe` (the design named it `behaviour_probe`): inputs from the syntax tree only (annotations, call-site literals and recipes, boundaries mined from comparisons, `len` checks, slices and imported constants of both versions and their callees, standard edges, then hypothesis or a fixed pseudo-random list), one corpus run at the base commit copy and in the working tree through `experiments.run` with a pytest plugin (no new allowlist entry), difference classes with minimal examples reproduced in a second pair of runs and recorded as run-scoped `experiment_verified` claims, properties, undeclared exceptions, nondeterminism, `--scaling`; a static side-effect gate (closure + module-level statements) and an audit hook in the run. No schema change (the design's `probes` table: runs are experiments, results are files under `runs/<probe id>/`). Hand fixtures (49, gold first, in-sample): 22/22 detected (20/20 of those the tests miss), 0 differences on 11 behaviour-preserving edits x 5 seeds (a 12th, labelled equivalent, really changes floats on Python 3.12: reported as `numeric_drift_only`), gate 9/9 refusals and 0/4 wrong ones, median 2.0 s per probe; automated mutants 25/25 killed; unchanged after a review round whose 16 findings were fixed or documented (threads and `multiprocessing` children blocked at run time, a taken module name, process exits, plugin errors, float drift, SQL strings in the gate, `--changed` no pass when a function was not compared), and after a second round of 8 (finalizers and exit handlers blocked at run time, the gate's SQL rule following helpers, defaults, attributes and loops again, float drift only between float literals, no pass when fewer than half of the inputs returned or raised, `asyncio.run` not network, an unparseable changed file, class-state writes, emitted tests for sets and long integers). Not built: `review --probe` (D35), the second minimisation round, the static concurrency signal; methods need a literal-argument constructor call. |
 | D37 | Exact names, one build at a time, freshness on every read (section 10) | implemented | Built 2026-09-26: `naming.resolve` for trace, impact and `node_inspect` (copies give way, ties listed), the copy rule in plan linking, the receiver pass bound to what a file can see, `buildlock` around scan/update, `freshness.check` on query/trace/map and the MCP read tools, analyze's refresh outside its budget (skipped with the stale files named when slow; MCP refreshes in the background). Tests from the evaluators' repros (`tests/test_exact_and_fresh.py`); the eight benchmark sets unchanged. Not done: per-file incremental update (the refresh is still a full rebuild). |
 | D38 | JVM callbacks and mod entry points | partial | Built 2026-09-26 (section 11): a Java / Kotlin method reference passed as an argument is a `registers` edge (never `calls`), stored in the receiver-call sidecar (version 3); `trace` follows it only when no call path exists, labelled `callback`; impact (map, UI, review dependents) follows it after the other edges, marked `registers (callback)`; a relation claim "A calls B" supported only by a method reference (source line, graph edge or a resolver answer) is graded `registers` (none); the map's entry points know fabric.mod.json, Fabric initializers, `@Mod`, `@EventBusSubscriber` / `@SubscribeEvent`, mixin handlers and registered callbacks, and its sinks JVM file writes, `NbtIo` and dirty flags. fastbench: 0 fact changes on all nine sets. Not built: `analyze` flow claims through callbacks, lambdas passed as callbacks, static initializer blocks, inherited targets. |
+| D39 | Honest verdicts | implemented | Built 2026-09-26 (section 12): `verinoda/verdict_gate.py` runs in `analyze` after the claims are made and only caps or refuses (definitions answer only locate questions; copies and reference trees never make `met`; unresolved call sites are named and cap callers; a commit line is not a reason; set differences are `not_supported`). Verdict audit (`verinoda benchmark verdict-audit`, 17 traps + 22 controls on public material, split before tuning, written by the rule author): wrong met dev 9/23 -> 0/23, held-out 8/16 -> 1/16; controls kept dev 13 -> 12, held-out 7 -> 7. No fastbench fact lost. Not done: reasons in comments, a computed set difference, synonyms. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -2405,6 +2406,94 @@ of the CPython standard library, 79,535 nodes) found, and the fixer changed:
   calls pass).
 - Entry points and sinks are text heuristics: an annotation spelled through an alias or a registration made
   through a project helper that takes a lambda are not seen.
+
+## 12. Honest verdicts (D39, 2026-09-26)
+
+### 12.1 Findings that drive the design
+
+- A senior review with five personas found `analyze` saying `met` for irrelevant or incomplete answers: 4 of
+  6 judged backend questions, 4 of 10 JVM questions, 2 of 5 of the lead's. "What calls
+  `BaseEventLoop.call_soon`?" was met with 1 caller where the code has 7 `self.call_soon` and 43
+  `_loop.call_soon` sites; "how does update decide which claims become stale?" was met with two env-var reads
+  from the frozen benchmark copy inside the repository; "where is the Wisp ticked?" was met though `Wisp` has
+  no `tick`; "which mixins are not listed in glowmod.mixins.json?" was met with one right and one wrong class;
+  "why are MCP tool calls serialised with a lock?" was met with a commit line; "which components use useAuth"
+  was met with definitions; "what calls openPalette" missed the keydown-listener caller.
+- `judge` checked the kind and strength of the claims (a verified definition, a verified relation), not
+  whether they were about what was asked. D31's `off_subject` covered only definitions of items the search
+  ranked near the question.
+
+### 12.2 Decisions
+
+- **D39. A verdict gate** (`verinoda/verdict_gate.py`), run in `analyze` after every claim is made
+  and critique has run, so it costs no claim and no budget. It never drops a claim and never raises a verdict:
+  it marks claims that cannot make the sub-question `met` (`flags["weak"]`) and gaps that keep it at most
+  `met_with_inference` (`flags["capped"]`), and says why in an unknown. Both flags are stored with the
+  analysis, so `plan audit` judges the same.
+- **Relevance.** A definition ("X is defined at ...", "file:line contains ...") answers only a locate/define
+  question (and a config one); for other intents it never makes a sub-question met. A locate question that
+  asks which code uses X ("which components use the useAuth hook?", "hangi bileşenler kullanıyor") needs a
+  definition of code that calls or uses X in the graph. "Where is X ticked?" (tick, draw, paint, render,
+  mount: lifecycle callbacks) needs a member of X named for it (`EmberForgeBlockEntity.serverTick`); other
+  verbs are left alone because the code that does them is seldom named after the thing, and a subject that
+  points back ("those registers") is not read. A callers answer must be about the callee the question names or
+  links, not a symbol ranked near it. A configuration read must carry one of the question's words or their
+  expansions in the variable, the reading function or its file.
+- **Copies.** Claims whose evidence lies only under an `index.reference` tree, a folder `verinoda.copies`
+  detected as a copy of the project, or a vendored folder (`vendor/`, `third_party/`, `node_modules/`, ...)
+  never make a sub-question met, unless the question names the tree (the same rule and aliases as the
+  search ranking).
+- **Unresolved call sites.** For a callers question the indexed code files are searched for the callee's name
+  written as a call, a method reference (`Cls::name`), a callback argument (`addEventListener("keydown",
+  name)`) or a JSX handler. A site counts when the graph tied neither the line nor the function around it to
+  any definition of that name, and its receiver can be the callee (not another class, not `self` for a module
+  function, not an instance or a `new Other()` for a static member). Any such site caps the verdict and the
+  unknown says "N call sites unresolved: file:line, ..." (up to four). The search stops after 8,000 files or
+  96 MB (a count, so the same tree gives the same answer) and says so.
+- **Why.** A commit line says when code changed, not why. History claims count only when the commit subject
+  states a reason ("because", "to avoid", "çünkü", ...); without a decision record that explains it the verdict
+  is at most `met_with_inference` and an unknown says the reason was not found.
+- **Set difference.** "Which X are not listed in Y", "which ... are missing / unused / have no ...", Turkish
+  "hangi ... listelenmemiş / olmayan / eksik / değil" are `not_supported` with the reason: no handler computes
+  a set difference. The test sits in `_exclusive_guard`, beside D31's "is X only called in Y?" (the other face of
+  the same question) and uses its verdict path.
+- **Measurement** (`verinoda benchmark verdict-audit`, `benchmarks/verdict_audit/`): 17 traps and 22 controls on
+  public material (the three examples, three fixtures under `tests/fixtures/verdict_audit/`, this repository at
+  `343a00d`), split into dev (23) and held-out (16) before any rule was written. `wrong_met` = met while the
+  answer misses a gold string, holds a wrong one, or the true answer is an absence; controls measure
+  over-refusal.
+
+### 12.3 Measurements (2026-09-26)
+
+| split | wrong met before | wrong met after | controls kept before | controls kept after |
+|---|---|---|---|---|
+| dev (23: 10 traps, 13 controls; rules tuned here) | 9/23 | 0/23 | 13/13 | 12/13 |
+| held-out (16: 7 traps, 9 controls; first run with the rules frozen) | 8/16 | 1/16 | 7/9 | 7/9 |
+
+- The dev control lost (`pyloop-why-adr`) was met before only through a commit line; its ADR claim is graded
+  `weak_inference` because the quoted line holds a negation ("never inside the call") and entail's polarity
+  check counts the claim's framing words ("Decision record ... explains it") as terms of that sentence.
+- The held-out wrong met left is a control, wrong before as well: "Where is max_heat declared?" is met with the
+  TOML default and `getMaxHeat`, and the Java declaration is not found. No rule here sees a missing definition.
+- No gold fact is lost on the nine fastbench sets (0 of 333 set x question x approach cells change). On the
+  eight public sets 74 sub-question verdicts were met before and 68 after; the six now `met_with_inference` are
+  four "why" questions answered only by a "benchmark corpus" commit line, a "which code uses these recipes"
+  answered by definitions, and a callers question answered with callers of another function. The gate takes
+  a few milliseconds per question; the call-site search about 0.2 s on the 226-file Graphify set (0.6 s under load).
+- In-sample caveats: the rule author wrote both splits, and the trap shapes come from the review's list.
+
+### 12.4 Not done / limits
+
+- The checks are lexical. A synonym ("opened" for `connect`) or a subject the code names differently is not
+  matched, which is why the action rule is limited to lifecycle callbacks. A reason stated in a comment or a
+  docstring next to the code is not searched for (the lock's reason is in `mcp/server.py`'s docstring): the
+  "why" question is capped, not answered.
+- The call-site search reads text: calls through another name (an alias assigned at run time, `getattr`, a
+  string) are not found, and for a method any lowercase receiver counts (an instance of another class with a
+  same-named method caps the verdict too).
+- Set differences are refused, not computed (mixin configs, registries, locale keys would be the first).
+- The ADR negation grading above is an entail rule (D31), outside this gate; fixing it would raise verdicts and
+  was left to that rule's owner.
 
 ## Sources
 
