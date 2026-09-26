@@ -76,7 +76,7 @@ from pathlib import Path, PurePosixPath
 from verinoda import textnorm
 from verinoda.testcode import is_test_file
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5   # 5: a JVM/C-family symbol's leading comment is its own (D55)
 TOKENIZER_VERSION = 4  # 3: y-final words meet their -ies/-ied forms (query/queries); 4: clustered/cluster
 DB_NAME = "search.db"
 
@@ -107,6 +107,8 @@ PROX_GAP = 1                      # "adjacent": at most this many tokens apart, 
 PROX_CANDIDATES = 300             # passages checked for proximity, best term coverage first
 MAX_FILE_BYTES = 4_000_000        # larger files are not indexed (reported in stats)
 PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc")
+_LEAD_DOC_SUFFIXES = (".java", ".kt", ".kts", ".groovy", ".scala", ".cs", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs",
+                      ".c", ".h", ".cc", ".cpp", ".hpp", ".swift", ".php", ".dart")
 # Text files the graph has no nodes for (data packs, configs, shaders, resources) are indexed
 # as "data" units, so a question can reach them and the code that names them.
 DATA_SUFFIXES = (".mcfunction", ".mcmeta", ".json", ".jsonc", ".json5", ".snbt", ".yml", ".yaml", ".toml",
@@ -749,13 +751,34 @@ def _code_units(g, f: str, lines: list[str]) -> list[_Unit]:
             m = ASSIGN_RE.match(line)
             if m and not IMPORT_RE.match(line):
                 consts.setdefault(m.group(1), i)
+    # A JVM / C-family symbol's leading comment (its javadoc, the `// why:` above it) is outside its span, so it
+    # counted for the enclosing class: it goes to the symbol it describes (often its only English, next to a
+    # Turkish or otherwise opaque name)
+    lead: dict[str, list[int]] = {}
+    if f.endswith(_LEAD_DOC_SUFFIXES):
+        for n in syms:
+            sp = g.span(n)
+            if not sp or sp[0] > len(lines) or sp[0] < 2:
+                continue
+            k, block = sp[0] - 1, []
+            while k >= 1 and len(block) < 40:
+                s = lines[k - 1].strip()
+                if not s or not (s.startswith(("*", "/*", "//", "@")) or s.endswith("*/")):
+                    break
+                block.append(k)
+                k -= 1
+            if block and any(lines[i - 1].strip().startswith(("*", "/*", "//")) for i in block):
+                lead[n] = sorted(block)
+    claimed = {i for ls in lead.values() for i in ls}
     units: list[_Unit] = []
     for n in syms:
         sp = g.span(n)
         if not sp or sp[0] > len(lines):
             continue
         a, b = sp[0], min(sp[1], len(lines))
-        own = [i for i in range(a, b + 1) if owner(i) == n and lines[i - 1].strip()]
+        own = [i for i in range(a, b + 1) if owner(i) == n and lines[i - 1].strip() and i not in claimed]
+        if n in lead:
+            own = lead[n] + own
         if not own and lines[a - 1].strip():
             own = [a]
         label = bare_label(g.label(n))
@@ -1488,6 +1511,35 @@ def command_handlers(conn: sqlite3.Connection, words: list[str]) -> dict[str, st
     return {name: cand[term] for term, name in rows if word_tokens(name)[0] == term}
 
 
+_REVERSE_SEED: dict[str, list[str]] | None = None
+# Turkish endings a name part carries most (plural, possessive, case), tried on a reverse-seed key as the index
+# tokenizes them: dusman + lar -> "dusmanlar", the token of the name part `dusmanlar`
+_TR_FORM_SUFFIXES = ("ler", "lar", "i", "u", "si", "su", "leri", "lari", "in", "un", "nin", "nun", "de", "da",
+                     "e", "a", "yi", "yu")
+
+
+def _reverse_seed() -> dict[str, list[str]]:
+    """English word (and its light stem) -> the Turkish seed keys that gloss to it."""
+    global _REVERSE_SEED
+    if _REVERSE_SEED is None:
+        from verinoda import lexicon
+
+        out: dict[str, list[str]] = defaultdict(list)
+        try:
+            entries = lexicon.seed_entries()
+        except Exception:  # noqa: BLE001 - no seed: no reverse glosses
+            entries = {}
+        for key, targets in entries.items():
+            if " " in key:
+                continue
+            for t in targets:
+                for form in {t.lower(), textnorm.en_stem(t.lower())}:
+                    if key not in out[form]:
+                        out[form].append(key)
+        _REVERSE_SEED = dict(out)
+    return _REVERSE_SEED
+
+
 def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[str, list[str]] | None = None,
                   repo: Path | None = None) -> QueryTerms:
     """Question -> weighted index terms, with every expansion reported."""
@@ -1566,6 +1618,34 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
                 if f not in have:
                     for term in _stem_terms(conn, st):
                         add(w, term, f"turkish stem '{st}'", EXPANSION_WEIGHT)
+    # An English question over code named in Turkish (docs/DESIGN.md D55): the seed dictionary read backwards
+    # ("body" -> govde, "lookup" -> bul), kept only as index terms that are the stem or the stem with Turkish
+    # inflection (govde, govdesi; not bulut for bul)
+    if not tr_question:
+        rev = _reverse_seed()
+        # a word the code already names things with in English (angel, item) means those names: its Turkish gloss
+        # would only pull in every Turkish name that shares it
+        english_named = {r[0] for r in _fetch(conn, "SELECT DISTINCT term FROM names WHERE term IN ({ph})",
+                                              [t for w in words for t in word_tokens(w)])} if words else set()
+        for w in words:
+            if not w.isascii() or any(t in english_named for t in word_tokens(w)):
+                continue
+            for key in dict.fromkeys(rev.get(textnorm.en_stem(w.lower()), []) + rev.get(w.lower(), [])):
+                # the key as the index tokenizes it (govde -> govd, the part of a name like govdeKaydet), and
+                # with the endings a name part carries (dusman + lar -> dusmanlar)
+                forms = [t for s in ("",) + _TR_FORM_SUFFIXES for t in word_tokens(key + s)]
+                own = [t for t in dict.fromkeys(forms) if len(t) >= 3]
+                # only a token of the code (a name, or a code unit's text): the same word only in prose or data
+                # (a glossary, Turkish docs) is not what an English question over Turkish names looks for
+                in_code = {r[0] for r in _fetch(conn, "SELECT DISTINCT term FROM names WHERE term IN ({ph})", own)} \
+                    if own else set()
+                rest = [x for x in own if x not in in_code]
+                if rest:
+                    in_code |= {r[0] for r in _fetch(
+                        conn, "SELECT DISTINCT b.term FROM body b JOIN passages p ON p.pid = b.pid JOIN units u "
+                              "ON u.uid = p.uid WHERE u.kind IN ('symbol', 'module') AND b.term IN ({ph})", rest)}
+                for tok in [x for x in own if x in in_code][:4]:
+                    add(w, tok, f"seed translation '{key}'", EXPANSION_WEIGHT)
     # Two adjacent words that the code writes as one name ("sipariş oluştur" -> siparis_olustur,
     # "retry policy" -> retry_policy, "order service" -> OrderService): that name, as if spelled
     stems_of: dict[str, set[str]] = defaultdict(set)

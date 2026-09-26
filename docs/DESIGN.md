@@ -75,6 +75,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D52 | Datapacks: function calls, tags, scoreboard | implemented | Built 2026-09-26 (section 25): `.mcfunction` files in the graph (`calls`, `schedule` as `registers` with ticks, `#minecraft:tick` / `load` as events); `datapack.py` links entity tags and objectives across mcfunction and Java; `verinoda datapack` lists tags checked but never added, objectives written but never read, missing functions. fastbench: 0 differences after keeping mcfunction files out of search names. |
 | D53 | Stack traces and GameTest results of a log | implemented | Built 2026-09-26 (section 26): `trace_log.py`; `verinoda trace-log FILE` maps project frames, folds the rest, ties a trace through a test's succeed/fail to that test, stores claims with the log as agent-report evidence. |
 | D54 | Shaders: uniform blocks and their Java writers | implemented | Built 2026-09-26 (section 27): `shaders.py`; `verinoda shader FIELD` / `--check`; analyze answers "where does `Block.Field.x` come from". Not done: shader functions in the graph, blocks filled in loops. |
+| D55 | English questions over Turkish-named code | implemented | Built 2026-09-26 (section 28): a symbol's leading comment is its own search text (schema 5); the seed dictionary read backwards with Turkish endings; 16 generic seed words. 30 mixed questions: top-3 8 -> 18 (English 0 -> 8). fastbench: analyze and text unchanged, JSON retrieval -4 facts. Not done: comment-learned pairs, a Turkish stemmer in the tokenizer. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3196,6 +3197,53 @@ fixture (a field added to the block, a constant renumbered) is reported by `--ch
 
 Graph nodes for shader functions and `#moj_import` edges, blocks filled in loops or through helpers, `uniform`
 variables outside blocks, post-effect JSON.
+
+## 28. English questions over code named in Turkish (D55, 2026-09-26)
+
+### 28.1 Why
+
+A mod written by a Turkish developer names its methods in Turkish (a body lookup, a list of threats) and documents
+many of them in English. An English question found almost none of them: on 30 questions about such methods of a
+private mod (15 in English, 15 in Turkish, a development set written for this item), 0 of the 15 English ones had
+their method in the first three results (MRR 0.023); the Turkish ones 8 (MRR 0.486).
+
+### 28.2 Decisions
+
+- **A symbol's leading comment is its own text** (search index schema 5): the javadoc or `//` block right above a
+  Java, Kotlin, C-family, Go, Rust, JS/TS ... method or field was outside the symbol's span, so its words counted
+  for the enclosing class. They now go to the symbol's unit, and the class's unit no longer holds them. For a
+  Turkish name its javadoc is often the only English there is.
+- **The seed dictionary backwards** for an English question: an English word's Turkish seed keys (`order` ->
+  `siparis`), tried with the endings a name part carries (`-ler`, `-i`, `-si`, `-de` ...) and kept as the index
+  cuts them (the English stemmer makes `govd` of `govde` and `siparisl` of `siparisler`), weight 0.5. Only where it
+  can help: a token of the code (a name or a code unit's text, not a glossary or Turkish prose), and only for a word
+  the code does not already name things with in English (`angel`, `item`: their Turkish glosses would pull in every
+  Turkish name that shares them).
+- **Sixteen generic seed words** used by game and tool code (`tehdit` threat, `dusman` enemy, `etraf` / `cevre`
+  around, `durak` stop, `konum` position, `ipucu` clue, `menzil` range, `bekci` guard ...).
+
+### 28.3 Measured
+
+- The 30 questions (kept outside the repository with the private corpus): top-3 18 of 30 (was 8), English 8 of 15
+  (was 0, MRR 0.023 -> 0.501), Turkish 10 of 15 (was 8, MRR 0.486 -> 0.627). The leading comments alone moved
+  English to 6 of 15. The seed words were chosen while looking at this set, so it is a development set.
+- "threats around the player" finds the Turkish-named threat list in the first three. "body lookup" does not reach
+  its method: about twenty methods of that mod are named after a body, and nothing in the question separates the
+  lookup from the others (its method ranks in the thirties).
+- fastbench on fresh indexes, old against new: analyze and plain-text retrieval unchanged on all nine sets; the
+  JSON retrieval lost 4 facts (a class's unit no longer spans its methods' javadoc words, and a whole-class unit
+  had counted every fact of its file).
+- Measured and dropped on the way: the comment in both units (weaker on the 30 questions, a fact lost by analyze on
+  the private set); the reverse seed at weight 0.7 and on words the code names in English (a fact lost by analyze
+  on an English question of the private set); `koru` glossed as guard or protect (a Turkish question about a
+  server's protection went to the guards module: 2 facts lost); reverse glosses from prose and data tokens (a
+  held-out question lost a fact to the seed glossary file itself).
+
+### 28.4 Not done
+
+Pairs learned from comments next to Turkish names (too sparse here: "threat" is written once near such a name), a
+Turkish stemmer in the tokenizer itself (`dusmanlar` -> `dusman` in the index), the Turkish question over English
+names beyond the seed.
 
 ## Sources
 
