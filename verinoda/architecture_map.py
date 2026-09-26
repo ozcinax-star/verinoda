@@ -11,6 +11,7 @@ decision records), impact (reverse dependencies of a change).
 
 from __future__ import annotations
 
+import heapq
 import re
 from collections import Counter, defaultdict, deque
 from pathlib import Path, PurePosixPath
@@ -53,6 +54,35 @@ ENTRY_DECORATOR_RE = re.compile(
 )
 ENTRY_NAME_RE = re.compile(r"(^|_)(handler|handle|endpoint|view|route|controller|main|cli|command)(_|$)", re.I)
 ENTRY_FILE_RE = re.compile(r"(^|/)(api|apis|views?|routes?|handlers?|controllers?|endpoints?|cli|main|__main__|app|server)\.[a-z]+$", re.I)
+
+# JVM mods (Fabric, NeoForge / Forge): entry points the framework calls, read from the code text and
+# fabric.mod.json (heuristics, labelled); see framework_entries
+JVM_SUFFIXES = (".java", ".kt")
+FABRIC_INITIALIZERS = {"ModInitializer": "onInitialize", "ClientModInitializer": "onInitializeClient",
+                       "DedicatedServerModInitializer": "onInitializeServer", "PreLaunchEntrypoint": "onPreLaunch"}
+FABRIC_ENTRY_METHODS = {"main": "onInitialize", "client": "onInitializeClient", "server": "onInitializeServer",
+                        "preLaunch": "onPreLaunch"}
+MIXIN_HANDLER_RE = re.compile(r"@(Inject|Redirect|ModifyVariable|ModifyArgs?|ModifyConstant|Overwrite|WrapOperation|"
+                              r"WrapWithCondition|ModifyExpressionValue|ModifyReturnValue)\b")
+# `ServerTickEvents.END_SERVER_TICK.register`, `UseBlockCallback.EVENT.register`: an event field's register;
+# `modBus.addListener`: a NeoForge / Forge event bus listener
+EVENT_REGISTRAR_RE = re.compile(r"(?:^|\.)[A-Z][A-Z0-9_]*\.register$|(?:^|\.)addListener$")
+# other calls that hand a method to the game to call later: a block entity ticker, a packet handler, a command
+# (a method handed to `forEach` / `map` / `computeIfAbsent` runs at once and is no entry point)
+CALLBACK_REGISTRAR_RE = re.compile(r"(?:^|\.)(?:createTickerHelper|playToServer|playToClient|playBidirectional|"
+                                   r"registerGlobalReceiver|registerReceiver|executes)$")
+ENTRY_TIERS = {"declared": 0, "framework": 1, "callback": 2}   # before the name heuristics (3)
+# persistence in JVM code (comment- and string-free lines of .java / .kt files; heuristics)
+JVM_SINK_PATTERNS = [
+    (re.compile(r"\bFiles\s*\.\s*(?:write|writeString|newBufferedWriter|newOutputStream|copy|move|createFile)\s*\(|"
+                r"\bnew\s+(?:FileWriter|FileOutputStream)\s*\("), "file-write"),
+    (re.compile(r"\bNbtIo\s*\.\s*write\w*\s*\("), "saved-data-write (NBT file)"),
+    # SavedData.setDirty() / PersistentState.markDirty(); a NeoForge block entity's setChanged()
+    (re.compile(r"\b(?:setDirty|markDirty|setChanged)\s*\("), "saved-data-write (dirty flag)"),
+]
+_JVM_SINK_WORDS = re.compile(r"\bFiles\b|FileWriter|FileOutputStream|NbtIo|setDirty|markDirty|setChanged")
+# a file without one of these words declares no framework entry point in its text
+_JVM_ENTRY_WORDS = re.compile(r"@(?:Mod|Mixin|SubscribeEvent)\b|EventBusSubscriber|Initializer\b|PreLaunchEntrypoint")
 
 
 def _read(root: Path, rel: str) -> list[str]:
@@ -171,7 +201,174 @@ def _sinks(g: Graph) -> dict[str, list[dict]]:
                     sym = _symbol_at(g, f, i)
                     if sym:
                         out.setdefault(sym, []).append({"kind": kind, "at": f"{f}:{i}", "line": text.strip()[:120]})
+        if f.endswith(JVM_SUFFIXES):
+            _jvm_sinks(g, f, lines, out)
     return out
+
+
+def _jvm_code(lines: list[str]) -> list[str]:
+    """Comment- and string-free lines of a Java / Kotlin file (a Java text block is not code either)."""
+    from verinoda.index import _java_code_lines
+
+    return _java_code_lines("\n".join(lines), kotlin=True) if lines else []
+
+
+def _jvm_sinks(g: Graph, f: str, lines: list[str], out: dict[str, list[dict]]) -> None:
+    """JVM persistence sinks (:data:`JVM_SINK_PATTERNS`) on the code lines of ``f``, labelled as heuristics."""
+    if not _JVM_SINK_WORDS.search("\n".join(lines)):
+        return
+    for i, text in enumerate(_jvm_code(lines), 1):
+        for rx, kind in JVM_SINK_PATTERNS:
+            if not rx.search(text):
+                continue
+            sym = _symbol_at(g, f, i)
+            if sym and not any(e["at"] == f"{f}:{i}" and e["kind"] == kind for e in out.get(sym, ())):
+                out.setdefault(sym, []).append({"kind": kind, "at": f"{f}:{i}", "line": lines[i - 1].strip()[:120],
+                                                "derived_by": "architecture_map.JVM_SINK_PATTERNS (heuristic)"})
+            break
+
+
+# -- JVM framework entry points (heuristics over the code text, labelled) --------------------------------
+
+def _decl_head(code: list[str], line: int | None, name: str, *, until_brace: bool = False) -> tuple[str, int] | None:
+    """``(text, declaration line)``: a JVM symbol's annotations and declaration. The declaration is the first
+    line from ``line`` that names ``name``; the lines above it back to the end of the previous statement or
+    member (``;``, ``{``, ``}``, a blank line) are its annotations. ``until_brace``: on to the ``{`` (a class's
+    ``extends`` / ``implements``)."""
+    if not line or not name or line > len(code):
+        return None
+    rx = re.compile(rf"(?<![\w$]){re.escape(name)}(?![\w$])")
+    s = next((i for i in range(line, min(line + 6, len(code)) + 1) if rx.search(code[i - 1])), None)
+    if s is None:
+        return None
+    a = s
+    while a > 1 and code[a - 2].strip() and not code[a - 2].rstrip().endswith((";", "{", "}")):
+        a -= 1
+    b = s
+    if until_brace:
+        while b < min(len(code), s + 6) and "{" not in code[b - 1]:
+            b += 1
+    return "\n".join(code[a - 1:b]), s
+
+
+def _fabric_entrypoints(g: Graph, jvm_files: list[str]) -> list[tuple[str, str, str]]:
+    """``(entry kind, value, fabric.mod.json path)`` of the ``entrypoints`` of the project's fabric.mod.json
+    files (in a source set's resources, ``src/<set>/resources``, or at the root)."""
+    import json
+
+    roots = {""}
+    for f in jvm_files:
+        m = re.match(r"(?:(.*)/)?src/([^/]+)/(?:java|kotlin)/", f)
+        if m:
+            roots.add(f"{m.group(1) + '/' if m.group(1) else ''}src/{m.group(2)}/resources/")
+    out = []
+    for r in sorted(roots):
+        rel = f"{r}fabric.mod.json"
+        try:
+            data = json.loads((Path(g.root) / rel).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        eps = data.get("entrypoints") if isinstance(data, dict) else None
+        for key, vals in (eps.items() if isinstance(eps, dict) else ()):
+            for v in vals if isinstance(vals, list) else [vals]:
+                val = v.get("value") if isinstance(v, dict) else v
+                if isinstance(val, str) and val.strip():
+                    out.append((str(key), val.strip(), rel))
+    return out
+
+
+def framework_entries(g: Graph) -> dict[str, dict]:
+    """JVM mod entry points the framework calls: ``{node: {"basis", "why": [...]}}``.
+
+    ``declared``: a class or method listed in fabric.mod.json ``entrypoints``, a class that implements a Fabric
+    initializer (its ``onInitialize...`` method), an ``@Mod`` class (its constructor). ``framework``: an
+    ``@SubscribeEvent`` method (with its event type), an ``@EventBusSubscriber`` class, a mixin handler
+    (``@Inject`` ...), a method registered with an event's ``register`` (``END_SERVER_TICK.register(X::tick)``,
+    a ``registers`` edge) or a bus's ``addListener``. ``callback``: a method handed by reference to a known game
+    registrar (:data:`CALLBACK_REGISTRAR_RE`: a ticker, a packet handler, a command). Read from the code text:
+    heuristics. Test files are left out."""
+    jvm = [f for f in _files(g) if f.endswith(JVM_SUFFIXES) and not is_test_file(f)]
+    if not jvm:
+        return {}
+    found: dict[str, dict] = {}
+
+    def add(n: str | None, basis: str, why: str) -> None:
+        if n is None or not g.file(n) or is_test_file(g.file(n)):
+            return
+        e = found.setdefault(n, {"basis": basis, "why": []})
+        if ENTRY_TIERS[basis] < ENTRY_TIERS[e["basis"]]:
+            e["basis"] = basis
+        if why not in e["why"]:
+            e["why"].append(why)
+
+    def bare(n: str) -> str:
+        return g.label(n).strip().strip(".()")
+
+    classes: dict[str, list[str]] = {f: [n for n in g.symbols_in(f) if g.G.nodes[n].get("_callable_class")]
+                                     for f in jvm}
+
+    def members(cid: str) -> list[str]:
+        return [v for v, _ in g.out_edges(cid, {"method"})]
+
+    def member(cid: str, name: str) -> str | None:
+        return next((v for v in members(cid) if bare(v) == name), None)
+
+    for key, val, rel in _fabric_entrypoints(g, jvm):
+        cls_path, _, meth = val.partition("::")
+        cls = cls_path.replace("$", ".").rpartition(".")[2]
+        path = cls_path.split("$")[0].replace(".", "/")
+        for f, cids in classes.items():
+            if not f.rsplit(".", 1)[0].endswith(path):
+                continue
+            for cid in cids:
+                if bare(cid) == cls:
+                    target = member(cid, meth) if meth else (member(cid, FABRIC_ENTRY_METHODS.get(key, "")) or cid)
+                    add(target, "declared", f'fabric.mod.json entrypoint "{key}": {val} ({rel})')
+    for f in jvm:
+        lines = _read(g.root, f)
+        if not classes[f] or not _JVM_ENTRY_WORDS.search("\n".join(lines)):
+            continue
+        code = _jvm_code(lines)
+        for cid in classes[f]:
+            hd = _decl_head(code, g.line(cid), bare(cid), until_brace=True)
+            head = hd[0] if hd else ""
+            ifaces = {g.label(v).rpartition(".")[2] for v, _ in g.out_edges(cid, {"implements", "inherits"})}
+            ifaces |= {i for i in FABRIC_INITIALIZERS if re.search(rf"(?:\bimplements\b|:)[^{{]*\b{i}\b", head)}
+            for iface in sorted(set(FABRIC_INITIALIZERS) & ifaces):
+                meth = FABRIC_INITIALIZERS[iface]
+                add(member(cid, meth) or cid, "declared", f"implements {iface}: Fabric calls {meth}() at start")
+            if re.search(r"@Mod\b(?!\s*\.)", head):  # not @Mod.EventBusSubscriber
+                for n in [v for v in members(cid) if bare(v) == bare(cid)] or [cid]:
+                    add(n, "declared", "@Mod class: the mod loader constructs it")
+            if re.search(r"@(?:Mod\.)?EventBusSubscriber\b", head):
+                add(cid, "framework", "@EventBusSubscriber: its static @SubscribeEvent methods are registered "
+                                      "on the event bus")
+            mixin = re.search(r"@Mixin\s*\(\s*(?:value\s*=\s*)?\{?\s*([\w.$]+?)(?:\.class|::class)", head)
+            for v in members(cid):
+                vh = _decl_head(code, g.line(v), bare(v))
+                if not vh:
+                    continue
+                if re.search(r"@SubscribeEvent\b", vh[0]):
+                    sig = code[vh[1] - 1]
+                    name = re.escape(bare(v))
+                    ev = re.search(rf"{name}\s*\(\s*(?:final\s+)?(?:@\w+\s+)*([\w.$]+)(?:<[^()]*?>)?\s+\w+", sig) or \
+                        re.search(rf"{name}\s*\(\s*\w+\s*:\s*([\w.]+)", sig)
+                    add(v, "framework", "@SubscribeEvent handler" + (f" of {ev.group(1)}" if ev else ""))
+                hm = MIXIN_HANDLER_RE.search(vh[0])
+                if hm and mixin:
+                    raw = "\n".join(lines[max(0, vh[1] - 6):vh[1]])
+                    into = re.search(r"method\s*=\s*\{?\s*\"([^\"]+)\"", raw)
+                    add(v, "framework", f"mixin @{hm.group(1)} into {mixin.group(1)}"
+                                        + (f".{into.group(1)}" if into else ""))
+    # methods handed over by reference (verinoda.index.java_registers_edges)
+    for u, v, d in g.edges({"registers"}):
+        reg = str(d.get("registrar") or "")
+        at = _edge_loc(d) or g.file(u) or ""
+        if EVENT_REGISTRAR_RE.search(reg):
+            add(v, "framework", f"callback registered with {reg}(...) at {at}")
+        elif CALLBACK_REGISTRAR_RE.search(reg):
+            add(v, "callback", f"callback handed to {reg}(...) at {at}")
+    return found
 
 
 def entry_reasons(g: Graph, n: str) -> list[str]:
@@ -196,12 +393,18 @@ def entry_reasons(g: Graph, n: str) -> list[str]:
 
 
 def entry_points(g: Graph) -> list[dict]:
+    """Entry points: JVM framework entries first (:func:`framework_entries`, with their ``basis``: declared,
+    framework, callback), then the name / decorator / module heuristics (:func:`entry_reasons`)."""
+    fw = framework_entries(g)
     found = []
     for n in g.G.nodes:
         reasons = entry_reasons(g, n)
-        if reasons:
+        if n in fw:
+            found.append({"id": n, "symbol": g.label(n), "at": _loc(g, n), "why": fw[n]["why"] + reasons,
+                          "basis": fw[n]["basis"]})
+        elif reasons:
             found.append({"id": n, "symbol": g.label(n), "at": _loc(g, n), "why": reasons})
-    return sorted(found, key=lambda e: e["at"])
+    return sorted(found, key=lambda e: (ENTRY_TIERS.get(e.get("basis"), 3), e["at"]))
 
 
 ASIDE = "copy or reference tree"
@@ -272,6 +475,11 @@ def dataflow(g: Graph, max_depth: int = 6, max_paths: int = 20) -> dict:
     if roots:
         limits.append("entry points in detected copies or reference trees (" + ", ".join(roots[:3])
                       + ") come after the project's own, marked \"in\"")
+    if any(e.get("basis") for e in entries) or any(x.get("derived_by") for v in sinks.values() for x in v):
+        limits.append("JVM mods: framework entry points (fabric.mod.json entrypoints, Fabric initializers, @Mod, "
+                      "@EventBusSubscriber / @SubscribeEvent, mixin handlers, methods registered by reference; each "
+                      "says why and its 'basis') and JVM sinks (file writes, NbtIo, setDirty / markDirty / "
+                      "setChanged) are read from the code text")
     return {
         "view": "dataflow",
         "coverage": {
@@ -450,6 +658,32 @@ def changed_files_from_git(root: Path, base: str | None = None) -> list[str]:
     return sorted({l.strip() for l in (out + "\n" + untracked).splitlines() if l.strip()})
 
 
+CALLBACK_VIA = "registers (callback)"
+
+
+def callback_dependents(g: Graph, dist: dict[str, int], rels: set[str], depth: int) -> set[str]:
+    """Extend a reverse walk ``dist`` (node -> distance, filled over ``rels``) in place with what reaches it
+    through a callback registration (``registers`` edges: the method that hands a changed method over, and
+    what depends on that). The nodes found before keep their distance; returns the nodes added."""
+    added: set[str] = set()
+    from verinoda.index import has_registers
+
+    if not has_registers(g):
+        return added
+    heap = [(d, n) for n, d in dist.items()]
+    heapq.heapify(heap)
+    while heap:
+        dd, n = heapq.heappop(heap)
+        if dd != dist.get(n) or dd >= depth:
+            continue
+        for u, _ in g.in_edges(n, rels | {"registers"}):
+            if u not in dist:
+                dist[u] = dd + 1
+                added.add(u)
+                heapq.heappush(heap, (dd + 1, u))
+    return added
+
+
 def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
     """Reverse reachability: who depends (calls/imports/uses/inherits) on the targets.
 
@@ -489,6 +723,7 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
             if u not in dist:
                 dist[u] = dist[n] + 1
                 q.append(u)
+    by_callback = callback_dependents(g, dist, rel, depth)
     affected_files = Counter()
     tests = set()
     for n, dd in dist.items():
@@ -516,7 +751,9 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
     return {
         "view": "impact",
         "coverage": {
-            "method": f"reverse traversal of call/import/use/inherit edges up to depth {depth}",
+            "method": f"reverse traversal of call/import/use/inherit edges up to depth {depth}"
+                      + ("; then callback registrations (a method handed over by reference: 'registers', "
+                         "INFERRED), marked via" if by_callback else ""),
             "limits": ["dynamic/reflective dependents are missed", "a dependent is 'possibly affected', "
                        "not proven broken"],
         },
@@ -524,7 +761,8 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
         "unresolved": unresolved,
         **({"resolution": resolution} if resolution else {}),
         "affected_symbols": sorted(
-            ({"symbol": g.label(n), "at": _loc(g, n), "distance": dd} for n, dd in dist.items() if dd > 0),
+            ({"symbol": g.label(n), "at": _loc(g, n), "distance": dd,
+              **({"via": CALLBACK_VIA} if n in by_callback else {})} for n, dd in dist.items() if dd > 0),
             key=lambda x: (x["distance"], x["at"]))[:80],
         "affected_files": dict(affected_files.most_common(40)),
         "tests_to_run": sorted(tests),

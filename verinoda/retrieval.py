@@ -91,7 +91,7 @@ IMPACT_RX = re.compile(r"\b(affect\w*|impact\w*|retest\w*|breaks?|if .* chang\w+
                        r"depend\w*|etkile\w*|kim kullan\w*|kullanan\w*|bagiml\w*)\b", re.I)
 _KIND_OF = {"calls": "call", "method": "containment", "contains": "containment", "uses": "reference",
             "references": "reference", "imports": "import", "imports_from": "import", "inherits": "inheritance",
-            "implements": "inheritance", "extends": "inheritance"}
+            "implements": "inheritance", "extends": "inheritance", "registers": "callback"}
 
 
 def _cost(obj) -> int:
@@ -763,6 +763,12 @@ def _render_items(result: dict, out: list[str], add, budget_chars: int) -> str:
 
 FLOW_ONLY = {"calls"}
 ANY_RELATIONS = {"calls", "uses", "imports", "imports_from", "inherits", "method", "references"}
+# a method handed over as a callback (JVM method references, verinoda.index.java_registers_edges): followed
+# only when no path exists without it, so every path found before stays the same
+CALLBACK_RELATIONS = {"registers"}
+CALLBACK_NOTE = ("a path includes a callback hop (registers): the method is handed over there (a method "
+                 "reference passed on); what receives it calls it later (an event, a ticker, a command) or at once "
+                 "(forEach, map, filter) - it is not a call written at that line")
 
 
 def _hints(g: Graph, text: str) -> list[dict]:
@@ -835,7 +841,7 @@ def _code_written(text: str) -> bool:
 
 
 def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int = 8,
-          mode: str = "flow", stale=()) -> dict:
+          mode: str = "flow", stale=(), callbacks: bool = True) -> dict:
     """Directed paths between two symbols/files, each hop with its edge location.
 
     ``mode="flow"`` follows only ``calls`` edges (plus class construction ->
@@ -857,6 +863,9 @@ def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int
     (a constant, an attribute) ``not_a_symbol``. Plain words may resolve by
     similarity, reported in ``fuzzy``. An endpoint that does not resolve comes
     back with ``hints`` and a ``next_step``.
+    With ``callbacks`` (the default), when there is no path, ``registers`` edges (a method handed over
+    as a callback) are followed too; such a hop is ``relation="registers"``, ``kind="callback"`` and the
+    result carries a ``note``.
     """
     from verinoda import naming
 
@@ -899,16 +908,13 @@ def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int
             continue
         if not D.has_edge(u, v) or d.get("confidence") == "EXTRACTED":
             D.add_edge(u, v, **d)
-    paths = []
-    try:
-        for p in nx.shortest_simple_paths(D, s, t):
-            if len(p) - 1 > cutoff:
-                break
-            paths.append(p)
-            if len(paths) >= max_paths:
-                break
-    except (nx.NetworkXNoPath, nx.NodeNotFound):
-        pass
+    paths = _simple_paths(D, s, t, cutoff, max_paths)
+    if not paths and callbacks:
+        D2 = _with_callbacks(g, D)
+        if D2 is not None:
+            paths = _simple_paths(D2, s, t, cutoff, max_paths)
+            if paths:
+                D = D2
     if not paths:
         try:
             p = nx.shortest_path(D.to_undirected(as_view=True), s, t)
@@ -927,16 +933,45 @@ def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int
             kinds_seen.add(kind)
             hops.append({"from": g.label(a), "from_id": a, "to": g.label(b), "to_id": b,
                          "relation": rel, "kind": kind, "confidence": d.get("confidence"), "at": _at(d),
-                         **({"derived_by": d["_origin"]} if str(d.get("_origin", "")).startswith("verinoda") else {})})
+                         **({"derived_by": d["_origin"]} if str(d.get("_origin", "")).startswith("verinoda") else {}),
+                         **({"context": d.get("context")} if kind == "callback" and d.get("context") else {})})
         out["paths"].append(hops)
     out["status"] = "found"
     if mode == "any":
         execution = kinds_seen <= {"call"}
-        out["reachability"] = "execution" if execution else "structural"
+        out["reachability"] = "execution" if execution else \
+            "callback" if kinds_seen <= {"call", "callback"} else "structural"
         if "containment" in kinds_seen:
             out["note"] = ("a path includes containment hops (a class/module defines the next symbol): it shows "
                            "how the symbols are related, not that execution reaches the target; "
                            "use mode='flow' for call paths")
-        elif not execution:
+        elif not execution and "callback" not in kinds_seen:
             out["note"] = "a path includes non-call hops: a structural relation, not execution reachability"
+    if "callback" in kinds_seen:
+        out["note"] = CALLBACK_NOTE + (f"; {out['note']}" if out.get("note") else "")
     return out
+
+
+def _simple_paths(D: nx.DiGraph, s: str, t: str, cutoff: int, max_paths: int) -> list[list[str]]:
+    paths: list[list[str]] = []
+    try:
+        for p in nx.shortest_simple_paths(D, s, t):
+            if len(p) - 1 > cutoff:
+                break
+            paths.append(p)
+            if len(paths) >= max_paths:
+                break
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        pass
+    return paths
+
+
+def _with_callbacks(g: Graph, D: nx.DiGraph) -> nx.DiGraph | None:
+    """``D`` plus the ``registers`` edges between nodes it has no edge between; None when there are none."""
+    extra = [(u, v, d) for u, v, d in g.edges(CALLBACK_RELATIONS) if not D.has_edge(u, v)]
+    if not extra:
+        return None
+    D2 = D.copy()
+    for u, v, d in extra:
+        D2.add_edge(u, v, **d)
+    return D2

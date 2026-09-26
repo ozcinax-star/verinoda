@@ -38,6 +38,7 @@ import ast
 import builtins
 import difflib
 import hashlib
+import heapq
 import re
 import time
 from collections import deque
@@ -1230,6 +1231,31 @@ def _walk_back(ctx: _Ctx, seeds: list[tuple[str, Change]], rels: set[str], depth
     return seen
 
 
+def _walk_callbacks(ctx: _Ctx, walk: dict, depth: int = DEPTH) -> None:
+    """Extend a reverse walk in place through callback registrations: the method that hands a changed method
+    over by reference (a ``registers`` edge, JVM ``Cls::m``) and what depends on it, over the relations of the
+    change's kind. The nodes found before keep their distance and chain."""
+    g = ctx.g
+    from verinoda.index import has_registers
+
+    if not has_registers(g):
+        return
+    heap = [(info["dist"], n) for n, info in walk.items()]
+    heapq.heapify(heap)
+    while heap:
+        d, v = heapq.heappop(heap)
+        info = walk[v]
+        kind = info["seed"].kind
+        if d != info["dist"] or d >= (1 if kind == "removed" else depth) or (d > 0 and _is_test(g.file(v) or "")):
+            continue
+        rels = {"signature": _SIG_RELS, "removed": _REMOVE_RELS}.get(kind, _BODY_RELS)
+        for u, e in _in_edges(ctx, v, rels | {"registers"}):
+            if u in walk or not g.file(u) or g.is_file_node(u):
+                continue
+            walk[u] = {"dist": d + 1, "parent": v, "edge": e, "seed": info["seed"]}
+            heapq.heappush(heap, (d + 1, u))
+
+
 def _chain(ctx: _Ctx, walk: dict, node: str) -> list[dict]:
     g = ctx.g
     out = []
@@ -1238,7 +1264,8 @@ def _chain(ctx: _Ctx, walk: dict, node: str) -> list[dict]:
         info = walk[cur]
         d = info["edge"] or {}
         hop = {"from": _clean_label(g.label(cur)), "to": _clean_label(g.label(info["parent"])),
-               "relation": "calls (construction)" if d.get("_construction") else d.get("relation"),
+               "relation": "calls (construction)" if d.get("_construction") else
+               "registers (callback)" if d.get("relation") == "registers" else d.get("relation"),
                "at": _relocated_at(ctx, cur, info["parent"], d), "confidence": d.get("confidence")}
         if str(d.get("_origin", "")).startswith("verinoda"):
             hop["derived_by"] = d["_origin"]
@@ -4318,6 +4345,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
             walk.setdefault(n, info)
         for n, info in _walk_back(ctx, seeds_rm, _REMOVE_RELS, depth=1).items():
             walk.setdefault(n, info)
+        _walk_callbacks(ctx, walk)
     dependents, dep_total = _dependents(ctx, walk, changes)
     readers = _binding_readers(ctx, changes)
     found: dict[str, list[dict]] = {k: [] for k in CONCERNS}

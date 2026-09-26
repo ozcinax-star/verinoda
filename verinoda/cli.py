@@ -229,6 +229,8 @@ def _r_trace(res: dict) -> None:
         for h in p:
             extra = f" derived_by={h['derived_by']}" if h.get("derived_by") else ""
             kind = f" ({h['kind']})" if h.get("kind") and h.get("kind") != "call" else ""
+            if h.get("kind") == "callback" and h.get("context"):
+                kind = f" (callback: {h['context']})"
             print(f"   {h['from']} -{h['relation']}[{h['confidence']}]-> {h['to']}  @{h['at']}{kind}{extra}")
     if res.get("reachability"):
         print(f" reachability: {res['reachability']}")

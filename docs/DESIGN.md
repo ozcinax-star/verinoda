@@ -58,6 +58,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D35 | Change review (`verinoda review`) | partial | Built 2026-09-25 (section 8): `verinoda review` (working tree vs HEAD, `--base`, `--staged`, a planned change with `--target` + `--change`), MCP `change_review` (34 tools), rule tables in `review_rules.py`, the review stored in `analyses`, a review step in both skills. review fixtures (36 dev + 11 held-out, gold hashed before any rule; one documented gold amendment before the first run): dev, in-sample, precision 0.92 and recall 1.00 at strong_inference or above; held-out, its only run with the rules frozen: precision 0.79 (bar 0.8 not met), recall 18/18, must-say-unknown 2/2; 0.81 after seven later fixes (one from that run, six from reviewing Verinoda's own branch; no longer clean). Time with the graph loaded: 0.19-0.21 s median on the examples, 1.8 s median (5.4 s max) on the 380-file copy. First review round (section 8.5): the 41 findings of two reviewers fixed with regression tests (the time finding partly): `--staged` reads the staged tree everywhere and runs it or refuses, SQL must be SQL-shaped, guard refactors are told apart from removals, removed methods and module-attribute call sites are found, a value changed on one line and saved later is found, `no_test_reaches` only for symbols with a static caller (`reach_unknown` otherwise); after it dev 67/73 = 0.92 and 62/62, held-out 22/27 = 0.81 and 18/18 (no longer clean), 1.7 s median on the copy. Second review round (section 8.6): 20 findings of a second reviewer fixed with regression tests - a check that now runs after the work it protected is `guard-after-work` / `check-call-after-work`, security calls are compared call by call, assigned aliases and renamed re-exports reach the guards engine, callers newer than the snapshot are searched and named (`graph_stale`), edges between a monorepo's packages are kept; dev and held-out numbers unchanged, +9 to +13 % time on the copy. Not built: findings as claims and critique on them, the entail predicate for a carried value, line-level coverage of changed lines, nested-loop and unbounded-append rules, value and parameter flow outside Python. |
 | D36 | Behaviour probe of changed functions | partial | Built 2026-09-25 (section 9): `verinoda probe FILE::NAME` / `--changed`, MCP `change_probe` (the design named it `behaviour_probe`): inputs from the syntax tree only (annotations, call-site literals and recipes, boundaries mined from comparisons, `len` checks, slices and imported constants of both versions and their callees, standard edges, then hypothesis or a fixed pseudo-random list), one corpus run at the base commit copy and in the working tree through `experiments.run` with a pytest plugin (no new allowlist entry), difference classes with minimal examples reproduced in a second pair of runs and recorded as run-scoped `experiment_verified` claims, properties, undeclared exceptions, nondeterminism, `--scaling`; a static side-effect gate (closure + module-level statements) and an audit hook in the run. No schema change (the design's `probes` table: runs are experiments, results are files under `runs/<probe id>/`). Hand fixtures (49, gold first, in-sample): 22/22 detected (20/20 of those the tests miss), 0 differences on 11 behaviour-preserving edits x 5 seeds (a 12th, labelled equivalent, really changes floats on Python 3.12: reported as `numeric_drift_only`), gate 9/9 refusals and 0/4 wrong ones, median 2.0 s per probe; automated mutants 25/25 killed; unchanged after a review round whose 16 findings were fixed or documented (threads and `multiprocessing` children blocked at run time, a taken module name, process exits, plugin errors, float drift, SQL strings in the gate, `--changed` no pass when a function was not compared), and after a second round of 8 (finalizers and exit handlers blocked at run time, the gate's SQL rule following helpers, defaults, attributes and loops again, float drift only between float literals, no pass when fewer than half of the inputs returned or raised, `asyncio.run` not network, an unparseable changed file, class-state writes, emitted tests for sets and long integers). Not built: `review --probe` (D35), the second minimisation round, the static concurrency signal; methods need a literal-argument constructor call. |
 | D37 | Exact names, one build at a time, freshness on every read (section 10) | implemented | Built 2026-09-26: `naming.resolve` for trace, impact and `node_inspect` (copies give way, ties listed), the copy rule in plan linking, the receiver pass bound to what a file can see, `buildlock` around scan/update, `freshness.check` on query/trace/map and the MCP read tools, analyze's refresh outside its budget (skipped with the stale files named when slow; MCP refreshes in the background). Tests from the evaluators' repros (`tests/test_exact_and_fresh.py`); the eight benchmark sets unchanged. Not done: per-file incremental update (the refresh is still a full rebuild). |
+| D38 | JVM callbacks and mod entry points | partial | Built 2026-09-26 (section 11): a Java / Kotlin method reference passed as an argument is a `registers` edge (never `calls`), stored in the receiver-call sidecar (version 3); `trace` follows it only when no call path exists, labelled `callback`; impact (map, UI, review dependents) follows it after the other edges, marked `registers (callback)`; a relation claim "A calls B" supported only by a method reference (source line, graph edge or a resolver answer) is graded `registers` (none); the map's entry points know fabric.mod.json, Fabric initializers, `@Mod`, `@EventBusSubscriber` / `@SubscribeEvent`, mixin handlers and registered callbacks, and its sinks JVM file writes, `NbtIo` and dirty flags. fastbench: 0 fact changes on all nine sets. Not built: `analyze` flow claims through callbacks, lambdas passed as callbacks, static initializer blocks, inherited targets. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -2316,6 +2317,94 @@ of the CPython standard library, 79,535 nodes) found, and the fixer changed:
   either on a big project** (low): see the build bullet.
 - **node_inspect and impact offered a similar name for a `not_indexed` one** (low) and **the text
   output hid the node a name resolved to** (low): see the resolver and freshness bullets.
+
+## 11. JVM callbacks and mod entry points (D38, 2026-09-26)
+
+### 11.1 Findings that drive the design
+
+- Mod code is callback-driven. `createTickerHelper(..., EmberForgeBlockEntity::serverTick)`,
+  `END_SERVER_TICK.register(RepairScheduler::tick)`, `registrar.playToServer(..., EmberNetwork::handleStoke)`:
+  the graph had no edge for these, so `trace EmberForgeBlock.getTicker EmberForgeBlockEntity.serverTick` and
+  `trace RepairScheduler.register RepairScheduler.tick` found no path, and impact on `serverTick`,
+  `handleStoke` or `RepairScheduler.tick` was empty (a change there looked safe).
+- `map --view dataflow` was empty on both example mods: no framework entry points, no JVM sinks.
+- `claim add "RepairScheduler.register calls RepairScheduler.tick" --kind relation` on the method reference
+  line got `strong_inference` 0.70, the grade of a real call whose receiver is not resolved.
+- A first attempt (d70b801, reverted in 3c066ec) made method references `calls` edges. It moved benchmark
+  scores (forge_mod JSON 50 -> 46, glow_mod analyze 43 -> 42), let a method reference hide a later direct
+  call to the same method, became a verified `calls` claim with a SCIP index, resolved `this::m` inside
+  anonymous classes and Kotlin objects to the outer class, and read Java text blocks as code.
+
+### 11.2 Decisions
+
+- **A separate relation, `registers`** (`index.java_registers_edges`): from the method that passes
+  `Cls::m`, `this::m`, `var::m` or Kotlin `::m` as an argument to the referenced method. The class is resolved
+  as for `java_call_edges` (an import, the file's package, a `pkg.*` import; else no edge); `var::m` follows the
+  declared type; `this::m` and Kotlin `::m` only where `this` is the named class that holds the method (a brace
+  scan of the code: not in an anonymous class, a Kotlin object expression, a companion object or a Kotlin
+  lambda, which may have another receiver); `::new`, `::class`, a dotted receiver, a reference that is not an
+  argument, a field initializer or static block (no method) make no edge. Comments, strings, Java text blocks
+  and Kotlin raw strings are blanked first. Edge data: `INFERRED`, `_origin=verinoda.java_refs`, `context`
+  ("RepairScheduler::tick passed to ServerTickEvents.END_SERVER_TICK.register(...)"), `registrar`,
+  `source_location`. Stored in the receiver-call sidecar under `registers` (version 3, so old sidecars are
+  recomputed); `_apply_edges` keeps one edge per relation, so a `registers` edge and a direct call between the
+  same two methods are both kept.
+- **The ranking does not see it**: `search_index.REL_WEIGHTS` (graph prior) and `retrieval.EXPAND_RELATIONS`
+  list the relations they weigh; `registers` is in neither. `analyze` builds claims from `calls` / `uses` /
+  `inherits` edges only.
+- **trace** follows `registers` only when there is no path without it, so every path found before is
+  returned unchanged; the hop is `relation=registers`, `kind=callback`, with its `context`, and the result has
+  a `note` (the framework calls the method later; it is not a call at that line). `analyze` passes
+  `callbacks=False`: its flow claims state calls.
+- **Impact** (`architecture_map.impact`, the UI's impact, review dependents) walks the other relations
+  first, then continues through `registers` edges; the nodes found before keep their distance, the new ones
+  are marked `registers (callback)`.
+- **Claims**: on Java / Kotlin, a cited line whose only mention of the target is a method reference is
+  call-site code `registers` (grade none): "A calls B" on it is `weak_inference`, below a real call, and
+  `claim add` attaches the line as qualifying evidence with that reason. A `registers` graph edge and a
+  resolver's definitive answer (SCIP finds the method a reference names) on such a line are graded the same
+  way: never a verified call.
+- **Entry points** (`architecture_map.framework_entries`, heuristics over the text, each with its reason and
+  a `basis`): `declared` - fabric.mod.json `entrypoints` (`main`, `client`, `server`, `fabric-gametest` ...,
+  `Cls::method` too), classes implementing `ModInitializer` / `ClientModInitializer` /
+  `DedicatedServerModInitializer` (their `onInitialize...`), `@Mod` classes (their constructor); `framework` -
+  `@SubscribeEvent` methods with the event type, `@EventBusSubscriber` classes, mixin handlers (`@Inject` ...
+  into the `@Mixin` target), methods registered with an event field's `register` or a bus's `addListener`;
+  `callback` - methods handed by reference to a known game registrar (`createTickerHelper`, `playToServer` /
+  `playToClient`, `registerGlobalReceiver`, brigadier `executes`). A method handed to `forEach`, `map` or
+  another call that runs it at once is no entry point. They come before the name heuristics. Test source sets
+  are left out.
+- **JVM sinks** (`JVM_SINK_PATTERNS`, on comment- and string-free lines, `derived_by` says heuristic):
+  `Files.write/writeString/newBufferedWriter/newOutputStream/copy/move/createFile`, `new FileWriter` /
+  `FileOutputStream`, `NbtIo.write*`, `setDirty()` / `markDirty()` / `setChanged()`. Kept apart from
+  `SINK_PATTERNS`, which review reads.
+
+### 11.3 Measurements
+
+- Edges: forge_mod 2 (`getTicker -> serverTick`, `EmberNetwork.register -> handleStoke`), glow_mod 8
+  (tick, stopping, chunk-load and client-tick events, the packet receiver, three command handlers). Entry
+  points: forge_mod 10 (1 declared, 7 framework, 2 callback), glow_mod 10 (2, 4, 4). Dataflow paths: 0 -> 2
+  on each (glow: `onInitialize -> GlowConfig.load` writes the config file; forge: `handleStoke -> stoke`
+  sets the dirty flag, `serverTick` sets it itself).
+- Both trace cases now return the callback path; impact on `RepairScheduler.tick` lists
+  `RepairScheduler.register` at distance 1 (`registers (callback)`).
+- fastbench on the prepared corpora (sidecars recomputed, `registers` edges counted in the run): 0 fact and
+  0 negative changes on all nine sets (BENCHMARKS.md).
+- Cost: the pass takes about 1 s on the largest mod corpus (computed once, stored in the sidecar); the
+  dataflow view about 0.5 s more there.
+
+### 11.4 Not done / limits
+
+- `analyze` does not build flow claims through callbacks (it asks trace for call paths only).
+- A lambda passed as a callback (`EVENT.register((a, b) -> ...)`) is not an edge; its body's calls belong to
+  the enclosing method already. A reference inside a lambda or an anonymous class is attributed to the
+  enclosing graph method.
+- A method reference in a static initializer block or a field initializer has no method to hand it over, and
+  a target inherited from a superclass is not resolved; overloads are one graph node.
+- `java_call_edges` itself still reads a Java text block as code (unchanged here; changing it moves the
+  calls pass).
+- Entry points and sinks are text heuristics: an annotation spelled through an alias or a registration made
+  through a project helper that takes a lambda are not seen.
 
 ## Sources
 

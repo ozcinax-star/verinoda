@@ -1699,7 +1699,8 @@ DESCRIPTIONS: dict[str, str] = {
         "Directed paths (up to 3, at most 8 hops) from source to target; each hop has relation, confidence "
         "(EXTRACTED/INFERRED) and call-site file:line. mode='flow': calls only; 'any': also uses/imports/inherits/"
         "references, saying whether a path is execution or structure. status: found | unresolved (with hints) | "
-        "no directed path | ambiguous; no static path does not prove there is none at runtime."),
+        "no directed path | ambiguous; no static path does not prove there is none at runtime. With no path, a JVM callback registration "
+        "(relation 'registers', kind 'callback', never a call) is followed and the result has a 'note'."),
     "map_view": (
         "One architecture view: hierarchy, dependencies (file-level calls/imports), dataflow (entry points -> "
         "persistence), config (env vars, config files), tests (static reachability), history (git log, decision "

@@ -238,6 +238,16 @@ dosyaları hiç okumuyordu.
   izlenmiyordu) dosyanın import'ları ya da paketi sınıfı bağlıyorsa eklenir ve
   her çağrı yeri gibi derecelendirilir. İddia metni `Ritual.baslat()` calls
   `Wisp.spawn()` biçimindedir.
+- **Geri çağrılar (callback):** argüman olarak verilen bir metot referansı
+  (`END_SERVER_TICK.register(RepairScheduler::tick)`) `registers` kenarıdır;
+  asla çağrı sayılmaz ve sıralamaya girmez. `trace` çağrı yolu yoksa onu izler
+  ve adımı `callback` diye yazar; etki analizi, arayüz ve `review` değişen
+  metodu kaydeden metodu gösterir; yalnızca metot referansına dayanan "A, B'yi
+  çağırır" iddiası `weak_inference` kalır. `map --view dataflow` modun giriş
+  noktalarından (fabric.mod.json, Fabric başlatıcıları, `@Mod`,
+  `@SubscribeEvent`, mixin, kayıtlı geri çağrılar) başlar ve JVM dosya
+  yazmalarını, `NbtIo`'yu ve kirli bayraklarını tanır; hepsi gerekçesiyle
+  yazılan metin sezgileridir.
 - **Referans ağaçları:** `verinoda setup --reference orijinal-eklenti/=orijinal,eklenti`
   özgün uygulamayı aranabilir tutar, ama soru "orijinal", "eklenti" ya da klasör
   adını anmadıkça 0,6 katsayıyla sıralar. `setup`, kod dosyalarının çoğu daha büyük bir klasördeki

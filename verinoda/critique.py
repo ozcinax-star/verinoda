@@ -92,6 +92,8 @@ _CALL_VERDICT = {
     "unbound": ("warn", "heuristic"), "not_called": ("warn", "heuristic"), "no_grammar": ("warn", "heuristic"),
     "outside_caller": ("fail", "definitive"), "string_only": ("fail", "definitive"), "absent": ("fail", "definitive"),
     "wrong_module": ("fail", "definitive"), "unreadable": ("fail", None), "blank": ("fail", None),
+    # a method reference hands the method over (a callback), it is not a call; the body may still call it
+    "registers": ("warn", "heuristic"),
 }
 
 
@@ -871,6 +873,22 @@ def challenge(store: Store, repo: Path, cid: str, *, graph=None, actor: str = "c
     }
 
 
+def _note_callback(cl: Claims, repo: Path, c: dict, detail: str) -> None:
+    """A relation claim whose cited line only passes the target by reference (``Cls::m``): the line is
+    attached as qualifying evidence that says so (it registers a callback, it does not call)."""
+    path, _, line = str((c.get("spec") or {}).get("at") or "").rpartition(":")
+    if not path or not line.isdigit():
+        return
+    ev = evmod.source_evidence(repo, path, int(line), commit=c.get("commit_sha"),
+                               meta={"check": "call_site", "code": "registers"})
+    if ev is not None and not any(e["relation"] == "qualifies" and (e.get("meta") or {}).get("code") == "registers"
+                                  for e in cl.evidence(c["id"])):
+        cl.attach(c["id"], ev, "qualifies", note=detail[:200])
+    cur = list(cl.get(c["id"]).get("uncertainties") or [])
+    if detail[:300] not in cur:
+        cl.store.update_claim(c["id"], {"uncertainties": cur + [detail[:300]]})
+
+
 def check_at_creation(store: Store, repo: Path, cid: str, *, graph=None, actor: str = "scope_check") -> dict:
     """The definitive, scope-stated checks of a claim just created (``claim add``).
 
@@ -888,6 +906,8 @@ def check_at_creation(store: Store, repo: Path, cid: str, *, graph=None, actor: 
         cs = call_site_check(repo, c, graph=graph)
         if cs["strength"] == "definitive" and cs["evidence"]:
             refute.append((cs["evidence"], cs["note"], cs["detail"]))
+        elif cs.get("code") == "registers":
+            _note_callback(cl, repo, c, cs["detail"])
     pctx = ProbeContext(repo=repo, kind=c["kind"], spec=spec, subjects=[str(s) for s in c.get("subjects") or []],
                         text=c["text"], graph=graph)
     for probe in SCOPE_PROBES.get(c["kind"], []):
