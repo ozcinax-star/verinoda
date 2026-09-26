@@ -59,7 +59,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from verinoda import anchors, callsite, entail, index, retrieval
+from verinoda import anchors, callsite, entail, index, retrieval, verdict_gate
 from verinoda import architecture_map as am
 from verinoda import evidence as evmod
 from verinoda import question_plan as qp
@@ -2113,10 +2113,23 @@ def _exclusive_guard(ctx: _Ctx, sub: _Sub, links: list[dict]) -> None:
     """A yes/no question whether a call is made *only* in some files: the claims that say where it is made
     do not answer it. The only_in engine of ``verinoda decide check`` (guards.py) does: a call outside the
     files is the answer (no), a search that finds none is an inference within the engine's limits; when
-    the call or the files cannot be resolved the sub-question is ``not_supported`` (docs/DESIGN.md D31)."""
+    the call or the files cannot be resolved the sub-question is ``not_supported`` (docs/DESIGN.md D31).
+    Its other face, "which X are not listed in Y" (a set difference, :func:`verdict_gate.asks_set_difference`),
+    is ``not_supported`` with the reason: no check here computes one (D-honest-verdicts)."""
     text = sub.sq.get("text") or ""
     word = asks_exclusive(text)
     if not word:
+        # "which X are not listed in Y": a set difference, the other face of "only"; no handler computes one
+        diff = verdict_gate.asks_set_difference(sub.sq.get("text_user_lang") or text) \
+            or verdict_gate.asks_set_difference(text)
+        if diff:
+            sub.flags["exclusive"] = {"unchecked": f"a set difference ('{diff}') is not computed"}
+            _unknown(ctx, sub, {"question": text,
+                                "why": f"the question asks for a set difference ('{diff}': all of them minus those "
+                                       "that are); the claims say where things are, not which are missing, and no "
+                                       "check here computes it",
+                                "next_step": "list both sets and compare them (the claims show where each set is "
+                                             "defined), or ask about one item: 'is X listed in Y?'"})
         return
     target, allowed, why_not, node = _exclusive_target(ctx, sub, links)
     if target is None:
@@ -2210,6 +2223,9 @@ def _finish_sub(ctx: _Ctx, sub: _Sub, out: dict, handler: str) -> dict:
     out["claim_ids"] = list(ctx.rec.by_sq.get(sub.sq["id"], []))
     out["unknowns"] = sub.unknowns
     out["_flags"] = sub.flags
+    # what the verdict gate needs later (verdict_gate.apply): the code the question names or links
+    named = sub.extra.get("anchored") or set(sub.seeds) | set(sub.subject_nodes)
+    out["_gate"] = {"subjects": sorted(n for n in named if n in ctx.g.G), "words": list(sub.words)}
     # made for this sub-question only as context (definitions of search hits, links among them), not by
     # its handler: a claim is shared by text, so a caller a handler found stays an answer
     out["_context"] = [cid for cid in ctx.rec.by_sq.get(sub.sq["id"], [])
@@ -2294,7 +2310,10 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
     ``human_decision_required`` whatever its claims say: a choice between options is never ``met`` by
     evidence (docs/DESIGN.md D33), and an option the code does not have does not make it ``unmet``. One whose
     words may ask for a choice (``flags["may_ask_for_choice"]``) is at most ``met_with_inference``: its claims
-    say what the code does, which may not be what was asked.
+    say what the code does, which may not be what was asked. The verdict gate (:mod:`verinoda.verdict_gate`,
+    docs/DESIGN.md D-honest-verdicts) only lowers: claims in ``flags["weak"]`` (not about what was asked, or
+    only in a copy of the code) never make it ``met``, and ``flags["capped"]`` (call sites left unresolved, a
+    reason not found) keeps it at most ``met_with_inference``.
     """
     flags = flags or {}
     if flags.get("blocked"):
@@ -2326,9 +2345,13 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
         if kind == "set_enumerated" and flags.get("empty_sets") and not flags.get("unlinked"):
             return "met_with_inference"
         return "unmet"
-    best = min(live, key=lambda c: _RANK[c["status"]])["status"]
+    weak = set(flags.get(verdict_gate.WEAK) or [])
+    strong = [c for c in live if c["id"] not in weak]
+    if not strong:
+        return "met_with_inference"  # claims exist, but none shown to answer what was asked
+    best = min(strong, key=lambda c: _RANK[c["status"]])["status"]
     if best in VERIFIED and _RANK[best] <= _RANK.get(min_status, _RANK[MIN_STATUS_DEFAULT]) \
-            and not flags.get("may_ask_for_choice"):
+            and not flags.get("may_ask_for_choice") and not flags.get(verdict_gate.CAPPED):
         return "met"
     return "met_with_inference"
 
@@ -2615,6 +2638,18 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
                                                               for c in flags["exclusive"]["answer"]))
         context = {replaced.get(c, c) for c in s.pop("_context", [])}
         rows = _claim_rows(store, s["claim_ids"])
+        gate = s.pop("_gate", {})
+        n_unknowns = len(unknowns)
+
+        def gate_step(name: str, detail: str = "") -> None:  # recorded, not charged: every claim is made already
+            steps.append({"step": name, "detail": detail, "t": round(time.monotonic() - budget.started, 3)})
+
+        try:  # are the answering claims about what was asked? (only caps or refuses; D-honest-verdicts)
+            verdict_gate.apply(ctx, by_id[s["id"]], rows, flags, s, {"unknowns": unknowns}, gate,
+                               answer_claims(by_id[s["id"]], rows, flags), step=gate_step)
+        except Exception as exc:  # noqa: BLE001 - a failed check is said, the verdict is capped, never raised
+            flags.setdefault(verdict_gate.CAPPED, []).append(f"verdict check failed: {type(exc).__name__}")
+        budget.chars += sum(_size(u) for u in unknowns[n_unknowns:])
         s["status"] = judge(by_id[s["id"]], rows, flags)
         ans = answer_claims(by_id[s["id"]], rows, flags)
         # what the sub-question's own handler found (the write site, the callers) before definitions
