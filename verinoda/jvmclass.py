@@ -31,12 +31,14 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-INDEX_VERSION = 2
+INDEX_VERSION = 3   # 3: access bits and parameter types of methods (docs/DESIGN.md D51)
 MAX_JARS = 400
 MAX_NESTED_DEPTH = 2
 
 ACC_STATIC, ACC_VARARGS, ACC_PRIVATE, ACC_SYNTHETIC, ACC_BRIDGE = 0x0008, 0x0080, 0x0002, 0x1000, 0x0040
 ACC_INTERFACE, ACC_ENUM = 0x0200, 0x4000
+ACC_PUBLIC, ACC_PROTECTED = 0x0001, 0x0004
+ACCESS_BITS = ACC_PUBLIC | ACC_PRIVATE | ACC_PROTECTED
 # release number -> the letter ct.sym names it by (8, 9, then A = 10 ... Z = 35)
 _RELEASE_CHAR = {**{r: str(r) for r in (8, 9)}, **{r: chr(ord("A") + r - 10) for r in range(10, 36)}}
 
@@ -76,7 +78,7 @@ def _generic_return(sig: str | None) -> bool:
 
 
 def parse_class(b: bytes) -> dict | None:
-    """``{"name", "super", "ifaces", "flags", "methods": {name: [[nparams, flags, ret], ...]},
+    """``{"name", "super", "ifaces", "flags", "methods": {name: [[nparams, flags, ret, param types], ...]},
     "fields": {name: [type, flags]}, "inner": {simple name: binary name}}`` of a class file, or None."""
     if b[:4] != b"\xca\xfe\xba\xbe":
         return None
@@ -165,9 +167,10 @@ def parse_class(b: bytes) -> dict | None:
         if acc & (ACC_SYNTHETIC | ACC_BRIDGE) or mname == "<clinit>":
             continue
         npar, ret = method_shape(desc)
-        methods.setdefault(mname, []).append([npar, acc & (ACC_STATIC | ACC_VARARGS | ACC_PRIVATE),
-                                              None if _generic_return(sig) else ret])
-    fields = {fname: [_descriptor_types(desc)[0] if desc else "?", acc & (ACC_STATIC | ACC_PRIVATE)]
+        params = _descriptor_types(desc[1:desc.index(")")]) if desc and ")" in desc else []
+        methods.setdefault(mname, []).append([npar, acc & (ACC_STATIC | ACC_VARARGS | ACCESS_BITS),
+                                              None if _generic_return(sig) else ret, params])
+    fields = {fname: [_descriptor_types(desc)[0] if desc else "?", acc & (ACC_STATIC | ACCESS_BITS)]
               for fname, desc, acc, _sig in fields_raw if not acc & ACC_SYNTHETIC}
     out = {"name": name, "super": cname(sup), "ifaces": [x for x in ifaces if x], "flags": flags,
            "methods": methods, "fields": fields, "inner": inner}

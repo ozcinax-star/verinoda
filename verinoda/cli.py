@@ -794,6 +794,16 @@ def cmd_trace(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_backlog(args) -> int:
+    from verinoda import backlog, freshness, index
+
+    repo = _repo(args)
+    res = backlog.lookup(repo, args.target, graph=(lambda: index.load(repo)) if (repo / ".verinoda").is_dir() else None,
+                         stale=lambda: freshness.check(repo)["files"])
+    _emit(args, res, lambda r: print(backlog.render(r)))
+    return 0 if res["status"] == "found" else 2
+
+
 def cmd_when(args) -> int:
     from verinoda import freshness, index, when
 
@@ -2088,7 +2098,8 @@ def _r_api(r: dict) -> None:
             print("  nearest: " + ", ".join(n["name"] for n in r["nearest"]))
         return
     where = r.get("at") or ""
-    print(f"{r.get('name') or r['target']} ({r.get('kind')}, {r.get('source')}, {where})")
+    print(f"{r.get('name') or r['target']} ({r.get('kind')}, {r.get('source')}" + (f", {where})" if where else ")")
+          + (f" extends {r['super']}" if r.get("super") and r.get("language") == "Java" else ""))
     if env:
         print(f"environment: {env.get('python')}")
     if r.get("signature"):
@@ -2098,7 +2109,9 @@ def _r_api(r: dict) -> None:
     for m in r.get("members", []):
         sig = m.get("signature") or m["name"]
         extra = f"  (from {m['defined_in']})" if m.get("defined_in") else ""
-        print(f"  {sig:<60} {m.get('kind') or '':<12} {m.get('at') or ''}{extra}")
+        kind = " ".join(x for x in (m.get("access") if m.get("access") != "public" else None,
+                                    "static" if m.get("static") else None, m.get("kind")) if x)
+        print(f"  {sig:<60} {kind:<22} {m.get('at') or ''}{extra}")
 
 
 def cmd_api(args) -> int:
@@ -2461,6 +2474,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("source")
     sp.add_argument("target")
     sp.add_argument("--mode", choices=["flow", "any"], default="flow")
+    sp = add("backlog", cmd_backlog, "a backlog item and the code comments that cite it, or the items that explain "
+                                     "a line or symbol (docs/BACKLOG.md rows and headings)")
+    sp.add_argument("target", help="an item id (69.3), path/File.java:LINE[-LINE], or a symbol")
     sp = add("when", cmd_when, "when a method runs: the events and callers that lead to it, with the conditions "
                                "around each call")
     sp.add_argument("symbol")
@@ -2817,8 +2833,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--env", default="auto", help=env_help)
     sp.add_argument("--all", action="store_true", help="also list the sites that exist")
     sp.add_argument("--no-cache", action="store_true", help="do not read or write .verinoda/cache/check")
-    sp = add("api", cmd_api, "Python only: the real members of a Python module, class or function in the "
-                             "project's environment, with signatures and locations (exit 3: not found; a name that "
+    sp = add("api", cmd_api, "the real members of a Python module, class or function in the project's environment, "
+                             "or of a Java class as the build sees it (classpath and JDK, with access), with "
+                             "signatures and locations (exit 3: not found; a name that "
                              "could not be decided - an open container, an attribute of a function or variable - "
                              "is reported as not decided, exit 0; a name of the project's code in another "
                              "language is not checked, exit 4)")

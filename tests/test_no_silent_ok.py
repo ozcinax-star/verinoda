@@ -337,10 +337,11 @@ def test_check_never_passes_a_file_it_cannot_read(tmp_path, capsys):
     assert not any("does not parse" in str(f) for f in snip["files"])
     whole = codecheck.check(repo, ["src"], env="none")
     assert whole["summary"]["files"] >= 15 and not any(u["language"] == "Java" for u in whole.get("not_checked", []))
-    # `api net.ashvale...EmberForgeBlockEntity` answered "module net is not in the standard library"
+    # `api net.ashvale...EmberForgeBlockEntity` answered "module net is not in the standard library"; since D51
+    # a Java class is read as the build sees it
     api = codecheck.api(repo, "com.example.glowmod.ritual.Ritual.baslat", env="none")
-    assert api["found"] is None and api["decided"] == "unsupported_language" and "Ritual.java" in api["why"]
-    assert api["exit"] == 4  # not checked, as in `check` (it was 0)
+    assert api["found"] is True and api["language"] == "Java" and api["at"].endswith("Ritual.java")
+    assert [m["name"] for m in api["members"]] == ["baslat"] and api["exit"] == 0
     # the diff: a TypeScript rename is listed, never passed
     _write(repo, "web/orderService.ts", "export function applyDiscount(x: number) { return x; }\n")
     _git(repo, "add", "-A")
@@ -376,7 +377,7 @@ def test_the_languages_check_reads_are_said_in_the_help_the_mcp_descriptions_and
 
     assert "Python, Java and Kotlin" in cli.build_parser().format_help()
     assert server.DESCRIPTIONS["code_check"].startswith("Python, Java, Kotlin")
-    assert server.DESCRIPTIONS["api_members"].startswith("Python only")
+    assert "Python module" in server.DESCRIPTIONS["api_members"] and "Java class" in server.DESCRIPTIONS["api_members"]
     for agent in ("claude", "codex"):
         body = agents.render_skill(agent).decode("utf-8")
         assert "Python" in body and "Java" in body and "Kotlin" in body and "not_checked" in body

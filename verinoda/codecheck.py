@@ -3705,6 +3705,25 @@ def _env_header(repo: Path, env: cenv.EnvInfo | None, sites: list[dict], no_jedi
 
 # -- api --------------------------------------------------------------------------------------------------
 
+def _java_api(repo: Path, target: str, private: bool) -> dict | None:
+    """``api`` for a Java class (docs/DESIGN.md D51): tried first in a repository with Java sources, for a dotted
+    name with a capitalised part or a capitalised simple name; None to go on with Python."""
+    parts = [p for p in target.replace("#", ".").split(".") if p]
+    if not parts or not any(p[:1].isupper() for p in parts):
+        return None
+    from verinoda import codecheck_java
+    from verinoda.paths import atlas_dir, load_config
+
+    try:
+        config = load_config(repo)
+    except Exception:  # noqa: BLE001 - no readable config: the build's own classpath is looked for
+        config = None
+    try:
+        return codecheck_java.api(repo, target, config, atlas_dir(repo) / "cache" / "jvm", private=private)
+    except (OSError, ValueError, RecursionError):
+        return None
+
+
 def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = False,
         trust_env: bool = True) -> dict:
     """The real members of a module, class or function, with signatures and locations. ``found`` is False
@@ -3716,6 +3735,9 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
     from verinoda import precise
 
     repo = Path(repo).resolve()
+    java = _java_api(repo, target, private)
+    if java is not None and (java.get("found") or java.get("decided") == "ambiguous"):
+        return java
     ok, why = precise.available()
     if not ok:
         return {"target": target, "found": None, "decided": "unknown", "why": why, "exit": 0}

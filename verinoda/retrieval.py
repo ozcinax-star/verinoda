@@ -203,6 +203,18 @@ def _mark(d: dict) -> str:
     return "" if d.get("confidence") == "EXTRACTED" else "?"
 
 
+def backlog_lines(repo, file: str, a: int, b: int, limit: int = 2) -> list[str]:
+    """``backlog: 69.3 Title (docs/BACKLOG.md:2235)`` for the backlog items the unit's comments cite (docs/DESIGN.md
+    D50): the shortest path from a line to why it is so."""
+    from verinoda import backlog
+
+    try:
+        found = backlog.items_for(repo, file, a, b, context=2)
+    except Exception:  # noqa: BLE001 - a backlog that cannot be read never breaks retrieval
+        return []
+    return [f"  backlog: {x['item'].id} {_clip(x['item'].title, 90)} ({x['item'].at})" for x in found[:limit]]
+
+
 def runs_lines(g: Graph, nid: str, limit: int = 2) -> list[str]:
     """What starts a symbol, when the graph knows it (docs/DESIGN.md D47, D48): ``mixin: @Inject into
     Mob.checkSpawnRules at HEAD - ...`` for a Mixin handler, ``runs: at the end of every server tick (registered at
@@ -627,6 +639,8 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
                 parts.append("  called by: " + "; ".join(callers) + (f" (+{nb - len(callers)})" if nb > len(callers) else ""))
                 outlined = True
             parts += runs_lines(g, h.nid) if full or flow else []
+        if full:
+            parts += backlog_lines(g.root, h.file, a, b)
         if full and h.consts:
             for c, ln in h.consts[:2]:
                 if 0 < ln <= len(lines):

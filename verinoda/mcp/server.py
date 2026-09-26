@@ -808,12 +808,23 @@ class AtlasTools:
                          "confidence": d.get("confidence"), "at": _edge_at(d)}
                     if str(d.get("_origin", "")).startswith("verinoda"):
                         r["derived_by"] = d["_origin"]
+                    if d.get("context") and d.get("relation") in ("registers", "injects", "accesses"):
+                        r["context"] = str(d["context"])[:160]
                     rs.append(r)
                 rs.sort(key=lambda r: (str(r["relation"]), r["at"] or "", r[other_key]))
                 return rs, rel_count
 
             outs, out_rel = rows(g.out_edges(nid), "to")
             ins, in_rel = rows(g.in_edges(nid), "from")
+            span = g.span(nid)
+            if span and g.file(nid):  # the backlog items its comments cite (docs/DESIGN.md D50)
+                from verinoda import backlog
+
+                cited = backlog.items_for(g.root, g.file(nid), span[0], span[1], context=2)[:5]
+                if cited:
+                    out["backlog"] = [{"id": x["item"].id, "title": x["item"].title[:120], "at": x["item"].at,
+                                       "cited_at": f"{g.file(nid)}:{x['line']}", **({"via": x["via"]} if x["via"]
+                                                                                   else {})} for x in cited]
             out.update({
                 "out_edges": outs[:EDGE_CAP], "out_total": len(outs), "out_relations": out_rel,
                 "in_edges": ins[:EDGE_CAP], "in_total": len(ins), "in_relations": in_rel,
@@ -1783,8 +1794,9 @@ DESCRIPTIONS: dict[str, str] = {
         "HEAD), or snippet + as_path. Each site: exists | absent (nearest names) | unknown (why) | "
         "not_installed | guarded. exit 3 = absent or a version differs from the lock. Read-only."),
     "api_members": (
-        "Python only. The real members of a module, class or function (dotted target) in the project's "
-        "environment: name, kind, signature, file:line, inherited-from, source version; private=true adds '_' "
+        "The real members of a Python module, class or function (dotted target) in the project's environment, "
+        "or of a Java class on the build's classpath (access included): name, kind, signature, file:line, "
+        "inherited-from, source version; private=true adds '_' "
         "names. found=false (exit 3) comes with nearest names; found=null ('unknown' / 'not_installed') was "
         "not decided; 'unsupported_language' (exit 4): the project's code in another language. Read-only."),
     "runtime_observe": (

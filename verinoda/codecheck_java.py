@@ -590,6 +590,23 @@ def _arity_ok(ov: list, n: int) -> bool:
     return npar == n or (flags & 0x0080 and n >= npar - 1)
 
 
+_BOXES = {"I": "java/lang/Integer", "J": "java/lang/Long", "S": "java/lang/Short", "B": "java/lang/Byte",
+          "C": "java/lang/Character", "Z": "java/lang/Boolean", "F": "java/lang/Float", "D": "java/lang/Double"}
+
+
+def _param_text(p: str) -> str:
+    """``J`` -> long, ``net/minecraft/core/BlockPos`` -> BlockPos, ``[I`` -> int[]."""
+    dims = len(p) - len(p.lstrip("["))
+    base = p.lstrip("[")
+    name = _PRIM_DESC.get(base, base.rsplit("/", 1)[-1].replace("$", "."))
+    return name + "[]" * dims
+
+
+def _access_word(flags: int) -> str:
+    return "private" if flags & 0x0002 else "protected" if flags & 0x0004 else "public" if flags & 0x0001 else \
+        "package-private"
+
+
 # -- checking one file ------------------------------------------------------------------------------
 
 class _FileCheck:
@@ -614,7 +631,7 @@ class _FileCheck:
         return self.u.resolve(written, self.ctx, scope, tv)
 
     def site(self, node, kind: str, expr: str, name: str, verdict: str, why: str = "", where: str = "",
-             nearest: list[str] | None = None) -> None:
+             nearest: list[str] | None = None, access: str | None = None) -> None:
         line, col = node.start_point[0] + 1, node.start_point[1] + 1
         if self.lines is not None and line not in self.lines:
             return
@@ -629,6 +646,8 @@ class _FileCheck:
             s["where"] = where
         if nearest:
             s["nearest"] = [{"name": n} for n in nearest]
+        if access:
+            s["access"] = access
         self.sites.append(s)
 
     def verdict_of(self, why: str) -> tuple[str, str]:
@@ -1130,6 +1149,7 @@ class _FileCheck:
 
     def check_call(self, n, env, scope, tv) -> str | None:
         u = self.u
+        self._scope = scope  # the classes around the call, for the access check of _judge
         name_node = n.child_by_field_name("name")
         name = _t(name_node, self.src)
         args = n.child_by_field_name("arguments")
@@ -1188,8 +1208,54 @@ class _FileCheck:
                       if missing else f"{_src(binary)} is not read")
         return None
 
+    def accessible(self, owner: str, ov: list, scope) -> bool:
+        """Can code in ``scope`` (the classes around the site, innermost last) reach this member of ``owner``?
+        Decided only for members read from class files (their access bits are known: a 4-element record)."""
+        if len(ov) < 4 or not scope:
+            return True
+        flags = ov[1]
+        if flags & 0x0001:
+            return True
+        tops = {c.split("$", 1)[0] for c in scope}
+        if flags & 0x0002:
+            return owner.split("$", 1)[0] in tops
+        same_pkg = any(c.rsplit("/", 1)[0] == owner.rsplit("/", 1)[0] for c in scope)
+        if same_pkg:
+            return True
+        if flags & 0x0004:  # a subclass, or a class nested in one
+            return any(owner in self.u.ancestors(c)[0] for c in scope)
+        return False
+
+    def fits_args(self, ov: list, argtypes: list[str | None]) -> bool:
+        """Could these argument types go to this overload? Only a known class type against a primitive
+        parameter, or against a class it does not extend, says no (a record without parameter types: yes)."""
+        if len(ov) < 4 or len(ov[3]) != len(argtypes) or ov[1] & 0x0080:
+            return True
+        for a, p in zip(argtypes, ov[3]):
+            if not a or p == "java/lang/Object" or p.startswith("["):
+                continue
+            if p in _PRIM_DESC:
+                if a != _BOXES.get(p) and a not in _BOXES.values() and self.u.get(a) is not None:
+                    return False
+                continue
+            if a == p or not self.u.hierarchy_closed(a):
+                continue
+            if p not in self.u.ancestors(a)[0]:
+                return False
+        return True
+
     def _judge(self, node, expr: str, name: str, nargs: int, ovs: list, binary: str) -> str | None:
         fits = [(owner, ov) for owner, ov in ovs if _arity_ok(ov, nargs)]
+        scope = getattr(self, "_scope", None)
+        if fits and scope and not any(self.accessible(o, ov, scope) for o, ov in fits):
+            owner, ov = fits[0]
+            word = _access_word(ov[1])
+            self.site(node, "method", expr, name, "absent",
+                      why=f"{word} in {_src(owner)}: not accessible from {_src(scope[-1])}"
+                          + (" (not a subclass, another package)" if word == "protected" else
+                             " (another package)" if word == "package-private" else ""),
+                      where=f"{_src(owner)} ({self.u.origin(owner)})", access=word)
+            return None
         if fits:
             owner = fits[0][0]
             self.site(node, "method", expr, name, "exists", where=f"{_src(owner)} ({self.u.origin(owner)})")
@@ -1210,9 +1276,10 @@ class _FileCheck:
         tnode = n.child_by_field_name("type")
         args = n.child_by_field_name("arguments")
         nargs = _count_args(args)
+        argtypes: list[str | None] = []
         if args is not None:
             for a in args.named_children:
-                self.walk_expr(a, env, scope, tv)
+                argtypes.append(self.walk_expr(a, env, scope, tv))
         outer = n.named_children[0] if n.named_children and n.named_children[0] not in (tnode, args) else None
         if outer is not None and outer.type not in ("type_arguments",):
             self.walk_expr(outer, env, scope, tv)
@@ -1228,12 +1295,27 @@ class _FileCheck:
         if c is None or "$" in binary or c.get("flags", 0) & 0x0200:
             return binary
         ctors = c.get("methods", {}).get("<init>", [])
-        if any(_arity_ok(ov, nargs) for ov in ctors):
+        fits = [ov for ov in ctors if _arity_ok(ov, nargs)]
+        typed = [ov for ov in fits if self.fits_args(ov, argtypes)] if fits else []
+        if fits and not typed:
+            known = ", ".join(_param_text(a) if a else "?" for a in argtypes)
+            self.site(tnode, "constructor", f"new {written}(...)", written, "absent",
+                      why=f"no constructor of {_src(binary)} takes ({known}): they take "
+                          + "; ".join("(" + ", ".join(_param_text(p) for p in ov[3]) + ")" for ov in ctors
+                                      if len(ov) >= 4) or f"no constructor of {_src(binary)} takes ({known})",
+                      where=u.origin(binary))
+        elif typed and scope and not any(self.accessible(binary, ov, scope) for ov in typed):
+            word = _access_word(typed[0][1])
+            self.site(tnode, "constructor", f"new {written}(...)", written, "absent",
+                      why=f"the constructor is {word} in {_src(binary)}: not accessible from {_src(scope[-1])}",
+                      where=u.origin(binary), access=word)
+        elif fits:
             self.site(tnode, "constructor", f"new {written}(...)", written, "exists", where=u.origin(binary))
         elif ctors:
+            sigs = ["(" + ", ".join(_param_text(p) for p in ov[3]) + ")" for ov in ctors if len(ov) >= 4]
             self.site(tnode, "constructor", f"new {written}(...)", written, "absent",
                       why=f"no constructor of {_src(binary)} takes {nargs} argument{'s' if nargs != 1 else ''}: they take "
-                          + ", ".join(str(a) for a in sorted({ov[0] for ov in ctors})))
+                          + ("; ".join(sigs) if sigs else ", ".join(str(a) for a in sorted({ov[0] for ov in ctors}))))
         return binary
 
     def check_field_access(self, n, env, scope, tv) -> str | None:
@@ -1535,3 +1617,96 @@ def check_files(repo: Path, targets: list[tuple[str, Path, set[int] | None]], co
         notes += [f"{where}: {n}" for n in cp.notes]
     return {"sites": sites, "files": files, "builds": builds, "notes": notes,
             "seconds": round(time.perf_counter() - t0, 3)}
+
+
+# -- the real members of a class (verinoda api, docs/DESIGN.md D51) --------------------------------------
+
+_SKIP_BUILD = {"build", ".gradle", "out", "bin", "node_modules", ".git", ".verinoda", "run", ".idea"}
+
+def api(repo: Path, target: str, config: dict | None = None, cache_dir: Path | None = None, *,
+        private: bool = False, limit: int = 400) -> dict | None:
+    """The members of a Java class as the build sees it (the project's sources, its classpath, the JDK): name,
+    parameters, return type, access and the type that declares each, own members first. None when the repository
+    has no Java source; ``found: False`` when no class of that name is on the classpath; a simple name that several
+    classes carry is ``ambiguous`` with the candidates."""
+    repo = Path(repo).resolve()
+    first = next((p for p in repo.rglob("*.java") if not any(part in _SKIP_BUILD for part in
+                                                            p.relative_to(repo).parts)), None)
+    if first is None:
+        return None
+    root = jvmclass.build_root(repo, first)
+    cp = jvmclass.discover(root, config if root == repo else None)
+    u = Universe(repo, cp, cache_dir, root, None)
+    name = target.strip().replace("#", ".").removesuffix("()")
+    binary, member = None, None
+    parts = name.split(".")
+    for i in range(len(parts), 0, -1):  # the longest prefix that names a class; the rest a member
+        cand = "/".join(parts[:i])
+        for k in range(i - 1, -1, -1):  # an inner class: a.b.Outer.Inner -> a/b/Outer$Inner
+            b = "/".join(parts[:k + 1]) + "".join("$" + p for p in parts[k + 1:i]) if k < i - 1 else cand
+            if u.get(b):
+                binary, member = b, ".".join(parts[i:]) or None
+                break
+        if binary:
+            break
+    if binary is None:
+        simple = parts[-1] if len(parts) == 1 else parts[-2] if parts[-1][:1].islower() else parts[-1]
+        member = parts[-1] if len(parts) > 1 and parts[-1][:1].islower() else None
+        hits = sorted({b for table in (u.project, u.lib, u.jdk) for b in table
+                       if b.rsplit("/", 1)[-1].rsplit("$", 1)[-1] == simple})
+        if len(hits) == 1:
+            binary = hits[0]
+        elif hits:
+            return {"target": target, "found": None, "decided": "ambiguous", "language": "Java",
+                    "why": f"{len(hits)} classes are named {simple}", "candidates": [_src(h) for h in hits[:20]],
+                    "exit": 0}
+        else:
+            return {"target": target, "found": False, "language": "Java", "exit": 3,
+                    "why": f"no class {name} in the project, its classpath ({len(cp.jars)} jars) or the JDK",
+                    "nearest": [{"name": n} for n in _nearest(simple, [b.rsplit("/", 1)[-1] for b in u.lib][:50000])]}
+    c = u.get(binary)
+    order, missing = u.ancestors(binary)
+    members = []
+    for owner in order:
+        oc = u.get(owner) or {}
+        for mname, ovs in sorted((oc.get("methods") or {}).items()):
+            if member and mname != member and not (member == binary.rsplit("/", 1)[-1] and mname == "<init>"):
+                continue
+            if mname == "<init>" and owner != binary:  # constructors are not inherited
+                continue
+            for ov in ovs:
+                flags = ov[1] if len(ov) > 1 else 0
+                if flags & 0x0002 and not private and owner != binary:
+                    continue
+                params = ", ".join(_param_text(p) for p in ov[3]) if len(ov) >= 4 else f"{ov[0]} args"
+                ret = _param_text(ov[2]) if isinstance(ov[2], str) and ov[2] and "/" in ov[2] or \
+                    (isinstance(ov[2], str) and ov[2] in _PRIM_DESC) else (ov[2] or "?")
+                shown = _src(owner).rsplit(".", 1)[-1] if mname == "<init>" else mname
+                members.append({"name": mname, "kind": "constructor" if mname == "<init>" else "method",
+                                "signature": f"{shown}({params})" + ("" if mname == "<init>" else f" -> {ret}"),
+                                "access": _access_word(flags) if len(ov) >= 4 else None,
+                                **({"static": True} if flags & 0x0008 else {}),
+                                **({"defined_in": _src(owner)} if owner != binary else {})})
+        for fname, f in sorted((oc.get("fields") or {}).items()):
+            if member and fname != member:
+                continue
+            flags = f[1] if len(f) > 1 else 0
+            if flags & 0x0002 and not private and owner != binary:
+                continue
+            members.append({"name": fname, "kind": "field", "signature": f"{fname}: {_param_text(f[0]) if f[0] else '?'}",
+                            "access": _access_word(flags) if owner in u.lib or owner in u.jdk else None,
+                            **({"static": True} if flags & 0x0008 else {}),
+                            **({"defined_in": _src(owner)} if owner != binary else {})})
+        if len(members) >= limit:
+            break
+    out = {"target": target, "found": True if members or not member else False, "language": "Java",
+           "name": _src(binary), "kind": "interface" if c.get("flags", 0) & 0x0200 else "class",
+           "source": u.origin(binary), "at": c.get("file") or "", "super": _src(c["super"]) if c.get("super") else None,
+           "members": members[:limit], "exit": 0 if members or not member else 3}
+    if missing:
+        out["why_open"] = "super types not read: " + ", ".join(_src(m) for m in missing[:3])
+    if member and not members:
+        out["why"] = f"{_src(binary)} and its super types declare no {member}"
+        out["nearest"] = [{"name": n} for n in _nearest(member, [m for a in order for m in (u.get(a) or {})
+                                                                  .get("methods", {})])]
+    return out

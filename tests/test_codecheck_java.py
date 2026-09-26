@@ -137,7 +137,7 @@ def test_names_are_checked_against_the_classpath(tmp_path):
 def test_constructors_varargs_enums_local_types_and_comments(tmp_path):
     repo = _repo(tmp_path)
     s = _sites(codecheck.check(repo, ["src/app/App.java"], env="none", include_exists=True))
-    assert s[(23, "Widget")]["verdict"] == "absent" and "take 0, 1" in s[(23, "Widget")]["why"]
+    assert s[(23, "Widget")]["verdict"] == "absent" and "they take (); (int)" in s[(23, "Widget")]["why"]
     assert s[(25, "all")]["verdict"] == "exists"       # varargs: any number from the fixed ones on
     assert s[(26, "format")]["verdict"] == "exists"
     assert s[(28, "values")]["verdict"] == "exists" and s[(29, "ordinal")]["verdict"] == "exists"
@@ -207,6 +207,84 @@ def test_class_files_are_read_with_arity_varargs_and_generic_returns():
     b = class_bytes("x/Y", methods=(("m", "(ILjava/lang/String;[J)V", PUBLIC), ("v", "([I)V", PUBLIC | VARARGS)))
     c = jvmclass.parse_class(b)
     assert c["name"] == "x/Y" and c["super"] == "java/lang/Object"
-    assert c["methods"]["m"] == [[3, 0, "V"]] and c["methods"]["v"][0][:2] == [1, VARARGS]
+    # the access bits and the parameter types are kept (docs/DESIGN.md D51)
+    assert c["methods"]["m"] == [[3, PUBLIC, "V", ["I", "java/lang/String", "[J"]]]
+    assert c["methods"]["v"][0][:2] == [1, PUBLIC | VARARGS] and c["methods"]["v"][0][3] == ["[I"]
     assert jvmclass.method_shape("(IJLa/B;[[Lc/D;)La/E;") == (4, "a/E")
     assert jvmclass._generic_return("<T:Ljava/lang/Object;>()TT;") and not jvmclass._generic_return("()La/B;")
+
+
+ACCESS_LIB = {
+    "lib/Mob": class_bytes("lib/Mob", methods=(
+        ("<init>", "()V", PUBLIC), ("isImmobile", "()Z", 0x0004), ("secret", "()V", 0x0002),
+        ("pkgOnly", "()V", 0), ("health", "()F", PUBLIC))),
+    "lib/Chunk": class_bytes("lib/Chunk", methods=(("<init>", "(J)V", PUBLIC), ("<init>", "(II)V", PUBLIC))),
+    "lib/Pos": class_bytes("lib/Pos", methods=(("<init>", "()V", PUBLIC),)),
+}
+
+ACCESS_APP = '''package app;
+
+import lib.Chunk;
+import lib.Mob;
+import lib.Pos;
+
+class Outside {
+    void run(Mob m, Pos pos, long packed) {
+        m.isImmobile();
+        m.secret();
+        m.pkgOnly();
+        m.health();
+        new Chunk(pos);
+        new Chunk(packed);
+        new Chunk(1, 2);
+        new Chunk(Long.valueOf(3));
+    }
+}
+
+class Inside extends Mob {
+    void run() {
+        isImmobile();
+        this.isImmobile();
+    }
+}
+'''
+
+
+def test_access_and_constructor_parameter_types(tmp_path):
+    """docs/DESIGN.md D51: a member the code cannot reach, or a constructor no argument list fits, is absent."""
+    repo = tmp_path / "acc"
+    write_jar(repo / "libs" / "lib.jar", {**base_classes(), **ACCESS_LIB})
+    (repo / "src" / "app").mkdir(parents=True)
+    (repo / "src" / "app" / "Outside.java").write_text(ACCESS_APP, encoding="utf-8")
+    (repo / ".verinoda").mkdir()
+    (repo / ".verinoda" / "config.json").write_text(json.dumps({"code_check": {"classpath": ["libs/*.jar"]}}),
+                                                    encoding="utf-8")
+    res = codecheck.check(repo, ["src/app/Outside.java"], env="none", include_exists=True)
+    s = _sites(res)
+    assert s[(9, "isImmobile")]["verdict"] == "absent" and s[(9, "isImmobile")]["access"] == "protected"
+    assert "not a subclass, another package" in s[(9, "isImmobile")]["why"]
+    assert s[(10, "secret")]["verdict"] == "absent" and s[(10, "secret")]["access"] == "private"
+    assert s[(11, "pkgOnly")]["verdict"] == "absent" and s[(11, "pkgOnly")]["access"] == "package-private"
+    assert s[(12, "health")]["verdict"] == "exists"
+    assert s[(13, "Chunk")]["verdict"] == "absent"
+    assert "takes (Pos): they take (long); (int, int)" in s[(13, "Chunk")]["why"]
+    assert s[(14, "Chunk")]["verdict"] == "exists" and s[(15, "Chunk")]["verdict"] == "exists"
+    assert s[(16, "Chunk")]["verdict"] == "exists"     # a boxed Long unboxes to long
+    assert s[(22, "isImmobile")]["verdict"] == "exists" and s[(23, "isImmobile")]["verdict"] == "exists"
+
+
+def test_api_lists_the_real_members_of_a_classpath_class(tmp_path):
+    """docs/DESIGN.md D51: `verinoda api` reads a Java class as the build sees it (the invented-API guard)."""
+    repo = tmp_path / "api"
+    write_jar(repo / "libs" / "lib.jar", {**base_classes(), **ACCESS_LIB})
+    (repo / "src" / "app").mkdir(parents=True)
+    (repo / "src" / "app" / "Outside.java").write_text(ACCESS_APP, encoding="utf-8")
+    (repo / ".verinoda").mkdir()
+    (repo / ".verinoda" / "config.json").write_text(json.dumps({"code_check": {"classpath": ["libs/*.jar"]}}),
+                                                    encoding="utf-8")
+    res = codecheck.api(repo, "lib.Chunk", env="none")
+    assert res["found"] is True and res["source"] == "jar"
+    assert {m["signature"] for m in res["members"] if m["kind"] == "constructor"} == {"Chunk(long)", "Chunk(int, int)"}
+    mob = codecheck.api(repo, "Mob.isImmobile", env="none")
+    assert [(m["signature"], m["access"]) for m in mob["members"]] == [("isImmobile() -> boolean", "protected")]
+    assert codecheck.api(repo, "lib.Chunkk", env="none")["found"] is not True

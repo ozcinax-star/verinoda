@@ -37,7 +37,7 @@ _HEAD_RX = re.compile(r"^## (\S+):(\d+)-(\d+)(?: |$)")
 _SUB_RX = re.compile(r"^  (\S+):(\d+)-(\d+)$")
 _ITEM_LINE_RX = re.compile(r"^\S+:\d+-\d+ ")
 _META = ("  doc: ", "  names: ", "  named by: ", "  same content: ", "  calls: ", "  called by: ", "  const ",
-         "  mixin: ", "  runs: ")
+         "  mixin: ", "  runs: ", "  backlog: ")
 _NOT_BODY = ("## ", "… ", "(calls / called by", "not indexed, and", "next: ", "expanded: ",
              "changed since indexing", "no candidate locations")
 

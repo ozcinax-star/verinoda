@@ -70,6 +70,8 @@ own measurements, with their caveats. The benchmark harness results are in
 | D47 | When a method runs (`verinoda when`, MCP `run_when`) | implemented | Built 2026-09-26 (section 20): JVM lambdas handed to a registration or scheduler as `registers` edges (event, delay), `when.py` walks back to the event with the conditions around each call; "when does X run / ne zaman çalışır" in `analyze`. fastbench on fresh indexes: 0 differences. Not done: Kotlin lambdas, anonymous listener classes, annotation-registered events. |
 | D48 | Mixin edges | implemented | Built 2026-09-26 (section 21): `jvm_mixins.py`; `injects` / `accesses` edges with the target method, point and `cancellable`; shown by query (`mixin:`), node, when and analyze (what blocks X). Two ranking changes tried and reverted (21.4); fastbench 0 differences. Not done: bytecode checks of descriptors, `@Shadow`. |
 | D49 | GameTest registry and the tests a change should run | implemented | Built 2026-09-26 (section 22): `gametests.py` reads the `fabric-gametest` entrypoints; impact and change_review list the registered GameTest classes that reach the change, nearest first (directly or through a class that calls it), and warn about unregistered ones. Not done: NeoForge, client game tests without `@GameTest`. |
+| D50 | Backlog items and code comments | implemented | Built 2026-09-26 (section 23): `backlog.py`; `verinoda backlog <item | file:line | symbol>`, `backlog:` lines in query, `backlog` in node_inspect; a line is explained by the comments on and above it and the declaration comments of the fields it uses. Not done: analyze claims from an item, other backlog formats. |
+| D51 | Java access, constructor types, `api` for Java | implemented | Built 2026-09-26 (section 24): class files keep access bits and parameter types; protected/private/package members out of reach and constructors no argument list fits are absent; `verinoda api` lists a Java class's real members from the classpath. A private mod: 0 absent over 127,176 sites. Not done: method argument types, SCIP. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -2998,6 +3000,83 @@ alphabetical order.
 
 NeoForge (`@GameTestHolder`, `RegisterGameTestsEvent`), Fabric client game tests that are not `@GameTest`
 methods, runtime selection (`runGameTest` with a filter).
+
+## 23. Backlog items and code comments (D50, 2026-09-26)
+
+### 23.1 Why
+
+A project that keeps a numbered backlog (`## 33 - ...` sections, `| 69.3 | **Title** | root cause and fix |`
+rows) cites its items in the code: `// why: 12.3 - the lookup by id misses a fresh body in its first ticks`. That
+comment is the shortest way from a line to why it is so, and the item is the shortest way from a decision to the
+code that carries it. Verinoda read the comment as text and the backlog as a document, with nothing between them.
+
+### 23.2 Decisions
+
+- **`verinoda/backlog.py`**: items are the table rows and numbered headings of the backlog files (`backlog.files`
+  in `.verinoda/config.json`; default the first of `docs/BACKLOG.md`, `BACKLOG.md`, ... that exists). A comment
+  cites an item with a dotted number anywhere in it, or a whole number as its leading label (`// 33:`,
+  `/** why: 33 -`), and only an item the backlog has: `12 ticks` or a string `"12.3"` is not a citation.
+- **Lines to items** (`items_for`): the comments on the lines and just above them (a `// why:` sits above its
+  code), and the declaration comments of the fields the lines use in the same file: `bodyRef.get()` is
+  explained by the `// why: 12.3 - ...` above `bodyRef`.
+- **Where it shows**: `verinoda backlog <item | file:LINE[-LINE] | symbol>` (an item: its text and every comment
+  that cites it; lines or a symbol: the items that explain them, with the citing comment and the field it came
+  through); `query` prints `backlog: 69.3 Title (docs/BACKLOG.md:2235)` under a unit whose comments cite an item;
+  MCP `node_inspect` lists them under `backlog`.
+
+### 23.3 Measured
+
+A private mod (548 items, 383 of them cited from 2,444 comment lines): the `WeakReference` line of the guard's
+body lookup returns item 69.3, whose row gives the cause ("being loaded is not existing"), through the field it
+reads; the method's own javadoc label returns its section, 33.
+
+### 23.4 Not done
+
+Items in other formats (issue trackers, `- [ ] 12.3` task lists), analyze claims from an item (it answers "why"
+only through `query` and `node_inspect` for now), items cited from documentation files.
+
+## 24. Java access, constructor types and the classpath as a reference (D51, 2026-09-26)
+
+### 24.1 Why
+
+The Java check (D43) knew a method by its name and number of arguments. `cas.isImmobile()` on a mod's NPC passed:
+the method exists, but it is `protected` in `LivingEntity` and the calling class is neither a subclass nor in its
+package, so the code does not compile. `new ChunkPos(pos)` with a `BlockPos` passed wherever some one-argument
+constructor existed (`ChunkPos(long)` in older versions). And an agent had no way to ask what a game class really
+offers: `verinoda api` read Python only, so invented Minecraft APIs were caught only after they were written.
+
+### 24.2 Decisions
+
+- **Class files keep more** (`jvmclass`, index version 3): the public / protected / private bits of methods and
+  fields, and each method's parameter types.
+- **Access**, for members read from class files (a project source's modifiers are not recorded, so its members are
+  never judged): private only from the same top-level class; protected from the same package or a subclass
+  (or a class nested in one); no modifier from the same package. A call no overload of which the calling class
+  can reach is `absent` with `access` and the reason ("protected in net.minecraft.world.entity.LivingEntity: not
+  accessible from app.Outside (not a subclass, another package)").
+- **Constructor parameter types**: among the constructors with the right number of arguments, one whose parameter
+  a known argument type cannot fill (a class type for a primitive, a class that does not extend the parameter's
+  type) does not fit; none fitting is `absent` with the signatures there are ("no constructor of ChunkPos takes
+  (BlockPos): they take (int, int)"). An unknown argument type, a boxed primitive, a varargs constructor or a type
+  whose super types are not all read always fits.
+- **`verinoda api` reads Java** (`codecheck_java.api`): a class by its full name, a simple name (the candidates
+  when several classes have it) or `Class.member`, as the build sees it: the project, its classpath (Loom's
+  Minecraft jars included) and the JDK; own members first, then inherited ones with where they come from,
+  constructors only of the class itself, with access and `static`. It is tried first in a repository with Java
+  sources, for a name with a capitalised part; Python follows when it finds nothing.
+
+### 24.3 Measured
+
+- The acceptance lines in a scratch file of a private Fabric mod: `cas.isImmobile()` absent (protected), `new
+  ChunkPos(pos)` absent, `new ChunkPos(1, 2)` and `cas.getHealth()` exist.
+- The whole mod (407 files, 127,176 sites, a build that compiles): 0 absent, as before.
+- `verinoda api net.minecraft.world.level.ChunkPos`: 2 seconds with the jar tables cached.
+
+### 24.4 Not done
+
+Method arguments' types (only constructors are matched by type), the receiver rule of protected access
+(`other.protectedMethod()` on a sibling class from a subclass), project sources' modifiers, SCIP symbols as a
+reference tree.
 
 ## Sources
 
