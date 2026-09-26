@@ -310,7 +310,7 @@ def test_registered_tools_have_descriptions_and_typed_params(repo):
 
 
 def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_path):
-    """The tool menu is standing context in every request of many clients: core by default (11 tools),
+    """The tool menu is standing context in every request of many clients: core by default (12 tools),
     the full set behind --profile full or mcp.profile in the project's config; no output schemas and
     no generated titles."""
     anyio = pytest.importorskip("anyio")
@@ -321,7 +321,7 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
                 for t in anyio.run(srv.list_tools)]
 
     core = listing(mcp_server.build_server(repo))
-    assert sorted(t["name"] for t in core) == sorted(CORE_TOOLS) and len(CORE_TOOLS) == 11
+    assert sorted(t["name"] for t in core) == sorted(CORE_TOOLS) and len(CORE_TOOLS) == 12
     assert set(CORE_TOOLS) <= set(TOOL_NAMES)
     wire = json.dumps(core, separators=(",", ":"))
     assert len(wire) < 12000  # 50,029 chars for the 33 tools before (2026-09-25)

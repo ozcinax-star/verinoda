@@ -1706,13 +1706,10 @@ DESCRIPTIONS: dict[str, str] = {
         "records), impact (reverse dependents of targets; default: the working-tree changes). 'coverage' states "
         "the method and its limits."),
     "change_review": (
-        "What a change touches, by concern (as `verinoda review`). Default: the working tree against HEAD; "
-        "base = another commit; staged = the index; targets ('path/file.py[::Qual.name]') + change "
-        "(body | signature | remove) = a planned change, before editing. Returns the changed definitions, "
-        "dependents with via-chains, findings by concern (persistence, security, performance, public_api, "
-        "config, entry_points; concerns_checked says which rules ran - no finding is never 'safe'), tests that "
-        "reach the change, unknowns with next steps, read_first packed to max_chars. exit 3 = findings or "
-        "unknowns to report. Never edits code."),
+        "What a change touches, by concern (as `verinoda review`): the working tree against HEAD, base=REV, "
+        "staged, or targets ('path.py[::Name]') + change (body|signature|remove) before editing. Changed "
+        "definitions, dependents, findings per concern (no finding is never 'safe'), tests reaching it, "
+        "unknowns, read_first. exit 3 = findings or unknowns to report. Never edits code."),
     "question_plan_draft": (
         "Draft a question plan (verinoda.question_plan/1) from the user's message by deterministic Turkish/English "
         "rules: sub-questions with intent and done_when, mentions with candidate names, references with the "
