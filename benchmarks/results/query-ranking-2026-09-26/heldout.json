@@ -1,0 +1,500 @@
+{
+ "questions": [
+  {
+   "id": "cp01",
+   "corpus": "cpython",
+   "question": "In asyncio base_events, how does create_connection try several resolved addresses with happy eyeballs?",
+   "gold_files": [
+    "asyncio/base_events.py",
+    "asyncio/staggered.py"
+   ],
+   "gold_symbols": [
+    "BaseEventLoop.create_connection",
+    "staggered_race"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "cp02",
+   "corpus": "cpython",
+   "question": "In subprocess, how does Popen on POSIX tell the parent process that exec failed in the child?",
+   "gold_files": [
+    "subprocess.py"
+   ],
+   "gold_symbols": [
+    "Popen._execute_child"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "cp03",
+   "corpus": "cpython",
+   "question": "How does functools lru_cache evict the least recently used entry once maxsize is reached?",
+   "gold_files": [
+    "functools.py"
+   ],
+   "gold_symbols": [
+    "_lru_cache_wrapper"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "cp04",
+   "corpus": "cpython",
+   "question": "How does shutil.which find an executable on Windows using PATHEXT?",
+   "gold_files": [
+    "shutil.py"
+   ],
+   "gold_symbols": [
+    "which"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "cp05",
+   "corpus": "cpython",
+   "question": "Where are non-ASCII characters turned into \\uXXXX escapes when dumping with ensure_ascii?",
+   "gold_files": [
+    "json/encoder.py"
+   ],
+   "gold_symbols": [
+    "py_encode_basestring_ascii"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "cp06",
+   "corpus": "cpython",
+   "question": "Where does the size-based rotating log file handler decide that it is time to roll over?",
+   "gold_files": [
+    "logging/handlers.py"
+   ],
+   "gold_symbols": [
+    "RotatingFileHandler.shouldRollover"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "cp07",
+   "corpus": "cpython",
+   "question": "How is an HTTP response with Transfer-Encoding: chunked read chunk by chunk on the client side?",
+   "gold_files": [
+    "http/client.py",
+    "http/client.py"
+   ],
+   "gold_symbols": [
+    "HTTPResponse._read_chunked",
+    "HTTPResponse._read_next_chunk_size"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "cp08",
+   "corpus": "cpython",
+   "question": "When extracting with the data filter, where are archive members with absolute paths or links pointing outside the destination rejected?",
+   "gold_files": [
+    "tarfile.py",
+    "tarfile.py"
+   ],
+   "gold_symbols": [
+    "_get_filtered_attrs",
+    "data_filter"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "cp09",
+   "corpus": "cpython",
+   "question": "Which tests check that json dumps raises ValueError on circular references in lists and dicts?",
+   "gold_files": [
+    "test/test_json/test_recursion.py"
+   ],
+   "gold_symbols": [
+    "TestRecursion"
+   ],
+   "asks_tests": true,
+   "lang": "en"
+  },
+  {
+   "id": "cp10",
+   "corpus": "cpython",
+   "question": "Where is the test that a TaskGroup cancels its other child tasks when one child raises?",
+   "gold_files": [
+    "test/test_asyncio/test_taskgroups.py"
+   ],
+   "gold_symbols": [
+    "TestTaskGroup.test_cancel_children_on_child_error"
+   ],
+   "asks_tests": true,
+   "lang": "en"
+  },
+  {
+   "id": "vn01",
+   "corpus": "verinoda",
+   "question": "How does the verinoda ui server refuse requests whose Host header is not 127.0.0.1 or localhost (DNS rebinding)?",
+   "gold_files": [
+    "verinoda/ui/server.py",
+    "verinoda/ui/server.py"
+   ],
+   "gold_symbols": [
+    "_host_ok",
+    "_hosts"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "vn02",
+   "corpus": "verinoda",
+   "question": "Debug oturumunda aynı hata farklı düzeltme denemelerinde üç kez tekrar ederse bunu hangi kural yakalıyor?",
+   "gold_files": [
+    "verinoda/looprules.py"
+   ],
+   "gold_symbols": [
+    "_no_progress"
+   ],
+   "asks_tests": false,
+   "lang": "tr"
+  },
+  {
+   "id": "vn03",
+   "corpus": "verinoda",
+   "question": "What happens when atlas.db was written by a newer Verinoda with a higher schema_version?",
+   "gold_files": [
+    "verinoda/store.py",
+    "verinoda/store.py"
+   ],
+   "gold_symbols": [
+    "Store._migrate",
+    "SchemaTooNew"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "vn04",
+   "corpus": "verinoda",
+   "question": "Kullanıcının yazdığı bir notun kod değiştikten sonra hâlâ geçerli olup olmadığı (fresh, changed, gone) nasıl kontrol ediliyor?",
+   "gold_files": [
+    "verinoda/usernotes.py"
+   ],
+   "gold_symbols": [
+    "check"
+   ],
+   "asks_tests": false,
+   "lang": "tr"
+  },
+  {
+   "id": "vn05",
+   "corpus": "verinoda",
+   "question": "On Windows, how are processes that a test command leaves running stopped when an experiment run ends?",
+   "gold_files": [
+    "verinoda/experiments.py"
+   ],
+   "gold_symbols": [
+    "_ProcessTree"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "vn06",
+   "corpus": "verinoda",
+   "question": "Codex için kullanıcı kapsamında MCP sunucusu hangi config.toml dosyasına yazılıyor, CODEX_HOME ortam değişkeni nerede dikkate alınıyor?",
+   "gold_files": [
+    "verinoda/agents/installer.py",
+    "verinoda/agents/installer.py"
+   ],
+   "gold_symbols": [
+    "_codex_home",
+    "_target"
+   ],
+   "asks_tests": false,
+   "lang": "tr"
+  },
+  {
+   "id": "vn07",
+   "corpus": "verinoda",
+   "question": "fold_tr fonksiyonunun Türkçe harfleri ASCII'ye çevirdiğini ve uzunluğu koruduğunu kontrol eden test nerede?",
+   "gold_files": [
+    "tests/test_textnorm.py"
+   ],
+   "gold_symbols": [
+    "test_fold_is_length_preserving_and_keeps_dotted_i"
+   ],
+   "asks_tests": true,
+   "lang": "tr"
+  },
+  {
+   "id": "vn08",
+   "corpus": "verinoda",
+   "question": "How does Verinoda decide that a folder is a vendored copy of the project's own code?",
+   "gold_files": [
+    "verinoda/copies.py"
+   ],
+   "gold_symbols": [
+    "detect"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "gf01",
+   "corpus": "graphify",
+   "question": "In graphify/cluster.py, how are communities that are too large split into smaller ones?",
+   "gold_files": [
+    "graphify/cluster.py",
+    "graphify/cluster.py"
+   ],
+   "gold_symbols": [
+    "cluster",
+    "_split_community"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "gf02",
+   "corpus": "graphify",
+   "question": "Why does the file watcher ignore events where a file was only opened or read, not changed?",
+   "gold_files": [
+    "graphify/watch.py"
+   ],
+   "gold_symbols": [
+    "_is_read_only_event"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "gf03",
+   "corpus": "graphify",
+   "question": "When does an update refuse to overwrite graph.json because the new graph has fewer nodes than the old one?",
+   "gold_files": [
+    "graphify/watch.py"
+   ],
+   "gold_symbols": [
+    "_check_shrink"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "gf04",
+   "corpus": "graphify",
+   "question": "How does graphify skip re-hashing a file whose size and mtime have not changed?",
+   "gold_files": [
+    "graphify/cache.py",
+    "graphify/cache.py"
+   ],
+   "gold_symbols": [
+    "file_hash",
+    "_stat_sig_fresh"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "gf05",
+   "corpus": "graphify",
+   "question": "How is fetching a URL protected against requests to private, loopback or link-local IP addresses?",
+   "gold_files": [
+    "graphify/security.py",
+    "graphify/security.py",
+    "graphify/security.py"
+   ],
+   "gold_symbols": [
+    "_ip_is_blocked",
+    "_resolve_and_validate",
+    "validate_url"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "gf06",
+   "corpus": "graphify",
+   "question": "Which tests check that cohesion_score ignores self-loops?",
+   "gold_files": [
+    "tests/test_cluster.py"
+   ],
+   "gold_symbols": [
+    "test_cohesion_score_ignores_self_loops"
+   ],
+   "asks_tests": true,
+   "lang": "en"
+  },
+  {
+   "id": "or01",
+   "corpus": "orders_app",
+   "question": "Where is the order total rounded when the discount applies?",
+   "gold_files": [
+    "orders/pricing.py"
+   ],
+   "gold_symbols": [
+    "apply_discount"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "or02",
+   "corpus": "orders_app",
+   "question": "Which tests check that an order with no items is rejected?",
+   "gold_files": [
+    "tests/test_service.py"
+   ],
+   "gold_symbols": [
+    "test_empty_order_rejected"
+   ],
+   "asks_tests": true,
+   "lang": "en"
+  },
+  {
+   "id": "or03",
+   "corpus": "orders_app",
+   "question": "Siparişler tablosu SQLite veritabanında nerede oluşturuluyor?",
+   "gold_files": [
+    "orders/repository.py"
+   ],
+   "gold_symbols": [
+    "OrderRepository.__init__"
+   ],
+   "asks_tests": false,
+   "lang": "tr"
+  },
+  {
+   "id": "or04",
+   "corpus": "orders_app",
+   "question": "How is the maximum number of items per order configured, and where is the limit enforced?",
+   "gold_files": [
+    "orders/config.py",
+    "orders/service.py"
+   ],
+   "gold_symbols": [
+    "MAX_ITEMS_PER_ORDER",
+    "validate_items"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "fm01",
+   "corpus": "forge_mod",
+   "question": "How does forging speed depend on the forge's heat and the recipe's minimum heat?",
+   "gold_files": [
+    "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt"
+   ],
+   "gold_symbols": [
+    "progressPerTick"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "fm02",
+   "corpus": "forge_mod",
+   "question": "Which JUnit tests cover how the forge cools down over time?",
+   "gold_files": [
+    "src/test/java/net/ashvale/emberforge/ForgeTickTest.java"
+   ],
+   "gold_symbols": [
+    "forgeCoolsOnlyOnDecayTicks"
+   ],
+   "asks_tests": true,
+   "lang": "en"
+  },
+  {
+   "id": "fm03",
+   "corpus": "forge_mod",
+   "question": "Stoke paketi sunucuda nasıl doğrulanıyor, oyuncu ocaktan uzaktaysa ya da menüsü açık değilse ne oluyor?",
+   "gold_files": [
+    "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java"
+   ],
+   "gold_symbols": [
+    "handleStoke"
+   ],
+   "asks_tests": false,
+   "lang": "tr"
+  },
+  {
+   "id": "fm04",
+   "corpus": "forge_mod",
+   "question": "What happens when a player punches a lit forge with an empty hand?",
+   "gold_files": [
+    "src/main/java/net/ashvale/emberforge/event/ModEvents.java"
+   ],
+   "gold_symbols": [
+    "onLeftClickForge"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "gm01",
+   "corpus": "glow_mod",
+   "question": "Is there a game test that checks a wisp appears where it was asked to spawn?",
+   "gold_files": [
+    "src/gametest/java/com/example/glowmod/test/WispTests.java"
+   ],
+   "gold_symbols": [
+    "wispAppearsWhereAsked"
+   ],
+   "asks_tests": true,
+   "lang": "en"
+  },
+  {
+   "id": "gm02",
+   "corpus": "glow_mod",
+   "question": "What does a wisp drop when it dies, and where is that defined?",
+   "gold_files": [
+    "src/main/java/com/example/glowmod/entity/Wisp.java",
+    "src/main/resources/data/glowmod/function/wisp_death.mcfunction",
+    "src/main/resources/data/glowmod/loot_table/entities/wisp.json"
+   ],
+   "gold_symbols": [
+    "onDeath"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  },
+  {
+   "id": "gm03",
+   "corpus": "glow_mod",
+   "question": "Ritüel başlayınca sunağın çevresindeki çimenler ve çiçekler nereye kaydediliyor, sonra nasıl geri konuyor?",
+   "gold_files": [
+    "src/main/java/com/example/glowmod/ritual/Ritual.java",
+    "src/main/java/com/example/glowmod/repair/RepairScheduler.java",
+    "src/main/java/com/example/glowmod/repair/RepairScheduler.java"
+   ],
+   "gold_symbols": [
+    "alaniAc",
+    "kaydet",
+    "tick"
+   ],
+   "asks_tests": false,
+   "lang": "tr"
+  },
+  {
+   "id": "gm04",
+   "corpus": "glow_mod",
+   "question": "Why does right-clicking a soul lantern with the lantern staff sometimes do nothing for a few seconds?",
+   "gold_files": [
+    "src/main/java/com/example/glowmod/event/LanternEvents.java"
+   ],
+   "gold_symbols": [
+    "etkinlestir"
+   ],
+   "asks_tests": false,
+   "lang": "en"
+  }
+ ]
+}

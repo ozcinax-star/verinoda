@@ -6,7 +6,7 @@ anchored re-checks, critique, and user corrections handled as hypotheses. The
 knowledge graph comes from the Graphify-derived `project_index`. Everything
 else is Verinoda's own.
 
-The design decisions (D1-D39) and their implementation status are in
+The design decisions (D1-D40) and their implementation status are in
 [DESIGN.md](DESIGN.md). Measured results are in [BENCHMARKS.md](BENCHMARKS.md).
 
 ```

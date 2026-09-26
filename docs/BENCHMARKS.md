@@ -33,6 +33,27 @@ file or module the question names counts x2 (a plain word that is a file stem or
 that writes the question's words side by side counts more, and prefix / Turkish-stem expansions stay narrower.
 No index change.
 
+**Held-out (measured after the merge into the night's integration branch).** A separate agent wrote 36
+questions without reading the ranking code or the benchmark questions (CPython's `Lib` 10, Verinoda 8, upstream
+Graphify 6, the three examples 12; 7 in Turkish, 7 asking about tests; `heldout.json`). The builder never saw
+them. Scored with the branch's `score.py` on one index per corpus built by the code before the change (main
+ffda91b), the same index for both sides:
+
+| | before | after |
+|---|---|---|
+| gold file first | 15/36 | 18/36 |
+| gold file in the top 3 | 29/36 | 32/36 |
+| gold file in the top 10 | 34/36 | 35/36 |
+| MRR | 0.607 | 0.681 |
+| gold symbol in the top 3 | 20/36 | 23/36 |
+| tests among the first 5 (29 questions not about tests) | 47/145 | 25/145 |
+| a test ranked first (same 29) | 7 | 2 |
+
+One question got worse (gf05: the gold file went from rank 1 to 2); the seven questions that ask about tests
+kept their ranks. The fast benchmark on all nine sets after the merge: 2 facts gained (heldout h05 and
+orders_app_tr q10, JSON retrieval), none lost. Files: `heldout.json`, `heldout-base.json`,
+`heldout-branch.json` in `benchmarks/results/query-ranking-2026-09-26/`.
+
 **Dev set** (in-sample: written for this change, 37 questions on a CPython `Lib` copy, upstream Graphify,
 Verinoda's own repository at 343a00d and the examples; gold file and symbol per question). Ranked list = the
 items of `verinoda query --json`, then `budget.more`:

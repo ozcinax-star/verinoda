@@ -634,7 +634,7 @@ in this project's environment?
 ## Documentation
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — modules, state on disk, invariants
-- [docs/DESIGN.md](docs/DESIGN.md) — design decisions D1-D39 and their implementation status
+- [docs/DESIGN.md](docs/DESIGN.md) — design decisions D1-D40 and their implementation status
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — measured comparison (no unmeasured savings claims)
 - [docs/UPSTREAM.md](docs/UPSTREAM.md) — Graphify base commit, feature inventory, port method, runtime patch
 - [docs/UPGRADING.md](docs/UPGRADING.md) — versioning, schema migrations, calibration changes, derived files

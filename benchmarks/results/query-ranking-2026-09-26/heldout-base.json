@@ -1,0 +1,701 @@
+{
+ "summary": {
+  "questions": 36,
+  "top1": 15,
+  "top3": 29,
+  "top10": 34,
+  "MRR": 0.607,
+  "sym_top3": "20/36",
+  "no_test_questions": 29,
+  "tests_top5": "47/145",
+  "test_first": 7
+ },
+ "rows": [
+  {
+   "id": "cp01",
+   "corpus": "cpython",
+   "asks_tests": false,
+   "file_rank": 3,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": true,
+   "n_ranked": 10,
+   "top": [
+    "test/test_httplib.py ._create_connection()",
+    "test/mock_socket.py create_connection()",
+    "asyncio/base_events.py .create_connection()",
+    "socket.py create_connection()",
+    "test/test_httplib.py .create_connection()"
+   ],
+   "seconds": 0.63
+  },
+  {
+   "id": "cp02",
+   "corpus": "cpython",
+   "asks_tests": false,
+   "file_rank": null,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": false,
+   "n_ranked": 9,
+   "top": [
+    "multiprocessing/process.py parent_process()",
+    "multiprocessing/process.py _ParentProcess",
+    "test/test_subprocess.py .test_failed_child_execute_fd_leak()",
+    "test/_test_multiprocessing.py ._test_send_parent_process()",
+    "test/test_sqlite3/test_dbapi.py .test_ctx_mgr_rollback_if_commit_failed()"
+   ],
+   "seconds": 0.47
+  },
+  {
+   "id": "cp03",
+   "corpus": "cpython",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 6,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": false,
+   "n_ranked": 23,
+   "top": [
+    "functools.py lru_cache()",
+    "test/test_functools.py .test_lru_hash_only_once()",
+    "test/test_inspect.py .test_unwrap_one()",
+    "test/test_zoneinfo/_support.py call_once()",
+    "importlib/metadata/_functools.py method_cache()"
+   ],
+   "seconds": 0.32
+  },
+  {
+   "id": "cp04",
+   "corpus": "cpython",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 2,
+   "test_first": false,
+   "n_ranked": 8,
+   "top": [
+    "_osx_support.py _find_executable()",
+    "shutil.py which()",
+    "_osx_support.py _find_build_tool()",
+    "test/test__osx_support.py .test__find_executable()",
+    "test/support/__init__.py missing_compiler_executable()"
+   ],
+   "seconds": 0.25
+  },
+  {
+   "id": "cp05",
+   "corpus": "cpython",
+   "asks_tests": false,
+   "file_rank": 3,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 25,
+   "top": [
+    "json/__init__.py dumps()",
+    "json/__init__.py dump()",
+    "json/encoder.py .__init__()",
+    "json/decoder.py _decode_uXXXX()",
+    "json/tool.py main()"
+   ],
+   "seconds": 0.41
+  },
+  {
+   "id": "cp06",
+   "corpus": "cpython",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 11,
+   "top": [
+    "logging/handlers.py BaseRotatingHandler",
+    "logging/handlers.py .__init__()",
+    "logging/handlers.py .getFilesToDelete()",
+    "logging/handlers.py TimedRotatingFileHandler",
+    "logging/handlers.py .computeRollover()"
+   ],
+   "seconds": 0.37
+  },
+  {
+   "id": "cp07",
+   "corpus": "cpython",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 2,
+   "test_first": false,
+   "n_ranked": 9,
+   "top": [
+    "http/client.py .begin()",
+    "test/test_httplib.py .test_overflowing_chunked_line()",
+    "http/client.py ._read_chunked()",
+    "http/client.py .read()",
+    "test/test_httplib.py .test_chunked_head()"
+   ],
+   "seconds": 0.19
+  },
+  {
+   "id": "cp08",
+   "corpus": "cpython",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 2,
+   "test_first": false,
+   "n_ranked": 9,
+   "top": [
+    "tarfile.py data_filter()",
+    "tarfile.py _get_filtered_attrs()",
+    "tarfile.py LinkOutsideDestinationError",
+    "test/test_tarfile.py .test_absolute_symlink()",
+    "test/test_tarfile.py .test_parent_symlink()"
+   ],
+   "seconds": 0.39
+  },
+  {
+   "id": "cp09",
+   "corpus": "cpython",
+   "asks_tests": true,
+   "file_rank": 6,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 11,
+   "top": [
+    "json/__init__.py dump()",
+    "json/encoder.py .__init__()",
+    "json/encoder.py _iterencode_dict()",
+    "json/encoder.py _iterencode_list()",
+    "json/encoder.py _iterencode()"
+   ],
+   "seconds": 0.88
+  },
+  {
+   "id": "cp10",
+   "corpus": "cpython",
+   "asks_tests": true,
+   "file_rank": 2,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 4,
+   "test_first": false,
+   "n_ranked": 10,
+   "top": [
+    "asyncio/taskgroups.py TaskGroup",
+    "test/test_asyncio/test_taskgroups.py .test_cancel_children_on_child_error()",
+    "test/test_asyncio/test_taskgroups.py .test_taskgroup_11()",
+    "test/test_asyncio/test_taskgroups.py .test_taskgroup_03()",
+    "test/test_asyncio/test_taskgroups.py .test_taskgroup_07()"
+   ],
+   "seconds": 0.73
+  },
+  {
+   "id": "vn01",
+   "corpus": "verinoda",
+   "asks_tests": false,
+   "file_rank": 4,
+   "sym_rank": 4,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": false,
+   "n_ranked": 6,
+   "top": [
+    "verinoda/project_index/serve.py _build_http_app()",
+    "tests/test_ui.py test_the_server_refuses_other_hosts_writes_and_unknown_paths()",
+    "tests_upstream/test_serve_http.py _client()",
+    "verinoda/ui/server.py _hosts()",
+    "tests/test_ui.py _get()"
+   ],
+   "seconds": 0.26
+  },
+  {
+   "id": "vn02",
+   "corpus": "verinoda",
+   "asks_tests": false,
+   "file_rank": null,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 1,
+   "test_first": false,
+   "n_ranked": 7,
+   "top": [
+    "verinoda/debug.py attempt()",
+    "verinoda/mcp/server.py debug_attempt()",
+    "tests/test_debug.py test_cli_debug_commands()",
+    "docs/BENCHMARKS.md Update 2026-09-25: debug ledger (debugloops_v1)",
+    "docs/GENEL-BAKIS.md 4.12 Ajan entegrasyonu ve MCP (`agents`, `mcp`) — Çalışıyor…"
+   ],
+   "seconds": 0.68
+  },
+  {
+   "id": "vn03",
+   "corpus": "verinoda",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 2,
+   "test_first": false,
+   "n_ranked": 9,
+   "top": [
+    "verinoda/store.py SchemaTooNew",
+    "tests/test_cross_r3.py test_a_newer_database_is_a_failed_check_and_an_error_line()",
+    "verinoda/store.py .__init__()",
+    "verinoda/doctor.py run()",
+    "tests/test_store.py test_refuses_a_newer_schema()"
+   ],
+   "seconds": 0.21
+  },
+  {
+   "id": "vn04",
+   "corpus": "verinoda",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 1,
+   "test_first": false,
+   "n_ranked": 8,
+   "top": [
+    "verinoda/decision_brief.py questions()",
+    "verinoda/usernotes.py check()",
+    "docs/GENEL-BAKIS.md 4.3 Referans çözücü (`references/`) — Çalışıyor (bazı parçalar kısmi)",
+    "docs/GENEL-BAKIS.md 4.1b Notlar ve graf görünümü (`verinoda ui`)",
+    "tests/test_usernotes.py test_a_note_follows_its_code_moved_changed_kept_and_gone"
+   ],
+   "seconds": 0.33
+  },
+  {
+   "id": "vn05",
+   "corpus": "verinoda",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 2,
+   "test_first": true,
+   "n_ranked": 6,
+   "top": [
+    "tests/test_experiments.py test_processes_a_run_leaves_running_are_stopped()",
+    "verinoda/experiments.py _ProcessTree",
+    "verinoda/mcp/server.py experiment_run()",
+    "verinoda/mcp/server.py .experiment_run()",
+    "tests/test_debug.py test_mcp_commands_keep_repeated_and_empty_arguments()"
+   ],
+   "seconds": 0.21
+  },
+  {
+   "id": "vn06",
+   "corpus": "verinoda",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 4,
+   "test_first": false,
+   "n_ranked": 6,
+   "top": [
+    "verinoda/agents/installer.py _codex_home()",
+    "tests/test_agents.py test_codex_home_env_is_respected_only_without_explicit_home()",
+    "tests/test_agents.py test_refuses_invalid_or_inline_toml()",
+    "tests/test_agents.py test_bom_files_round_trip()",
+    "tests/test_agents.py test_refuses_foreign_mcp_entries()"
+   ],
+   "seconds": 0.47
+  },
+  {
+   "id": "vn07",
+   "corpus": "verinoda",
+   "asks_tests": true,
+   "file_rank": 3,
+   "sym_rank": 3,
+   "has_sym": true,
+   "tests_top5": 1,
+   "test_first": false,
+   "n_ranked": 6,
+   "top": [
+    "verinoda/textnorm.py fold_tr()",
+    "verinoda/analysis.py fold_tr()",
+    "tests/test_textnorm.py test_fold_is_length_preserving_and_keeps_dotted_i()",
+    "docs/GENEL-BAKIS.md 4.2 Soru planları ve Türkçe desteği (`question_plan`, `textnorm`, `lexicon`) — Çalışıyor (",
+    "verinoda/data/seed_lexicon_tr_en.json seed_lexicon_tr_en.json"
+   ],
+   "seconds": 0.35
+  },
+  {
+   "id": "vn08",
+   "corpus": "verinoda",
+   "asks_tests": false,
+   "file_rank": 6,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": true,
+   "n_ranked": 7,
+   "top": [
+    "tests/test_verdict_gate.py test_copy_roots_and_vendored_folders()",
+    "tests/test_review.py test_documentation_is_no_dependent_and_vendored_copies_are_other_projects()",
+    "verinoda/verdict_gate.py apply()",
+    "verinoda/verdict_gate.py copy_root_of()",
+    "tests/test_copies.py (module level)"
+   ],
+   "seconds": 0.2
+  },
+  {
+   "id": "gf01",
+   "corpus": "graphify",
+   "asks_tests": false,
+   "file_rank": 3,
+   "sym_rank": 4,
+   "has_sym": true,
+   "tests_top5": 1,
+   "test_first": false,
+   "n_ranked": 8,
+   "top": [
+    "worked/karpathy-repos/GRAPH_REPORT.md Knowledge Gaps",
+    "tests/test_llm_backends.py test_ollama_num_ctx_scales_with_small_token_budget()",
+    "graphify/cluster.py _partition()",
+    "graphify/cluster.py cluster()",
+    "graphify/cli.py dispatch_command()"
+   ],
+   "seconds": 0.39
+  },
+  {
+   "id": "gf02",
+   "corpus": "graphify",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": true,
+   "n_ranked": 7,
+   "top": [
+    "tests/test_watch.py test_read_only_events_are_ignored()",
+    "graphify/watch.py _is_read_only_event()",
+    "tests/test_detect.py test_gitignore_keeps_tracked_file_but_drops_untracked_sibling()",
+    "tests/test_watch.py test_read_only_events_with_real_watchdog_classes()",
+    "graphify/watch.py on_any_event()"
+   ],
+   "seconds": 0.39
+  },
+  {
+   "id": "gf03",
+   "corpus": "graphify",
+   "asks_tests": false,
+   "file_rank": 7,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 4,
+   "test_first": true,
+   "n_ranked": 7,
+   "top": [
+    "tests/test_export.py test_to_json_refuses_shrink()",
+    "tests/test_watch.py test_rebuild_refuses_overwrite_when_existing_graph_over_size_cap()",
+    "graphify/export.py to_json()",
+    "tests/test_watch.py test_rebuild_refuses_overwrite_when_existing_graph_corrupt()",
+    "tests/test_unverified_semantic_shrink.py test_3203_e2e_repro_protected_and_manifest_unstamped()"
+   ],
+   "seconds": 0.29
+  },
+  {
+   "id": "gf04",
+   "corpus": "graphify",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": true,
+   "n_ranked": 8,
+   "top": [
+    "tests/test_cache.py test_file_hash_detects_same_size_rewrite_within_one_mtime_tick()",
+    "graphify/cache.py file_hash()",
+    "tests/test_word_count_cache.py test_file_hash_ignores_legacy_unsalted_entry()",
+    "graphify/detect.py _zip_within_caps()",
+    "tests/test_cache.py test_file_hash_changes()"
+   ],
+   "seconds": 0.31
+  },
+  {
+   "id": "gf05",
+   "corpus": "graphify",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 1,
+   "test_first": false,
+   "n_ranked": 6,
+   "top": [
+    "graphify/security.py _ip_is_blocked()",
+    "graphify/llm.py _ollama_host_is_link_local_or_metadata()",
+    "graphify/llm.py _validate_ollama_base_url()",
+    "graphify/security.py validate_url()",
+    "tests/test_ollama.py test_ollama_alias_resolving_to_link_local_blocked()"
+   ],
+   "seconds": 0.08
+  },
+  {
+   "id": "gf06",
+   "corpus": "graphify",
+   "asks_tests": true,
+   "file_rank": 3,
+   "sym_rank": 3,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": false,
+   "n_ranked": 7,
+   "top": [
+    "graphify/cluster.py cohesion_score()",
+    "worked/mixed-corpus/raw/cluster.py cohesion_score()",
+    "tests/test_cluster.py test_cohesion_score_ignores_self_loops()",
+    "tests/test_cluster.py test_cohesion_score_self_loops_only_is_zero()",
+    "tests/test_cluster.py test_cohesion_score_range_with_self_loops()"
+   ],
+   "seconds": 0.13
+  },
+  {
+   "id": "or01",
+   "corpus": "orders_app",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": false,
+   "n_ranked": 10,
+   "top": [
+    "orders/pricing.py apply_discount()",
+    "tests/test_pricing.py test_discount_applies_above_threshold()",
+    "orders/pricing.py compute_total()",
+    "tests/test_pricing.py test_no_discount_below_threshold()",
+    "tests/test_pricing.py test_compute_total()"
+   ],
+   "seconds": 0.02
+  },
+  {
+   "id": "or02",
+   "corpus": "orders_app",
+   "asks_tests": true,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": true,
+   "n_ranked": 10,
+   "top": [
+    "tests/test_service.py test_empty_order_rejected()",
+    "orders/service.py validate_items()",
+    "orders/service.py place_order()",
+    "tests/test_service.py test_place_and_fetch_roundtrip()",
+    "tests/test_pricing.py test_discount_applies_above_threshold()"
+   ],
+   "seconds": 0.02
+  },
+  {
+   "id": "or03",
+   "corpus": "orders_app",
+   "asks_tests": false,
+   "file_rank": 3,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 10,
+   "top": [
+    "docs/adr/0001-sqlite-persistence.md ADR 0001: SQLite for order persistence",
+    "README.md orders_app",
+    "orders/repository.py (module level)",
+    "orders/repository.py .__init__()",
+    "orders/api.py create_order_handler()"
+   ],
+   "seconds": 0.03
+  },
+  {
+   "id": "or04",
+   "corpus": "orders_app",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 11,
+   "top": [
+    "orders/service.py validate_items()",
+    "orders/config.py load_settings()",
+    "orders/config.py (module level)",
+    "orders/service.py place_order()",
+    "orders/pricing.py apply_discount()"
+   ],
+   "seconds": 0.02
+  },
+  {
+   "id": "fm01",
+   "corpus": "forge_mod",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 5,
+   "has_sym": true,
+   "tests_top5": 1,
+   "test_first": true,
+   "n_ranked": 7,
+   "top": [
+    "src/test/java/net/ashvale/emberforge/HeatMathTest.java .noProgressBelowTheRecipesMinimumHeat()",
+    "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt HeatMath",
+    "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java .serverTick()",
+    "src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java ForgingRecipe",
+    "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt .progressPerTick()"
+   ],
+   "seconds": 0.03
+  },
+  {
+   "id": "fm02",
+   "corpus": "forge_mod",
+   "asks_tests": true,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 2,
+   "test_first": true,
+   "n_ranked": 10,
+   "top": [
+    "src/test/java/net/ashvale/emberforge/ForgeTickTest.java .forgeCoolsOnlyOnDecayTicks()",
+    "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java .serverTick()",
+    "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java .cooled()",
+    "src/test/java/net/ashvale/emberforge/ForgeTickTest.java .coldForgeStaysCold()",
+    "build.gradle (module level)"
+   ],
+   "seconds": 0.02
+  },
+  {
+   "id": "fm03",
+   "corpus": "forge_mod",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 8,
+   "top": [
+    "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java .handleStoke()",
+    "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java .createMenu()",
+    "src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt .requestStoke()",
+    "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java EmberForgeMenu",
+    "src/main/resources/assets/emberforge/lang/tr_tr.json emberforge:tr_tr"
+   ],
+   "seconds": 0.04
+  },
+  {
+   "id": "fm04",
+   "corpus": "forge_mod",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 2,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 8,
+   "top": [
+    "src/main/java/net/ashvale/emberforge/event/ModEvents.java ModEvents",
+    "src/main/java/net/ashvale/emberforge/event/ModEvents.java .onLeftClickForge()",
+    "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java .useItemOn()",
+    "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java .quickMoveStack()",
+    "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java .serverTick()"
+   ],
+   "seconds": 0.02
+  },
+  {
+   "id": "gm01",
+   "corpus": "glow_mod",
+   "asks_tests": true,
+   "file_rank": 1,
+   "sym_rank": 1,
+   "has_sym": true,
+   "tests_top5": 3,
+   "test_first": true,
+   "n_ranked": 9,
+   "top": [
+    "src/gametest/java/com/example/glowmod/test/WispTests.java .wispAppearsWhereAsked()",
+    "src/gametest/java/com/example/glowmod/test/WispTests.java .deadWispLeavesItsHeart()",
+    "src/gametest/java/com/example/glowmod/test/WispTests.java WispTests",
+    "src/main/java/com/example/glowmod/entity/Wisp.java .spawn()",
+    "build.gradle (module level)"
+   ],
+   "seconds": 0.02
+  },
+  {
+   "id": "gm02",
+   "corpus": "glow_mod",
+   "asks_tests": false,
+   "file_rank": 7,
+   "sym_rank": null,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 11,
+   "top": [
+    "reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java .onDeath()",
+    "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java .isWisp()",
+    "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java Wisp",
+    "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java .heart()",
+    "reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java WispListener"
+   ],
+   "seconds": 0.02
+  },
+  {
+   "id": "gm03",
+   "corpus": "glow_mod",
+   "asks_tests": false,
+   "file_rank": 2,
+   "sym_rank": 3,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 9,
+   "top": [
+    "reference/original-plugin/src/main/java/com/example/glowplugin/GlowPlugin.java .onEnable()",
+    "src/main/java/com/example/glowmod/ritual/Ritual.java .baslat()",
+    "src/main/java/com/example/glowmod/repair/RepairScheduler.java .kaydet()",
+    "README.md Glow Mod (example)",
+    "src/main/java/com/example/glowmod/entity/ModEntities.java .register()"
+   ],
+   "seconds": 0.04
+  },
+  {
+   "id": "gm04",
+   "corpus": "glow_mod",
+   "asks_tests": false,
+   "file_rank": 1,
+   "sym_rank": 3,
+   "has_sym": true,
+   "tests_top5": 0,
+   "test_first": false,
+   "n_ranked": 9,
+   "top": [
+    "src/main/java/com/example/glowmod/event/LanternEvents.java LanternEvents",
+    "src/main/resources/data/glowmod/recipe/lantern_staff.json glowmod:lantern_staff",
+    "src/main/java/com/example/glowmod/event/LanternEvents.java .etkinlestir()",
+    "src/main/resources/assets/glowmod/models/item/lantern_staff.json glowmod:item/lantern_staff",
+    "reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java .onInteract()"
+   ],
+   "seconds": 0.02
+  }
+ ],
+ "code": "C:\\Users\\ozcin\\Desktop\\RepoAtlas\\verinoda",
+ "questions_file": "C:\\Users\\ozcin\\Desktop\\RepoAtlas\\private-bench\\qr\\heldout_scorer.json"
+}
