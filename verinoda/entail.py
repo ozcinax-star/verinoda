@@ -1012,6 +1012,7 @@ def names_called_at(text: str, rel: str, line: int) -> list[str] | None:
 #   method_unresolved                         -> partial (receiver type unknown: an inference)
 #   rebound, other_module, module_assign, unbound, not_called, no_grammar -> partial (heuristic doubt)
 #   outside_caller, string_only, absent, wrong_module, unreadable, blank  -> none
+#   registers (Java / Kotlin: only a method reference `Cls::m`, a callback handed over) -> none
 def _py_call_grade(text: str, rel: str, line: int, token: str, *, caller: str | None,
                    target_path: str | None, target_qual: str | None, relation: str | None) -> Grade:
     lines = text.splitlines()
@@ -1220,6 +1221,9 @@ def _other_call_grade(text: str, rel: str, line: int, token: str, *, target_path
     if parser is None:
         if re.search(rf"(?<![\w.$]){re.escape(token)}\s*\(", src):
             return Grade("partial", f"line {line} looks like a call to `{token}` (no grammar: textual)", "no_grammar")
+        ref = method_reference_at(text, rel, line, token)
+        if ref:
+            return Grade("none", registers_reason(ref, token, line), "registers")
         return Grade("none", f"line {line} does not name `{token}`", "absent")
     tree = parser.parse(text.encode("utf-8", "surrogatepass"))
     target_cls = PurePosixPath(target_path).stem if target_path else None
@@ -1259,9 +1263,31 @@ def _other_call_grade(text: str, rel: str, line: int, token: str, *, target_path
     if member:
         return Grade("partial", f"method call `.{token}()` at line {line}; receiver type not resolved",
                      "method_unresolved")
+    ref = method_reference_at(text, rel, line, token)
+    if ref:
+        return Grade("none", registers_reason(ref, token, line), "registers")
     if re.search(rf"\b{re.escape(token)}\b", src):
         return Grade("partial", f"line {line} names `{token}` but has no call to it", "not_called")
     return Grade("none", f"line {line} does not name `{token}`", "absent")
+
+
+def method_reference_at(text: str, rel: str, line: int, token: str) -> str | None:
+    """The Java / Kotlin method reference to ``token`` on ``line`` (``Cls::token``, ``this::token``,
+    ``::token``) as written, outside strings, comments and text blocks; None when there is none (or the
+    file is not Java / Kotlin)."""
+    if not rel.endswith((".java", ".kt")) or not token:
+        return None
+    from verinoda.index import _java_code_lines
+
+    code = _java_code_lines(text, kotlin=True)
+    src = code[line - 1] if 0 < line <= len(code) else ""
+    m = re.search(rf"(?<![\w$.:])((?:[A-Za-z_$][\w$]*\s*)?::\s*{re.escape(token)})(?![\w$])(?!\s*[.(])", src)
+    return re.sub(r"\s+", "", m.group(1)) if m else None
+
+
+def registers_reason(ref: str, token: str, line: int) -> str:
+    return (f"line {line} passes `{ref}` as a callback (a method reference): it registers `{token}` to be "
+            "called later, it does not call it here")
 
 
 def call_site(repo: Path | str | None, path: str, line: int, target_label: str, *, caller: str | None = None,
@@ -1534,6 +1560,19 @@ def _relation(repo, spec: dict, ev: dict, text: str, subjects: list[str]) -> Gra
     if not token:
         return _general(repo, ev, text)
     meta = ev.get("meta") or {}
+    calls_claim = str(spec.get("relation") or "calls").lower() in ("calls", "call")
+    if typ == "graph_edge" and calls_claim and (meta.get("relation") == "registers"
+                                                or "-[registers]->" in str(ev.get("locator") or "")):
+        return Grade("none", "the graph edge is a callback registration (registers: a method reference passed "
+                             "on), not a call", "registers")
+    if typ == "static_resolution" and calls_claim and ev.get("path") and ev.get("line_start"):
+        # a resolver finds the method a reference names too: `Cls::m` resolves to m without calling it
+        full, a = _file_text(repo, ev), int(ev["line_start"])
+        if full is not None and str(ev["path"]).endswith((".java", ".kt")) and \
+                _other_call_grade(full, ev["path"], a, token, target_path=b_path).code == "registers":
+            ref = method_reference_at(full, ev["path"], int(a), token) or token
+            return Grade("none", f"{meta.get('tool', 'resolver')}: " + registers_reason(ref, token, int(a)),
+                         "registers")
     if typ == "graph_edge":
         if spec.get("source") and spec.get("target") and \
                 (meta.get("source"), meta.get("target")) == (spec.get("source"), spec.get("target")):
