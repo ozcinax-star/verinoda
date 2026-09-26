@@ -264,7 +264,7 @@ copies indexed from scratch by the fixed code:
 
 **Answers.** fastbench on the eight public sets against the main run of the day
 (`scratchpad/fb/int0925c.json`, `cmp_ab.py`): 0 differences on 86 questions x 3 approaches,
-negatives unchanged (private_mod was not run). The agent persona's ten out-of-sample questions on the
+negatives unchanged (the private set was not run). The agent persona's ten out-of-sample questions on the
 two copies: query text 14/32, query JSON 16/32, analyze JSON 14/32, analyze text 10/32, every
 question and approach equal to main's run.
 
