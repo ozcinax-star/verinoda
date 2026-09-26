@@ -17,11 +17,16 @@ PASSAGES = [
     "  called by: get_repo (orders/api.py:12)",
     "  orders/repository.py:15-20",
     "def save(self, customer: str, total: float) -> int:",
+    "    cur = self.conn.execute(",
+    "        'INSERT INTO orders (customer, total) VALUES (?, ?)', (customer, total)",
+    "    )",
+    "    self.conn.commit()",
+    "    return cur.lastrowid",
     "## orders/api.py:16-21 create_order_handler",
     "## orders/api.py:24-28 get_order_handler",
     "orders/config.py:5-7 DATABASE_URL = os.environ.get('ORDERS_DATABASE_URL', 'orders.db')",
     "… 3 more candidates not shown: a.py:1-2 x",
-    "next: same query, --max-chars 12000",
+    "next: verinoda query \"…\" --max-chars 12000",
 ]
 
 
@@ -88,6 +93,54 @@ def test_printed_windows_counts_only_lines_the_passages_print():
     assert not any(w[0] == "orders/config.py" for w in wins)  # a one-line item prints no body
 
 
+def test_evidence_is_left_out_only_when_the_text_carries_the_same_whole_locator():
+    """Line 18 is not line 180 (nor 18 in 18-20): the evidence stays unless the text quotes that locator."""
+    c = _claim("cx", "`save()` is called at orders/api.py:180", evidence=["supports:source_code:orders/api.py:18"])
+    assert av.lean_claim(c)["evidence"] == ["source_code:orders/api.py:18"]
+    assert "{source_code:orders/api.py:18}" in av.claim_line(c)
+    ranged = dict(c, text="`save()` is defined at orders/api.py:18-20")
+    assert av.lean_claim(ranged)["evidence"] == ["source_code:orders/api.py:18"]
+    other = dict(c, text="`save()` is called at other_orders/api.py:18")
+    assert av.lean_claim(other)["evidence"] == ["source_code:orders/api.py:18"]
+    same = dict(c, text="`save()` is called at orders/api.py:18")
+    assert "evidence" not in av.lean_claim(same) and "{" not in av.claim_line(same)
+
+
+def test_passages_cut_short_print_only_the_lines_they_keep():
+    """The MCP response cap keeps a prefix of the passages: a window counts only the lines that follow it."""
+    cut = PASSAGES[:PASSAGES.index("    )") + 1]  # save() up to its fourth line, 15-18
+    wins = av.printed_windows(cut)
+    assert ("orders/repository.py", 15, 18) in wins and ("orders/repository.py", 15, 20) not in wins
+    head = PASSAGES[:PASSAGES.index("    return apply_discount(subtotal)")]  # compute_total up to line 7
+    assert ("orders/pricing.py", 6, 7) in av.printed_windows(head)
+    assert av.printed_windows(PASSAGES[:3]) == []  # a header and its calls line: no body yet
+    assert av.shown_by_passages(_result(passages=cut)) == {"c3"}  # save() 15-20 is no longer all printed
+
+
+def test_lean_capped_brings_back_the_claims_whose_lines_the_cut_removed():
+    from verinoda.mcp.server import cap_response
+
+    res = _result()
+    full = av.lean(res)
+    size = len(json.dumps(full, ensure_ascii=False, separators=(",", ":")))
+    for limit in range(size - 1200, size + 40, 40):
+        out = av.lean_capped(res, lambda d, n=limit: cap_response(d, n, first=("critique", "plan_check.links",
+                                                                             "passages")))
+        wire = len(json.dumps(out, ensure_ascii=False, separators=(",", ":")))
+        assert wire <= limit or out.get("truncation", {}).get("over_limit"), limit
+        listed = {c["id"] for c in out["claims"]}
+        kept = out.get("passages") or []
+        assert kept == PASSAGES[:len(kept)]  # the cut keeps a prefix
+        hidden = av.shown_by_passages(_result(passages=kept))
+        cut_claims = "claims" in (out.get("truncation") or {}).get("cut", {})
+        for c in res["claims"]:
+            # every claim is listed, or printed by the passages kept, or counted as cut
+            assert c["id"] in listed or c["id"] in hidden or cut_claims, (limit, c["id"])
+        if not cut_claims:  # what the count says is printed is printed
+            assert out.get("claims_in_passages", 0) == len(hidden - listed), limit
+    assert av.lean_capped(res, lambda d: cap_response(d, 10 ** 6)) == full  # nothing to cut: the lean view
+
+
 def test_verified_context_claims_the_passages_print_are_left_out_and_counted():
     res = _result()
     assert av.shown_by_passages(res) == {"c3", "c4"}
@@ -103,6 +156,13 @@ def test_text_is_the_answer_then_the_passages():
     assert lines[0] == "analysis ana_1, snapshot snp_1 (commit 0123456789)"
     assert lines[1].startswith("understood as: Understood (rules)")
     assert "plan check: persist_order: not_found (did you mean place_order)" in text
+    # where the question's words resolved (the MCP view lists the same links): a locator, weak links left out
+    assert "\nplan links: order -> orders/service.py:19-22\n" in text and "x.py:1-2" not in text
+    ambiguous = {"mention": "m4", "text": "total", "status": "ambiguous", "at": "orders/pricing.py:6-8"}
+    more = _result()
+    more["plan_check"]["links"].append(ambiguous)
+    assert ("plan links: order -> orders/service.py:19-22; total -> orders/pricing.py:6-8 (ambiguous)"
+            in av.render_text(more))
     q1 = text.index("\nq1 [met_with_inference] flow: how is an order saved?")
     c1 = text.index("  [statically_verified] `place_order()` calls `compute_total()` (orders/service.py:21)  (c1)\n")
     c2 = text.index("  [strong_inference 0.60] `place_order()` -> `.save()` reaches the database "
@@ -114,7 +174,7 @@ def test_text_is_the_answer_then_the_passages():
     assert "(c5)" in text and "(c6)" in text and "(c3)" not in text and "(c4)" not in text
     assert "+2 verified claim(s) about lines the passages below print" in text
     assert "\nunknown: does the index describe the tree?: refresh failed; next: scan" in text
-    assert text.index("\npassages (") > ctx and text.endswith("next: same query, --max-chars 12000")
+    assert text.index("\npassages (") > ctx and text.endswith("next: verinoda query \"…\" --max-chars 12000")
     for noise in ("steps", "usage", "tool_calls", "done_when", "links_used", "qpl_1", "0.90"):
         assert noise not in text, noise
     exhausted = av.render_text(_result(usage={"exhausted": "time budget 60.0s spent"}))

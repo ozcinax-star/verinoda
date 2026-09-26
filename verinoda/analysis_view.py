@@ -18,6 +18,7 @@ Rules (nothing an answer rests on is dropped; the full record stays one ``--json
   with its call site, is left out), uncertainties and "not challenged" reasons always;
 * a verified context claim (not an answer claim) whose cited lines all lie in a window the
   passages print is left out and counted: the passage shows those lines;
+* the plan's links stay (where the question's words resolved in the code: a locator), weak ones go;
 * dropped: steps, usage (unless a budget ran out), the question echo, plan id/source, per
   sub-question done_when / links_used / retrieval / handler / claim_ids, weak plan links.
 """
@@ -25,6 +26,7 @@ Rules (nothing an answer rests on is dropped; the full record stays one ``--json
 from __future__ import annotations
 
 import re
+from typing import Callable
 
 from verinoda.claims import CONFIDENCE_CAP
 
@@ -50,7 +52,7 @@ def _evidence(c: dict) -> list[str]:
             if kind == "graph_edge" and _LOC_RX.search(text):
                 continue  # the relation and its call site are the text itself
             m = _LOC_RX.search(where)
-            if m and m.group(1) in text:
+            if m and m.group(1) in _LOC_RX.findall(text):  # the same locator, not one it is a prefix of
                 continue
             out.append(f"{kind}:{where}")
         else:
@@ -85,24 +87,33 @@ def printed_windows(passages: list[str]) -> list[tuple[str, int, int]]:
     """Line ranges whose source lines the passages print (``retrieval.render_text`` layout).
 
     A ``  path:x-y`` sub-window counts (its lines follow it in one block); an item's ``## path:a-b``
-    header counts only when its whole body follows directly (after its doc/calls/... lines)."""
+    header counts only when its body follows directly (after its doc/calls/... lines). A window
+    covers only the lines that follow it: passages cut short (the MCP response cap keeps a prefix)
+    print a window's first lines, and only those count."""
     out = []
     for i, ln in enumerate(passages):
         m = _SUB_RX.match(ln)
-        if m:
-            out.append((m.group(1), int(m.group(2)), int(m.group(3))))
-            continue
-        m = _HEAD_RX.match(ln)
-        if not m:
-            continue
         j = i + 1
-        while j < len(passages) and passages[j].startswith(_META):
-            j += 1
-        if j < len(passages):
-            nxt = passages[j]
-            if not (nxt.startswith(_NOT_BODY) or _SUB_RX.match(nxt) or _ITEM_LINE_RX.match(nxt)):
-                out.append((m.group(1), int(m.group(2)), int(m.group(3))))
+        if not m:
+            m = _HEAD_RX.match(ln)
+            if not m:
+                continue
+            while j < len(passages) and passages[j].startswith(_META):
+                j += 1
+            if j < len(passages) and (_SUB_RX.match(passages[j]) or _ITEM_LINE_RX.match(passages[j])):
+                continue  # a sub-window or the next item follows: the header prints no body
+        path, lo, hi = m.group(1), int(m.group(2)), int(m.group(3))
+        n = 0
+        while j + n < len(passages) and n < hi - lo + 1 and not _block_start(passages[j + n]):
+            n += 1
+        if n:
+            out.append((path, lo, lo + n - 1))
     return out
+
+
+def _block_start(ln: str) -> bool:
+    """Does ``ln`` start a new block of the text (not a source line of the window above it)?"""
+    return bool(ln.startswith(_NOT_BODY) or _SUB_RX.match(ln) or _ITEM_LINE_RX.match(ln))
 
 
 def _covered(loc: str, wins: list[tuple[str, int, int]]) -> bool:
@@ -136,16 +147,18 @@ def shown_by_passages(res: dict) -> set[str]:
 
 # -- MCP: lean JSON ------------------------------------------------------------------------------
 
-def _link(lk: dict) -> str | None:
+def _link(lk: dict, *, untagged: str | None = None) -> str | None:
+    """One plan link as a line (None for a weak one); a link whose status is ``untagged`` goes without it."""
     st = lk.get("status")
     if st == "weak":
         return None
     if st == "not_found":
         dym = lk.get("did_you_mean") or []
         return f"{lk.get('text')}: not_found" + (f" (did you mean {', '.join(map(str, dym[:3]))})" if dym else "")
+    tag = "" if st == untagged else f" ({st})"
     if lk.get("at"):
-        return f"{lk.get('text')} -> {lk['at']} ({st})"
-    return f"{lk.get('text')} ({st})"
+        return f"{lk.get('text')} -> {lk['at']}{tag}"
+    return f"{lk.get('text')}{tag}"
 
 
 def lean_plan_check(pc: dict) -> dict:
@@ -163,8 +176,11 @@ SUB_KEYS = ("id", "intent", "text", "status", "answer_claim_ids", "flags", "prop
             "decision_brief")
 
 
-def lean(res: dict) -> dict:
-    """The MCP ``analyze`` response (see the module rules); ``unknowns`` carry their ``sub_question``."""
+def lean(res: dict, *, shown_by: list[str] | None = None) -> dict:
+    """The MCP ``analyze`` response (see the module rules); ``unknowns`` carry their ``sub_question``.
+
+    ``shown_by``: the passage lines that leave claims out as printed (default: all of them;
+    :func:`lean_capped` passes the ones a response cap keeps)."""
     out: dict = {k: res[k] for k in ("analysis_id", "status", "understood_as") if res.get(k) is not None}
     snap = res.get("snapshot")
     if snap:
@@ -178,7 +194,7 @@ def lean(res: dict) -> dict:
     if res.get("plan_source") == "host":
         out["plan_id"] = res.get("plan_id")
     out["subquestions"] = [{k: s[k] for k in SUB_KEYS if s.get(k)} for s in res.get("subquestions") or []]
-    hidden = shown_by_passages(res)
+    hidden = shown_by_passages(res if shown_by is None else {**res, "passages": shown_by})
     out["claims"] = [lean_claim(c) for c in res.get("claims") or [] if c["id"] not in hidden]
     if hidden:
         out["claims_in_passages"] = len(hidden)
@@ -191,6 +207,22 @@ def lean(res: dict) -> dict:
     if res.get("passages"):
         out["passages"] = res["passages"]
     return out
+
+
+def lean_capped(res: dict, cap: Callable[[dict], dict]) -> dict:
+    """``cap(lean(res))``, where ``cap`` cuts a response to its size limit (MCP ``cap_response``: the
+    passages from the end, before any claim), with the claims left out as printed by the passages
+    counted only on the passage lines the cut keeps: a claim whose lines the cut removed comes back.
+
+    The cut keeps a prefix of the passages; each round counts on the prefix the last one kept, until a
+    round keeps every line it counted on (at most one round per passage line, usually one or two)."""
+    lines = list(res.get("passages") or [])
+    while True:
+        out = cap(lean(res, shown_by=lines))
+        kept = len(out.get("passages") or [])
+        if kept >= len(lines):
+            return out
+        lines = lines[:kept]
 
 
 # -- CLI: plain text -----------------------------------------------------------------------------
@@ -255,9 +287,14 @@ def render_text(res: dict) -> str:
     pc = res.get("plan_check") or {}
     if res.get("plan_source") == "host":
         out.append(f"plan {res.get('plan_id')}: {pc.get('status') or status}")
+    linked = []
     for lk in pc.get("links") or []:
         if lk.get("status") == "not_found":
             out.append("plan check: " + _link(lk))
+        elif lk.get("status") != "weak":
+            linked.append(_link(lk, untagged="linked"))
+    if linked:  # where the question's words resolved in the code (the MCP view lists the same links)
+        out.append("plan links: " + "; ".join(linked))
     if res.get("index_refresh_error"):
         out.append(f"warning: {res['index_refresh_error']}")
     if status == "invalid_plan":
