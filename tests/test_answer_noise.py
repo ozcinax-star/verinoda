@@ -84,3 +84,34 @@ def test_the_file_list_is_read_once_per_moment_not_per_reader(tmp_path, monkeypa
     assert snapshot.listed_files(tmp_path) is first  # the same moment: the same list
     monkeypatch.setattr(snapshot, "LISTED_TTL", 0.0)
     assert "b.mcfunction" in snapshot.listed_files(tmp_path)
+
+
+def test_a_setting_read_by_a_string_key_answers_a_config_question(tmp_path):
+    """`Config.getInt("car.door-ticks", 140)`: the key the question's words name, with its default and the YAML line
+    that sets it (config questions used to look only at environment variables)."""
+    import os
+
+    os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
+    from verinoda import analysis, search_index, workflow
+    from verinoda.store import open_store
+
+    root = tmp_path / "mod"
+    (root / "src").mkdir(parents=True)
+    (root / "src" / "Car.java").write_text(
+        "package x;\n\npublic class Car {\n    void tick() {\n"
+        "        int open = Config.getInt(\"car.door-ticks\", 140);\n"
+        "        double speed = Config.getDouble(\"car.max-speed\", 0.8);\n"
+        "        String name = Component.translatable(\"car.door.name\");\n    }\n}\n", encoding="utf-8")
+    (root / "src" / "settings.yml").write_text("car:\n  door-ticks: 140\n  max-speed: 0.8\n", encoding="utf-8")
+    workflow.init(root)
+    st = open_store(root)
+    try:
+        workflow.scan(st, root)
+        search_index._HANDLES.clear()
+        res = analysis.analyze(st, root, "which config key sets how long the car door stays open?")
+    finally:
+        st.close()
+    texts = [c["text"] for c in res["claims"] if "reads setting" in c["text"]]
+    assert texts and texts[0].startswith("`tick` reads setting `car.door-ticks` (default 140) (src/Car.java:5)"), texts
+    assert "is set in src/settings.yml:2" in texts[0]
+    assert not any("car.max-speed" in t or "car.door.name" in t for t in texts)

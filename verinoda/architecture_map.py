@@ -592,6 +592,74 @@ def config(g: Graph) -> dict:
     }
 
 
+# A read of a setting by a string key: `Config.getInt("car.door-ticks", 140)`, `cfg.get("server.port")`. The
+# key has two or more dotted parts; a second argument is the default. Calls that take such a string for another
+# reason (a translation key, a resource id, a log line, a format) are left out by name.
+KEY_READ_RE = re.compile(r"\b([A-Za-z_]\w*)\s*\(\s*\"([A-Za-z][\w-]*(?:\.[\w-]+)+)\"\s*(?:,\s*([^()\"]{1,40}?|\"[^\"]{0,40}\"))?\s*\)")
+NOT_KEY_READS = frozenset("translatable literal id of parse resource getResource getResourceAsStream format printf "
+                          "info warn error debug trace log equals equalsIgnoreCase startsWith endsWith contains "
+                          "matches split replace replaceAll indexOf forName loadClass require import_module "
+                          "getLogger getMessage t tr i18n _ gettext".split())
+CONFIG_DATA_SUFFIXES = (".yml", ".yaml", ".toml", ".properties", ".cfg", ".ini", ".conf")
+
+
+def config_key_reads(g: Graph, files: list[str]) -> list[dict]:
+    """String-keyed setting reads in ``files``: ``{"key", "method", "default", "at", "symbol", "line"}``."""
+    out = []
+    for f in files:
+        if Path(f).suffix.lower() in CONFIG_DATA_SUFFIXES or f.endswith((".md", ".json")):
+            continue
+        for i, text in enumerate(_read(g.root, f), 1):
+            if "\"" not in text or text.lstrip().startswith(("//", "#", "*", "/*")):
+                continue
+            for m in KEY_READ_RE.finditer(text):
+                if m.group(1) in NOT_KEY_READS:
+                    continue
+                sym = _symbol_at(g, f, i)
+                out.append({"key": m.group(2), "method": m.group(1), "default": (m.group(3) or "").strip() or None,
+                            "at": f"{f}:{i}", "symbol": g.label(sym) if sym else "(module)",
+                            "line": text.strip()[:140]})
+    return out
+
+
+def config_key_definitions(g: Graph) -> dict[str, str]:
+    """Dotted key -> ``file:line`` where a configuration file of the repository defines it (YAML nesting is
+    followed: ``car:`` then ``  door-ticks: 140`` defines ``car.door-ticks``; TOML ``[section]`` and flat
+    ``a.b = 1`` lines too)."""
+    from verinoda.snapshot import listed_files
+
+    try:
+        files = [f for f in listed_files(g.root) if f.lower().endswith(CONFIG_DATA_SUFFIXES)]
+    except OSError:
+        files = []
+    out: dict[str, str] = {}
+    for f in files[:200]:
+        stack: list[tuple[int, str]] = []
+        section = ""
+        yaml = f.lower().endswith((".yml", ".yaml"))
+        for i, text in enumerate(_read(g.root, f), 1):
+            if not text.strip() or text.lstrip().startswith(("#", ";", "//")):
+                continue
+            if yaml:
+                m = re.match(r"^(\s*)(?:- )?[\"']?([\w.-]+)[\"']?\s*:(?:\s|$)", text)
+                if not m:
+                    continue
+                ind = len(m.group(1))
+                while stack and stack[-1][0] >= ind:
+                    stack.pop()
+                stack.append((ind, m.group(2)))
+                out.setdefault(".".join(k for _, k in stack), f"{f}:{i}")
+            else:
+                m = re.match(r"^\s*\[([\w.-]+)\]\s*$", text)
+                if m:
+                    section = m.group(1)
+                    continue
+                m = re.match(r"^\s*[\"']?([\w.-]+)[\"']?\s*[=:]", text)
+                if m:
+                    out.setdefault(f"{section}.{m.group(1)}" if section else m.group(1), f"{f}:{i}")
+    return out
+
+
 # -- 5. tests ----------------------------------------------------------------------
 
 REACH_RELATIONS = testcode.REACH_RELATIONS

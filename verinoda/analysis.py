@@ -1426,10 +1426,56 @@ def _h_config(ctx: _Ctx, sub: _Sub) -> None:
                       subjects=[path], spec={"env": var},
                       **({} if py else {"uncertainties": ["the read is found by a pattern; what it is bound to is "
                                                           "checked for Python only"]}))
-    if not hits:
+    keys = _config_key_claims(ctx, sub, files)
+    if not hits and not keys:
         _unknown(ctx, sub, {"question": SUBQUESTIONS["config"], "why": "no env reads matched",
                             "next_step": "check settings objects / framework config manually; indirect reads "
                                          "are outside the config view's coverage"})
+
+
+def _config_key_claims(ctx: _Ctx, sub: _Sub, files: dict[str, float]) -> int:
+    """Settings read by a string key in the files that ranked for the question (``Config.getInt("a.door-ticks",
+    140)``), those whose key words are the question's (or the Turkish words the seed dictionary glosses them
+    with) first; with the configuration file line that defines the key. Returns the claims made."""
+    from verinoda import search_index
+
+    top = sorted(files, key=lambda f: -files[f])[:8]
+    reads = am.config_key_reads(ctx.g, top)
+    if not reads:
+        return 0
+    rev = search_index._reverse_seed()
+    stems = {tn.en_stem(tn.fold_tr(w).lower()) for w in sub.words if len(w) >= 3}
+    wants = stems | {tr for st in stems for tr in rev.get(st, ())}
+
+    def named(key: str) -> int:
+        parts = {tn.fold_tr(x).lower() for x in re.split(r"[._-]+", key) if len(x) >= 3}
+        return sum(1 for w in wants if any(p.startswith(w) or (len(p) >= 4 and w.startswith(p)) for p in parts))
+
+    ranked = sorted(((named(r["key"]), -files.get(r["at"].rpartition(":")[0], 0.0), r) for r in reads),
+                    key=lambda x: (-x[0], x[1], x[2]["at"]))
+    defs = am.config_key_definitions(ctx.g) if any(n for n, _f, _r in ranked) else {}
+    made, seen = 0, set()
+    best = ranked[0][0]
+    for n, _f, r in ranked:
+        # keys that carry fewer of the question's words than the best one are other settings of the same code
+        if n == 0 or n < best or r["key"] in seen or made >= 3 or not ctx.budget.ok:
+            continue
+        seen.add(r["key"])
+        path, _, ln = r["at"].rpartition(":")
+        evs = [(_src_ev(ctx.repo, path, int(ln), None, ctx.commit), "supports")]
+        where = defs.get(r["key"])
+        if where:
+            dpath, _, dln = where.rpartition(":")
+            evs.append((_src_ev(ctx.repo, dpath, int(dln), None, ctx.commit), "supports"))
+        default = f" (default {r['default']})" if r["default"] else ""
+        if ctx.rec.claim(f"`{qp._bare(r['symbol'])}` reads setting `{r['key']}`{default} ({r['at']})"
+                         + (f"; `{r['key']}` is set in {where}" if where else ""),
+                         kind="config", status="strong_inference", evidence=evs, subjects=[path],
+                         spec={"key": r["key"]},
+                         uncertainties=["a string-keyed read found by a pattern: which setting object answers "
+                                        "it is not traced"]) is not None:
+            made += 1
+    return made
 
 
 def _h_tests(ctx: _Ctx, sub: _Sub) -> None:

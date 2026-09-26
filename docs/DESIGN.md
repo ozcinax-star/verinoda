@@ -79,6 +79,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D56 | An analysis said once | implemented | Built 2026-09-26 (section 29): changed files listed once, uncertainties without repeats, six context claims, critique clipped; analyze facts unchanged, -1.6 % characters. Smaller passage budgets measured and dropped (facts lost). |
 | D57 | Java overloads; answers read as a person would | implemented | Built 2026-09-27 (section 30): each Java overload is its own node and a call binds to the overload its argument count fits; `when`, `trace` and name lookups take the whole overload group; "how does X work" with one subject is answered by what X calls (inference), entry-to-storage paths are matched by node, not label; a storage question gets the entry-to-storage paths through its own code; impact names the callers of the method asked about; a symbol's doc comment above its span prints where it is; the JSON answer keeps room for the next two candidates. JSON retrieve facts 253 -> 262, text and analyze unchanged. |
 | D58 | Less noise in an answer | implemented | Built 2026-09-27 (section 31): context the critique refuted is counted, not printed; a changed file is an unknown only when it spells a name that looks like one (not a plain word that happens to name a function); "how does X decide ..." is a mechanism, not a setting; `module.function` links to that module's function; no empty quote claims; the history view 100x faster; a why-answer quotes the section with the reason. |
+| D59 | Settings read by a string key | implemented | Built 2026-09-27 (section 32): a config question also gets the string-keyed setting reads (`Config.getInt("car.door-ticks", 140)`) in the files that ranked for it, matched by the question's words (and their Turkish glosses), with the default and the YAML / TOML / .properties line that sets the key. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3366,6 +3367,33 @@ decide which passages fit the character budget?", "which tests cover naming.reso
 
 fastbench on the same indexes: analyze facts 318 -> 317, characters -0.3 %; the fact lost matched only a token
 inside a refuted claim about a test file (the fact's own lines are elsewhere): a scorer artifact, kept as measured.
+
+## 32. Settings read by a string key (D59, 2026-09-27)
+
+### 32.1 Why
+
+"Which config key sets how long the car door stays open?" over a Minecraft mod came back `unmet` ("no env reads
+matched"): the config view knows environment variables, and a mod (like most JVM and many web projects) reads
+its settings through its own object by a dotted key, `Settings.number("car.door-wait-ticks", 140)`, backed by a YAML
+file.
+
+### 32.2 Decisions
+
+- `architecture_map.config_key_reads`: calls whose first argument is a string of two or more dotted parts, the
+  second argument taken as the default; calls that take such a string for another reason are left out by name
+  (`translatable`, `id`, `format`, logging, `equals`, ...).
+- `architecture_map.config_key_definitions`: dotted keys defined by the repository's YAML (nesting followed),
+  TOML (`[section]`) and flat `key = value` files, with their line.
+- The config handler reads those calls in the eight files that ranked highest for the question, scores each key
+  by the question's words among its parts (an English word also by the Turkish words the seed dictionary glosses
+  it with: "door" finds `kapi`), keeps the best-scoring keys (at most three), and claims "`tick` reads setting
+  `car.door-wait-ticks` (default 140) (file:line); ... is set in settings.yml:12" as `strong_inference` with both
+  lines as evidence (a pattern found it; which object answers the read is not traced).
+
+### 32.3 Measured
+
+fastbench: facts unchanged, analyze characters +0.2 % (the new claims). On the mod: the key the question asked
+about first, then only keys with as many of its words.
 
 ## Sources
 
