@@ -307,7 +307,8 @@ def test_doctor_names_the_build_and_flags_a_server_of_another_python(tmp_path, m
     launcher.write_bytes(f"#!{other}\n".encode("utf-8"))
     real_which = shutil.which
     monkeypatch.setattr(shutil, "which",
-                        lambda name, *a, **k: str(launcher) if name == "verinoda" else real_which(name, *a, **k))
+                        lambda name, *a, **k: str(launcher) if name in ("verinoda", "verinoda.exe")  # doctor, installer
+                        else real_which(name, *a, **k))
 
     res = doctor.run(proj)
     checks = _checks(res)
@@ -318,6 +319,7 @@ def test_doctor_names_the_build_and_flags_a_server_of_another_python(tmp_path, m
     cli = checks["cli_on_path"]
     assert cli["level"] == "warn" and other in cli["detail"] and "another installation" in cli["detail"]
     srv = checks["mcp_server:claude:project"]
+    # the project file names what the PATH `verinoda` starts, so doctor may suggest asking it its version
     assert srv["level"] == "warn" and f"starts {other}" in srv["detail"] and "--version" in srv["detail"]
     assert "starts " + other in checks["agent:claude:project"]["detail"]
     assert res["ok"] is True  # warnings, not failures
@@ -326,3 +328,25 @@ def test_doctor_names_the_build_and_flags_a_server_of_another_python(tmp_path, m
     with contextlib.redirect_stdout(out):
         doctor.render(res)
     assert out.getvalue().splitlines()[0].startswith(f"verinoda {b['version']} ({buildinfo.describe(b)})")
+
+
+def test_doctor_says_unknown_for_a_path_launcher_it_cannot_read(tmp_path, monkeypatch):
+    """`#!/usr/bin/env python3` (or a shim of a format the reader does not know): setup registers the
+    running interpreter because it cannot tell, and doctor says the same instead of ok."""
+    import shutil
+    import sys
+
+    shim = tmp_path / "bin" / "verinoda.exe"
+    shim.parent.mkdir()
+    shim.write_bytes(b"#!/usr/bin/env python3\nimport sys\nfrom verinoda.cli import main\n")
+    real_which = shutil.which
+    monkeypatch.setattr(shutil, "which",
+                        lambda name, *a, **k: str(shim) if name == "verinoda" else real_which(name, *a, **k))
+    checks: list[dict] = []
+    doctor._path_cli(checks)
+    assert checks[0]["level"] == "warn" and "whether it is this build is unknown" in checks[0]["detail"]
+    # the same launcher in this interpreter's own folder is this environment (setup's judgement too)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "bin" / "python.exe"))
+    checks = []
+    doctor._path_cli(checks)
+    assert checks[0]["level"] == "ok" and "in this Python's folder" in checks[0]["detail"]

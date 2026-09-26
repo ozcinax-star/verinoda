@@ -190,7 +190,7 @@ include = ["verinoda*"]
 "verinoda.agents" = ["templates/*.md"]
 "verinoda.benchmark" = ["questions/*.json"]
 # round 3 (docs/DESIGN.md): question-plan schema, TR->EN seed lexicon; the build stamp git archive fills in
-"verinoda" =["schemas/*.json", "data/*.json", "data/*.txt"]
+"verinoda" = ["schemas/*.json", "data/*.json", "data/*.txt"]
 # `verinoda ui`: the page, its script and style (no third-party assets)
 "verinoda.ui" = ["static/*.html", "static/*.js", "static/*.css"]
 

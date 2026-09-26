@@ -235,6 +235,10 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
     chosen = _choose(agents)
 
     report: dict = {"repo": str(repo), "steps": [], "agents": [], "warnings": [], "next_steps": []}
+    # the command that runs this build: `verinoda` only when the PATH one is this build (installer.resolve_launcher)
+    launcher = installer.resolve_launcher()
+    cli = launcher["cli"]
+    report["cli"] = cli
     for spec in reference or []:  # a bad --reference refuses before anything is written
         _reference_target(repo, spec)
     workflow.init(repo)
@@ -273,7 +277,7 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
             report["warnings"].append(
                 f"{s['path']} looks like a copy of code in {s['copy_of']} ({s['shared']} of its {s['files']} code "
                 f"files sit at the same path there); if it is reference code (an original being ported, a "
-                f"snapshot), run `verinoda setup \"{repo}\" --reference \"{s['path'].rstrip('/')}\"` so it ranks "
+                f"snapshot), run `{cli} setup \"{repo}\" --reference \"{s['path'].rstrip('/')}\"` so it ranks "
                 f"below your own code")
     report["index"] = {
         "mode": "scan" if first else res.get("mode", "update"),
@@ -297,7 +301,7 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
                                  "notes": (r.get("notes") or [])[:3], "manual": (r.get("manual") or [])[:3],
                                  "error": "; ".join(r.get("errors") or []) or None})
         if r.get("server") and "server" not in report:  # which program the agents start, and why
-            report["server"] = {k: r["server"].get(k) for k in ("how", "note", "python", "path_exe")}
+            report["server"] = {k: r["server"].get(k) for k in ("how", "note", "cli", "python", "path_exe")}
         for w in r.get("warnings") or []:
             if w not in report["warnings"]:
                 report["warnings"].append(w)
@@ -316,13 +320,16 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
             "this Verinoda install is hardlinked or editable; a sandboxed agent (Codex on Windows) may not be "
             "able to import it and will fall back to MCP. Reinstall with the command in the README "
             "(`uv tool install --force --reinstall-package verinoda --link-mode copy ...`)")
+    if cli != "verinoda" and "server" not in report:  # no agent line says why the steps name another command
+        report["warnings"].append(f"the steps below run this build as `{cli}`: {launcher.get('why')}")
     first = _first_question(repo)
     if first:
-        report["next_steps"].insert(0, f"A first question about this project: `verinoda query \"{first}\"` "
+        report["next_steps"].insert(0, f"A first question about this project: `{cli} query \"{first}\"` "
                                        "(or ask in your own words, English or Turkish)")
-    report["next_steps"].append("See it: `verinoda ui` opens notes and the graph (3D, Ctrl+K for commands) in the browser")
-    report["next_steps"].append("Terminal: `verinoda query \"<question>\"` or `verinoda analyze \"<question>\"`; "
-                                "after big edits `verinoda update .`; if anything looks wrong `verinoda doctor`")
+    report["next_steps"].append(f"See it: `{cli} ui` opens notes and the graph (3D, Ctrl+K for commands) "
+                                "in the browser")
+    report["next_steps"].append(f"Terminal: `{cli} query \"<question>\"` or `{cli} analyze \"<question>\"`; "
+                                f"after big edits `{cli} update .`; if anything looks wrong `{cli} doctor`")
     report["ok"] = all(a["ok"] for a in report["agents"]) and not res.get("error")
     return report
 
