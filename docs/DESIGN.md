@@ -67,6 +67,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D44 | `update --fast`: the changed files now, the graph in the background | implemented | Built 2026-09-26 (section 17): `workflow._deferred`, `workflow.start_background_update`; MCP `index_update` takes it after a graph build over 15 s. 3.4 s instead of 27-33 s on Verinoda's own repository; the background graph equals a forced scan's. Not done: a graph build that reads only the changed files. |
 | D45 | Name check for Kotlin, in the Java check's world | implemented | Built 2026-09-26 (section 18): `codecheck_kotlin.py`; the universe reads Kotlin sources (Java sees them too), `jvmclass` reads `@kotlin.Metadata` names. kotlinpoet: 10 absents, all kotlin-reflect names the given classpath lacked; the Java mod unchanged (0 absent, 8 of 8 caught). Not done: argument counts, receiver-less calls, type inference beyond declarations and constructors. |
 | D46 | Import check for TypeScript and JavaScript | implemented | Built 2026-09-26 (section 19): `codecheck_ts.py`. A planted sample: 6 of 6; ky: 0 false absents over 594 sites. A file is checked for imports only and stays under `not_checked`. Not done: calls, members, types (the TypeScript compiler), bundler aliases, Vue/Svelte files. |
+| D47 | When a method runs (`verinoda when`, MCP `run_when`) | implemented | Built 2026-09-26 (section 20): JVM lambdas handed to a registration or scheduler as `registers` edges (event, delay), `when.py` walks back to the event with the conditions around each call; "when does X run / ne zaman çalışır" in `analyze`. fastbench on fresh indexes: 0 differences. Not done: Kotlin lambdas, anonymous listener classes, annotation-registered events. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -2849,6 +2850,63 @@ import: a helper file that does not exist, a package that is not installed, a ho
 
 Calls, members and types (they need the TypeScript compiler), bundler aliases from `vite.config` or `webpack`
 configs, `.vue`/`.svelte` files, and `package.json` `imports` (`#internal`).
+
+## 20. When a method runs (D47, 2026-09-26)
+
+### 20.1 Why
+
+"When does this run?" is the first question about a mod's method, and the graph could not answer it. A tick
+handler registered with a method reference had a `registers` edge (D38), but most registrations take a lambda
+(`UseEntityCallback.EVENT.register((player, world, hand, entity, hit) -> { ... })`,
+`Scheduler.runLater(80, () -> finish(w))`), and the condition that decides whether the call happens at all
+(`if (ticks % 5 == 0 && Settings.on("guard.watch", true))`) was only in the source. An agent had to read three
+methods to learn "at the end of every server tick, every fifth tick, when the setting is on".
+
+### 20.2 Decisions
+
+- **Lambdas are registrations too** (`index.java_registers_edges`): what a lambda passed as an argument calls
+  becomes a `registers` edge from the method around it, with `lambda: true`, the registrar, and for a scheduler
+  (`runLater`, `runTaskLater`, `schedule`, ...) its first argument as `delay` (read as written: a literal the
+  code text blanks is read back from the line). The extractor already has a `calls` edge for the same call: the
+  `registers` edge says when it runs. Methods that call their lambda before returning (streams, collections,
+  `Optional`, `getEntities`, `sendSuccess`, `computeIfAbsent`, ...) get no edge: the call is part of the caller's
+  own run.
+- **An event, in words** (`index.event_label`): Fabric, NeoForge and Bukkit events by name ("at the end of every
+  server tick", "when a player right-clicks an entity", "before a living entity takes damage (it can cancel)"),
+  a scheduler's delay ("80 ticks later", "after Math.max(1, t - 2) ticks"), the server or client thread, a
+  future's completion. Anything else is said as what it is: "when prepare(...) calls it back". The label is
+  computed when shown, never cached.
+- **`verinoda when SYMBOL`** (`verinoda/when.py`): walks back over `calls` and `registers` edges (6 hops, 8
+  paths); a path ends at a registration, at a method nothing in the project calls, or at the depth limit.
+  Registrations come first. From a caller that both calls the method in a lambda and registers that lambda,
+  only the registration is followed ("now" would be wrong).
+- **Conditions from the code, not evaluated**: for each call, the `if`/`while`/`for`/`switch` blocks still open
+  at the call line, a braceless `if (x)` on the line before, `else` as `not (x)`, and early exits
+  (`if (x) return;`) in a block still open (a `continue` in a loop that has closed does not count). The
+  structure is read from the text with strings and comments blanked, the condition itself as written, with
+  its line.
+- **In `analyze`**: "when does X run", "what triggers X", "X ne zaman çalışır / tetiklenir"
+  (`question_plan.RUNS_WHEN`) is a callers question (not history, as "ne zaman" was). Its answer is the call
+  claims on the way, one `flow` claim per registration ("`tick` runs at the end of every server tick:
+  `initialize` hands it to `END_SERVER_TICK.register(...)` (file:line)") and one per guarded call ("`tick` calls
+  `watch` only if ... (file:line)", its evidence the condition lines). Both are `strong_inference`: the event
+  is read from the registrar's name, the conditions are not evaluated. Paths beyond two are an `unknown` whose
+  next step is `verinoda when X`.
+
+### 20.3 Measured
+
+- On a private Fabric mod (4,584 files): 1,269 `registers` edges, 785 of them from lambdas; 159 carry a delay.
+  The acceptance question (a guard method's "when does it run") answered from the tick registration in the
+  mod's initializer and the every-fifth-tick condition, each with its file and line; before, the answer was one
+  `calls` edge.
+- fastbench on fresh indexes (9 sets, 333 question x approach results), old code against new: 0 differences;
+  `registers` edges carry no ranking weight (D38), and a callers question keeps its answer unless it asks when.
+
+### 20.4 Not done
+
+Kotlin lambdas (method references only, as in D38), anonymous classes passed as listeners, events registered
+through annotations (`@SubscribeEvent`) and the conditions of the registration itself (a handler registered
+only in dev mode).
 
 ## Sources
 

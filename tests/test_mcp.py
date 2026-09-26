@@ -46,6 +46,7 @@ EXPECTED_PARAMS = {
     "project_query": ({"question", "max_items", "format"}, {"question"}),
     "node_inspect": ({"name"}, {"name"}),
     "relation_trace": ({"source", "target", "mode"}, {"source", "target"}),
+    "run_when": ({"symbol", "depth"}, {"symbol"}),
     "map_view": ({"view", "targets"}, {"view"}),
     "change_review": ({"base", "staged", "targets", "change", "concerns", "run_tests", "observe", "max_chars"}, set()),
     "question_plan_draft": ({"question"}, {"question"}),
@@ -87,7 +88,7 @@ EXPECTED_PARAMS = {
     "change_probe": ({"symbol", "base", "no_base", "changed", "inputs", "seed", "properties", "examples", "scaling",
                       "allow_side_effects", "emit_test"}, set()),
 }
-READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
+READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "map_view", "claim_inspect", "claim_list",
              "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members",
              "debug_status"}
 
@@ -225,6 +226,7 @@ def _all_calls(t: AtlasTools) -> dict:
         "project_query": lambda: t.project_query("where is the order saved?"),
         "node_inspect": lambda: t.node_inspect("place_order"),
         "relation_trace": lambda: t.relation_trace("a", "b"),
+        "run_when": lambda: t.run_when("place_order"),
         "map_view": lambda: t.map_view("hierarchy"),
         "change_review": lambda: t.change_review(),
         "question_plan_draft": lambda: t.question_plan_draft("where is the order saved?"),

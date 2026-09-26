@@ -268,6 +268,13 @@ EN_CUES: dict[str, list[str]] = {
 # Weak cues count only when no other cue fires in the clause.
 EN_WEAK: dict[str, list[str]] = {}
 TR_WEAK: dict[str, list[str]] = {"flow": [r"\bnasil\b"]}
+# "when does X run", "what triggers X", "X ne zaman çalışır / tetiklenir" (Turkish folded): a question about
+# what starts a method, answered from its callers and registrations (verinoda/when.py)
+RUNS_WHEN = re.compile(
+    r"\bwhen (?:does|do|is|are|will)\b(?:[^?.!]|\.(?=\w)){1,80}?\b(?:run|runs|called|invoked|executed|fired?|triggered|tick(?:s|ed)?)\b"
+    r"|\bwhat (?:triggers|fires|invokes|starts|schedules)\b"
+    r"|\bne zaman (?:calis|cagril|tetiklen|devreye gir|isler|kosar)\w*"
+    r"|\bne (?:tetikl|calistir)\w*|\bneyle tetiklen\w*|\bhangi olay\w*")
 # (pattern, shadowable): a shadowable cue is also a common domain noun; it needs a
 # second cue of the same intent when the word is part of this repository's vocabulary.
 TR_CUES: dict[str, list[tuple[str, bool]]] = {
@@ -548,6 +555,15 @@ def clause_cues(text: str, lexicon=None) -> list[dict]:
     if "callers" in found and "flow" in found and \
             re.fullmatch(r"calls?|called|cagir\w*|cagri\w*", found["flow"]["cue"]):
         del found["flow"]
+    # "when does X run" / "X ne zaman çalışır": what calls or registers it, and under which conditions
+    # (verinoda/when.py), not the history of "ne zaman" or "when was"
+    rm = RUNS_WHEN.search(low) or RUNS_WHEN.search(tn.fold_tr(tn.nfc(text)))
+    if rm:
+        found.setdefault("callers", {"intent": "callers", "cue": rm.group(0).strip(), "lang": "en"})
+        if "history" in found and re.fullmatch(r"ne zaman|when (was|were|did)", found["history"]["cue"]):
+            del found["history"]
+        if "flow" in found and re.fullmatch(r"run\w*|calis\w*", found["flow"]["cue"]):
+            del found["flow"]
     if not found:
         weak = [(_EN_WEAK_RX, low, "en")]
         if _uses_turkish_cues(text):

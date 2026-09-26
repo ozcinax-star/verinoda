@@ -794,6 +794,23 @@ def cmd_trace(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_when(args) -> int:
+    from verinoda import freshness, index, when
+
+    repo = _repo(args)
+    _need_graph(repo)
+    fresh = freshness.check(repo)
+    res = when.run(index.load(repo), args.symbol, stale=fresh["files"], max_depth=args.depth)
+    res.update(freshness.summary(fresh))
+
+    def render(r: dict) -> None:
+        print(when.render(r))
+        _stale_note(r)
+
+    _emit(args, res, render)
+    return 0 if res["status"] == "found" else 2
+
+
 # -- question plans (docs/DESIGN.md D1-D9) ----------------------------------------
 
 def _plan_file(repo: Path, arg: str) -> Path:
@@ -2444,6 +2461,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("source")
     sp.add_argument("target")
     sp.add_argument("--mode", choices=["flow", "any"], default="flow")
+    sp = add("when", cmd_when, "when a method runs: the events and callers that lead to it, with the conditions "
+                               "around each call")
+    sp.add_argument("symbol")
+    sp.add_argument("--depth", type=int, default=6, help="caller hops to walk back (default 6)")
     sp = add("analyze", cmd_analyze, "answer a question as claims with evidence, critique and unknowns")
     sp.add_argument("question", nargs="?", help="the question (optional with --plan: the plan's user_message)")
     sp.add_argument("--plan", metavar="FILE",

@@ -97,7 +97,9 @@ def test_method_references_on_the_example_mods_are_registers_edges(forge, glow):
                          ("ServerNetworking.register", "ServerNetworking.onSummonWisp"),
                          ("GlowCommands.register", "GlowCommands.wisp"),
                          ("GlowCommands.register", "GlowCommands.ritual"),
-                         ("GlowCommands.register", "GlowCommands.reload")}
+                         ("GlowCommands.register", "GlowCommands.reload"),
+                         # a call in a lambda handed to UseBlockCallback.EVENT.register (D47)
+                         ("LanternEvents.etkinlestir", "Wisp.spawn")}
     d = next(d for _u, v, d in gg.edges({"registers"}) if gg.label(v) == ".tick()")
     assert d["confidence"] == "INFERRED" and d["_origin"] == index.JAVA_REFS_ORIGIN
     assert (d["source_file"], d["source_location"]) == (TICK, "L24")
@@ -107,7 +109,8 @@ def test_method_references_on_the_example_mods_are_registers_edges(forge, glow):
     assert not any(gg.label(v) == ".tick()" and gg.file(v) == TICK for _u, v, _d in gg.edges({"calls"}))
     # stored with the receiver-call sidecar (kept apart from the call edges) and applied from it
     side = index._read_sidecar(glow)
-    assert side["version"] == index.RECEIVER_SIDECAR_VERSION and len(side["registers"]) == 8
+    # 8 method references and a lambda (D47)
+    assert side["version"] == index.RECEIVER_SIDECAR_VERSION and len(side["registers"]) == 9
     assert not any(d.get("relation") == "registers" for _u, _v, d in side["edges"])
 
 

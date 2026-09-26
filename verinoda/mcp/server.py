@@ -76,6 +76,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "project_query",
     "node_inspect",
     "relation_trace",
+    "run_when",
     "map_view",
     "change_review",
     "question_plan_draft",
@@ -851,6 +852,19 @@ class AtlasTools:
                                  "what the tests actually call)")
             return res
         return self._run("relation_trace", go, need="graph")
+
+    def run_when(self, symbol: str, depth: int = 6) -> dict:
+        def go():
+            from verinoda import freshness, when
+
+            fresh = self._freshness()
+            res = when.run(self._graph(), _text(symbol, "symbol"), stale=fresh.get("files") or (),
+                           max_depth=max(1, min(int(depth), 10)))
+            res.update(freshness.summary(fresh))
+            if res["status"] != "found":
+                res.setdefault("next_step", "pass 'path/File.java::method' or 'Class.method' (see 'candidates')")
+            return res
+        return self._run("run_when", go, need="graph")
 
     def map_view(self, view: str, targets: list[str] | None = None) -> dict:
         def go():
@@ -1650,6 +1664,7 @@ reference_resolve first; report each as <name> @ <pin> (basis: <basis>) with its
 the default branch for a named version; ask only questions_for_user. reference_research(resolution_id,
 reference_id) inspects one at its pin; reference_compare compares a mechanism.
 - plan_audit: re-judge an analysis later. lexicon_show: the code words the repository ties to a word.
+- run_when: when a method runs - the event or caller that starts it and the conditions on the way (not evaluated).
 - claim_verify / claim_challenge: re-check a claim's lines; adversarial check. resolve_call: which definition
   a call binds to (only 'definitive' verifies). api_members: the real members of a module or class.
 - runtime_observe: selected tests under the call tracer. experiment_run: one allowlisted command in a copy.
@@ -1699,6 +1714,11 @@ DESCRIPTIONS: dict[str, str] = {
         "references, saying whether a path is execution or structure. status: found | unresolved (with hints) | "
         "no directed path | ambiguous; no static path does not prove there is none at runtime. With no path, JVM "
         "callbacks ('registers' hops, not calls) are followed."),
+    "run_when": (
+        "When a method runs: paths back through its callers to the event or scheduler that starts it (JVM "
+        "registrations and lambdas: 'at the end of every server tick', '80 ticks later'), each call with the "
+        "conditions around it as written (if/for/while blocks, early returns) and file:line. Conditions are not "
+        "evaluated; a path that ends at a method nothing calls is an entry point or dead code."),
     "map_view": (
         "One architecture view: hierarchy, dependencies (file-level calls/imports), dataflow (entry points -> "
         "persistence), config (env vars, config files), tests (static reachability), history (git log, decision "
@@ -1862,7 +1882,7 @@ DESCRIPTIONS: dict[str, str] = {
         "processes or change global state (allow_side_effects is the user's decision). Never edits code."),
 }
 
-_READ_ONLY = {"project_query", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
+_READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "map_view", "claim_inspect", "claim_list",
               "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members",
               "debug_status"}
 _OPEN_WORLD = {"reference_research", "reference_compare", "feedback_submit", "feedback_process", "reference_resolve"}
@@ -2055,6 +2075,13 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
                         Field(description="'flow' = calls only; 'any' = also uses/imports/inherits.")] = "flow",
     ) -> dict[str, Any]:
         return emit(t.relation_trace(source, target, mode=mode))
+
+    @register("run_when")
+    def run_when(
+        symbol: Annotated[str, Field(description="The method: 'Class.method' or 'path/File.java::method'.")],
+        depth: Annotated[int, Field(description="Caller hops to walk back (1-10).")] = 6,
+    ) -> dict[str, Any]:
+        return emit(t.run_when(symbol, depth=depth))
 
     @register("map_view")
     def map_view(

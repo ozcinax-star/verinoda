@@ -1151,11 +1151,72 @@ _CODE_SUFFIXES = {".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs", ".j
                   ".m", ".groovy", ".dart", ".mjs", ".cjs", ".ps1"}
 
 
+WHEN_PATHS = 2  # "when does X run": the event paths turned into claims (the rest: `verinoda when X`)
+
+
+def _when_claims(ctx: _Ctx, sub: _Sub, t: str) -> bool:
+    """"When does X run" (docs/DESIGN.md D47): the call and registration hops that lead to ``t``
+    (verinoda/when.py) as claims, each call's conditions as a claim on its source lines. False when no path ends
+    at a registration or a caller (the plain callers answer then stands)."""
+    from verinoda import when as whenmod
+
+    g = ctx.g
+    res = whenmod.when(g, t, max_paths=WHEN_PATHS * 2)
+    paths = [p for p in res["paths"] if any("relation" in h for h in p)][:WHEN_PATHS]
+    if not paths:
+        return False
+    ctx.step("when", f"{res['symbol']}: {len(res['paths'])} path(s) to it, "
+                     f"{sum(1 for p in res['paths'] if any(h.get('event') for h in p))} from a registration")
+    done: set[tuple[str, str]] = set()
+    for path in paths:
+        for h in reversed([h for h in path if "relation" in h]):
+            if not ctx.budget.ok:
+                ctx.rec.skipped["callers"] += 1
+                return True
+            key = (h["from_id"], h["to_id"])
+            if key in done:
+                continue
+            done.add(key)
+            if not h.get("event"):  # a registration's line hands the method over: its claim is the event one
+                _edge_claim(ctx.rec, g, h["from_id"], h["to_id"], h["_edge"], ctx.commit)
+            path_, _, ln = h["at"].rpartition(":")
+            if h.get("event") and ln.isdigit():
+                ev = _src_ev(ctx.rec.repo, path_, int(ln), None, ctx.commit)
+                if ev:
+                    ctx.rec.claim(f"`{h['to']}` runs {h['event']}: `{h['from']}` hands it to "
+                                  f"{h['_edge'].get('registrar') or 'a registration'}(...) ({h['at']})",
+                                  kind="flow", status="strong_inference", evidence=[(ev, "supports")],
+                                  subjects=[f"{g.file(h['from_id'])}::{g.label(h['from_id'])}",
+                                            f"{g.file(h['to_id'])}::{g.label(h['to_id'])}"],
+                                  spec={"source": h["from_id"], "target": h["to_id"], "event": h["event"],
+                                        "at": h["at"]},
+                                  uncertainties=["the event's meaning is read from the registrar's name, not "
+                                                 "from the framework's documentation"])
+            conds, lines = h.get("conditions") or [], h.get("condition_lines") or []
+            if conds and ln.isdigit():
+                evs = [e for e in (_src_ev(ctx.rec.repo, path_, a, None, ctx.commit)
+                                   for a in sorted(set(lines + [int(ln)]))) if e]
+                ctx.rec.claim(f"`{h['from']}` calls `{h['to']}` only {'; '.join(conds)} ({h['at']})",
+                              kind="flow", status="strong_inference", evidence=[(e, "supports") for e in evs],
+                              subjects=[f"{g.file(h['from_id'])}::{g.label(h['from_id'])}"],
+                              spec={"source": h["from_id"], "target": h["to_id"], "conditions": conds,
+                                    "at": h["at"]},
+                              uncertainties=["conditions are the code's text around the call, not evaluated"])
+    if res.get("truncated") or len(res["paths"]) > len(paths):
+        _unknown(ctx, sub, {"question": f"what else leads to {res['symbol']} running?",
+                            "why": f"{len(res['paths']) - len(paths)} more path(s) were not turned into claims",
+                            "next_step": f"verinoda when {res['symbol']}"})
+    return True
+
+
 def _h_callers(ctx: _Ctx, sub: _Sub) -> None:
     g = ctx.g
     if not _begin(ctx, sub, "callers"):
         return
+    runs_when = _asks_when_runs(sub.sq)
     for t in _targets(ctx, sub):
+        if runs_when and _when_claims(ctx, sub, t):
+            continue
         # extracted edges first, product code before tests, one claim per calling function
         callers = sorted(g.in_edges(t, {"calls"}), key=lambda x: (x[1].get("confidence") != "EXTRACTED",
                                                                    testcode.is_test_file(g.file(x[0])),
@@ -2381,7 +2442,15 @@ def _verdict_kinds(sq: dict) -> tuple[str, str, set]:
         kinds = CLAIM_EXISTS_KINDS.get(sq.get("intent"), {"location", "flow", "config", "relation"})
     if kind == "set_enumerated" and sq.get("intent") in CLAIM_EXISTS_KINDS:
         kinds = CLAIM_EXISTS_KINDS[sq["intent"]]
+    if sq.get("intent") == "callers" and _asks_when_runs(sq):  # the event and the conditions answer it too
+        kinds = kinds | {"flow"}
     return kind, min_status, kinds
+
+
+def _asks_when_runs(sq: dict) -> bool:
+    """"When does X run" / "X ne zaman çalışır" (question_plan.RUNS_WHEN), answered by verinoda/when.py."""
+    text = sq.get("text_user_lang") or sq.get("text") or ""
+    return bool(qp.RUNS_WHEN.search(text.lower()) or qp.RUNS_WHEN.search(tn.fold_tr(tn.nfc(text))))
 
 
 def answer_claims(sq: dict, claims: list[dict], flags: dict | None = None) -> list[str]:

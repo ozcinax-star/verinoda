@@ -49,7 +49,7 @@ CODE_RELATIONS = {"calls", "imports", "imports_from", "uses", "inherits", "metho
 FLOW_RELATIONS = {"calls"}
 RECEIVER_ORIGIN = "verinoda.receiver"
 JAVA_CALL_ORIGIN = "verinoda.java_calls"
-RECEIVER_SIDECAR_VERSION = 4   # 3: a receiver's class is the one the calling file can see (_visible_class); 4: and JVM method references as `registers` edges
+RECEIVER_SIDECAR_VERSION = 6   # 3: a receiver's class is the one the calling file can see (_visible_class); 4: and JVM method references as `registers` edges; 6: lambdas too (D47)
 HEURISTIC_SPAN_CAP = 80        # the next-symbol fallback never spans more lines than this
 PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc",
                   ".pdf", ".docx", ".xlsx", ".pptx")  # the last four: their text view (doctext.py)
@@ -2052,6 +2052,152 @@ def _call_around(flat: str, start: int) -> str | None:
     return None
 
 
+# What a registration means, for a person: the framework's event (Fabric, NeoForge, Bukkit) or a delay.
+_EVENT_LABELS = (
+    (r"START_SERVER_TICK", "at the start of every server tick"),
+    (r"END_SERVER_TICK", "at the end of every server tick"),
+    (r"START_WORLD_TICK", "at the start of every world tick"),
+    (r"END_WORLD_TICK", "at the end of every world tick"),
+    (r"START_CLIENT_TICK", "at the start of every client tick"),
+    (r"END_CLIENT_TICK", "at the end of every client tick"),
+    (r"ServerTickEvent|LevelTickEvent|TickEvent", "on a tick event"),
+    (r"AFTER_DEATH|LivingDeathEvent", "after a living entity dies"),
+    (r"ALLOW_DEATH", "before a living entity dies (it can cancel)"),
+    (r"ALLOW_DAMAGE", "before a living entity takes damage (it can cancel)"),
+    (r"AFTER_DAMAGE|LivingDamageEvent", "after a living entity takes damage"),
+    (r"UseEntityCallback", "when a player right-clicks an entity"),
+    (r"UseBlockCallback", "when a player right-clicks a block"),
+    (r"UseItemCallback", "when a player uses an item"),
+    (r"AttackEntityCallback", "when a player attacks an entity"),
+    (r"AttackBlockCallback", "when a player starts breaking a block"),
+    (r"PlayerBlockBreakEvents\.AFTER", "after a player breaks a block"),
+    (r"PlayerBlockBreakEvents\.BEFORE", "before a player breaks a block (it can cancel)"),
+    (r"CHAT_MESSAGE|ALLOW_CHAT_MESSAGE|ServerChatEvent", "when a chat message is sent"),
+    (r"COMMAND_MESSAGE|CommandRegistrationCallback|RegisterCommandsEvent", "when commands are registered"),
+    (r"ServerPlayConnectionEvents\.JOIN|ServerPlayerEvents\.JOIN|PlayerLoggedInEvent", "when a player joins"),
+    (r"ServerPlayConnectionEvents\.DISCONNECT|ServerPlayerEvents\.LEAVE|PlayerLoggedOutEvent",
+     "when a player leaves"),
+    (r"ClientPlayConnectionEvents\.JOIN", "when the client joins a server"),
+    (r"ClientPlayConnectionEvents\.DISCONNECT", "when the client leaves a server"),
+    (r"AFTER_RESPAWN|COPY_FROM|PlayerRespawnEvent", "after a player respawns"),
+    (r"SERVER_STARTING", "while the server starts"),
+    (r"SERVER_STARTED|ServerStartedEvent", "once the server has started"),
+    (r"SERVER_STOPPING|ServerStoppingEvent", "while the server stops"),
+    (r"SERVER_STOPPED", "once the server has stopped"),
+    (r"ENTITY_LOAD|EntityJoinLevelEvent", "when an entity is loaded into a world"),
+    (r"ENTITY_UNLOAD", "when an entity is unloaded"),
+    (r"CHUNK_LOAD", "when a chunk is loaded"),
+    (r"CHUNK_UNLOAD", "when a chunk is unloaded"),
+    (r"createTickerHelper|BlockEntityTicker", "every tick of that block entity"),
+    (r"playToServer|registerGlobalReceiver|ServerPlayNetworking", "when the client sends that packet"),
+    (r"playToClient|ClientPlayNetworking", "when the server sends that packet"),
+    (r"\.executes$", "when the command is run"),
+    (r"runOnServer|computeOnServer|\.execute$|\.submit$", "on the server thread, soon"),
+    (r"runOnClient|computeOnClient", "on the client thread, soon"),
+    (r"\.(?:thenAccept|thenRun|thenApply|thenCompose|whenComplete|whenCompleteAsync|thenAcceptAsync|thenRunAsync|"
+     r"exceptionally|handle)$", "when that future completes"),
+)
+_DELAY_REGISTRARS = re.compile(r"(?:runLater|runTaskLater|scheduleDelayed|schedule|delay|later|runAfter)$", re.I)
+
+
+def event_label(registrar: str, delay: str | None = None) -> str:
+    """What a registration means for when the handler runs: ``END_SERVER_TICK.register`` -> "at the end of
+    every server tick"; a scheduler's delay -> "80 ticks later"; otherwise the registrar humanised."""
+    if delay is not None:
+        return ("1 tick later" if delay == "1" else f"{delay} ticks later") if delay.isdigit() \
+            else f"after {delay} ticks"
+    for pattern, label in _EVENT_LABELS:
+        if re.search(pattern, registrar):
+            return label
+    if registrar.endswith((".register", ".subscribe", ".listen")):
+        head = registrar.rsplit(".", 1)[0].rsplit(".", 1)[-1]
+        words = re.sub(r"([a-z])([A-Z])", r"\1 \2", head).replace("_", " ").lower().strip()
+        return f"when {words} fires"
+    return f"when {registrar.rsplit('.', 1)[-1]}(...) calls it back"
+
+
+def _enclosing_call(flat: str, start: int) -> tuple[str, int] | None:
+    """``(callee chain, index of its "(")`` of the call whose argument starts at ``start``, else None."""
+    j = start - 1
+    while j >= 0 and flat[j].isspace():
+        j -= 1
+    if not (j >= 0 and flat[j] in "(,"):
+        return None
+    depth = 0
+    while j >= 0:
+        c = flat[j]
+        if c == ")":
+            depth += 1
+        elif c == "(":
+            if depth == 0:
+                chain = _callee_chain(flat, j)
+                return (chain, j) if chain else None
+            depth -= 1
+        elif c in ";{}" and depth == 0:
+            return None
+        j -= 1
+    return None
+
+
+def _first_arg(flat: str, open_i: int, before: int) -> str | None:
+    """The first argument of the call whose ``(`` is at ``open_i``, when it ends (a top-level comma) before
+    ``before``: ``runLater(Math.max(1, t - 2), () -> ...)`` -> ``Math.max(1, t - 2)``."""
+    depth = 0
+    for j in range(open_i + 1, min(before, len(flat))):
+        c = flat[j]
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            arg = re.sub(r"\s+", " ", flat[open_i + 1:j]).strip()
+            return arg or None
+    return None
+
+
+def _lambda_body(flat: str, arrow: int) -> tuple[int, int]:
+    """The span of a Java lambda's body after its ``->``: a block to its closing brace, else the expression to
+    the comma or parenthesis that ends the argument."""
+    k = arrow
+    while k < len(flat) and flat[k].isspace():
+        k += 1
+    if k < len(flat) and flat[k] == "{":
+        depth = 0
+        for j in range(k, len(flat)):
+            if flat[j] == "{":
+                depth += 1
+            elif flat[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    return k, j + 1
+        return k, len(flat)
+    depth = 0
+    for j in range(k, len(flat)):
+        c = flat[j]
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            if depth == 0:
+                return k, j
+            depth -= 1
+        elif c in ",;" and depth == 0:
+            return k, j
+    return k, len(flat)
+
+
+_JAVA_LAMBDA = re.compile(r"(\([^()]*\)|[A-Za-z_$][\w$]*)\s*->")
+_JAVA_CALL_IN = re.compile(r"(?<![\w$.])(?:([A-Z][\w$]*)\s*\.\s*)?([a-z_$][\w$]*)\s*\(")
+_NOT_CALLS = frozenset("if for while switch catch synchronized return new super this assert throw else do try".split())
+# Methods that call the lambda they are given before they return (streams, collections, Optional, entity
+# queries, a command's feedback supplier): no event, the call is part of the caller's own run
+_SYNC_LAMBDA_TAKERS = re.compile(
+    r"(?:^|\.)(?:forEach|forEachOrdered|filter|map|flatMap|mapToObj|mapToInt|mapToLong|mapToDouble|anyMatch|"
+    r"allMatch|noneMatch|removeIf|replaceAll|computeIfAbsent|computeIfPresent|compute|merge|sort|sorted|min|max|"
+    r"reduce|collect|peek|takeWhile|dropWhile|iterate|generate|ifPresent|ifPresentOrElse|orElseGet|orElseThrow|"
+    r"comparing|comparingInt|comparingDouble|thenComparing|getEntities|getEntitiesOfClass|getNearbyEntities|"
+    r"sendSuccess|sendFailure|withLock|put|putIfAbsent|getOrDefault|toArray|count|findFirst|findAny)$")
+
+
 def java_registers_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
     """``registers`` edges for Java / Kotlin method references passed as arguments (not applied).
 
@@ -2112,12 +2258,12 @@ def java_registers_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
     have: set[tuple[str, str]] = set()
     for f in sorted(by_file):
         text = read(f)
-        if not text or "::" not in text:
+        if not text or ("::" not in text and "->" not in text):
             continue
         kotlin = f.endswith(".kt")
         code = _java_code_lines(text, kotlin=True)  # a Java text block is blanked like a Kotlin raw string
         flat = "\n".join(code)
-        if "::" not in flat:
+        if "::" not in flat and "->" not in flat:
             continue
         starts = [0]
         for ln in code:
@@ -2198,7 +2344,49 @@ def java_registers_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
                                     "_origin": JAVA_REFS_ORIGIN, "source_file": f, "source_location": f"L{line}",
                                     "context": f"{ref} passed to {registrar}(...)"
                                                + (f" on {typ}" if how == "typed" else ""),
-                                    "registrar": registrar}))
+                                    "registrar": registrar, "event": event_label(registrar)}))
+        if kotlin or "->" not in flat:
+            continue
+        # A lambda passed as an argument (`END_SERVER_TICK.register(s -> tick(s))`, `runLater(80, () -> ...)`):
+        # what its body calls, the framework or the scheduler runs later (docs/DESIGN.md D47)
+        for lm in _JAVA_LAMBDA.finditer(flat):
+            call = _enclosing_call(flat, lm.start())
+            if call is None:
+                continue
+            registrar, open_i = call
+            if _SYNC_LAMBDA_TAKERS.search(registrar):  # run before the call returns: its `calls` edge says it all
+                continue
+            line = bisect.bisect_right(starts, lm.start()) or 1
+            n = next((x for _s, a, b, x in spans if a <= line <= b), None)
+            if n is None:
+                continue
+            delay = None
+            if _DELAY_REGISTRARS.search(registrar):
+                delay = _first_arg(flat, open_i, lm.start())
+                if delay and '""' in delay:  # a literal blanked: the argument as written, from its line
+                    oline = bisect.bisect_right(starts, open_i) or 1
+                    olines = text.splitlines()[oline - 1:oline + 3]
+                    k = olines[0].find(registrar.rsplit(".", 1)[-1] + "(") if olines else -1
+                    if k >= 0:
+                        written = "\n".join(olines)
+                        delay = _first_arg(written, written.index("(", k), len(written)) or delay
+            a, b = _lambda_body(flat, lm.end())
+            for cm in _JAVA_CALL_IN.finditer(flat, a, b):
+                cls, meth = cm.group(1), cm.group(2)
+                if meth in _NOT_CALLS:
+                    continue
+                cline = bisect.bisect_right(starts, cm.start(2)) or 1
+                target = unique(resolve(cls), meth) if cls else unique(owner_of(f, cline), meth)
+                if not target or target == n or (n, target) in have:
+                    continue
+                have.add((n, target))
+                out.append((n, target, {"relation": CALLBACK_RELATION, "confidence": "INFERRED",
+                                        "confidence_score": 0.7, "_origin": JAVA_REFS_ORIGIN, "source_file": f,
+                                        "source_location": f"L{line}",
+                                        "context": f"called in a lambda passed to {registrar}(...)"
+                                                   + (f" at L{cline}" if cline != line else ""),
+                                        "registrar": registrar, "event": event_label(registrar, delay),
+                                        "lambda": True, **({"delay": delay} if delay else {})}))
     return out
 
 
