@@ -1533,7 +1533,8 @@ A senior-engineer review (2026-09-26; five personas, gaps 2 and 6 of its synthes
   reported: git must list it (`git ls-files --cached --others --exclude-standard`, the paths as
   literal pathspecs after `--`; a file inside a nested repository or a submodule is not listed), an
   untracked file under build/ or dist/ is build output, and a folder holding a `.git` is not
-  looked into (asked once per snapshot and path, `fresh_ignored.json`). A code name of a query that
+  looked into (asked once per snapshot and path, `fresh_ignored.json`; also for a project inside a
+  larger repository, whose ignore rules `list_files` follows too). A code name of a query that
   no node has but a changed file spells, where the version the index describes did not spell it
   (read from the search index's tokens of that file, when it holds the snapshot's version), is
   reported first ("not in the index yet ... `x` at file:line ... the passages below are not about

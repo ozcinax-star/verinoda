@@ -290,6 +290,21 @@ def _hold(repo: Path, seconds: float, purpose: str = "test build") -> tuple[thre
     return th, started
 
 
+def _hold_until(repo: Path, purpose: str = "update") -> tuple[threading.Thread, threading.Event]:
+    """Hold the build lock until the returned event is set (a fixed sleep races a slow machine)."""
+    started, release = threading.Event(), threading.Event()
+
+    def run():
+        with buildlock.build_lock(repo, wait=0, purpose=purpose):
+            started.set()
+            release.wait(120)
+
+    th = threading.Thread(target=run, daemon=True)
+    th.start()
+    assert started.wait(5)
+    return th, release
+
+
 def test_a_second_update_that_may_not_wait_does_nothing_and_says_who_builds(proj):
     th, _ = _hold(proj, 1.5)
     try:
@@ -310,14 +325,20 @@ def test_a_second_update_that_may_not_wait_does_nothing_and_says_who_builds(proj
 
 
 def test_a_second_update_waits_for_the_first_then_runs(proj):
-    th, _ = _hold(proj, 0.6)
+    th, release = _hold_until(proj, purpose="test build")
     seen = []
+
+    def waiting(holder):  # the first build finishes once the second says it waits
+        seen.append(holder)
+        release.set()
+
     st = open_store(proj)
     try:
         (proj / "app" / "tax.py").write_text(_module("tax") + "\n# edited\n", encoding="utf-8")
-        res = workflow.update(st, proj, wait=30, on_wait=seen.append)
+        res = workflow.update(st, proj, wait=30, on_wait=waiting)
     finally:
         st.close()
+        release.set()
         th.join(5)
     assert res["mode"] == "incremental" and "app/tax.py" in res["changed"]["modified"]
     assert seen and seen[0]["purpose"] == "test build"
@@ -394,10 +415,11 @@ def test_decide_check_never_passes_on_edges_it_could_not_refresh(proj, monkeypat
 
     _no_edge_case(proj)
     monkeypatch.setattr(buildlock, "GATE_WAIT_SECONDS", 0.3)
-    th, _ = _hold(proj, 4.0, purpose="update")
+    th, release = _hold_until(proj)
     try:
         code = cli.main(["decide", "check", "--repo", str(proj), "--json"])
     finally:
+        release.set()
         th.join(10)
     res = json.loads(capsys.readouterr().out)
     assert code == 2 and res["exit"] == 2 and res["status"] == "unknown" and not res["ok"], res
@@ -405,16 +427,27 @@ def test_decide_check_never_passes_on_edges_it_could_not_refresh(proj, monkeypat
     assert any(u["kind"] == "no_edge" and "not seen" in u["why"] for u in res["unknown"])
 
 
-def test_decide_check_waits_for_a_running_build_then_checks_the_new_edges(proj, capsys):
+def test_decide_check_waits_for_a_running_build_then_checks_the_new_edges(proj, monkeypatch, capsys):
     from verinoda import cli
 
     _no_edge_case(proj)
-    th, _ = _hold(proj, 1.0, purpose="update")
+    th, release = _hold_until(proj)
+    waited = []
+    real_note = cli._waiting_note
+
+    def note(holder):  # the check says it waits; only then does the other build finish
+        waited.append(holder)
+        real_note(holder)
+        release.set()
+
+    monkeypatch.setattr(cli, "_waiting_note", note)
     try:
         code = cli.main(["decide", "check", "--repo", str(proj), "--json"])
     finally:
+        release.set()
         th.join(10)
     res = json.loads(capsys.readouterr().out)
+    assert waited and waited[0]["purpose"] == "update"
     assert code == 1 and res["violations"][0]["at"].startswith("app/cli.py:") and "graph_stale" not in res, res
 
 
@@ -487,6 +520,27 @@ def test_files_the_snapshot_never_lists_are_not_reported_so_update_clears_the_no
     finally:
         st.close()
     assert not up.get("error") and freshness.check(proj)["count"] == 0
+
+
+def test_a_project_inside_a_larger_repository_follows_its_ignore_rules_too(tmp_path):
+    # the snapshot lists a subfolder project's files through git (the parent's .gitignore applies);
+    # the check asked git only when the project folder itself held .git
+    parent = tmp_path / "mono"
+    _write(parent, ".gitignore", "*.log\n.verinoda/\n")
+    _write(parent, "sub/app.py", "def main():\n    return 1\n")
+    _git(parent, "init", "-q")
+    _git(parent, "add", "-A")
+    _git(parent, "commit", "-q", "-m", "init")
+    sub = parent / "sub"
+    workflow.init(sub)
+    st = open_store(sub)
+    try:
+        assert not workflow.scan(st, sub).get("error")
+    finally:
+        st.close()
+    _write(sub, "run.log", "noise\n")
+    _write(sub, "new.py", "X = 1\n")
+    assert freshness.check(sub)["files"] == ["new.py"]
 
 
 def test_query_says_which_files_changed_and_names_the_index_does_not_have(proj):
@@ -736,7 +790,7 @@ def test_a_new_caller_in_a_file_the_answer_did_not_read_is_said_and_caps_the_ver
 def test_analyze_does_not_wait_for_another_build(proj, monkeypatch):
     monkeypatch.setattr(analysis, "REFRESH_SMALL_PROJECT", 0)  # a big project: no wait at all
     (proj / "app" / "claims.py").write_text(CLAIMS + "\n# edited\n", encoding="utf-8")
-    th, _ = _hold(proj, 3.0, purpose="update")
+    th, release = _hold_until(proj)
     try:
         st = open_store(proj)
         try:
@@ -746,6 +800,7 @@ def test_analyze_does_not_wait_for_another_build(proj, monkeypatch):
         finally:
             st.close()
     finally:
+        release.set()
         th.join(10)
     ref = res["index_refresh"]
     assert ref["skipped"] == "another index build is running" and ref["busy"]["holder"]["purpose"] == "update"
@@ -757,7 +812,16 @@ def test_analyze_inline_waits_for_another_build_even_on_a_big_project(proj, monk
     # review: --refresh inline ("always") did not wait on a project of 300+ files: busy, previous index
     monkeypatch.setattr(analysis, "REFRESH_SMALL_PROJECT", 0)
     (proj / "app" / "claims.py").write_text(CLAIMS + "\n# edited\n", encoding="utf-8")
-    th, _ = _hold(proj, 1.5, purpose="update")
+    th, release = _hold_until(proj)
+    real = workflow.update
+    waits = []
+
+    def update(*a, **kw):  # the other build finishes once analyze is at the lock
+        waits.append(kw.get("wait"))
+        threading.Timer(0.5, release.set).start()
+        return real(*a, **kw)
+
+    monkeypatch.setattr(workflow, "update", update)
     try:
         st = open_store(proj)
         try:
@@ -765,9 +829,11 @@ def test_analyze_inline_waits_for_another_build_even_on_a_big_project(proj, monk
         finally:
             st.close()
     finally:
+        release.set()
         th.join(10)
     ref = res["index_refresh"]
-    assert ref["ran"] is True and "skipped" not in ref and ref["seconds"] >= 1.0, ref
+    assert waits == [buildlock.CLI_WAIT_SECONDS]
+    assert ref["ran"] is True and "skipped" not in ref and ref["mode"] == "incremental", ref
 
 
 def test_analyze_of_a_small_project_waits_briefly_for_another_build(proj):

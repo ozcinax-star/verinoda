@@ -172,14 +172,13 @@ def _ignored(repo: str, snap: str, rels: list[str]) -> set[str]:
     return ignored & set(rels)
 
 
-def _new_listed(repo: str, snap: str, rels: list[str], git_mode: bool) -> list[str]:
+def _new_listed(repo: str, snap: str, rels: list[str]) -> list[str]:
     """The new files among ``rels`` that the snapshot's own rule would list (:func:`_git_listed`,
-    remembered per snapshot; without git, or when git cannot tell, the folder rule of a tree that is
-    not a git work tree): a file an update cannot add is never reported as changed."""
+    remembered per snapshot; git is asked even without a ``.git`` here, as ``list_files`` does for a
+    project inside a larger repository; when git cannot tell, the folder rule of a tree that is not
+    a git work tree): a file an update cannot add is never reported as changed."""
     if not rels:
         return []
-    if not git_mode:
-        return sorted(rels)  # the walk already applied the non-git skip rules
     p, ignored, kept = _memo(repo, snap)
     ask = [r for r in rels if r not in ignored and r not in kept]
     if ask:
@@ -297,7 +296,7 @@ def check(repo: Path, *, with_new: bool = True) -> dict:
                         n_files += 1
                 if n_files >= MAX_NEW_FOLDER_FILES:
                     break
-    new = _new_listed(root, snap, sorted(new), git_mode)
+    new = _new_listed(root, snap, sorted(new))
     files = modified + new + sorted(removed)
     return {"checked": True, "snapshot": snap, "count": len(files), "files": files,
             "modified": len(modified), "added": len(new), "removed": len(removed),
