@@ -1,0 +1,4 @@
+# Filled in by `git archive` through export-subst (.gitattributes), for example in the source
+# archives GitHub serves; verinoda/buildinfo.py reads it. In a checkout the values stay placeholders.
+commit: $Format:%H$
+date: $Format:%cI$

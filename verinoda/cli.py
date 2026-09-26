@@ -27,7 +27,6 @@ import re
 import sys
 from pathlib import Path
 
-from verinoda import __version__
 from verinoda.claims import ORDER as _CLAIM_ORDER
 from verinoda.paths import configure_index_env, find_repo_root
 
@@ -2117,9 +2116,15 @@ def cmd_uninstall(args) -> int:
 
 
 def cmd_mcp(args) -> int:
-    from verinoda.mcp.server import default_repo, serve
+    from verinoda.mcp.server import default_repo, repo_of_config, serve
 
-    serve(_repo(args) if args.repo else default_repo(Path.cwd()), profile=args.profile)
+    if args.repo:
+        repo = _repo(args)
+    elif args.repo_of:
+        repo = repo_of_config(Path.cwd(), args.repo_of)
+    else:
+        repo = default_repo(Path.cwd())
+    serve(repo, profile=args.profile)
     return 0
 
 
@@ -2303,12 +2308,26 @@ def cmd_benchmark(args) -> int:
 
 # -- parser ---------------------------------------------------------------------
 
+class _VersionAction(argparse.Action):
+    """``--version``: the version and the build, computed only when asked (it reads git files)."""
+
+    def __init__(self, option_strings, dest=argparse.SUPPRESS, default=argparse.SUPPRESS, help=None):
+        super().__init__(option_strings=option_strings, dest=dest, default=default, nargs=0, help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        from verinoda import buildinfo
+
+        print(buildinfo.version_line())
+        parser.exit()
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="verinoda",
         description="Evidence-first codebase analysis (derived from Graphify; not an official Graphify release).",
     )
-    p.add_argument("--version", action="version", version=f"verinoda {__version__}")
+    p.add_argument("--version", action=_VersionAction,
+                   help="show the version and the build (the commit it was built from, when known) and exit")
     sub = p.add_subparsers(dest="cmd", metavar="<command>")
 
     def add(name, fn, help_, repo=True, js=True, parent=None):
@@ -2797,7 +2816,12 @@ def build_parser() -> argparse.ArgumentParser:
                         "index_update, code_check, decision_check) or full (all 33); else mcp.profile in "
                         ".verinoda/config.json")
     c.set_defaults(fn=cmd_mcp)
-    c.add_argument("--repo")
+    where = c.add_mutually_exclusive_group()
+    where.add_argument("--repo", help="project root (default: from the folder the server starts in)")
+    where.add_argument("--repo-of", metavar="FILE",
+                       help="serve the nearest folder at or above the start folder whose FILE (a relative path "
+                            "such as .mcp.json) registers this server; what project-scope configs use, so "
+                            "moving the project keeps them working")
 
     sp = sub.add_parser("index", help="pass-through to the Graphify-derived indexer CLI (advanced; "
                                        "installer/hook commands and commands writing under ~/.graphify are "

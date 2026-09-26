@@ -1994,14 +1994,19 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     served = set(PROFILES[profile])
     emit = _result_wrapper(major)
     text = instructions(profile).format(repo=t.repo)
+    from verinoda import buildinfo
+
+    # serverInfo.version names the build (``0.1.0.dev0+<commit12>``, ``+unknown``), so a client can tell
+    # which Verinoda it started when two installs share a version number
+    version = buildinfo.server_version()
     try:
-        from verinoda import __version__
-    except Exception:  # pragma: no cover
-        __version__ = "0"
-    try:
-        srv = Server("verinoda", instructions=text, version=__version__)
-    except TypeError:  # mcp 1.x FastMCP has no version argument
+        srv = Server("verinoda", instructions=text, version=version)
+    except TypeError:  # mcp 1.x FastMCP has no version argument: set it on the low-level server
         srv = Server("verinoda", instructions=text)
+        try:
+            srv._mcp_server.version = version
+        except AttributeError:  # pragma: no cover - SDK layout changed
+            pass
     srv.verinoda_profile = profile
     # a description names only what this profile serves (else the CLI)
     plan_check = "see question_plan_check" if "question_plan_check" in served else "from `verinoda plan check`"
@@ -2550,6 +2555,51 @@ def default_repo(start: Path) -> Path:
     return root
 
 
+def _registers_repo_of(path: Path) -> bool:
+    """``path`` (an agent's MCP config) holds a server entry started with ``--repo-of``."""
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+        if path.suffix == ".toml":
+            try:
+                import tomllib
+            except ModuleNotFoundError:  # Python 3.10
+                import tomli as tomllib
+            servers = tomllib.loads(text).get("mcp_servers")
+        else:
+            servers = json.loads(text).get("mcpServers")
+    except (OSError, UnicodeDecodeError, ValueError, AttributeError):
+        return False
+    return isinstance(servers, dict) and any(
+        isinstance(e, dict) and "--repo-of" in [str(a) for a in (e.get("args") or [])] for e in servers.values())
+
+
+def repo_of_config(start: Path, rel: str) -> Path:
+    """The project a ``verinoda mcp serve --repo-of REL`` serves when started in ``start``.
+
+    Project-scope agent configs carry no absolute project path, so moving the project keeps them
+    working: Claude Code reads ``.mcp.json`` from the session folder and every folder above it and
+    starts servers in the session folder, so the project is the nearest folder at or above ``start``
+    whose ``REL`` registers a server with ``--repo-of``. The home folder and the folders above it are
+    never chosen; when nothing matches, the ``default_repo`` rules apply and the log says so.
+    """
+    from verinoda.paths import _is_home_or_above
+
+    parts = Path(rel).parts
+    if not rel or Path(rel).is_absolute() or Path(rel).drive or ".." in parts:
+        raise SystemExit(f"error: --repo-of takes a path relative to the project folder, such as .mcp.json "
+                         f"(got {rel!r})")
+    here = Path(start).resolve()
+    for p in (here, *here.parents):
+        if _is_home_or_above(p):
+            break
+        f = p / rel
+        if f.is_file() and _registers_repo_of(f):
+            return p
+    print(f"verinoda mcp: no {rel} registering this server at or above {here}; using the nearest project "
+          "folder instead", file=sys.stderr, flush=True)
+    return default_repo(here)
+
+
 def serve(repo: Path, profile: str | None = None) -> None:
     """Serve the Verinoda tools for ``repo`` over stdio (``verinoda mcp serve [--profile core|full]``)."""
     repo = Path(repo).resolve()
@@ -2567,8 +2617,10 @@ def serve(repo: Path, profile: str | None = None) -> None:
     else:
         state = "not scanned - tools will ask for `verinoda scan`"
     served = getattr(srv, "verinoda_profile", DEFAULT_PROFILE)
-    print(f"verinoda mcp: serving {repo} over stdio ({state}; {len(PROFILES[served])} tools, profile {served})",
-          file=sys.stderr, flush=True)
+    from verinoda import buildinfo
+
+    print(f"verinoda mcp: serving {repo} over stdio ({state}; {len(PROFILES[served])} tools, profile {served}); "
+          f"build {buildinfo.server_version()} ({sys.executable})", file=sys.stderr, flush=True)
     try:
         srv.run("stdio")
     except KeyboardInterrupt:  # pragma: no cover - interactive stop

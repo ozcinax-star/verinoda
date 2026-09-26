@@ -30,9 +30,12 @@ import copy
 import hashlib
 import json
 import os
+import re
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -50,6 +53,7 @@ MANIFEST_NAME = "install-manifest.json"
 MANIFEST_VERSION = 1
 TEMPLATES = Path(__file__).parent / "templates"
 CLI_PLACEHOLDER = "{{VERINODA_CLI}}"
+CLI_NOTE_PLACEHOLDER = "{{VERINODA_CLI_NOTE}}"
 # Codex's default MCP start-up timeout is short; a Python server can be slower
 # to start on Windows (cold imports), so give it more room.
 CODEX_STARTUP_TIMEOUT = 30
@@ -199,23 +203,242 @@ def _target(agent: str, scope: str, project_dir: Path, home: Path, explicit_home
                   root / ".verinoda" / MANIFEST_NAME)
 
 
+# -- which program the agents start ------------------------------------------------------
+
+PKG_DIR = Path(__file__).resolve().parents[1]
+# The config file a project-scope Claude Code server finds its project by (`mcp serve --repo-of`):
+# Claude Code reads .mcp.json from the session folder and every folder above it and starts stdio
+# servers in the session folder, so no absolute project path has to be stored.
+CLAUDE_PROJECT_CONFIG = ".mcp.json"
+# `#!C:\...\python.exe` inside a Windows console-script launcher (pip/distlib and uv write one).
+_EXE_SHEBANG = re.compile(rb'#!\s*"?([A-Za-z]:[\\/][^\r\n"]*?pythonw?[0-9.]*\.exe)"?[ \t]*\r?\n', re.I)
+_IMPORT_CACHE: dict[str, str | None] = {}
+
+
+def _norm(p) -> str:
+    return os.path.normcase(os.path.normpath(os.path.abspath(str(p))))
+
+
+def network_path(p) -> bool:
+    """``p`` names a network location (``\\\\host\\share\\...``, ``//host/share/...``, ``\\\\?\\UNC\\...``):
+    a path from a config file that is never stat'ed or read, because on Windows touching it connects
+    to that host with the user's credentials."""
+    s = str(p or "")
+    return len(s) >= 2 and s[0] in "\\/" and s[1] in "\\/"
+
+
+def same_python(a, b) -> bool:
+    """``a`` and ``b`` name the same interpreter of the same environment: the same path, or two names in
+    one folder for the same file (a venv's ``bin/python`` and ``bin/python3`` links). Two venvs whose
+    links resolve to one base interpreter are different environments, so only one folder counts."""
+    if not a or not b:
+        return False
+    if _norm(a) == _norm(b):
+        return True
+    if network_path(a) or network_path(b):  # compared as text only
+        return False
+    try:
+        return _norm(Path(a).parent) == _norm(Path(b).parent) and os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def launcher_python(path) -> str | None:
+    """The Python interpreter a ``verinoda`` console-script launcher starts, read from the file (never run).
+
+    POSIX scripts: the shebang line, including pip's ``#!/bin/sh`` + ``'''exec' <python>`` form for
+    long paths. Windows ``.exe`` launchers (pip/distlib, uv): the ``#!<python.exe>`` line they embed.
+    ``#!/usr/bin/env python3`` depends on PATH when it starts, and an unreadable file is not guessed:
+    both give None. A network path (:func:`network_path`) is not touched at all: None.
+    """
+    if network_path(path):
+        return None
+    try:
+        p = Path(path)
+        st = p.stat()
+        # a path from a config file: only a regular file of launcher size is read (never a device or pipe)
+        if not stat.S_ISREG(st.st_mode) or st.st_size > 16 * 1024 * 1024:
+            return None
+        data = p.read_bytes()
+    except OSError:
+        return None
+    if data.startswith(b"#!"):
+        first, _, rest = data.partition(b"\n")
+        interp = first[2:].strip().decode("utf-8", "replace")
+        if interp in ("/bin/sh", "/usr/bin/sh"):
+            m = re.match(rb"'''exec' (?:\"([^\"]+)\"|'([^']+)'|(\S+))", rest)
+            return (m.group(1) or m.group(2) or m.group(3)).decode("utf-8", "replace") if m else None
+        if interp.startswith('"'):
+            end = interp.find('"', 1)
+            return interp[1:end] if end > 1 else None
+        tok = interp.split()[0] if interp.split() else ""
+        return None if not tok or os.path.basename(tok) == "env" else tok
+    m = _EXE_SHEBANG.search(data)
+    return m.group(1).decode("utf-8", "replace") if m else None
+
+
+# The import check's code. Its first statement takes the start folder (``''`` for ``-c``) off
+# sys.path, which ``-P`` does on 3.11+: a shared, writable folder never supplies ``verinoda``.
+_IMPORT_PROBE = ("import sys; sys.path[:1] = [] if sys.path[:1] in ([''], ['.']) else sys.path[:1]; "
+                 "import os, verinoda; print(os.path.dirname(os.path.abspath(verinoda.__file__)))")
+
+
+def _import_location(python: str) -> str | None:
+    """Folder of the ``verinoda`` package ``python`` imports when an agent starts it: without this
+    process's PYTHONPATH (``-E``) and without the start folder on sys.path (``-P``, or the probe's first
+    statement on 3.10), started in a new private folder that is removed afterwards. None when it cannot
+    import it or the check fails. Only the running interpreter (``sys.executable``) is ever passed here."""
+    if python in _IMPORT_CACHE:
+        return _IMPORT_CACHE[python]
+    argv = [python, "-E", *(["-P"] if sys.version_info >= (3, 11) else []), "-c", _IMPORT_PROBE]
+    out = None
+    try:
+        cwd = tempfile.mkdtemp(prefix="verinoda-probe-")
+    except OSError:
+        cwd = None
+    if cwd is not None:
+        try:
+            p = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               cwd=cwd, timeout=60, stdin=subprocess.DEVNULL)
+            lines = (p.stdout or "").strip().splitlines()
+            out = lines[-1].strip() if p.returncode == 0 and lines else None
+        except (OSError, subprocess.SubprocessError):
+            out = None
+        finally:
+            shutil.rmtree(cwd, ignore_errors=True)
+    _IMPORT_CACHE[python] = out
+    return out
+
+
+def _module_argv(python: str) -> list[str]:
+    # -P (Python 3.11+): the folder the agent starts the server in - any project - is not put on
+    # sys.path, so a project's own `verinoda/` folder can never stand in for the installed package
+    return [python, *(["-P"] if sys.version_info >= (3, 11) else []), "-m", NAME]
+
+
+def resolve_launcher() -> dict:
+    """The program agents start for this build, and why.
+
+    The ``verinoda`` on PATH is registered only when it is this build: its launcher starts this
+    interpreter, and that interpreter imports this package when an agent starts it. Otherwise the
+    running interpreter is registered (``<python> -m verinoda``) and the result says what the PATH
+    one is. Returns ``{"argv", "how" ("path" | "interpreter"), "cli", "note", "why", "warnings",
+    "python", "package", "imports", "runs_ours", "path_exe", "path_python", "path_build"}``:
+    ``runs_ours`` is True only when the registered program was shown to import this package, and
+    ``path_build`` says whether the PATH ``verinoda`` is this build (``this`` | ``other`` |
+    ``unknown``; None when there is none). Nothing is run apart from this interpreter's import check.
+    """
+    py = sys.executable or ""
+    loc = _import_location(py) if py else None
+    runs_ours = loc is not None and _norm(loc) == _norm(PKG_DIR)
+    found = _which(NAME)
+    path_exe = os.path.abspath(found) if found else None
+    path_py = launcher_python(path_exe) if path_exe else None
+    same_env = bool(path_exe and py) and (
+        same_python(path_py, py) if path_py else _norm(Path(path_exe).parent) == _norm(Path(py).parent))
+    if not path_exe:
+        path_build = None
+    elif same_env and runs_ours:
+        path_build = "this"
+    elif not py or (path_py is None and not same_env) or (same_env and loc is None):
+        path_build = "unknown"  # its interpreter could not be read, or whether that imports verinoda
+    else:
+        path_build = "other"
+    out = {"python": py or None, "package": str(PKG_DIR), "imports": loc, "runs_ours": runs_ours,
+           "path_exe": path_exe, "path_python": path_py, "path_build": path_build, "warnings": []}
+    if path_build == "this":
+        out.update(argv=[path_exe], how="path", cli=NAME, why="it runs this build",
+                   note=f"registered `verinoda` on PATH ({path_exe}): it runs this build ({py})")
+        return out
+    if not py:  # an embedded interpreter without sys.executable: nothing better than the PATH program
+        argv = [path_exe] if path_exe else [NAME]
+        out.update(argv=argv, how="path", cli=NAME, why="the running interpreter's path is not known",
+                   note=f"registered {argv[0]}: the running interpreter's path is not known")
+        out["warnings"].append("the running Python interpreter's path is not known (sys.executable is empty); "
+                               f"registered {argv[0]}, which may be another Verinoda build")
+        return out
+    argv = _module_argv(py)
+    unread = ("it is a launcher whose interpreter could not be read" if not same_env else
+              "it starts this Python, which could not import verinoda outside this command (or the check failed)")
+    if not path_exe:
+        why = "`verinoda` is not on PATH"
+    elif path_build == "unknown":
+        why = f"whether `verinoda` on PATH ({path_exe}) is this build is unknown ({unread})"
+    elif not same_env:
+        why = f"`verinoda` on PATH ({path_exe}) starts {path_py}, another installation"
+    else:
+        why = f"`verinoda` on PATH ({path_exe}) imports {loc}, not this build"
+    out.update(argv=argv, how="interpreter", cli=_display(argv), why=why,
+               note=f"registered the running interpreter ({_display(argv)}): {why}")
+    if path_build == "other":
+        out["warnings"].append(
+            f"`verinoda` on PATH ({path_exe}) is not the build running this command ({PKG_DIR}); the agent "
+            f"configs name the running interpreter instead ({_display(argv)}), and so does the skill. Upgrade "
+            "or remove the PATH install to use one build everywhere.")
+    elif path_build == "unknown":
+        out["warnings"].append(
+            f"could not tell whether `verinoda` on PATH ({path_exe}) is the build running this command "
+            f"({PKG_DIR}): {unread}. The agent configs name the running interpreter ({_display(argv)}) to be "
+            "sure, and so does the skill.")
+    if not runs_ours:
+        from verinoda.buildinfo import is_source_root
+
+        how = (f" (from its source folder: `{_display([py, '-m', 'pip', 'install', '-e', str(PKG_DIR.parent)])}`)"
+               if is_source_root(PKG_DIR.parent) else "")
+        if loc is not None:
+            out["warnings"].append(
+                f"`{_display(argv)}` started by an agent imports {loc}, not this build at {PKG_DIR} (imported "
+                "here through PYTHONPATH or the current folder), so the server will run that one, and its entry "
+                f"stores the project path (--repo), which every build accepts. Install this build into that "
+                f"interpreter{how} and re-run.")
+        else:
+            out["warnings"].append(
+                f"`{_display(argv)}` started by an agent could not import verinoda (it is not installed there, "
+                f"or the check failed), so the registered server may not start. Install this build into that "
+                f"interpreter{how} and re-run.")
+    parts = {s.lower() for s in Path(py).parts}
+    if "archive-v0" in parts or ("uv" in parts and "cache" in parts):
+        out["warnings"].append(
+            f"{py} lives in uv's cache (a `uvx` run): `uv cache clean` deletes it and the registered server stops "
+            "starting. Install with `uv tool install` and re-run setup.")
+    return out
+
+
+def entry_python(entry: dict | None) -> str | None:
+    """The interpreter a registered server entry starts, read statically: the command itself for
+    ``<python> [-P] -m verinoda``, the launcher's shebang otherwise (a bare name is looked up on PATH
+    now; the agent may see another PATH). None for a network path: it is not touched."""
+    if not isinstance(entry, dict) or not entry.get("command"):
+        return None
+    cmd = str(entry["command"])
+    args = [str(a) for a in entry.get("args") or []]
+    exe = cmd if os.path.dirname(cmd) else (_which(cmd) or cmd)
+    if network_path(exe):
+        return None
+    if "-m" in args and args[args.index("-m") + 1: args.index("-m") + 2] == [NAME]:
+        return exe
+    return launcher_python(exe)
+
+
 # -- what gets written -----------------------------------------------------------------
 
-def _verinoda_exe() -> str | None:
-    exe = _which(NAME)
-    if exe:
-        return os.path.abspath(exe)
-    cand = Path(sys.executable).parent / ("verinoda.exe" if os.name == "nt" else "verinoda")
-    return str(cand) if cand.is_file() else None
+def server_command(scope: str, project_dir: Path, agent: str | None = None,
+                   launcher: dict | None = None, *, profile: str | None = None) -> list[str]:
+    """Command line that starts the Verinoda MCP server for this scope.
 
-
-def server_command(scope: str, project_dir: Path, profile: str | None = None) -> list[str]:
-    """Command line that starts the Verinoda MCP server for this scope (``profile``: its tool profile,
-    None = the server's default)."""
-    exe = _verinoda_exe()
-    base = [exe] if exe else [sys.executable, "-m", NAME]
-    return (base + ["mcp", "serve"] + (["--repo", str(project_dir)] if scope == "project" else [])
-            + (["--profile", profile] if profile else []))
+    Project scope for Claude Code stores no project path (``--repo-of .mcp.json``, see
+    :data:`CLAUDE_PROJECT_CONFIG`) when the registered program was shown to be this build: an older
+    build does not know ``--repo-of`` and would not start, so any other program gets ``--repo
+    <project>``, which every build accepts. Codex project configs keep ``--repo <project>`` because
+    where Codex starts its servers is not verified. ``profile``: the server's tool profile (None = its default)."""
+    launcher = launcher or resolve_launcher()
+    base = list(launcher["argv"])
+    tail = ["--profile", profile] if profile else []
+    if scope != "project":
+        return base + ["mcp", "serve"] + tail
+    if agent == "claude" and launcher.get("runs_ours"):
+        return base + ["mcp", "serve", "--repo-of", CLAUDE_PROJECT_CONFIG] + tail
+    return base + ["mcp", "serve", "--repo", str(project_dir)] + tail
 
 
 def mcp_profile(agent: str) -> str | None:
@@ -231,19 +454,25 @@ def mcp_profile(agent: str) -> str | None:
     return "full" if lay.get("editable") or lay.get("hardlinked") else None
 
 
-def cli_hint() -> str:
-    if _which(NAME):
-        return NAME
-    exe = _verinoda_exe()
-    if exe:
-        return f'"{exe}"' if " " in exe else exe
-    py = f'"{sys.executable}"' if " " in sys.executable else sys.executable
-    return f"{py} -m {NAME}"
+def cli_hint(launcher: dict | None = None) -> str:
+    """How the skill tells the agent to run the CLI: ``verinoda`` when the PATH one is this build."""
+    return (launcher or resolve_launcher())["cli"]
 
 
-def render_skill(agent: str) -> bytes:
+def render_skill(agent: str, launcher: dict | None = None) -> bytes:
     tpl = (TEMPLATES / f"{agent}_SKILL.md").read_text(encoding="utf-8")
-    text = tpl.replace("\r\n", "\n").replace(CLI_PLACEHOLDER, cli_hint())
+    launcher = launcher or resolve_launcher()
+    cli = cli_hint(launcher)
+    if cli == NAME:
+        note = ""
+    elif launcher.get("path_build") == "unknown":
+        note = (" Whether the `verinoda` on PATH is this build is not known: run this command wherever this "
+                "skill says `verinoda`.")
+    elif launcher.get("path_exe"):
+        note = " It is not the `verinoda` on PATH (another build): run it wherever this skill says `verinoda`."
+    else:
+        note = " `verinoda` is not on PATH here: run this command wherever this skill says `verinoda`."
+    text = tpl.replace("\r\n", "\n").replace(CLI_PLACEHOLDER, cli).replace(CLI_NOTE_PLACEHOLDER, note)
     if MARKER not in text:  # pragma: no cover - template invariant, tested
         raise RuntimeError(f"template for {agent} lacks the ownership marker")
     return text.encode("utf-8")
@@ -343,8 +572,8 @@ class Plan:
         self.ops.append((lambda: item, item))
 
 
-def _plan_skill(plan: Plan, t: Target, prev_items: list[dict]) -> None:
-    data = render_skill(t.agent)
+def _plan_skill(plan: Plan, t: Target, prev_items: list[dict], launcher: dict | None = None) -> None:
+    data = render_skill(t.agent, launcher)
     rel = _rel(t.root, t.skill)
     prev = _prev(prev_items, "file", rel)
     item = {"kind": "file", "role": "skill", "path": rel, "sha256": _sha(data),
@@ -645,7 +874,26 @@ def _check_args(res: dict, agent: str, scope: str, project_dir: Path, home: Path
     return res["ok"]
 
 
-def _usage_notes(t: Target, with_mcp: bool) -> list[str]:
+def _inside(path, folder) -> bool:
+    try:
+        return os.path.commonpath([_norm(path), _norm(folder)]) == _norm(folder)
+    except ValueError:  # another drive
+        return False
+
+
+def _move_note(cmd: list[str] | None, project_dir: Path) -> str:
+    """What moving the project does to a Claude Code project entry ``cmd``."""
+    if cmd and "--repo-of" in cmd:
+        if os.path.isabs(cmd[0]) and _inside(cmd[0], project_dir):
+            return (f"The entry stores no project path (--repo-of {CLAUDE_PROJECT_CONFIG}), but its program is "
+                    f"inside the project ({cmd[0]}): re-run setup after moving the project")
+        return (f"The entry stores no project path (--repo-of {CLAUDE_PROJECT_CONFIG}), so moving the project "
+                "keeps it working, but it names this machine's Verinoda program")
+    return ("The entry stores this project's path (--repo), because its program was not shown to be this build "
+            "and an older build does not know --repo-of: re-run setup after moving the project")
+
+
+def _usage_notes(t: Target, with_mcp: bool, cmd: list[str] | None = None) -> list[str]:
     notes = []
     if t.agent == "claude":
         notes.append(f"Claude Code: type /{NAME} <question> (the text after the command is passed to the skill "
@@ -653,7 +901,7 @@ def _usage_notes(t: Target, with_mcp: bool) -> list[str]:
                      "Start a new session if it does not appear.")
         if with_mcp and t.scope == "project":
             notes.append("Claude Code asks for approval before starting servers from a project .mcp.json "
-                         "(check /mcp). The entry holds absolute paths for this machine - review before committing.")
+                         f"(check /mcp). {_move_note(cmd, t.project_dir)} - review before committing.")
     else:
         notes.append(f"Codex: mention ${NAME} in your prompt (or pick it via /skills); Codex may also choose it "
                      f"when a task matches. Codex has no /{NAME} slash command.")
@@ -702,10 +950,16 @@ def install(agent: str, scope: str, *, project_dir, home=None, with_mcp: bool = 
     prev_items = prev.get("items") or []
 
     plan = Plan()
-    _plan_skill(plan, t, prev_items)
+    launcher = resolve_launcher()
+    plan.warnings.extend(launcher["warnings"])
+    res["server"] = {k: launcher[k] for k in ("how", "note", "cli", "why", "python", "package", "imports",
+                                              "runs_ours", "path_exe", "path_python", "path_build")}
+    _plan_skill(plan, t, prev_items, launcher)
+    cmd = None
     if with_mcp:
         profile = mcp_profile(agent)
-        cmd = server_command(scope, project_dir, profile)
+        cmd = server_command(scope, project_dir, agent, launcher, profile=profile)
+        res["server"]["command"] = cmd
         {"json": _plan_json, "toml": _plan_toml, "claude_cli": _plan_claude_cli}[t.mcp_kind](plan, t, cmd, prev_items)
         if profile:
             plan.notes.append(f"The MCP server is registered with --profile {profile}: this Verinoda install is "
@@ -723,18 +977,21 @@ def install(agent: str, scope: str, *, project_dir, home=None, with_mcp: bool = 
         res.update(ok=False, result="refused")
         res["notes"].append("nothing was written.")
         return res
-    res["notes"] = plan.notes + _usage_notes(t, with_mcp)
+    res["notes"] = plan.notes + _usage_notes(t, with_mcp, cmd)
     ops = {a["op"] for a in plan.actions} - {"manual"}
     res["result"] = ("unchanged" if ops <= {"unchanged"} else "updated" if "update" in ops else "installed")
     if dry_run:
         return res
 
     items = _apply(plan, prev_items)
+    from verinoda.buildinfo import build_info
+
     entry = {"scope": scope, "root": str(t.root), "installed_at": prev.get("installed_at") or _now(),
              "updated_at": prev.get("updated_at") or _now(), "verinoda_version": _version(),
+             "verinoda_build": build_info()["build"],
              "with_mcp": bool(with_mcp) or any(i.get("role") == "mcp" for i in items), "items": items}
     same = (prev and prev.get("items") == items and prev.get("verinoda_version") == entry["verinoda_version"]
-            and prev.get("with_mcp") == entry["with_mcp"])
+            and prev.get("verinoda_build") == entry["verinoda_build"] and prev.get("with_mcp") == entry["with_mcp"])
     if same and t.manifest.exists():
         plan.act("unchanged", "manifest", t.manifest)
     elif items:
@@ -984,27 +1241,91 @@ def _loc(t: Target, p: Path) -> str:
     return f"~/{rel}" if t.scope == "user" else rel
 
 
-def _mcp_status(t: Target) -> tuple[bool, str]:
+def _mcp_status(t: Target) -> tuple[bool, str, dict | None]:
+    """(registered, one-line description, the registered entry)."""
     p, loc = t.mcp_path, _loc(t, t.mcp_path)
     try:
         if t.mcp_kind == "json":
             cur = (json.loads(_read_text(p)[0]).get("mcpServers") or {}).get(NAME) if p.exists() else None
-            return (True, f"{loc}: {NAME} -> {_short(cur, t)}") if cur else (False, f"not registered ({loc})")
+            return ((True, f"{loc}: {NAME} -> {_short(cur, t)}", cur) if cur
+                    else (False, f"not registered ({loc})", None))
         if t.mcp_kind == "claude_cli":
             cur, err = _read_claude_user_entry(p)
             if err:
-                return False, err
-            return ((True, f"user scope ({loc}): {NAME} -> {_short(cur, t)}") if cur
-                    else (False, f"not registered ({loc})"))
+                return False, err, None
+            return ((True, f"user scope ({loc}): {NAME} -> {_short(cur, t)}", cur) if cur
+                    else (False, f"not registered ({loc})", None))
         text = _read_text(p)[0] if p.exists() else ""
         cur = (te.loads(text).get("mcp_servers") or {}).get(NAME)
         if not cur:
-            return False, f"not registered ({loc})"
+            return False, f"not registered ({loc})", None
         how = "Verinoda block" if te.find_block(text) else "not managed by Verinoda"
         trust = "; used only if Codex trusts the project" if t.scope == "project" else ""
-        return True, f"{loc} ({how}): {NAME} -> {_short(cur, t)}{trust}"
+        return True, f"{loc} ({how}): {NAME} -> {_short(cur, t)}{trust}", cur
     except (OSError, UnicodeDecodeError, ValueError, AttributeError) as exc:
-        return False, f"cannot read {loc}: {exc}"
+        return False, f"cannot read {loc}: {exc}", None
+
+
+def _running() -> dict:
+    """The interpreter running this command, whether an agent-started one imports this package, and the
+    interpreter the ``verinoda`` on PATH starts (read from its launcher)."""
+    py = sys.executable or ""
+    loc = _import_location(py) if py else None
+    found = _which(NAME)
+    return {"python": py or None, "runs_ours": loc is not None and _norm(loc) == _norm(PKG_DIR), "imports": loc,
+            "path_python": launcher_python(os.path.abspath(found)) if found else None}
+
+
+def server_check(entry: dict, t: Target, running: dict) -> dict:
+    """What a registered server entry starts, compared with the build running this command (static:
+    the command is never run, and a network path is not touched). ``build``: ``this`` | ``other`` |
+    ``unknown``; ``problems``: lines for doctor (another build, a project path that is not this project, a
+    project file naming a program on a network path). A project-scope entry comes from a file a clone can
+    supply, so doctor never tells the user to run the program it names, unless it is the Python the PATH
+    ``verinoda`` starts."""
+    out: dict = {"python": entry_python(entry), "problems": []}
+    args = [str(a) for a in entry.get("args") or []]
+    if t.scope == "project" and "--repo" in args:
+        i = args.index("--repo")
+        target = args[i + 1] if i + 1 < len(args) else ""
+        # a relative --repo depends on where the agent starts the server: not judged from here
+        if target and os.path.isabs(target) and _norm(target) != _norm(t.project_dir):
+            out["serves"] = target
+            out["problems"].append(f"it serves {target}, not this project (moved or copied?); run `verinoda setup` "
+                                   "(or `verinoda install`) here to update the entry")
+    py, run_py = out["python"], running.get("python")
+    fix = ("`verinoda setup` here registers this one" if t.scope == "project" else
+           f"`verinoda install --agent {t.agent} --scope user` registers this one")
+    cmd = str(entry.get("command") or "")
+    if network_path(cmd):
+        out["build"] = "unknown"
+        out["detail"] = f"unknown (network path not read: {cmd})"
+        if t.scope == "project":
+            out["problems"].append(f"the registered server is a program on a network path ({cmd}), which Verinoda "
+                                   "does not open: whether it is Verinoda, and which build, is unknown; check it "
+                                   f"before approving the server; {fix}")
+    elif py is None or not run_py:
+        out["build"] = "unknown"
+        out["detail"] = "could not tell which Python the registered command starts"
+    elif not same_python(py, run_py):
+        out["build"] = "other"
+        out["detail"] = f"starts {py}, not the Python running this command ({run_py})"
+        if t.scope != "project" or same_python(py, running.get("path_python")):
+            name_it = f"`{_display([py, '-m', NAME, '--version'])}` names it"
+        else:
+            name_it = "the project's config names that program, so check what it is before running it"
+        out["problems"].append(f"the registered server starts {py}, not the Python running this command "
+                               f"({run_py}), so it may be another Verinoda build; {name_it}; {fix}")
+    elif not running.get("runs_ours"):
+        out["build"] = "other"
+        out["detail"] = f"starts this Python, which imports {running.get('imports') or 'no verinoda'} when an agent starts it"
+        out["problems"].append(f"the registered server starts this Python ({py}), but outside this command it imports "
+                               f"{running.get('imports') or 'no verinoda package'}, not this build ({PKG_DIR}); install "
+                               "this build into it to serve this one")
+    else:
+        out["build"] = "this"
+        out["detail"] = "runs this build"
+    return out
 
 
 def _short(entry: dict, t: Target) -> str:
@@ -1017,11 +1338,20 @@ def _short(entry: dict, t: Target) -> str:
 
 
 def status(project_dir, home=None) -> dict:
-    """Installed state per ``agent:scope``: skill file, ownership and MCP registration."""
+    """Installed state per ``agent:scope``: skill file, ownership and MCP registration, and for each
+    registered server what it starts compared with the running build (``mcp_server``)."""
     project_dir = Path(project_dir).resolve()
     explicit_home = home is not None
     home = Path(home).resolve() if home is not None else Path.home()
     out: dict = {}
+    running: dict | None = None
+
+    def check(entry: dict, t: Target) -> dict:
+        nonlocal running
+        if running is None:
+            running = _running()
+        return server_check(entry, t, running)
+
     for agent in AGENTS:
         for scope in SCOPES:
             t = _target(agent, scope, project_dir, home, explicit_home)
@@ -1042,11 +1372,14 @@ def status(project_dir, home=None) -> dict:
                     info["managed"] = it is not None
                     if it is not None:
                         info["modified"] = _sha(data) != it.get("sha256")
-                info["mcp_registered"], info["mcp"] = _mcp_status(t)
+                info["mcp_registered"], info["mcp"], entry = _mcp_status(t)
+                if entry:
+                    info["mcp_server"] = check(entry, t)
                 if t.mcp_kind == "claude_cli":
                     local = _claude_local_entries(t.mcp_path, project_dir)
                     if local:
-                        info["mcp_local"] = [{"folder": f, "server": _short(cur, t)} for f, cur in local]
+                        info["mcp_local"] = [{"folder": f, "server": _short(cur, t), "check": check(cur, t)}
+                                             for f, cur in local]
                         info["mcp"] += "".join(f"; local scope for {f}: {NAME} -> {_short(cur, t)} (used instead "
                                                "of the user entry by sessions started there)" for f, cur in local)
             except OSError as exc:
@@ -1064,6 +1397,8 @@ def render(res: dict) -> None:
                 state += " (modified)"
             print(f"{key:<15} {state:<24} {v.get('skill') or v.get('skill_target')}")
             print(f"{'':<15} mcp: {v.get('mcp')}")
+            if (v.get("mcp_server") or {}).get("detail"):
+                print(f"{'':<15} server: {v['mcp_server']['detail']}")
         return
     dry = res.get("dry_run")
     root = res.get("root") or ""
@@ -1077,6 +1412,8 @@ def render(res: dict) -> None:
         if root and path.startswith(root):
             path = path[len(root):].lstrip("\\/") or "."
         print(f"  {op:<14} {a['what']:<8} {path}" + (f"  ({a['detail']})" if a.get("detail") else ""))
+    if (res.get("server") or {}).get("note"):
+        print(f"  server: {res['server']['note']}")
     for w in res.get("warnings", []):
         print(f"  warn: {w}")
     for e in res.get("errors", []):

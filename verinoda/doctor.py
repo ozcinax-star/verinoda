@@ -54,8 +54,38 @@ def _check(name: str, ok: bool, detail: str, level: str = "error") -> dict:
     return {"check": name, "ok": ok, "level": "ok" if ok else level, "detail": detail}
 
 
+def _path_cli(checks: list[dict]) -> None:
+    """Is the ``verinoda`` on PATH this build? Read from its launcher; nothing is run."""
+    from verinoda.agents.installer import _display, _norm, launcher_python, same_python
+
+    exe = shutil.which("verinoda")
+    if exe is None:
+        checks.append(_check("cli_on_path", False, "`verinoda` not on PATH (use `python -m verinoda`)", "warn"))
+        return
+    lp = launcher_python(exe)
+    if lp is None and _norm(Path(exe).parent) == _norm(Path(sys.executable).parent):
+        checks.append(_check("cli_on_path", True, f"{exe} (in this Python's folder; which Python it starts "
+                             "could not be read)"))
+    elif lp is None:  # the same judgement as setup's: unknown, so setup registers the running interpreter
+        checks.append(_check("cli_on_path", False, f"{exe}: whether it is this build is unknown (a launcher whose "
+                             "interpreter could not be read); `verinoda setup` registers the running interpreter "
+                             "instead", "warn"))
+    elif same_python(lp, sys.executable):
+        checks.append(_check("cli_on_path", True, f"{exe} (starts this Python)"))
+    else:
+        checks.append(_check("cli_on_path", False, f"{exe} starts {lp}, not the Python running this command "
+                             f"({sys.executable}): another installation, possibly another build; "
+                             f"`{_display([lp, '-m', 'verinoda', '--version'])}` names it", "warn"))
+
+
 def run(repo: Path) -> dict:
+    from verinoda.buildinfo import build_info, describe
+
     checks: list[dict] = []
+    build = build_info()
+    checks.append(_check("build", build["commit"] is not None,
+                         f"verinoda {build['version']}, {describe(build)}; package {build['package']}",
+                         "info"))
     py = sys.version_info
     checks.append(_check("python", py >= (3, 10), f"{sys.version.split()[0]} at {sys.executable}"))
     try:
@@ -75,9 +105,7 @@ def run(repo: Path) -> dict:
                              "verinoda and must fall back to MCP; reinstall with "
                              "`uv tool install --link-mode copy <wheel-or-path>` for a sandbox-readable copy",
                              "warn"))
-    exe = shutil.which("verinoda")
-    checks.append(_check("cli_on_path", exe is not None, exe or "`verinoda` not on PATH (use `python -m verinoda`)",
-                         "warn"))
+    _path_cli(checks)
     up = Path(__file__).parent / "project_index" / "UPSTREAM_COMMIT"
     base = up.read_text().strip()[:12] if up.exists() else "?"
     graphify = "yes" if importlib.util.find_spec("graphify") else "no"
@@ -148,10 +176,17 @@ def run(repo: Path) -> dict:
         agents_state = agents.status(project_dir=repo)
         for key, st_ in agents_state.items():
             if isinstance(st_, dict) and "installed" in st_:
+                srv = st_.get("mcp_server") or {}
                 checks.append(_check(f"agent:{key}", True,
                                      ("installed" if st_["installed"] else "not installed")
                                      + (f" ({st_.get('skill')})" if st_.get("skill") else "")
-                                     + (f"; mcp: {st_.get('mcp')}" if st_.get("mcp") else ""), "info"))
+                                     + (f"; mcp: {st_.get('mcp')}" if st_.get("mcp") else "")
+                                     + (f"; server {srv['detail']}" if srv.get("detail") else ""), "info"))
+                problems = list(srv.get("problems") or [])
+                for loc in st_.get("mcp_local") or []:
+                    problems += [f"local scope for {loc['folder']}: {p}" for p in (loc.get("check") or {}).get("problems") or []]
+                if problems:
+                    checks.append(_check(f"mcp_server:{key}", False, "; ".join(problems), "warn"))
     except Exception as exc:  # agents module optional at runtime
         checks.append(_check("agents", False, f"could not inspect agent installs: {exc}", "warn"))
 
@@ -167,8 +202,8 @@ def run(repo: Path) -> dict:
                          "info"))
     env = {k: ("set" if os.environ.get(k) else "unset") for k in SECRET_ENV}
     ok = all(c["ok"] or c["level"] != "error" for c in checks)
-    return {"ok": ok, "version": __version__, "checks": checks, "project": proj, "agents": agents_state,
-            "optional": opt, "env": env}
+    return {"ok": ok, "version": __version__, "build": build, "checks": checks, "project": proj,
+            "agents": agents_state, "optional": opt, "env": env}
 
 
 # -- round-3 state: every probe is read-only apart from what its module records on first use,
@@ -467,7 +502,10 @@ def render_brief(res: dict) -> None:
 
 
 def render(res: dict) -> None:
-    print(f"verinoda {res['version']}  ({'OK' if res['ok'] else 'PROBLEMS FOUND'})")
+    from verinoda.buildinfo import describe
+
+    build = f" ({describe(res['build'])})" if res.get("build") else ""
+    print(f"verinoda {res['version']}{build}  ({'OK' if res['ok'] else 'PROBLEMS FOUND'})")
     sym = {"ok": "ok  ", "warn": "warn", "error": "FAIL", "info": "info"}
     for c in res["checks"]:
         print(f"  [{sym[c['level']]}] {c['check']}: {c['detail']}")

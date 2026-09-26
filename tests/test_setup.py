@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -34,6 +36,42 @@ def project(tmp_path):
     return repo
 
 
+def test_setup_next_steps_name_the_command_that_runs_this_build(project, tmp_path, monkeypatch):
+    """When the `verinoda` on PATH is another build, setup registers the running interpreter; its Next
+    lines must not send the user to the PATH one (an older build on an atlas.db this one just wrote)."""
+    from verinoda.agents import installer
+
+    other = r"C:\other\venv\Scripts\python.exe" if os.name == "nt" else "/other/venv/bin/python"
+    old = tmp_path / "bin" / "verinoda.exe"
+    old.parent.mkdir()
+    old.write_bytes(f"#!{other}\n".encode("utf-8"))
+    which = {"verinoda": str(old), "claude": "C:/fake/claude.cmd"}
+    monkeypatch.setattr(installer, "_which", lambda name: which.get(name))
+    monkeypatch.setattr(installer, "_import_location", lambda python: str(installer.PKG_DIR))
+    cli = installer._display([sys.executable, *(["-P"] if sys.version_info >= (3, 11) else []), "-m", "verinoda"])
+
+    rep = setup_mod.setup_project(project, agents="claude", home=tmp_path / "home")
+    steps = "\n".join(rep["next_steps"])
+    assert rep["cli"] == rep["server"]["cli"] == cli
+    for cmd in ("query ", "ui`", "analyze ", "update .`", "doctor`"):
+        assert f"`{cli} {cmd}" in steps and f"`verinoda {cmd}" not in steps, cmd
+    assert "`/verinoda <question>`" in steps  # the agent's slash command keeps its name
+    assert not any(w.startswith("the steps below") for w in rep["warnings"])  # the agents line says why
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        setup_mod.render(rep)
+    assert f"`{cli} query " in out.getvalue() and "agents start: registered the running interpreter" in out.getvalue()
+
+    rep = setup_mod.setup_project(project, agents="none")  # no agent line: a note says why
+    assert f"`{cli} doctor`" in "\n".join(rep["next_steps"])
+    assert any(w.startswith(f"the steps below run this build as `{cli}`") and str(old) in w for w in rep["warnings"])
+
+    old.write_bytes(f"#!{sys.executable}\n".encode("utf-8"))  # the PATH one is this build: plain `verinoda`
+    rep = setup_mod.setup_project(project, agents="none")
+    assert rep["cli"] == "verinoda" and "`verinoda doctor`" in "\n".join(rep["next_steps"])
+    assert not any(w.startswith("the steps below") for w in rep["warnings"])
+
+
 def test_setup_indexes_and_is_safe_to_rerun(project):
     rep = setup_mod.setup_project(project, agents="none")
     assert rep["ok"] and rep["index"]["mode"] == "scan" and rep["index"]["nodes"] > 0
@@ -49,11 +87,25 @@ def test_setup_auto_installs_only_the_agents_found(project, tmp_path, monkeypatc
     real = installer._which
     monkeypatch.setattr(installer, "_which", lambda name: "C:/fake/claude.cmd" if name == "claude"
                         else (None if name == "codex" else real(name)))
+    # this interpreter imports this build when an agent starts it (how an installed build runs)
+    monkeypatch.setattr(installer, "_import_location", lambda python: str(installer.PKG_DIR))
     rep = setup_mod.setup_project(project, agents="auto", home=tmp_path / "home")
     assert [a["agent"] for a in rep["agents"]] == ["claude"] and rep["agents"][0]["ok"]
     assert (project / ".claude" / "skills" / "verinoda" / "SKILL.md").is_file()
     assert not (project / ".agents").exists()
     assert any("/verinoda" in s for s in rep["next_steps"])
+    # which build set it up, and which program the agents start (the running build, never a guess)
+    from verinoda import buildinfo
+
+    assert rep["build"]["build"] == buildinfo.build_info()["build"] and rep["build"]["python"] == sys.executable
+    assert rep["server"]["note"].startswith("registered ") and rep["server"]["how"] in ("path", "interpreter")
+    entry = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["verinoda"]
+    assert entry["args"][-4:] == ["mcp", "serve", "--repo-of", ".mcp.json"] and str(project) not in json.dumps(entry)
+    assert rep["agents"][0]["server"] == [entry["command"], *entry["args"]]
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        setup_mod.render(rep)
+    assert f"build {rep['build']['build']}" in out.getvalue() and "agents start: registered" in out.getvalue()
     # re-running changes nothing
     rep2 = setup_mod.setup_project(project, agents="auto", home=tmp_path / "home")
     assert rep2["agents"][0]["result"] == "unchanged"

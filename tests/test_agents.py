@@ -11,14 +11,17 @@ import os
 
 os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
+import contextlib  # noqa: E402
 import difflib  # noqa: E402
 import hashlib  # noqa: E402
+import io  # noqa: E402
 import json  # noqa: E402
 import re  # noqa: E402
 import shlex  # noqa: E402
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
 import sys  # noqa: E402
+import tempfile  # noqa: E402
 from pathlib import Path  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 
@@ -52,7 +55,10 @@ def env(tmp_path, monkeypatch):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     exe = bindir / "verinoda.exe"
-    exe.write_bytes(b"")
+    # a console-script launcher for the running interpreter, which imports this package: the PATH
+    # `verinoda` is this build, so it is what gets registered (see the build-skew tests below)
+    exe.write_bytes(f"#!{sys.executable}\n".encode("utf-8"))
+    monkeypatch.setattr(ins, "_import_location", lambda python: str(ins.PKG_DIR))
     guard = tmp_path / "REAL-HOME-MUST-NOT-BE-USED"
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: guard))
     monkeypatch.setenv("HOME", str(guard))
@@ -240,8 +246,10 @@ def test_claude_project_install_is_idempotent_and_uninstalls_cleanly(env):
     data = skill.read_bytes()
     assert agents.MARKER.encode() in data
     mcp = json.loads((env.proj / ".mcp.json").read_text(encoding="utf-8"))
+    # no project path in the file: the server finds the folder holding .mcp.json (moving the project is fine)
     assert mcp == {"mcpServers": {"verinoda": {
-        "type": "stdio", "command": env.exe, "args": ["mcp", "serve", "--repo", str(env.proj.resolve())]}}}
+        "type": "stdio", "command": env.exe, "args": ["mcp", "serve", "--repo-of", ".mcp.json"]}}}
+    assert str(env.proj) not in (env.proj / ".mcp.json").read_text(encoding="utf-8")
     m = manifest(env.proj)
     items = m["installs"]["claude"]["items"]
     f = next(i for i in items if i["kind"] == "file")
@@ -375,7 +383,7 @@ def test_claude_user_scope_refuses_foreign_server(env, monkeypatch):
 def test_cmd_shim_with_unsafe_arguments_is_not_run(env, tmp_path):
     weird = tmp_path / "a&b"
     weird.mkdir()
-    (weird / "verinoda.exe").write_bytes(b"")
+    (weird / "verinoda.exe").write_bytes(f"#!{sys.executable}\n".encode("utf-8"))  # this build, registered
     env.which["verinoda"] = str(weird / "verinoda.exe")
     env.which["claude"] = "C:/tools/claude.cmd"
     r = agents.install("claude", "user", project_dir=env.proj, home=env.home)  # _run would raise
@@ -500,7 +508,7 @@ def test_mcp_json_keeps_unrelated_keys(env, variant):
 def test_mcp_json_entry_update_when_command_changes(env):
     agents.install("claude", "project", project_dir=env.proj, home=env.home)
     newexe = env.bindir / "verinoda2.exe"
-    newexe.write_bytes(b"")
+    newexe.write_bytes(f"#!{sys.executable}\n".encode("utf-8"))
     env.which["verinoda"] = str(newexe)
     r = agents.install("claude", "project", project_dir=env.proj, home=env.home)
     assert r["ok"] and r["result"] == "updated", r
@@ -509,6 +517,284 @@ def test_mcp_json_entry_update_when_command_changes(env):
     assert agents.uninstall("claude", "project", project_dir=env.proj, home=env.home)["result"] == "uninstalled"
     assert tree(env.proj) == {}
 
+
+# -- which build the agents start (senior review gap 14) ----------------------------------------------
+
+OTHER_PY = r"C:\other\venv\Scripts\python.exe" if os.name == "nt" else "/other/venv/bin/python"
+
+
+def test_launcher_python_reads_the_interpreter_without_running_it(tmp_path):
+    def f(name: str, data: bytes) -> Path:
+        p = tmp_path / name
+        p.write_bytes(data)
+        return p
+
+    assert ins.launcher_python(f("posix", b"#!/opt/venv/bin/python\nimport sys\n")) == "/opt/venv/bin/python"
+    assert ins.launcher_python(f("pip_long", b"#!/bin/sh\n'''exec' '/very long/venv/bin/python' \"$0\" \"$@\"\n' '''\n")
+                               ) == "/very long/venv/bin/python"
+    assert ins.launcher_python(f("env", b"#!/usr/bin/env python3\n")) is None  # decided by PATH at start-up
+    # Windows launchers (pip/distlib: shebang + zip appended; uv: the same lines in a resource)
+    exe = b"MZ\x90\x00" + b"\x00" * 64 + b"#!C:\\Users\\x\\venv\\Scripts\\python.exe\n# -*- coding: utf-8 -*-\nimport sys\n"
+    assert ins.launcher_python(f("a.exe", exe + b"PK\x03\x04")) == r"C:\Users\x\venv\Scripts\python.exe"
+    quoted = b"MZ" + b"\x00" * 64 + b'#!"C:\\Program Files\\Python312\\python.exe"\r\n' + b"PK\x03\x04"
+    assert ins.launcher_python(f("b.exe", quoted)) == r"C:\Program Files\Python312\python.exe"
+    assert ins.launcher_python(f("empty.exe", b"")) is None
+    assert ins.launcher_python(tmp_path / "missing.exe") is None
+    assert ins.launcher_python(tmp_path) is None  # only regular files are read (a config may name anything)
+    if os.path.exists("/dev/zero"):
+        assert ins.launcher_python("/dev/zero") is None
+    real = shutil.which("verinoda")
+    if real and os.name == "nt":  # the machine's own launcher (uv or pip) names a python.exe
+        lp = ins.launcher_python(real)
+        assert lp is None or lp.lower().endswith(("python.exe", "pythonw.exe"))
+
+
+def test_the_import_check_never_imports_a_package_from_a_shared_or_start_folder(tmp_path, monkeypatch):
+    """A `verinoda/` left (or planted) in the temp folder, or in the folder the check starts in, is never
+    imported: its code would run as whoever runs setup/install/doctor, and it would be reported as the
+    build the agents start. The check starts in a new private folder with the start folder off sys.path."""
+    marker = tmp_path / "PLANTED_RAN"
+
+    def plant(folder: Path) -> Path:
+        (folder / "verinoda").mkdir(parents=True)
+        (folder / "verinoda" / "__init__.py").write_text(f"open({str(marker)!r}, 'w').write('ran')\n",
+                                                         encoding="utf-8")
+        return folder
+
+    shared = plant(tmp_path / "shared-tmp")
+    monkeypatch.setattr(tempfile, "tempdir", str(shared))  # TMPDIR / TEMP: /tmp on Linux
+    monkeypatch.setattr(ins, "_IMPORT_CACHE", {})
+    loc = ins._import_location(sys.executable)
+    assert not marker.exists() and (loc is None or not ins._inside(loc, shared)), loc
+    assert [p.name for p in shared.iterdir()] == ["verinoda"]  # the private start folder is removed again
+
+    made: list[Path] = []
+
+    def mkdtemp(*a, **k):  # the start folder itself holding a package: -P / the probe's first statement
+        made.append(plant(tmp_path / f"start{len(made)}"))
+        return str(made[-1])
+
+    monkeypatch.setattr(tempfile, "mkdtemp", mkdtemp)
+    monkeypatch.setattr(ins, "_IMPORT_CACHE", {})
+    loc = ins._import_location(sys.executable)
+    assert made and not marker.exists() and (loc is None or not ins._inside(loc, made[0])), loc
+    assert not made[0].exists()
+    # Python 3.10 has no -P: the probe's first statement alone keeps the start folder off sys.path
+    start = plant(tmp_path / "start-310")
+    r = subprocess.run([sys.executable, "-E", "-c", ins._IMPORT_PROBE], cwd=start, capture_output=True, text=True,
+                       timeout=120, stdin=subprocess.DEVNULL)
+    assert not marker.exists() and str(start) not in r.stdout, r.stdout + r.stderr
+
+
+def test_same_python_means_one_interpreter_of_one_environment(tmp_path):
+    (tmp_path / "venv" / "bin").mkdir(parents=True)
+    (tmp_path / "other" / "bin").mkdir(parents=True)
+    py = tmp_path / "venv" / "bin" / "python3.12"
+    py.write_bytes(b"interpreter")
+    os.link(py, tmp_path / "venv" / "bin" / "python3")  # a venv's second name for it
+    os.link(py, tmp_path / "other" / "bin" / "python3")  # the same base file, another environment
+    assert ins.same_python(py, py) and ins.same_python(py, tmp_path / "venv" / "bin" / "python3")
+    assert not ins.same_python(py, tmp_path / "other" / "bin" / "python3")
+    assert not ins.same_python(py, tmp_path / "venv" / "bin" / "missing") and not ins.same_python(None, py)
+
+
+def test_a_path_verinoda_of_another_build_is_not_registered(env, monkeypatch):
+    """The lead's repro: setup from one build wrote .mcp.json for the older PATH build."""
+    fake = FakeClaude(env.home)
+    monkeypatch.setattr(ins, "_run", fake)
+    env.which["claude"] = str(env.bindir / "claude.exe")
+    other = env.bindir / "verinoda-old.exe"
+    other.write_bytes(f"#!{OTHER_PY}\n".encode("utf-8"))
+    env.which["verinoda"] = str(other)
+    want = [sys.executable, *(["-P"] if sys.version_info >= (3, 11) else []), "-m", "verinoda"]
+
+    r = agents.install("claude", "project", project_dir=env.proj, home=env.home)
+    assert r["ok"], r
+    entry = json.loads((env.proj / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["verinoda"]
+    assert [entry["command"], *entry["args"]] == want + ["mcp", "serve", "--repo-of", ".mcp.json"]
+    srv = r["server"]
+    assert srv["how"] == "interpreter" and srv["path_exe"] == str(other) and srv["path_python"] == OTHER_PY
+    assert "registered the running interpreter" in srv["note"] and OTHER_PY in srv["note"]
+    assert any(str(other) in w and "is not the build running this command" in w for w in r["warnings"])
+    skill = (env.proj / ".claude" / "skills" / "verinoda" / "SKILL.md").read_text(encoding="utf-8")
+    assert f"recorded at install time is `{ins._display(want)}`." in skill
+    assert "It is not the `verinoda` on PATH (another build)" in skill and "{{" not in skill
+    env.which["verinoda"] = None
+    off = agents.render_skill("codex").decode("utf-8")
+    assert "`verinoda` is not on PATH here: run this command wherever" in off and "another build" not in off
+
+    r = agents.install("claude", "user", project_dir=env.proj, home=env.home)
+    assert r["ok"] and fake.calls[0][0][-(len(want) + 2):] == want + ["mcp", "serve"]
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        agents.render(r)
+    assert "server: registered the running interpreter" in buf.getvalue()
+
+
+def test_the_same_interpreter_importing_another_copy_is_not_this_build(env, monkeypatch):
+    # e.g. a dev run through PYTHONPATH while the venv has an editable install of another checkout
+    monkeypatch.setattr(ins, "_import_location", lambda python: "/elsewhere/verinoda")
+    r = agents.install("claude", "project", project_dir=env.proj, home=env.home, dry_run=True)
+    assert r["server"]["how"] == "interpreter" and r["server"]["imports"] == "/elsewhere/verinoda"
+    assert "imports /elsewhere/verinoda, not this build" in r["server"]["note"]
+    assert any("/elsewhere/verinoda, not this build at" in w for w in r["warnings"])
+    assert r["server"]["runs_ours"] is False and r["server"]["path_build"] == "other"
+
+
+@pytest.mark.parametrize("imports", ["/elsewhere/verinoda", None])
+def test_a_program_not_shown_to_be_this_build_gets_the_repo_every_build_knows(env, monkeypatch, imports):
+    """--repo-of is new: an older build started by the entry exits with 'unrecognized arguments', so an
+    entry whose program imports another copy (or none) keeps `--repo <project>` and says why."""
+    monkeypatch.setattr(ins, "_import_location", lambda python: imports)
+    r = agents.install("claude", "project", project_dir=env.proj, home=env.home)
+    assert r["ok"], r
+    entry = json.loads((env.proj / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["verinoda"]
+    assert entry["command"] == sys.executable and "--repo-of" not in entry["args"]
+    assert entry["args"][-4:] == ["mcp", "serve", "--repo", str(env.proj.resolve())]
+    note = next(n for n in r["notes"] if "project .mcp.json" in n)
+    assert "stores this project's path (--repo)" in note and "moving the project keeps it working" not in note
+    if imports:
+        assert any("stores the project path (--repo)" in w for w in r["warnings"])
+    else:  # nothing imports: said as it is, not as another build
+        assert any("could not import verinoda" in w and "may not start" in w for w in r["warnings"])
+        assert r["server"]["path_build"] == "unknown"
+    # once the interpreter imports this build, a re-install moves the entry to --repo-of
+    monkeypatch.setattr(ins, "_import_location", lambda python: str(ins.PKG_DIR))
+    r = agents.install("claude", "project", project_dir=env.proj, home=env.home)
+    entry = json.loads((env.proj / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["verinoda"]
+    assert r["result"] == "updated" and entry["args"][-2:] == ["--repo-of", ".mcp.json"]
+
+
+def test_the_move_note_holds_only_when_the_program_is_outside_the_project(env):
+    r = agents.install("claude", "project", project_dir=env.proj, home=env.home, dry_run=True)
+    assert any("moving the project keeps it working" in n for n in r["notes"])
+    inner = env.proj / ".venv" / "Scripts" / "verinoda.exe"  # a project-local venv's launcher on PATH
+    inner.parent.mkdir(parents=True)
+    inner.write_bytes(f"#!{sys.executable}\n".encode("utf-8"))
+    env.which["verinoda"] = str(inner)
+    r = agents.install("claude", "project", project_dir=env.proj, home=env.home)
+    entry = json.loads((env.proj / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["verinoda"]
+    assert entry["command"] == str(inner) and entry["args"][-2:] == ["--repo-of", ".mcp.json"]
+    note = next(n for n in r["notes"] if "project .mcp.json" in n)
+    assert "moving the project keeps it working" not in note
+    assert f"its program is inside the project ({inner})" in note and "re-run setup after moving" in note
+
+
+def test_a_path_launcher_whose_interpreter_cannot_be_read_is_unknown_not_another_build(env):
+    """`#!/usr/bin/env python3` (or a shim of an unknown format) first on PATH, outside this Python's folder."""
+    shim = env.bindir / "verinoda-env.exe"
+    shim.write_bytes(b"#!/usr/bin/env python3\nimport sys\nfrom verinoda.cli import main\n")
+    env.which["verinoda"] = str(shim)
+    r = agents.install("claude", "project", project_dir=env.proj, home=env.home)
+    srv = r["server"]
+    assert srv["how"] == "interpreter" and srv["path_python"] is None and srv["path_build"] == "unknown"
+    assert "is this build is unknown" in srv["note"] and "could not be read" in srv["note"]
+    assert any("could not tell whether `verinoda` on PATH" in w for w in r["warnings"])
+    assert not any("is not the build running this command" in w for w in r["warnings"])
+    skill = (env.proj / ".claude" / "skills" / "verinoda" / "SKILL.md").read_text(encoding="utf-8")
+    assert "Whether the `verinoda` on PATH is this build is not known" in skill and "another build" not in skill
+
+
+def test_without_verinoda_on_path_the_running_interpreter_is_registered(env):
+    env.which["verinoda"] = None
+    r = agents.install("codex", "project", project_dir=env.proj, home=env.home)
+    cfg = tomllib.loads((env.proj / ".codex" / "config.toml").read_text(encoding="utf-8"))["mcp_servers"]["verinoda"]
+    assert cfg["command"] == sys.executable and cfg["args"][-4:] == ["mcp", "serve", "--repo", str(env.proj.resolve())]
+    assert "`verinoda` is not on PATH" in r["server"]["note"] and not r["warnings"]
+
+
+def test_an_absolute_repo_entry_from_an_older_install_is_migrated(env):
+    """Older installs wrote `--repo <absolute project>`; the manifest lets a re-install replace it."""
+    old = {"type": "stdio", "command": env.exe, "args": ["mcp", "serve", "--repo", str(env.proj.resolve())]}
+    (env.proj / ".mcp.json").write_text(json.dumps({"mcpServers": {"verinoda": old}}, indent=2) + "\n",
+                                        encoding="utf-8")
+    (env.proj / ".verinoda").mkdir()
+    (env.proj / ".verinoda" / "install-manifest.json").write_text(json.dumps({
+        "version": 1, "tool": "verinoda", "scope": "project", "root": str(env.proj),
+        "created": {"dirs": [], "files": []},
+        "installs": {"claude": {"scope": "project", "root": str(env.proj), "verinoda_version": "0.1.0.dev0",
+                                "with_mcp": True, "items": [
+                                    {"kind": "json_key", "role": "mcp", "path": ".mcp.json",
+                                     "key": ["mcpServers", "verinoda"], "sha256": ins._entry_hash(old),
+                                     "created_file": True, "created_parent": True}]}}}), encoding="utf-8")
+    st = agents.status(env.proj, home=env.home)["claude:project"]
+    assert st["mcp_server"]["problems"] == []  # still this project: nothing to flag yet
+    r = agents.install("claude", "project", project_dir=env.proj, home=env.home)
+    assert r["ok"] and any(a["op"] == "update" and a["what"] == "mcp" for a in r["actions"]), r
+    entry = json.loads((env.proj / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["verinoda"]
+    assert entry["args"] == ["mcp", "serve", "--repo-of", ".mcp.json"]
+    assert manifest(env.proj)["installs"]["claude"]["verinoda_build"]
+    assert agents.uninstall("claude", "project", project_dir=env.proj, home=env.home)["result"] == "uninstalled"
+    assert not (env.proj / ".mcp.json").exists()
+
+
+def test_status_flags_a_moved_project_and_a_server_of_another_python(env):
+    moved_from = env.tmp / "old-place"
+    (env.proj / ".mcp.json").write_text(json.dumps({"mcpServers": {"verinoda": {
+        "command": env.exe, "args": ["mcp", "serve", "--repo", str(moved_from)]}}}), encoding="utf-8")
+    srv = agents.status(env.proj, home=env.home)["claude:project"]["mcp_server"]
+    assert srv["build"] == "this" and srv["serves"] == str(moved_from)
+    assert "not this project (moved or copied?)" in srv["problems"][0]
+    (env.proj / ".mcp.json").write_text(json.dumps({"mcpServers": {"verinoda": {
+        "command": env.exe, "args": ["mcp", "serve", "--repo", "."]}}}), encoding="utf-8")
+    assert agents.status(env.proj, home=env.home)["claude:project"]["mcp_server"]["problems"] == []
+
+    (env.proj / ".mcp.json").write_text(json.dumps({"mcpServers": {"verinoda": {
+        "command": OTHER_PY, "args": ["-m", "verinoda", "mcp", "serve", "--repo-of", ".mcp.json"]}}}),
+        encoding="utf-8")
+    srv = agents.status(env.proj, home=env.home)["claude:project"]["mcp_server"]
+    assert srv["build"] == "other" and srv["python"] == OTHER_PY
+    # a project file names the program: doctor does not tell the user to run it
+    assert "may be another Verinoda build" in srv["problems"][0] and "--version" not in srv["problems"][0]
+    assert "check what it is before running it" in srv["problems"][0]
+    older = env.bindir / "verinoda-old.exe"  # ... unless it is what the PATH `verinoda` starts
+    older.write_bytes(f"#!{OTHER_PY}\n".encode("utf-8"))
+    env.which["verinoda"] = str(older)
+    srv = agents.status(env.proj, home=env.home)["claude:project"]["mcp_server"]
+    assert "--version" in srv["problems"][0] and OTHER_PY in srv["problems"][0]
+    env.which["verinoda"] = env.exe
+
+    (env.proj / ".mcp.json").write_text(json.dumps({"mcpServers": {"verinoda": {
+        "command": "verinoda", "args": ["mcp", "serve"]}}}), encoding="utf-8")  # a bare name: PATH now
+    assert agents.status(env.proj, home=env.home)["claude:project"]["mcp_server"]["build"] == "this"
+    env.which["verinoda"] = None
+    assert agents.status(env.proj, home=env.home)["claude:project"]["mcp_server"]["build"] == "unknown"
+
+
+def test_network_paths_named_by_a_project_config_are_never_touched(env, monkeypatch):
+    """A clone's .mcp.json names `\\\\host\\share\\...`: on Windows a stat connects to that host with the
+    user's credentials, before the user approved anything. Compared as text only; the result is unknown."""
+    assert ins.network_path(r"\\host\share\v.exe") and ins.network_path("//host/share/v")
+    assert ins.network_path(r"\\?\UNC\host\share\v.exe") and ins.network_path("\\/host/share")
+    assert not ins.network_path(r"C:\venv\python.exe") and not ins.network_path("/opt/venv/bin/python")
+    assert not ins.network_path("") and not ins.network_path(None)
+    touched = []
+    real_stat, real_read, real_os_stat = Path.stat, Path.read_bytes, os.stat
+
+    def spy(real, what):
+        def f(p, *a, **k):
+            s = os.fspath(p) if not isinstance(p, int) else ""
+            if ins.network_path(s):
+                touched.append((what, s))
+                raise OSError("refused by the test")
+            return real(p, *a, **k)
+        return f
+
+    monkeypatch.setattr(Path, "stat", spy(real_stat, "Path.stat"))
+    monkeypatch.setattr(Path, "read_bytes", spy(real_read, "Path.read_bytes"))
+    monkeypatch.setattr(os, "stat", spy(real_os_stat, "os.stat"))
+    assert ins.launcher_python(r"\\attacker.invalid\share\verinoda.exe") is None
+    for command, args in ((r"\\attacker.invalid\share\verinoda.exe", ["mcp", "serve"]),
+                          (r"\\attacker.invalid\share\python.exe", ["-m", "verinoda", "mcp", "serve"]),
+                          ("//attacker.invalid/share/verinoda", ["mcp", "serve"])):
+        (env.proj / ".mcp.json").write_text(json.dumps({"mcpServers": {"verinoda": {
+            "command": command, "args": args}}}), encoding="utf-8")
+        srv = agents.status(env.proj, home=env.home)["claude:project"]["mcp_server"]
+        assert srv["build"] == "unknown" and srv["python"] is None
+        assert srv["detail"] == f"unknown (network path not read: {command})"
+        assert "network path" in srv["problems"][0] and "--version" not in srv["problems"][0]
+        assert ins.same_python(command, sys.executable) is False
+    assert touched == []
 
 
 def test_bom_files_round_trip(env):
@@ -686,7 +972,8 @@ def test_status_reports_each_agent_and_scope(env):
     cp, cu, xp, xu = (st[k] for k in ("claude:project", "claude:user", "codex:project", "codex:user"))
     assert cp["installed"] and cp["managed"] and cp["modified"] is False and cp["mcp_registered"]
     assert cp["skill"].endswith(os.path.join(".claude", "skills", "verinoda", "SKILL.md"))
-    assert "--repo <project>" in cp["mcp"] and cp["mcp"].startswith(".mcp.json")
+    assert "--repo-of .mcp.json" in cp["mcp"] and cp["mcp"].startswith(".mcp.json")
+    assert cp["mcp_server"]["build"] == "this" and cp["mcp_server"]["problems"] == []
     assert xu["installed"] and xu["mcp_registered"] and "Verinoda block" in xu["mcp"]
     assert not cu["installed"] and not cu["mcp_registered"] and cu["skill"] is None
     assert not xp["installed"] and not xp["mcp_registered"]
@@ -723,11 +1010,14 @@ def test_server_command_uses_real_installation(tmp_path):
     cmd = agents.server_command("project", tmp_path)
     assert Path(cmd[0]).is_file()
     assert cmd[-4:] == ["mcp", "serve", "--repo", str(tmp_path)]
-    if len(cmd) == 7:
-        assert cmd[1:3] == ["-m", "verinoda"]
+    if len(cmd) > 5:  # the running interpreter: `<python> [-P] -m verinoda`
+        assert cmd[0] == sys.executable and cmd[-6:-4] == ["-m", "verinoda"]
+    launcher = ins.resolve_launcher()
+    want = ["--repo-of", ".mcp.json"] if launcher["runs_ours"] else ["--repo", str(tmp_path)]
+    assert agents.server_command("project", tmp_path, "claude", launcher)[-4:] == ["mcp", "serve", *want]
     user = agents.server_command("user", tmp_path)
     assert user[-2:] == ["mcp", "serve"] and "--repo" not in user
-    assert agents.server_command("user", tmp_path, "full")[-4:] == ["mcp", "serve", "--profile", "full"]
+    assert agents.server_command("user", tmp_path, profile="full")[-4:] == ["mcp", "serve", "--profile", "full"]
 
 
 @pytest.mark.parametrize("layout", ["editable", "hardlinked"])
@@ -789,6 +1079,8 @@ def test_status_reports_claude_local_scope_servers_for_the_project_or_a_parent(e
         str(proj): {"mcpServers": {"other": entry}},
     }}), encoding="utf-8")
     st = agents.status(proj, home=env.home)["claude:user"]
-    assert st["mcp_local"] == [{"folder": ws.as_posix(), "server": "verinoda.exe mcp serve --repo <project>"}]
+    assert [{k: v for k, v in e.items() if k != "check"} for e in st["mcp_local"]] == [
+        {"folder": ws.as_posix(), "server": "verinoda.exe mcp serve --repo <project>"}]
+    assert st["mcp_local"][0]["check"]["build"] == "this"
     assert f"local scope for {ws.as_posix()}" in st["mcp"] and not st["mcp_registered"]
     assert "mcp_local" not in agents.status(env.proj, home=env.home)["claude:user"]

@@ -294,3 +294,73 @@ def test_brief_rendering_keeps_the_index_lines_and_every_problem(capsys):
     out = capsys.readouterr().out.splitlines()
     assert out == ["verinoda 9.9  (PROBLEMS FOUND)", "  [ok  ] graph: 10 nodes, 12 edges",
                    "  [warn] snapshot: snp_1 - working tree changed", "  [FAIL] search_index: unreadable"]
+
+
+# -- build identity (senior review gap 14) ------------------------------------------------------------
+
+def test_doctor_names_the_build_and_flags_a_server_of_another_python(tmp_path, monkeypatch):
+    import contextlib
+    import io
+    import shutil
+
+    from verinoda import buildinfo
+
+    other = r"C:\other\venv\Scripts\python.exe" if os.name == "nt" else "/other/venv/bin/python"
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / ".mcp.json").write_text(json.dumps({"mcpServers": {"verinoda": {
+        "command": other, "args": ["-m", "verinoda", "mcp", "serve", "--repo-of", ".mcp.json"]}}}),
+        encoding="utf-8")
+    launcher = tmp_path / "bin" / "verinoda.exe"  # an older install first on PATH
+    launcher.parent.mkdir()
+    launcher.write_bytes(f"#!{other}\n".encode("utf-8"))
+    real_which = shutil.which
+    monkeypatch.setattr(shutil, "which",
+                        lambda name, *a, **k: str(launcher) if name in ("verinoda", "verinoda.exe")  # doctor, installer
+                        else real_which(name, *a, **k))
+
+    res = doctor.run(proj)
+    checks = _checks(res)
+    b = res["build"]
+    assert b == buildinfo.build_info() and b["version"] == res["version"]
+    assert checks["build"]["detail"].startswith(f"verinoda {b['version']}, {buildinfo.describe(b)}")
+    assert checks["build"]["ok"] is (b["commit"] is not None)
+    cli = checks["cli_on_path"]
+    assert cli["level"] == "warn" and other in cli["detail"] and "another installation" in cli["detail"]
+    srv = checks["mcp_server:claude:project"]
+    # the project file names what the PATH `verinoda` starts, so doctor may suggest asking it its version
+    assert srv["level"] == "warn" and f"starts {other}" in srv["detail"] and "--version" in srv["detail"]
+    assert "starts " + other in checks["agent:claude:project"]["detail"]
+    assert res["ok"] is True  # warnings, not failures
+    json.dumps(res)  # --json output stays serialisable
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        doctor.render(res)
+    assert out.getvalue().splitlines()[0].startswith(f"verinoda {b['version']} ({buildinfo.describe(b)})")
+
+
+def test_doctor_says_unknown_for_a_path_launcher_it_cannot_read(tmp_path, monkeypatch):
+    """`#!/usr/bin/env python3` (or a shim of a format the reader does not know): setup registers the
+    running interpreter because it cannot tell, and doctor says the same instead of ok."""
+    import shutil
+    import sys
+
+    shim = tmp_path / "bin" / "verinoda.exe"
+    shim.parent.mkdir()
+    shim.write_bytes(b"#!/usr/bin/env python3\nimport sys\nfrom verinoda.cli import main\n")
+    real_which = shutil.which
+    monkeypatch.setattr(shutil, "which",
+                        lambda name, *a, **k: str(shim) if name == "verinoda" else real_which(name, *a, **k))
+    checks: list[dict] = []
+    doctor._path_cli(checks)
+    assert checks[0]["level"] == "warn" and "whether it is this build is unknown" in checks[0]["detail"]
+    # the same launcher in this interpreter's own folder is this environment (setup's judgement too)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "bin" / "python.exe"))
+    checks = []
+    doctor._path_cli(checks)
+    assert checks[0]["level"] == "ok" and "in this Python's folder" in checks[0]["detail"]

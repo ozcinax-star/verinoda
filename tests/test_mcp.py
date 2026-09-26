@@ -1396,15 +1396,18 @@ def test_cap_response_cuts_a_nested_first_list_before_the_rest():
 
 # -- real stdio round trip ------------------------------------------------------------------
 
-def _server_params(repo: Path, *extra: str):
+def _server_params(repo: Path, *extra: str, where: list[str] | None = None, cwd: Path | None = None,
+                   launcher: list[str] | None = None):
     from mcp.client.stdio import StdioServerParameters
 
     env = {"GRAPHIFY_OUT": os.environ.get("GRAPHIFY_OUT", ".verinoda/index"), "PYTHONIOENCODING": "utf-8"}
-    if os.environ.get("PYTHONPATH"):  # the server must import what this test process imports
-        env["PYTHONPATH"] = os.environ["PYTHONPATH"]
-    return StdioServerParameters(command=sys.executable,
-                                 args=["-m", "verinoda", "mcp", "serve", "--repo", str(repo), *extra],
-                                 cwd=str(repo), env=env)
+    # the server must import what this test process imports (a source run, or a checkout that is not
+    # the one the interpreter has installed)
+    env["PYTHONPATH"] = os.pathsep.join(p for p in (str(Path(__file__).resolve().parents[1]),
+                                                    os.environ.get("PYTHONPATH")) if p)
+    cmd = launcher or [sys.executable, "-m", "verinoda"]
+    return StdioServerParameters(command=cmd[0], args=[*cmd[1:], "mcp", "serve", *(where or ["--repo", str(repo)]), *extra],
+                                 cwd=str(cwd or repo), env=env)
 
 
 def _is_error(res) -> bool:
@@ -1425,9 +1428,11 @@ def _payload(res) -> dict:
     return data
 
 
-def _session(repo: Path, errlog: Path, body, *extra: str):
-    """Spawn the server (``extra``: more ``mcp serve`` arguments), initialize, run ``body(session)``,
-    shut down; return its result."""
+def _session(repo: Path, errlog: Path, body, *extra: str, params=None):
+    """Spawn the server (``extra``: more ``mcp serve`` arguments), initialize, run ``body(session)`` (or ``body(session, init_result)`` when it
+    takes two arguments), shut down; return its result."""
+    import inspect
+
     anyio = pytest.importorskip("anyio")
     from mcp import ClientSession
     from mcp.client.stdio import stdio_client
@@ -1435,9 +1440,11 @@ def _session(repo: Path, errlog: Path, body, *extra: str):
     async def main():
         with open(errlog, "w", encoding="utf-8") as err:
             with anyio.fail_after(STDIO_TIMEOUT):
-                async with stdio_client(_server_params(repo, *extra), errlog=err) as (read, write):
+                async with stdio_client(params or _server_params(repo, *extra), errlog=err) as (read, write):
                     async with ClientSession(read, write) as session:
-                        await session.initialize()
+                        init = await session.initialize()
+                        if len(inspect.signature(body).parameters) == 2:
+                            return await body(session, init)
                         return await body(session)
 
     try:
@@ -1556,3 +1563,83 @@ def test_default_repo_serves_the_only_initialised_subfolder_of_a_workspace(tmp_p
     (ws / "other" / ".verinoda" / "atlas.db").write_bytes(b"")
     assert mcp_server.default_repo(ws) == ws  # two candidates: no guess, the log names them
     assert "other, tool" in capsys.readouterr().err
+
+
+REPO_OF = {"mcpServers": {"verinoda": {"type": "stdio", "command": "python",
+                                       "args": ["-m", "verinoda", "mcp", "serve", "--repo-of", ".mcp.json"]}}}
+
+
+def test_repo_of_serves_the_folder_whose_config_registered_the_server(tmp_path, capsys, monkeypatch):
+    """Claude Code reads .mcp.json from the session folder and every folder above it and starts the
+    server in the session folder; the project is where the registering .mcp.json lives - even below
+    a nested git repository, which the plain folder rules would pick instead."""
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "elsewhere"))
+    proj = tmp_path / "moved" / "proj"
+    nested = proj / "vendor" / "lib"
+    (nested / ".git").mkdir(parents=True)
+    (proj / ".mcp.json").write_text(json.dumps(REPO_OF), encoding="utf-8")
+    (proj / "vendor" / ".mcp.json").write_text(json.dumps({"mcpServers": {"db": {"command": "x"}}}),
+                                               encoding="utf-8")  # a nearer config without this server
+    (nested / "src").mkdir()
+    assert mcp_server.repo_of_config(nested / "src", ".mcp.json") == proj
+    assert mcp_server.default_repo(nested / "src") == nested  # what `mcp serve` without --repo-of would serve
+    assert mcp_server.repo_of_config(proj, ".mcp.json") == proj
+    # the same for a TOML config (Codex's key)
+    (proj / ".codex").mkdir()
+    (proj / ".codex" / "config.toml").write_text(
+        '[mcp_servers.verinoda]\ncommand = "python"\nargs = ["mcp", "serve", "--repo-of", ".codex/config.toml"]\n',
+        encoding="utf-8")
+    assert mcp_server.repo_of_config(nested, ".codex/config.toml") == proj
+    # nothing registers it: the folder rules apply, and the log says so
+    alone = tmp_path / "alone"
+    (alone / ".git").mkdir(parents=True)
+    capsys.readouterr()
+    assert mcp_server.repo_of_config(alone, ".mcp.json") == alone
+    assert "no .mcp.json registering this server" in capsys.readouterr().err
+    for bad in ("", "../.mcp.json", str(proj / ".mcp.json")):
+        with pytest.raises(SystemExit):
+            mcp_server.repo_of_config(proj, bad)
+
+
+def test_serve_takes_either_repo_or_repo_of(capsys):
+    from verinoda import cli
+
+    p = cli.build_parser()
+    assert p.parse_args(["mcp", "serve", "--repo-of", ".mcp.json"]).repo_of == ".mcp.json"
+    with pytest.raises(SystemExit):
+        p.parse_args(["mcp", "serve", "--repo", "x", "--repo-of", ".mcp.json"])
+    assert "not allowed with argument" in capsys.readouterr().err
+
+
+def test_repo_of_never_serves_the_home_folder(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    (home / "work").mkdir(parents=True)
+    (home / ".mcp.json").write_text(json.dumps(REPO_OF), encoding="utf-8")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    assert mcp_server.repo_of_config(home / "work", ".mcp.json") != home
+
+
+def test_stdio_server_found_through_repo_of_names_its_build(tmp_path):
+    """The project-scope entry `setup` writes (`<python> [-P] -m verinoda mcp serve --repo-of .mcp.json`),
+    started from a sub-folder as Claude Code would: it serves the project and its serverInfo.version
+    names the build (0.1.0.dev0+<commit12> or +unknown)."""
+    from verinoda import buildinfo
+    from verinoda.agents import installer
+
+    proj = tmp_path / "proj"
+    (proj / "pkg").mkdir(parents=True)
+    (proj / "pkg" / "app.py").write_text("def main():\n    return 1\n", encoding="utf-8")
+    (proj / ".mcp.json").write_text(json.dumps(REPO_OF), encoding="utf-8")
+
+    async def body(s, init):
+        return init.server_info if hasattr(init, "server_info") else init.serverInfo
+
+    err = tmp_path / "server.err"
+    info = _session(proj, err, body, params=_server_params(proj, ["--repo-of", ".mcp.json"], cwd=proj / "pkg",
+                                                           launcher=installer._module_argv(sys.executable)))
+    want = buildinfo.server_version(buildinfo.collect())  # now, not this process's cached value (HEAD may move)
+    assert info.name == "verinoda" and info.version == want
+    assert info.version.startswith(buildinfo.build_info()["version"] + "+")
+    log = err.read_text(encoding="utf-8", errors="replace")
+    assert f"verinoda mcp: serving {proj.resolve()} over stdio" in log
+    assert f"; build {want} ({sys.executable})" in log
