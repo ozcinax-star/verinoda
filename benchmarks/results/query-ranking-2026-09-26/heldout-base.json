@@ -696,6 +696,6 @@
    "seconds": 0.02
   }
  ],
- "code": "C:\\Users\\ozcin\\Desktop\\RepoAtlas\\verinoda",
- "questions_file": "C:\\Users\\ozcin\\Desktop\\RepoAtlas\\private-bench\\qr\\heldout_scorer.json"
+ "code": "<base: main ffda91b>",
+ "questions_file": "heldout.json"
 }

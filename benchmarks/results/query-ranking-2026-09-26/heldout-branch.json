@@ -696,6 +696,6 @@
    "seconds": 0.04
   }
  ],
- "code": "C:\\Users\\ozcin\\Desktop\\RepoAtlas\\verinoda\\.claude\\worktrees\\qr-merge",
- "questions_file": "C:\\Users\\ozcin\\Desktop\\RepoAtlas\\private-bench\\qr\\heldout_scorer.json"
+ "code": "<branch>",
+ "questions_file": "heldout.json"
 }
