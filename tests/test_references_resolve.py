@@ -5,6 +5,7 @@ import os
 os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
 import importlib.util  # noqa: E402
+import re  # noqa: E402
 import socket  # noqa: E402
 import sqlite3  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -196,7 +197,10 @@ def test_offline_semantics(world, tmp_path):
 def test_local_files_and_commits_of_the_project(world):
     proj = world["project"]
     sha = helpers.git(proj, "rev-parse", "HEAD")
-    res = run(world, f"app.py changed in {sha[:10]} and `pyproject.toml` too; missing/nowhere.py is gone")
+    # a hash is told from a number or a word by holding both a digit and a letter (question_plan's sha pattern);
+    # an abbreviation without one (about 1 % of commits) is not taken for a commit: the full hash then
+    short = sha[:10] if re.search(r"\d", sha[:10]) and re.search(r"[a-f]", sha[:10]) else sha
+    res = run(world, f"app.py changed in {short} and `pyproject.toml` too; missing/nowhere.py is gone")
     by = {r["requested"].get("path") or r["class"]: r for r in res["references"]}
     assert by["app.py"]["status"] == "pinned" and by["app.py"]["pin"]["basis"] == "local_snapshot"
     commit = next(r for r in res["references"] if r["class"] == "git_commit")
