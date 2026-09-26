@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-26: token wins](#update-2026-09-26-token-wins) · [Update 2026-09-26: exact names and a fresh index](#update-2026-09-26-exact-names-and-a-fresh-index-d37) · [Update 2026-09-26: never ok without looking](#update-2026-09-26-never-ok-without-looking) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-26: the merged night, tokens against Graphify](#update-2026-09-26-the-merged-night-tokens-against-graphify) · [Update 2026-09-26: token wins](#update-2026-09-26-token-wins) · [Update 2026-09-26: exact names and a fresh index](#update-2026-09-26-exact-names-and-a-fresh-index-d37) · [Update 2026-09-26: never ok without looking](#update-2026-09-26-never-ok-without-looking) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,31 @@ Sections: [Update 2026-09-26: token wins](#update-2026-09-26-token-wins) · [Upd
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-26: the merged night, tokens against Graphify
+
+After the night's branches were merged (never ok without looking, exact names and a fresh index, token wins,
+the map text, the probe and debug fixes), the eight public sets were run again on indexes built from scratch
+by the merged code (86 questions, 319 gold facts; tokens are chars/4 of what the approach returns; Graphify's
+rows are the token economist's fresh-index run of 2026-09-25, whose code did not change):
+
+| approach | facts found | pinpointed | facts shown | tokens per question | facts per 1k tokens |
+|---|---|---|---|---|---|
+| Verinoda query (text) | 285/319 | 238 | 213 | 1,310 | 2.53 |
+| Verinoda analyze (text) | 287/319 | 242 | 219 | 1,899 | 1.76 |
+| Verinoda query (JSON) | 231/319 | 205 | 169 | 1,425 | 1.88 |
+| Graphify, vendored renderer | 69/319 | 63 | 8 | 1,391 | 0.58 |
+| Graphify, upstream CLI | 68/319 | 62 | 8 | 1,480 | 0.53 |
+| raw text search | 129/319 | 111 | 135 | 3,991 | 0.38 |
+
+Per question, the default query text is 6% smaller than Graphify's vendored renderer and 11% smaller than its
+CLI while it finds 4.1 times the facts. It is not smaller on every set: on forge_mod, glow_mod,
+graphify_core_tr and verinoda_user_tr Graphify's answer is shorter (the fixed 6,000-character budget is spent
+on content). Standing context: the MCP core profile (12 tools, the default) is 11,952 characters of tool menu
+(about 3,000 tokens), the full profile 42,016; Graphify's menu is about a tenth of the full one. The skills are
+18,306 (Claude Code) and 17,318 (Codex) characters. The fast benchmark on all nine sets (the private one
+included) against the evening's integration branch: 5 facts gained (forge q12 for query and analyze, heldout
+h03 and h08), none lost.
 
 ## Update 2026-09-26: token wins
 
