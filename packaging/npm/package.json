@@ -1,6 +1,6 @@
 {
   "name": "verinoda",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Evidence-first codebase analysis for coding agents (runs the Python package verinoda through uvx, pipx or a private venv)",
   "bin": {
     "verinoda": "bin/verinoda.js"

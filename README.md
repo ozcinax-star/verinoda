@@ -13,14 +13,14 @@
 > This repository is unfinished. Features may be missing, change without notice
 > or be wrong. No warranty or guarantee of correctness, security or fitness for
 > any purpose is given (see also the Apache-2.0 "AS IS" terms in `LICENSE`).
-> Released as an alpha: 0.1.0 on [PyPI](https://pypi.org/project/verinoda/) and
-> [npm](https://www.npmjs.com/package/verinoda) (2026-09-26). Formerly developed under the working name "RepoAtlas".
+> Released as an alpha: 0.2.0 on [PyPI](https://pypi.org/project/verinoda/) and
+> [npm](https://www.npmjs.com/package/verinoda) (2026-09-26; 0.1.0 earlier the same day). Formerly developed under the working name "RepoAtlas".
 
 ### What is in this snapshot (2026-09-26)
 
 | Part | State |
 |---|---|
-| Release | 0.1.0 (alpha), 2026-09-26: `pip` / `pipx` / `uv tool install verinoda`, `npx verinoda`; built and published by `.github/workflows/release.yml` (PyPI Trusted Publishing, npm with provenance), [GitHub release v0.1.0](https://github.com/ozcinax-star/verinoda/releases/tag/v0.1.0) |
+| Release | 0.2.0 (alpha), 2026-09-26: `pip` / `pipx` / `uv tool install verinoda`, `npx verinoda`; 0.2.0 adds documents and images (D41), a faster update and `update --fast` (D42, D44), and the name check for Java, Kotlin and TypeScript/JavaScript imports (D43, D45, D46); built and published by `.github/workflows/release.yml` (PyPI Trusted Publishing, npm with provenance), [GitHub release v0.2.0](https://github.com/ozcinax-star/verinoda/releases/tag/v0.2.0) |
 | Documents and images (`docs/DESIGN.md` D41, 2026-09-26) | PDF, Word, Excel and PowerPoint files in the repository are read as text (a heading per page, sheet, slide or Word heading), become graph nodes and search passages, and are quoted as evidence that can be checked again; on Windows the text in screenshots and diagrams is read with the OCR engine built into Windows (no model, nothing downloaded; textures, icons and small images skipped; `VERINODA_OCR=0` turns it off). `analyze` answers from a PDF page with a verified claim, and the claim goes stale when the PDF changes. Not read: scanned PDFs without a text layer, audio, video |
 | Java name check (`verinoda check`, D43, 2026-09-26) | Java files are checked against the project's sources, its classpath and the JDK: imports, types, methods with their number of arguments, fields, constructors and Fabric Mixin targets (`@Inject(method = ...)`, `@Shadow`, `@Accessor`, `@Invoker`). The classpath is read from a Fabric Loom build or set in `code_check.classpath`; the JDK's API from its `ct.sym`. On a real Minecraft 26.2 mod: 126,848 sites, 0 false absents, 2.3% unknown, 4.7 s; 8 of 8 planted invented names caught with the real one as the nearest (`PlayerEntity` -> `Player`). Not checked: Kotlin, argument types |
 | Kotlin name check (`verinoda check`, D45, 2026-09-26) | Kotlin files are checked in the same world as Java (the project's Java and Kotlin sources, the classpath, the JDK; Java code now sees the project's Kotlin classes, objects and companions): imports, types, and members and properties on receivers of known type (a Java getter counts for a property). Kotlin keeps more names open, and they stay `unknown`: extensions (the project's, and the libraries' read from their file facades and `@kotlin.Metadata`), smart casts after `is`/`as`/`when` in the same function, Kotlin's built-in types, calls without a receiver, the number of arguments, and anything in a file tree-sitter-kotlin does not parse completely. On kotlinpoet (86 files, 15,090 sites, kotlin-stdlib as the only jar given): the 10 absents are kotlin-reflect's extensions that classpath lacked; 6 of 6 planted names caught |
@@ -120,7 +120,7 @@ are pinned to the exact version the user meant before anything is compared.
 > (commit `20a20d30`, Apache-2.0). It is an independent project, **not** an
 > official Graphify release. See [docs/UPSTREAM.md](docs/UPSTREAM.md).
 > The name "Verinoda" was checked as free on PyPI, npm and GitHub on 2026-09-23 (see
-> [docs/NAMING.md](docs/NAMING.md)); 0.1.0 was published there on 2026-09-26 from the tag `v0.1.0`
+> [docs/NAMING.md](docs/NAMING.md)); 0.1.0 and 0.2.0 were published there on 2026-09-26 from the tags `v0.1.0` and `v0.2.0`
 > ([docs/RELEASING.md](docs/RELEASING.md)).
 
 ## Install

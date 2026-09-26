@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 # Formerly developed under the working name "RepoAtlas" (see docs/NAMING.md).
 # Published by .github/workflows/release.yml (a tag v<version>); docs/RELEASING.md.
 name = "verinoda"
-version = "0.1.0"
+version = "0.2.0"
 description = "Evidence-first codebase analysis for coding agents: knowledge graph, architecture map, claims with evidence, critique and experiments. Derived from Graphify."
 readme = "README.md"
 license = "Apache-2.0"
