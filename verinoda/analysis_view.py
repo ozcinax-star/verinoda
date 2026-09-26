@@ -228,6 +228,22 @@ def lean_capped(res: dict, cap: Callable[[dict], dict]) -> dict:
 
 # -- CLI: plain text -----------------------------------------------------------------------------
 
+CONTEXT_SHOWN = 6     # context claims printed after the answer (the rest counted; --json has them all)
+CRITIQUE_CHARS = 140  # a critique line's findings, clipped (the claim's own line already says why)
+
+
+def _distinct_uncertainties(items: list[str]) -> list[str]:
+    """The uncertainties minus one another's repeats: critique's ``call site path:line: <reason>`` restates a reason
+    the claim already gives (``... not confirmed to name the target (<reason>)``) - said once."""
+    out: list[str] = []
+    for u in dict.fromkeys(str(x) for x in items):
+        core = re.sub(r"^call site \S+:\d+: ", "", u)
+        if any(core in o for o in items if o != u) or any(core in o for o in out):
+            continue
+        out.append(u)
+    return out
+
+
 def claim_line(c: dict) -> str:
     conf = _confidence(c)
     line = f"[{c['status']}{f' {conf:.2f}' if conf is not None else ''}] {c['text']}"
@@ -235,7 +251,7 @@ def claim_line(c: dict) -> str:
     if ev:
         line += " {" + "; ".join(ev) + "}"
     if c.get("uncertainties"):
-        line += " (uncertain: " + "; ".join(c["uncertainties"]) + ")"
+        line += " (uncertain: " + "; ".join(_distinct_uncertainties(c["uncertainties"])) + ")"
     line += f"  ({c['id']})"
     if c.get("challenged") is False:
         reason = c.get("not_challenged_reason")
@@ -330,7 +346,10 @@ def render_text(res: dict) -> str:
     rest = [c for c in claims.values() if c["id"] not in printed and c["id"] not in hidden]
     if rest or hidden:
         out.append("context (found on the way; not what answers):" if printed else "claims:")
-        out += ["  " + claim_line(c) for c in rest]
+        shown = rest if not printed else rest[:CONTEXT_SHOWN]
+        out += ["  " + claim_line(c) for c in shown]
+        if len(rest) > len(shown):
+            out.append(f"  +{len(rest) - len(shown)} more context claim(s) (--json lists them)")
         if hidden:
             out.append(f"  +{len(hidden)} verified claim(s) about lines the passages below print (--json lists them)")
     loose = [u for u in unknowns if not u.get("sub_question")]
@@ -338,7 +357,7 @@ def render_text(res: dict) -> str:
         out += [_unknown(u) for u in loose]
     for c in res.get("critique") or []:
         out.append(f"critique {c['claim']}: {c['before']} -> {c['after']}  "
-                   + "; ".join((c.get("fails") or []) + (c.get("warns") or []))[:300])
+                   + "; ".join((c.get("fails") or []) + (c.get("warns") or []))[:CRITIQUE_CHARS])
     exhausted = (res.get("usage") or {}).get("exhausted")
     if exhausted:
         out.append(f"budget exhausted: {exhausted} (what was not reached is listed as unknown)")

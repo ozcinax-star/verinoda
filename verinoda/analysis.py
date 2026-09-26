@@ -603,6 +603,9 @@ def _passages(g, question: str) -> list[str]:
         chars = retrieval.question_chars(question, g.root) if hasattr(retrieval, "question_chars") \
             else PASSAGE_CHARS
         res = retrieval.retrieve(g, question, retrieval.Budget(max_items=10, max_chars=chars))
+        # the index's changed files are the analysis's own unknown already: not repeated in its passages
+        res.pop("stale_count", None)
+        res.pop("stale_files", None)
         return retrieval.render_text(res, chars).splitlines()
     except Exception:  # noqa: BLE001 - passages are an addition; the claims stand without them
         return []

@@ -196,10 +196,10 @@ def _r_claims(res: dict) -> None:
 
     ref = res.get("index_refresh") or {}
     if ref.get("skipped"):  # never answer silently from an older tree
-        files = ref.get("stale_files") or []
+        # the changed files are listed once, under the answer's "does the index describe the current working
+        # tree?" unknown (an agent reads every line of it: the same list three times cost tokens, said nothing)
         print(f"index: NOT refreshed ({ref['skipped']}); answered from the previous index; "
-              f"{ref.get('stale_count', 0)} file(s) changed since it: " + ", ".join(files[:5])
-              + (" ..." if ref.get("stale_count", 0) > 5 else ""))
+              f"{ref.get('stale_count', 0)} file(s) changed since it (listed under unknown)")
     _write(render_text(res))
 
 

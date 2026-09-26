@@ -76,6 +76,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D53 | Stack traces and GameTest results of a log | implemented | Built 2026-09-26 (section 26): `trace_log.py`; `verinoda trace-log FILE` maps project frames, folds the rest, ties a trace through a test's succeed/fail to that test, stores claims with the log as agent-report evidence. |
 | D54 | Shaders: uniform blocks and their Java writers | implemented | Built 2026-09-26 (section 27): `shaders.py`; `verinoda shader FIELD` / `--check`; analyze answers "where does `Block.Field.x` come from". Not done: shader functions in the graph, blocks filled in loops. |
 | D55 | English questions over Turkish-named code | implemented | Built 2026-09-26 (section 28): a symbol's leading comment is its own search text (schema 5); the seed dictionary read backwards with Turkish endings; 16 generic seed words. 30 mixed questions: top-3 8 -> 18 (English 0 -> 8). fastbench: analyze and text unchanged, JSON retrieval -4 facts. Not done: comment-learned pairs, a Turkish stemmer in the tokenizer. |
+| D56 | An analysis said once | implemented | Built 2026-09-26 (section 29): changed files listed once, uncertainties without repeats, six context claims, critique clipped; analyze facts unchanged, -1.6 % characters. Smaller passage budgets measured and dropped (facts lost). |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3244,6 +3245,32 @@ their method in the first three results (MRR 0.023); the Turkish ones 8 (MRR 0.4
 Pairs learned from comments next to Turkish names (too sparse here: "threat" is written once near such a name), a
 Turkish stemmer in the tokenizer itself (`dusmanlar` -> `dusman` in the index), the Turkish question over English
 names beyond the seed.
+
+## 29. An analysis said once (D56, 2026-09-26)
+
+### 29.1 Why
+
+An `analyze` answer is read in full by an agent. Measured over the nine benchmark sets (fastbench now counts the
+characters of every answer), the answer itself was about a tenth of the text: the passages 56-73 %, the claims
+"found on the way" 10-12 %, critique lines 2-3 %; and with an index older than the working tree the changed files
+were listed up to four times (the header, the answer's unknown, the passages' note, again per sub-question).
+
+### 29.2 Decisions
+
+- The changed files are listed once, under the answer's "does the index describe the current working tree?"
+  unknown; the CLI header says how many, the passages inside an analysis no longer repeat them.
+- A claim's uncertainties are printed without repeats (critique's "call site path:line: <reason>" restates a
+  reason the claim already gives).
+- At most six context claims after the answer (the rest counted; `--json` has them all); a critique line's
+  findings clipped to 140 characters.
+
+### 29.3 Measured
+
+fastbench on the same indexes: analyze facts 318 -> 318, analyze characters -1.6 % (the benchmark's indexes are
+fresh, so the stale-file saving does not show there). Tried and dropped: a smaller passage budget when every
+sub-question is met (2,400 characters: -15 % characters, -6 facts; 3,600: -9.5 %, -3 facts), and window lines
+without their path (the text is budget-bound: the characters saved were filled with more of the same, and the
+path was lost).
 
 ## Sources
 
