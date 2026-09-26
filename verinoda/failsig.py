@@ -935,10 +935,68 @@ def _parse_node(text: str, resolver: PathResolver, mapper) -> list[dict] | None:
     return failures or None
 
 
+# Minecraft GameTest (the headless server's summary) ------------------------------------------------------
+
+_GT_SUMMARY = re.compile(r"\b\d+ required tests? failed\b")
+_GT_LINE = re.compile(r"^(?:\[[^\]]*\]\s*)*(?:\([^)]*\)\s*)?\s*- ([a-z0-9_.\-]+:[a-z0-9_/.\-]+): (.*?)\s*$")
+_GT_TICK = re.compile(r"\s+on tick \d+$")
+
+
+def _snake(name: str) -> str:
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name).lower()
+
+
+def _gametest_method(test_id: str, resolver: PathResolver, mapper) -> tuple[str | None, int | None, str | None]:
+    """``(path, line, Class.method)`` for a GameTest id ``ns:<snake class>_<snake method>`` (Fabric's naming),
+    when exactly one test source file's class and one of its methods spell it; else unknown."""
+    tail = test_id.split(":", 1)[-1].rsplit("/", 1)[-1]
+    hits = []
+    for f in resolver.files:
+        if not f.endswith((".java", ".kt")):
+            continue
+        cls = f.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        prefix = _snake(cls) + "_"
+        if tail.startswith(prefix) and len(tail) > len(prefix):
+            hits.append((f, cls, tail[len(prefix):]))
+    if len(hits) != 1:
+        return None, None, None
+    f, cls, rest = hits[0]
+    data = mapper.reader(f) if mapper and mapper.reader else None
+    if data is None:
+        return f, None, None
+    for i, ln in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
+        m = re.search(r"\b(?:void|fun)\s+(\w+)\s*\(", ln)
+        if m and _snake(m.group(1)) == rest:
+            return f, i, f"{cls}.{m.group(1)}"
+    return f, None, None
+
+
+def _parse_gametest(text: str, resolver: PathResolver, mapper) -> list[dict] | None:
+    """``N required tests failed`` and the ``- ns:test_id: message`` lines under it. The server log also
+    prints unrelated start-up exceptions (a missing server.properties); those are not the failure."""
+    if not _GT_SUMMARY.search(text):
+        return None
+    failures = []
+    after = False
+    for ln in text.splitlines():
+        if _GT_SUMMARY.search(ln):
+            after = True
+            continue
+        m = _GT_LINE.match(ln) if after else None
+        if not m:
+            continue
+        test, msg = m.group(1), _GT_TICK.sub("", m.group(2))
+        path, line, qual = _gametest_method(test, resolver, mapper)
+        failures.append(_failure(test, "call", "GameTestAssertException", msg, (path, line) if path else None,
+                                 [(path, line, qual)] if path and line else [], mapper, qual))
+    return failures or None
+
+
 # -- entry points --------------------------------------------------------------------------------------
 
 _PARSERS: tuple[tuple[str, Callable], ...] = (
-    ("pytest_text", _parse_pytest), ("python_traceback", _parse_python), ("jvm", _parse_jvm),
+    ("pytest_text", _parse_pytest), ("python_traceback", _parse_python), ("gametest", _parse_gametest),
+    ("jvm", _parse_jvm),
     ("go", _parse_go), ("rust", _parse_rust), ("node", _parse_node),
 )
 
