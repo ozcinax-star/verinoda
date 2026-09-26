@@ -72,6 +72,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D49 | GameTest registry and the tests a change should run | implemented | Built 2026-09-26 (section 22): `gametests.py` reads the `fabric-gametest` entrypoints; impact and change_review list the registered GameTest classes that reach the change, nearest first (directly or through a class that calls it), and warn about unregistered ones. Not done: NeoForge, client game tests without `@GameTest`. |
 | D50 | Backlog items and code comments | implemented | Built 2026-09-26 (section 23): `backlog.py`; `verinoda backlog <item | file:line | symbol>`, `backlog:` lines in query, `backlog` in node_inspect; a line is explained by the comments on and above it and the declaration comments of the fields it uses. Not done: analyze claims from an item, other backlog formats. |
 | D51 | Java access, constructor types, `api` for Java | implemented | Built 2026-09-26 (section 24): class files keep access bits and parameter types; protected/private/package members out of reach and constructors no argument list fits are absent; `verinoda api` lists a Java class's real members from the classpath. A private mod: 0 absent over 127,176 sites. Not done: method argument types, SCIP. |
+| D52 | Datapacks: function calls, tags, scoreboard | implemented | Built 2026-09-26 (section 25): `.mcfunction` files in the graph (`calls`, `schedule` as `registers` with ticks, `#minecraft:tick` / `load` as events); `datapack.py` links entity tags and objectives across mcfunction and Java; `verinoda datapack` lists tags checked but never added, objectives written but never read, missing functions. fastbench: 0 differences after keeping mcfunction files out of search names. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3077,6 +3078,54 @@ offers: `verinoda api` read Python only, so invented Minecraft APIs were caught 
 Method arguments' types (only constructors are matched by type), the receiver rule of protected access
 (`other.protectedMethod()` on a sibling class from a subclass), project sources' modifiers, SCIP symbols as a
 reference tree.
+
+## 25. Datapacks: function calls, entity tags and scoreboard objectives (D52, 2026-09-26)
+
+### 25.1 Why
+
+A mod with a datapack keeps a large part of its behaviour in `.mcfunction` files, which the graph did not read at
+all (628 files in the private mod measured here). Their calls (`function`, `execute ... run function`, `schedule
+function ... 40t`) were invisible to `trace`, `when` and impact, and the state they share with Java - entity tags
+and scoreboard objectives - was two unrelated piles of text. The bug this hides: Java checks a tag nothing adds
+(the vampire the upkeep tick never found), or mcfunction writes a score nothing reads.
+
+### 25.2 Decisions
+
+- **Functions in the graph** (`project_index/extractors/mcfunction.py`): one node per function file, labelled with
+  its id (`ns:path`); `function` and `execute ... run function` are `calls` edges, `schedule function x 40t` a
+  `registers` edge with the delay in ticks (`s` and `d` converted), so `when` says "40 ticks later"; a function a
+  datapack's `#minecraft:tick` or `#minecraft:load` lists carries it (`metadata.events`), so `when` ends there
+  ("every server tick"). For a call, the `execute if/unless ...` part of its line is the condition. A path to the
+  file resolves to its function node.
+- **`verinoda/datapack.py`**: tags (`tag ... add/remove`, `{Tags:[...]}` in `summon` / `data merge`, `tag=` in
+  selectors; Java `addTag` / `removeTag` / `entityTags().contains(...)` and their scoreboard-tag forms, through a
+  `static final String` constant when that is the argument, through the project's own helpers that wrap them, and
+  commands written as strings) and objectives (`scoreboard objectives add`, `players set/add/operation`, `execute
+  if score`, `scores={...}`, `store result score`; in Java, a string naming a known objective, read or written by
+  what the called helper does with it). A tag a macro fills in (`$(tag)`) is said, never matched.
+- **`verinoda datapack`**: the counts, then tags checked but never added, tags added but never checked, objectives
+  written but never read, calls to functions that do not exist; `datapack tag|score|function NAME` for one of
+  them, every site with its language and role.
+
+### 25.3 Measured
+
+- The private mod at its current commit: 314 functions (two copies of the datapack), 143 tags, 46 objectives; 12
+  tags checked but never added (leads: names built at run time or added outside the mod), 5 objectives written
+  but never read.
+- The acceptance: at the commit before the fix of a vampire the hunt never found, "tags checked but never added"
+  lists both tags of the acceptance: the hunted creature's (checked in Java, added nowhere) and the broken wing's
+  (checked in Java, the mcfunction adding it not yet written); at the fixed commit neither is there.
+- `when` on a wing function: every server tick, through six functions from `#minecraft:tick`, with the `execute
+  if score ...` condition of the last call.
+- fastbench on fresh indexes: the first version lost 2 facts on glow_mod and moved 2 private questions (the
+  function nodes, named `ns:path`, outranked the Java that runs them as names); with mcfunction files kept
+  as data files for search (their nodes still serve when, trace and impact): 0 differences on the three
+  sets with datapacks.
+
+### 25.4 Not done
+
+Advancement and predicate JSON (a function run as an advancement reward), `return run`, macros' arguments, Java
+running a function by a built string, NBT `Tags` set from Java.
 
 ## Sources
 

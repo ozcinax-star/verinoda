@@ -2094,6 +2094,8 @@ _EVENT_LABELS = (
     (r"\.executes$", "when the command is run"),
     (r"runOnServer|computeOnServer|\.execute$|\.submit$", "on the server thread, soon"),
     (r"runOnClient|computeOnClient", "on the client thread, soon"),
+    (r"^#minecraft:tick$", "every server tick (the datapack's #minecraft:tick)"),
+    (r"^#minecraft:load$", "when the datapack loads (#minecraft:load)"),
     (r"\.(?:thenAccept|thenRun|thenApply|thenCompose|whenComplete|whenCompleteAsync|thenAcceptAsync|thenRunAsync|"
      r"exceptionally|handle)$", "when that future completes"),
 )

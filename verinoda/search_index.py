@@ -403,6 +403,10 @@ def _graph_files(g) -> list[str]:
     out = []
     for f in sorted({d["source_file"] for _, d in g.G.nodes(data=True)
                      if isinstance(d.get("source_file"), str) and d.get("source_file")}):
+        # a datapack function stays a data file for search (its text, not a name unit): its node serves the
+        # graph's walks (when, trace, impact); as a name it outranked the Java that runs it (D52, measured)
+        if f.endswith(".mcfunction"):
+            continue
         if _local_source(g.root, f) is not None:
             out.append(f)
     return out

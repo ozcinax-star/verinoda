@@ -199,6 +199,8 @@ class _Names:
             if label.replace("\\", "/").endswith(base) and g.is_file_node(n):
                 self.files[f] = n
                 self.by_stem[base.rpartition(".")[0] if "." in base else base].append(n)
+            elif (d.get("metadata") or {}).get("language") == "mcfunction":  # one node per file, its function id
+                self.files.setdefault(f, n)
             self.by_bare[fold_tr(label.strip().lstrip(".").split("(")[0].strip())].append(n)
 
 
@@ -240,7 +242,8 @@ def candidates(g, text: str) -> list[str]:
             cands.update(nm.by_bare.get(fold_tr(form), ()))
         if "." in name:
             cands.update(nm.by_stem.get(name.rpartition(".")[2], ()))
-    return sorted(n for n in cands if rt._names_exactly(g, text, n))
+    return sorted(n for n in cands if rt._names_exactly(g, text, n) or (
+        path and not name and (g.G.nodes[n].get("metadata") or {}).get("language") == "mcfunction"))
 
 
 def _via_import(g, text: str) -> list[str]:

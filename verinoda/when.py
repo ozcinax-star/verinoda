@@ -153,6 +153,13 @@ def when(g, nid: str, *, max_depth: int = MAX_DEPTH, max_paths: int = MAX_PATHS)
         if rel == ix.CALLBACK_RELATION:
             h["event"] = ix.event_label(d.get("registrar") or "", d.get("delay"))
             h["context"] = d.get("context")
+        elif line and f and f.endswith(".mcfunction"):  # `execute if ... as ... run function x`: the if/unless
+            lines = ix.file_lines(g.root / f) or []
+            text = lines[line - 1].strip().lstrip("$") if 0 < line <= len(lines) else ""
+            m = re.match(r"execute\s+(.*?)\s+run\s", text)
+            if m and re.search(r"\b(?:if|unless)\b", m.group(1)):
+                h["conditions"] = [f"execute {m.group(1)}"]
+                h["condition_lines"] = [line]
         elif line:
             sp = g.span(u)
             code, orig = code_of(f) if f else (None, None)
@@ -176,6 +183,12 @@ def when(g, nid: str, *, max_depth: int = MAX_DEPTH, max_paths: int = MAX_PATHS)
         # says when it runs, the plain call would say "now"
         lambda_from = {u for _r, u, d in callers if d.get("lambda")}
         callers = [c for c in callers if c[0] == 0 or c[1] not in lambda_from]
+        events = (g.G.nodes[node].get("metadata") or {}).get("events") or []
+        for ev in events:  # a datapack's #minecraft:tick
+            paths.append(trail + [{"from": ev, "from_id": node, "to": name(node), "to_id": node, "relation": "tag",
+                                   "at": loc(node), "event": ix.event_label(ev), "context": f"listed in {ev}",
+                                   "_edge": {}},
+                                  {"entry": ev, "at": loc(node), "why": "the game runs the tag's functions"}])
         mixed = [(v, d) for v, d in g.out_edges(node, {"injects"})]
         if mixed:  # a Mixin handler: the target method runs it (docs/DESIGN.md D48)
             from verinoda import jvm_mixins
@@ -192,6 +205,8 @@ def when(g, nid: str, *, max_depth: int = MAX_DEPTH, max_paths: int = MAX_PATHS)
                                        "context": d.get("context"), "_edge": d},
                                       {"entry": where, "at": loc(v) if g.file(v) else "(outside the project)",
                                        "why": "the Mixin runs it inside this method"}])
+            continue
+        if not callers and events:  # the tag is what starts it, not "nothing calls it"
             continue
         if not callers or len(trail) >= max_depth:
             paths.append(trail + [{"entry": name(node), "at": loc(node),

@@ -1255,6 +1255,8 @@ class Snapshot:
             f = d.get("source_file")
             if not f or self.kind(n) in HIDDEN_KINDS or (not tests and _is_test(f)):
                 continue
+            if f.endswith(".mcfunction"):  # a datapack function is a data note here, as in search (D52)
+                continue
             size[f] += 1
             if isinstance(d.get("community"), int):
                 community[f][d["community"]] += 1

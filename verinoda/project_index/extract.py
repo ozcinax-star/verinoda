@@ -36,6 +36,7 @@ from verinoda.project_index.extractors.base import (  # noqa: F401
 )
 from verinoda.project_index.extractors.apex import extract_apex  # noqa: F401
 from verinoda.project_index.extractors.bash import extract_bash  # noqa: F401
+from verinoda.project_index.extractors.mcfunction import extract_mcfunction  # noqa: F401
 from verinoda.project_index.extractors.blade import extract_blade  # noqa: F401
 from verinoda.project_index.extractors.csharp import (
     CsharpNameResolver,
@@ -6362,6 +6363,8 @@ _DISPATCH: dict[str, Any] = {
     ".lpk": extract_lazarus_package,
     ".sh": extract_bash,
     ".bash": extract_bash,
+    # Minecraft datapack functions: a node per function, `function` / `schedule` edges (verinoda/datapack.py)
+    ".mcfunction": extract_mcfunction,
     ".json": extract_json,
     ".tf": extract_terraform,
     ".tfvars": extract_terraform,

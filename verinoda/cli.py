@@ -804,6 +804,14 @@ def cmd_backlog(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_datapack(args) -> int:
+    from verinoda import datapack
+
+    res = datapack.lookup(_repo(args), args.what, args.name)
+    _emit(args, res, lambda r: print(datapack.render(r)))
+    return 0 if res["status"] == "found" else 2
+
+
 def cmd_when(args) -> int:
     from verinoda import freshness, index, when
 
@@ -2477,6 +2485,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("backlog", cmd_backlog, "a backlog item and the code comments that cite it, or the items that explain "
                                      "a line or symbol (docs/BACKLOG.md rows and headings)")
     sp.add_argument("target", help="an item id (69.3), path/File.java:LINE[-LINE], or a symbol")
+    sp = add("datapack", cmd_datapack, "Minecraft datapacks: entity tags checked but never added, objectives written "
+                                       "but never read, calls to missing functions; or one tag, score or function "
+                                       "across mcfunction and Java")
+    sp.add_argument("what", nargs="?", choices=["tag", "score", "function"], help="look one up (default: the summary)")
+    sp.add_argument("name", nargs="?", help="the tag, objective or function id (ns:path)")
     sp = add("when", cmd_when, "when a method runs: the events and callers that lead to it, with the conditions "
                                "around each call")
     sp.add_argument("symbol")
