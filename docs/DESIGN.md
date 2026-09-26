@@ -77,6 +77,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D54 | Shaders: uniform blocks and their Java writers | implemented | Built 2026-09-26 (section 27): `shaders.py`; `verinoda shader FIELD` / `--check`; analyze answers "where does `Block.Field.x` come from". Not done: shader functions in the graph, blocks filled in loops. |
 | D55 | English questions over Turkish-named code | implemented | Built 2026-09-26 (section 28): a symbol's leading comment is its own search text (schema 5); the seed dictionary read backwards with Turkish endings; 16 generic seed words. 30 mixed questions: top-3 8 -> 18 (English 0 -> 8). fastbench: analyze and text unchanged, JSON retrieval -4 facts. Not done: comment-learned pairs, a Turkish stemmer in the tokenizer. |
 | D56 | An analysis said once | implemented | Built 2026-09-26 (section 29): changed files listed once, uncertainties without repeats, six context claims, critique clipped; analyze facts unchanged, -1.6 % characters. Smaller passage budgets measured and dropped (facts lost). |
+| D57 | Java overloads; answers read as a person would | implemented | Built 2026-09-27 (section 30): each Java overload is its own node and a call binds to the overload its argument count fits; `when`, `trace` and name lookups take the whole overload group; "how does X work" with one subject is answered by what X calls (inference), entry-to-storage paths are matched by node, not label; a storage question gets the entry-to-storage paths through its own code; impact names the callers of the method asked about; a symbol's doc comment above its span prints where it is; the JSON answer keeps room for the next two candidates. JSON retrieve facts 253 -> 262, text and analyze unchanged. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3271,6 +3272,58 @@ fresh, so the stale-file saving does not show there). Tried and dropped: a small
 sub-question is met (2,400 characters: -15 % characters, -6 facts; 3,600: -9.5 %, -3 facts), and window lines
 without their path (the text is budget-bound: the characters saved were filled with more of the same, and the
 path was lost).
+
+## 30. Java overloads; answers read as a person would (D57, 2026-09-27)
+
+### 30.1 Why
+
+Reading `analyze` answers over a real Minecraft mod the way a person would showed six faults:
+
+- Java overloads were one node. The extractor mints a method's id from its class and name, so a second
+  `moon(server, night, full)` next to `moon(server)` was dropped: its span was the first overload's (a one-line
+  delegate), its body's calls were counted as the first one's (a self-call "`moon` calls `moon`"), and the method
+  that holds the logic had no passage of its own. The mod had 135 such groups (283 methods).
+- "How does the car move each tick?" was answered `met_with_inference` by three paths from the mod's initializer
+  to another class's saved data: a flow question with one subject fell back to entry-to-storage paths, and those
+  were matched to the question's code by *label* (`.tick()` names a hundred methods).
+- "What breaks if I change the signature of `Cls.method`?" got a file-level list (the file possibly affects a
+  backlog document, ...) at `weak_inference`, not the method's callers.
+- A class whose doc comment sits above its declaration printed empty, inverted windows (`File.java:104-76`):
+  D55 made the comment the class's own text, but the text renderer clamped a window to the span's first line.
+- A Turkish stem matched a function word (`yanıyor` "is burning" -> `yani` "that is"; `button` -> `but`).
+- In the JSON answer, characters freed anywhere went to one more edge between items already shown, and the
+  `more` list (the next candidates, often the one fact still missing) no longer fit.
+
+### 30.2 Decisions
+
+- Java: a method whose id is taken by an earlier overload of the same class gets `name_2`, `name_3` (same
+  label) and `arity` / `varargs` metadata on every overload. A call binds to the overloads its argument count
+  fits (same file, the cross-file member-call resolver, and Verinoda's `java_calls` pass, which counts the
+  arguments on the call's line, strings and nesting aware); when the count decides nothing, to all of them as
+  INFERRED. The AST cache schema (5) and the receiver sidecar (8) change: run `verinoda scan .` once.
+- A name that means several overloads of one class resolves to the group (the first is the node, a note lists
+  the lines); `when` merges the groups' paths (not the ones through another overload), `trace` tries every pair.
+- A flow sub-question with one subject and no storage word: when no entry-to-storage path passes through its code,
+  it is `mechanism` - the subject's calls answer it, at most `met_with_inference`, with an unknown that says
+  why. Entry-to-storage paths are matched to the question's code by node id (hops carry `from_id` / `to_id`).
+- The repository-wide entry-to-storage view stops at 20 paths; in a large project the code a question is about
+  is often on none of them ("where is the car's parking spot saved?" found none of 20). A storage question then
+  gets the paths through its own code (`architecture_map.paths_through`): from each of its symbols (a class
+  stands for its methods) the nearest write, and back from it the nearest entry point or a caller nothing in the
+  project calls (a framework override); "X writes at X" alone is not a path.
+- Impact on a symbol the question names (a method): "A change to `Cls.m` reaches the code that calls it:
+  `A.x` (file:line), ..." with the call-site lines as evidence, before the file-level view.
+- A symbol's leading comment prints at its own lines when a passage of it ranks.
+- Query expansions by Turkish stem or corpus prefix never add a function word; `yani cunku ancak bile diye zaten`
+  joined the Turkish stopwords, `kir` / `kirik` / `bozuk` the seed dictionary.
+- The JSON answer keeps room for the first two `more` candidates before edges between shown items.
+
+### 30.3 Measured
+
+fastbench, fresh indexes built by each code (fb_base57 / fb_new57b): text and analyze facts 315 / 318 unchanged,
+JSON retrieve 253 -> 262 (the `more` room: +9, no loss), characters within 0.2 %. The first expansion filter
+(every route) lost a fact where a lexicon identifier's part (`not` of `not_a_forge`) mattered: it applies to stems
+and prefixes only. The TR/EN ranking set (bench_tr) stays at top-3 18/30.
 
 ## Sources
 

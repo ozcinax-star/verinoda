@@ -53,6 +53,7 @@ class Resolution:
     note: str | None = None
     set_aside: list[str] = field(default_factory=list)    # exact nodes in copies / reference trees
     site: str | None = None                                # where a code name is spelled (not_indexed)
+    overloads: list[str] = field(default_factory=list)    # every overload when the name is one (``node`` the first)
 
     @property
     def exact(self) -> bool:
@@ -423,6 +424,14 @@ def _not_indexed(text: str, name: str, site: str, new: bool | None) -> Resolutio
     return Resolution(text, NOT_INDEXED, None, [], note, site=site)
 
 
+def _overloads(g, nodes: list[str]) -> bool:
+    """``nodes`` (two or more) are overloads: methods of one class under one label (Java gives each its own node)."""
+    if len(nodes) < 2 or len({g.label(n) for n in nodes}) != 1 or len({g.file(n) for n in nodes}) != 1:
+        return False
+    owners = {tuple(sorted(u for u, _ in g.in_edges(n, {"method"}))) for n in nodes}
+    return len(owners) == 1 and bool(next(iter(owners)))
+
+
 def resolve(g, text: str, *, stale: Iterable[str] = ()) -> Resolution:
     """Resolve ``text`` (see the module docstring). ``stale``: files changed since the index
     (:func:`verinoda.freshness.check`); a code name spelled only there, where the indexed version did
@@ -436,6 +445,12 @@ def resolve(g, text: str, *, stale: Iterable[str] = ()) -> Resolution:
     # the fuzzy scorer (seconds on a large graph) only for plain words: a name written as code is
     # never replaced by a similar one, and a node it names exactly is found by the lookups
     best, aside = exact_nodes(g, text, fallback=not code)
+    overloads = _overloads(g, best)
+    if overloads:  # one method name declared several times in one class: the name, not a tie
+        best = sorted(best, key=lambda n: g.line(n) or 0)
+        note = (f"'{text}' has {len(best)} overloads in {g.file(best[0])} (lines "
+                + ", ".join(str(g.line(n)) for n in best) + f"); the one at line {g.line(best[0])} is used")
+        return Resolution(text, EXACT, best[0], best, note, aside, overloads=list(best))
     if len(best) == 1:
         n = best[0]
         notes = []

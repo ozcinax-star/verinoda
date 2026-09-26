@@ -41,7 +41,8 @@ TR_STOPWORDS = frozenset(
     """nasil nerede nereye nereden neresi hangi hangisi hangileri ne neyi neler nedir neden nicin niye
     kim kime kimi kimin mi mu ve veya ya yada ile icin gibi bu su o bunu sunu onu bunlar bunlari bir
     da de ki daha en cok var yok olan oluyor olur ediliyor yapiliyor yapar acaba peki lutfen goster
-    anlat acikla nedir midir mudur hep her hangi sey seyi sekilde kadar gore ise ama fakat""".split()
+    anlat acikla nedir midir mudur hep her hangi sey seyi sekilde kadar gore ise ama fakat
+    yani cunku ancak bile diye zaten""".split()
 )
 EN_STOPWORDS = frozenset(
     """the a an and or of to in on at for from by with is are was were be been does do did how what

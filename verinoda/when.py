@@ -235,7 +235,14 @@ def run(g, symbol: str, *, stale=None, max_depth: int = MAX_DEPTH, max_paths: in
     r = naming.resolve(g, symbol, stale=stale)
     if r.status == naming.EXACT and r.node:
         res = when(g, r.node, max_depth=max_depth, max_paths=max_paths)
-        res["paths"] = [[{k: v for k, v in h.items() if not k.startswith("_")} for h in p] for p in res["paths"]]
+        for other in r.overloads[1:]:  # an overloaded name runs when any of its overloads does
+            more = when(g, other, max_depth=max_depth, max_paths=max_paths)
+            # not a path through another overload: that one's paths are listed already
+            fresh = [p for p in more["paths"] if p not in res["paths"]
+                     and not any(h.get("from_id") in r.overloads for h in p)]
+            res["paths"] += fresh[:max(0, max_paths - len(res["paths"]))]
+            res["truncated"] = res.get("truncated") or more.get("truncated")
+        res["paths"] =[[{k: v for k, v in h.items() if not k.startswith("_")} for h in p] for p in res["paths"]]
         return {"status": "found", **res, **({"resolution_note": r.note} if r.note else {})}
     cands = [{"id": c, "label": g.label(c), "at": f"{g.file(c)}:{g.line(c)}"} for c in list(r.candidates)[:10]]
     return {"status": "ambiguous" if r.status == naming.AMBIGUOUS else "not_found", "query": symbol,
@@ -248,6 +255,8 @@ def render(res: dict) -> str:
         out += [f"  - {c['label']} ({c['at']})" for c in res.get("candidates") or []]
         return "\n".join(out)
     out = [f"{res['symbol']} ({res['at']}) runs:"]
+    if res.get("resolution_note"):
+        out.insert(0, f"note: {res['resolution_note']}")
     if not res["paths"]:
         out.append("  no caller or registration found in the index")
     for k, path in enumerate(res["paths"], 1):

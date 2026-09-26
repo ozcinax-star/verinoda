@@ -1148,7 +1148,8 @@ def _h_flow(ctx: _Ctx, sub: _Sub) -> None:
                 "next_step": f"`verinoda trace {qp._bare(g.label(src[0]))} {qp._bare(g.label(tgt[0]))} --mode any` "
                              "for non-call links, or name the intermediate function"})
         return
-    _dataflow_paths(ctx, sub, src or _named_symbols(ctx, sub))
+    text = f"{sub.sq.get('text') or ''} {sub.sq.get('text_user_lang') or ''}"
+    _dataflow_paths(ctx, sub, src or _named_symbols(ctx, sub), mechanism=not qp.is_persistence_word(text))
 
 
 def _h_dataflow(ctx: _Ctx, sub: _Sub) -> None:
@@ -1163,24 +1164,34 @@ def _named_symbols(ctx: _Ctx, sub: _Sub) -> list[str]:
     return [n for n in sub.seeds if n in ctx.g.G and ctx.g.is_symbol(n) and n not in sub.subject_nodes][:5]
 
 
-def _dataflow_paths(ctx: _Ctx, sub: _Sub, src: list[str]) -> None:
-    """Entry -> persistence paths that touch this sub-question's code (never unrelated ones)."""
+def _dataflow_paths(ctx: _Ctx, sub: _Sub, src: list[str], *, mechanism: bool = False) -> None:
+    """Entry -> persistence paths that touch this sub-question's code (never unrelated ones).
+
+    ``mechanism``: a "how does X work" question with one subject and no storage word; when no such path
+    passes through it, what X calls answers it as an inference (``flags["mechanism"]``, :func:`judge`),
+    not a missing path to persistence nobody asked about."""
     g = ctx.g
     df = ctx.view("dataflow")
     ctx.step("dataflow_view", f"{len(df['paths'])} entry->sink paths")
     anchor = {i["id"] for i in sub.items if i["id"] in g.G} | set(src) | set(sub.seeds) | set(sub.subject_nodes)
     locs = {f"{g.file(n)}:{g.line(n)}" for n in anchor if n in g.G}
-    labels = {g.label(n) for n in anchor if n in g.G}
+    # by node, not by label: `.tick()` names a hundred methods, and a path through another one is not about this code
     if src:  # the question names where the data comes from: the path must pass through it
         src_locs = {f"{g.file(n)}:{g.line(n)}" for n in src}
-        src_labels = {g.label(n) for n in src}
+        src_ids = set(src)
         touched = [p for p in df["paths"] if p["entry"] in src_locs
-                   or (p["hops"] and p["hops"][0]["from"] in src_labels)]
-        touched = touched or [p for p in df["paths"] if any(h["from"] in src_labels or h["to"] in src_labels
+                   or (p["hops"] and p["hops"][0].get("from_id") in src_ids)]
+        touched = touched or [p for p in df["paths"] if any(h.get("from_id") in src_ids or h.get("to_id") in src_ids
                                                              for h in p["hops"])]
     else:  # paths through the code the question is about
         touched = [p for p in df["paths"] if p["entry"] in locs or p["sink"] in locs
-                   or any(h["from"] in labels or h["to"] in labels for h in p["hops"])]
+                   or any(h.get("from_id") in anchor or h.get("to_id") in anchor for h in p["hops"])]
+    if not touched and not mechanism:  # none of the repository-wide paths: the ones through this question's own code
+        # the code the question names; only a question that names none is about what ranked for it
+        named = [n for n in [*src, *sub.subject_nodes, *sub.seeds] if n in g.G and g.is_symbol(n)]
+        order = named or [i["id"] for i in sub.items if i["id"] in g.G and g.is_symbol(i["id"])]
+        touched = am.paths_through(g, list(dict.fromkeys(order))[:8])
+        ctx.step("paths_through", f"{len(touched)} path(s) through the question's code")
     made = 0
     for p in touched[:3]:
         if not ctx.budget.ok:
@@ -1198,7 +1209,12 @@ def _dataflow_paths(ctx: _Ctx, sub: _Sub, src: list[str]) -> None:
             ctx.step("verify_path", chain)
             made += 1
         _sink_claims(ctx, p)
-    if not touched:
+    if not touched and mechanism:
+        sub.flags["mechanism"] = True
+        _unknown(ctx, sub, {"question": sub.sq.get("text") or SUBQUESTIONS["flow"],
+                            "why": "one subject and no second end: what it calls is an inference about how it works",
+                            "next_step": "read the passages; for a path name both ends: `verinoda trace A B`"})
+    elif not touched:
         sub.flags["no_path"] = True
         why = ("no entry->sink path found over call edges" if not df["paths"] else
                f"none of the {len(df['paths'])} entry->sink paths passes through the code this question is about")
@@ -1239,7 +1255,8 @@ def _targets(ctx: _Ctx, sub: _Sub, n: int = 2) -> list[str]:
 
     out = [nid for nid in sub.seeds if nid in g.G and code(nid)]
     if out:  # "who calls place_order?": the callers of place_order, not of whatever ranked next to it
-        return out[:n]
+        # a Java method's name means all of its overloads (each is its own node, D57)
+        return list(dict.fromkeys(m for nid in out[:n] for m in index.overload_group(g, nid)))
     for it in sub.prod:
         if it["id"] in g.G and it["id"] not in out and code(it["id"]):
             out.append(it["id"])
@@ -1396,9 +1413,17 @@ def _h_tests(ctx: _Ctx, sub: _Sub) -> None:
     reach = testcode.reach(g)   # the tests view's reach (same depth), by test id: a same-named test elsewhere
     silent = (tv.get("test_files_without_recognised_tests") or {}).get("count") or 0
     observe: list[tuple[dict, list[str], str | None]] = []  # one tracer run for all targets
-    for t in _targets(ctx, sub):
+    targets = _targets(ctx, sub)
+
+    def reached(n: str) -> bool:
+        return bool(tv["covered"].get(f"{g.label(n)} ({g.file(n)}:{g.line(n)})"))
+
+    for t in targets:
         if testcode.is_test_file(g.file(t)):
             continue
+        group = index.overload_group(g, t)
+        if len(group) > 1 and not reached(t) and any(reached(o) for o in group if o in targets):
+            continue  # another overload of the name is reached: "no test reaches it" would read as the name's
         if not ctx.budget.ok:
             ctx.rec.skipped["tests"] += 1
             continue
@@ -1774,6 +1799,35 @@ def _h_impact(ctx: _Ctx, sub: _Sub) -> None:
     if not targets_n or not _begin(ctx, sub, "impact"):
         return
     targets = sorted({g.file(n) for n in targets_n if g.file(n)})
+    # a symbol the question names: the code that calls it (or hands it on) is what a change to it reaches first,
+    # each cited at its call site; the file-level view below says what else may follow
+    for t in [n for n in targets_n if n in sub.seeds and g.label(n).endswith(")")]:
+        callers: dict[str, str] = {}
+        for u, d in sorted(g.in_edges(t, {"calls", index.CALLBACK_RELATION}),
+                           key=lambda x: (testcode.is_test_file(g.file(x[0])), g.file(x[0]) or "", x[0])):
+            at = retrieval._at(d)
+            if u != t and at and u not in callers:
+                callers[u] = at
+        if not callers or not ctx.budget.ok:
+            continue
+        shown = list(callers.items())[:6]
+        evs = []
+        for _u, at in shown[:4]:
+            path, _, ln = at.rpartition(":")
+            if ln.isdigit():
+                ev = _src_ev(ctx.repo, path, int(ln), None, ctx.commit, check="call_site")
+                if ev is not None:
+                    evs.append((ev, "supports"))
+        more = f" and {len(callers) - len(shown)} more" if len(callers) > len(shown) else ""
+        def qual(n: str) -> str:  # Class.method: a bare method name is often shared
+            owner = next((qp._bare(g.label(o)) for o, _ in g.in_edges(n, {"method"})), "")
+            return f"{owner}.{qp._bare(g.label(n))}" if owner else qp._bare(g.label(n))
+
+        ctx.rec.claim(f"A change to `{qual(t)}` reaches the code that calls it: "
+                      + ", ".join(f"`{qual(u)}` ({at})" for u, at in shown) + more,
+                      kind="impact", status="strong_inference", evidence=evs, subjects=[g.file(t) or ""],
+                      uncertainties=["callers come from the call graph: reflective, dynamic and external callers "
+                                     "are not in it"])
     iv = am.impact(g, targets)
     ctx.step("impact_view", f"{len(iv['affected_files'])} files")
     if iv["affected_files"]:
@@ -2538,7 +2592,7 @@ CLAIM_EXISTS_KINDS = {
 _RANK = {s: i for i, s in enumerate(ORDER)}
 
 
-def _verdict_kinds(sq: dict) -> tuple[str, str, set]:
+def _verdict_kinds(sq: dict, flags: dict | None = None) -> tuple[str, str, set]:
     """``(done_when kind, min_status, claim kinds that can meet it)`` for a sub-question."""
     dw = sq.get("done_when") or {}
     kind = dw.get("kind") or qp.DEFAULT_DONE.get(sq.get("intent"), ("claim_exists",))[0]
@@ -2550,6 +2604,8 @@ def _verdict_kinds(sq: dict) -> tuple[str, str, set]:
         kinds = CLAIM_EXISTS_KINDS[sq["intent"]]
     if sq.get("intent") == "callers" and _asks_when_runs(sq):  # the event and the conditions answer it too
         kinds = kinds | {"flow"}
+    if (flags or {}).get("mechanism"):  # "how does X move": X's calls, never more than an inference (judge)
+        kinds = kinds | {"relation"}
     return kind, min_status, kinds
 
 
@@ -2562,7 +2618,7 @@ def _asks_when_runs(sq: dict) -> bool:
 def answer_claims(sq: dict, claims: list[dict], flags: dict | None = None) -> list[str]:
     """The claims that answer a sub-question, strongest first: of a kind its ``done_when`` asks for,
     about its subject (not ``off_subject`` context), not stale, contradicted or unknown."""
-    _kind, _min, kinds = _verdict_kinds(sq)
+    _kind, _min, kinds = _verdict_kinds(sq, flags)
     off = set((flags or {}).get("off_subject") or [])
     ans = [c for c in claims if c.get("kind") in kinds and c["id"] not in off
            and c.get("status") in _RANK and c["status"] not in ("unknown", "stale", "contradicted")]
@@ -2620,7 +2676,7 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
         if not live:
             return "unmet"
         return "met" if min(live, key=lambda c: _RANK[c["status"]])["status"] in VERIFIED else "met_with_inference"
-    kind, min_status, kinds = _verdict_kinds(sq)
+    kind, min_status, kinds = _verdict_kinds(sq, flags)
     live = [c for c in claims if c.get("kind") in kinds and c.get("status") in _RANK and c["status"] != "unknown"]
     off = set(flags.get("off_subject") or [])
     about = [c for c in live if c["id"] not in off]  # context claims about other code than the question's
@@ -2642,7 +2698,7 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
     best = min(strong, key=lambda c: _RANK[c["status"]])["status"]
     if best in VERIFIED and _RANK[best] <= _RANK.get(min_status, _RANK[MIN_STATUS_DEFAULT]) \
             and not flags.get("may_ask_for_choice") and not flags.get("stale_subject") \
-            and not flags.get(verdict_gate.CAPPED):
+            and not flags.get(verdict_gate.CAPPED) and not flags.get("mechanism"):
         return "met"
     return "met_with_inference"
 

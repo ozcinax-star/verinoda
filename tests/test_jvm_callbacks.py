@@ -507,7 +507,7 @@ def test_strings_comments_text_blocks_and_non_arguments_are_not_references(cb):
     assert ("Net.typed", "Handler.onEvent") in regs      # `var::m` follows the declared type
     assert not any(v == "Net.helper" for _u, v in regs)  # an assignment, a string, a comment, a text block
     assert not any(u == "Net.constructors" for u, _v in regs)   # `::new` is a constructor
-    assert ("Net.overloaded", "Net.twice") in regs   # the graph has one node for the overloads of a name
+    assert ("Net.overloaded", "Net.twice") in regs   # the first overload stands for the name (D57)
 
 
 def test_a_class_is_resolved_by_the_imports_or_no_edge(tmp_path):

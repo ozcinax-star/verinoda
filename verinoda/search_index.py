@@ -1580,6 +1580,10 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
         for t in (term,) if indexed else word_tokens(term):
             if t == src:
                 continue
+            # a stem or a prefix that only matches a function word (yan -> yani, button -> but); a lexicon
+            # identifier's own parts (not_a_forge) stay
+            if via.startswith(("turkish stem", "corpus prefix")) and (t in EN_STOPWORDS or t in textnorm.TR_STOPWORDS):
+                continue
             if t in weights:
                 if weight > weights[t]:  # the user's own words (1.0) are never lowered
                     weights[t] = weight

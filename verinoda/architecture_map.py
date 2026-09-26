@@ -420,6 +420,78 @@ def _aside_roots(g: Graph) -> tuple[str, ...]:
         return ()
 
 
+def _render_path(g: Graph, p: list[str], sinks: dict, roots: tuple[str, ...] = ()) -> dict:
+    hops = []
+    for a, b in zip(p, p[1:]):
+        ds = g.G.get_edge_data(a, b) or {}
+        d = next(iter(ds.values()), {}) if ds else {}
+        hops.append({"from": g.label(a), "to": g.label(b), "from_id": a, "to_id": b, "relation": d.get("relation"),
+                     "confidence": d.get("confidence"), "at": _edge_loc(d),
+                     **({"derived_by": d["_origin"]} if str(d.get("_origin", "")).startswith("verinoda") else {})})
+    entry = _loc(g, p[0])
+    return {"entry": entry, "sink": _loc(g, p[-1]), "sink_kinds": sorted({s["kind"] for s in sinks[p[-1]]}),
+            "sink_lines": [s["at"] for s in sinks[p[-1]]][:4], "hops": hops,
+            **({"in": ASIDE} if roots and (entry or "").startswith(roots) else {})}
+
+
+def _cached(g: Graph, key: str, fn):
+    cache = g.__dict__.setdefault("_am_cache", {})
+    if key not in cache:
+        cache[key] = fn(g)
+    return cache[key]
+
+
+def paths_through(g: Graph, nodes: list[str], max_depth: int = 5, max_paths: int = 3) -> list[dict]:
+    """Entry -> ... -> node -> ... -> sink paths through the given nodes, in their order: from each node the nearest
+    persistence sink over call edges, and back from it the nearest entry point or uncalled caller (none within
+    ``max_depth``: the path starts at the node). :func:`dataflow` caps its paths for the whole repository; in a large one the code a question is
+    about is often on none of them."""
+    sinks = _cached(g, "sinks", _sinks)
+    entries = {e["id"] for e in _cached(g, "entries", entry_points)}
+    out: list[dict] = []
+    seen_paths: set[tuple[str, ...]] = set()
+    expanded: list[str] = []
+    for n in nodes:  # a class stands for its methods (a SavedData class writes in one of them)
+        expanded.append(n)
+        if n in g.G and g.G.nodes[n].get("_callable_class"):
+            expanded += sorted((v for v, _ in g.out_edges(n, {"method"})), key=lambda v: g.line(v) or 0)[:12]
+    for n in dict.fromkeys(expanded):
+        if n not in g.G or len(out) >= max_paths:
+            continue
+        fwd = _bfs(g, n, lambda c: [v for v, _ in g.out_edges(c, FLOW_RELATIONS)], lambda c: c in sinks, max_depth)
+        if not fwd:
+            continue
+        def callers(c: str) -> list[str]:
+            return [u for u, _ in g.in_edges(c, FLOW_RELATIONS) if not is_test_file(g.file(u) or "")]
+
+        # back to an entry point, or to the first caller nothing in the project calls (the framework does:
+        # a game's tick override, a handler the index cannot see registered)
+        back = _bfs(g, n, callers, lambda c: c in entries or not callers(c), max_depth)
+        path = (list(reversed(back)) if back else [n]) + fwd[1:]
+        if (len(path) < 2 and path[0] not in entries) or tuple(path) in seen_paths:  # "X writes at X" says nothing
+            continue
+        seen_paths.add(tuple(path))
+        out.append(_render_path(g, path, sinks))
+    return out
+
+
+def _bfs(g: Graph, start: str, step, goal, max_depth: int) -> list[str] | None:
+    """The shortest path from ``start`` to a node ``goal`` accepts (``start`` itself included)."""
+    q = deque([[start]])
+    seen = {start}
+    while q:
+        path = q.popleft()
+        if goal(path[-1]):
+            return path
+        if len(path) > max_depth:
+            continue
+        for v in sorted(set(step(path[-1]))):
+            if v not in seen and g.file(v):
+                seen.add(v)
+                q.append(path + [v])
+    return None
+
+
 def dataflow(g: Graph, max_depth: int = 6, max_paths: int = 20) -> dict:
     """Entry points -> call paths -> persistence sinks. The project's own entry points come first: one in a
     detected copy of the project or a configured reference tree is listed after them (``"in"``) and its
@@ -453,20 +525,7 @@ def dataflow(g: Graph, max_depth: int = 6, max_paths: int = 20) -> dict:
                 if v not in seen and g.file(v):
                     seen.add(v)
                     q.append(path + [v])
-    rendered = []
-    for p in paths:
-        hops = []
-        for a, b in zip(p, p[1:]):
-            ds = g.G.get_edge_data(a, b) or {}
-            d = next(iter(ds.values()), {}) if ds else {}
-            hops.append({"from": g.label(a), "to": g.label(b), "relation": d.get("relation"),
-                         "confidence": d.get("confidence"), "at": _edge_loc(d),
-                         **({"derived_by": d["_origin"]} if str(d.get("_origin", "")).startswith("verinoda") else {})})
-        entry = _loc(g, p[0])
-        rendered.append({"entry": entry, "sink": _loc(g, p[-1]),
-                         "sink_kinds": sorted({s["kind"] for s in sinks[p[-1]]}),
-                         "sink_lines": [s["at"] for s in sinks[p[-1]]][:4], "hops": hops,
-                         **({"in": ASIDE} if roots and (entry or "").startswith(roots) else {})})
+    rendered = [_render_path(g, p, sinks, roots) for p in paths]
     limits = ["paths follow call edges only; values are not tracked (no taint analysis)",
               "Python param.method() calls are resolved from type annotations/local constructors "
               "(edges marked derived_by=verinoda.receiver, INFERRED)",

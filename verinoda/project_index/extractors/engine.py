@@ -814,6 +814,31 @@ def _swift_declaration_keyword(node) -> str | None:
             return c.type
     return None
 
+def _java_arity(node) -> tuple[int, bool] | None:
+    """``(parameter count, varargs)`` of a Java method or constructor declaration."""
+    params = node.child_by_field_name("parameters")
+    if params is None:
+        return None
+    ps = [c for c in params.named_children if c.type in ("formal_parameter", "spread_parameter")]
+    return len(ps), any(c.type == "spread_parameter" for c in ps)
+
+
+def _java_n_args(call) -> int | None:
+    """The number of arguments of a Java call (None when the node has no argument list)."""
+    args = call.child_by_field_name("arguments")
+    if args is None:
+        return None
+    return sum(1 for c in args.named_children if c.type not in ("line_comment", "block_comment"))
+
+
+def java_arity_fits(arity, n_args) -> bool:
+    """A call with ``n_args`` arguments can bind to a declaration of ``arity`` (``(count, varargs)``)."""
+    if not arity or n_args is None:
+        return True
+    k, varargs = arity
+    return n_args == k or (bool(varargs) and n_args >= k - 1)
+
+
 def _python_pre_scan_underscore_collisions(root_node, source: bytes, stem: str) -> dict[str, set[str]]:
     """Pre-scan a Python module for name-only differences that collapse to one node id.
 
@@ -3586,6 +3611,9 @@ def _extract_generic(
     # while parameters and locals belong only to their declaring method.
     java_field_types: dict[str, dict[str, str]] = {}
     java_method_scopes: dict[int, tuple[object, str]] = {}
+    # Java overloads: each has its own node (``name_2``...); a call binds to the one its argument count fits
+    java_arity: dict[str, tuple[int, bool]] = {}
+    java_overloads: dict[str, list[str]] = {}  # every overload's nid -> the group, in declaration order
     # C# receiver typing is method-scoped too (#2299): class fields/properties
     # are shared, parameters and locals belong only to their declaring method —
     # the old file-wide table let one method's untypable rebinding poison a
@@ -4957,6 +4985,30 @@ def _extract_generic(
                     func_nid = _python_underscore_salted_nid(
                         func_nid, sanitized_name, python_underscore_groups
                     )
+                java_overload_meta = None
+                if config.ts_module == "tree_sitter_java":
+                    arity = _java_arity(node)
+                    if func_nid in seen_ids and func_nid in java_arity:
+                        # an overload gets its own node (same label): add_node would drop it, and its
+                        # body's calls would land on the first overload, its lines outside that span
+                        first = func_nid
+                        k = 2
+                        while _make_id(parent_class_nid, f"{sanitized_name}_{k}") in seen_ids:
+                            k += 1
+                        func_nid = _make_id(parent_class_nid, f"{sanitized_name}_{k}")
+                        group = java_overloads.setdefault(first, [first])
+                        group.append(func_nid)
+                        java_overloads[func_nid] = group
+                        for existing in nodes:  # the first one learns it is overloaded too
+                            if existing["id"] == first and "arity" not in (existing.get("metadata") or {}):
+                                fa = java_arity[first]
+                                existing["metadata"] = sanitize_metadata(
+                                    {**(existing.get("metadata") or {}), "arity": fa[0], "varargs": fa[1]})
+                                break
+                        if arity is not None:
+                            java_overload_meta = {"arity": arity[0], "varargs": arity[1]}
+                    if arity is not None and func_nid not in seen_ids:
+                        java_arity[func_nid] = arity
                 ruby_method_metadata = None
                 if ruby_method_kind is not None:
                     kinds = ruby_method_kinds.setdefault(func_nid, set())
@@ -4981,7 +5033,7 @@ def _extract_generic(
                     func_nid,
                     f".{func_name}()",
                     line,
-                    metadata=ruby_method_metadata,
+                    metadata=ruby_method_metadata or java_overload_meta,
                 )
                 add_edge(parent_class_nid, func_nid, "method", line)
             else:
@@ -6369,21 +6421,27 @@ def _extract_generic(
                 # and must not become a calls hub. Real definitions have a
                 # source_file and continue through the normal call path.
                 external_stub_target = bool(tgt_nid and not nid_to_sf.get(tgt_nid))
+                tgt_nids = [tgt_nid]
+                if tgt_nid in java_overloads:  # the overloads the argument count fits; all of them if it decides nothing
+                    n_args = _java_n_args(node)
+                    fits = [x for x in java_overloads[tgt_nid] if java_arity_fits(java_arity.get(x), n_args)]
+                    tgt_nids = [x for x in (fits or java_overloads[tgt_nid]) if x != caller_nid] or [tgt_nid]
                 if tgt_nid and not external_stub_target:
-                    pair = (caller_nid, tgt_nid)
-                    if pair not in seen_call_pairs:
-                        seen_call_pairs.add(pair)
-                        line = node.start_point[0] + 1
-                        edges.append({
-                            "source": caller_nid,
-                            "target": tgt_nid,
-                            "relation": "calls",
-                            "context": "call",
-                            "confidence": "EXTRACTED",
-                            "source_file": str_path,
-                            "source_location": f"L{line}",
-                            "weight": 1.0,
-                        })
+                    for one in tgt_nids:
+                        pair = (caller_nid, one)
+                        if pair not in seen_call_pairs:
+                            seen_call_pairs.add(pair)
+                            line = node.start_point[0] + 1
+                            edges.append({
+                                "source": caller_nid,
+                                "target": one,
+                                "relation": "calls",
+                                "context": "call",
+                                "confidence": "EXTRACTED" if len(tgt_nids) == 1 else "INFERRED",
+                                "source_file": str_path,
+                                "source_location": f"L{line}",
+                                "weight": 1.0,
+                            })
                 elif callee_name and not tgt_nid:
                     # In Python, if an unqualified call names a local non-callable variable or parameter,
                     # do NOT append it to raw_calls (#3405 Part 3/4).
@@ -6431,6 +6489,9 @@ def _extract_generic(
                                 rc_entry["receiver_type"] = receiver_type
                         if config.ts_module == "tree_sitter_java":
                             rc_entry["lang"] = "java"
+                            n_args = _java_n_args(node)
+                            if n_args is not None:
+                                rc_entry["n_args"] = n_args
                             receiver_type = (receiver_types or {}).get(member_receiver or "")
                             if receiver_type:
                                 rc_entry["receiver_type"] = receiver_type

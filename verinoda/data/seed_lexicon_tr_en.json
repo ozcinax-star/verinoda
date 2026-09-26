@@ -253,6 +253,9 @@
    "size",
    "dimension"
   ],
+  "bozuk": [
+   "broken"
+  ],
   "bul": [
    "find",
    "lookup",
@@ -1099,8 +1102,14 @@
    "authentication",
    "login"
   ],
+  "kir": [
+   "break"
+  ],
   "kiraci": [
    "tenant"
+  ],
+  "kirik": [
+   "broken"
   ],
   "kirp": [
    "trim",

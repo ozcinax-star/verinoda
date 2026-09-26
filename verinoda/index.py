@@ -49,7 +49,7 @@ CODE_RELATIONS = {"calls", "imports", "imports_from", "uses", "inherits", "metho
 FLOW_RELATIONS = {"calls"}
 RECEIVER_ORIGIN = "verinoda.receiver"
 JAVA_CALL_ORIGIN = "verinoda.java_calls"
-RECEIVER_SIDECAR_VERSION = 7   # 3: a receiver's class is the one the calling file can see (_visible_class); 4: and JVM method references as `registers` edges; 6: lambdas too (D47); 7: and Mixin edges (D48)
+RECEIVER_SIDECAR_VERSION = 8   # 8: Java overloads bound by argument count; 3: a receiver's class is the one the calling file can see (_visible_class); 4: and JVM method references as `registers` edges; 6: lambdas too (D47); 7: and Mixin edges (D48)
 HEURISTIC_SPAN_CAP = 80        # the next-symbol fallback never spans more lines than this
 PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc",
                   ".pdf", ".docx", ".xlsx", ".pptx")  # the last four: their text view (doctext.py)
@@ -1756,6 +1756,51 @@ def _java_code_lines(text: str, *, kotlin: bool = False) -> list[str]:
     return out
 
 
+def overload_group(g: Graph, n: str) -> list[str]:
+    """The Java overloads ``n`` belongs to (the methods of its class under its label, declaration order), or
+    ``[n]``: the extractor gives each its own node with ``arity`` metadata (docs/DESIGN.md D57)."""
+    if n not in g.G or "arity" not in (g.G.nodes[n].get("metadata") or {}):
+        return [n]
+    owners = [u for u, _ in g.in_edges(n, {"method"})]
+    if not owners:
+        return [n]
+    same = [v for v, _ in g.out_edges(owners[0], {"method"}) if g.label(v) == g.label(n)]
+    return sorted(set(same) | {n}, key=lambda v: g.line(v) or 0)
+
+
+def _call_arg_count(line: str, paren: int) -> int | None:
+    """Arguments of the call whose ``(`` is at ``paren``; None when the list does not close on this line."""
+    depth, commas, seen, quote, prev = 0, 0, False, "", ""
+    for ch in line[paren:]:
+        if quote:  # a comma in a string literal separates nothing
+            quote = "" if ch == quote and prev != "\\" else quote
+            prev = "" if prev == "\\" else ch
+            continue
+        prev = ch
+        if ch in "\"'":
+            quote, seen = ch, True
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth == 0:
+                return commas + 1 if seen else 0
+        elif depth == 1 and ch == ",":
+            commas += 1
+        elif depth >= 1 and not ch.isspace():
+            seen = True
+    return None
+
+
+def _fits_arity(node: dict, n_args: int | None) -> bool:
+    """A Java overload (its node's ``arity``/``varargs`` metadata) takes ``n_args`` arguments."""
+    md = node.get("metadata") or {}
+    if n_args is None or "arity" not in md:
+        return True
+    k = int(md["arity"])
+    return n_args == k or (bool(md.get("varargs")) and n_args >= k - 1)
+
+
 def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
     """``calls`` edges for Java ``Cls.method(...)`` and ``var.method(...)`` the extractor did not record.
 
@@ -1767,7 +1812,7 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
     field (``Wisp w = ...``). Edges are ``INFERRED`` with ``_origin=verinoda.java_calls``.
     """
     classes: dict[str, list[tuple[str, str]]] = {}
-    methods: dict[tuple[str, str], str] = {}
+    methods: dict[tuple[str, str], list[str]] = {}  # (class, name) -> its overloads
     for n, d in g.G.nodes(data=True):
         f = d.get("source_file") or ""
         if f.endswith(JVM_SUFFIXES) and d.get("_callable_class"):
@@ -1792,7 +1837,7 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
             line = g.line(m)
             owners = [(b - a, cid) for a, b, cid in class_spans.get(f, []) if line and a <= line <= b]
             if owners:
-                methods.setdefault((min(owners)[1], g.label(m).strip(".()")), m)
+                methods.setdefault((min(owners)[1], g.label(m).strip(".()")), []).append(m)
     if read is None:
         def read(f: str) -> str | None:
             try:
@@ -1860,15 +1905,21 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
                     else:
                         continue
                     cid = resolve(cls)
-                    target = methods.get((cid, meth)) if cid else None
-                    if not target or target == n or (n, target) in have:
+                    group = methods.get((cid, meth)) if cid else None
+                    if not group or any((n, t) in have for t in group):  # an overload already bound here
                         continue
-                    have.add((n, target))
+                    if len(group) > 1:  # overloads: the ones the argument count fits, else all of them
+                        k = _call_arg_count(code[i - 1], m.end() - 1)
+                        group = [t for t in group if _fits_arity(g.G.nodes[t], k)] or group
                     ctx = f"{recv}.{meth}()" + ("" if how == "class" else f" on {cls}")
-                    out.append((n, target, {"relation": "calls", "confidence": "INFERRED",
-                                            "confidence_score": 0.9 if how == "class" else 0.75,
-                                            "_origin": JAVA_CALL_ORIGIN, "source_file": f,
-                                            "source_location": f"L{i}", "context": ctx}))
+                    for target in group:
+                        if target == n or (n, target) in have:
+                            continue
+                        have.add((n, target))
+                        out.append((n, target, {"relation": "calls", "confidence": "INFERRED",
+                                                "confidence_score": 0.9 if how == "class" else 0.75,
+                                                "_origin": JAVA_CALL_ORIGIN, "source_file": f,
+                                                "source_location": f"L{i}", "context": ctx}))
     return out
 
 
@@ -2238,7 +2289,7 @@ def java_registers_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
         return min(owners)[1] if owners else None
 
     # (class, name) -> methods; the class is the extractor's (`method` edge: an object expression's methods are
-    # its own), else the innermost class span; "<top>:file" for a Kotlin top-level function. Overloads are one node.
+    # its own), else the innermost class span; "<top>:file" for a Kotlin top-level function.
     methods: dict[tuple[str, str], list[str]] = {}
     for f, ms in by_file.items():
         for m in ms:
@@ -2248,6 +2299,10 @@ def java_registers_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
 
     def unique(cid: str | None, name: str) -> str | None:
         hit = methods.get((cid, name)) if cid else None
+        if hit and len(hit) > 1 and all("arity" in (g.G.nodes[m].get("metadata") or {}) for m in hit):
+            # Java overloads (D57): which one a reference means is the functional interface's business; the
+            # first stands for the name, as the one node did before (`when` follows every overload)
+            return min(hit, key=lambda m: g.line(m) or 0)
         return hit[0] if hit and len(hit) == 1 else None
 
     if read is None:

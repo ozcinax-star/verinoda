@@ -66,6 +66,7 @@ OUTLINE_ITEMS = 3           # JSON items that carry calls / called_by
 # items 4-7 half of it, later items only their matched lines; then "more".
 JSON_FULL_ITEMS, JSON_EXCERPT_ITEMS, JSON_TAIL_LINES = 3, 7, 3
 MAX_MORE = 15               # further candidates listed as "path:a-b name" after the items
+MORE_RESERVED = 2           # of them, kept room for before the edges between items
 MAX_CALLS, MAX_CALLERS, MAX_CALLERS2 = 12, 8, 4
 
 # text rendering (D20)
@@ -404,6 +405,22 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
         if in_graph:
             higher[h.nid] = h.score
     chosen = {i["id"]: i["score"] for i in items}
+    shown = {i["id"] for i in items}
+
+    def more_entries():
+        for h in rk.hits[rest_from:]:
+            if h.key in shown or (not include_tests and testcode.is_test_file(h.file)):
+                continue
+            yield f"{h.file}:{h.a}-{h.b} {_clip(h.qual or h.name or '(module level)', 60)}"
+
+    # the next two candidates the budget cut are kept room for: a lead to an item not shown yet is worth
+    # more than one more edge between items that are
+    reserve = 0
+    for k, entry in enumerate(more_entries()):
+        if k == MORE_RESERVED:
+            break
+        reserve += _cost(entry) + (len(', "more": []') if k == 0 else 0)
+    budget.max_chars -= reserve
     edges = []
     # edges between returned items, those joining the most relevant items first
     between = sorted(((u, v, d) for u in chosen if u in g.G for v, d in g.out_edges(u, EXPAND_RELATIONS)
@@ -419,15 +436,12 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
         if not budget.take(_cost(e)):
             break
         edges.append(e)
-    shown = {i["id"] for i in items}
+    budget.max_chars += reserve
     more: list[str] = []
     more_cost = len(', "more": []')  # listed inside "budget": the candidates the budget cut
-    for h in rk.hits[rest_from:]:
-        if len(more) >= MAX_MORE or h.key in shown:
-            continue
-        if not include_tests and testcode.is_test_file(h.file):
-            continue
-        entry = f"{h.file}:{h.a}-{h.b} {_clip(h.qual or h.name or '(module level)', 60)}"
+    for entry in more_entries():
+        if len(more) >= MAX_MORE:
+            break
         if not budget.take(_cost(entry) + more_cost):
             break
         more_cost = 0
@@ -651,7 +665,8 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
         else:
             k = 2 if full else 1
             for s, _pid, pa, pb in h.passages:
-                pa, pb = max(a, pa - 1), min(b, pb + 1)
+                # a symbol's leading comment lies above its span: that passage is printed where it is
+                pa, pb = (max(a, pa - 1), min(b, pb + 1)) if pa >= a else (pa, min(pb, a - 1))
                 if any(not (pb < x or pa > y) for x, y in wins):
                     continue
                 wins.append((pa, min(pb, pa + TEXT_PASSAGE_LINES - 1)))
@@ -944,11 +959,22 @@ def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int
             continue
         if not D.has_edge(u, v) or d.get("confidence") == "EXTRACTED":
             D.add_edge(u, v, **d)
-    paths = _simple_paths(D, s, t, cutoff, max_paths)
+    # an overloaded name: a path to (or from) any of its overloads
+    ends = [(a, b) for a in (res["source"].overloads or [s]) for b in (res["target"].overloads or [t]) if a != b]
+
+    def all_paths(DG) -> list[list[str]]:
+        found: list[list[str]] = []
+        for a, b in ends:
+            found += _simple_paths(DG, a, b, cutoff, max_paths - len(found))
+            if len(found) >= max_paths:
+                break
+        return found
+
+    paths = all_paths(D)
     if not paths and callbacks:
         D2 = _with_callbacks(g, D)
         if D2 is not None:
-            paths = _simple_paths(D2, s, t, cutoff, max_paths)
+            paths = all_paths(D2)
             if paths:
                 D = D2
     if not paths:
