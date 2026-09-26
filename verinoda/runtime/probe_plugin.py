@@ -149,6 +149,36 @@ def _inside_run_dir(path) -> bool:
         return False
 
 
+_ENV_EVENTS = ("os.putenv", "os.unsetenv")
+_PACKAGE_DIRS = (os.sep + "site-packages" + os.sep, os.sep + "dist-packages" + os.sep)
+
+
+def _library_import() -> bool:
+    """Is a library (the standard library or an installed package, not the project) running its module body
+    under this event? numpy sets OPENBLAS_MAIN_FREE in ``os.environ`` when it is imported: the same in both runs
+    and part of loading the library, not of the code under test. The innermost module body on the stack
+    decides, and only when no project frame comes first: project code that sets an environment variable (at
+    import or in a call, directly or through a library function) is still a side effect."""
+    f = sys._getframe(1)
+    for _ in range(64):
+        if f is None:
+            return False
+        code = f.f_code
+        fn = code.co_filename
+        if fn == __file__ or fn in ("<frozen os>", os.__file__):
+            f = f.f_back
+            continue
+        library = fn.startswith("<frozen ") or (
+            not fn.startswith("<") and (any(d in os.path.normcase(os.path.abspath(fn)) for d in _PACKAGE_DIRS)
+                                        or not _inside_run_dir(fn)))
+        if not library:
+            return False
+        if code.co_name == "<module>" and f.f_globals.get("__name__") != "__main__":
+            return True
+        f = f.f_back
+    return False
+
+
 _LOOPBACK = ("127.0.0.1", "::1")
 
 
@@ -199,6 +229,8 @@ def _classify(event: str, args) -> str | None:
     if event in _PROC_EVENTS or event.startswith("os.exec") or event.startswith("os.spawn"):
         return "process"
     if event in _STATE_EVENTS:
+        if event in _ENV_EVENTS and _library_import():
+            return None
         return "global-state"
     if event == "sqlite3.connect":
         db = args[0] if args else None
