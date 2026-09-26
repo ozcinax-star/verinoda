@@ -1497,8 +1497,9 @@ def test_stdio_server_found_through_repo_of_names_its_build(tmp_path):
     err = tmp_path / "server.err"
     info = _session(proj, err, body, params=_server_params(proj, ["--repo-of", ".mcp.json"], cwd=proj / "pkg",
                                                            launcher=installer._module_argv(sys.executable)))
-    assert info.name == "verinoda" and info.version == buildinfo.server_version()
+    want = buildinfo.server_version(buildinfo.collect())  # now, not this process's cached value (HEAD may move)
+    assert info.name == "verinoda" and info.version == want
     assert info.version.startswith(buildinfo.build_info()["version"] + "+")
     log = err.read_text(encoding="utf-8", errors="replace")
     assert f"verinoda mcp: serving {proj.resolve()} over stdio" in log
-    assert f"; build {buildinfo.server_version()} ({sys.executable})" in log
+    assert f"; build {want} ({sys.executable})" in log
