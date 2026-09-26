@@ -1286,8 +1286,8 @@ def method_reference_at(text: str, rel: str, line: int, token: str) -> str | Non
 
 
 def registers_reason(ref: str, token: str, line: int) -> str:
-    return (f"line {line} passes `{ref}` as a callback (a method reference): it registers `{token}` to be "
-            "called later, it does not call it here")
+    return (f"line {line} passes `{ref}` as a callback (a method reference): it hands `{token}` over to be called "
+            "(later, or at once by forEach/map), it does not call it here")
 
 
 def call_site(repo: Path | str | None, path: str, line: int, target_label: str, *, caller: str | None = None,

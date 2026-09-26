@@ -831,7 +831,9 @@ class Snapshot:
         relation ``registers (callback)``) and what uses that. Found notes keep their depth; True when
         :data:`MAX_IMPACT` stopped it."""
         g = self.g
-        if not any(True for _ in g.edges({"registers"})):
+        from verinoda.index import has_registers
+
+        if not has_registers(g):
             return False
         heap = [(d, n) for n, d in dist.items()]
         heapq.heapify(heap)

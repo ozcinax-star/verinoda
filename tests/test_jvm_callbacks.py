@@ -583,3 +583,78 @@ def test_claim_add_on_a_method_reference_is_weaker_than_a_call(glow, tmp_path, c
                      "--json"]) == 0
     real = json.loads(capsys.readouterr().out)
     assert real["status"] == "strong_inference" and not real["uncertainties"]
+
+
+# -- review fixes (2026-09-26) ------------------------------------------------------------------------------
+
+JAVA_OUTER = """package com.rv;
+
+public class Outer {
+    public void anonWithLambdaArg(Bus bus) {
+        bus.register(new Handler(() -> { return 1; }) {
+            void on() { bus.register(this::helper); }
+        });
+    }
+
+    public void anonWithArrayArg(Bus bus) {
+        bus.register(new Handler(new int[]{1, 2}) {
+            void on() { bus.register(this::helper); }
+        });
+    }
+
+    public void named(Bus bus) {
+        bus.register(this::helper);
+    }
+
+    // a text block starts with \"\"\" - this is a comment, not code
+    public void afterComment(Bus bus) {
+        bus.register(Outer::helper);
+    }
+
+    static void helper() {
+    }
+}
+"""
+
+
+def test_review_fixes_anonymous_classes_with_braces_in_arguments_and_triple_quotes_in_a_comment(tmp_path):
+    root = tmp_path / "rv"
+    _write(root, "src/main/java/com/rv/Outer.java", JAVA_OUTER)
+    _write(root, "src/main/java/com/rv/Bus.java",
+           "package com.rv;\n\npublic class Bus {\n    void register(Object o) {\n    }\n}\n")
+    _write(root, "src/main/java/com/rv/Handler.java",
+           "package com.rv;\n\npublic class Handler {\n    Handler(Object o) {\n    }\n}\n")
+    g = index.load(_scan(root, git=False))
+    regs = _regs(g)
+    assert ("Outer.named", "Outer.helper") in regs
+    assert not any(u in ("Outer.anonWithLambdaArg", "Outer.anonWithArrayArg") for u, _v in regs), regs
+    assert ("Outer.afterComment", "Outer.helper") in regs   # the comment's quotes did not blank the rest
+    assert index.has_registers(g) and g.__dict__.get("_has_registers") is True
+
+
+def test_an_event_bus_subscriber_is_not_a_mod_class(tmp_path):
+    root = tmp_path / "mdk"
+    _write(root, "src/main/java/com/mdk/ExampleMod.java", """package com.mdk;
+
+@Mod("examplemod")
+public class ExampleMod {
+    public ExampleMod() {
+    }
+
+    @Mod.EventBusSubscriber(modid = "examplemod")
+    public static class ClientModEvents {
+    }
+}
+""")
+    _write(root, "src/main/java/com/mdk/ForgeEvents.java", """package com.mdk;
+
+@Mod.EventBusSubscriber
+public class ForgeEvents {
+}
+""")
+    g = index.load(_scan(root, git=False))
+    eps = am.framework_entries(g)
+    why = {g.label(n).strip(".()"): " ".join(v["why"]) for n, v in eps.items()}
+    mod = [k for k, w in why.items() if "@Mod class" in w]
+    assert mod and all(k in ("ExampleMod",) for k in mod), why
+    assert "@Mod class" not in why.get("ForgeEvents", "") and "@Mod class" not in why.get("ClientModEvents", "")

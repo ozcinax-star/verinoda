@@ -1242,7 +1242,9 @@ def _walk_callbacks(ctx: _Ctx, walk: dict, depth: int = DEPTH) -> None:
     over by reference (a ``registers`` edge, JVM ``Cls::m``) and what depends on it, over the relations of the
     change's kind. The nodes found before keep their distance and chain."""
     g = ctx.g
-    if not any(True for _ in g.edges({"registers"})):
+    from verinoda.index import has_registers
+
+    if not has_registers(g):
         return
     heap = [(info["dist"], n) for n, info in walk.items()]
     heapq.heapify(heap)

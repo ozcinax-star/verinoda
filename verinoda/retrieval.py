@@ -607,8 +607,8 @@ ANY_RELATIONS = {"calls", "uses", "imports", "imports_from", "inherits", "method
 # only when no path exists without it, so every path found before stays the same
 CALLBACK_RELATIONS = {"registers"}
 CALLBACK_NOTE = ("a path includes a callback hop (registers): the method is handed over there (a method "
-                 "reference passed to a registrar) and the framework calls it later, when that event happens; "
-                 "it is not a call at that line")
+                 "reference passed on); what receives it calls it later (an event, a ticker, a command) or at once "
+                 "(forEach, map, filter) - it is not a call written at that line")
 
 
 def _hints(g: Graph, text: str) -> list[dict]:

@@ -1571,6 +1571,20 @@ _KOTLIN_PROP = re.compile(r"\b(?:val|var)\s+([a-z_]\w*)\s*(?::\s*([A-Z]\w*)|=\s*
 JVM_SUFFIXES = (".java", ".kt")
 
 
+def _before_comment(s: str, idx: int, in_block: bool) -> bool:
+    """Is position ``idx`` of line ``s`` inside a comment: after a ``//`` or ``/*`` that is not in a string, or in
+    a block comment continued from an earlier line that does not close before it."""
+    if in_block:
+        end = s.find("*/")
+        if end < 0 or end > idx:
+            return True
+    for mark in ("//", "/*"):
+        c = s.find(mark)
+        if 0 <= c < idx and s[:c].count('"') % 2 == 0:
+            return True
+    return False
+
+
 def _java_code_lines(text: str, *, kotlin: bool = False) -> list[str]:
     """The file's lines with string literals and comments blanked (same line numbers).
 
@@ -1588,6 +1602,8 @@ def _java_code_lines(text: str, *, kotlin: bool = False) -> list[str]:
                 s, in_raw = '""' + s[end + 3:], False
             while '"""' in s:
                 a = s.find('"""')
+                if _before_comment(s, a, in_block):  # `// a text block starts with """` is a comment
+                    break
                 b = s.find('"""', a + 3)
                 if b < 0:
                     s, in_raw = s[:a] + '""', True
@@ -1777,9 +1793,25 @@ def _jvm_brace_kind(head: str, kotlin: bool) -> tuple[str, str | None]:
     m = _JAVA_CLASS_HEAD.search(head)
     if m:
         return "class", m.group(1)
-    if _JAVA_ANON_HEAD.search(head):
+    if _JAVA_ANON_HEAD.search(head) or _java_anon_after_args(head):
         return "anon", None
     return "block", None
+
+
+def _java_anon_after_args(head: str) -> bool:
+    """``new Type(<arguments with braces or semicolons>) {``: walk back over the balanced argument list."""
+    h = head.rstrip()
+    if not h.endswith(")"):
+        return False
+    depth = 0
+    for k in range(len(h) - 1, -1, -1):
+        if h[k] == ")":
+            depth += 1
+        elif h[k] == "(":
+            depth -= 1
+            if depth == 0:
+                return bool(re.search(r"\bnew\s+[\w$.]+\s*(?:<[^;{}]*>)?\s*$", h[:k]))
+    return False
 
 
 def _jvm_scopes(flat: str, kotlin: bool) -> list[tuple[int, int, str, str | None]]:
@@ -1787,17 +1819,24 @@ def _jvm_scopes(flat: str, kotlin: bool) -> list[tuple[int, int, str, str | None
     out: list[tuple[int, int, str, str | None]] = []
     stack: list[tuple[int, str, str | None]] = []
     head = 0
+    depth = 0  # parentheses: a brace inside an argument list (a lambda body, an array) keeps the statement's head
     for i, ch in enumerate(flat):
-        if ch == "{":
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        elif ch == "{":
             kind, name = _jvm_brace_kind(flat[head:i], kotlin)
             stack.append((i, kind, name))
-            head = i + 1
+            if depth == 0:
+                head = i + 1
         elif ch == "}":
             if stack:
                 a, kind, name = stack.pop()
                 out.append((a, i, kind, name))
-            head = i + 1
-        elif ch == ";":
+            if depth == 0:
+                head = i + 1
+        elif ch == ";" and depth == 0:
             head = i + 1
     out += [(a, len(flat), kind, name) for a, kind, name in stack]
     return out
@@ -2044,8 +2083,18 @@ def _apply_edges(g: Graph, edges) -> int:
         if any(dd.get("relation") == d.get("relation", "calls") for dd in (g.G.get_edge_data(u, v) or {}).values()):
             continue
         g.G.add_edge(u, v, **d)
+        if d.get("relation") == CALLBACK_RELATION:
+            g.__dict__["_has_registers"] = True
         added += 1
     return added
+
+
+def has_registers(g: Graph) -> bool:
+    """Whether the graph holds a ``registers`` edge (remembered: impact, review and the UI ask per request)."""
+    v = g.__dict__.get("_has_registers")
+    if v is None:
+        v = g.__dict__["_has_registers"] = any(True for _ in g.edges({CALLBACK_RELATION}))
+    return v
 
 
 def augment_python_receiver_calls(g: Graph) -> int:

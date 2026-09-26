@@ -338,7 +338,7 @@ def framework_entries(g: Graph) -> dict[str, dict]:
             for iface in sorted(set(FABRIC_INITIALIZERS) & ifaces):
                 meth = FABRIC_INITIALIZERS[iface]
                 add(member(cid, meth) or cid, "declared", f"implements {iface}: Fabric calls {meth}() at start")
-            if re.search(r"@Mod\b", head):
+            if re.search(r"@Mod\b(?!\s*\.)", head):  # not @Mod.EventBusSubscriber
                 for n in [v for v in members(cid) if bare(v) == bare(cid)] or [cid]:
                     add(n, "declared", "@Mod class: the mod loader constructs it")
             if re.search(r"@(?:Mod\.)?EventBusSubscriber\b", head):
@@ -621,7 +621,9 @@ def callback_dependents(g: Graph, dist: dict[str, int], rels: set[str], depth: i
     through a callback registration (``registers`` edges: the method that hands a changed method over, and
     what depends on that). The nodes found before keep their distance; returns the nodes added."""
     added: set[str] = set()
-    if not any(True for _ in g.edges({"registers"})):
+    from verinoda.index import has_registers
+
+    if not has_registers(g):
         return added
     heap = [(d, n) for n, d in dist.items()]
     heapq.heapify(heap)
