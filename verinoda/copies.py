@@ -170,6 +170,41 @@ def update(repo: Path, g) -> dict:
     return {"copies": [c["path"] for c in load(repo)]}  # what is ranked lower, after index.not_copies
 
 
+def roots_not_named(repo: Path, words: set[str], text: str = "") -> tuple[str, ...]:
+    """Path prefixes of the configured reference trees (``index.reference``) and of the detected
+    copies that neither ``words`` (folded question words) nor ``text`` name: they count less in a
+    search and give way to the project's own code when a name is resolved.
+
+    An alias counts as a word or a word's stem ("orijinalde" names "orijinal"); a folder name only
+    as the whole word (so "super" does not name "mymod-original")."""
+    import re
+
+    from verinoda import textnorm
+    from verinoda.paths import load_config
+
+    try:
+        entries = list((load_config(Path(repo)).get("index") or {}).get("reference") or [])
+    except Exception:  # noqa: BLE001 - an unreadable config only means no reference trees
+        return ()
+    try:
+        entries += [c["path"] for c in load(Path(repo))]
+    except Exception:  # noqa: BLE001 - no detection result: the configured trees only
+        pass
+    text = textnorm.fold_tr(text or "")
+    roots = []
+    for e in entries:
+        path = e.get("path") if isinstance(e, dict) else e
+        if not isinstance(path, str) or not path.strip("/"):
+            continue
+        aliases = [textnorm.fold_tr(s) for s in (e.get("aliases") or [])] if isinstance(e, dict) else []
+        segments = [textnorm.fold_tr(seg) for seg in path.strip("/").split("/") if len(seg) >= 3]
+        named = any(a in words or (len(a) >= 5 and any(w.startswith(a) for w in words)) for a in aliases) \
+            or any(s in words or re.search(r"(?<![\w-])" + re.escape(s) + r"(?![\w-])", text) for s in segments)
+        if not named:
+            roots.append(path.strip("/") + "/")
+    return tuple(roots)
+
+
 def load(repo: Path) -> list[dict]:
     """The detected copies to rank lower: none when detection is off or a path is excluded."""
     cfg = _config(repo)

@@ -48,7 +48,7 @@ CODE_RELATIONS = {"calls", "imports", "imports_from", "uses", "inherits", "metho
 FLOW_RELATIONS = {"calls"}
 RECEIVER_ORIGIN = "verinoda.receiver"
 JAVA_CALL_ORIGIN = "verinoda.java_calls"
-RECEIVER_SIDECAR_VERSION = 2
+RECEIVER_SIDECAR_VERSION = 3   # 3: a receiver's class is the one the calling file can see (_visible_class)
 HEURISTIC_SPAN_CAP = 80        # the next-symbol fallback never spans more lines than this
 PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc")
 MARKDOWN_SUFFIXES = (".md", ".markdown", ".mdx")
@@ -1499,6 +1499,59 @@ def _receiver_candidates(g: Graph) -> list[tuple[str, str]]:
     return out
 
 
+def _top_folder(f: str) -> str:
+    return f.split("/", 1)[0] + "/" if "/" in f else ""
+
+
+def _file_imports(g: Graph) -> dict[str, set[str]]:
+    """file -> the files its import statements resolve to (``imports`` / ``imports_from`` edges)."""
+    out: dict[str, set[str]] = {}
+    for u, v, d in g.G.edges(data=True):
+        if d.get("relation") in ("imports", "imports_from"):
+            fu, fv = g.file(u), g.file(v)
+            if fu and fv and fu != fv:
+                out.setdefault(fu, set()).add(fv)
+    return out
+
+
+def _copy_roots(g: Graph) -> tuple[str, ...]:
+    """Folders detected as copies of the project and configured reference trees (the last detection)."""
+    try:
+        from verinoda import copies
+        from verinoda.paths import load_config
+
+        ref = (load_config(g.root).get("index") or {}).get("reference") or []
+        roots = [c["path"] for c in copies.load(g.root)]
+        roots += [(e.get("path") if isinstance(e, dict) else e) or "" for e in ref]
+    except Exception:  # noqa: BLE001 - no config or detection: the import rule alone
+        return ()
+    return tuple(r.strip("/") + "/" for r in roots if isinstance(r, str) and r.strip("/"))
+
+
+def _visible_class(g: Graph, f: str, cands, imports: dict[str, set[str]], copy_roots: tuple[str, ...]) -> str | None:
+    """The class among ``cands`` (same label) that a name in file ``f`` refers to, or None.
+
+    Its own file first, then a file ``f`` imports, then a class under a top-level folder ``f``
+    imports from or lives in; a class across a copy's boundary (either way) never counts."""
+    if not cands:
+        return None
+    mine = next((r for r in copy_roots if f.startswith(r)), None)
+    seen = imports.get(f, set())
+    tops = {_top_folder(x) for x in seen} | {_top_folder(f)}
+    best: list[tuple[int, str]] = []
+    for cid in cands:
+        cf = g.file(cid) or ""
+        if next((r for r in copy_roots if cf.startswith(r)), None) != mine:
+            continue
+        tier = 0 if cf == f else 1 if cf in seen else 2 if _top_folder(cf) in tops else None
+        if tier is not None:
+            best.append((tier, cid))
+    if not best:
+        return None
+    top = min(t for t, _ in best)
+    return next(c for t, c in best if t == top)
+
+
 def receiver_call_edges(g: Graph, facts_for=None) -> list[tuple[str, str, dict]]:
     """``calls`` edges for ``param.method()`` where ``param: SomeClass`` (not applied).
 
@@ -1509,15 +1562,24 @@ def receiver_call_edges(g: Graph, facts_for=None) -> list[tuple[str, str, dict]]
     ``confidence=INFERRED`` and ``_origin=verinoda.receiver`` so they can never
     be mistaken for extractor facts. ``facts_for(file) -> {start line: facts}``
     supplies per-file facts (default: parse the file now).
+
+    The class a name means is the one the calling file can see (:func:`_visible_class`): its own,
+    one from a file it imports, then one under a top-level folder it imports from or shares. A
+    class in another top-level package the file never imports from (the project's own ``Claims``
+    for a frozen copy's ``cl: Claims``) is never linked, nor is a detected copy linked to the
+    code outside it, either way.
     """
-    classes: dict[str, str] = {}
+    classes: dict[str, list[str]] = {}
     methods: dict[tuple[str, str], str] = {}
     for n, d in g.G.nodes(data=True):
         if d.get("_callable_class") and d.get("file_type") == "code":
-            classes.setdefault(d.get("label", ""), n)
-    for _cls_label, cid in classes.items():
-        for v, _ in g.out_edges(cid, {"method"}):
-            methods[(cid, g.label(v).strip(".()"))] = v
+            classes.setdefault(d.get("label", ""), []).append(n)
+    for cids in classes.values():
+        for cid in cids:
+            for v, _ in g.out_edges(cid, {"method"}):
+                methods[(cid, g.label(v).strip(".()"))] = v
+    imports = _file_imports(g)
+    copy_roots = _copy_roots(g)
     if facts_for is None:
         def facts_for(f: str) -> dict | None:
             try:
@@ -1538,11 +1600,13 @@ def receiver_call_edges(g: Graph, facts_for=None) -> list[tuple[str, str, dict]]
             continue
         typed: dict[str, str] = {}
         for arg, name in fx["ann"]:
-            if name in classes:
-                typed[arg] = classes[name]
+            cid = _visible_class(g, f, classes.get(name) or (), imports, copy_roots)
+            if cid:
+                typed[arg] = cid
         for var, cname in fx["assign"]:
-            if cname in classes:
-                typed[var] = classes[cname]
+            cid = _visible_class(g, f, classes.get(cname) or (), imports, copy_roots)
+            if cid:
+                typed[var] = cid
         for line, var, attr in fx["calls"]:
             cid = typed.get(var)
             target = methods.get((cid, attr)) if cid else None
@@ -1728,6 +1792,7 @@ def java_call_edges(g: Graph, read=None) -> list[tuple[str, str, dict]]:
 
 def _apply_edges(g: Graph, edges) -> int:
     g.__dict__.pop("_ppr_adj", None)  # search_index caches weighted neighbours per graph
+    g.__dict__.pop("_qp_ix", None)    # and question_plan its lookup index
     added = 0
     for u, v, d in edges:
         if u not in g.G or v not in g.G:
@@ -1744,19 +1809,29 @@ def augment_python_receiver_calls(g: Graph) -> int:
     return _apply_edges(g, receiver_call_edges(g) + java_call_edges(g))
 
 
-def _read_sidecar(repo: Path) -> dict | None:
+_SIDECAR_FACTS_SINCE = 2   # the per-file facts have this shape since v2 (v3 changed only how edges are made)
+
+
+def _read_sidecar(repo: Path, *, facts_only: bool = False) -> dict | None:
+    """The receiver-call sidecar of this version; ``facts_only``: also an older one whose per-file
+    facts can be reused (its edges cannot)."""
     try:
         data = json.loads(receiver_calls_path(repo).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return data if isinstance(data, dict) and data.get("version") == RECEIVER_SIDECAR_VERSION else None
+    if not isinstance(data, dict):
+        return None
+    v = data.get("version")
+    if v == RECEIVER_SIDECAR_VERSION or (facts_only and isinstance(v, int) and _SIDECAR_FACTS_SINCE <= v):
+        return data
+    return None
 
 
 def refresh_receiver_sidecar(repo: Path, g: Graph | None = None) -> dict:
     """Recompute ``receiver_calls.json`` for the current graph (per-file facts reused by sha256)."""
     repo = Path(repo).resolve()
     g = g or load(repo, augment=False)
-    old = _read_sidecar(repo) or {}
+    old = _read_sidecar(repo, facts_only=True) or {}
     old_files = old.get("files") or {}
     files: dict[str, dict] = {}
     parsed = 0

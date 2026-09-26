@@ -120,8 +120,8 @@ Rules:
   arguments, a definition kind, another file or code name keeps it unverified. Plain text is at
   most `weak_inference`; a quote (`"f.py:12 contains: <exact text>"`) verifies only the quoted
   text. A `contradicted` result states its scope: correct the sentence, do not reword it.
-- A name written as code that `plan check` or `trace` reports `not_found` does not exist here:
-  say so with its `did_you_mean`; never answer about the similar name instead.
+- A code name `plan check`/`trace`/`node_inspect` reports `not_found` does not exist (say so with
+  `did_you_mean`); `not_indexed`: `update` first; `ambiguous`: pass `path::Name`. Never use a similar name.
 - Do not upgrade a status by wording. Change status only through Verinoda (`verify`,
   `experiment run`, `claim add --source`, which downgrades a requested status the evidence
   does not allow).
@@ -264,6 +264,7 @@ it, then record `--observed-output out.txt --exit-code N -- <command>` (agent-re
 
 Run `verinoda update .` after you or the user change code. It re-indexes the changed files
 and marks claims whose evidence changed as `stale`; `verify` them again before relying on them.
+Until then reads say "N file(s) changed since the index" and analyze may say it was not refreshed.
 Before you finish a code change, run `verinoda decide check --changed --json` (MCP `decision_check`
 with `changed_only`). On `VIOLATED`, fix the code or ask the user whether the decision should be
 superseded or the site waived; never edit, supersede or waive a decision record yourself. Exit 3

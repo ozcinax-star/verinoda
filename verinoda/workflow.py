@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from verinoda import buildlock, index
 from verinoda import evidence as evmod
-from verinoda import index
 from verinoda.claims import ACTIVE, CONFIDENCE_CAP, RECHECK_TYPES, Claims, assess_change, invalidate_stale
 from verinoda.paths import ensure_atlas, graph_path
 from verinoda.snapshot import changed_files, current_state, take_snapshot
@@ -43,14 +43,26 @@ def _index_refused(store: Store, repo: Path, stats: dict, *, force: bool, files:
     """
     files = current_state(repo)["files"] if files is None else files
     stale = invalidate_stale(store, None, files=files)
-    what = ("the indexer did not rewrite the graph" + (" even with --force" if force else
-            " (it refuses a rebuild that would shrink the graph sharply, e.g. after deleting code)")
-            + "; no new snapshot was recorded, the index still describes an older tree")
     log = (stats.get("log") or "").strip().splitlines()
-    return {"snapshot": store.latest_snapshot(), "error": what,
-            "hint": f"verinoda scan {repo} --force",
+    failed = next((ln.strip() for ln in log if "Rebuild failed" in ln), None)
+    if failed:  # the indexer broke (a file it read went away): not a refused shrink
+        what = f"the indexer failed ({failed[:160]})"
+        hint = f"run `verinoda update {repo}` again"
+    else:
+        what = "the indexer did not rewrite the graph" + (" even with --force" if force else
+               " (it refuses a rebuild that would shrink the graph sharply, e.g. after deleting code)")
+        hint = f"verinoda scan {repo} --force"
+    what += "; no new snapshot was recorded, the index still describes an older tree"
+    return {"snapshot": store.latest_snapshot(), "error": what, "hint": hint,
             "index_log_tail": [ln[:200] for ln in log[-3:]], "stale": stale,
             "graph": {k: stats.get(k) for k in ("nodes", "edges", "graph_path")}}
+
+
+def _busy(store: Store, busy: buildlock.IndexBusy) -> dict:
+    """Another build holds the project's lock: nothing was done, and the result says who is building."""
+    return {"snapshot": store.latest_snapshot(), "error": busy.message(), "busy": busy.as_dict(),
+            "hint": "run it again once that build has finished",
+            "mode": "busy", "index_mode": "none", "index_seconds": 0.0, "changed_count": 0, "stale": []}
 
 
 def _graph_counts(repo: Path, stats: dict) -> dict:
@@ -138,14 +150,27 @@ def _derive(store: Store, repo: Path, *, changed: list[str] | None, all_files: l
     return out
 
 
-def scan(store: Store, repo: Path, *, force: bool = False) -> dict:
+def scan(store: Store, repo: Path, *, force: bool = False, wait: float = buildlock.DEFAULT_WAIT_SECONDS,
+         purpose: str = "scan", on_wait=None) -> dict:
     """Full index build, snapshot, stale invalidation and derived data.
 
     A graph that still describes deleted files is rebuilt with ``force`` (the
     indexer otherwise refuses a rebuild that shrinks the graph), and anything
     it keeps is pruned: no node may point at a missing file.
+
+    One build at a time per project (:mod:`verinoda.buildlock`): while another
+    runs this waits up to ``wait`` seconds, then returns ``mode: busy`` with
+    who is building, having done nothing.
     """
     repo = Path(repo).resolve()
+    try:
+        with buildlock.build_lock(repo, wait=wait, purpose=purpose, on_wait=on_wait):
+            return _scan(store, repo, force=force)
+    except buildlock.IndexBusy as busy:
+        return _busy(store, busy)
+
+
+def _scan(store: Store, repo: Path, *, force: bool) -> dict:
     t0 = time.monotonic()
     had_graph = graph_path(repo).exists()
     missing_before = index.missing_source_files(repo) if had_graph else []
@@ -155,6 +180,7 @@ def scan(store: Store, repo: Path, *, force: bool = False) -> dict:
     t_index = time.monotonic() - t0
     if not stats.get("ok", True):
         return {**_index_refused(store, repo, stats, force=force), "index_seconds": round(t_index, 3)}
+    buildlock.record_build(repo, graph_seconds=t_index, files=stats.get("files"))
     before = store.latest_snapshot()
     stats, pruned, dangling = _no_missing_files(repo, stats, store.snapshot_files(before["id"]) if before else ())
     snap = take_snapshot(store, repo, graph_stats=stats)
@@ -173,16 +199,18 @@ def scan(store: Store, repo: Path, *, force: bool = False) -> dict:
     return out
 
 
-def _graph_affected(repo: Path, diff: dict) -> bool:
+def _graph_affected(repo: Path, diff: dict, in_graph: set[str] | None = None) -> bool:
     """Can the changed files change the code graph? A file the graph has nodes from, or a new file
     the extractor reads (code, package manifests). An edited README, data file or document is
-    only re-indexed for search: rebuilding the graph for it costs as much as for a code edit."""
+    only re-indexed for search: rebuilding the graph for it costs as much as for a code edit.
+    ``in_graph``: the graph's files when a loaded graph gives them (else graph.json is read)."""
     from verinoda.project_index.detect import FileType, classify_file
 
-    try:
-        in_graph = index.graph_source_files(repo)
-    except Exception:  # noqa: BLE001 - no readable graph: rebuild
-        return True
+    if in_graph is None:
+        try:
+            in_graph = index.graph_source_files(repo)
+        except Exception:  # noqa: BLE001 - no readable graph: rebuild
+            return True
     if any(f in in_graph for f in diff["modified"] + diff["removed"]):
         return True
     for f in diff["added"]:
@@ -194,7 +222,8 @@ def _graph_affected(repo: Path, diff: dict) -> bool:
     return False
 
 
-def update(store: Store, repo: Path) -> dict:
+def update(store: Store, repo: Path, *, wait: float = buildlock.DEFAULT_WAIT_SECONDS, purpose: str = "update",
+           on_wait=None) -> dict:
     """Refresh after edits: rebuild the graph, re-index only the files changed since the last snapshot.
 
     The code graph is rebuilt over the whole corpus whenever a file of the graph (or a
@@ -210,8 +239,20 @@ def update(store: Store, repo: Path) -> dict:
     When the indexer refuses to rewrite the graph the previous snapshot is
     returned with ``error`` and ``hint`` (``mode`` = ``"index_refused"``); no
     snapshot is recorded over the stale graph.
+
+    One build at a time per project (:mod:`verinoda.buildlock`): while another
+    runs this waits up to ``wait`` seconds (0: not at all), then returns
+    ``mode: busy`` with who is building, having done nothing.
     """
     repo = Path(repo).resolve()
+    try:
+        with buildlock.build_lock(repo, wait=wait, purpose=purpose, on_wait=on_wait):
+            return _update(store, repo)
+    except buildlock.IndexBusy as busy:
+        return _busy(store, busy)
+
+
+def _update(store: Store, repo: Path) -> dict:
     prev = store.latest_snapshot()
     if prev is None or not graph_path(repo).exists():
         res = scan(store, repo)
@@ -248,6 +289,8 @@ def update(store: Store, repo: Path) -> dict:
             stats = index.build(repo, force=True, prune_missing=True)
             forced = True
     t_index = time.monotonic() - t0
+    if stats is not None and stats.get("ok", True):
+        buildlock.record_build(repo, graph_seconds=t_index, files=stats.get("files"))
     if stats is not None and not stats.get("ok", True):
         return {**_index_refused(store, repo, stats, force=forced, files=state["files"]),
                 "changed": diff, "changed_count": len(changed), "mode": "index_refused",

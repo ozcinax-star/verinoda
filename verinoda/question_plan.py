@@ -803,7 +803,14 @@ _INDEX_CACHE: dict[tuple, _Index] = {}
 
 
 def _index(g) -> _Index:
-    """The lookup index of a graph, shared by every load of the same graph file."""
+    """The lookup index of a graph, shared by every load of the same graph file.
+
+    Kept on the graph object too, while its node count holds (the index is built from nodes only):
+    counting the edges for the shared key walks every edge (0.13 s on 60k edges), too much for a
+    lookup that trace, impact and node_inspect make on every call."""
+    memo = getattr(g, "__dict__", {}).get("_qp_ix")
+    if memo is not None and memo[0] == len(g.G):
+        return memo[1]
     try:
         stamp = Path(g.path).stat().st_mtime_ns
     except (OSError, TypeError):
@@ -814,6 +821,8 @@ def _index(g) -> _Index:
         if len(_INDEX_CACHE) > 8:
             _INDEX_CACHE.clear()
         ix = _INDEX_CACHE[key] = _Index(g)
+    if hasattr(g, "__dict__"):
+        g.__dict__["_qp_ix"] = (len(g.G), ix)
     return ix
 
 
@@ -1584,6 +1593,24 @@ def _families(g, ix: _Index, scored: dict[str, dict]) -> list[dict]:
     return out
 
 
+def _copy_families(g, fams: list[dict], text: str) -> set[int]:
+    """``id()`` of the families whose best node is in a detected copy or a reference tree ``text`` does
+    not name, when a family of the project's own code scores within the margin of the top one (so it
+    takes the copy's place); empty otherwise."""
+    if len(fams) < 2:
+        return set()
+    from verinoda import naming
+
+    roots = naming._aside_roots(g, text)
+    if not roots:
+        return set()
+    out = {id(f) for f in fams if (g.file(f["best"]) or "").startswith(roots)}
+    own = [f for f in fams if id(f) not in out]
+    if not out or not own or own[0]["score"] < fams[0]["score"] - THRESHOLDS["margin"]:
+        return set()
+    return out
+
+
 def _cand(g, n: str, info: dict, with_hash: bool) -> dict:
     site = _site(g, n)
     matches = []
@@ -1662,6 +1689,12 @@ def link_mention(mention: dict, graph, lexicon=None, *, with_hash: bool = True) 
         else:
             link["occurs_at"] = site
     fams = _families(g, ix, scored)
+    # a detected copy of the project or a reference tree the mention does not name gives way to the
+    # project's own code: a copy and its original are never offered as a choice
+    aside = _copy_families(g, fams, mention.get("text") or "")
+    if aside:
+        fams = [f for f in fams if id(f) not in aside] + [f for f in fams if id(f) in aside]
+        link["set_aside"] = [f["best"] for f in fams if id(f) in aside][:5]
     link["entropy"] = _entropy([f["score"] for f in fams])
     if not fams or fams[0]["score"] < THRESHOLDS["weak"]:
         near = _near_misses(ix, mention.get("text") or "")
@@ -1675,7 +1708,7 @@ def link_mention(mention: dict, graph, lexicon=None, *, with_hash: bool = True) 
     link["best"] = _cand(g, best["best"], scored[best["best"]], with_hash)
     link["tier"] = scored[best["best"]]["matches"][0]["type"]
     link["alternatives"] = [_cand(g, f["best"], scored[f["best"]], False) for f in fams[1:4]]
-    close = [f for f in fams if f["score"] >= THRESHOLDS["link"]
+    close = [f for f in fams if f["score"] >= THRESHOLDS["link"] and id(f) not in aside
              and best["score"] - f["score"] < THRESHOLDS["margin"]]
     link["_close"] = [f["best"] for f in close]
     if best["score"] < THRESHOLDS["link"] or link.get("occurs_at") or link.get("existence"):
@@ -1693,7 +1726,8 @@ def link_mention(mention: dict, graph, lexicon=None, *, with_hash: bool = True) 
             link["uncertainty"] = (f"no symbol in the index is named `{written}`, and whether the repository spells "
                                    "it was not checked (the repository is too large to scan); linked by "
                                    f"{link['tier']} to {g.label(best['best'])}, not by its name")
-        link["nodes"] = [f["best"] for f in fams if best["score"] - f["score"] < THRESHOLDS["margin"]][:5]
+        link["nodes"] = [f["best"] for f in fams
+                         if id(f) not in aside and best["score"] - f["score"] < THRESHOLDS["margin"]][:5]
     elif len(close) == 1:
         link["status"] = "linked"
         link["nodes"] = [best["best"]]

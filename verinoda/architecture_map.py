@@ -211,9 +211,29 @@ def entry_points(g: Graph) -> list[dict]:
     return sorted(found, key=lambda e: e["at"])
 
 
+ASIDE = "copy or reference tree"
+
+
+def _aside_roots(g: Graph) -> tuple[str, ...]:
+    """Path prefixes of the detected copies and configured reference trees (:func:`verinoda.copies.roots_not_named`)."""
+    from verinoda import copies
+
+    try:
+        return copies.roots_not_named(g.root, set(), "")
+    except Exception:  # noqa: BLE001 - no config, no detection: nothing is set aside
+        return ()
+
+
 def dataflow(g: Graph, max_depth: int = 6, max_paths: int = 20) -> dict:
+    """Entry points -> call paths -> persistence sinks. The project's own entry points come first: one in a
+    detected copy of the project or a configured reference tree is listed after them (``"in"``) and its
+    paths only fill what ``max_paths`` leaves (a frozen copy never crowds out the project's own flows)."""
     sinks = _sinks(g)
     entries = entry_points(g)
+    roots = _aside_roots(g)
+    if roots:
+        entries = ([e for e in entries if not e["at"].startswith(roots)]
+                   + [{**e, "in": ASIDE} for e in entries if e["at"].startswith(roots)])
     paths = []
     for e in entries:
         # BFS over call-ish edges; also step from a method to its class and
@@ -246,19 +266,25 @@ def dataflow(g: Graph, max_depth: int = 6, max_paths: int = 20) -> dict:
             hops.append({"from": g.label(a), "to": g.label(b), "relation": d.get("relation"),
                          "confidence": d.get("confidence"), "at": _edge_loc(d),
                          **({"derived_by": d["_origin"]} if str(d.get("_origin", "")).startswith("verinoda") else {})})
-        rendered.append({"entry": _loc(g, p[0]), "sink": _loc(g, p[-1]),
+        entry = _loc(g, p[0])
+        rendered.append({"entry": entry, "sink": _loc(g, p[-1]),
                          "sink_kinds": sorted({s["kind"] for s in sinks[p[-1]]}),
-                         "sink_lines": [s["at"] for s in sinks[p[-1]]][:4], "hops": hops})
+                         "sink_lines": [s["at"] for s in sinks[p[-1]]][:4], "hops": hops,
+                         **({"in": ASIDE} if roots and (entry or "").startswith(roots) else {})})
+    limits = ["paths follow call edges only; values are not tracked (no taint analysis)",
+              "Python param.method() calls are resolved from type annotations/local constructors "
+              "(edges marked derived_by=verinoda.receiver, INFERRED)",
+              "entry-point and sink detection are heuristics and are labelled as such",
+              "framework routing tables and async queues are not followed"]
+    if roots:
+        limits.append("entry points in detected copies or reference trees (" + ", ".join(roots[:3])
+                      + ") come after the project's own, marked \"in\"")
     return {
         "view": "dataflow",
         "coverage": {
             "method": "entry points (decorators/names/entry modules, heuristic) -> AST call edges -> "
                       "persistence sinks (regex over symbol bodies: SQL, db connect, ORM, file writes)",
-            "limits": ["paths follow call edges only; values are not tracked (no taint analysis)",
-                       "Python param.method() calls are resolved from type annotations/local constructors "
-                       "(edges marked derived_by=verinoda.receiver, INFERRED)",
-                       "entry-point and sink detection are heuristics and are labelled as such",
-                       "framework routing tables and async queues are not followed"],
+            "limits": limits,
         },
         "entries": entries,
         "sinks": [{"symbol": g.label(s), "at": _loc(g, s), "evidence": v[:4]} for s, v in sorted(sinks.items())],
@@ -418,19 +444,33 @@ def changed_files_from_git(root: Path, base: str | None = None) -> list[str]:
     return sorted({l.strip() for l in (out + "\n" + untracked).splitlines() if l.strip()})
 
 
-def impact(g: Graph, targets: list[str], depth: int = 4) -> dict:
-    """Reverse reachability: who depends (calls/imports/uses/inherits) on the targets."""
+def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
+    """Reverse reachability: who depends (calls/imports/uses/inherits) on the targets.
+
+    A target is a file of the graph (all its nodes) or a name resolved exactly
+    (:func:`verinoda.naming.resolve`; a detected copy gives way to the project's own code). A target
+    that names several symbols, that names nothing, or that only a file changed since the index
+    (``stale``) spells is ``unresolved``, with its candidates in ``resolution``: impact is never
+    computed for a merely similar name."""
+    from verinoda import naming
+
     seeds: set[str] = set()
     unresolved = []
+    resolution = []
     for t in targets:
         hit = [n for n in g.G.nodes if g.file(n) == t]
         if hit:
             seeds.update(hit)
             continue
-        nid, _ = g.resolve(t)
-        if nid:
-            seeds.add(nid)
-        else:
+        r = naming.resolve(g, t, stale=stale)
+        if r.exact:
+            f = g.file(r.node)
+            seeds.add(r.node)
+            if f and g.is_file_node(r.node):  # `orders/api` names the file: every node of it, as above
+                seeds.update(n for n in g.G.nodes if g.file(n) == f)
+        # what every name target resolved to (or why not), so a wrong pick is visible
+        resolution.append(r.as_dict(g))
+        if not r.exact:
             unresolved.append(t)
     rel = {"calls", "imports", "imports_from", "uses", "inherits", "method", "references"}
     dist = {s: 0 for s in seeds}
@@ -461,6 +501,7 @@ def impact(g: Graph, targets: list[str], depth: int = 4) -> dict:
         },
         "targets": targets,
         "unresolved": unresolved,
+        **({"resolution": resolution} if resolution else {}),
         "affected_symbols": sorted(
             ({"symbol": g.label(n), "at": _loc(g, n), "distance": dd} for n, dd in dist.items() if dd > 0),
             key=lambda x: (x["distance"], x["at"]))[:80],

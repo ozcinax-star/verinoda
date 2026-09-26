@@ -1333,11 +1333,13 @@ def _targets(g: dict) -> tuple[dict[str, str], str]:
 
 
 class _Ctx:
-    def __init__(self, repo: Path, all_files: list[str], graph=None, decisions: Path | None = None):
+    def __init__(self, repo: Path, all_files: list[str], graph=None, decisions: Path | None = None,
+                 graph_stale: str | None = None):
         self.repo = Path(repo)
         self.all_files = all_files
         self.graph = graph
         self.decisions = decisions  # the decisions folder in use (None: decisions.decisions_dir)
+        self.graph_stale = graph_stale  # why ``graph`` may not describe the working tree (a failed refresh)
         self._py: _PyIndex | None = None
         self._deps: dict | None = None
         self._code: dict[str, list[str]] = {}
@@ -1483,6 +1485,9 @@ def check_no_edge(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
     if ctx.graph is None:
         scan.unknown.append("no index: run `verinoda scan` (no_edge reads the graph's edges)")
         return [], scan, what
+    if ctx.graph_stale:  # the edges read below describe an older tree: nothing found there is not "ok"
+        scan.unknown.append(f"{ctx.graph_stale}; an edge a recent edit added is not seen (run `verinoda update`, "
+                            "then check again)")
     rels = set(g.get("relations") or [])
     # what the guard looks at: the indexed files each side matches, and the edges out of the `from` files
     indexed = {f for _n, f in ctx.graph.G.nodes(data="source_file") if f}
@@ -2069,8 +2074,16 @@ def _rel_or_abs(p: Path, root: Path) -> str:
         return Path(p).as_posix()
 
 
+def stale_graph_note(update_result: dict) -> str:
+    """Why the graph a gate is about to read may not describe the working tree, from a failed refresh
+    (:func:`verinoda.workflow.update`): another build still running after the wait, or an error."""
+    if update_result.get("mode") == "busy":
+        return "the index was not refreshed: another index build was still running after the wait"
+    return f"the index could not be refreshed ({str(update_result.get('error') or 'unknown error')[:160]})"
+
+
 def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool = False,
-          records=None, decisions_dir: str | None = None) -> dict:
+          records=None, decisions_dir: str | None = None, graph_stale: str | None = None) -> dict:
     """Run every accepted guard of every enforced decision on the working tree.
 
     ``base`` (a git revision) or ``changed_only`` (= base HEAD) labels each finding ``new/touched since
@@ -2081,6 +2094,11 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
     that checked no file, edge or manifest, a record that cannot be read, or no record found while the
     repository holds ADR-like files); ``ok`` never stands for a check that looked at nothing.
     ``decisions_dir``: the records' folder (``--decisions-dir``) instead of the configured one.
+
+    ``graph_stale``: why ``graph`` may be older than the working tree (its refresh failed, or another build
+    was still running): every no_edge guard is then ``unknown`` (a violation it still finds stands, as its
+    line is re-read), and without a violation ``exit`` is 2, as for an error: a gate never passes on edges
+    it could not read.
     """
     from verinoda import decisions as dm
     from verinoda.snapshot import list_files
@@ -2099,7 +2117,9 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
         base_sha = validate_ref(repo, base_label)
         changed = changed_since(repo, base_sha)
         res["base"] = {"ref": base_label, "commit": base_sha, "changed_files": len(changed)}
-    ctx = _Ctx(repo, list_files(repo), graph, ddir)
+    ctx = _Ctx(repo, list_files(repo), graph, ddir, graph_stale)
+    if graph_stale:
+        res["graph_stale"] = graph_stale
     today = dm._today()
     if not recs and ddir_from != dm.DEFAULT_SOURCE and not ddir.is_dir():
         # a folder the user named (flag, config, verinoda.toml, pyproject) that is not there: a typo or a folder
@@ -2219,8 +2239,10 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
                                   "what": f"{r['kind']}={r['value']}", "scope": scope, "limits": [note]})
     res["elapsed_s"] = round(time.monotonic() - t0, 3)
     broken = [n for n in res["not_enforced"] if n.get("problem")]
-    # 1: something is violated; 3: nothing violated, but something was not checked (unknown); 0 otherwise
-    res["exit"] = 1 if res["violations"] else 3 if res["unknown"] or broken else 0
+    stale_unchecked = bool(graph_stale) and any(u["kind"] == "no_edge" for u in res["unknown"])
+    # 1: something is violated; 2: edges could not be read (a stale graph); 3: nothing violated, but something was
+    # not checked (unknown); 0 otherwise
+    res["exit"] = 1 if res["violations"] else 2 if stale_unchecked else 3 if res["unknown"] or broken else 0
     # "ok" only when every guard was checked and nothing was found: a guard or file that could not be checked,
     # or a record that cannot be read, is "unknown"; violations in files unchanged since the base are
     # "pre_existing" (not "ok")

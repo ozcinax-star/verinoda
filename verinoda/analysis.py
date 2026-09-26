@@ -194,6 +194,7 @@ class _Recorder:
         self.store, self.repo, self.snap, self.aid, self.budget = store, repo, snapshot, analysis_id, budget
         self.cl = Claims(store, repo)
         self.extra = list(extra_uncertainties or [])
+        self.stale_files: set[str] = set()   # changed since the index when it was not refreshed
         self.ids: list[str] = []
         self.reused: set[str] = set()
         self.charged: dict[str, int] = {}
@@ -271,9 +272,17 @@ class _Recorder:
         c = self.cl.get(cid)
         unc = list(c["uncertainties"] or [])
         unc += [u for u in self.extra + self.context_unc.get(cid, []) if u not in unc]
+        evs = self.cl.evidence(cid)
+        if self.stale_files:  # the index was not refreshed: say it where a claim stands on a changed file
+            cited = sorted({e.get("path") for e in evs if e.get("path")} & self.stale_files)
+            if cited:
+                u = (f"{', '.join(cited[:2])} changed since the index; the index was not refreshed for this "
+                     "answer (run `verinoda update`)")
+                if u not in unc:
+                    unc.append(u)
         return {
             "id": cid, "text": c["text"], "status": c["status"], "confidence": round(c["confidence"], 2),
-            "evidence": [f"{e['relation']}:{e['source_type']}:{e['locator']}" for e in self.cl.evidence(cid)][:6],
+            "evidence": [f"{e['relation']}:{e['source_type']}:{e['locator']}" for e in evs][:6],
             "uncertainties": unc,
             **({"reused": True} if cid in self.reused else {}),
             **({"challenged": False, "not_challenged_reason": not_challenged} if not_challenged else {}),
@@ -2033,7 +2042,74 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
     if not sub.flags.get("not_found"):
         _exclusive_guard(ctx, sub, links)
     _choice_guard(ctx, sub)
+    _stale_guard(ctx, sub, links)
     return _finish_sub(ctx, sub, out, "+".join(h[3:] for h in handler_names) or "location")
+
+
+STALE_GUARD_FILES = 200   # changed files read for the subject's names (a skipped refresh leaves 1-5 as a rule)
+STALE_GUARD_NAMES = 6
+
+
+def _stale_guard(ctx: _Ctx, sub: _Sub, links: list[dict]) -> None:
+    """The index was not refreshed for this answer (``rec.stale_files``): a changed file that spells the
+    sub-question's subject may hold what was asked (a new caller, a changed definition) and the answer
+    did not read it. Each such file is said as an unknown ("verinoda/textnorm.py:296 (changed since the
+    index) spells `split_identifier`: not in this answer") and the verdict is at most
+    met_with_inference (``flags["stale_subject"]``, :func:`judge`)."""
+    stale = sorted(ctx.rec.stale_files or ())
+    if not stale:
+        return
+    g = ctx.g
+    nodes = list(sub.subject_nodes)
+    for lk in links:
+        if lk.get("status") in ("linked", "weak", "ambiguous"):
+            nodes += qp.mention_nodes(lk)
+    names = []
+    for n in nodes:
+        if n in g.G and not g.is_file_node(n):
+            bare = qp._bare(g.label(n))
+            if len(bare) >= 3 and bare not in names:
+                names.append(bare)
+    for lk in links:
+        t = (lk.get("text") or "").strip("`'\" ")
+        if qp.code_shape(t) == "name":
+            bare = qp.split_code_name(t)[1].rpartition(".")[2]
+            if len(bare) >= 3 and bare not in names:
+                names.append(bare)
+    if not names:
+        return
+    rxs = [(nm, re.compile(rf"(?<![\w]){re.escape(nm)}(?![\w])"),
+            re.compile(rf"^\s*(?:async\s+def|def|class|function|func|fun|fn)\s+{re.escape(nm)}(?![\w])"))
+           for nm in names[:STALE_GUARD_NAMES]]
+    hits: list[tuple[str, str]] = []
+    texts = ctx.rec.__dict__.setdefault("_stale_texts", {})  # read once per analysis, not per sub-question
+    for f in stale[:STALE_GUARD_FILES]:
+        if f not in texts:
+            texts[f] = qp._lines_of(g, f)
+        uses, defs = [], []
+        for i, line in enumerate(texts[f], 1):
+            for nm, rx, drx in rxs:
+                if rx.search(line):
+                    (defs if drx.search(line) else uses).append((i, nm))
+                    break
+        # where the name is used first (a new caller), else where it is defined
+        found = uses[:3] or defs[:1]
+        if found:
+            hits.append((f"{f}:" + ", ".join(str(i) for i, _ in found), found[0][1]))
+    if not hits:
+        return
+    sub.flags["stale_subject"] = [at for at, _ in hits]
+    for at, nm in hits[:3]:
+        _unknown(ctx, sub, {"question": f"what does {at.rpartition(':')[0]} (changed since the index) do with `{nm}`?",
+                            "why": f"{at} spells `{nm}` and changed since the index; the index was not refreshed "
+                                   "for this answer, so what it holds there (a new caller, a changed definition) "
+                                   "is not in this answer",
+                            "next_step": "run `verinoda update` (or MCP index_update), then ask again"})
+    if len(hits) > 3:
+        _unknown(ctx, sub, {"question": "do other changed files hold what was asked?",
+                            "why": f"{len(hits) - 3} more file(s) changed since the index spell the subject: "
+                                   + ", ".join(at for at, _ in hits[3:8]),
+                            "next_step": "run `verinoda update`, then ask again"})
 
 
 def _choice_guard(ctx: _Ctx, sub: _Sub) -> None:
@@ -2342,7 +2418,7 @@ def judge(sq: dict, claims: list[dict], flags: dict | None = None) -> str:
         return "unmet"
     best = min(live, key=lambda c: _RANK[c["status"]])["status"]
     if best in VERIFIED and _RANK[best] <= _RANK.get(min_status, _RANK[MIN_STATUS_DEFAULT]) \
-            and not flags.get("may_ask_for_choice"):
+            and not flags.get("may_ask_for_choice") and not flags.get("stale_subject"):
         return "met"
     return "met_with_inference"
 
@@ -2454,10 +2530,139 @@ def _lexicon(repo: Path, g: index.Graph, store: Store, snap: dict, step) -> obje
             return None
 
 
+REFRESH_INLINE_SECONDS = 15.0   # a refresh expected to take longer is not run inside analyze
+REFRESH_INLINE_FILES = 200      # nor one over this many changed files
+# without a recorded build time, a graph build is estimated by the file count (measured on Windows:
+# 2,259-2,388 files took 42-71 s, 1,522 TypeScript files 25 s; 0.015 s a file is on the low side)
+REFRESH_SECONDS_PER_FILE = 0.015
+REFRESH_SMALL_PROJECT = 300     # a project with fewer files is refreshed first whatever its last build took
+REFRESH_BUSY_WAIT_SMALL = 10.0  # and waits this long for another build of it (a big one does not wait)
+REFRESH_MODES = ("auto", "inline", "skip")
+
+
+def _refresh_estimate(repo: Path, store: Store, snap: dict, state: dict,
+                      g=None) -> tuple[float | None, list[str], bool]:
+    """``(expected seconds, changed files, graph rebuild needed)`` of refreshing the index now
+    (``g``: the loaded graph, which spares reading graph.json)."""
+    from verinoda import buildlock, workflow
+    from verinoda.snapshot import changed_files
+
+    diff = changed_files(store.snapshot_files(snap["id"]), state["files"])
+    changed = diff["modified"] + diff["added"] + diff["removed"]
+    in_graph = None
+    if g is not None:
+        in_graph = {f for _n, d in g.G.nodes(data=True) if (f := d.get("source_file"))}
+    try:
+        graph = workflow._graph_affected(repo, diff, in_graph)
+    except Exception:  # noqa: BLE001 - unknown: assume the expensive path
+        graph = True
+    if not graph:
+        return 1.0, changed, False  # search index and derived data only, per changed file
+    last = buildlock.last_build_seconds(repo)
+    if last is None:  # an index built before build times were kept: judged by its size
+        last = REFRESH_SECONDS_PER_FILE * (snap.get("file_count") or len(state["files"]))
+    return last, changed, True
+
+
+def slow_refresh(repo: Path, snap: dict, est: float | None, changed: list[str], rebuild: bool) -> str | None:
+    """Why refreshing the index now is too slow to run inside an analysis (None: run it)."""
+    from verinoda import buildlock
+
+    if not rebuild or (snap.get("file_count") or 0) < REFRESH_SMALL_PROJECT:
+        return None
+    if len(changed) > REFRESH_INLINE_FILES:
+        return f"{len(changed)} files changed (a refresh here would rebuild the whole graph)"
+    if est is not None and est > REFRESH_INLINE_SECONDS:
+        if buildlock.last_build_seconds(repo) is not None:
+            return f"the last graph build took {est:.0f} s"
+        return f"a graph build of {snap.get('file_count')} files is estimated at {est:.0f} s"
+    return None
+
+
+def _refresh_index(store: Store, repo: Path, snap: dict | None, state: dict, mode: str, budget: Budget,
+                   step, unknown, extra_unc: list[str], g=None) -> dict:
+    """Step 0 of :func:`analyze`: refresh the index, or say why the answer uses the previous one.
+
+    Returns what happened (``ran``, ``seconds``, ``skipped``, ``stale_files``...) plus ``_snapshot``,
+    the snapshot the analysis stands on. The time a refresh takes is given back to the budget.
+    ``g``: the graph already loaded (the MCP server's), if any."""
+    from verinoda import buildlock, workflow
+
+    if mode not in REFRESH_MODES:
+        raise ValueError(f"refresh must be one of {', '.join(REFRESH_MODES)}, not {mode!r}")
+    info: dict = {"ran": False}
+    skip_why = None
+    changed: list[str] = []
+    if snap is not None and graph_path_exists(repo):
+        est, changed, rebuild = _refresh_estimate(repo, store, snap, state, g)
+        info["changed_count"] = len(changed)
+        if mode == "skip":
+            skip_why = "not asked to refresh"
+        elif mode == "auto":
+            skip_why = slow_refresh(repo, snap, est, changed, rebuild)
+        if skip_why:
+            info.update(skipped=skip_why, stale_files=changed[:20], stale_count=len(changed), _stale_all=changed,
+                        next_step="run `verinoda update` (or MCP index_update), then ask again")
+    if skip_why is None:
+        t0 = time.monotonic()
+        try:
+            small = snap is None or (snap.get("file_count") or 0) < REFRESH_SMALL_PROJECT
+            # inline means "refresh first": a build already running is waited for (as `verinoda update` does)
+            wait = buildlock.CLI_WAIT_SECONDS if mode == "inline" else REFRESH_BUSY_WAIT_SMALL if small else 0
+            res = workflow.update(store, repo, wait=wait, purpose="analyze refresh")
+        except Exception as exc:  # noqa: BLE001 - a failed refresh is reported, not raised
+            res = {"error": f"{type(exc).__name__}: {exc}"[:300], "snapshot": snap}
+        took = time.monotonic() - t0
+        budget.started += took  # the refresh is not the answer's time
+        info.update(seconds=round(took, 3), mode=res.get("mode"))
+        if res.get("mode") == "busy":
+            skip_why = "another index build is running"
+            info.update(skipped=skip_why, busy=res.get("busy"), stale_files=changed[:20], stale_count=len(changed),
+                        _stale_all=changed, next_step="ask again once that build has finished")
+        elif res.get("error") or not res.get("snapshot"):
+            prev = res.get("snapshot") or snap
+            err = res.get("error") or "the refresh produced no snapshot"
+            extra_unc.append(f"index could not be refreshed ({err}); the graph describes an older "
+                             f"tree (snapshot {(prev or {}).get('id')}), cited lines are re-read from the current one")
+            hint = str(res.get("hint") or "")
+            unknown({"question": "does the index describe the current working tree?",
+                     "why": f"index could not be refreshed: {err}",
+                     "next_step": f"`{hint}`" if hint.startswith("verinoda ") else (hint or "run `verinoda update`")})
+            step("refresh_index", f"refused: {err}; continuing on snapshot {(prev or {}).get('id')}")
+            info.update(error=extra_unc[-1])
+            return {**info, "_snapshot": prev}
+        else:
+            info["ran"] = True
+            step("refresh_index", f"working tree changed; re-indexed ({res.get('changed_count')} files, "
+                                  f"{took:.1f} s, not charged to the budget), "
+                                  f"{len(res.get('stale') or [])} claim(s) marked stale")
+            return {**info, "changed_count": res.get("changed_count"), "_snapshot": res["snapshot"]}
+    # answered from the previous index: said once, and on every claim that cites a changed file
+    files = info.get("stale_files") or []
+    more = info.get("stale_count", 0) - len(files[:5])
+    unknown({"question": "does the index describe the current working tree?",
+             "why": f"the index predates {info.get('stale_count', 0)} changed file(s) ("
+                    + ", ".join(files[:5]) + (f", +{more}" if more > 0 else "")
+                    + f"); not refreshed: {skip_why}; this answer uses the previous index",
+             "next_step": info["next_step"]})
+    step("refresh_index", f"skipped: {skip_why}; answering from snapshot {(snap or {}).get('id')}")
+    return {**info, "_snapshot": snap}
+
+
+def graph_path_exists(repo: Path) -> bool:
+    from verinoda.paths import graph_path
+
+    return graph_path(repo).exists()
+
+
 def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budget | None = None,
             run_tests: bool = False, challenge: bool = True, max_claims: int = 12, graph=None,
-            observe: bool = False) -> dict:
-    """Answer ``question`` (or ``plan``: a dict, JSON text or a plan file) with claims and unknowns."""
+            observe: bool = False, refresh: str = "auto") -> dict:
+    """Answer ``question`` (or ``plan``: a dict, JSON text or a plan file) with claims and unknowns.
+
+    ``refresh``: ``auto`` refreshes a stale index first unless that would be slow (then the answer
+    uses the previous index and says which files are stale), ``inline`` always refreshes, ``skip``
+    never does."""
     from verinoda import critique, workflow
 
     repo = Path(repo).resolve()
@@ -2481,30 +2686,19 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
     host_plan, plan_problems = (qp.parse(plan) if plan is not None else (None, []))
     if host_plan is not None and not (question or "").strip():
         question = str(host_plan.get("user_message") or "")
-    # 0. make sure the index describes the working tree we are about to cite
-    #    (the refresh is charged to the time budget like any other step)
+    # 0. make sure the index describes the working tree we are about to cite. The refresh is not
+    #    charged to the answer's time budget; one that would be slow (the last graph build took
+    #    longer than REFRESH_INLINE_SECONDS, or many files changed) or that another build is running
+    #    is not waited for: the answer comes from the previous index and says which files are stale.
     snap = store.latest_snapshot()
     state = current_state(repo, store=store)  # stat-cached hashes; passed once to critique
     extra_unc: list[str] = []
+    refresh_info: dict | None = None
+    stale_all: set[str] = set()
     if snap is None or snap["tree_hash"] != state["tree_hash"]:
-        try:
-            res = workflow.update(store, repo)
-        except Exception as exc:  # noqa: BLE001 - a failed refresh is reported, not raised
-            res = {"error": f"{type(exc).__name__}: {exc}"[:300], "snapshot": snap}
-        if res.get("error") or not res.get("snapshot"):
-            prev = res.get("snapshot") or snap
-            err = res.get("error") or "the refresh produced no snapshot"
-            extra_unc.append(f"index could not be refreshed ({err}); the graph describes an older "
-                             f"tree (snapshot {(prev or {}).get('id')}), cited lines are re-read from the current one")
-            unknown({"question": "does the index describe the current working tree?",
-                     "why": f"index could not be refreshed: {err}",
-                     "next_step": "run `verinoda scan --force`" + (f" ({res['hint']})" if res.get("hint") else "")})
-            step("refresh_index", f"refused: {err}; continuing on snapshot {(prev or {}).get('id')}")
-            snap = prev
-        else:
-            snap = res["snapshot"]
-            step("refresh_index", f"working tree changed; re-indexed ({res.get('changed_count')} files), "
-                                  f"{len(res.get('stale') or [])} claim(s) marked stale")
+        refresh_info = _refresh_index(store, repo, snap, state, refresh, budget, step, unknown, extra_unc, g=graph)
+        snap = refresh_info.pop("_snapshot")
+        stale_all = set(refresh_info.pop("_stale_all", None) or ())
     if snap is None:  # nothing indexed to stand on
         result = {"analysis_id": aid, "question": question, "intents": intents_for(question), "status": "no_index",
                   "snapshot": None, "claims": [], "unknowns": unknowns, "critique": [], "steps": steps}
@@ -2551,6 +2745,7 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
         _store_analysis(store, aid, question, snap, budget, result, [], plan_id, status)
         return result
     rec = _Recorder(store, repo, snap, aid, budget, extra_unc)
+    rec.stale_files = stale_all
     rec.precise_budget = _precise_budget(repo)
     budget.spend(0, _size(base) + 120)
     ctx = _Ctx(store=store, repo=repo, g=g, lex=lex, snap=snap, commit=commit, budget=budget, rec=rec, step=step,
@@ -2647,8 +2842,10 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
     if question.strip():
         result["passages"] = _passages(g, question)
         budget.chars += sum(len(ln) + 1 for ln in result["passages"])
-    if extra_unc:
-        result["index_refresh_error"] = extra_unc[0]
+    if refresh_info and refresh_info.get("error"):
+        result["index_refresh_error"] = refresh_info["error"]
+    if refresh_info:
+        result["index_refresh"] = refresh_info
     result["usage"] = budget.usage()
     pb = rec.precise_budget
     if pb is not None and (pb.sites or pb.skipped):

@@ -525,7 +525,7 @@ def test_update_rendering_and_error_exit(monkeypatch, capsys, tmp_path):
 
     failed = {"mode": "error", "error": "index build failed: boom", "hint": "run `verinoda scan --force`"}
     monkeypatch.setattr(cli, "_store", lambda repo, **kw: None)
-    monkeypatch.setattr(workflow, "update", lambda st, repo: failed)
+    monkeypatch.setattr(workflow, "update", lambda st, repo, **kw: failed)
     assert cli.main(["update", str(tmp_path)]) == 1
     cap = capsys.readouterr()
     assert cap.out.startswith("error: 0 changed file(s)")
