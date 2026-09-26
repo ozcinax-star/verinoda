@@ -36,7 +36,8 @@ _LOC_RX = re.compile(r"([A-Za-z0-9_.][\w.\-/]*\.[A-Za-z0-9_]+:\d+(?:-\d+)?)")
 _HEAD_RX = re.compile(r"^## (\S+):(\d+)-(\d+)(?: |$)")
 _SUB_RX = re.compile(r"^  (\S+):(\d+)-(\d+)$")
 _ITEM_LINE_RX = re.compile(r"^\S+:\d+-\d+ ")
-_META = ("  doc: ", "  names: ", "  named by: ", "  same content: ", "  calls: ", "  called by: ", "  const ")
+_META = ("  doc: ", "  names: ", "  named by: ", "  same content: ", "  calls: ", "  called by: ", "  const ",
+         "  mixin: ", "  runs: ")
 _NOT_BODY = ("## ", "… ", "(calls / called by", "not indexed, and", "next: ", "expanded: ",
              "changed since indexing", "no candidate locations")
 

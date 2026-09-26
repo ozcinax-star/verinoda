@@ -544,7 +544,9 @@
    "minimum"
   ],
   "engelle": [
-   "block"
+   "block",
+   "prevent",
+   "cancel"
   ],
   "entegrasyon": [
    "integration"

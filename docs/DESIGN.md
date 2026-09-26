@@ -68,6 +68,8 @@ own measurements, with their caveats. The benchmark harness results are in
 | D45 | Name check for Kotlin, in the Java check's world | implemented | Built 2026-09-26 (section 18): `codecheck_kotlin.py`; the universe reads Kotlin sources (Java sees them too), `jvmclass` reads `@kotlin.Metadata` names. kotlinpoet: 10 absents, all kotlin-reflect names the given classpath lacked; the Java mod unchanged (0 absent, 8 of 8 caught). Not done: argument counts, receiver-less calls, type inference beyond declarations and constructors. |
 | D46 | Import check for TypeScript and JavaScript | implemented | Built 2026-09-26 (section 19): `codecheck_ts.py`. A planted sample: 6 of 6; ky: 0 false absents over 594 sites. A file is checked for imports only and stays under `not_checked`. Not done: calls, members, types (the TypeScript compiler), bundler aliases, Vue/Svelte files. |
 | D47 | When a method runs (`verinoda when`, MCP `run_when`) | implemented | Built 2026-09-26 (section 20): JVM lambdas handed to a registration or scheduler as `registers` edges (event, delay), `when.py` walks back to the event with the conditions around each call; "when does X run / ne zaman çalışır" in `analyze`. fastbench on fresh indexes: 0 differences. Not done: Kotlin lambdas, anonymous listener classes, annotation-registered events. |
+| D48 | Mixin edges | implemented | Built 2026-09-26 (section 21): `jvm_mixins.py`; `injects` / `accesses` edges with the target method, point and `cancellable`; shown by query (`mixin:`), node, when and analyze (what blocks X). Two ranking changes tried and reverted (21.4); fastbench 0 differences. Not done: bytecode checks of descriptors, `@Shadow`. |
+| D49 | GameTest registry and the tests a change should run | implemented | Built 2026-09-26 (section 22): `gametests.py` reads the `fabric-gametest` entrypoints; impact and change_review list the registered GameTest classes that reach the change, nearest first (directly or through a class that calls it), and warn about unregistered ones. Not done: NeoForge, client game tests without `@GameTest`. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -2907,6 +2909,95 @@ methods to learn "at the end of every server tick, every fifth tick, when the se
 Kotlin lambdas (method references only, as in D38), anonymous classes passed as listeners, events registered
 through annotations (`@SubscribeEvent`) and the conditions of the registration itself (a handler registered
 only in dev mode).
+
+## 21. Mixin edges (D48, 2026-09-26)
+
+### 21.1 Why
+
+A Mixin handler is mod code that runs inside a game method: `@Inject(method = "checkSpawnRules(...)Z",
+at = @At("HEAD"), cancellable = true)` on `MobMixin` runs at the start of `Mob.checkSpawnRules` and can make it
+return false. The graph had one `references` edge from the handler to `Mob`, so "what stops mobs from spawning"
+found neither the handler nor what it does, and `when` could not say when the handler runs.
+
+### 21.2 Decisions
+
+- **`verinoda/jvm_mixins.py`, from the annotations as written** (comments removed, strings kept): the `@Mixin`
+  targets (`X.class` through the file's imports, `targets = "..."` strings), then every `@Inject`, `@Redirect`,
+  `@ModifyVariable`, `@ModifyArg(s)`, `@ModifyConstant`, `@ModifyExpressionValue`, `@ModifyReturnValue`,
+  `@WrapOperation`, `@WrapWithCondition`, `@Overwrite`: the target method (a descriptor is reduced to the name,
+  `"a" + "b"` joined, a `static final String` constant of the file read), the injection point (`HEAD`,
+  `RETURN`, `TAIL`, `INVOKE` with its target, `FIELD` ...) and `cancellable`. `@Accessor` / `@Invoker` name the
+  target member (the value, or the method name without get/set/is/call/invoke).
+- **Edges**: `injects` (and `accesses`) from the handler method to the target class node (the external class
+  the file imports, or a project class), `EXTRACTED`, `_origin=verinoda.mixins`, with `kind`, `target_methods`,
+  `at`, `at_target`, `cancellable` and a readable `context` ("@Inject into Mob.checkSpawnRules at HEAD - at its
+  start; can cancel it"). Kept in the receiver sidecar with the other load-time edges (version 7). Nothing is
+  checked against the target's bytecode: a wrong descriptor is reported as written. A target class with no node
+  (a string target the file does not import) gives no edge.
+- **Where it shows**: `query` prints `mixin: ...` under a handler and `runs: <event> (registered at file:line)`
+  under a registered handler; `node` lists the edges; `when` ends a handler's path "inside Mob.checkSpawnRules,
+  at its start; can cancel it"; `analyze` claims the injections whose target method the question's words (their
+  translations included) name, the cancellable ones first when the question asks what blocks, prevents or stops
+  something (`engelle`, `önle`, `durdur` in Turkish): "`MobMixin.guard$noSpawnInWard` runs inside `Mob.checkSpawnRules`
+  at its start; it can cancel it (@Inject at file:line)", `strong_inference`, its evidence the annotation lines.
+- **Seed**: `engelle` -> block, prevent, cancel.
+
+### 21.3 Measured
+
+- A private Fabric mod: 39 injector edges from 28 Mixin classes, every one with its target method and point
+  after reading `+`-joined descriptors and `String` constants (before those two: 7 with a broken or missing
+  method). The acceptance question, in Turkish ("what blocks creatures from spawning"), answered with the
+  `checkSpawnRules` HEAD injection; before, the answer was the definitions of a class named after the word
+  "creature".
+- fastbench on fresh indexes (9 sets, 333 results), old code against D48 and D49 as committed: 0 differences
+  (after the reverts in 21.4).
+
+### 21.4 Tried and reverted
+
+- **Seed translations weighted above co-occurrence guesses** (0.85 against 0.5, both 0.7 before): the Turkish
+  question above moved from rank 50 to 22 in `query`, but forge_mod JSON retrieval lost 3 facts (50 -> 47) and
+  Verinoda's own Turkish user questions lost 5 in analyze (13 -> 8). Reverted.
+- **Turkish vowel narrowing in seed keys** (`engelle` matching `engelliyor`): it also let `yenile` match
+  `yeniliyor` and pulled the ranking of those user questions towards update code (analyze 13 -> 8). Reverted;
+  the block cue of the Mixin claims reads `engel...` directly.
+
+### 21.5 Not done
+
+Bytecode checks of the target descriptor (item 4's reference tree), `@Shadow` members, Mixins written in
+Kotlin, NeoForge access transformers.
+
+## 22. GameTest registry and the tests a change should run (D49, 2026-09-26)
+
+### 22.1 Why
+
+Fabric runs only the GameTest classes a `fabric.mod.json` names under `fabric-gametest` (server) or
+`fabric-client-gametest` (client). The impact view listed every test file within four import hops: on a mod
+whose main class imports every feature that was 66 test files for a one-file change, without saying which of
+them run or which are nearest.
+
+### 22.2 Decisions
+
+- **`verinoda/gametests.py`**: `registry()` reads the entrypoints of every `fabric.mod.json` outside build
+  output (a file with junk after its JSON object is still read); `gametest_classes()` groups the `@GameTest`
+  methods (`verinoda.testcode`) by class; `for_change(g, seeds)` ranks the classes whose tests reach the
+  changed symbols: directly (static test reach, two steps) or through a neighbour class, one whose method calls
+  or registers a changed symbol (not a hub over 60 edges in, like the mod's main class): a test that summons an
+  NPC, then waits for the tick handler the change is in, reaches the NPC's class, not the handler. Registered
+  first, then by distance, then by folder distance from the change. A class that reaches the change but no
+  entrypoint names is a warning: it never runs.
+- **Where it shows**: `map --view impact` (`gametests` in JSON, "GameTests to run (registered, nearest first):
+  ..." in text) and `review` / MCP `change_review` (under Tests).
+
+### 22.3 Measured
+
+On a private Fabric mod (89 GameTest classes, all registered), a change to a guard NPC's file: the three test
+classes of that NPC first, then three that reach it through the command class; before, 66 test files in
+alphabetical order.
+
+### 22.4 Not done
+
+NeoForge (`@GameTestHolder`, `RegisterGameTestsEvent`), Fabric client game tests that are not `@GameTest`
+methods, runtime selection (`runGameTest` with a filter).
 
 ## Sources
 

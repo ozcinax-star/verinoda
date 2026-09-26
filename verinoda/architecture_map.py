@@ -748,6 +748,9 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
                                "distance": dd + 1, "basis": testcode.reach_basis(testcode.extra_kind(g, u.id, n),
                                                                                  what)}
     out_basis = {"tests_basis": list(basis.values())} if basis else {}
+    from verinoda import gametests
+
+    gt = gametests.for_change(g, seeds) if seeds else None  # Minecraft GameTests: registered ones, nearest first
     return {
         "view": "impact",
         "coverage": {
@@ -767,6 +770,7 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
         "affected_files": dict(affected_files.most_common(40)),
         "tests_to_run": sorted(tests),
         **out_basis,
+        **({"gametests": gt} if gt else {}),
     }
 
 

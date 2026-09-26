@@ -877,8 +877,65 @@ def _mark_context(ctx: _Ctx, sub: _Sub, it: dict, c: dict | None) -> None:
             off.append(c["id"])
 
 
+# "what blocks / prevents / stops X", "X'i ne engelliyor / önlüyor / durduruyor" (Turkish folded)
+_BLOCK_CUE = re.compile(r"\b(?:block|prevent|stop|cancel|forbid|suppress|disabl|keep\w* from)\w*"
+                        r"|\b(?:engel|onle|onlu|durdur|iptal|yasakl)\w*")
+MIXIN_CLAIMS = 3
+
+
+def _mixin_claims(ctx: _Ctx, sub: _Sub) -> None:
+    """Mixin handlers whose injection target the question names (docs/DESIGN.md D48): "what blocks mob spawning"
+    -> the ``@Inject`` into ``Mob.checkSpawnRules`` that can cancel it. A target method's name parts must meet the
+    question's words (its translations included); a question that asks what blocks something ranks the injections
+    that can cancel first."""
+    g = ctx.g
+    edges = list(g.edges({"injects"}))
+    if not edges:
+        return
+    words = {tn.en_stem(tn.fold_tr(w).lower()) for w in sub.words if len(w) >= 3}
+    text = sub.sq.get("text_user_lang") or sub.sq.get("text") or ""
+    blocks = bool(_BLOCK_CUE.search(text.lower()) or _BLOCK_CUE.search(tn.fold_tr(text).lower()))
+    scored = []
+    for u, v, d in edges:
+        methods = [m for m in d.get("target_methods") or [] if m]
+        mhit = {m: {tn.en_stem(p.lower()) for p in tn.split_identifier(m) if len(p) >= 3} & words for m in methods}
+        best = max(mhit, key=lambda m: len(mhit[m]), default=None)
+        if best is None or not mhit[best]:
+            continue
+        cls = str(d.get("target_class") or g.label(v)).rsplit(".", 1)[-1]
+        chit = {tn.en_stem(p.lower()) for p in tn.split_identifier(cls) if len(p) >= 3} & words
+        cancels = blocks and bool(d.get("cancellable"))
+        if len(mhit[best] | chit) < 2 and not cancels:  # one shared word ("tick") is not the question's subject
+            continue
+        score = len(mhit[best] | chit) + (1 if cancels else 0)
+        scored.append((-score, f"{g.file(u)}:{g.line(u)}", u, cls, best, d))
+    if not scored or not _begin(ctx, sub, "mixins"):
+        return
+    from verinoda import jvm_mixins
+
+    for _s, _at, u, cls, method, d in sorted(scored)[:MIXIN_CLAIMS]:
+        if not ctx.budget.ok:
+            ctx.rec.skipped["mixins"] += 1
+            continue
+        f, sp = g.file(u), g.span(u)
+        ann = int(str(d.get("source_location") or "L0")[1:] or 0)
+        a = min(x for x in (ann, (sp or (ann, ann))[0]) if x) if (ann or sp) else None
+        if not f or not a:
+            continue
+        b = min((sp or (a, a))[1], a + 4)
+        point = jvm_mixins.point_words(d.get("at"))
+        text_ = (f"`{_disp(g, u)}` runs inside `{cls}.{method}`" + (f" {point}" if point else "")
+                 + ("; it can cancel it" if d.get("cancellable") else "") + f" (@{d.get('kind')} at {f}:{ann or a})")
+        ctx.rec.claim(text_, kind="location", status="strong_inference",
+                      evidence=[(_src_ev(ctx.repo, f, a, b, ctx.commit), "supports")],
+                      subjects=[f"{f}::{g.label(u)}"], spec={"symbol": g.label(u), "mixin": d.get("context")},
+                      uncertainties=["read from the Mixin annotation; the target class's bytecode is not checked"])
+        ctx.step("mixin", f"{_disp(g, u)} -> {cls}.{method}")
+
+
 def _context_claims(ctx: _Ctx, sub: _Sub, raw_items: list[dict]) -> None:
     g, rec, commit, repo = ctx.g, ctx.rec, ctx.commit, ctx.repo
+    _mixin_claims(ctx, sub)
     items = sub.prod or sub.items
     module_blocks = [i for i in sub.items if i["symbol"] == "(module level)"]
     graph_items = [i for i in items if i["id"] in g.G]
@@ -1182,9 +1239,10 @@ def _when_claims(ctx: _Ctx, sub: _Sub, t: str) -> bool:
             path_, _, ln = h["at"].rpartition(":")
             if h.get("event") and ln.isdigit():
                 ev = _src_ev(ctx.rec.repo, path_, int(ln), None, ctx.commit)
+                how = (f"{h.get('context')}" if h.get("relation") == "injects" else
+                       f"`{h['from']}` hands it to {h['_edge'].get('registrar') or 'a registration'}(...)")
                 if ev:
-                    ctx.rec.claim(f"`{h['to']}` runs {h['event']}: `{h['from']}` hands it to "
-                                  f"{h['_edge'].get('registrar') or 'a registration'}(...) ({h['at']})",
+                    ctx.rec.claim(f"`{h['to']}` runs {h['event']}: {how} ({h['at']})",
                                   kind="flow", status="strong_inference", evidence=[(ev, "supports")],
                                   subjects=[f"{g.file(h['from_id'])}::{g.label(h['from_id'])}",
                                             f"{g.file(h['to_id'])}::{g.label(h['to_id'])}"],

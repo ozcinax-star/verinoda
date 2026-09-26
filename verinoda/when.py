@@ -176,6 +176,23 @@ def when(g, nid: str, *, max_depth: int = MAX_DEPTH, max_paths: int = MAX_PATHS)
         # says when it runs, the plain call would say "now"
         lambda_from = {u for _r, u, d in callers if d.get("lambda")}
         callers = [c for c in callers if c[0] == 0 or c[1] not in lambda_from]
+        mixed = [(v, d) for v, d in g.out_edges(node, {"injects"})]
+        if mixed:  # a Mixin handler: the target method runs it (docs/DESIGN.md D48)
+            from verinoda import jvm_mixins
+
+            for v, d in mixed:
+                cls = str(d.get("target_class") or g.label(v)).rsplit(".", 1)[-1]
+                where = ", ".join(f"{cls}.{m}" for m in d.get("target_methods") or []) or cls
+                notes = "; ".join(w for w in (jvm_mixins.point_words(d.get("at")),
+                                               "can cancel it" if d.get("cancellable") else "") if w)
+                paths.append(trail + [{"from": where, "from_id": v, "to": name(node), "to_id": node,
+                                       "relation": "injects", "at": f"{d.get('source_file')}:"
+                                       f"{str(d.get('source_location') or 'L0')[1:]}",
+                                       "event": f"inside {where}" + (f", {notes}" if notes else ""),
+                                       "context": d.get("context"), "_edge": d},
+                                      {"entry": where, "at": loc(v) if g.file(v) else "(outside the project)",
+                                       "why": "the Mixin runs it inside this method"}])
+            continue
         if not callers or len(trail) >= max_depth:
             paths.append(trail + [{"entry": name(node), "at": loc(node),
                                    "why": ("nothing in the project calls or registers it: the framework calls it, "
@@ -225,6 +242,8 @@ def render(res: dict) -> str:
         for h in reversed(path):
             if "entry" in h:
                 out.append(f"     - {h['entry']} ({h['at']}): {h['why']}")
+            elif h.get("relation") == "injects":
+                out.append(f"     - {h['from']} runs {h['to']} ({h['at']}): {h.get('context') or ''}")
             elif h.get("event"):
                 out.append(f"     - {h['from']} registers {h['to']} at {h['at']}: {h.get('context') or ''}")
             else:

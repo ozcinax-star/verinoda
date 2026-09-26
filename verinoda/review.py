@@ -4616,6 +4616,12 @@ def _tests(ctx: _Ctx, changes: list[Change], *, run_tests: bool, observe: bool, 
                           "files that call a changed symbol"}
     if observed:
         out["observed"] = observed
+    if ctx.g is not None:  # Minecraft GameTests: the registered ones that reach the change, unregistered warned
+        from verinoda import gametests
+
+        gt = gametests.for_change(ctx.g, {c.node for c in code_changes if c.node is not None and c.node in ctx.g.G})
+        if gt and (gt["registered"] or gt["unregistered"]):
+            out["gametests"] = gt
     reached_any = {c.symbol for c in code_changes if per.get(c.symbol)} | \
         {s for s, t in ((observed or {}).get("reached") or {}).items() if t}
     # "no test reaches" is said only of a symbol the static graph can reach at all: without any static caller
@@ -4938,6 +4944,10 @@ def render_text(res: dict) -> str:
                    + (f", experiment {r['experiment']}" if r.get("experiment") else ""))
     if (t.get("observe") or {}).get("refused"):
         out.append(f"  observe: refused - {t['observe']['refused']}")
+    if t.get("gametests"):
+        from verinoda import gametests
+
+        out += ["  " + ln.strip() for ln in gametests.render(t["gametests"])]
     if t.get("no_test_reaches"):
         out.append("  no test reaches it in the static graph: " + ", ".join(t["no_test_reaches"][:6]))
     if t.get("reach_unknown"):

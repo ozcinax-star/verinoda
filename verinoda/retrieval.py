@@ -203,6 +203,26 @@ def _mark(d: dict) -> str:
     return "" if d.get("confidence") == "EXTRACTED" else "?"
 
 
+def runs_lines(g: Graph, nid: str, limit: int = 2) -> list[str]:
+    """What starts a symbol, when the graph knows it (docs/DESIGN.md D47, D48): ``mixin: @Inject into
+    Mob.checkSpawnRules at HEAD - ...`` for a Mixin handler, ``runs: at the end of every server tick (registered at
+    file:line)`` for a registered handler."""
+    from verinoda import index as ix
+
+    out: list[str] = []
+    mix = list(dict.fromkeys(str(d.get("context")) for _v, d in g.out_edges(nid, {"injects", "accesses"})
+                             if d.get("context")))
+    if mix:
+        out.append("  mixin: " + "; ".join(mix[:limit]) + (f" (+{len(mix) - limit})" if len(mix) > limit else ""))
+    regs = [(d, u) for u, d in g.in_edges(nid, {ix.CALLBACK_RELATION})]
+    if regs:
+        seen = list(dict.fromkeys(f"{ix.event_label(d.get('registrar') or '', d.get('delay'))} (registered at "
+                                  f"{d.get('source_file') or g.file(u)}:{str(d.get('source_location') or 'L?')[1:]})"
+                                  for d, u in regs))
+        out.append("  runs: " + "; ".join(seen[:limit]) + (f" (+{len(seen) - limit})" if len(seen) > limit else ""))
+    return out
+
+
 def call_outline(g: Graph, nid: str, *, impact: bool = False) -> tuple[list[str], list[str], int, int]:
     """``calls`` (``name@line``, by call-site line) and ``called_by`` (``name (path:line)``).
 
@@ -606,6 +626,7 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
             if callers and (full or flow or impact):
                 parts.append("  called by: " + "; ".join(callers) + (f" (+{nb - len(callers)})" if nb > len(callers) else ""))
                 outlined = True
+            parts += runs_lines(g, h.nid) if full or flow else []
         if full and h.consts:
             for c, ln in h.consts[:2]:
                 if 0 < ln <= len(lines):

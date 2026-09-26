@@ -151,6 +151,9 @@ def _impact(v: dict, cap: int) -> list[str]:
     tests = v.get("tests_to_run", [])
     if tests:
         out.append(f"tests to run ({len(tests)}): " + ", ".join(tests[:6]) + (" ..." if len(tests) > 6 else ""))
+    from verinoda import gametests
+
+    out += gametests.render(v.get("gametests"))
     return out
 
 
