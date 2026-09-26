@@ -274,7 +274,7 @@ def test_both_skills_keep_the_code_writing_rules_and_ask_for_the_users_words():
     for agent in ("claude", "codex"):
         text = agents.render_skill(agent).decode("utf-8")
         assert "use only the name check below" not in text
-        assert "the name check, the debug ledger (bug fixes) and\n`decide check --changed` below still apply" in text
+        assert "skip the question workflow; the name check, debug ledger and `decide check --changed` apply" in text
         record = text[text.index("verinoda decide record <brief-id>"):][:200]
         assert "--said" in record, agent
 

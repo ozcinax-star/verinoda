@@ -17,6 +17,11 @@ allowed-tools:
   - Bash(verinoda update *)
   - Bash(verinoda check *)
   - Bash(verinoda api *)
+  - Bash(verinoda when *)
+  - Bash(verinoda backlog *)
+  - Bash(verinoda datapack *)
+  - Bash(verinoda shader *)
+  - Bash(verinoda trace-log *)
   - Bash(verinoda decide check *)
   - Bash(verinoda decide list *)
   - Bash(verinoda decide brief *)
@@ -36,6 +41,11 @@ allowed-tools:
   - PowerShell(verinoda update *)
   - PowerShell(verinoda check *)
   - PowerShell(verinoda api *)
+  - PowerShell(verinoda when *)
+  - PowerShell(verinoda backlog *)
+  - PowerShell(verinoda datapack *)
+  - PowerShell(verinoda shader *)
+  - PowerShell(verinoda trace-log *)
   - PowerShell(verinoda decide check *)
   - PowerShell(verinoda decide list *)
   - PowerShell(verinoda decide brief *)
@@ -64,12 +74,12 @@ what the evidence supports.
 - "Should we switch to X / which one should we pick / how will this scale?" (the code's side of a
   decision; the user decides)
 - "What breaks if I change X?" (`verinoda review --target`; before you finish a change: `verinoda review`)
-- Verifying, re-checking or challenging an earlier conclusion, yours or the user's.
-- Comparing a mechanism with a reference repository or an official document.
+- Re-checking an earlier conclusion (yours or the user's), or comparing with a reference repo or doc.
 - Writing or editing Python code: check that the names it uses exist (see below).
+- Java / Minecraft mods: `when <Class.method>` (events and conditions that lead to it), `trace-log <log>`,
+  `datapack`, `shader <Block.field>` / `--check`, `backlog <id|File.java:LINE>`; `check`/`api` cover Java.
 
-For pure code-writing tasks skip the question workflow; the name check, the debug ledger (bug fixes) and
-`decide check --changed` below still apply.
+Pure code-writing: skip the question workflow; the name check, debug ledger and `decide check --changed` apply.
 
 ## Setup (once per session)
 
