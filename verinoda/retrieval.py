@@ -618,27 +618,58 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
     if outlined:
         add("(calls / called by: static call graph, '?' = inferred edge; may be incomplete)")
     if more:
-        nxt = f"next: same query, --max-chars {budget_chars * 2}"
-        while True:
-            tail = f"… {more} more candidates not shown" + (": " + "; ".join(rest[:4]) if rest else "")
-            tail = _clip(tail, 400) + "\n" + nxt
-            if used + len(tail) + 1 <= budget_chars or len(out) <= 1:
-                break
-            dropped = out.pop()  # make room for the note: the last block goes to the list instead
+        # the CLI command, named as such: MCP clients read this text too, and project_query takes no budget
+        nxt = f"next: verinoda query \"…\" --max-chars {budget_chars * 2}"
+
+        def drop_last() -> None:
+            """Make room for the note: the last block goes (an item's section or line is listed instead)."""
+            nonlocal used, more
+            dropped = out.pop()
             used -= len(dropped) + 1
             if len(out) in sig_back:  # the passage that printed a signature went: its header shows it again
                 at, with_sig = sig_back.pop(len(out))
                 used = _swap_block(out, at, with_sig, used, budget_chars, force=True)
-            m = _ITEM_HEAD_RX.match(dropped)  # an item's section or line (not a passage body) is listed
+            m = _ITEM_HEAD_RX.match(dropped)
             if m:
                 rest.insert(0, f"{m.group(1)} {m.group(2) or ''}".strip()[:120])
                 more += 1
-        while len(out) > 1 and used > budget_chars:  # a header that took its signature back overran
-            used -= len(out.pop()) + 1
-        add(tail)
+
+        while True:  # the whole note, keeping the top block
+            tail = _tail_forms(more, rest, nxt, budget_chars, _any_item(out))[0]
+            if used + len(tail) + 1 <= budget_chars or len(out) <= 1:
+                break
+            drop_last()
+        # the top block (or a header that took its signature back) can leave too little room: a shorter
+        # note, else that block goes as well; the note itself is never left out
+        while True:
+            room = budget_chars - used - 1
+            tail = next((t for t in _tail_forms(more, rest, nxt, room, _any_item(out)) if len(t) <= room), None)
+            if tail is not None or not out:
+                break
+            drop_last()
+        add(tail if tail is not None else _clip(_tail_forms(more, [], nxt, 0, False)[-1], max(1, budget_chars - 1)))
     if not out:
         add("no candidate locations to show for this question")
     return "\n".join(out)
+
+
+def _any_item(out: list[str]) -> bool:
+    """Does the text show at least one item (a section or an item line)?"""
+    return any(_ITEM_HEAD_RX.match(b) for b in out)
+
+
+def _tail_forms(more: int, rest: list[str], nxt: str, room: int, shown: bool) -> list[str]:
+    """The note on the candidates left out, longest form first: the count with the first of them and the
+    next step, the same list cut to ``room``, the count and the next step, the count alone."""
+    head = (f"… {more} more candidates not shown" if shown
+            else f"… {more} candidates not shown (budget too small)")
+    forms = []
+    if rest:
+        listed = head + ": " + "; ".join(rest[:4])
+        forms.append(_clip(listed, 400) + "\n" + nxt)
+        if room - len(nxt) - 1 >= len(head) + 24:
+            forms.append(_clip(listed, room - len(nxt) - 1) + "\n" + nxt)
+    return forms + [head + "\n" + nxt, head]
 
 
 # the first line of a rendered item: "## path:a-b name" (a section) or "path:a-b signature" (a line)
@@ -682,7 +713,7 @@ def _render_items(result: dict, out: list[str], add, budget_chars: int) -> str:
             add(f"… {left} more items not shown")
             break
     if (result.get("budget") or {}).get("truncated"):
-        add(f"… more candidates exist: same query, --max-chars {budget_chars * 2}")
+        add(f"… more candidates exist: verinoda query \"…\" --max-chars {budget_chars * 2}")
     return "\n".join(out)
 
 

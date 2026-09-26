@@ -478,7 +478,28 @@ def test_render_text_states_truncation_with_the_follow_up_command(g):
     res = retrieval.retrieve(g, "order")
     text = retrieval.render_text(res, budget_chars=700)
     assert len(text) <= 700
-    assert "more candidates not shown" in text and "next: same query, --max-chars 1400" in text
+    # the follow-up names the CLI command: MCP clients read the same text, and project_query takes no budget
+    assert "more candidates not shown" in text and 'next: verinoda query "…" --max-chars 1400' in text
+
+
+@pytest.mark.parametrize("q", ["where is the discount applied to an order", "order",
+                               "How does create_order_handler reach the database write?"])
+def test_render_text_states_what_it_leaves_out_at_every_budget(g, q):
+    """At any budget the text fits, and when it leaves out a candidate it says so: an item the whole
+    text prints and this one does not, or candidates past the ranked hits, mean the note is there; and
+    it never says there are no candidates when there are."""
+    res = retrieval.retrieve(g, q)
+    rk = res.render.ranking
+    assert rk.hits
+    item = re.compile(r"^(?:## )?(\S+:\d+-\d+) ", re.M)
+    everything = set(item.findall(retrieval.render_text(res, budget_chars=10 ** 6)))
+    for n in list(range(10, 700, 11)) + list(range(700, 3200, 89)):
+        text = retrieval.render_text(res, budget_chars=n)
+        assert len(text) <= n, n
+        assert "no candidate locations" not in text, n
+        left_out = everything - set(item.findall(text))
+        if left_out or rk.candidates > len(rk.hits):
+            assert "candidates not shown" in text or len(text) < 30, (n, sorted(left_out)[:3], text[-200:])
 
 
 def test_render_text_lists_at_most_three_expansions_without_their_notes(g):
