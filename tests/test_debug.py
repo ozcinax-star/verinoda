@@ -903,3 +903,19 @@ def test_printed_commands_are_quoted_and_costs_include_the_overhead():
         "'compute or roundtrip'" in debug.cmd_text(PT + ["-k", "compute or roundtrip"])
     assert debug._duration([{"duration_s": 0.6, "touched": {"cost": {"overhead_s": 17.2}}}]) == pytest.approx(17.8)
     assert debug._duration([{"duration_s": 0.6}]) == pytest.approx(0.6)
+
+
+def test_a_failure_the_edits_introduced_does_not_let_a_passing_baseline_session_close_as_resolved(tmp_path):
+    # found on a real mod: the flaky symptom never showed, an edit broke the test, the next edit passed and the
+    # session closed as "resolved" although nothing it saw was the symptom
+    repo = _repo(tmp_path)
+    st = open_store(repo)
+    s0 = debug.start(st, repo, "a test fails now and then", PT)
+    assert s0["outcome"] == "pass"
+    _sub(repo, "orders/pricing.py", 'i["qty"]', 'i["quantity"]')
+    assert debug.attempt(st, repo, hypothesis="rename the key")["outcome"] == "fail"
+    _sub(repo, "orders/pricing.py", 'i["quantity"]', 'i["qty"]')
+    assert debug.attempt(st, repo, hypothesis="put the key back")["outcome"] == "pass"
+    with pytest.raises(debug.DebugError, match="came after an edit"):
+        debug.close(st, repo, resolved_by=2)
+    assert debug.close(st, repo, abandoned=True, note="not reproduced")["status"] == "abandoned"
