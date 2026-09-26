@@ -40,9 +40,11 @@ TestPyPI refuses the same version twice; bump a rehearsal version (for example `
    `0.2.0-rc.1`; the workflow checks that they match, and the wrapper maps one to the other).
 2. Update the README status table and `docs/UPGRADING.md`; commit on `main`; wait for CI.
 3. Tag and push: `git tag v0.1.0 && git push origin v0.1.0`.
-4. The workflow publishes to PyPI (after the `pypi` environment's approval, if you set one), creates the
+4. The workflow writes `verinoda/data/build_stamp.json` (the tag's commit; ignored by git) before it builds, so
+   `verinoda --version` of a PyPI or npm install names the commit, and checks that the wheel says so.
+5. The workflow publishes to PyPI (after the `pypi` environment's approval, if you set one), creates the
    GitHub release, and publishes to npm.
-5. Check: `uvx --from verinoda==0.1.0 verinoda --version`, `npx -y verinoda@0.1.0 --version`.
+6. Check: `uvx --from verinoda==0.1.0 verinoda --version`, `npx -y verinoda@0.1.0 --version`.
 
 A version on PyPI can never be uploaded again, even after it is deleted: fix a bad release with a new
 version (`0.1.1`), not by re-tagging.

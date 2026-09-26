@@ -252,3 +252,18 @@ def test_newer_schema_error_names_both_builds(tmp_path):
     assert f"schema v{SCHEMA_VERSION + 1}, migrated by verinoda 9.9.9+abcdef012345" in msg
     assert buildinfo.server_version() in msg and sys.executable in msg and "verinoda doctor" in msg
     assert exc.value.written_by == "9.9.9+abcdef012345"
+
+
+def test_a_release_build_names_its_commit_from_the_workflows_stamp(tmp_path):
+    """A PyPI / npm install has no checkout, archive stamp or VCS install record: the release workflow writes
+    data/build_stamp.json before it builds, so `verinoda --version` names the commit, not "build unknown"."""
+    pkg = tmp_path / "site" / "verinoda"
+    (pkg / "data").mkdir(parents=True)
+    assert buildinfo.collect(pkg, record=_no_record)["build"] == "unknown"
+    sha = "ab" * 20
+    (pkg / "data" / "build_stamp.json").write_text(json.dumps({"commit": sha, "ref": "v9.9.9"}), encoding="utf-8")
+    info = buildinfo.collect(pkg, record=_no_record)
+    assert (info["source"], info["commit"], info["ref"], info["build"]) == ("release build", sha, "v9.9.9", sha[:12])
+    assert "written by the release workflow" in info["evidence"][-1]
+    (pkg / "data" / "build_stamp.json").write_text('{"commit": "not-a-sha"}', encoding="utf-8")
+    assert buildinfo.collect(pkg, record=_no_record)["build"] == "unknown"

@@ -13,7 +13,9 @@ one only reports what it read, and the build is ``unknown`` when none of them ap
 2. **source archive** - ``verinoda/data/git_archival.txt`` is filled in by ``git archive`` through
    ``export-subst`` in ``.gitattributes``; GitHub's ``/archive/<ref>.zip`` downloads (what install.sh
    installs) are made that way. An unfilled file (a checkout, a local build) gives nothing.
-3. **install record** - the PEP 610 ``direct_url.json`` of the installed distribution, used only when
+3. **release stamp** - ``verinoda/data/build_stamp.json``, written by the release workflow just before it builds
+   the sdist and the wheel (the tag's commit and name); a PyPI or npm install has no other source. Not in git.
+4. **install record** - the PEP 610 ``direct_url.json`` of the installed distribution, used only when
    that distribution is the package that is running: ``vcs_info.commit_id`` for a git URL install, a
    commit named in an archive URL, otherwise the URL and the requested ref without a commit.
 
@@ -35,6 +37,7 @@ from urllib.parse import unquote, urlparse
 
 PKG_DIR = Path(__file__).resolve().parent
 ARCHIVAL = "data/git_archival.txt"
+STAMP = "data/build_stamp.json"
 SHORT = 12
 _SHA = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
 _REF = re.compile(r"refs/[A-Za-z0-9._/+-]+")
@@ -275,7 +278,25 @@ def collect(pkg_dir: Path = PKG_DIR, *, check_changes: bool = True, record=None)
         if info["source"] == "unknown":
             info["source"] = "source archive"
         info["evidence"].append(f"{ARCHIVAL} filled in by git archive")
+    stamp = read_stamp(pkg_dir)
+    if stamp and not info["commit"]:
+        info.update(commit=stamp["commit"], ref=stamp.get("ref") or info["ref"])
+        if info["source"] == "unknown":
+            info["source"] = "release build"
+        info["evidence"].append(f"{STAMP} written by the release workflow")
     return _finish(info)
+
+
+def read_stamp(pkg_dir: Path = PKG_DIR) -> dict | None:
+    """``{"commit", "ref"}`` from the release workflow's stamp, or None (absent, unreadable, not a commit)."""
+    try:
+        data = json.loads(_read(Path(pkg_dir) / STAMP) or "")
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or not _SHA.fullmatch(str(data.get("commit") or "")):
+        return None
+    ref = data.get("ref")
+    return {"commit": data["commit"], "ref": ref if isinstance(ref, str) and ref else None}
 
 
 def _finish(info: dict) -> dict:

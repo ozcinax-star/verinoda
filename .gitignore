@@ -8,3 +8,5 @@ build/
 graphify-out/
 .verinoda/
 .hypothesis/
+# written by the release workflow before the build (verinoda/buildinfo.py)
+verinoda/data/build_stamp.json
