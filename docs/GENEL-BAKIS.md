@@ -95,7 +95,7 @@ satır; ürün testleri yaklaşık 15.300 satır.
 
 | Adım | Ne olur | Modül |
 |---|---|---|
-| 0 | Çalışma ağacı son taramadan beri değiştiyse indeks artımlı güncellenir. Dayandığı bir *öğe* (imza, gövde, isim bağlaması, belge bölümü) değişen iddialar `stale` olur. İndeksleme reddedilirse hata raporlanır, yeni snapshot kaydedilmez. | `workflow`, `claims` |
+| 0 | Çalışma ağacı son taramadan beri değiştiyse indeks artımlı güncellenir (büyük bir projede yavaş olacaksa atlanır ve değişen dosyalar söylenir; tablonun altına bakın). Bir projede aynı anda tek indeks kurulumu çalışır; ikincisi bekler ve kimin kurduğunu söyler. Dayandığı bir *öğe* (imza, gövde, isim bağlaması, belge bölümü) değişen iddialar `stale` olur. İndeksleme reddedilirse hata raporlanır, yeni snapshot kaydedilmez. | `workflow`, `claims` |
 | 1 | Soru bir **soru planına** çevrilir: alt sorular, her birinin niyeti ve "ne zaman cevaplanmış sayılır" ölçütü (`done_when`), sorudaki kod adları (mention) ve referanslar. Planı ajan yazabilir; yazmazsa kurallarla taslak çıkarılır (Türkçe ve İngilizce). | `question_plan` |
 | 2 | Plan denetlenir: şema, kimlikler, bağımlılıkların döngüsüz olması, her mention'ın mesajda birebir geçmesi, sürüm ifadelerinin düşmemesi. Her mention grafikte kanıtla eşleştirilir. Belirsizse en fazla 3 seçmeli soru üretilir; geçersiz plan işi durdurur. | `question_plan`, `lexicon`, `textnorm` |
 | 3 | Her alt soru için kalıcı arama indeksinden sınırlı sayıda kod konumu getirilir; her konum neden seçildiğini söyler. Soruyla ilgisiz çıkan konumlar iddiaya dönüşmez, `unknown` + sonraki adım olur. | `search_index`, `retrieval` |
@@ -105,8 +105,17 @@ satır; ürün testleri yaklaşık 15.300 satır.
 | 7 | Her alt soru `done_when` ölçütüne göre yargılanır: `met`, `met_with_inference`, `unmet`, `not_supported`, `blocked_by_clarification`. Bağlam iddiası (aramada soruya yakın çıkan bir öğenin tanımı) yalnız sorunun konusuyla ilgiliyse `met` sayılır (2026-09-25); analiz, `verinoda query`'nin aynı soru için verdiği pasajları da taşır. | `analysis` |
 
 Döngünün süre, araç çağrısı ve bağlam bütçesi vardır (varsayılan 60 sn,
-40 çağrı, ~6.000 token). İndeks yenileme ve test çalıştırmaları süre
-bütçesine dahildir; test zaman aşımı kalan süreyle sınırlanır. Döndürülen her
+40 çağrı, ~6.000 token). Test çalıştırmaları süre bütçesine dahildir; test
+zaman aşımı kalan süreyle sınırlanır. İndeks yenileme dahil değildir
+(2026-09-26). 300 ve üzeri dosyalı bir projede yenileme yavaş olacaksa (son
+graf kurulumu 15 sn'den uzun sürdüyse, 200'den fazla dosya değiştiyse ya da
+başka bir kurulum sürüyorsa) analiz önceki indeksten yanıtlanır ve değişen
+dosyalar adıyla söylenir; değişen bir dosyayı gösteren her iddia da bunu
+taşır. Değişen bir dosya sorunun konusunu (bağlanan sembolün adını ya da kod
+gibi yazılmış bir adı) içeriyorsa bu ayrı bir `unknown` olur ve o alt soru en
+çok `met_with_inference` olur. MCP sunucusu bu durumda `verinoda update`'i
+arka planda başlatır. `--refresh inline` her zaman yeniler (süren bir kurulumu
+en çok 10 dakika bekler), `--refresh skip` hiç yenilemez. Döndürülen her
 iddia, `unknown`, adım ve karşıt kontrol kaydı, serileştirilmiş boyutuyla
 (chars/4) bağlam bütçesinden düşülür. Bütçe biterse yeni iddia üretilmez;
 atlanan ya da yarım kalan her alt soru adıyla birlikte `unknown` olarak
@@ -176,14 +185,25 @@ Bölüm 4.5'teki öğe düzeyinde eskimenin ve kanıt bağlamanın gerçek bir
   yalnızca sıralamayı etkiler, kanıt sayılmaz.
 - **Modele giden çıktı düz metindir:** önce iskelet (imza, belge satırı,
   çağrı özeti, satır numaralarıyla), sonra en iyi eşleşen pasajlar. Kesilme
-  her zaman belirtilir ve takip komutu verilir. JSON çıktısı programlar
-  içindir (`--json`); karakter bütçesi döndürülen her şeyi sayar.
+  her zaman belirtilir ve takip komutu verilir. Hiçbir şey iki kez basılmaz:
+  soru tekrarlanmaz, imza bir kez yazılır, pencereler girintisiz basılır
+  (2026-09-26). JSON çıktısı programlar içindir (`--json`; çıktı bir
+  terminale gitmiyorsa tek satır); karakter bütçesi döndürülen her şeyi sayar.
 - **Kısaltmalar ve Türkçe:** `env` → environment, `db` → database gibi
   genişletmeler ve Türkçe ekler çıktı başlığında raporlanır, sessizce
   yapılmaz.
 - Eski sürümdeki "her soruda her dosyayı tarama" ve 400 dosya sınırı kalktı.
   İndekslendikten sonra değişen dosyalar sorgu anında yeniden indekslenmez;
-  çıktıda `stale_files` olarak bildirilir.
+  `query`, `trace`, `map` ve MCP okuma araçları projenin tamamında indeksten
+  sonra değişen dosyaları sayısıyla ve listesiyle söyler (`stale_count`,
+  `stale_files`; 2026-09-26). Denetim ucuzdur: dizinler bir kez listelenir,
+  yalnız boyutu ya da zamanı değişen dosya yeniden özetlenir (2.388 dosyada
+  43-60 ms). İndeksin hiç kapsamadığı dosyalar (iç içe bir git deposu ya da
+  alt modül, izlenmeyen build/ ya da dist/ çıktısı) sayılmaz, bu yüzden
+  `verinoda update` bu notu her zaman temizler. Sorudaki bir kod adı yalnız
+  değişmiş bir dosyada geçiyor ve indeksin bildiği sürümde geçmiyorsa "henüz
+  indekste yok" denir (o sürüm okunamadıysa "henüz indekste olmayabilir");
+  benzer bir ad onun yerine konmaz.
 
 ### 4.1a Veri dosyaları, oyun modları ve veri paketleri (`search_index`, `resources`) — Çalışıyor (yeni, 2026-09-23)
 
@@ -271,7 +291,9 @@ satırları). Sayfa indeksi izler: `verinoda update`'ten birkaç saniye sonra a�
 çizilir (kaydırma yeri korunur) ve bunu söyler (görünmeyen sekme, gösterildiğinde bakar);
 `verinoda ui --watch` dosyalar değişince `verinoda update`'i kendisi de çalıştırır (düzenlemeler durunca,
 aynı anda tek güncelleme; güncelleme grafı bütün proje üzerinden yeniden kurduğu için Verinoda'nın yaklaşık 1.200
-dosyasında yaklaşık 27 sn, düzenleme grafı değiştirmiyorsa 21 sn (2026-09-25 öncesi 34 sn, yol önbelleğinden önce 44 sn), Python standart kütüphanesinin 2.305 dosyasında yaklaşık 95 sn sürer). O büyüklükte
+dosyasında yaklaşık 27 sn, düzenleme grafı değiştirmiyorsa 21 sn (2026-09-25 öncesi 34 sn, yol önbelleğinden önce 44 sn), Python standart kütüphanesinin 2.305 dosyasında yaklaşık 95 sn sürer). Başka bir süreç projeyi
+indekslerken (`verinoda update`, bir analiz) izleyici o turu atlar, sayfada nedenini gösterir ve bir sonraki
+bakışta yeniden dener; bir projede aynı anda tek indeks kurulumu çalışır (`.verinoda/build.lock`, 2026-09-26). O büyüklükte
 (79.526 not) sunucu 1,6 sn'de açılır, başlangıç sayfası 1,5, arama 0,8, bir not 0,5 sn'de gelir; graf görünümü
 (1.745 dosya) 0,4 sn'de çizilir ve saniyede yaklaşık 60 kare akar; `--export` 9,3 MB'ı yaklaşık 6 sn'de yazar. `verinoda ui --export [DOSYA]` grafı ve her kaynak dosyanın, belgenin, veri
 dosyasının notunu sunucu gerektirmeyen tek bir HTML dosyasına yazar (varsayılan
@@ -527,15 +549,34 @@ Her görünüm hangi yöntemle üretildiğini ve **neyi göremediğini** yazar:
 | Hiyerarşi | repo → alt sistem → paket → dosya → sembol | paket = dizin; dil düzeyi modül değil |
 | Bağımlılıklar | dosya düzeyinde çağrı, import, kullanım ve kalıtım ilişkileri (paket düzeyi yalnızca API'de) | dinamik çağrı, reflection, DI çözülmez |
 | Veri akışı | giriş noktasından kalıcı veriye (SQL, ORM, dosya yazımı) çağrı yolları | giriş ve kalıcılık tespiti sezgisel; değer takibi (taint) yok |
-| Yapılandırma | okunan ortam değişkenleri ve yapılandırma dosyaları | dolaylı okumalar (settings nesneleri) izlenmez |
+| Yapılandırma | okunan ortam değişkenleri ve yapılandırma dosyaları (grafta düğümü olmayan `.yml`/`.toml` dosyaları da, 2026-09-26) | dolaylı okumalar (settings nesneleri) izlenmez |
 | Testler | hangi test hangi kodu statik olarak çağırıyor (varsa `coverage.xml`) | statik erişim ≠ çalışma zamanı; bunun için `observe` |
 | Tarihçe | son commit'ler, değişim sıklığı, ADR/karar belgeleri | bağlantılar metinsel eşleşmedir |
 | Etki | bir değişiklikten etkilenebilecek semboller, dosyalar, testler | "etkilenebilir" demektir, "bozuldu" değil |
+
+`verinoda map`'in metin çıktısı JSON dökümü değil, her görünüm için bir
+özettir: sayılar, en büyük klasör ve paketler, en ağır bağımlılıklar, neyin
+dışarıda kaldığı (2026-09-26). Her şey için `--json`.
 
 `trace` iki sembol arasındaki yönlü yolları verir. `flow` modu `calls`
 kenarlarını (Graphify'ın ve Verinoda'nın `INFERRED` çağrıları dahil) ve
 sınıf oluşturma → `__init__` adımını izler; diğer içerme ilişkilerini akış
 saymaz.
+
+`trace`, `map --view impact` ve MCP `node_inspect` adı aynı kesin
+çözümleyiciyle bulur (`naming.resolve`, D37, 2026-09-26): taramanın bulduğu
+kopya (`copies.json`) ya da referans ağacı, soru onu anmadıkça, projenin
+kendi koduna yol verir; ardından testlerdeki ve örnek, fikstür ya da vendored
+klasörlerindeki tanımlar ürünün kendi tanımına, bir fonksiyonun içindeki
+yardımcı da modül ya da sınıf düzeyindeki tanıma yol verir. Yine de birden çok
+sembol kalıyorsa hepsi listelenir, biri seçilmez (`ambiguous`; yol verenler
+`set_aside` altında; `path/dosya.py::Ad` ile verin). Etki analizi yalnız tam
+adlandırılan hedef için hesaplanır; `...::OlmayanAd` artık (standart
+kütüphanede görüldüğü gibi) "80 etkilenen" değil, adaylarıyla çözülemeyen
+hedeftir (çıkış kodu 2). Soru planının
+eşleştirmesi de aynı kopya kuralını kullanır: bir kopya ile özgünü arasında
+seçim sorusu sorulmaz. Alıcı-tipi geçişi çağıran dosyanın görebildiği sınıfı
+bağlar; bir kopyanın çağrıları artık projeye bağlanmaz.
 
 Verinoda'nın Python alıcı-tipi geçişi basit durumları kapsar: düz sınıf adıyla
 işaretlenmiş parametreler ve `x = Sınıf()` atamaları. `Optional[X]`,
@@ -620,7 +661,21 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
   netleştirme sorularını sor → planla analiz. (3) Cevap "Understood as /
   Anladığım: …" ile başlar; ardından her alt soru için kararı, iddiaları ve
   bilinmeyenleri gelir.
-- **MCP:** 35 araç, aynı çekirdek fonksiyonları çağırır. Yanıtlar
+- Beceriler CLI'nin düz metnini okur; `--json` yalnız metnin bırakmadığı bir
+  alan için eklenir (JSON aynı içerik için 2-5 kat token tutar; 2026-09-26).
+- **MCP:** 35 araç, aynı çekirdek fonksiyonları çağırır. Varsayılan olarak
+  çekirdek profil bunların on ikisini sunar (sorgu, analiz, düğüm/izleme/harita,
+  iddia ve kanıt, dizin güncelleme, isim denetimi, karar denetimi, değişiklik
+  incelemesi); hepsi için `verinoda mcp serve --profile full` ya da
+  yapılandırmada `mcp.profile: full`. Menü bir oturumun her isteğinde bağlamda
+  durur: on bir araçlık çekirdek profille 50.029 karakterden 9.967 karaktere
+  indi (`change_review` dallar birleştirilirken eklendi; menü yeniden
+  ölçülmedi). Codex'in sandbox'ı kurulumu içe aktaramayabileceği durumda
+  (düzenlenebilir ya da hardlink kurulum; `verinoda doctor` uyarır) kurulum MCP
+  kaydını `--profile full` ile yapar: orada tek giriş MCP'dir ve beceri
+  dosyasının zorunlu kıldığı her araç (hata ayıklama defteri, soru planları,
+  referanslar, kararlar) açık kalmalıdır. Yapılandırmadaki `mcp` ayarı
+  okunamıyorsa sunucu hata verir, sessizce çekirdek profile düşmez. Yanıtlar
   varsayılan 12.000 karakterle sınırlıdır. Uzun yaşayan sunucu grafiği,
   sözlüğü ve jedi projesini bellekte tutar.
 - Kurulum tekrar çalıştırılabilir, başka araçların ayarlarını ezmez ve yaptığı
@@ -646,19 +701,20 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
 | Hangi tanıma gidiyor (kesin çözümleme) | — | jedi (isteğe bağlı), SCIP okuyucu | Çalışıyor (isteğe bağlı) |
 | Yönlü akış izi | en kısa yol (`path`) | yalnızca çağrı ilişkisiyle akış modu, her adımda konum | Çalışıyor |
 | Tip bilgisinden metot çağrısı çözme | Swift, TS/JS, C++, C#, Java, ObjC, Kotlin, Ruby, Rust alıcı tipleri; Python'da yalnızca `SınıfAdı.metot()` | ek geçiş: Python'da tip açıklamalı parametre ve `x = Sınıf()` alıcıları; `INFERRED` + kaynağı işaretli | Çalışıyor |
-| Mimari görünümler | topluluklar, rapor, `affected` etki analizi, gerekçe/ADR düğümleri | 7 görünüm (veri akışı, yapılandırma ve test görünümleri yeni), her biri sınırlarını yazar | Çalışıyor |
+| Mimari görünümler | topluluklar, rapor, `affected` etki analizi, gerekçe/ADR düğümleri | 7 görünüm (veri akışı, yapılandırma ve test görünümleri yeni), her biri sınırlarını yazar; metin çıktısı görünüm başına bir özet | Çalışıyor |
 | Bütçeli analiz döngüsü ve `unknown` | — | süre, çağrı ve bağlam bütçesi; döndürülen her şey bütçeden düşülür | Çalışıyor |
 | Referans repo incelemesi ve karşılaştırma | — | tam SHA'da inceleme, mekanizma izi, varsayım farkı | Çalışıyor (sezgisel iz) |
 | Kullanıcı eleştirisi protokolü | — | 9 adım, 4 sonuç, önce referans çözümü, geçmiş korunur | Çalışıyor |
 | Sürümlü hafıza | — | iddiaya bağlanırsa eskiyince geçersiz | Çalışıyor (yalnızca elle) |
 | Ajan kurulumu | 20'den fazla platform | Claude Code + Codex, manifest, güvenli kaldırma | Çalışıyor |
-| MCP araçları | grafik araçları | 35 araç: plan, referans, iddia, kanıt, gözlem, doğrulama, eleştiri, isim denetimi, kararlar, hata ayıklama defteri, değişiklik incelemesi, davranış sondası | Çalışıyor |
+| MCP araçları | grafik araçları | 35 araç: plan, referans, iddia, kanıt, gözlem, doğrulama, eleştiri, isim denetimi, kararlar, hata ayıklama defteri, değişiklik incelemesi, davranış sondası (varsayılan profil: on iki araç) | Çalışıyor |
 | Büyük resim: bir değişiklik neyi etkiler | etki görünümü | `verinoda review`: değişen tanımlar, onlara bağlı olanlar (zinciriyle), kaygıya göre bulgular (kalıcılık, güvenlik, performans, genel API, yapılandırma, giriş noktaları), değişikliğe hangi testlerin ulaştığı ve hiçbir testin ulaşmadığı kod; önce ne okunmalı. "Bulgu yok" asla "güvenli" demek değildir | Çalışıyor (D35) |
-| Çalışıyor ama yanlış kod | yok | `verinoda probe` (Python): değişen fonksiyonun eski ve yeni sürümü atılabilir kopyalarda üretilen girdilerle çalıştırılır ve karşılaştırılır; fark bir davranış değişikliği olarak örneğiyle bildirilir. Yan etkisini yalıtamadığı fonksiyonları nedenini söyleyerek reddeder; "N girdide fark bulunmadı" der, asla "doğrulandı" demez | Çalışıyor (D36) |
-| Mimari kararlar | yok | "Geçmeli miyiz / hangisini seçelim / nasıl büyütürüz" sorusu `human_decision_required` olur, asla `met` değil. `decide brief` kodun tarafını (kanıtlı olgular, nerede arandığıyla bulunamayanlar, kayıtlı kararlar, seçenekler) ve yalnız kullanıcının yanıtlayabileceği en çok 5 soruyu verir, öneri vermez. Kullanıcının açık seçimi korumalarıyla bir karar kaydı olur; `decide check` kararı bozan kodu bulur (CI'da kullanılabilir). Sınır: ayarlanmadığı sorularda seçim sorusunu yaklaşık yarı yarıya tanır | Çalışıyor (D33) |
-| Hata ayıklama döngüleri | yok | Tek bir hatayı düzeltme denemelerinin her biri, çalıştığı ağaç, tabana göre yama, hatanın `dosya::sembol` imzası ve ilerlemeyle kaydedilir; kesin döngü kuralları ajanı durdurur (ağaç geri döndü, aynı hata geri geldi, ilerleme yok, kod yerine test değişti, düzenleme hatalı testin hiç ulaşmadığı yerde); stratejiler atılabilir kopyalarda çalışır (tabanda tekrar, iki ucu önce çalıştırılan bisect, tekrarlama, izli çalıştırma). "Düzeldi" asla denmez | Çalışıyor (D34) |
-| Kod yazarken isim denetimi | yok | `verinoda check` / `verinoda api`: modül, içe aktarılan ad, öznitelik, anahtar kelime argümanı ve sözlük anahtarı projenin kendi ortamında var mı; kapalı-dünya kuralıyla `absent`, gerisi nedenli `unknown`; denetlenen projeden hiçbir şey içe aktarılmaz ya da çalıştırılmaz | Çalışıyor (yalnız Python) |
-| Yanlış cümlenin doğrulanması | kelime örtüşmesi doğruluyordu | Kelime örtüşmesi doğrulamaz; yazılı iddianın her rolü (çağıran/çağrılan yönü, ayarın bağlandığı ad) denetlenir; kesin ıska oluşturulurken kapsamıyla çürütülür; kod gibi yazılmış ama depoda olmayan ad benzeriyle değiştirilmez (`not_found`, `did_you_mean`) | Çalışıyor (D31) |
+| Çalışıyor ama yanlış kod | yok | `verinoda probe` (Python): değişen fonksiyonun eski ve yeni sürümü atılabilir kopyalarda üretilen girdilerle çalıştırılır ve karşılaştırılır; fark bir davranış değişikliği olarak örneğiyle bildirilir. Yan etkisini yalıtamadığı fonksiyonları nedenini söyleyerek reddeder; "N girdide fark bulunmadı" der, asla "doğrulandı" demez. Bir kütüphane modülü yüklenirken ayarlanan ortam değişkeni (numpy'nin `OPENBLAS_MAIN_FREE`'si) yan etki sayılmaz; proje kodunun ayarladığı sayılmaya devam eder (2026-09-26) | Çalışıyor (D36) |
+| Mimari kararlar | yok | "Geçmeli miyiz / hangisini seçelim / nasıl büyütürüz" sorusu `human_decision_required` olur, asla `met` değil. `decide brief` kodun tarafını (kanıtlı olgular, nerede arandığıyla bulunamayanlar, kayıtlı kararlar, seçenekler) ve yalnız kullanıcının yanıtlayabileceği en çok 5 soruyu verir, öneri vermez. Kullanıcının açık seçimi korumalarıyla bir karar kaydı olur; `decide check` kararı bozan kodu bulur (CI'da kullanılabilir); hiçbir dosya, kenar ya da manifest okumayan bir koruma `ok` değil `unknown` olur ve çıkış kodu 3'tür. Karar klasörü commit edilen bir dosyadan okunur (`verinoda.toml` içinde `[decisions] dir`, `pyproject.toml` içinde `[tool.verinoda.decisions] dir`, ya da `--decisions-dir`); belirtilen klasör yoksa ya da taze bir klonda hiç kayıt yokken ADR benzeri dosyalar varsa kontrol geçmez, çıkış 3 olur (2026-09-26). Sınır: ayarlanmadığı sorularda seçim sorusunu yaklaşık yarı yarıya tanır | Çalışıyor (D33) |
+| Hata ayıklama döngüleri | yok | Tek bir hatayı düzeltme denemelerinin her biri, çalıştığı ağaç, tabana göre yama, hatanın `dosya::sembol` imzası ve ilerlemeyle kaydedilir; kesin döngü kuralları ajanı durdurur (ağaç geri döndü, aynı hata geri geldi, ilerleme yok, kod yerine test değişti, düzenleme hatalı testin hiç ulaşmadığı yerde); stratejiler atılabilir kopyalarda çalışır (tabanda tekrar, iki ucu önce çalıştırılan bisect, tekrarlama, izli çalıştırma). "Düzeldi" asla denmez. Bir Minecraft GameTest çalıştırmasının hataları özetinden okunur ("N required tests failed" ve altındaki "- ns:test_id: mesaj" satırları) ve test metoduna bağlanır; sunucunun açılışta yazdığı ilgisiz bir istisna hata sayılmaz. Taban çalıştırması geçtiyse ve her başarısız çalıştırma bir düzenlemeden sonra geldiyse `debug close --resolved-by` reddeder: o hatalar düzenlemelerin kendisinindir (2026-09-26) | Çalışıyor (D34) |
+| Kod yazarken isim denetimi | yok | `verinoda check` / `verinoda api`: modül, içe aktarılan ad, öznitelik, anahtar kelime argümanı ve sözlük anahtarı projenin kendi ortamında var mı; kapalı-dünya kuralıyla `absent`, gerisi nedenli `unknown`; denetlenen projeden hiçbir şey içe aktarılmaz ya da çalıştırılmaz. Yalnız Python: başka dildeki bir dosya (not defteri ve Cython da) ya da ayrıştırılamayan bir Python dosyası `not_checked` altında nedeniyle listelenir, asla denetlenmiş sayılmaz. Çıkış 3: olmayan bir ad ya da kilit dosyasından farklı bir sürüm; çıkış 4: olmayan ad yok ama istenen bir şey denetlenmedi. Geniş bir `except Exception` bir öznitelik ya da anahtar sözcük argümanı için koruma sayılmaz (2026-09-26) | Çalışıyor (yalnız Python) |
+| Yanlış cümlenin doğrulanması | kelime örtüşmesi doğruluyordu | Kelime örtüşmesi doğrulamaz; yazılı iddianın her rolü (çağıran/çağrılan yönü, ayarın bağlandığı ad) denetlenir; kesin ıska oluşturulurken kapsamıyla çürütülür; kod gibi yazılmış ama depoda olmayan ad benzeriyle değiştirilmez (`not_found`, `did_you_mean`). Python dışında yapılandırma ve ilişki iddiaları ile akışların çağrı adımları en çok `strong_inference` olur: bağlama denetimi yalnız Python için var (2026-09-26) | Çalışıyor (D31) |
+| Adın doğru sembole bağlanması ve taze indeks | benzer ad ya da ilk eşleşme seçilebiliyordu; eşzamanlı iki güncelleme çakışıyordu | `trace`, etki ve `node_inspect` tek bir kesin çözümleyici kullanır: kopya ve referans ağacı projenin koduna, test/örnek/fikstür kodu ürünün koduna yol verir; kalan eşitlik listelenir, biri seçilmez; benzer ad asla yerine konmaz. Bir projede aynı anda tek indeks kurulumu çalışır. Okuma komutları indeksten sonra değişen dosyaları söyler; `analyze` yenilemeyi bütçesine saymaz, büyük projede yavaşsa önceki indeksten yanıtlar ve bunu söyler | Çalışıyor (D37) |
 | Karşılaştırmalı benchmark | kendi yayınladığı doğruluk, maliyet ve token rakamları (Verinoda'ya aktarılmaz) | ham arama vs Graphify vs Verinoda; eskime ve karşıt kontrol ölçüm düzenekleri | Çalışıyor (model döngüde değil) |
 | LLM ile belge/görsel çıkarımı | var | analizde kullanılmıyor; `verinoda index -- extract` geçişiyle, desteklenmeden erişilebilir | daraltıldı |
 | Claude Code ve Codex dışındaki ~20 ajan platformu | var | engellendi: `verinoda index -- install` vb. gerçek bir Graphify kurulumunu bozmasın diye reddedilir | daraltıldı |
@@ -944,6 +1000,51 @@ kopyaları artık tek öğe; kalan öğelerin iki çağrı kenarı "more" listes
 bütçesinin dışına itti). Tarama süresi ölçülebilir biçimde artmadı. Bu turu
 başlatan, sahibinin kendi modu üzerindeki özel küme yayımlanmıyor.
 
+### 7.7 Token maliyeti ve gecenin diğer ölçümleri (2026-09-26, `docs/BENCHMARKS.md`)
+
+**Token maliyeti.** Sekiz herkese açık küme (86 soru, 319 altın bilgi; hepsi
+artık örneklem içi) ve ajan personasının 10 soruluk örneklem dışı seti;
+token'lar chars/4, model döngüde değil. Kural: bulunan ya da gösterilen
+(altın satırın metni bağlamda) bir bilgiyi herhangi bir kümede kaybettiren
+değişiklik açılmaz. Bulunan / gösterilen bilgi, soru başına token:
+
+| Yaklaşım | Önce (`main`) | Sonra |
+|---|---|---|
+| `analyze`, becerinin okuduğu biçimde | 286 / 219, 3.901 (`--json`) | 287 / 219, **1.873** (metin; %52 az) |
+| MCP `analyze` | 272 / 207, 2.832 | **287 / 219**, 2.037 |
+| `query` metni | 283 / 213, 1.313 | 285 / 213, 1.310 |
+
+Graphify'ın iki çıktısı aynı kümelerde 68-69 bilgi bulup 8'ini gösteriyor,
+soru başına 1.391-1.480 token (yeniden çalıştırılmadı). MCP `analyze` artık
+kanıtını yanıt sınırına kaptırmıyor: 15 bilgi daha buldu. Karşılaştırma bilgi
+bilgi yapıldı: ilk sürümde toplamlar eşitti ama `analyze` metni bir bilgiyi
+kaybedip başka birini kazanmıştı; planın bağlantıları metne eklenince kayıp
+geri geldi. Örneklem dışı 10 soruda her yaklaşım `main` ile aynı bilgileri
+buldu (`query` metni 14/32, 1.482 → 1.442 token; `analyze` metni 14/32, 1.949
+token, `--json` 3.615 token idi). Bir oturumun ilk sorudan önce taşıdığı yük
+yaklaşık 20.500 token'dan yaklaşık 7.330'a indi (beceri ~4.240, çekirdek MCP
+menüsü ~2.490 ve ~500 talimat, `doctor --brief` ~100); Graphify'ınki yaklaşık
+11.600-12.000. Bu yük dalda, çekirdek profil on bir araçken ölçüldü;
+`change_review`'un eklenmesi ve birleştirilmiş beceriler yeniden ölçülmedi.
+Soru biçimine göre bütçe (tek cümlecikli soruya 4.800 karakter) `query`
+token'larını %8,3 azaltıyor ama bir altın satırı artık göstermiyor; bu yüzden
+kapalı (`query.shape_budget`).
+
+**Bakmadan "ok" yok (D31-D33).** Değerlendiricinin 12 tekrarının 12'sinde
+`main` sessiz bir sonuç verdi: bakmadığı şey için `ok`, geçti ya da doğrulandı
+dedi (bir Java dosyasına `check`:
+0 dosyada 0 yer, çıkış 0; kayıtları commit edilmiş ama yapılandırması olmayan
+taze bir CI klonunda `decide check`: 0 kayıt, çıkış 0); dalda 0. Tekrarlar
+değişikliği isteyen bulgulardan geldiği için bu ölçüm örneklem içidir.
+İnceleyicinin 11 bulgusunun 11'i düzeltmelerden önce yeniden üretildi, sonra
+hiçbiri. Sekiz kümede bulunan bilgiler aynı kaldı (282 hücre, 0 fark).
+
+**Kesin adlar ve taze indeks (D37).** Sekiz kümede 86 soru × 3 yaklaşım,
+`main` ile 0 fark; örneklem dışı 10 soruda sayılar aynı. Kendi kodunun donmuş
+bir kopyasını tutan bir Verinoda kopyasında plan eşleştirmesi 15 mention'ın
+11'ini kopyaya bağlıyordu, şimdi hiçbirini. Tazelik denetimi 2.388 dosyada
+43-60 ms; bedeli Bölüm 8'de.
+
 ---
 
 ## 8. Ek maliyetler ve zayıf kalınan yerler
@@ -970,7 +1071,13 @@ başlatan, sahibinin kendi modu üzerindeki özel küme yayımlanmıyor.
   birlikte (`not challenged: <neden>`) işaretlenir.
 - `query` çıktısındaki kaynak kesitleri ile `analyze` çıktısındaki iddia,
   kanıt konumu, belirsizlik ve karşıt kontrol ayrıntıları çıktıyı büyütür.
-  `analyze` çıktısında kaynak kesiti yoktur; kesitler `query`'dedir.
+  `analyze` 2026-09-25'ten beri `query`'nin pasajlarını da taşır; metin
+  çıktısında token'ların çoğu bu pasajlardır (ölçümde 1.847 token'ın 1.330'u).
+- Tazelik denetimi her okumada ödenir (2026-09-26): uzun yaşayan MCP
+  sunucusunda bellekten yanıtlanan bir `project_query` 4 ms'den 50 ms'ye,
+  `node_inspect` 14 ms'den 61 ms'ye çıktı. Hiçbir sembolü adlandırmayan bir
+  kod adı, standart kütüphane kopyasında 5-8 sn'lik varlık ve en yakın ad
+  aramasını öder (`main` onun için hiçbir şey döndürmüyordu).
 - Her CLI süreci grafiği `graph.json`'dan yeniden yükler (~0,06 sn). Uzun
   yaşayan MCP sunucusu grafiği bellekte tutar.
 
