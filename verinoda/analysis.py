@@ -937,7 +937,7 @@ _HAS_SHADERS: dict[str, bool] = {}   # repository -> whether it has shader files
 
 
 def _shader_claims(ctx: _Ctx, sub: _Sub) -> int:
-    """"Where does ``Hava.y`` come from" (docs/DESIGN.md D54): a uniform block field the question names, with the Java
+    """"Where does ``Weather.y`` come from" (docs/DESIGN.md D54): a uniform block field the question names, with the Java
     expression that fills it (verinoda/shaders.py), as a claim on the writer's line and the field's declaration."""
     text = sub.sq.get("text_user_lang") or sub.sq.get("text") or ""
     if sub.extra.get("shader_done") is not None:
@@ -2153,7 +2153,7 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
                             "next_step": "read that version with `verinoda research <repository> --ref <version>` "
                                          "(or `verinoda resolve` the reference first)"})
     if required_unlinked and not usable and not subject_nodes:
-        if _shader_claims(ctx, sub):  # a uniform field (`Hava.y`) is no graph node: its writer answers
+        if _shader_claims(ctx, sub):  # a uniform field (`Weather.y`) is no graph node: its writer answers
             return _finish_sub(ctx, sub, out, "shader")
         sub.flags["unlinked"] = [lk["mention"] for lk in required_unlinked]
         return _finish_sub(ctx, sub, out, "none")

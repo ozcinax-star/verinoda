@@ -2530,7 +2530,7 @@ def build_parser() -> argparse.ArgumentParser:
                                          "succeed/fail tied to that test; stored as claims with the log as evidence")
     sp.add_argument("file", help="the log (latest.log, a GameTest run's output, a pasted trace)")
     sp.add_argument("--no-store", action="store_true", help="report only; record no claim")
-    sp = add("shader", cmd_shader, "GLSL uniform blocks and the Java that fills them: where a field (Hava.y) comes "
+    sp = add("shader", cmd_shader, "GLSL uniform blocks and the Java that fills them: where a field (Weather.y) comes "
                                    "from; --check: blocks and writers that differ, mirrored constants that disagree")
     sp.add_argument("name", nargs="?", help="Field, Field.x or Block.Field")
     sp.add_argument("--check", action="store_true", help="list what disagrees between the shaders and Java (exit 3)")
