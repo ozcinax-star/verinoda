@@ -37,6 +37,13 @@ alpha 0.3, eps 1e-4, at most 20k pushes) from the top lexical units adds
 the question's words. Graph edges only move the ranking; they are never
 presented as evidence.
 
+**What the question names and asks** (docs/DESIGN.md D-query-ranking): units
+of a file the question writes as a path or dotted module count x2, a plain
+word that is a file stem or Python package x1.3; a docstring that writes two
+adjacent question words side by side counts x1.25 per pair; and, unless the
+question is about tests, callers or the impact of a change, a test moves just
+below the non-test code that matches the same question words.
+
 **Query side** (:func:`analyze_query`): English and Turkish stopwords, Turkish
 folding and apostrophe suffixes (``pricing.py'deki``), Turkish stems confirmed
 by the index vocabulary, and abbreviation expansion (a corpus token that is a
@@ -138,6 +145,17 @@ UNSURE_LINK_FACTOR = 0.5          # a link whose namespace or resource kind the 
 DATA_FACTOR = 0.6
 CONFIG_SUFFIXES = (".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".properties", ".env.example",
                    ".gradle", ".kts", ".mcmeta")
+# What the question names and asks (docs/DESIGN.md D-query-ranking)
+FILE_NAMED_FACTOR = 2.0           # units of a file the question writes as a path (graphify/cluster.py) or module (http.client)
+FILE_WORD_FACTOR = 1.3            # ... whose file stem or Python package it writes as a plain word (subprocess, logging)
+MAX_WORD_FILES = 3                # a plain word that is the stem of more code files than this (index, utils) names none
+MAX_NAMED_SHARE = 0.25            # a folder or package holding more of the indexed files than this names none of them
+TEST_FACTOR = 0.7                 # a test ranks below code scoring at least this share of its score ...
+TEST_COVER = 0.75                 # ... that matches this share of the test's matched question words (weighted)
+TEST_WINDOW = 180                 # top-scored units compared for that
+DOC_PHRASE_BOOST = 0.25           # per adjacent pair of question words in a unit's docstring (at most two pairs)
+DOC_PHRASE_GAP = 2                # "adjacent" in a docstring: one filler word between ("directory to use")
+DOC_CANDIDATES = 300              # best-scored units whose docstring is checked
 MAX_SIG_CHARS = 220
 MAX_DOC_CHARS = 240
 
@@ -1025,6 +1043,7 @@ class Handle:
     by_file: dict[str, list[tuple[int, int, int, int]]] | None = None   # file -> (span, a, b, uid), innermost first
     copies: dict[str, list[str]] | None = None    # file -> other files with byte-identical content
     unindexed: list[tuple[str, str, frozenset]] | None = None   # (file, reason, name tokens), loaded once
+    file_table: "_FileTable | None" = None        # indexed files by path, stem and package (named files)
     _pin: threading.local = field(default_factory=threading.local, repr=False, compare=False)
 
     def connect(self) -> sqlite3.Connection:
@@ -1174,13 +1193,24 @@ def _inflects(stem: str, part: str) -> bool:
     return part.startswith(stem) and (rest == "" or (rest.isalpha() and textnorm.is_suffix_chain(rest)))
 
 
+@lru_cache(maxsize=4096)
+def _tr_inflection(rest: str, parts: int = 4) -> bool:
+    """``rest`` is empty or a chain of Turkish inflectional endings (:data:`textnorm.TR_SUFFIXES`). Stricter
+    than :func:`textnorm.is_suffix_chain`, which also takes single consonants (para|meter, para|llel)."""
+    if not rest:
+        return True
+    return parts > 0 and any(rest.startswith(s) and _tr_inflection(rest[len(s):], parts - 1)
+                             for s in textnorm.TR_SUFFIXES)
+
+
 def _stem_terms(conn: sqlite3.Connection, st: str) -> list[str]:
     """Corpus terms the unconfirmed stem of a Turkish word expands to: the shorter the stem, the closer the match.
 
     - ``TR_PREFIX_STEM`` letters or more: the three most frequent terms it begins; a Turkish spelling
       of an English word shares its first letters (proje -> project, algor -> algorithm, proto -> protocol);
     - four letters: the stem inflected, for a name its first part (para -> para_birimi, wisp ->
-      wispspawner), not another word that begins with it (paragraph; artifact for "arti");
+      wispspawner), not another word that begins with it (paragraph; artifact for "arti"; parameter
+      and parallel for "para": the rest must be Turkish inflection, :func:`_tr_inflection`);
     - three letters: the stem itself, when the code names something with it (sil); not sayfa for
       "say" or signal for "sig".
     """
@@ -1192,12 +1222,12 @@ def _stem_terms(conn: sqlite3.Connection, st: str) -> list[str]:
     out: list[str] = []
     for term, _df in _vocab_prefixed(conn, st, 12):
         head = re.split(r"[_\W]", term, maxsplit=1)[0]
-        ok = _inflects(st, head)
+        ok = _inflects(st, head) and _tr_inflection(head[len(st):])
         if not ok and head == term:
             # a camelCase name is one token (wispspawner): its first part comes from the units it names
             rows = conn.execute("SELECT u.raw FROM names n JOIN units u ON u.uid = n.uid WHERE n.term = ? LIMIT 8",
                                 (term,)).fetchall()
-            ok = any(term.startswith(p) and len(p) < len(term) and _inflects(st, p)
+            ok = any(term.startswith(p) and len(p) < len(term) and _inflects(st, p) and _tr_inflection(p[len(st):])
                      for (raw,) in rows for p in raw.split())
         if ok:
             out.append(term)
@@ -1440,8 +1470,25 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
         joined = sorted({a + sep + b for a in f1 for b in f2 for sep in ("_", "") if len(a) >= 3 and len(b) >= 3})
         for term in sorted(_vocab_has(conn, joined)):
             add(f"{w1} {w2}", term, "joined words", 1.0)
-    # Abbreviations: fixed map (both directions) and corpus prefixes of long words.
-    base_terms = list(weights)
+    # Abbreviations: fixed map (both directions) and corpus prefixes of long words; of the user's
+    # words and their Turkish stems, not of expansions (paramet -> param).
+    base_terms = [t for t, wt in weights.items() if wt > EXPANSION_WEIGHT]
+    # A word the code names things with as it is (client, request) means that name, not a longer
+    # name's abbreviation (cli, req), unless it is two names written as one (emberforge: ember + forge);
+    # an inflected Turkish word (parayı) has its stem instead (not par).
+    raw_of: dict[str, set[str]] = defaultdict(set)
+    for w in words:
+        parts = textnorm.split_identifier(w)
+        if len(parts) == 1:
+            raw_of[word_stem(parts[0])] |= {parts[0], word_stem(parts[0])}
+
+    def raw_named(xs) -> set[str]:
+        return {c[len(RAW_PREFIX):] for (c,) in _fetch(conn, "SELECT DISTINCT term FROM names WHERE term IN ({ph})",
+                                                        sorted({RAW_PREFIX + x for x in xs}))}
+
+    ident = raw_named({r for rs in raw_of.values() for r in rs})
+    ident_words = {t for t, rs in raw_of.items() if rs & ident}
+    tr_inflected = {t for w in stems_of for t in word_tokens(w)}
     cand: dict[str, tuple[str, str]] = {}
     prefixes: dict[str, str] = {}
     for t in base_terms:
@@ -1452,7 +1499,7 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
         for short, longs in ABBREVIATIONS.items():
             if t in {word_stem(x) for x in longs}:
                 cand.setdefault(short, (t, "abbreviation"))
-        if len(t) >= 6:
+        if len(t) >= 6 and t not in tr_inflected:
             # Turkish derivational endings only in Turkish questions (oyuncu is not oyun); in English
             # "applic" -> app and "deduplicat" -> dedup are abbreviations
             endings = _DERIVATIONAL + TR_DERIVATIONAL if tr_question else _DERIVATIONAL
@@ -1466,10 +1513,13 @@ def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[s
     # A strict prefix of a long word counts as its abbreviation only when some
     # symbol or constant is named with it (``env`` in ``ENV_ALLOW``), not when
     # it merely occurs in text (``comma`` for ``command``).
-    names = _fetch(conn, "SELECT DISTINCT term FROM names WHERE term IN ({ph})",
-                   sorted(RAW_PREFIX + c for c in prefixes if c not in weights))
-    for (c,) in names:
-        c = c[len(RAW_PREFIX):]
+    named_prefixes = raw_named(c for c in prefixes if c not in weights)
+    rests = {c: {r[len(c):] for r in raw_of.get(prefixes[c], ()) if r.startswith(c) and len(r) - len(c) >= 3}
+             for c in named_prefixes if prefixes[c] in ident_words}
+    named_rests = raw_named({r for rs in rests.values() for r in rs})
+    for c in sorted(named_prefixes):
+        if c in rests and not rests[c] & named_rests:
+            continue
         if c in known or _vocab_has(conn, [c]):
             add(prefixes[c], c, "corpus prefix", EXPANSION_WEIGHT)
     provided = dict(expansions or {})
@@ -1749,6 +1799,199 @@ def _fetch(conn: sqlite3.Connection, sql: str, keys: list, extra: tuple = ()) ->
     return out
 
 
+# -- what the question names and asks: files, modules, tests (docs/DESIGN.md D-query-ranking) ------
+
+MENTION_EXTS = frozenset(FILE_EXTS | {"java", "kt", "kts", "scala", "groovy", "c", "h", "cc", "cpp", "hpp", "cs",
+                                      "php", "swift", "lua", "dart", "mjs", "cjs", "vue", "svelte", "mcfunction",
+                                      "gradle", "properties", "markdown", "mdx", "adoc"})
+# A question about tests (matched on the folded, lower-case question; _TESTS_NAMED on the question as
+# written: HeatMathTest, WispTests, not "latest"), and one about what calls a name or what a change
+# affects (tests are callers, and what to re-run). Test files keep their rank for both.
+_TESTS_ASKED = re.compile(
+    r"(?<![a-z])(re)?test|_tests?\b|\bspecs?\b|\bcoverage\b|\bcover(s|ed|ing)?\b|\bexercis\w*|\bfixtures?\b"
+    r"|\bmock\w*|\bjunit\b|\bkapsa\w*|\bsinan\w*")
+_TESTS_NAMED = re.compile(r"[a-z0-9](Test|Tests|IT|Spec)\b")
+_CALLERS_ASKED = re.compile(
+    r"\b(who|what|which\s+\w+)\s+(calls?|uses?|invokes?|references?)\b|\bcallers?\b|\bcall\s?sites?\b"
+    r"|\bcalled\s+(by|from)\b|\bused\s+by\b|\bwhere\s+is\s+.+\s+(called|used)\b|\baffect\w*|\bimpact\w*"
+    r"|\bbreak(s|ing)?\b|\bdepends?\s+on\b|\bretest\w*|\bif\b.+\bchang\w*|\bdegis(irse|ince|tiginde)\b"
+    r"|\bkim(ler)?\b[^.?!]{0,30}\b(cagir|kullan|cagril|kullanil)\w*|\btarafindan\s+(cagril|kullanil)\w*"
+    r"|\bnere(ler)?den\s+(cagril|kullanil)\w*|\bcagiran\w*|\bkullanan\w*|\betkile\w*|\bbagimli\w*")
+
+
+def asks_about_tests(question: str) -> bool:
+    """Does the question ask about tests (which tests, coverage, a test named in it)?"""
+    return bool(_TESTS_ASKED.search(textnorm.fold_tr(question).lower()) or _TESTS_NAMED.search(question))
+
+
+def asks_about_callers(question: str) -> bool:
+    """Does the question ask who calls or uses something, or what a change affects?"""
+    return bool(_CALLERS_ASKED.search(textnorm.fold_tr(question).lower()))
+
+
+@dataclass
+class _FileTable:
+    paths: list[tuple[str, str, str]]      # (lower-case path, the same without extension, path)
+    stems: dict[str, list[str]]            # lower-case stem of a code file that is not a test -> files
+    packages: dict[str, list[str]]         # Python package folder name -> lower-case folder paths
+
+
+def _file_table(h: Handle) -> _FileTable:
+    if h.file_table is None:
+        kinds: dict[str, set[str]] = defaultdict(set)
+        for row in h.units.values():
+            kinds[row[0]].add(row[2])
+        paths: list[tuple[str, str, str]] = []
+        stems: dict[str, list[str]] = defaultdict(list)
+        packages: dict[str, list[str]] = defaultdict(list)
+        for f in sorted(kinds):
+            p = PurePosixPath(f.lower())
+            paths.append((str(p), str(p.with_suffix("")) if p.suffix else str(p), f))
+            if kinds[f] & {"symbol", "module"} and not is_test_file(f):
+                stems[p.stem].append(f)
+                if p.name == "__init__.py" and p.parent.name:
+                    packages[p.parent.name].append(str(p.parent))
+        h.file_table = _FileTable(paths, dict(stems), dict(packages))
+    return h.file_table
+
+
+@dataclass
+class _Mentions:
+    files: dict[str, tuple[float, str]]    # file -> (score factor, what the question wrote)
+    module_parts: set[str]                 # lower-case parts of dotted names that named a module, not a symbol
+    owners: dict[str, set[str]]            # lower-case symbol part -> the module or class written before it
+
+
+def _under(t: _FileTable, folder: str) -> list[str]:
+    pre = folder.strip("/") + "/"
+    return [f for lp, _n, f in t.paths if lp.startswith(pre) or "/" + pre in lp]
+
+
+def _module_files(t: _FileTable, mod: str) -> list[str]:
+    """Files a module path names (``http/client`` -> ``Lib/http/client.py``), else the files of that package."""
+    return [f for _lp, n, f in t.paths if n == mod or n.endswith("/" + mod)] or _under(t, mod)
+
+
+def _test_counterparts(t: _FileTable, files: list[str]) -> list[str]:
+    """Test files named after the modules in ``files`` (test_shutil.py, shutil_test.py, HeatMathTest.java)."""
+    want = set()
+    for f in files:
+        s = PurePosixPath(f.lower()).stem
+        want |= {f"test_{s}", f"{s}_test", f"{s}test", f"{s}tests"}
+    return [f for lp, _n, f in t.paths if PurePosixPath(lp).stem in want and is_test_file(f)]
+
+
+def _mentions(question: str, h: Handle, wants_tests: bool) -> _Mentions:
+    """Files the question names: a path (``graphify/cluster.py``), a dotted module (``http.client``,
+    ``json.dumps``, ``search_index.rank``) or, weaker, a plain word that is a file stem or a Python
+    package (``subprocess``, ``logging's``; not a stem shared by more than MAX_WORD_FILES files)."""
+    t = _file_table(h)
+    out: dict[str, tuple[float, str]] = {}
+    module_parts: set[str] = set()
+    owners: dict[str, set[str]] = defaultdict(set)
+
+    def give(files: list[str], factor: float, label: str) -> None:
+        if len(files) > max(MAX_WORD_FILES, len(t.paths) * MAX_NAMED_SHARE):
+            return  # the project's own package (graphify in graphify's repository) names no part of it
+        if wants_tests:
+            files = files + _test_counterparts(t, files)
+        for f in files:
+            if (wants_tests or not is_test_file(f)) and out.get(f, (0.0, ""))[0] < factor:
+                out[f] = (factor, label)
+
+    for tok in textnorm.raw_tokens(question):
+        tok = tok.strip("`'\"*<>,;:")
+        low = textnorm.fold_tr(tok).lower().replace("\\", "/").lstrip("./")
+        if not low:
+            continue
+        ext = low.rsplit(".", 1)[-1] if "." in low.rsplit("/", 1)[-1] else ""
+        if "/" in low or (ext in MENTION_EXTS and re.fullmatch(r"[\w.-]+", low)):
+            m = low.rstrip("/")
+            files = [f for lp, _n, f in t.paths if lp == m or lp.endswith("/" + m)]
+            if not files and not ext:
+                files = _module_files(t, m)
+            give(files, FILE_NAMED_FACTOR, tok)
+            continue
+        if "." in tok and IDENT_RE.fullmatch(tok):
+            parts = tok.removesuffix("()").split(".")
+            run = []
+            for p in parts:
+                if not p or p[:1].isupper():
+                    break
+                run.append(p)
+            for k in range(len(run), 0, -1):
+                files = _module_files(t, "/".join(run[:k]).lower())
+                if files:
+                    give(files, FILE_NAMED_FACTOR, ".".join(parts[:k]))
+                    module_parts |= {p.lower() for p in parts[:k]}
+                    for i in range(k, len(parts)):
+                        owners[parts[i].lower()].add(parts[i - 1])
+                    break
+            continue
+        if re.fullmatch(r"[a-z_][a-z0-9_]{2,}", low) and low not in EN_STOPWORDS and low not in textnorm.TR_STOPWORDS:
+            files = t.stems.get(low, [])
+            if not files or len(files) > MAX_WORD_FILES:
+                folders = t.packages.get(low, [])
+                files = [f for d in folders for f in _under(t, d)] if 0 < len(folders) <= MAX_WORD_FILES else []
+            give(files, FILE_WORD_FACTOR, tok)
+    return _Mentions(out, module_parts, dict(owners))
+
+
+def _doc_phrases(conn: sqlite3.Connection, h: Handle, q: QueryTerms, best: dict[int, float]) -> dict[int, int]:
+    """uid -> adjacent pairs of the question's own words that the unit's docstring also writes side by side
+    (``command line string`` in list2cmdline's), for the best-scored symbols that are not tests (a test's
+    docstring states its scenario in the words of the code it tests)."""
+    pairs = _query_pairs(q.words)
+    if not pairs:
+        return {}
+    cand = [u for u in sorted(best, key=lambda u: (-best[u], u))[:DOC_CANDIDATES]
+            if best[u] > 0 and h.units[u][2] == "symbol" and not is_test_file(h.units[u][0])]
+    out: dict[int, int] = {}
+    for uid, doc in _fetch(conn, "SELECT uid, doc FROM units WHERE uid IN ({ph}) AND doc != ''", cand):
+        seq = tokens(doc)
+        n = sum(1 for a, b in pairs if _near(seq, a, b, DOC_PHRASE_GAP))
+        if n:
+            out[uid] = n
+    return out
+
+
+def _word_groups(q: QueryTerms) -> dict[str, set[str]]:
+    """Index term -> the question words it stands for (a word's own tokens, an expansion's source word,
+    both words of a joined pair: temporary_directory and temporarydirectory stand for the same two)."""
+    out: dict[str, set[str]] = defaultdict(set)
+    for w in q.words:
+        for t in word_tokens(w):
+            out[t].add(textnorm.fold_tr(w).lower())
+    for e in q.expansions:
+        src = re.sub(r"\s*\(.*\)$", "", str(e["from"]))
+        out[e["to"]].update(textnorm.fold_tr(x).lower() for x in src.split())
+    return out
+
+
+def _tests_yield(h: Handle, score: dict[int, float], matched, word_weight: dict[str, float]) -> None:
+    """Among the best-scored units, a test ranks below the code that matches the same words.
+
+    A test function or class moves just below the best code unit that is not a test, scores less than
+    it but at least TEST_FACTOR of its score, and matches the test's matched question words to TEST_COVER
+    of their weight. With no such unit it keeps its score: it is the only place those words meet, or far
+    ahead of any code that has them. Module-level blocks of test files (fixture text) keep theirs.
+    ``matched(uid)`` -> the question words the unit matched."""
+    top = sorted(score, key=lambda u: (-score[u], u))[:TEST_WINDOW]
+    code = [u for u in top if h.units[u][2] in ("symbol", "module")]
+    losers = [u for u in code if h.units[u][2] == "symbol" and is_test_file(h.units[u][0])]
+    winners = [(score[u], matched(u)) for u in code if not is_test_file(h.units[u][0])]
+    if not losers or not winners:
+        return
+    for u in losers:
+        s, m = score[u], matched(u)
+        need = TEST_COVER * sum(word_weight.get(w, 0.0) for w in m)
+        near = [p for p, c in winners if s * TEST_FACTOR <= p < s
+                and sum(word_weight.get(w, 0.0) for w in m & c) >= need]
+        if near:
+            p = max(near)
+            score[u] = p - 1e-6 * p / s   # just below it; two units moved below it keep their order
+
+
 def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] | None = None,
          expansions: dict[str, list[str]] | None = None, limit: int = 60, handle: Handle | None = None,
          ppr: bool = True) -> Ranking:
@@ -1834,20 +2077,39 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
                 return 1.0
             return DATA_FACTOR
 
-        # (a 0.8 factor for test files was tried on 2026-09-24: +3 facts on heldout_repoatlas,
-        # -2 on glow_mod and -1 on orders_app_tr, whose behaviour questions cite tests; not kept)
+        # (a flat 0.8 factor on the lexical score of test files was tried on 2026-09-24: +3 facts on
+        # heldout_repoatlas, -2 on glow_mod and -1 on orders_app_tr, whose behaviour questions cite tests;
+        # not kept. Tests now yield only to code that matches the same words, after the graph prior.)
+        wants_tests = asks_about_tests(question)
+        mentions = _mentions(question, h, wants_tests)
+        # a question about tests keeps the index's order among tests and code (the code's called_by
+        # lists the tests); only what it names counts more
+        doc_pairs = {} if wants_tests else _doc_phrases(conn, h, q, best)
         for uid in best:
             best[uid] *= ref_factor(uid) * data_factor(uid)
+        # the scale is set before the boosts below, so a boosted unit does not push every other one down
         top = max(best.values(), default=0.0) or 1.0
+        for uid in best:
+            named_file = mentions.files.get(h.units[uid][0])
+            if named_file:
+                best[uid] *= named_file[0]
+                if named_file[0] >= FILE_NAMED_FACTOR:
+                    reasons[uid].append(f"question names {named_file[1]}")
+            if uid in doc_pairs:
+                best[uid] *= 1 + DOC_PHRASE_BOOST * min(2, doc_pairs[uid])
         lex = {uid: s / top for uid, s in best.items() if s > 0}
-        if q.named:
-            want = {nm.strip("_").lower(): nm for nm in q.named}
+        # the parts of "http.client" name a module (boosted above), not every symbol called client
+        named = [nm for nm in q.named if nm.strip("_").lower() not in mentions.module_parts]
+        if named:
+            want = {nm.strip("_").lower(): nm for nm in named}
             rows = _fetch(conn, "SELECT uid, name, qual FROM units WHERE uid IN "
                                 "(SELECT uid FROM names WHERE term IN ({ph}))",
                           sorted({t for nm in want for t in word_tokens(nm)}))
             # "Wisp.spawn": of the symbols named spawn, the one Wisp owns (its qualified name or
             # its file); when none is owned by it, every spawn counts as before
             owners = qualified_owners(question)
+            for part, xs in mentions.owners.items():  # http.client.HTTPConnection: the class module client owns
+                owners.setdefault(part, set()).update(xs)
 
             def owned(uid: int, name: str, qual: str | None) -> bool:
                 xs = owners.get(name.strip("_").lower())
@@ -1923,6 +2185,19 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
                 ppr_mass[uid] = bonus
                 reasons[uid].append(why)
         _fold_copies(h, score, canon, include_tests)
+        if include_tests and not wants_tests and not asks_about_callers(question):
+            groups = _word_groups(q)
+            word_weight: dict[str, float] = defaultdict(float)
+            for t, w in qw.items():
+                for x in groups.get(t, ()):
+                    word_weight[x] = max(word_weight[x], w)
+
+            def matched(uid: int) -> set[str]:
+                pid = per_unit[uid][0][1] if per_unit.get(uid) else None
+                ts = set(acc.get(pid, empty)) | set(name_tf.get(uid, empty)) | set(path_tf.get(h.units[uid][0], empty))
+                return {x for t in ts for x in groups.get(t, ())}
+
+            _tests_yield(h, score, matched, word_weight)
         for uid in score:
             if ref_factor(uid) < 1.0:
                 reasons[uid].append(REFERENCE_REASON)
