@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "mixmod",
+  "version": "0.1.0",
+  "name": "Mix Mod",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.example.mixmod.MixMod"]
+  },
+  "mixins": ["mixmod.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.1"
+  }
+}
