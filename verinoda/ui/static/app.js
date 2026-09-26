@@ -421,7 +421,8 @@
       const group = r.items.filter((x) => x.depth === d);
       body.push(el("div", { class: "sec small", text: `${d} ${t("impactDepth")} · ${group.length}` }));
       body.push(el("ul", { class: "links" }, group.slice(0, 80).map((it) => el("li", {}, kindBadge(it.kind), noteLink(it),
-        el("span", { class: "rel", text: `${it.relation} → ${it.via_title}` }), it.at ? atLink(it.at) : null))));
+        el("span", { class: "rel", text: `${it.relation} → ${it.via_title}`, title: it.basis }),
+        it.at ? atLink(it.at) : null))));
       if (group.length > 80) body.push(el("div", { class: "muted small", text: `+${group.length - 80} ${t("more")}` }));
     }
     box.replaceWith(panel("impact", `${t("impactTitle")} · ${n.title}`, ...body));

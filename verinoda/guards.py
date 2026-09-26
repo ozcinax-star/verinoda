@@ -72,6 +72,8 @@ import tokenize
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
+from verinoda.testcode import is_test_file  # test code, out of an only_in guard's default scope
+
 VIOLATED, POSSIBLE, REVIEW, TRIGGER = "VIOLATED", "POSSIBLE", "REVIEW", "TRIGGER"
 PY_SUFFIXES = (".py", ".pyi")
 JVM_SUFFIXES = (".java", ".kt", ".kts")
@@ -397,13 +399,6 @@ def _excluded_roots(repo: Path) -> list[str]:
     except Exception:  # noqa: BLE001
         pass
     return [r for r in roots if r]
-
-
-def is_test_file(rel: str) -> bool:
-    """Test code: the architecture map's test-file rule, plus pytest's ``conftest.py`` (fixtures)."""
-    from verinoda.architecture_map import is_test_file as _arch_test
-
-    return _arch_test(rel) or PurePosixPath(rel).name == "conftest.py"
 
 
 # folders of code that is not the product's own (samples, fixtures, vendored copies): out of an only_in guard's
@@ -1708,7 +1703,6 @@ def _gradle_maven(root: Path, all_files: list[str] | None = None) -> tuple[list[
     a build file the root build does not include is read, and its items say so (``build: other``).
     A dependency written through a version catalog (``gradle/libs.versions.toml``) is cited at the build
     line that uses it, with the catalog line (``via``)."""
-    from verinoda.architecture_map import is_test_file
     from verinoda.snapshot import list_files
 
     root = Path(root)

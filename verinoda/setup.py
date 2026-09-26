@@ -134,7 +134,7 @@ def reference_suggestions(repo: Path, files: list[str], configured: list[str] = 
     """
     from collections import Counter, defaultdict
 
-    from verinoda.architecture_map import is_test_file
+    from verinoda.testcode import is_test_file
 
     code = [f for f in files if f.endswith(CODE_SUFFIXES) and not is_test_file(f)]
     groups: dict[str, list[str]] = defaultdict(list)
@@ -322,7 +322,7 @@ def _first_question(repo: Path) -> str | None:
     """A question worth asking first: about the project's own most connected function or class."""
     try:
         from verinoda import index
-        from verinoda.architecture_map import is_test_file
+        from verinoda.testcode import is_test_file
 
         g = index.load(repo)
         best = max((n for n in g.G if g.is_symbol(n) and not is_test_file(g.file(n) or "")

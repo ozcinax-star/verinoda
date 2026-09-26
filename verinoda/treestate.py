@@ -55,6 +55,10 @@ from pathlib import Path
 
 from verinoda.snapshot import _GIT_SKIP_DIRS, _SKIP_DIRS, git, hash_files, list_files
 
+# the ledger's test files ("test" on a changed file, the test_edited rule): the one rule of verinoda.testcode,
+# test support (a testing/ folder) included
+from verinoda.testcode import is_test_or_support_file as is_test_file
+
 LF_SCHEME = "lf1"          # file_facts scheme of the raw sha256 -> content id memo
 TREE_PREFIX = b"verinoda-tree/1\n"
 MAX_DIFF_LINES = 20_000    # per side; bigger files are reported changed without a line diff
@@ -72,10 +76,6 @@ _WIN_BAD_CHARS = re.compile(r'[<>:"|?*\x00-\x1f]')
 # ".\.git\config" is written as .git/config. Reserved names are looked for between either separator.
 _ANY_SEP = re.compile(r"[/\\]")
 _WIN_DEVICES = re.compile(r"^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³]|conin\$|conout\$)(\..*)?$", re.I)
-# Test files by the conventions of the languages the failure parsers cover, beyond the Python/directory
-# rule of the runtime tracer: Jest/Vitest/node --test (x.test.js, x.spec.ts), Go (x_test.go), JVM (FooTest.java).
-_TEST_FILE_RE = re.compile(r"(^|/)[^/]+\.(test|spec)\.[cm]?[jt]sx?$|(^|/)[^/]+_test\.go$|"
-                           r"(^|/)[^/]*(Test|Tests|IT|Spec)\.(java|kt|scala|groovy)$|(^|/)[^/]+_(spec|test)\.rb$")
 
 
 class NotAGitTree(RuntimeError):
@@ -613,18 +613,6 @@ def _symbols_for(facts, start: int, end: int) -> list[str]:
         if s and s not in out:
             out.append(s)
     return out
-
-
-def is_test_file(path: str | None) -> bool:
-    """A test file by the runtime tracer's rule (Python names, ``tests/``-style directories) or by the
-    conventions of the other languages the failure parsers cover (``x.test.js``, ``x.spec.ts``,
-    ``x_test.go``, ``FooTest.java``)."""
-    from verinoda.runtime.trace import is_test_path
-
-    if not path:
-        return False
-    p = path.replace("\\", "/")
-    return is_test_path(p) or bool(_TEST_FILE_RE.search(p))
 
 
 def _docstring(node: ast.AST) -> ast.Expr | None:

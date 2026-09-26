@@ -30,8 +30,8 @@ from collections import Counter, defaultdict
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
 
-from verinoda import index
-from verinoda.architecture_map import is_test_file
+from verinoda import index, testcode
+from verinoda.testcode import is_test_file
 
 _is_test = lru_cache(maxsize=1 << 16)(is_test_file)  # asked for every link of every note
 RACY_NS = 2_000_000_000  # a file written this close to now may change again within the same clock tick
@@ -809,12 +809,33 @@ class Snapshot:
                     via[u] = (v, str(data.get("relation")), _at(data))
                     nxt.append(u)
             frontier = nxt
+        # the tests that reach a note through a step the graph does not hold (pkg.main.run(), a pytest fixture, a
+        # JS it() naming it): the rule of the map's impact and tests view (verinoda.testcode), with its basis
+        basis: dict[str, str] = {}
+        if tests:
+            extra = testcode.extra_callers(g)
+            for v, d in sorted(dist.items(), key=lambda kv: kv[1]):
+                if d >= depth:
+                    continue
+                for x in extra.get(v, ()):
+                    u = x.node if x.node is not None and x.node in g.G and self.kind(x.node) not in HIDDEN_KINDS \
+                        else self._file_note(x.file)
+                    if u is None or u in dist:
+                        continue
+                    if len(dist) - len(seeds) >= MAX_IMPACT:
+                        truncated = True
+                        break
+                    dist[u] = d + 1
+                    via[u] = (v, "test reach", x.at)
+                    what = "it" if d == 0 else f"{self.title(v)} (which reaches it)"
+                    basis[u] = testcode.reach_basis(testcode.extra_kind(g, x.id, v), what)
         items = []
         for u, d in dist.items():
             if d == 0:
                 continue
             v, rel, at = via[u]
-            items.append({**self.brief(u), "depth": d, "relation": rel, "at": at, "via": v, "via_title": self.title(v)})
+            items.append({**self.brief(u), "depth": d, "relation": rel, "at": at, "via": v, "via_title": self.title(v),
+                          **({"basis": basis[u]} if u in basis else {})})
         def place(f: str) -> int:  # the project's own code first, then tests, then reference trees
             return 2 if self.in_reference(f) else 1 if _is_test(f) else 0
 

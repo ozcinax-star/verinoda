@@ -295,7 +295,7 @@ class _Probe:
         self.repo = Path(repo).resolve()
         self.graph = graph
         self.files = list_files(self.repo)
-        from verinoda import guards
+        from verinoda import guards, testcode
 
         self.guards = guards
         roots = guards._excluded_roots(self.repo)
@@ -304,8 +304,8 @@ class _Probe:
             return f.endswith(guards.CODE_SUFFIXES) and not f.startswith(".verinoda/") and \
                 not any(f == r or f.startswith(r + "/") for r in roots)
 
-        self.product = [f for f in self.files if in_scope(f) and not guards.is_test_file(f)]
-        self.tests = [f for f in self.files if in_scope(f) and guards.is_test_file(f)]
+        self.product = [f for f in self.files if in_scope(f) and not testcode.is_test_file(f)]
+        self.tests = [f for f in self.files if in_scope(f) and testcode.is_test_file(f)]
         self.python = any(f.endswith((".py", ".pyi")) for f in self.product)
         self.forces: list[dict] = []
         self.absences: list[dict] = []

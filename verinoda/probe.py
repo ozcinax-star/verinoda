@@ -61,7 +61,7 @@ import re
 import time
 from pathlib import Path
 
-from verinoda import experiments, probe_gate, treestate
+from verinoda import experiments, probe_gate, testcode, treestate
 from verinoda import probe_inputs as pin
 from verinoda.paths import runs_dir
 from verinoda.snapshot import list_files
@@ -176,7 +176,7 @@ def resolve_target(repo: Path, symbol: str, files: list[str]) -> tuple[str, str]
         return rel, qual.strip()
     found = []
     for rel in files:
-        if not rel.endswith(".py") or treestate.is_test_file(rel):
+        if not rel.endswith(".py") or testcode.is_test_or_support_file(rel):
             continue
         text = _read(repo, rel)
         if text is None or s.rpartition(".")[2] not in text:
@@ -314,7 +314,7 @@ class _Project:
         out: list[dict] = []
         seen: set[str] = set()
         short = cls.rpartition(".")[2]
-        for frel in sorted(self.files, key=lambda f: (not treestate.is_test_file(f), f)):
+        for frel in sorted(self.files, key=lambda f: (not testcode.is_test_or_support_file(f), f)):
             text = _read(self.repo, frel)
             if text is None or short + "(" not in text:
                 continue
@@ -376,7 +376,7 @@ class _Project:
         flows: list[tuple[str, int, str]] = []
         tuples: list[dict] = []
         n_sites = 0
-        for frel in sorted(self.files, key=lambda f: (not treestate.is_test_file(f), f)):
+        for frel in sorted(self.files, key=lambda f: (not testcode.is_test_or_support_file(f), f)):
             text = _read(self.repo, frel)
             if text is None or name + "(" not in text and name + " (" not in text:
                 continue
@@ -1814,7 +1814,7 @@ def changed_functions(repo: Path, base_sha: str) -> list[dict]:
     ch = treestate.changes_vs_base(Path(repo).resolve(), base_sha)
     out = []
     for rel in sorted(ch["tree_files"]):
-        if not rel.endswith(".py") or treestate.is_test_file(rel):
+        if not rel.endswith(".py") or testcode.is_test_or_support_file(rel):
             continue
         new, old = ch["contents"].get(rel), ch["base"].get(rel)
         if new is None:

@@ -1420,7 +1420,7 @@ def mechanism(graph, topic: str, root: Path, commit: str | None, *, depth: int =
     carry ``at`` = file:line at ``commit``. Extraction is a labelled heuristic.
     """
     from verinoda import retrieval
-    from verinoda.architecture_map import is_test_file
+    from verinoda.testcode import is_test_file
 
     root = Path(root).resolve()
     cache: dict = {}
@@ -1534,7 +1534,8 @@ _DOC_RE = re.compile(r"(^|/)(readme|changelog|changes|history|news|contributing|
 
 
 def _why(graph, root: Path, key_nodes: list[str], involved: list[str], terms: list[str], cache: dict) -> dict:
-    from verinoda.architecture_map import DOC_DECISION_RE, is_test_file
+    from verinoda.architecture_map import DOC_DECISION_RE
+    from verinoda.testcode import is_test_file
 
     out: dict = {"commits": [], "tests": [], "docs": []}
     names = []
