@@ -86,7 +86,7 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     empties = _known_empty_json(repo, replay=not force)
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
-    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(), _absolutize_once(),             python_facts_cache(index_dir(repo), fresh=fresh_caches), python_cross_cache(index_dir(repo), fresh=fresh_caches), empties, keep:
+    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(), _absolutize_once(),             _distinct_case_ids(repo), python_facts_cache(index_dir(repo), fresh=fresh_caches), python_cross_cache(index_dir(repo), fresh=fresh_caches), empties, keep:
         ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
     if keep.failed:  # the full path would have failed making its report: so does this build
         ok = False
@@ -436,6 +436,56 @@ class _without_report_questions:
     def __exit__(self, *a):
         if self.mod is not None:
             self.mod.suggest_questions = self.real
+        return False
+
+
+class _distinct_case_ids:
+    """Symbols of one file whose names differ only in case keep distinct ids (:mod:`verinoda.case_ids`).
+
+    The upstream pipeline folds case into every id and merged ``class OrderService`` with ``const
+    orderService``. During a build its corpus extraction (``extract``, whose ids the reconcile of an
+    update keeps or drops by) and its graph builder (``build_from_json``, which also sees the nodes an
+    update kept from the last graph) are wrapped: their nodes and edges pass
+    :func:`verinoda.case_ids.split_case_collisions` first. The same split on both is a no-op the second
+    time.
+    """
+
+    def __init__(self, repo: Path):
+        self.repo = repo
+        self.mods = None
+
+    def __enter__(self):
+        try:
+            from verinoda.project_index import build as upstream_build
+            from verinoda.project_index import extract as upstream_extract
+        except Exception:  # noqa: BLE001 - nothing to wrap
+            return self
+        from verinoda.case_ids import split_case_collisions
+
+        repo = self.repo
+        self.mods = (upstream_extract, upstream_extract.extract, upstream_build, upstream_build.build_from_json)
+        real_extract, real_build = self.mods[1], self.mods[3]
+
+        def extract(*a, **k):
+            res = real_extract(*a, **k)
+            if isinstance(res, dict):
+                split_case_collisions(res.get("nodes") or [], res.get("edges") or [], repo)
+            return res
+
+        def build_from_json(extraction, *a, **k):
+            if isinstance(extraction, dict):
+                split_case_collisions(extraction.get("nodes") or [],
+                                      extraction.get("edges") or extraction.get("links") or [], repo)
+            return real_build(extraction, *a, **k)
+
+        upstream_extract.extract = extract
+        upstream_build.build_from_json = build_from_json
+        return self
+
+    def __exit__(self, *a):
+        if self.mods is not None:
+            self.mods[0].extract = self.mods[1]
+            self.mods[2].build_from_json = self.mods[3]
         return False
 
 
@@ -1132,6 +1182,15 @@ class Graph:
         if not scored:
             return None, []
         pick = _pick_scored_endpoint(und, scored, query)
+        # The scorer folds case: `orderService` scores the class OrderService and the const orderService of
+        # one file alike (distinct nodes since verinoda.case_ids). Of the candidates that score as high as
+        # the pick, the one whose name is the query, case and all, is the one meant.
+        want = query.strip().strip(".()")
+        if str(self.label(pick)).strip(".()") != want:
+            top = next(s for s, n in scored if n == pick)
+            exact = [n for s, n in scored if s == top and str(self.label(n)).strip(".()") == want]
+            if exact:
+                pick = exact[0]
         # The scorer is fuzzy (IDF over sub-tokens): 'definitely_not_a_symbol'
         # can land on some file node. Accept a scored pick only when a
         # meaningful query token really occurs in its label, id or file;

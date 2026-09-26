@@ -572,6 +572,48 @@ def test_undoing_the_last_edit_while_fixing_another_file_does_not_stop(tmp_path)
     assert debug.close(st, repo, resolved_by=3)["status"] == "resolved"
 
 
+def test_restoring_the_test_with_the_real_fix_is_not_a_test_edit(tmp_path):
+    # senior evaluation (web, jsdebug): attempt 2 edited the assertion (a right stop); attempt 3 ran
+    # `git checkout` on the test and fixed the code, and was stopped as test_edited although the test was
+    # identical to the base
+    repo = _repo(tmp_path)
+    _sub(repo, "orders/pricing.py", "return round(subtotal * 0.9, 2)", "return round(subtotal * 0.09, 2)")
+    _git(repo, "commit", "-qam", "the bug")
+    st = open_store(repo)
+    cmd = PT + ["tests/test_pricing.py"]
+    assert debug.start(st, repo, "10 percent discount gives 18 instead of 180", cmd)["outcome"] == "fail"
+    _sub(repo, "orders/pricing.py", "subtotal * 0.09", "subtotal * 0.009")
+    assert debug.attempt(st, repo, hypothesis="the rate is off by ten")["outcome"] == "fail"
+    _sub(repo, "tests/test_pricing.py", "== 180.0", "== 1.8")
+    a2 = debug.attempt(st, repo, hypothesis="the expected value was wrong")
+    assert a2["outcome"] == "pass" and a2["stop"] and _rules(a2) == ["test_edited"]
+    _git(repo, "checkout", "--", "tests/test_pricing.py")
+    _sub(repo, "orders/pricing.py", "subtotal * 0.009", "subtotal * 0.9")
+    a3 = debug.attempt(st, repo, hypothesis="10 percent off is 0.9 of the subtotal")
+    assert a3["outcome"] == "pass" and not a3["stop"] and _rules(a3) == [] and not a3["questions_for_human"]
+    assert debug.close(st, repo, resolved_by=3)["status"] == "resolved"
+
+
+def test_a_pass_bought_by_a_test_edit_is_not_the_last_passing_state_for_narrowing(tmp_path):
+    # senior evaluation (backend): after a pass that only edited the test, restoring the test narrowed the
+    # suspects to "changed since attempt 1 passed" - the test alone - and dropped the changed code
+    repo = _repo(tmp_path)
+    _sub(repo, "orders/pricing.py", "return round(subtotal * 0.9, 2)", "return round(subtotal * 0.09, 2)")
+    st = open_store(repo)
+    cmd = PT + ["tests/test_pricing.py"]
+    debug.start(st, repo, "10 percent discount gives 18 instead of 180", cmd)
+    _sub(repo, "tests/test_pricing.py", "== 180.0", "== 18.0")
+    a1 = debug.attempt(st, repo, hypothesis="the expected value was wrong")
+    assert a1["outcome"] == "pass" and _rules(a1) == ["test_edited"]
+    _git(repo, "checkout", "--", "tests/test_pricing.py")
+    a2 = debug.attempt(st, repo, hypothesis="back to the real test")
+    assert a2["outcome"] == "fail" and a2["stop"] and _rules(a2) == ["tree_reverted"]
+    narrowing = next(s for s in a2["strategies"] if s["id"] == "narrowing")
+    code = next(s for s in narrowing["suspects"] if s["at"] == "orders/pricing.py::apply_discount")
+    assert any(e.startswith("changed vs the base") for e in code["evidence"])
+    assert not any("changed since attempt 1 passed" in e for s in narrowing["suspects"] for e in s["evidence"])
+
+
 def test_the_same_code_with_a_docstring_edit_is_a_revert(tmp_path):
     repo = _repo(tmp_path)
     _sub(repo, "orders/pricing.py", 'i["qty"]', 'i["quantity"]')

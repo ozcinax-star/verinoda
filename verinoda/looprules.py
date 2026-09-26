@@ -25,7 +25,9 @@ Every finding names the attempts (and runs) it rests on. Two strengths:
     test configuration (``addopts``, ``-k``, ``--deselect``, ``collect_ignore``,
     ...; in pyproject.toml / setup.cfg / tox.ini only in pytest's own section).
     A test file is one by name or one a failing test of the session lives in
-    (a module that only holds failing doctests is code, its docstrings tests);
+    (a module that only holds failing doctests is code, its docstrings tests).
+    A file put back to its content at attempt 0 (``git checkout`` of a test an
+    earlier attempt edited) is not edited;
   - ``failing_tests_skipped``: tests that failed at the baseline (or at the
     previous attempt) did not pass here: skipped, xfailed, deselected or not
     collected (pytest's per-test outcomes; unknown without them). A module that
@@ -475,11 +477,23 @@ def _test_edited(hist: list[dict], cur: dict) -> tuple[list[dict], list[dict]]:
     parametrize table, a golden data file under ``tests/``), a removed test file, a line that switches a test
     off. When the repro runs doctests (``--doctest-modules``, or a failing doctest), a changed line of a
     docstring's examples is a test edit too; the rest of that module is code. When the attempt changed only
-    test files, any replaced or removed line counts."""
-    changes = [c for c in cur.get("vs_prev") or [] if not c.get("content_unknown")]
+    test files, any replaced or removed line counts.
+
+    A file the attempt put back to the content it had at the first attempt (attempt 0) is not edited: that
+    undoes an earlier attempt's edit (``git checkout`` of a test). Back to the base commit only counts when
+    attempt 0 had that content too - a test the session started with, uncommitted, is the test."""
+    prev = hist[-1] if hist else None
+    first = hist[0] if hist else None
+
+    def restored(path: str) -> bool:
+        if first is None or prev is None or first is prev or "tree_files" not in cur:
+            return False
+        now = _file_id(cur, path)
+        return now == _file_id(first, path) and now != _file_id(prev, path)
+
+    changes = [c for c in cur.get("vs_prev") or [] if not c.get("content_unknown") and not restored(c["path"])]
     if not changes:
         return [], []
-    prev = hist[-1] if hist else None
     test_paths = test_files_of(hist)
     all_doctests = _runs_doctests(cur.get("command"))
     doc_hosts = doctest_hosts(hist)

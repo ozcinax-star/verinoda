@@ -1044,7 +1044,12 @@ is a separate, later step.
   with a hint to compare with the base branch in CI. The help, the MCP
   descriptions and the skills say "Python only".
 - Output: nearest real names (edit distance with transpositions, shared word
-  parts, a few synonyms) and where the name is defined elsewhere. Wording:
+  parts, a few synonyms) and where the name is defined elsewhere (the
+  project's, or the installed package's, functions, classes, variables and
+  methods; found through a word index of the files' text built once per call
+  on the first absent name, so only files that contain the name are parsed -
+  the same answers as parsing every file, which made a diff with an absent
+  name about 10x slower than a clean one). Wording:
   "not found in <container> as installed in <env> (<file>)", never "does not
   exist". Exit 3 when something is absent or an installed version differs
   from the lock; `exit_because` says which. `incomplete` lists what was not
@@ -1394,7 +1399,11 @@ records what the human chose and checks the code against it.
     is the same after parsing) is not flagged. "An assertion or expected value" = a removed/changed
     line matching assertion forms (`assert`, `self.assert*`, `expect(`, `assertThat`, `assert_eq!`,
     `t.Errorf`, `pytest.raises`, `expected =`/`want :=`, ...). It stops even a passing attempt (a test
-    edited until it passes is the case to ask about).
+    edited until it passes is the case to ask about). A file the attempt put back to the content it had
+    at attempt 0 is not edited: `git checkout` of a test an earlier attempt changed undoes a test edit
+    (senior evaluation: the real fix after such a checkout was stopped). Back to the base commit counts
+    only where attempt 0 had the base content too; a test the session started with, uncommitted, is the
+    test, and putting it back to the commit discards it (still `test_edited`).
   - `failing_tests_skipped`: a test that failed at the baseline (or at the previous attempt, if it
     existed at the baseline) is skipped, xfailed, deselected or not collected in this run (the
     plugin's per-test outcomes; unknown without them). It stops even a passing attempt, and such a
@@ -1423,8 +1432,10 @@ records what the human chose and checks the code against it.
   and stops with `unknown`), then first-parent binary search in commit copies, commits that cannot run
   are skipped, without `--good` Verinoda steps back 1, 2, 4, ... commits, and the conclusion cites the
   attempt that shows each side; `observe`; `narrowing` (a suspect list: traceback symbols and symbols
-  changed since the last passing state, each with its evidence; only a complete trace in which a
-  changed function was called nowhere, with no child process started, rules it out);
+  changed since the last passing state - a pass with `test_edited` or `failing_tests_skipped` is not
+  one, else the changed code drops out behind the edited test - each with its evidence; only a
+  complete trace in which a changed function was called nowhere, with no child process started,
+  rules it out);
   `minimal_repro` (the repro narrowed to the failing tests; when a test passes alone and failed in
   the full repro on the same tree, the attempt reports the heuristic `order_dependent`); `ask_human`
   when a test rule fired or nothing else applies.
