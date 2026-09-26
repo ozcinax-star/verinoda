@@ -15,7 +15,7 @@ numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
 the measured ratios.
 
-Sections: [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-26: honest verdicts](#update-2026-09-26-honest-verdicts-wrong-met-d-honest-verdicts) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -23,6 +23,46 @@ Sections: [Update 2026-09-26: change review, second review round](#update-2026-0
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-09-26: honest verdicts, wrong 'met' (D-honest-verdicts)
+
+A senior review found `analyze` saying `met` for irrelevant or incomplete answers (callers that missed most
+call sites, env reads from a frozen copy, a commit line as a reason, definitions for "which components use
+X", a set difference answered with a wrong member). `benchmarks/verdict_audit/cases.json` turns those shapes
+into a regression set on public material: 17 traps and 22 controls (where `met` is right) on the three
+examples, three fixtures under `tests/fixtures/verdict_audit/` and this repository at `343a00d`, split into dev
+and held-out before any rule was written. `wrong_met` = the verdict is `met` while the answer misses a gold
+string, holds a wrong one, or the true answer is an absence the tool cannot state (definitions in
+`benchmarks/verdict_audit/README.md`).
+
+| split | cases | wrong met before | wrong met after | controls kept before | controls kept after | above ceiling after |
+|---|---|---|---|---|---|---|
+| dev (10 traps, 13 controls; the rules were tuned here) | 23 | 9 (0.39) | 0 | 13/13 | 12/13 | 0 |
+| held-out (7 traps, 9 controls; first run with the rules frozen) | 16 | 8 (0.50) | 1 (0.06) | 7/9 | 7/9 | 0 |
+
+- Before = `343a00d` (integrate/0925), after = this branch; the same indexed copies, `verinoda benchmark
+  verdict-audit --split all --work DIR`. Verdicts before: 37 met, 2 unmet; after: 20 met, 14 met_with_inference,
+  3 not_supported, 2 unmet.
+- The dev control lost, `pyloop-why-adr`, was met before only through a commit line. Its ADR claim is graded
+  `weak_inference`: the quoted line holds a negation and entail's polarity check counts the claim's framing
+  words (docs/DESIGN.md 10.3).
+- The held-out wrong met left is a control that was wrong before too ("Where is max_heat declared?": met with
+  the TOML default and `getMaxHeat`, the Java declaration not found). The other held-out control not kept
+  (`verinoda-mcp-size-env`) is `unmet` before and after: the config view does not find the read.
+- Fact recall: fastbench on the nine sets (eight public and one private) against the integrate/0925 run: 0 of 333
+  set x question x approach cells differ, negatives unchanged. On the eight public sets 74 sub-question verdicts
+  were met before and 68 after; the six now `met_with_inference` are four "why" questions answered only by the
+  corpus's "benchmark corpus" commit line, "which code reads these recipes?" answered by definitions, and a
+  callers question answered with callers of another function.
+- Time: the gate takes a few milliseconds per question; the call-site search of a callers question read the
+  whole 226-file Graphify set in 0.2 s on a quiet machine (0.6 s under load). It stops after 8,000 files or
+  96 MB, a count, so the same tree gives the same verdict.
+- In-sample caveats: the rule author wrote both splits, and the trap shapes come from the review's list; the
+  held-out set checks over-fitting to the exact questions, not unseen shapes. After the held-out run the
+  set-difference test was narrowed (it no longer fires on "without a ..." or "the missing-key handler"); the
+  final run of both splits, in the result files, gives the same numbers.
+
+Result files: `benchmarks/results/verdict-audit-2026-09-26/before.json` and `after.json`.
 
 ## Update 2026-09-26: change review, second review round (D35)
 
