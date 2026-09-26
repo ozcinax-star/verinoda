@@ -1,5 +1,11 @@
 # Verinoda
 
+[![PyPI](https://img.shields.io/pypi/v/verinoda)](https://pypi.org/project/verinoda/)
+[![npm](https://img.shields.io/npm/v/verinoda)](https://www.npmjs.com/package/verinoda)
+[![Python](https://img.shields.io/pypi/pyversions/verinoda)](https://pypi.org/project/verinoda/)
+[![CI](https://github.com/ozcinax-star/verinoda/actions/workflows/ci.yml/badge.svg)](https://github.com/ozcinax-star/verinoda/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 > **⚠️ Durum / Status: TAMAMLANMADI — work in progress, no guarantees.**
 > Bu depo aktif geliştirme altındadır ve henüz bitmemiştir. Özellikler eksik,
 > değişken veya hatalı olabilir; hiçbir doğruluk, güvenlik ya da uygunluk
@@ -7,12 +13,14 @@
 > This repository is unfinished. Features may be missing, change without notice
 > or be wrong. No warranty or guarantee of correctness, security or fitness for
 > any purpose is given (see also the Apache-2.0 "AS IS" terms in `LICENSE`).
-> Not published to PyPI yet. Formerly developed under the working name "RepoAtlas".
+> Released as an alpha: 0.1.0 on [PyPI](https://pypi.org/project/verinoda/) and
+> [npm](https://www.npmjs.com/package/verinoda) (2026-09-26). Formerly developed under the working name "RepoAtlas".
 
 ### What is in this snapshot (2026-09-26)
 
 | Part | State |
 |---|---|
+| Release | 0.1.0 (alpha), 2026-09-26: `pip` / `pipx` / `uv tool install verinoda`, `npx verinoda`; built and published by `.github/workflows/release.yml` (PyPI Trusted Publishing, npm with provenance), [GitHub release v0.1.0](https://github.com/ozcinax-star/verinoda/releases/tag/v0.1.0) |
 | Graphify port (`verinoda/project_index`, `tests_upstream/`) | done. Upstream suite at port time: 5436 passed / 50 failed, and every failure also fails on unmodified upstream on the same Windows machine; not re-run since (`docs/UPSTREAM.md`) |
 | Core: claims, evidence, critique, experiments, research/compare, feedback, memory, installers, MCP server (35 tools) | implemented |
 | Round 3: search engine, question plans with Turkish support, reference resolver, trust engine (anchors, entailment, facet-level staleness), runtime observation, precise call resolution | implemented and wired into the CLI, MCP and `analyze`; gaps per decision in `docs/DESIGN.md` ("Implementation status") |
@@ -106,8 +114,8 @@ are pinned to the exact version the user meant before anything is compared.
 > (commit `20a20d30`, Apache-2.0). It is an independent project, **not** an
 > official Graphify release. See [docs/UPSTREAM.md](docs/UPSTREAM.md).
 > The name "Verinoda" was checked as free on PyPI, npm and GitHub on 2026-09-23 (see
-> [docs/NAMING.md](docs/NAMING.md)) and again free on 2026-09-26. Packages are published from release tags
-> ([docs/RELEASING.md](docs/RELEASING.md)); until the first tag, nothing is on PyPI or npm.
+> [docs/NAMING.md](docs/NAMING.md)); 0.1.0 was published there on 2026-09-26 from the tag `v0.1.0`
+> ([docs/RELEASING.md](docs/RELEASING.md)).
 
 ## Install
 
@@ -125,8 +133,8 @@ On Windows, get uv first with `winget install --id astral-sh.uv -e` (then open a
 `uv tool update-shell` once so `verinoda` is on PATH. `[precise]` adds the optional precise call-site resolver
 (jedi); leave it out for a smaller install. Upgrade with `uv tool upgrade verinoda`, `pipx upgrade verinoda` or
 `pip install -U verinoda`. Releases are published from tags by `.github/workflows/release.yml`
-([docs/RELEASING.md](docs/RELEASING.md)); if `pip` says there is no matching distribution, the first release
-is not out yet - use the development version below.
+([docs/RELEASING.md](docs/RELEASING.md)). MCP clients that start servers with npx can use
+`npx -y verinoda mcp serve`; `verinoda setup` registers the installed command instead.
 
 **The development version (main)**, straight from GitHub:
 

@@ -1118,8 +1118,9 @@ bir kopyasını tutan bir Verinoda kopyasında plan eşleştirmesi 15 mention'ı
 
 **Ad sorunu**
 
-- Ürünün kalıcı adı "Verinoda" (eski çalışma adı RepoAtlas). Ad PyPI, npm ve GitHub'da boş; paket henüz bir paket dizinine
-  (PyPI) yayınlanmadı.
+- Ürünün kalıcı adı "Verinoda" (eski çalışma adı RepoAtlas). 0.1.0 (alfa) 26 Eylül 2026'da PyPI'da (`verinoda`) ve
+  npm'de (`verinoda`, PyPI sürümünü çalıştıran ince sarmalayıcı) yayımlandı; yayın `v0.1.0` etiketinden
+  `.github/workflows/release.yml` ile yapıldı (docs/RELEASING.md).
 
 ---
 
@@ -1225,7 +1226,9 @@ Kurulumdan sonra:
 **Diğer yollar ve tek tek komutlar:**
 
 ```bash
-# Bir checkout'tan ya da wheel'den (PyPI'da yok)
+# PyPI'dan (önerilen), npm'den ya da bir checkout'tan
+uv tool install --link-mode copy "verinoda[precise]"                 # PyPI
+npx -y verinoda --version                                           # npm (Node kullananlar)
 uv tool install --link-mode copy .                                  # Windows'ta Codex için --link-mode copy şart
 uv tool install --link-mode copy --with "jedi>=0.19.2,<0.21" .      # kesin çözümleme (precise) ile
 uv tool install --link-mode copy "verinoda[precise] @ git+https://github.com/ozcinax-star/verinoda"   # git ile
@@ -1254,8 +1257,8 @@ Linux'ta henüz denenmedi. `winget install --id astral-sh.uv` satırı yalnızca
 paketin winget'te bulunduğu kontrol edilerek eklendi; bu makinede uv zaten
 kurulu olduğu için çalıştırılmadı.
 
-Depo herkese açıktır (https://github.com/ozcinax-star/verinoda); paket PyPI'da
-yayımlanmadı. Graphify'ın (`graphifyy`) ayrıca kurulması gerekmez.
+Depo herkese açıktır (https://github.com/ozcinax-star/verinoda); paket PyPI'da ve npm'de
+`verinoda` adıyla yayımlanmıştır (0.1.0, alfa). Graphify'ın (`graphifyy`) ayrıca kurulması gerekmez.
 
 ---
 

@@ -15,6 +15,9 @@ Checked on 2026-09-23:
 | npm registry | free (404) |
 | GitHub repositories named "verinoda" | 0 |
 | GitHub users/orgs "verinoda" | 0 |
+
+Published on 2026-09-26: 0.1.0 on PyPI (https://pypi.org/project/verinoda/) and npm
+(https://www.npmjs.com/package/verinoda), so both names now belong to this project.
 | `verinoda.com` | does not resolve |
 
 No trademark search was done. Do one in the target markets before a public
