@@ -24,6 +24,14 @@ _EXC = re.compile(r"^(?:Exception in thread \"[^\"]*\"\s+)?(?P<exc>(?:[a-z][\w$]
 _CAUSED = re.compile(r"^\s*Caused by:\s*(?P<rest>.*)$")
 _MORE = re.compile(r"^\s*\.\.\.\s*(\d+)\s+more")
 _STAMP = re.compile(r"^\[(?P<t>[\d:.]+)\]")
+# a logger's prefix on every line, a stack trace printed through System.out / System.err included:
+# "[20:01:36] [Server thread/INFO] (Minecraft) [STDOUT]: \tat a.B.c(B.java:4)"
+_PREFIX = re.compile(r"^(?:\[[^\]]*\]\s*)+(?:\([^)]*\)\s*)?(?:\[[^\]]*\]\s*)*:\s?")
+
+
+def _unprefixed(line: str) -> str:
+    """``line`` without a logger's ``[time] [thread/LEVEL] (Logger) [STDOUT]:`` prefix (the line itself when none)."""
+    return _PREFIX.sub("", line, count=1)
 _RESULT = re.compile(r"(?P<name>[\w:./$-]+)\s+(?:has\s+)?(?P<how>passed|failed|succeeded|timed out)\b", re.I)
 _NOTABLE = re.compile(r"GameTestInfo\.(?:succeed|fail)|GameTestHelper\.(?:succeed|fail|onEachTick|runAfterDelay)"
                       r"|GameTestTicker|ServerTickEvents|EventFactory|Entity\.(?:discard|remove|kill|setRemoved)"
@@ -52,14 +60,15 @@ class Trace:
 
 def parse(text: str) -> tuple[list[Trace], list[dict]]:
     """``(traces, test results)`` of a log's text."""
-    lines = text.splitlines()
+    raw_lines = text.splitlines()
+    lines = [_unprefixed(ln) for ln in raw_lines]  # what the program printed, for frames and headers
     traces: list[Trace] = []
     results: list[dict] = []
     cur: Trace | None = None
     last_stamp = None
-    for i, raw in enumerate(lines, 1):
-        line = raw.rstrip()
-        st = _STAMP.match(line)
+    for i, raw in enumerate(raw_lines, 1):
+        line = lines[i - 1].rstrip()
+        st = _STAMP.match(raw)
         if st:
             last_stamp = st.group("t")
         fm = _FRAME.match(line)

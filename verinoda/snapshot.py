@@ -105,6 +105,14 @@ def sha256_file(p: Path) -> str:
     return h.hexdigest()
 
 
+def _is_file(p: Path) -> bool:
+    """``p.is_file()``, False for a link or junction whose target is gone or cannot be read (never raises)."""
+    try:
+        return p.is_file()
+    except OSError:
+        return False
+
+
 def list_files(repo: Path) -> list[str]:
     """Repo-relative POSIX paths of tracked + untracked-not-ignored files."""
     repo = Path(repo).resolve()
@@ -115,7 +123,7 @@ def list_files(repo: Path) -> list[str]:
         others = git(repo, "ls-files", "-z", "--others", "--exclude-standard") or ""
         rels = {r for r in tracked.split("\0") if r and not set(Path(r).parts) & _GIT_SKIP_DIRS}
         rels |= {r for r in others.split("\0") if r and not set(Path(r).parts) & _SKIP_DIRS}
-        return sorted(r for r in rels if (repo / r).is_file())
+        return sorted(r for r in rels if _is_file(repo / r))
     rels = []
     for dirpath, dirnames, filenames in os.walk(repo):
         dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and not d.endswith(".egg-info")]

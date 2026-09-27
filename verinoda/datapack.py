@@ -237,8 +237,9 @@ def index(repo: Path, *, java_files: list[str] | None = None) -> dict:
         for ln, name, kind in os_:
             objs.setdefault(name, []).append(Site(f, ln, "mcfunction", kind, lines[ln - 1].strip()[:160]))
     if java_files is None:
-        java_files = [p.relative_to(repo).as_posix() for p in repo.rglob("*.java")
-                      if not _skipped(p.relative_to(repo).parts[:-1])]
+        from verinoda.snapshot import listed_files
+
+        java_files = [f for f in listed_files(repo) if f.endswith(".java") and not _skipped(f.split("/")[:-1])]
     texts: dict[str, str] = {}
     for f in java_files:
         try:

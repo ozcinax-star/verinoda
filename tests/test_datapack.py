@@ -120,3 +120,42 @@ def test_cli(repo, capsys):
     assert len(json.loads(capsys.readouterr().out)["sites"]) == 2
     assert cli.main(["datapack", "function", "wings:fold", "--repo", str(repo)]) == 0
     assert "called by wings:tick" in capsys.readouterr().out
+
+
+def _dangling_link(link, target) -> bool:
+    """A junction (Windows) or symlink (elsewhere) to ``target``, which is then removed; False when not possible."""
+    import os
+    import shutil
+
+    target.mkdir(parents=True)
+    try:
+        if os.name == "nt":
+            import _winapi
+
+            _winapi.CreateJunction(str(target), str(link))
+        else:
+            os.symlink(target, link, target_is_directory=True)
+    except (OSError, AttributeError, ImportError):
+        return False
+    shutil.rmtree(target)
+    return True
+
+
+def test_links_whose_target_is_gone_are_skipped_not_fatal(tmp_path):
+    """A node_modules package linked to a folder that has since moved (npm workspaces, a copied project): the
+    datapack reader skips the link instead of stopping."""
+    root = tmp_path / "mod"
+    fn = root / "data" / "ns" / "function"
+    fn.mkdir(parents=True)
+    (fn / "a.mcfunction").write_text("tag @s add seen\nexecute if entity @s[tag=seen] run say hi\n", encoding="utf-8")
+    (root / "src").mkdir()
+    (root / "src" / "A.java").write_text("class A {}\n", encoding="utf-8")
+    nm = root / "tools" / "x" / "node_modules" / "@scope"
+    nm.mkdir(parents=True)
+    made = [_dangling_link(nm / name, tmp_path / "moved" / name) for name in ("plugin", "shared")]
+    other = root / "tools" / "stray"
+    made.append(_dangling_link(other, tmp_path / "moved" / "stray"))
+    if not any(made):
+        pytest.skip("links cannot be made here")
+    res = datapack.lookup(root, None, None)
+    assert res["functions"] == 1 and res["status"] == "found"

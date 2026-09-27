@@ -116,3 +116,18 @@ def test_cli_stores_claims_with_the_log_as_evidence(repo, tmp_path, capsys):
     assert len(copies) == 1                               # a log outside the repository is kept to be cited
     assert cli.main(["trace-log", str(log), "--repo", str(repo), "--no-store"]) == 0
     assert "stored" not in capsys.readouterr().out
+
+
+def test_a_trace_printed_through_stdout_keeps_the_loggers_prefix_on_every_line():
+    """Minecraft logs System.out: every line of a printed stack trace carries "[time] [thread/LEVEL] (Minecraft)
+    [STDOUT]: " (a raw latest.log gave 0 traces until the prefix was stripped by hand)."""
+    pre = "[20:01:36] [Server thread/INFO] (Minecraft) [STDOUT]: "
+    log = (pre + "java.lang.IllegalStateException: boom\n"
+           + pre + "\tat com.example.Foo.bar(Foo.java:12)\n"
+           + pre + "\tat com.example.Foo.tick(Foo.java:30)\n"
+           + "[20:01:37] [Server thread/INFO]: gametest:foo has passed\n")
+    traces, results = trace_log.parse(log)
+    assert [(t.header, t.stamp) for t in traces] == [("java.lang.IllegalStateException: boom", "20:01:36")]
+    assert [(f.cls, f.meth, f.line) for f in traces[0].frames] == [("com.example.Foo", "bar", 12),
+                                                                    ("com.example.Foo", "tick", 30)]
+    assert results[0]["name"] == "gametest:foo" and results[0]["outcome"] == "passed"

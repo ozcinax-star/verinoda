@@ -214,8 +214,9 @@ def lookup(repo: Path, target: str, *, graph=None, stale=None, max_sites: int = 
         except (OSError, subprocess.SubprocessError):
             listed = []
         if not [f for f in listed if f]:
-            listed = [p.relative_to(repo).as_posix() for p in repo.rglob("*") if p.is_file()
-                      and ".verinoda" not in p.parts and ".git" not in p.parts]
+            from verinoda.snapshot import listed_files
+
+            listed = [f for f in listed_files(repo) if ".verinoda" not in f.split("/")]
         at = sites(repo, [f for f in listed if f], table).get(t, [])
         it = table[t]
         return {**base, "status": "found", "kind": "item", "item": _item_dict(it),

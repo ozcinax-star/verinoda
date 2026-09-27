@@ -1630,8 +1630,10 @@ def api(repo: Path, target: str, config: dict | None = None, cache_dir: Path | N
     has no Java source; ``found: False`` when no class of that name is on the classpath; a simple name that several
     classes carry is ``ambiguous`` with the candidates."""
     repo = Path(repo).resolve()
-    first = next((p for p in repo.rglob("*.java") if not any(part in _SKIP_BUILD for part in
-                                                            p.relative_to(repo).parts)), None)
+    from verinoda.snapshot import listed_files
+
+    first = next((repo / f for f in listed_files(repo) if f.endswith(".java")
+                  and not any(part in _SKIP_BUILD for part in f.split("/"))), None)
     if first is None:
         return None
     root = jvmclass.build_root(repo, first)
