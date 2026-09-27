@@ -6,15 +6,20 @@
 [![CI](https://github.com/ozcinax-star/verinoda/actions/workflows/ci.yml/badge.svg)](https://github.com/ozcinax-star/verinoda/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-> **⚠️ Durum / Status: TAMAMLANMADI — work in progress, no guarantees.**
-> Bu depo aktif geliştirme altındadır ve henüz bitmemiştir. Özellikler eksik,
-> değişken veya hatalı olabilir; hiçbir doğruluk, güvenlik ya da uygunluk
-> güvencesi verilmez. Üretimde kullanmayın.
-> This repository is unfinished. Features may be missing, change without notice
-> or be wrong. No warranty or guarantee of correctness, security or fitness for
-> any purpose is given (see also the Apache-2.0 "AS IS" terms in `LICENSE`).
-> Released as an alpha: 0.3.2 on [PyPI](https://pypi.org/project/verinoda/) and
-> [npm](https://www.npmjs.com/package/verinoda) (2026-09-27; 0.1.0 and 0.2.0 on 2026-09-26). Formerly developed under the working name "RepoAtlas".
+> **Durum / Status: BETA.**
+> Verinoda beta aşamasındadır: çekirdek komutlar (`scan`, `update`, `query`, `analyze`, `trace`, `check`,
+> `review`) ve MCP çekirdek araçları kullanıma hazırdır; `docs/DESIGN.md`'de "partial" olarak işaretli
+> özellikler deneyseldir ve değişebilir. Cevaplar kanıt satırlarıyla verilir, ama yanlış olabilir: kritik
+> kararlarda kanıtı kendiniz okuyun. Hiçbir doğruluk, güvenlik ya da uygunluk garantisi verilmez.
+> Verinoda is in beta: the core commands (`scan`, `update`, `query`, `analyze`, `trace`, `check`, `review`)
+> and the core MCP tools are ready for use; features marked "partial" in `docs/DESIGN.md` are experimental and
+> may change. Answers come with their evidence lines but can be wrong: read the evidence yourself before a
+> critical decision. No warranty or guarantee of correctness, security or fitness for any purpose is given
+> (Apache-2.0 "AS IS" terms in `LICENSE`). Performance claims are published only with their measurement
+> (model, version, date, raw logs).
+> Published: 0.3.2 on [PyPI](https://pypi.org/project/verinoda/) and
+> [npm](https://www.npmjs.com/package/verinoda) (2026-09-27; 0.1.0 and 0.2.0 on 2026-09-26); the next release is
+> published as a beta. Formerly developed under the working name "RepoAtlas".
 
 ### What is in this snapshot (2026-09-27)
 
