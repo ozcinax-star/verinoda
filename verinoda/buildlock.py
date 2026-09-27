@@ -215,12 +215,29 @@ def updater_argv(repo: Path) -> list[str]:
     return [sys.executable, "-I", "-c", _UPDATER_BOOT, home, "update", "--repo", str(repo)]
 
 
-def extraction_stamp() -> str:
-    """Which extraction builds a graph now: the package version and the AST cache schema. A graph built under
-    another stamp describes the code as an older extractor read it (Java overloads as one node before D57)."""
-    from verinoda.project_index.cache import _AST_CACHE_SCHEMA, _EXTRACTOR_VERSION
+_STAMP: str | None = None
 
-    return f"{_EXTRACTOR_VERSION}-s{_AST_CACHE_SCHEMA}"
+
+def extraction_stamp() -> str:
+    """Which extraction builds a graph now: the AST cache schema and a hash of the extractor's source files. A
+    graph built under another stamp describes the code as an older extractor read it (Java overloads as one node
+    before D57). The source, not the installed version: two installs of the same code (the MCP server's and a
+    development checkout's, whose metadata can say another version) agree, and never rebuild each other's graph."""
+    global _STAMP
+    if _STAMP is None:
+        import hashlib
+
+        from verinoda.project_index.cache import _AST_CACHE_SCHEMA
+
+        base = Path(__file__).resolve().parent / "project_index"
+        h = hashlib.sha1()
+        for p in [base / "extract.py", *sorted((base / "extractors").glob("*.py"))]:
+            try:
+                h.update(p.name.encode() + b"\0" + p.read_bytes().replace(b"\r\n", b"\n"))
+            except OSError:
+                continue
+        _STAMP = f"s{_AST_CACHE_SCHEMA}-{h.hexdigest()[:12]}"
+    return _STAMP
 
 
 def recorded_extraction(repo: Path) -> str | None:
