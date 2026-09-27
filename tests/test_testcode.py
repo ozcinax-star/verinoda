@@ -37,6 +37,11 @@ pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not ava
     "web/CheckoutPage.test.tsx", "web/cart.spec.mjs", "web/cart.test.cjs", "web/src/__tests__/cart.js",
     "go/calc_test.go", "rs/tests/integration.rs", "spec/models/user_spec.rb", "test/models/user_test.rb",
     "testing/test_x.py",
+    # .NET test projects, Xcode test targets, PHPUnit, XCTest, GoogleTest, Dart, Elixir
+    "src/UnitTests/Bug/NullableMaps.cs", "src/IntegrationTests/Inheritance.cs", "src/AutoMapper.DI.Tests/A.cs",
+    "src/Foo.Test/Helpers.cs", "MyAppTests/LoginViewModel.swift", "crates/integration_tests/src/lib.rs",
+    "src/Http/RequestTest.php", "Sources/App/Views/LoginTests.swift", "base/strings/str_util_test.cc",
+    "base/files/file_unittest.cpp", "src/jq_test.c", "lib/parser_test.dart", "lib/router_test.exs",
 ])
 def test_a_test_file_by_its_path(path):
     assert testcode.is_test_file(path) and testcode.is_test_or_support_file(path)
@@ -47,6 +52,8 @@ def test_a_test_file_by_its_path(path):
     "src/main/java/a/Contest.java", "src/main/java/a/Greatest.java", "src/main/java/a/EDIT.java",
     "src/main/java/a/ModConfigSpec.java", "src/main/kotlin/a/ConfigSpec.kt", "web/cart.js", "go/latest.go",
     "rs/src/lib.rs", "src/main/java/a/testing/DebugCommand.java", "", None,
+    "src/Contests/Rules.cs", "src/Latest/Feed.cs", "app/Latest.php", "Sources/Contest.swift", "src/attest.cc",
+    "src/latest.c", "lib/manifest.dart", "lib/contest.exs", "src/AutoMapper/TestSupport.cs",
 ])
 def test_not_a_test_file(path):
     assert not testcode.is_test_file(path) and not testcode.is_test_or_support_file(path)

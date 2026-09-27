@@ -10,7 +10,11 @@ this module, so they cannot disagree about what a test is.
 pytest's ``conftest.py``, Go ``x_test.go``, JS/TS ``x.test.ts`` / ``x.spec.mjs`` (any of js, jsx, ts, tsx
 with an optional c/m), JVM and .NET classes ``FooTest``, ``FooTests``, ``FooIT`` (and the Turkish
 ``FooTesti`` / ``FooTestleri``), Spock/ScalaTest ``FooSpec.groovy`` / ``.scala``, Ruby ``x_spec.rb`` /
-``x_test.rb``. ``latest.py``, ``contest.py``, ``src/latest/`` and ``src/contest/`` are not tests.
+``x_test.rb``, .NET test projects and Xcode test targets (``UnitTests/``, ``AutoMapper.UnitTests/``,
+``Foo.Tests/``, ``Foo.Test/``, ``MyAppTests/``, ``integration_tests/``), PHPUnit and XCTest classes
+(``FooTest.php``, ``FooTests.swift``), GoogleTest files (``x_test.cc``, ``x_unittest.cpp``), Dart and
+Elixir ``x_test.dart`` / ``x_test.exs``. ``latest.py``, ``contest.py``, ``src/latest/``, ``src/contest/``
+and ``Contests/`` are not tests.
 
 A ``testing/`` directory is test support only for the runtime tracer, the debug ledger and the change review
 (:func:`is_test_or_support_file`): many projects ship one as product code (``numpy.testing``,
@@ -77,9 +81,14 @@ TEST_FILE_RE = re.compile(
     # Gradle/Maven test source sets (src/test, src/gametest, src/integrationTest, src/testFixtures);
     # not src/latest/, src/contest/, src/_pytest/
     r"|(^|/)src/(test[A-Z0-9_][A-Za-z0-9_]*|tests?|gametest|[a-z]+Tests?)/"
-    # JVM / .NET test classes; Spock and ScalaTest specifications; Ruby
+    # .NET test projects and Xcode test targets (UnitTests/, AutoMapper.UnitTests/, Foo.Tests/, Foo.Test/,
+    # MyAppTests/), and their lower-case forms (unit_tests/, integration-tests/)
+    r"|(^|/)[\w.-]*Tests/|(^|/)([\w-]+\.)*Test/|(^|/)(unit|integration|functional|acceptance|e2e)[_-]?tests?/"
+    # JVM / .NET / PHPUnit / XCTest test classes; Spock and ScalaTest specifications; Ruby
     r"|(Tests?|[a-z0-9]IT|Testleri|Testi)\.(java|cs|kt|groovy|scala)$|[a-z0-9]Spec\.(groovy|scala)$"
-    r"|_(spec|test)\.rb$"
+    r"|[A-Za-z0-9]Tests?\.(php|swift)$|_(spec|test)\.rb$"
+    # C/C++ (GoogleTest's x_test.cc, x_unittest.cc), Dart, Elixir
+    r"|_(unit)?tests?\.(c|cc|cpp|cxx)$|_test\.(dart|exs)$"
 )
 
 REACH_RELATIONS = frozenset({"calls", "uses", "references"})   # the edges static test reach follows
