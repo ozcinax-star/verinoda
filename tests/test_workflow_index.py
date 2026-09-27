@@ -563,3 +563,22 @@ def test_a_process_whose_code_changed_on_disk_neither_uses_nor_writes_a_record(
     full, _ = _update_once(repo, monkeypatch, comment, fast=False)
     assert rp.exists()  # the same build, with the code as loaded, is recorded
     assert stale == full
+
+
+def test_a_graph_an_older_extraction_built_is_rebuilt_once_without_a_changed_file(proj):
+    """After an upgrade that changes extraction (D57: Java overloads) unchanged files kept what the old extractor
+    made of them until `verinoda scan .`; now the first update rebuilds the graph, the next is a noop."""
+    from verinoda import buildlock
+
+    repo, st = proj
+    workflow.scan(st, repo)
+    stats = index_dir(repo) / buildlock.STATS_NAME
+    assert json.loads(stats.read_text(encoding="utf-8"))["extraction"] == buildlock.extraction_stamp()
+    assert workflow.update(st, repo)["mode"] == "noop"
+    old = json.loads(stats.read_text(encoding="utf-8"))
+    old.pop("extraction")  # as an index built before stamps (0.3.2 and earlier) left it
+    stats.write_text(json.dumps(old), encoding="utf-8")
+    res = workflow.update(st, repo)
+    assert res["index_mode"] == "full" and res["changed_count"] == 0
+    assert res["extraction"] == {"was": None, "now": buildlock.extraction_stamp()}
+    assert workflow.update(st, repo)["mode"] == "noop"

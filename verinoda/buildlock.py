@@ -215,8 +215,29 @@ def updater_argv(repo: Path) -> list[str]:
     return [sys.executable, "-I", "-c", _UPDATER_BOOT, home, "update", "--repo", str(repo)]
 
 
+def extraction_stamp() -> str:
+    """Which extraction builds a graph now: the package version and the AST cache schema. A graph built under
+    another stamp describes the code as an older extractor read it (Java overloads as one node before D57)."""
+    from verinoda.project_index.cache import _AST_CACHE_SCHEMA, _EXTRACTOR_VERSION
+
+    return f"{_EXTRACTOR_VERSION}-s{_AST_CACHE_SCHEMA}"
+
+
+def recorded_extraction(repo: Path) -> str | None:
+    """The extraction stamp of the last recorded graph build (None: none recorded, or recorded before stamps)."""
+    from verinoda.paths import index_dir
+
+    try:
+        data = json.loads((index_dir(Path(repo)) / STATS_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    v = data.get("extraction") if isinstance(data, dict) else None
+    return v if isinstance(v, str) else None
+
+
 def record_build(repo: Path, *, graph_seconds: float | None, files: int | None) -> None:
-    """Remember how long the last graph build took (``build_stats.json`` beside the index)."""
+    """Remember how long the last graph build took and which extraction made it (``build_stats.json`` beside
+    the index)."""
     if graph_seconds is None:
         return
     from verinoda.paths import index_dir
@@ -226,7 +247,7 @@ def record_build(repo: Path, *, graph_seconds: float | None, files: int | None) 
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_name(p.name + ".tmp")
         tmp.write_text(json.dumps({"graph_seconds": round(float(graph_seconds), 3), "files": files,
-                                   "at": time.time()}) + "\n", encoding="utf-8")
+                                   "at": time.time(), "extraction": extraction_stamp()}) + "\n", encoding="utf-8")
         tmp.replace(p)
     except OSError:
         pass

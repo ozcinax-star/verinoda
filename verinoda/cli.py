@@ -313,6 +313,10 @@ def _r_update(r: dict) -> None:
     if r.get("seconds") is not None and r.get("index_mode") == "deferred":
         parts.append(f"{r['seconds']:.1f} s")
     print("; ".join(parts))
+    if r.get("extraction"):
+        ex = r["extraction"]
+        print(f"  graph rebuilt for this version of Verinoda (built by {ex.get('was') or 'an older version'}, "
+              f"now {ex.get('now')})")
     if r.get("index_mode") == "deferred":
         behind = r.get("graph_behind") or []
         bg = r.get("background") or {}
