@@ -82,7 +82,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D59 | Settings read by a string key | implemented | Built 2026-09-27 (section 32): a config question also gets the string-keyed setting reads (`Config.getInt("car.door-ticks", 140)`) in the files that ranked for it, matched by the question's words (and their Turkish glosses), with the default and the YAML / TOML / .properties line that sets the key. |
 | D60 | What an agent carries and cites | implemented | Built 2026-09-27 (section 33): passages number their lines (blank lines left out); the core MCP menu and instructions are about a quarter shorter and list decision_check only in a project with decision records; `index_update` scans a folder never scanned; the skills and instructions say to cite the narrowest lines and to run code_check on code written, not read. |
 | D61 | A four-tool menu and a gateway | implemented | Built 2026-09-27 (section 34): the core profile lists project_query, analyze, code_check and index_update (analyze and code_check with the arguments a question or an edit needs) and `run_tool`, which reaches the other core tools by name with their own argument checks; an agent session's first turn is 2,177 tokens larger than without Verinoda, 3,933 before. |
-| D62 | Verinoda in the Grep the agent already runs | experimental | Built 2026-09-27 (section 35): `grep_context` answers a Claude Code PostToolUse hook on Grep with the definition, callers and callees of a searched symbol (at most 450 characters, nothing when the name is unknown); the hook ships as a template, opt-in; `ANALYZE_FIRST` holds the sentence that asks for analyze before a search by hand. Both are under an adoption study before either is switched on. |
+| D62 | Verinoda in the Grep the agent already runs | measured, off | Built 2026-09-27 (section 35): `grep_context` answers a Claude Code PostToolUse hook on Grep with the definition, callers and callees of a searched symbol (at most 450 characters, nothing when the name is unknown); the hook ships as a template, opt-in; `ANALYZE_FIRST` holds the sentence that asks for analyze before a search by hand. An adoption study (125 sessions) switched neither on: neither found more facts; both stay built and off. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3504,6 +3504,19 @@ agent already looks (b).
   a question that names one symbol or file can start with Grep." Not in the instructions yet.
 - Neither is switched on: an adoption study measures both (with a 2 x 2 design) on the build that holds them, and
   each goes in only if it pays.
+
+### 35.3 Measured (adoption study, 2026-09-28)
+
+25 questions not used before (six repositories, 139 to 134,000 code lines), five arms per question started together:
+no Verinoda, Verinoda as shipped, + (a), + (b), + both; 125 sessions, a model in the loop. The rule was written before
+the first session: switch one on if its arms find at least as many facts as their pairs and the median paired cost
+rises at most 10 %.
+
+- (a): facts 140 -> 136 over 50 pairs, median paired cost -1 %. (b): 143 -> 133, +1 %. Neither is switched on. Most
+  of both drops is the cell with both (63 of 83 facts, against 70-73 in the others), inside the noise of 25 pairs.
+- Adoption: sessions that called Verinoda 14 of 25 as shipped, 15 with (a), 18 with (b), 17 with both. The hook
+  fired 41 times in the (b) arm, 22 of them with context, about 65 tokens per session.
+- Verinoda as shipped (D61) against no Verinoda on the same questions: facts 65 -> 70, total cost -19 %.
 
 ## Sources
 
