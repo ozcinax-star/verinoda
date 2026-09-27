@@ -685,8 +685,8 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
         at = len(out) - 1
         for x, y in sorted(wins):
             # each window dedented on its own: the path:lines header keeps the place, indentation is noise
-            body = textwrap.dedent("\n".join(_clip(lines[j - 1], TEXT_LINE_CHARS)
-                                             for j in range(x, min(y, len(lines)) + 1)))
+            body = numbered_lines(textwrap.dedent("\n".join(_clip(lines[j - 1], TEXT_LINE_CHARS)
+                                                       for j in range(x, min(y, len(lines)) + 1))), x)
             added = add((f"  {h.file}:{x}-{y}\n" if (x, y) != (a, b) else "") + body)
             if short and x == a:
                 with_sig = "\n".join([f"## {h.file}:{a}-{b} {sig}{ref_tag}", *parts[1:]])
@@ -744,6 +744,14 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
     if not out:
         add("no candidate locations to show for this question")
     return "\n".join(out)
+
+
+def numbered_lines(body: str, first: int) -> str:
+    """Each line with its line number: the one line that supports a claim can be cited as such, not the
+    whole span a header names. Blank lines are left out: the numbers keep every line's place."""
+    rows = body.split("\n")
+    w = len(str(first + len(rows) - 1))
+    return "\n".join(f"{first + k:>{w}} {row}" for k, row in enumerate(rows) if row.strip())
 
 
 def _any_item(out: list[str]) -> bool:

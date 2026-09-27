@@ -75,7 +75,7 @@ Rules:
 - Verified means *verified at a snapshot with evidence*, not timeless fact: name the snapshot
   (`snapshot <id> (commit <sha>)` in the result; `snapshot.id`, `snapshot.commit` in JSON) and the evidence; a run-scoped observation
   says what those tests executed, never what always happens.
-- Cite `path:line` (or `path:start-end`) for every statement, taken from the evidence locators.
+- Cite the narrowest `path:line` / `path:a-b` that holds each statement (passages number lines), not a function span.
 - Never present `weak_inference` or `unknown` as fact. Never invent a relation, call path,
   file, line, test result or benchmark number.
 - A graph edge alone is never verification: `trace` and `query` give leads; confirm them with source lines
@@ -188,7 +188,7 @@ unresolved, say what evidence would settle it.
 ## Check the names code uses (Python)
 
 Invented imports, methods, keyword arguments and dict keys break code that looks right. Before you propose Python
-code, and after every edit:
+code, and after every edit (code you write; reading code needs no check):
 
 1. `verinoda check --diff` (MCP `code_check`) checks the changed lines; code not written yet:
    `verinoda check --stdin --as <path>` (MCP `code_check` with `snippet` and `as_path`).

@@ -680,7 +680,13 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
   yapılandırmada `mcp.profile: full`. Menü bir oturumun her isteğinde bağlamda
   durur: on bir araçlık çekirdek profille 50.029 karakterden 9.967 karaktere
   indi (`change_review` dallar birleştirilirken eklendi; menü yeniden
-  ölçülmedi). Codex'in sandbox'ı kurulumu içe aktaramayabileceği durumda
+  ölçülmedi). 2026-09-27'den beri (D60) karar kaydı olmayan projede
+  `decision_check` listelenmez; menü ve talimatlar Claude Code'un aldığı
+  biçimde 14.647 karakterden 10.521'e indi. Hiç taranmamış klasörde
+  `index_update` ilk taramayı yapar (ev klasörü, sürücü kökü ya da birden çok
+  proje içeren çalışma klasörü hariç).
+  Sorgu ve analiz metni pasaj satırlarını numarasıyla verir: atıf, fonksiyonun
+  tamamı yerine iddiayı taşıyan satır olur. Codex'in sandbox'ı kurulumu içe aktaramayabileceği durumda
   (düzenlenebilir ya da hardlink kurulum; `verinoda doctor` uyarır) kurulum MCP
   kaydını `--profile full` ile yapar: orada tek giriş MCP'dir ve beceri
   dosyasının zorunlu kıldığı her araç (hata ayıklama defteri, soru planları,

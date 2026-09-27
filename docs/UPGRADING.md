@@ -24,6 +24,18 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
+## Upgrading from 0.3.2 (D60)
+
+Nothing to migrate. Re-run `verinoda setup` (or `verinoda install`) for the skills' citation and code-check lines.
+
+- Query and analyze text print passage lines with their line numbers (`19     def request_key(...)`), and
+  leave blank lines out. A program that read the passage lines as source text strips the number and the
+  space after it; the `## path:a-b` and `  path:x-y` locators are unchanged.
+- MCP: the core profile lists `decision_check` only in a project with decision records (restart the server
+  after adding the first one); `index_update` on a folder never scanned runs the first scan (not in a home
+  folder, a drive root or a workspace of several projects), and the other tools' not_initialised hint names it. Tool and parameter
+  descriptions and the server instructions are shorter.
+
 ## Upgrading to the 2026-09-26 code
 
 Nothing to migrate: the schema stays v6, and the derived files rebuild themselves (see *Derived

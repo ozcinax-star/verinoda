@@ -24,9 +24,10 @@ Design rules
 * Errors never crash the server: they come back as
   ``{"error": <code>, "message": ..., "hint": <next step>, "tool": ...}``
   (flagged ``isError`` on mcp 2.x). A repository that was never scanned (no
-  ``.verinoda/``) yields ``error="not_initialised"``; the server never creates
-  ``.verinoda/`` itself. Argument *type* violations are rejected by the SDK
-  before a tool runs (plain-text ``isError`` result).
+  ``.verinoda/``) yields ``error="not_initialised"``; only ``index_update``
+  creates ``.verinoda/`` (the first scan, which the agent asked for; never in a
+  home folder or a drive root). Argument *type* violations are rejected by the
+  SDK before a tool runs (plain-text ``isError`` result).
 * Build-time work is not repeated per call (docs/DESIGN.md D21): the loaded
   graph is kept until ``graph.json`` changes (stat: mtime, size, file id);
   its symbol spans and per-file line owners are kept too and dropped per file
@@ -494,7 +495,7 @@ class AtlasTools:
             raise ToolFailure(
                 "not_initialised",
                 f"{self.repo} has no {ATLAS_DIRNAME}/ directory: it has not been scanned by Verinoda",
-                f"run `verinoda scan {self.repo}` in a terminal, then call this tool again",
+                "call index_update (it scans this folder), then this tool again",
                 repo=str(self.repo),
             )
         if need == "graph" and not graph_path(self.repo).exists():
@@ -792,8 +793,11 @@ class AtlasTools:
             src = g.source(nid, max_lines=EXCERPT_MAX_LINES)
             if src:
                 span = g.span(nid)
+                from verinoda.retrieval import numbered_lines
+
                 out["excerpt"] = {"lines": [src[0], src[1]], "span": list(span) if span else None,
-                                  "truncated": bool(span and span[1] > src[1]), "text": src[2]}
+                                  "truncated": bool(span and span[1] > src[1]),
+                                  "text": numbered_lines(src[2], src[0])}  # the line a claim needs, by number
             else:
                 out["excerpt"] = None
                 if not g.file(nid):
@@ -1493,6 +1497,9 @@ class AtlasTools:
 
     # -- index ----------------------------------------------------------------------
     def index_update(self) -> dict:
+        if not atlas_dir(self.repo).is_dir():
+            return self._first_scan()
+
         def go():
             from verinoda import analysis, buildlock, workflow
 
@@ -1503,6 +1510,36 @@ class AtlasTools:
             with self._store() as st:
                 return workflow.update(st, self.repo, wait=MCP_BUILD_WAIT, purpose="index_update (MCP)", fast=fast)
         return self._run("index_update", go)
+
+    def _first_scan(self) -> dict:
+        """index_update on a folder never scanned: the agent asked for an index, so it is built here (the same
+        `verinoda scan`), except in a folder that is not one project - a home folder, a drive root, or a workspace
+        holding two or more projects (sub-folders with their own .git or .verinoda) - which is a wrongly resolved
+        project."""
+        def go():
+            from verinoda import workflow
+
+            home = Path.home().resolve()
+            try:
+                projects = [d.name for d in self.repo.iterdir() if d.is_dir() and not d.name.startswith(".")
+                            and ((d / ".git").exists() or atlas_dir(d).is_dir())]
+            except OSError:
+                projects = []
+            why = ("a home folder" if self.repo == home else "a drive root" if self.repo.parent == self.repo
+                   else f"a workspace of {len(projects)} projects ({', '.join(sorted(projects)[:5])})"
+                   if len(projects) >= 2 else None)
+            if why:
+                raise ToolFailure(
+                    "not_initialised",
+                    f"{self.repo} is not scanned, and it is {why}, not one project",
+                    "start the server with --repo <project>, or run `verinoda scan <project>` in a terminal",
+                    repo=str(self.repo))
+            workflow.init(self.repo)
+            with self._store() as st:
+                res = workflow.scan(st, self.repo, wait=MCP_BUILD_WAIT, purpose="index_update (MCP, first scan)")
+            res["mode"] = "first_scan"
+            return res
+        return self._run("index_update", go, need="none")
 
     # -- experiments and the debug ledger ----------------------------------------------
     def experiment_run(self, command: list[str], hypothesis: str, expect: str = "pass", timeout: float | None = None,
@@ -1651,20 +1688,15 @@ PROFILES: dict[str, tuple[str, ...]] = {"core": CORE_TOOLS, "full": TOOL_NAMES}
 DEFAULT_PROFILE = "core"
 
 _INSTRUCTIONS_HEAD = """Verinoda: evidence-first answers about the repository {repo}.
-- project_query: where is X / what handles Y - plain text, skeleton first; hits are leads, not verified claims.
-- analyze(question): claims with evidence, one verdict per sub-question, unknowns with their next step, and
-  the passages. Start the answer with "Understood as / Anladığım: ..." (understood_as), then one block per
-  sub-question; never present weak_inference or unknown as fact.
-- node_inspect / relation_trace: one symbol's definition and edges; call paths between two symbols.
-- map_view: architecture views (hierarchy, dependencies, dataflow, config, tests, history, impact).
-- claim_inspect / claim_list / evidence_inspect: a claim's record, earlier claims, one evidence re-checked now.
-- change_review: before editing (targets + change) and before saying done (no arguments): what the change
-  touches by concern, tests, unknowns; read read_first in order and report every concern.
-- index_update: re-index after editing files (claims whose files changed become stale).
-- code_check (Python, Java): after editing code, check that the modules, names, methods, arguments and
-  keys it uses exist; fix every absent site, treat unknown as unverified; other languages come back
-  not_checked (exit 4), never as checked.
-- decision_check(changed_only=true) before finishing a code change; on VIOLATED fix the code or ask the user."""
+Questions: project_query (where is X; hits are leads) or analyze (claims with evidence: start the answer with its
+understood_as, one block per sub-question; never state weak_inference or unknown as fact). One symbol: node_inspect;
+call paths: relation_trace; architecture: map_view; earlier claims: claim_list, claim_inspect, evidence_inspect.
+Cite the narrowest lines that support a claim (source lines are numbered), not the whole span of a header.
+Editing: change_review before and after (report every concern); index_update after editing; code_check only on
+code you wrote or edited, not to read code."""
+
+_INSTRUCTIONS_DECISIONS = """ decision_check(changed_only=true) before finishing - on VIOLATED fix the code
+or ask the user."""
 
 _INSTRUCTIONS_FULL = """
 Understand the question first: question_plan_draft(question) -> edit the plan (split compound questions, gloss
@@ -1694,52 +1726,68 @@ More tools (question plans, references, feedback, decision records and briefs, t
 runtime tracing): `verinoda mcp serve --profile full`, or the `verinoda` CLI."""
 
 _INSTRUCTIONS_TAIL = """
-Rules: graph edges are extractions, never verification. Claim status: observed, experiment_verified,
-statically_verified, primary_source_verified, strong_inference, weak_inference, unknown, contradicted, stale.
-Missing evidence -> 'unknown' plus a next step, never a guess. "truncated": true means lists were cut
-('truncation'). Errors: {{"error", "message", "hint"}}; not_initialised/no_index: run `verinoda scan {repo}`."""
+Rules: graph edges are extractions, never verification. Missing evidence -> 'unknown' plus a next step, never a
+guess. "truncated": true means lists were cut. Errors: {{"error", "message", "hint"}}; not_initialised/no_index:
+call index_update."""
 
 
-def instructions(profile: str = DEFAULT_PROFILE) -> str:
-    """The server instructions for a profile (``{repo}`` still to be filled in)."""
-    return (_INSTRUCTIONS_HEAD + (_INSTRUCTIONS_FULL if profile == "full" else _INSTRUCTIONS_CORE)
-            + _INSTRUCTIONS_TAIL)
+def instructions(profile: str = DEFAULT_PROFILE, *, decisions: bool = True) -> str:
+    """The server instructions for a profile (``{repo}`` still to be filled in); ``decisions=False``: the
+    menu has no decision_check (:func:`served_tools`), so they do not name it."""
+    return (_INSTRUCTIONS_HEAD + (_INSTRUCTIONS_DECISIONS if decisions else "")
+            + (_INSTRUCTIONS_FULL if profile == "full" else _INSTRUCTIONS_CORE) + _INSTRUCTIONS_TAIL)
+
+
+def _has_decision_records(repo: Path) -> bool:
+    """Does the project keep decision records (a Markdown file in its decisions folder)? When that cannot be
+    told (a config the folder cannot be read from), yes: the tool stays listed and says what is wrong."""
+    try:
+        from verinoda.decisions import decisions_dir
+
+        d = decisions_dir(repo)
+        return d.is_dir() and any(d.glob("*.md"))
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def served_tools(repo: Path, profile: str) -> tuple[str, ...]:
+    """The tools a profile lists for ``repo``. The core menu is standing context in every request, so it
+    leaves out decision_check in a project without decision records (nothing to check; `--profile full`
+    always lists it). The menu is read at startup: records added later show after a restart."""
+    names = PROFILES[profile]
+    if profile == "core" and not _has_decision_records(Path(repo)):
+        names = tuple(n for n in names if n != "decision_check")
+    return names
 
 
 INSTRUCTIONS = instructions("full")
 
 DESCRIPTIONS: dict[str, str] = {
     "project_query": (
-        "Where is X / what handles Y: the best code locations for a question, ranked by the passage index "
-        "(BM25F + graph prior). format='text' (default): plain text, skeleton first (path:lines headers, call "
-        "outlines, the matching lines), packed to 6000 chars, truncation stated; format='json': items with "
-        "reasons, for programs. Read-only; hits are leads, not verified claims."),
+        "Where is X / what handles Y: ranked code locations as plain text (path:lines headers, call outlines, "
+        "numbered source lines; up to 6000 chars, truncation stated). format='json' for programs. Hits are "
+        "leads, not verified claims."),
     "node_inspect": (
-        "One node: an id, label, 'path/file.py::symbol', 'Class.method' or a file path. Returns how the name "
-        "resolved ('scored' = heuristic: check 'candidates'), location, source excerpt (at most 30 lines) and "
-        "edges in and out with relation, confidence and file:line (at most 25 each, totals given). Edges are "
-        "extractions, not verification."),
+        "One symbol or file (id, label, 'path/file.py::symbol', 'Class.method', path): location, source (at "
+        "most 30 lines) and edges in and out with file:line. A 'scored' resolution is a guess: check "
+        "'candidates'. Edges are extractions, not verification."),
     "relation_trace": (
-        "Directed paths (up to 3, at most 8 hops) from source to target; each hop has relation, confidence "
-        "(EXTRACTED/INFERRED) and call-site file:line. mode='flow': calls only; 'any': also uses/imports/inherits/"
-        "references, saying whether a path is execution or structure. status: found | unresolved (with hints) | "
-        "no directed path | ambiguous; no static path does not prove there is none at runtime. With no path, JVM "
-        "callbacks ('registers' hops, not calls) are followed."),
+        "Paths (up to 3, at most 8 hops) from source to target, each hop with relation, confidence and "
+        "file:line. mode='flow': calls; 'any': also uses/imports/inherits. No static path does not prove "
+        "there is none at runtime."),
     "run_when": (
         "When a method runs: paths back through its callers to the event or scheduler that starts it (JVM "
         "registrations and lambdas: 'at the end of every server tick', '80 ticks later'), each call with the "
         "conditions around it as written (if/for/while blocks, early returns) and file:line. Conditions are not "
         "evaluated; a path that ends at a method nothing calls is an entry point or dead code."),
     "map_view": (
-        "One architecture view: hierarchy, dependencies (file-level calls/imports), dataflow (entry points -> "
-        "persistence), config (env vars, config files), tests (static reachability), history (git log, decision "
-        "records), impact (reverse dependents of targets; default: the working-tree changes). 'coverage' states "
-        "the method and its limits."),
+        "One architecture view: hierarchy, dependencies, dataflow, config, tests, history, or impact "
+        "(dependents of targets; default the working-tree changes). 'coverage' states the method and its "
+        "limits."),
     "change_review": (
-        "What a change touches, by concern (`verinoda review`): the working tree vs HEAD, base=REV, "
-        "staged, or targets ('path.py[::Name]') + change (body|signature|remove), planned. Changed "
-        "definitions, dependents, findings per concern ('no finding' is not 'safe'), tests reaching it, "
-        "unknowns, read_first. exit 3 = something to report. Never edits code."),
+        "What a change touches, by concern: the working tree vs HEAD (base=REV, staged), or planned targets "
+        "('path.py[::Name]') + change. Dependents, findings ('no finding' is not 'safe'), tests reaching it, "
+        "unknowns, read_first. Never edits code."),
     "question_plan_draft": (
         "Draft a question plan (verinoda.question_plan/1) from the user's message by deterministic Turkish/English "
         "rules: sub-questions with intent and done_when, mentions with candidate names, references with the "
@@ -1750,12 +1798,10 @@ DESCRIPTIONS: dict[str, str] = {
         "nowhere is not_found with did_you_mean, never replaced). Stored (plan_id). status: ready | "
         "needs_clarification (ask the user, record answers[] with clarification_id) | invalid (an error)."),
     "analyze": (
-        "Answer a question as claims with evidence: sub-questions (from the question, or a checked plan_json) "
-        "answered by retrieval, re-checked source lines and git history/decision records; run_tests / observe "
-        "also run or trace the tests that reach the answer in an isolated copy. Returns the snapshot, "
-        "understood_as, per-sub-question verdicts, claims (evidence only where it adds a locator), unknowns "
-        "with next steps and the passages project_query gives. needs_clarification is a normal result (ask the "
-        "user). Re-indexes first if the tree changed; bounded by budget_seconds / budget_calls."),
+        "Answer a question as claims with evidence: one verdict per sub-question, claims with file:line, "
+        "unknowns with next steps, and the passages. needs_clarification is a normal result (ask the user). "
+        "run_tests / observe also run or trace the tests that reach the answer (isolated copy). Re-indexes "
+        "first if the tree changed."),
     "plan_audit": (
         "Re-judge an earlier analysis' sub-questions on the current claim statuses (refresh=true re-indexes "
         "first, so claims whose files changed are stale); 'changed' lists the verdicts that moved."),
@@ -1764,15 +1810,12 @@ DESCRIPTIONS: dict[str, str] = {
         "natural-language word (Turkish or English). They widen search and plan linking only; never evidence. "
         "Read-only."),
     "claim_inspect": (
-        "A claim's full record: text, status, confidence, kind, snapshot/commit, supporting/refuting/qualifying "
-        "evidence with its current state, and its status history. Read-only."),
+        "A claim's record: text, status, evidence with its current state, status history. Read-only."),
     "claim_list": (
-        "Recorded claims, newest first (id, status, confidence, kind, text), optionally filtered by status: "
-        "claim ids from earlier sessions. Read-only."),
+        "Recorded claims, newest first, optionally by status (ids from earlier sessions). Read-only."),
     "evidence_inspect": (
-        "One evidence record (type, locator, commit, hash, excerpt), whether its type can verify a claim, the "
-        "claims citing it, and a live re-check: recheck.status same | moved (new lines) | changed | gone | "
-        "ambiguous. Read-only."),
+        "One evidence record re-checked now (same | moved | changed | gone | ambiguous), whether its type can "
+        "verify a claim, and the claims citing it. Read-only."),
     "claim_verify": (
         "Re-check a claim's cited lines against the working tree and re-assess its status (changed evidence -> "
         "stale); run=true also re-runs its recorded test experiment in an isolated copy. Returns before/after "
@@ -1786,13 +1829,11 @@ DESCRIPTIONS: dict[str, str] = {
         "other languages): definitive | dynamic | ambiguous | external | unresolved. With target_path/target_line "
         "a verdict: confirms | refutes | undetermined (definitive answers only). Read-only."),
     "code_check": (
-        "Python, Java, Kotlin, TS/JS imports; other languages: not_checked (exit 4). Python: do the modules, "
-        "imported names, attributes, keyword arguments and constant dict keys it uses exist in the project's "
-        "environment (.venv/venv/env; env=PATH another venv; 'none' = standard library only)? JVM: classes, "
-        "methods (arity), fields, Mixin targets in the project, its classpath (a Loom build or "
-        "code_check.classpath) and the JDK. Input: paths, or diff (a revision; nothing given: changes against "
-        "HEAD), or snippet + as_path. Each site: exists | absent (nearest names) | unknown (why) | "
-        "not_installed | guarded. exit 3 = absent or a version differs from the lock. Read-only."),
+        "Python, Java, Kotlin, TS/JS imports; other languages: not_checked (exit 4). For code you wrote or "
+        "edited, not for reading code: do the modules, names, methods, arguments and keys it uses exist in "
+        "the project and its environment? Input: paths, diff (a revision; nothing: changes against HEAD), or "
+        "snippet + as_path. Each site: exists | absent (nearest names) | unknown | not_installed | guarded; "
+        "exit 3 = absent. Read-only."),
     "api_members": (
         "The real members of a Python module, class or function (dotted target) in the project's environment, "
         "or of a Java class on the build's classpath (access included): name, kind, signature, file:line, "
@@ -1827,9 +1868,8 @@ DESCRIPTIONS: dict[str, str] = {
         "Close feedback with a verdict (confirmed | qualified | corrected | unresolved), a reason and the "
         "evidence ids that justify it; 'corrected' can carry the corrected statement."),
     "index_update": (
-        "Re-index the files changed since the last snapshot and mark claims whose files changed as stale (a full "
-        "scan when there is no snapshot). Returns mode (noop | incremental | full), changed files and stale "
-        "claims."),
+        "Re-index after editing files (on a folder never scanned: the first scan); claims whose files changed "
+        "become stale. mode: noop | incremental | full | first_scan."),
     "decision_record": (
         "Decision records (Markdown with front matter in decisions.dir, logged append-only). action: list | "
         "record (chosen + rationale; optional brief_id, guards, governs, revisit_when, supersedes) | import (a "
@@ -1846,12 +1886,9 @@ DESCRIPTIONS: dict[str, str] = {
         "weak_inference, at most 5 questions_for_human (EN and TR). verdict is always human_decision_required; "
         "record the user's answers with decision_record(action='answer')."),
     "decision_check": (
-        "The working tree against every accepted guard of accepted decision records: violations (VIOLATED, "
-        "statically verified), possible (heuristic hits), reviews (governed code changed), triggers (revisit "
-        "conditions hold), ok (with scope and limits), waived, unknown. changed_only=true (or base=REV) counts "
-        "only new findings (exit 1). exit 3 (unknown): nothing violated but something was not checked - never "
-        "ok. Refreshes a stale index first when a guard needs the graph. Never edits code "
-        "or records."),
+        "The working tree against the guards of accepted decision records: VIOLATED, possible, reviews, "
+        "triggers, ok, unknown. changed_only=true (or base=REV) counts only new findings. exit 3: something "
+        "was not checked - never ok. Never edits code or records."),
     "experiment_run": (
         "Run one command as a recorded experiment in a throw-away copy of the working tree (or of commit ref, "
         "with overlay files): allowlisted test runners under process isolation, anything else needs "
@@ -2021,9 +2058,9 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     Server, major = _load_sdk()
     t = tools or AtlasTools(repo)
     profile = resolve_profile(t.repo, profile)
-    served = set(PROFILES[profile])
+    served = set(served_tools(t.repo, profile))
     emit = _result_wrapper(major)
-    text = instructions(profile).format(repo=t.repo)
+    text = instructions(profile, decisions="decision_check" in served).format(repo=t.repo)
     from verinoda import buildinfo
 
     # serverInfo.version names the build (``0.1.0.dev0+<commit12>``, ``+unknown``), so a client can tell
@@ -2038,6 +2075,7 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         except AttributeError:  # pragma: no cover - SDK layout changed
             pass
     srv.verinoda_profile = profile
+    srv.verinoda_instructions = text
     # a description names only what this profile serves (else the CLI)
     plan_check = "see question_plan_check" if "question_plan_check" in served else "from `verinoda plan check`"
 
@@ -2117,8 +2155,7 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         = None,
         run_tests: Annotated[bool, Field(description="Run the pytest tests that reach the change (isolated copy).")]
         = False,
-        observe: Annotated[bool, Field(description="Run them under the call tracer: which reach the changed "
-                                                   "functions.")] = False,
+        observe: Annotated[bool, Field(description="Run them under the call tracer.")] = False,
         max_chars: Annotated[int, Field(description="Budget of read_first in characters (500-50000).")] = 6000,
     ) -> dict[str, Any]:
         return emit(t.change_review(base=base, staged=staged, targets=targets, change=change, concerns=concerns,
@@ -2139,18 +2176,15 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
     @register("analyze")
     def analyze(
-        question: Annotated[str, Field(description="The question to answer with claims and evidence (optional "
-                                                   "when plan_json is given: the plan's user_message is used).")]
-        = "",
-        run_tests: Annotated[bool, Field(description="Also run the tests that statically reach the answer "
-                                                     "(isolated copy, allowlisted runners only).")] = False,
+        question: Annotated[str, Field(description="The question (optional with plan_json).")] = "",
+        run_tests: Annotated[bool, Field(description="Also run the tests that reach the answer (isolated copy).")]
+        = False,
         budget_seconds: Annotated[float, Field(description="Wall-time budget in seconds (1-600).")] = 60,
         budget_calls: Annotated[int, Field(description="Internal tool-call budget (1-200).")] = 40,
         # plain `str`: the SDK would parse a JSON string into an object for an optional (str | None) field
-        plan_json: Annotated[str, Field(description=f"A checked question plan as JSON text ({plan_check}); "
-                                                    "used instead of drafting one.")] = "",
-        observe: Annotated[bool, Field(description="Trace the tests that reach the answer with the runtime "
-                                                   "call tracer (isolated copy) and attach what they observed.")]
+        plan_json: Annotated[str, Field(description=f"A checked question plan as JSON text ({plan_check}).")]
+        = "",
+        observe: Annotated[bool, Field(description="Trace the tests that reach the answer (isolated copy).")]
         = False,
     ) -> dict[str, Any]:
         return emit(t.analyze(question, run_tests=run_tests, budget_seconds=budget_seconds,
@@ -2212,22 +2246,18 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     ) -> dict[str, Any]:
         return emit(t.resolve_call(path, line, target, target_path=target_path, target_line=target_line))
 
-    EnvArg = Annotated[OptStr, Field(description="'auto' (default: the project's .venv, venv or env), a virtual "
-                                                 "environment directory whose base interpreter is a Python "
-                                                 "installation this system knows, outside the project (nothing "
-                                                 "the repository supplies is started), or 'none' (standard "
-                                                 "library only).")]
+    EnvArg = Annotated[OptStr, Field(description="'auto' (the project's .venv, venv or env), a venv outside the "
+                                                 "project, or 'none' (standard library only).")]
 
     @register("code_check")
     def code_check(
         paths: Annotated[list[str] | None, Field(description="Repository-relative files or directories to check "
                                                              "(whole files).")] = None,
-        diff: Annotated[OptStr, Field(description="A revision: check only the sites on lines changed "
-                                                  "against it, plus new files (e.g. 'HEAD').")] = None,
+        diff: Annotated[OptStr, Field(description="A revision (e.g. 'HEAD'): only lines changed against it.")]
+        = None,
         snippet: Annotated[OptStr, Field(description="Python code not written yet, checked as if it were in "
                                                      "as_path.")] = None,
-        as_path: Annotated[OptStr, Field(description="With snippet: the repository-relative file it is meant "
-                                                     "for (imports and relative imports resolve from there).")]
+        as_path: Annotated[OptStr, Field(description="With snippet: the repository-relative file it is for.")]
         = None,
         env: EnvArg = None,
         include_exists: Annotated[bool, Field(description="Also list the sites that exist.")] = False,
@@ -2650,13 +2680,14 @@ def serve(repo: Path, profile: str | None = None) -> None:
     if graph_path(repo).exists():
         state = "indexed"
     elif atlas_dir(repo).is_dir():
-        state = "initialised, not indexed - tools will ask for `verinoda scan`"
+        state = "initialised, not indexed - index_update builds the index"
     else:
-        state = "not scanned - tools will ask for `verinoda scan`"
+        state = "not scanned - index_update scans it"
     served = getattr(srv, "verinoda_profile", DEFAULT_PROFILE)
     from verinoda import buildinfo
 
-    print(f"verinoda mcp: serving {repo} over stdio ({state}; {len(PROFILES[served])} tools, profile {served}); "
+    print(f"verinoda mcp: serving {repo} over stdio ({state}; {len(served_tools(repo, served))} tools, "
+          f"profile {served}); "
           f"build {buildinfo.server_version()} ({sys.executable})", file=sys.stderr, flush=True)
     try:
         srv.run("stdio")

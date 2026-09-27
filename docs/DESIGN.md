@@ -80,6 +80,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D57 | Java overloads; answers read as a person would | implemented | Built 2026-09-27 (section 30): each Java overload is its own node and a call binds to the overload its argument count fits; `when`, `trace` and name lookups take the whole overload group; "how does X work" with one subject is answered by what X calls (inference), entry-to-storage paths are matched by node, not label; a storage question gets the entry-to-storage paths through its own code; impact names the callers of the method asked about; a symbol's doc comment above its span prints where it is; the JSON answer keeps room for the next two candidates. JSON retrieve facts 253 -> 262, text and analyze unchanged. |
 | D58 | Less noise in an answer | implemented | Built 2026-09-27 (section 31): context the critique refuted is counted, not printed; a changed file is an unknown only when it spells a name that looks like one (not a plain word that happens to name a function); "how does X decide ..." is a mechanism, not a setting; `module.function` links to that module's function; no empty quote claims; the history view 100x faster; a why-answer quotes the section with the reason. |
 | D59 | Settings read by a string key | implemented | Built 2026-09-27 (section 32): a config question also gets the string-keyed setting reads (`Config.getInt("car.door-ticks", 140)`) in the files that ranked for it, matched by the question's words (and their Turkish glosses), with the default and the YAML / TOML / .properties line that sets the key. |
+| D60 | What an agent carries and cites | implemented | Built 2026-09-27 (section 33): passages number their lines (blank lines left out); the core MCP menu and instructions are about a quarter shorter and list decision_check only in a project with decision records; `index_update` scans a folder never scanned; the skills and instructions say to cite the narrowest lines and to run code_check on code written, not read. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3394,6 +3395,54 @@ file.
 
 fastbench: facts unchanged, analyze characters +0.2 % (the new claims). On the mod: the key the question asked
 about first, then only keys with as many of its words.
+
+## 33. What an agent carries and cites (D60, 2026-09-27)
+
+### 33.1 Why
+
+An agent-in-the-loop pilot (a model answering questions about a small repository with only file tools, with
+Verinoda, and with Graphify; one run per tool and task profile) showed three costs that are Verinoda's, not
+the task's:
+
+- The agent cited the span of a whole function (14 lines) where one or two lines held the statement: the
+  passages named their span in the header and printed the lines unnumbered, so the header was the only locator
+  it had. A citation rule of the task (at most 8 lines per range) then failed the answer's evidence, and a reader
+  gets a function to search instead of a line to read.
+- Every request carried the tool menu and the server instructions (12,496 and 2,151 characters, about 3,700
+  tokens) - over about fifty turns, a large share of the session's input - including decision_check in a project
+  without decision records, and instructions that repeated the tool descriptions.
+- The agent ran code_check on a read-only question (11,600 characters of results), and its first call,
+  index_update, came back not_initialised: the folder had not been scanned, and the agent had to find the shell
+  command.
+
+### 33.2 Decisions
+
+- `retrieval.render_text` prints each passage line with its line number, right-aligned per window; blank lines
+  are left out (the numbers keep every line's place). The `## path:a-b` and `  path:x-y` locators are unchanged.
+  node_inspect's excerpt is numbered the same way (`retrieval.numbered_lines`).
+- Tool descriptions of the core profile say what the tool returns and its limits once; parameter descriptions
+  lost what the tool description or the result already says. The instructions name each core tool in the order
+  of use and keep the rules; the claim-status list is in every result that has a status.
+- `served_tools`: the core profile lists decision_check only when the project's decisions folder holds a Markdown
+  file (a folder that cannot be read keeps it listed, so the tool can say what is wrong); the instructions then
+  leave out its sentence. `--profile full` always lists it. The menu is read at startup: records added later show
+  after a restart.
+- `index_update` on a folder with no `.verinoda/` runs the first scan (`verinoda scan`), except in the user's home
+  folder, a drive root or a workspace of two or more projects (sub-folders with their own `.git` or `.verinoda`):
+  a wrongly resolved project, not_initialised with the `--repo` hint. Every other tool
+  still refuses with not_initialised and now names index_update. The server creates `.verinoda/` only then.
+- The skills and the instructions: cite the narrowest lines that hold a statement, not a function's span;
+  code_check is for code the agent writes or edits.
+
+### 33.3 Measured
+
+- Menu and instructions as Claude Code receives them: 14,647 -> 10,521 characters without decision records
+  (-28 %; 11 tools), 11,539 with them (-21 %; 12 tools).
+- fastbench, nine sets, 333 question x approach cells: one fact lost (heldout h08, analyze and query text: the
+  last passage no longer fits the 6,000-character budget). Characters per set -2.2 % to +3.0 % for query text
+  (+3.0 % on orders_app and orders_app_tr, +2.4 % on graphify_core) and -1.7 % to +1.6 % for analyze; the sets
+  whose answers fill the budget stay within 1 %.
+- The pilot's effect on the agent is measured again on the next frozen build, on tasks other than the pilot's.
 
 ## Sources
 

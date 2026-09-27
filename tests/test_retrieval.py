@@ -461,10 +461,11 @@ def test_render_text_is_skeleton_first_with_outlines_and_constants(g):
 def test_render_text_dedents_each_window_and_keeps_the_locators(g):
     res = retrieval.retrieve(g, "How does create_order_handler reach the database write?")
     text = retrieval.render_text(res, budget_chars=6000)
-    # a method's passage starts at column 0; its place is in the header, not in the indentation
-    assert "## orders/repository.py:9-13 OrderRepository.__init__\ndef __init__(self, url: str = DATABASE_URL):" \
+    # a method's passage starts at column 0 after its line number; its place is in the header and the numbers,
+    # not in the indentation
+    assert "## orders/repository.py:9-13 OrderRepository.__init__\n 9 def __init__(self, url: str = DATABASE_URL):" \
         in text
-    assert "    self.conn = sqlite3.connect(url)" in text  # relative indentation inside the window stays
+    assert "10     self.conn = sqlite3.connect(url)" in text  # relative indentation inside the window stays
     for ln in text.splitlines():
         if ln.startswith("## "):
             assert re.match(r"## \S+:\d+-\d+ \S", ln), ln
@@ -480,11 +481,34 @@ def test_render_text_never_loses_a_signature_to_the_short_header(g, q):
     for n in range(150, 3200, 23):
         text = retrieval.render_text(res, budget_chars=n)
         assert len(text) <= n
-        flat = " ".join(text.split())  # a data file's "signature" is its first lines joined
+        # a data file's "signature" is its first lines joined (without the line numbers the passage prints)
+        flat = " ".join(re.sub(r"^ *\d+ ", "", text, flags=re.M).split())
         for m in re.finditer(r"^## (\S+:\d+-\d+) ", text, re.M):
             sig = sigs.get(m.group(1))
             if sig:
                 assert " ".join(sig.split())[:25] in flat, (n, m.group(0), sig)
+
+
+def test_render_text_numbers_each_passage_line_and_leaves_blank_lines_out(g):
+    """Each line carries its number, so a claim can cite the line that holds it rather than the header's
+    span; the numbers keep the place of the blank lines left out."""
+    res = retrieval.retrieve(g, "How does create_order_handler reach the database write?")
+    text = retrieval.render_text(res, budget_chars=6000)
+    root = res.render.g.root
+    path = None
+    numbered = 0
+    for ln in text.splitlines():
+        head = re.match(r"^## (\S+):\d+-\d+", ln)
+        if head:
+            path = head.group(1)
+            continue
+        m = re.match(r"^ *(\d+) (.*)$", ln)
+        if m and path:
+            src = (root / path).read_text(encoding="utf-8").splitlines()
+            assert m.group(2).strip() == src[int(m.group(1)) - 1].strip(), (path, ln)
+            numbered += 1
+    assert numbered > 5
+    assert not any(re.fullmatch(r" *\d+ ?", ln) for ln in text.splitlines())  # no numbered blank line
 
 
 def test_render_text_states_truncation_with_the_follow_up_command(g):

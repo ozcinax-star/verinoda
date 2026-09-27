@@ -7,7 +7,8 @@
 3. Real stdio round trip: ``python -m verinoda mcp serve --repo <copy>``
    driven by the MCP client SDK (initialize, list_tools, call_tool).
 4. Unscanned repositories: structured ``not_initialised`` errors, in-process
-   and over stdio, without creating ``.verinoda/``.
+   and over stdio, without creating ``.verinoda/`` - except index_update, the
+   first scan (never in a home folder).
 
 examples/ itself is never scanned or written: each test copies it to tmp_path
 and runs ``git init`` + commit there. Reference tests run offline (sockets
@@ -30,6 +31,7 @@ from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
 
+from verinoda import retrieval  # noqa: E402
 from verinoda.mcp import server as mcp_server  # noqa: E402
 from verinoda.mcp.server import TOOL_NAMES, AtlasTools, _size, cap_response  # noqa: E402
 
@@ -312,9 +314,9 @@ def test_registered_tools_have_descriptions_and_typed_params(repo):
 
 
 def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_path):
-    """The tool menu is standing context in every request of many clients: core by default (12 tools),
-    the full set behind --profile full or mcp.profile in the project's config; no output schemas and
-    no generated titles."""
+    """The tool menu is standing context in every request of many clients: core by default (12 tools;
+    11 in a project without decision records), the full set behind --profile full or mcp.profile in the
+    project's config; no output schemas and no generated titles."""
     anyio = pytest.importorskip("anyio")
     from verinoda.mcp.server import CORE_TOOLS, instructions, resolve_profile
 
@@ -323,14 +325,23 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
                 for t in anyio.run(srv.list_tools)]
 
     core = listing(mcp_server.build_server(repo))
-    assert sorted(t["name"] for t in core) == sorted(CORE_TOOLS) and len(CORE_TOOLS) == 12
+    # no decision records in the example: nothing for decision_check to check, so it is not listed
+    assert sorted(t["name"] for t in core) == sorted(set(CORE_TOOLS) - {"decision_check"}) and len(CORE_TOOLS) == 12
     assert set(CORE_TOOLS) <= set(TOOL_NAMES)
     wire = json.dumps(core, separators=(",", ":"))
-    assert len(wire) < 12000  # 50,029 chars for the 33 tools before (2026-09-25)
+    # 50,029 chars for the 33 tools before (2026-09-25); 11,999 for the 12 core tools on 2026-09-26
+    assert len(wire) < 9000
     assert '"title"' not in wire and "outputSchema" not in wire
     text = instructions("core")
     assert all(n in text for n in CORE_TOOLS) and "--profile full" in text and "question_plan_draft" not in text
-    assert len(text) < len(instructions("full"))
+    assert len(text) < len(instructions("full")) and len(text) < 1400
+    assert "decision_check" not in instructions("core", decisions=False)
+    assert "decision_check" not in mcp_server.build_server(repo).verinoda_instructions
+    rec = tmp_path / "with_records"
+    shutil.copytree(repo, rec)
+    (rec / ".verinoda" / "decisions").mkdir(parents=True, exist_ok=True)
+    (rec / ".verinoda" / "decisions" / "0001-x.md").write_text("---\nverinoda-decision: 1\n---\n", encoding="utf-8")
+    assert sorted(t["name"] for t in listing(mcp_server.build_server(rec))) == sorted(CORE_TOOLS)
     full = mcp_server.build_server(repo, profile="full")
     assert full.verinoda_profile == "full" and len(listing(full)) == len(TOOL_NAMES)
     # the project's config picks the profile when the command line does not
@@ -442,7 +453,7 @@ def test_node_inspect_location_excerpt_and_edges(repo, tools):
     assert node["id"] == nid and node["file"] == "orders/service.py" and node["kind"] == "callable"
     assert node["resolution"] == "label" and node["line"] == _line_of(repo, "orders/service.py", "def place_order")
     s, e, text = g.source(nid, max_lines=30)
-    assert res["excerpt"]["lines"] == [s, e] and res["excerpt"]["text"] == text
+    assert res["excerpt"]["lines"] == [s, e] and res["excerpt"]["text"] == retrieval.numbered_lines(text, s)
     assert res["excerpt"]["truncated"] is False and e - s + 1 <= 30
     core_out = sorted((v, d.get("relation")) for v, d in g.out_edges(nid))
     core_in = sorted((u, d.get("relation")) for u, d in g.in_edges(nid))
@@ -587,7 +598,7 @@ def test_graph_and_spans_are_kept_and_follow_file_edits(fresh_repo):
     assert t.cache_stats["graph_loads"] == 1 and t.cache_stats["span_files_invalidated"] >= 1
     fresh = index.load(fresh_repo)
     assert after["excerpt"]["span"] == list(fresh.span(nid)) == [a, a + 4]
-    assert after["excerpt"]["text"] == fresh.source(nid, max_lines=30)[2]
+    assert after["excerpt"]["text"] == retrieval.numbered_lines(fresh.source(nid, max_lines=30)[2], a)
     assert "subtotal * 1" in after["excerpt"]["text"]
     assert all(g._spans.get(n) == s for n, s in service_spans.items())  # untouched files keep their spans
 
@@ -1323,10 +1334,32 @@ def test_unscanned_repo_returns_structured_error_for_every_tool(tmp_path):
     calls = _all_calls(t)
     assert set(calls) == set(TOOL_NAMES)
     for name, fn in calls.items():
+        if name == "index_update":
+            continue
         res = fn()
         assert res["error"] == "not_initialised", (name, res)
-        assert res["tool"] == name and "verinoda scan" in res["hint"] and res["message"]
-    assert not (plain / ".verinoda").exists()
+        assert res["tool"] == name and "index_update" in res["hint"] and res["message"]
+    assert not (plain / ".verinoda").exists()  # no other tool creates project state
+    res = calls["index_update"]()  # the one the hint names: the first scan
+    assert "error" not in res and res["mode"] == "first_scan", res
+    assert (plain / ".verinoda").is_dir() and "text" in t.project_query("main")
+
+
+def test_index_update_never_scans_a_home_folder(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    res = AtlasTools(home).index_update()
+    assert res["error"] == "not_initialised" and "--repo" in res["hint"]
+    assert not (home / ".verinoda").exists()
+    # a workspace holding several projects is not one project either
+    ws = tmp_path / "workspace"
+    for name in ("a", "b"):
+        (ws / name).mkdir(parents=True)
+        _git(ws / name, "init", "-q")
+    res = AtlasTools(ws).index_update()
+    assert res["error"] == "not_initialised" and "workspace of 2 projects (a, b)" in res["message"]
+    assert not (ws / ".verinoda").exists()
 
 
 def test_initialised_but_unindexed_repo(tmp_path):
@@ -1538,12 +1571,15 @@ def test_stdio_server_starts_in_unscanned_dir(tmp_path):
         return [t.name for t in listed.tools], out
 
     names, results = _session(plain, tmp_path / "server.err", body)
-    assert sorted(names) == sorted(mcp_server.CORE_TOOLS)  # the default profile
-    assert "12 tools, profile core" in (tmp_path / "server.err").read_text(encoding="utf-8", errors="replace")
-    for res in results:
+    # the default profile, without decision_check (no decision records)
+    assert sorted(names) == sorted(set(mcp_server.CORE_TOOLS) - {"decision_check"})
+    assert "11 tools, profile core" in (tmp_path / "server.err").read_text(encoding="utf-8", errors="replace")
+    for res in results[:3]:
         p = _payload(res)
-        assert p["error"] == "not_initialised" and "verinoda scan" in p["hint"]
-    assert not (plain / ".verinoda").exists()
+        assert p["error"] == "not_initialised" and "index_update" in p["hint"]
+    p = _payload(results[3])  # index_update: the first scan, over the protocol too
+    assert not _is_error(results[3]) and p["mode"] == "first_scan"
+    assert (plain / ".verinoda").is_dir()
 
 
 def test_default_repo_serves_the_only_initialised_subfolder_of_a_workspace(tmp_path, capsys, monkeypatch):
