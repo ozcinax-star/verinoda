@@ -373,19 +373,31 @@ def _resolve_csharp_type_references(
                 return alias
         return stem or None
 
+    # Local change (Verinoda): the first placeholder per label, in all_nodes order, built once.
+    # The linear scan over all_nodes per unresolved reference was quadratic (44 % of C#
+    # extraction on a 591-file repo); nodes only change here by the append below, so the
+    # index stays exact when that append records its stub.
+    placeholder_by_label: dict[str, str] | None = None
+
+    def _first_placeholder(label: str) -> str | None:
+        nonlocal placeholder_by_label
+        if placeholder_by_label is None:
+            placeholder_by_label = {}
+            for node in all_nodes:
+                nid = node.get("id")
+                node_label = node.get("label")
+                if isinstance(nid, str) and isinstance(node_label, str) and _is_placeholder(node):
+                    placeholder_by_label.setdefault(node_label, nid)
+        return placeholder_by_label.get(label)
+
     def _dangling_stub_id(label: str, current_target: object) -> str:
         current = node_by_id.get(current_target)
         if _is_placeholder(current) and current.get("label") == label:
             return str(current_target)
 
-        for node in all_nodes:
-            nid = node.get("id")
-            if (
-                isinstance(nid, str)
-                and node.get("label") == label
-                and _is_placeholder(node)
-            ):
-                return nid
+        found = _first_placeholder(label)
+        if found is not None:
+            return found
 
         stem = _make_id(label)
         stub_id = stem
@@ -404,6 +416,8 @@ def _resolve_csharp_type_references(
         }
         all_nodes.append(node)
         node_by_id[stub_id] = node
+        if placeholder_by_label is not None:
+            placeholder_by_label.setdefault(label, stub_id)
         return stub_id
 
     REPOINT_RELATIONS = {"implements", "inherits", "references"}
