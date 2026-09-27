@@ -108,7 +108,8 @@ PROX_CANDIDATES = 300             # passages checked for proximity, best term co
 MAX_FILE_BYTES = 4_000_000        # larger files are not indexed (reported in stats)
 PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc")
 _LEAD_DOC_SUFFIXES = (".java", ".kt", ".kts", ".groovy", ".scala", ".cs", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs",
-                      ".c", ".h", ".cc", ".cpp", ".hpp", ".swift", ".php", ".dart")
+                      ".c", ".h", ".cc", ".cpp", ".hpp", ".hh", ".hxx", ".ipp", ".inl", ".tpp", ".swift", ".php",
+                      ".dart")
 # Text files the graph has no nodes for (data packs, configs, shaders, resources) are indexed
 # as "data" units, so a question can reach them and the code that names them.
 DATA_SUFFIXES = (".mcfunction", ".mcmeta", ".json", ".jsonc", ".json5", ".snbt", ".yml", ".yaml", ".toml",
@@ -117,7 +118,8 @@ DATA_SUFFIXES = (".mcfunction", ".mcmeta", ".json", ".jsonc", ".json5", ".snbt",
                  ".ps1", ".sh", ".html", ".css", ".scss", *PROSE_SUFFIXES,
                  # source files the graph extractor skipped (it ignores directories such as build/)
                  ".java", ".kt", ".scala", ".groovy", ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".go",
-                 ".rs", ".rb", ".php", ".cs", ".c", ".h", ".cc", ".cpp", ".hpp", ".swift", ".lua", ".dart")
+                 ".rs", ".rb", ".php", ".cs", ".c", ".h", ".cc", ".cpp", ".hpp", ".hh", ".hxx", ".ipp", ".inl",
+                 ".tpp", ".swift", ".lua", ".dart")
 DATA_NAMES = frozenset({"Dockerfile", "Makefile", "Procfile", "Jenkinsfile", ".env.example"})
 BINARY_SUFFIXES = frozenset(""".png .jpg .jpeg .gif .webp .avif .ico .bmp .tga .psd .svgz .ogg .wav .mp3 .flac .mp4 .webm
     .nbt .dat .mca .mcr .schem .schematic .litematic .zip .gz .tgz .xz .7z .rar .jar .class .war .bin .exe .dll .so
@@ -604,7 +606,8 @@ def _doc_units(g, f: str, lines: list[str]) -> list["_Unit"]:
 MISALIGNED_PREFIX = "graph-mismatch:"
 ALIGN_WINDOW = 8                  # lines after a symbol's start in which its name must appear
 ALIGN_SUFFIXES = (".py", ".java", ".kt", ".kts", ".scala", ".groovy", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx",
-                  ".go", ".rs", ".cs", ".rb", ".php", ".swift", ".c", ".cc", ".cpp", ".h", ".hpp", ".lua", ".dart")
+                  ".go", ".rs", ".cs", ".rb", ".php", ".swift", ".c", ".cc", ".cpp", ".h", ".hpp", ".hh", ".hxx",
+                  ".ipp", ".inl", ".tpp", ".lua", ".dart")
 _ALIGN_NAME = re.compile(r"[A-Za-z_$][\w$]*")
 
 

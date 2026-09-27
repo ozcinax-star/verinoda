@@ -2760,6 +2760,7 @@ _LANG_FAMILY_BY_EXT: dict[str, str] = {
     # C-family: shared headers, Objective-C/C++ mix, Swift↔ObjC bridging
     ".c": "native", ".h": "native", ".cpp": "native", ".cc": "native",
     ".cxx": "native", ".hpp": "native", ".cu": "native", ".cuh": "native",
+    ".hh": "native", ".hxx": "native", ".ipp": "native", ".inl": "native", ".tpp": "native",
     ".metal": "native", ".m": "native", ".mm": "native", ".swift": "native",
     # Single-language families
     ".py": "python",
@@ -5188,7 +5189,8 @@ register_language_resolver(
 register_language_resolver(
     LanguageResolver(
         "cpp_member_calls",
-        frozenset({".cpp", ".cc", ".cxx", ".hpp", ".cu", ".cuh", ".metal", ".h"}),
+        frozenset({".cpp", ".cc", ".cxx", ".hpp", ".cu", ".cuh", ".metal", ".h",
+                   ".hh", ".hxx", ".ipp", ".inl", ".tpp"}),
         _resolve_cpp_member_calls,
     )
 )
@@ -6304,6 +6306,12 @@ _DISPATCH: dict[str, Any] = {
     ".cc": extract_cpp,
     ".cxx": extract_cpp,
     ".hpp": extract_cpp,
+    # Local change (Verinoda): the other C++ header and inline-implementation suffixes.
+    ".hh": extract_cpp,
+    ".hxx": extract_cpp,
+    ".ipp": extract_cpp,
+    ".inl": extract_cpp,
+    ".tpp": extract_cpp,
     ".cu": extract_cpp,
     ".cuh": extract_cpp,
     ".metal": extract_cpp,
