@@ -185,6 +185,48 @@ def test_facts_are_cached_by_content(tmp_path):
         st.close()
 
 
+def test_update_facts_stores_what_facts_for_stores_in_one_commit(tmp_path, monkeypatch):
+    """The batched scan pass (one read per file, one transaction) writes the rows the per-file path writes."""
+    from pathlib import Path
+
+    examples = Path(__file__).resolve().parents[1] / "examples"
+    files = sorted(p.relative_to(examples).as_posix() for p in examples.rglob("*")
+                   if p.is_file() and ".verinoda" not in p.parts and "__pycache__" not in p.parts)
+    assert anchors.scheme_for("x.py") and sum(anchors.scheme_for(f) is not None for f in files) > 10
+
+    def rows(st: Store) -> list[tuple]:
+        return sorted(tuple(r) for r in st.conn.execute("SELECT sha256, scheme, facts FROM file_facts"))
+
+    one, many = Store(tmp_path / "one.db"), Store(tmp_path / "many.db")
+    try:
+        anchors._MEM.clear()
+        for f in files:
+            anchors.facts_for(one, examples, f)
+        anchors._MEM.clear()
+        commits = []
+        monkeypatch.setattr(many, "conn", _CommitCounter(many.conn, commits))
+        out = anchors.update_facts(many, examples, files)
+        assert commits == [1] and out["computed"] + out["cached"] + out["errors"] > 10
+        assert rows(many) == rows(one) and rows(one)
+    finally:
+        one.close()
+        many.close()
+
+
+class _CommitCounter:
+    """A sqlite3 connection that records its commits (the attribute cannot be patched on the C type)."""
+
+    def __init__(self, conn, commits: list):
+        self._conn, self._commits = conn, commits
+
+    def commit(self):
+        self._commits.append(1)
+        return self._conn.commit()
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
 def _anchor(text: str, line: int, end: int | None = None) -> dict:
     a = anchors.make_anchor(facts(text), text, line, end or line)
     assert a is not None

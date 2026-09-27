@@ -692,6 +692,16 @@ class Store:
                 (sha256, scheme, json.dumps(facts, sort_keys=True), now()),
             )
 
+    def put_file_facts_many(self, rows: list[tuple[str, str, dict]]) -> None:
+        """:meth:`put_file_facts` for many ``(sha256, scheme, facts)`` rows in one transaction (a scan
+        committed once per file)."""
+        ts = now()
+        with self.tx():
+            self.conn.executemany(
+                "INSERT OR IGNORE INTO file_facts (sha256, scheme, facts, created_at) VALUES (?, ?, ?, ?)",
+                [(sha, scheme, json.dumps(facts, sort_keys=True), ts) for sha, scheme, facts in rows],
+            )
+
     def add_claim_deps(self, claim_id: str, deps: list[dict]) -> None:
         """Record ``[{"dep_key", "facet", "fp", "scheme"}]``; an existing (key, facet) keeps its row."""
         ts = now()

@@ -611,6 +611,7 @@ def update_facts(store, repo: Path, changed_paths: Iterable[str | Path] | None) 
     repo = Path(repo).resolve()
     t0 = time.perf_counter()
     out = {"computed": 0, "cached": 0, "unsupported": 0, "missing": 0, "errors": 0}
+    rows: dict[tuple[str, str], dict] = {}  # written in one transaction at the end
     for p in changed_paths or []:
         p = Path(p)
         try:
@@ -628,14 +629,27 @@ def update_facts(store, repo: Path, changed_paths: Iterable[str | Path] | None) 
             out["missing"] += 1
             continue
         sha = hashlib.sha256(data).hexdigest()
-        if facts_by_sha(store, rel, sha) is not None:
+        if (sha, scheme) in rows or facts_by_sha(store, rel, sha) is not None:
             out["cached"] += 1
             continue
-        facts = facts_for(store, repo, rel, sha256=sha)
+        # what facts_for would store for this version, from the bytes already read (it read and hashed
+        # the file a second time)
+        facts = compute_facts(rel, data)
+        if facts is None:  # a tree-sitter grammar that is not installed
+            out["errors"] += 1
+            continue
+        facts["sha256"] = sha
+        _mem_put(sha, scheme, facts)
+        rows[(sha, scheme)] = facts
         if not usable(facts):
             out["errors"] += 1
         else:
             out["computed"] += 1
+    if store is not None and rows:
+        try:
+            store.put_file_facts_many([(sha, scheme, facts) for (sha, scheme), facts in rows.items()])
+        except Exception:  # a read-only or busy store must not break a scan (facts_for's rule)
+            pass
     out["ms"] = round(1000 * (time.perf_counter() - t0), 1)
     return out
 
