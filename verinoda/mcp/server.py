@@ -57,6 +57,7 @@ import importlib
 import itertools
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -109,6 +110,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "debug_attempt",
     "debug_status",
     "debug_strategy",
+    "grep_context",
     "change_probe",
 )
 
@@ -140,6 +142,18 @@ PLAN_HINT = ("draft and check a plan with `verinoda plan draft` / `verinoda plan
 # within the file system's timestamp granularity: what was derived from it is not kept (git's racy-clean rule).
 RACY_NS = 2_000_000_000
 MCP_BUILD_WAIT = 30.0          # index_update waits this long for another build of the project
+# grep_context (the Grep hook, D62): identifier-like words of a Grep pattern, those that are only regex or
+# language keywords left out; the hook's text is at most this long
+_HOOK_WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*")
+_HOOK_SKIP = {"def", "class", "function", "return", "import", "from", "self", "this", "public", "private", "static",
+              "void", "const", "async", "await", "final", "override", "interface", "record", "true", "false", "none",
+              "null", "string", "self."}
+HOOK_CONTEXT_CHARS = 450  # every Grep that names a known symbol pays it: about 110 tokens at most
+HOOK_CALLERS, HOOK_CALLS = 3, 4
+# D62 (a), under study: the sentence that asks for analyze before a search by hand. Not in the instructions yet; the
+# adoption study appends it verbatim, and it goes into _INSTRUCTIONS_CORE_HEAD byte for byte if it is adopted.
+ANALYZE_FIRST = ("For a how, why, what-happens or flow question, call analyze once before searching by hand; a "
+                 "question that names one symbol or file can start with Grep.")
 _RACY = ("racy",)                # recorded instead of a stat: never equal to one, so it is re-derived
 
 
@@ -754,6 +768,47 @@ class AtlasTools:
                         self._query_memo.popitem(last=False)
             return out
         return self._run("project_query", go, need="graph")
+
+    def grep_context(self, pattern: str, path: str | None = None) -> dict:
+        """What the static graph says about the symbols a Grep searched for, as a Claude Code PostToolUse hook
+        output (D62): where each one found by its exact name is defined, who calls it and what it calls, in one
+        short line. Nothing found, or anything wrong: ``{}`` (the hook adds nothing; a Grep is never held up).
+        ``path`` is the Grep's own path argument, unused for now."""
+        from verinoda import naming, retrieval
+
+        with self._lock:
+            try:
+                with contextlib.redirect_stdout(sys.stderr):
+                    if not graph_path(self.repo).exists():
+                        return {}
+                    g = self._graph()
+                    words = sorted({w for w in _HOOK_WORD.findall(pattern or "")
+                                    if len(w) >= 4 and w.lower() not in _HOOK_SKIP}, key=len, reverse=True)
+                    said = []
+                    for w in words[:4]:
+                        r = naming.resolve(g, w)
+                        if r.node is None or not r.exact:
+                            continue
+                        calls, callers, nc, nb = retrieval.call_outline(g, r.node)
+                        line = f"`{w}` is defined at {g.file(r.node)}:{g.line(r.node)}"
+                        if callers:
+                            line += "; called by " + "; ".join(callers[:HOOK_CALLERS]) + (
+                                f" (+{nb - HOOK_CALLERS})" if nb > HOOK_CALLERS else "")
+                        if calls:
+                            line += "; calls " + ", ".join(calls[:HOOK_CALLS]) + (
+                                f" (+{nc - HOOK_CALLS})" if nc > HOOK_CALLS else "")
+                        said.append(line)
+                        if len(said) == 2:
+                            break
+                    if not said:
+                        return {}
+                    text = "Verinoda (static call graph, extracted, not verified): " + " | ".join(said)
+                    if len(text) > HOOK_CONTEXT_CHARS:  # cut between entries, never inside a path
+                        cut = text.rfind("; ", 0, HOOK_CONTEXT_CHARS - 4)
+                        text = text[:cut if cut > 0 else HOOK_CONTEXT_CHARS - 4] + "; ..."
+                    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}}
+            except Exception:  # noqa: BLE001 - a hook never breaks the agent's Grep
+                return {}
 
     def node_inspect(self, name: str) -> dict:
         def go():
@@ -1733,6 +1788,7 @@ reference_id) inspects one at its pin; reference_compare compares a mechanism.
   the user's own words (user_statement).
 - debug_start before the first edit of a bug fix, debug_attempt after every edit; on stop=true stop editing, run
   strategies[0] with debug_strategy and show debug_status. Never say "fixed": the repro passed at tree T in run R.
+- grep_context: what the Grep hook adds (definition, callers, callees of a searched symbol).
 - change_probe: after editing a Python function, its base and working-tree versions on generated inputs. A
   difference is a behaviour change, not a bug; say "no difference found in N inputs", never "verified"; a refusal,
   inconclusive or incomplete is not a pass."""
@@ -1786,6 +1842,8 @@ def served_tools(repo: Path, profile: str) -> tuple[str, ...]:
     names = PROFILES[profile]
     if profile == "core" and not _has_decision_records(Path(repo)):
         names = tuple(n for n in names if n != "decision_check")
+    if profile == "core":
+        names = (*names, "grep_context")  # the Grep hook's call (D62), reached through run_tool, never listed
     return names
 
 
@@ -1916,6 +1974,9 @@ DESCRIPTIONS: dict[str, str] = {
     "feedback_resolve": (
         "Close feedback with a verdict (confirmed | qualified | corrected | unresolved), a reason and the "
         "evidence ids that justify it; 'corrected' can carry the corrected statement."),
+    "grep_context": (
+        "The Grep hook's call (install --hooks): what the static call graph says about the symbols a Grep pattern "
+        "names - definition, callers, callees - as a PostToolUse hook output; {} when it knows none."),
     "index_update": (
         "Re-index after editing files (on a folder never scanned: the first scan); claims whose files changed "
         "become stale. mode: noop | incremental | full | first_scan."),
@@ -1982,7 +2043,7 @@ DESCRIPTIONS: dict[str, str] = {
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "map_view", "claim_inspect", "claim_list",
               "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members",
-              "debug_status"}
+              "debug_status", "grep_context"}
 _OPEN_WORLD = {"reference_research", "reference_compare", "feedback_submit", "feedback_process", "reference_resolve"}
 
 
@@ -2590,6 +2651,13 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         return emit(t.debug_strategy(strategy, session_id=session_id, good=good, bad=bad, times=times,
                                      prepare=prepare, trace=trace, overlay=overlay))
 
+    @register("grep_context")
+    def grep_context(
+        pattern: Annotated[str, Field(description="The Grep pattern.")],
+        path: Annotated[OptStr, Field(description="The Grep's path argument.")] = None,
+    ) -> dict[str, Any]:
+        return emit(t.grep_context(pattern, path))
+
     if slim:
         # the core menu's analyze and code_check: the arguments a question or an edit needs (the full profile, and
         # the CLI, keep the rest: plans, test runs, tracing, budgets, environments)
@@ -2612,7 +2680,7 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
         add("analyze", analyze_core, DESCRIPTIONS["analyze"])
         add("code_check", code_check_core, DESCRIPTIONS["code_check"])
-    behind = [n for n in CORE_TOOLS if n in impl and n not in listed] if GATEWAY in listed else []
+    behind = [n for n in (*CORE_TOOLS, "grep_context") if n in impl and n not in listed] if GATEWAY in listed else []
     if behind:
         import inspect
 

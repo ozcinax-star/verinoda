@@ -46,6 +46,7 @@ GOLD_DISCOUNT_TESTS = ["tests/test_pricing.py::test_compute_total",
 
 EXPECTED_PARAMS = {
     "project_query": ({"question", "max_items", "format"}, {"question"}),
+    "grep_context": ({"pattern", "path"}, {"pattern"}),
     "node_inspect": ({"name"}, {"name"}),
     "relation_trace": ({"source", "target", "mode"}, {"source", "target"}),
     "run_when": ({"symbol", "depth"}, {"symbol"}),
@@ -92,7 +93,7 @@ EXPECTED_PARAMS = {
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "map_view", "claim_inspect", "claim_list",
              "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members",
-             "debug_status"}
+             "debug_status", "grep_context"}
 
 
 # -- fixtures & helpers -----------------------------------------------------------
@@ -261,6 +262,7 @@ def _all_calls(t: AtlasTools) -> dict:
         "debug_status": lambda: t.debug_status(),
         "debug_strategy": lambda: t.debug_strategy("differential"),
         "change_probe": lambda: t.change_probe(symbol="app.py::main"),
+        "grep_context": lambda: t.grep_context("main"),
     }
 
 
@@ -331,8 +333,8 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
     gate = next(t for t in core if t["name"] == GATEWAY)
     behind = set(gate["inputSchema"]["properties"]["name"]["enum"])
     # no decision records in the example: nothing for decision_check to check, so run_tool does not offer it
-    assert behind == set(CORE_TOOLS) - set(CORE_DIRECT) - {"decision_check"}
-    assert all(n in gate["description"] for n in behind)
+    assert behind == set(CORE_TOOLS) - set(CORE_DIRECT) - {"decision_check"} | {"grep_context"}
+    assert all(n in gate["description"] for n in behind - {"grep_context"})  # the hook's own: not advertised
     assert gate["annotations"]["readOnlyHint"] is False  # change_review can run tests
     # the core analyze and code_check take the arguments a question or an edit needs
     by = {t["name"]: t["inputSchema"]["properties"] for t in core}
@@ -390,7 +392,7 @@ def test_the_core_profile_names_only_tools_it_serves(repo):
 
     from verinoda.mcp.server import CORE_TOOLS, PLAN_HINT
 
-    others = [n for n in TOOL_NAMES if n not in CORE_TOOLS]
+    others = [n for n in TOOL_NAMES if n not in CORE_TOOLS and n != "grep_context"]  # the hook's, in run_tool
     srv = mcp_server.build_server(repo)
     listed = json.dumps([t.model_dump(by_alias=True, exclude_none=True, mode="json")
                          for t in anyio.run(srv.list_tools)])
@@ -1346,6 +1348,9 @@ def test_unscanned_repo_returns_structured_error_for_every_tool(tmp_path):
     for name, fn in calls.items():
         if name == "index_update":
             continue
+        if name == "grep_context":  # the Grep hook adds nothing rather than an error
+            assert fn() == {}
+            continue
         res = fn()
         assert res["error"] == "not_initialised", (name, res)
         assert res["tool"] == name and "index_update" in res["hint"] and res["message"]
@@ -1709,3 +1714,26 @@ def test_run_tool_reaches_the_core_tools_not_listed_and_checks_their_arguments(r
     assert ok_p["node"]["file"] == "orders/service.py"
     assert bad_p["error"] == "invalid_arguments" and bad_p["hint"] == "node_inspect(name)"
     assert "nme: Unexpected keyword argument" in bad_p["message"]
+
+
+def test_grep_context_is_a_posttooluse_hook_output_or_nothing(repo):
+    """The Grep hook (D62): a searched name the graph knows by its exact name gets its definition, callers and
+    callees in one short line, as Claude Code's PostToolUse hook JSON; anything else adds nothing."""
+    t = AtlasTools(repo)
+    out = t.grep_context(r"def place_order\(")
+    ctx = out["hookSpecificOutput"]["additionalContext"]
+    assert out["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+    assert "`place_order` is defined at orders/service.py:" in ctx and "called by create_order_handler" in ctx
+    assert len(ctx) <= mcp_server.HOOK_CONTEXT_CHARS
+    assert t.grep_context("no_such_name_anywhere") == {} and t.grep_context("") == {}
+
+
+def test_the_hooks_template_calls_grep_context_through_run_tool():
+    from importlib import resources
+
+    tpl = json.loads(resources.files("verinoda.agents").joinpath("templates/claude_hooks.json").read_text("utf-8"))
+    (entry,) = tpl["hooks"]["PostToolUse"]
+    (hook,) = entry["hooks"]
+    assert entry["matcher"] == "Grep" and hook["type"] == "mcp_tool" and hook["server"] == "verinoda"
+    assert hook["tool"] == mcp_server.GATEWAY and hook["input"]["name"] == "grep_context"
+    assert hook["input"]["arguments"] == {"pattern": "${tool_input.pattern}"}

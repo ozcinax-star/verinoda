@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "verinoda",
+            "tool": "run_tool",
+            "input": {
+              "name": "grep_context",
+              "arguments": {
+                "pattern": "${tool_input.pattern}"
+              }
+            },
+            "timeout": 10,
+            "statusMessage": "verinoda: graph context"
+          }
+        ]
+      }
+    ]
+  }
+}

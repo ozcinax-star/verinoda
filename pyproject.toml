@@ -214,7 +214,7 @@ include = ["verinoda*"]
 # Runtime data only; tests/test_packaging.py checks every data file in the source
 # tree is matched here and that the built wheel ships it.
 "verinoda.project_index" = ["*.md", "skills/*/references/*.md", "always_on/*.md", "UPSTREAM_COMMIT"]
-"verinoda.agents" = ["templates/*.md"]
+"verinoda.agents" = ["templates/*.md", "templates/*.json"]
 "verinoda.benchmark" = ["questions/*.json"]
 # round 3 (docs/DESIGN.md): question-plan schema, TR->EN seed lexicon; the build stamp git archive fills in
 "verinoda" = ["schemas/*.json", "data/*.json", "data/*.txt", "data/*.ps1"]

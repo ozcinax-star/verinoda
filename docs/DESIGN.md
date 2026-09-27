@@ -82,6 +82,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D59 | Settings read by a string key | implemented | Built 2026-09-27 (section 32): a config question also gets the string-keyed setting reads (`Config.getInt("car.door-ticks", 140)`) in the files that ranked for it, matched by the question's words (and their Turkish glosses), with the default and the YAML / TOML / .properties line that sets the key. |
 | D60 | What an agent carries and cites | implemented | Built 2026-09-27 (section 33): passages number their lines (blank lines left out); the core MCP menu and instructions are about a quarter shorter and list decision_check only in a project with decision records; `index_update` scans a folder never scanned; the skills and instructions say to cite the narrowest lines and to run code_check on code written, not read. |
 | D61 | A four-tool menu and a gateway | implemented | Built 2026-09-27 (section 34): the core profile lists project_query, analyze, code_check and index_update (analyze and code_check with the arguments a question or an edit needs) and `run_tool`, which reaches the other core tools by name with their own argument checks; an agent session's first turn is 2,177 tokens larger than without Verinoda, 3,933 before. |
+| D62 | Verinoda in the Grep the agent already runs | experimental | Built 2026-09-27 (section 35): `grep_context` answers a Claude Code PostToolUse hook on Grep with the definition, callers and callees of a searched symbol (at most 450 characters, nothing when the name is unknown); the hook ships as a template, opt-in; `ANALYZE_FIRST` holds the sentence that asks for analyze before a search by hand. Both are under an adoption study before either is switched on. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3479,6 +3480,30 @@ and decision_check belong to editing, which the sessions did not do.
 - First turn of a Claude Code session (the same orders_app question with and without Verinoda, a build of this
   code): +3,933 tokens before, +2,177 now (-45 %). Expected before measuring: 1,800-2,000.
 - Tests: run_tool reaches node_inspect and reports a wrong argument with the tool's parameters.
+
+## 35. Verinoda in the Grep the agent already runs (D62, 2026-09-27; under study)
+
+### 35.1 Why
+
+In every benchmark so far the agent reached for Grep and Read first and often never came back to Verinoda: 15 bug-fix
+sessions made no Verinoda call, and on a Minecraft mod the agent grepped its way to half an answer that analyze gives
+whole. Two ways to meet it: ask for analyze first on the questions it is for (a), or put what Verinoda knows where the
+agent already looks (b).
+
+### 35.2 Decisions
+
+- (b) `grep_context(pattern)`: identifier-like words of the Grep pattern (at least 4 characters, regex and language
+  keywords left out), longest first; for the first two the graph resolves by their exact name, one line each:
+  where it is defined, up to 3 callers and 4 callees with file:line, counts beyond that. Returned as Claude Code's
+  PostToolUse hook JSON (`additionalContext`), cut between entries at 450 characters; `{}` for anything else,
+  errors included, so a Grep is never held up. Warm, one call takes about 0.1 s (the MCP server keeps the graph).
+- The hook is an `mcp_tool` hook on the Grep tool that calls run_tool with `grep_context` and the Grep's pattern
+  (`agents/templates/claude_hooks.json`): no process per Grep. It covers the Grep tool only: in the threshold
+  study's sessions 111 of 133 searches went through it, 22 through grep in Bash.
+- (a) `ANALYZE_FIRST`: "For a how, why, what-happens or flow question, call analyze once before searching by hand;
+  a question that names one symbol or file can start with Grep." Not in the instructions yet.
+- Neither is switched on: an adoption study measures both (with a 2 x 2 design) on the build that holds them, and
+  each goes in only if it pays.
 
 ## Sources
 

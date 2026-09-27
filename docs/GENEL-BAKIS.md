@@ -673,7 +673,7 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
   bilinmeyenleri gelir.
 - Beceriler CLI'nin düz metnini okur; `--json` yalnız metnin bırakmadığı bir
   alan için eklenir (JSON aynı içerik için 2-5 kat token tutar; 2026-09-26).
-- **MCP:** 35 araç, aynı çekirdek fonksiyonları çağırır. Varsayılan olarak
+- **MCP:** 37 araç, aynı çekirdek fonksiyonları çağırır. Varsayılan olarak
   çekirdek profil bunların on ikisini sunar (sorgu, analiz, düğüm/izleme/harita,
   iddia ve kanıt, dizin güncelleme, isim denetimi, karar denetimi, değişiklik
   incelemesi); hepsi için `verinoda mcp serve --profile full` ya da
@@ -727,7 +727,7 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
 | Kullanıcı eleştirisi protokolü | — | 9 adım, 4 sonuç, önce referans çözümü, geçmiş korunur | Çalışıyor |
 | Sürümlü hafıza | — | iddiaya bağlanırsa eskiyince geçersiz | Çalışıyor (yalnızca elle) |
 | Ajan kurulumu | 20'den fazla platform | Claude Code + Codex, manifest, güvenli kaldırma | Çalışıyor |
-| MCP araçları | grafik araçları | 35 araç: plan, referans, iddia, kanıt, gözlem, doğrulama, eleştiri, isim denetimi, kararlar, hata ayıklama defteri, değişiklik incelemesi, davranış sondası (varsayılan profil: on iki araç) | Çalışıyor |
+| MCP araçları | grafik araçları | 37 araç: plan, referans, iddia, kanıt, gözlem, doğrulama, eleştiri, isim denetimi, kararlar, hata ayıklama defteri, değişiklik incelemesi, davranış sondası (varsayılan profil: on iki araç) | Çalışıyor |
 | Büyük resim: bir değişiklik neyi etkiler | etki görünümü | `verinoda review`: değişen tanımlar, onlara bağlı olanlar (zinciriyle), kaygıya göre bulgular (kalıcılık, güvenlik, performans, genel API, yapılandırma, giriş noktaları), değişikliğe hangi testlerin ulaştığı ve hiçbir testin ulaşmadığı kod; önce ne okunmalı. "Bulgu yok" asla "güvenli" demek değildir | Çalışıyor (D35) |
 | Çalışıyor ama yanlış kod | yok | `verinoda probe` (Python): değişen fonksiyonun eski ve yeni sürümü atılabilir kopyalarda üretilen girdilerle çalıştırılır ve karşılaştırılır; fark bir davranış değişikliği olarak örneğiyle bildirilir. Yan etkisini yalıtamadığı fonksiyonları nedenini söyleyerek reddeder; "N girdide fark bulunmadı" der, asla "doğrulandı" demez. Bir kütüphane modülü yüklenirken ayarlanan ortam değişkeni (numpy'nin `OPENBLAS_MAIN_FREE`'si) yan etki sayılmaz; proje kodunun ayarladığı sayılmaya devam eder (2026-09-26) | Çalışıyor (D36) |
 | Dürüst karar ("met" ne zaman denir) | yok | `analyze` bir alt soruya yalnızca sorulanı yanıtlayan iddialarla `met` der. Tanım yalnızca "nerede tanımlı" sorusunu yanıtlar; "X'i hangi kod kullanıyor" için X'i kullanan kod gerekir; "X nerede tick'leniyor" için X'in kendi tick'i gerekir; yalnızca başvuru ağacından, tespit edilen bir kopyadan ya da vendor klasöründen gelen iddialar `met` yapmaz; çağıran sorusunda grafiğin çözemediği çağrı yerleri sayılıp yazılır ("3 call sites unresolved: ...") ve karar en fazla `met_with_inference` olur; commit satırı gerekçe sayılmaz; "Y'de listelenmemiş X'ler hangileri" `not_supported` olur. Karar yalnızca düşer, hiçbir iddia silinmez. Herkese açık 17 tuzak ve 22 kontrol sorusunda (`verinoda benchmark verdict-audit`; kuralları yazan kişi yazdı) yanlış `met`: geliştirme kümesinde 9/23 → 0/23, ayrılmış kümede 8/16 → 1/16; doğru `met` kalan kontroller 13 → 12 ve 7 → 7; benchmark'ta hiçbir olgu kaybolmadı | Çalışıyor (D39) |
