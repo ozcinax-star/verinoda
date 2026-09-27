@@ -1686,6 +1686,22 @@ CORE_TOOLS: tuple[str, ...] = (
 )
 PROFILES: dict[str, tuple[str, ...]] = {"core": CORE_TOOLS, "full": TOOL_NAMES}
 DEFAULT_PROFILE = "core"
+# The core menu lists only these (docs/DESIGN.md D61): the tools agents called in the benchmark sessions, and
+# the ones every edit needs. The other core tools are reached through GATEWAY, one listed tool whose description
+# names them with their arguments; every listed tool is standing context in every request.
+CORE_DIRECT: tuple[str, ...] = ("project_query", "analyze", "code_check", "index_update")
+GATEWAY = "run_tool"
+# what the gateway's description says of each tool behind it: its arguments and what it returns
+GATEWAY_CATALOG: dict[str, str] = {
+    "node_inspect": "node_inspect {name}: one symbol's definition and edges with file:line",
+    "relation_trace": "relation_trace {source, target, mode?: flow|any}: call paths between two symbols",
+    "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact, targets?}",
+    "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: earlier claims, "
+                  "their evidence re-checked",
+    "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {} after: what the "
+                     "change touches",
+    "decision_check": "decision_check {changed_only?: true}: the tree against accepted decision records",
+}
 
 _INSTRUCTIONS_HEAD = """Verinoda: evidence-first answers about the repository {repo}.
 Questions: project_query (where is X; hits are leads) or analyze (claims with evidence: start the answer with its
@@ -1721,6 +1737,17 @@ reference_id) inspects one at its pin; reference_compare compares a mechanism.
   difference is a behaviour change, not a bug; say "no difference found in N inputs", never "verified"; a refusal,
   inconclusive or incomplete is not a pass."""
 
+_INSTRUCTIONS_CORE_HEAD = """Verinoda: evidence-first answers about the repository {repo}.
+Questions: project_query (where is X; hits are leads) or analyze (claims with evidence: start the answer with its
+understood_as, one block per sub-question; never state weak_inference or unknown as fact). Cite the narrowest lines
+that support a claim (source lines are numbered), not the whole span of a header. index_update after editing;
+code_check only on code you wrote or edited, not to read code. run_tool reaches node_inspect, relation_trace,
+map_view, claim_list, claim_inspect, evidence_inspect and change_review (before and after editing: report every
+concern)."""
+
+_INSTRUCTIONS_CORE_DECISIONS = """ Through run_tool, decision_check(changed_only=true) before finishing - on
+VIOLATED fix the code or ask the user."""
+
 _INSTRUCTIONS_CORE = """
 More tools (question plans, references, feedback, decision records and briefs, the debug ledger, experiments,
 runtime tracing): `verinoda mcp serve --profile full`, or the `verinoda` CLI."""
@@ -1734,8 +1761,10 @@ call index_update."""
 def instructions(profile: str = DEFAULT_PROFILE, *, decisions: bool = True) -> str:
     """The server instructions for a profile (``{repo}`` still to be filled in); ``decisions=False``: the
     menu has no decision_check (:func:`served_tools`), so they do not name it."""
-    return (_INSTRUCTIONS_HEAD + (_INSTRUCTIONS_DECISIONS if decisions else "")
-            + (_INSTRUCTIONS_FULL if profile == "full" else _INSTRUCTIONS_CORE) + _INSTRUCTIONS_TAIL)
+    if profile == "core":
+        return (_INSTRUCTIONS_CORE_HEAD + (_INSTRUCTIONS_CORE_DECISIONS if decisions else "") + _INSTRUCTIONS_CORE
+                + _INSTRUCTIONS_TAIL)
+    return _INSTRUCTIONS_HEAD + (_INSTRUCTIONS_DECISIONS if decisions else "") + _INSTRUCTIONS_FULL + _INSTRUCTIONS_TAIL
 
 
 def _has_decision_records(repo: Path) -> bool:
@@ -1758,6 +1787,26 @@ def served_tools(repo: Path, profile: str) -> tuple[str, ...]:
     if profile == "core" and not _has_decision_records(Path(repo)):
         names = tuple(n for n in names if n != "decision_check")
     return names
+
+
+def listed_tools(repo: Path, profile: str) -> tuple[str, ...]:
+    """The tools the menu lists: the core profile's direct tools and the gateway to the rest of
+    :func:`served_tools`; the full profile lists every tool."""
+    if profile != "core":
+        return served_tools(repo, profile)
+    behind = [n for n in served_tools(repo, profile) if n not in CORE_DIRECT]
+    return (*CORE_DIRECT, *((GATEWAY,) if behind else ()))
+
+
+def gateway_description(behind: list[str]) -> str:
+    """run_tool's description: the tools behind it, with their arguments."""
+    parts, said = [], set()
+    for n in behind:
+        key = "claim_list" if n in ("claim_list", "claim_inspect", "evidence_inspect") else n
+        if key in GATEWAY_CATALOG and key not in said:
+            said.add(key)
+            parts.append(GATEWAY_CATALOG[key])
+    return ("Run one more Verinoda tool: name and its arguments as an object. " + "; ".join(parts) + ".")
 
 
 INSTRUCTIONS = instructions("full")
@@ -2079,21 +2128,29 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     # a description names only what this profile serves (else the CLI)
     plan_check = "see question_plan_check" if "question_plan_check" in served else "from `verinoda plan check`"
 
+    listed = set(listed_tools(t.repo, profile))
+    impl: dict[str, Callable] = {}   # every served tool's function: run_tool calls the ones not listed
+    slim = {"analyze", "code_check"} if profile == "core" else set()  # listed with fewer arguments (below)
+
+    def add(name: str, fn, description: str) -> None:
+        kwargs: dict[str, Any] = {"name": name, "description": description,
+                                  "structured_output": False}  # no output schema: results are open objects
+        ann = _tool_annotations(name)
+        if ann is not None:
+            kwargs["annotations"] = ann
+        for drop in ((), ("structured_output",), ("structured_output", "annotations")):
+            try:
+                srv.add_tool(fn, **{k: v for k, v in kwargs.items() if k not in drop})
+                break
+            except TypeError:  # pragma: no cover - an older SDK without these arguments
+                continue
+
     def register(name: str):
         def deco(fn):
-            if name not in served:
-                return fn
-            kwargs: dict[str, Any] = {"name": name, "description": DESCRIPTIONS[name],
-                                      "structured_output": False}  # no output schema: results are open objects
-            ann = _tool_annotations(name)
-            if ann is not None:
-                kwargs["annotations"] = ann
-            for drop in ((), ("structured_output",), ("structured_output", "annotations")):
-                try:
-                    srv.add_tool(fn, **{k: v for k, v in kwargs.items() if k not in drop})
-                    break
-                except TypeError:  # pragma: no cover - an older SDK without these arguments
-                    continue
+            if name in served:
+                impl[name] = fn
+            if name in listed and name not in slim:
+                add(name, fn, DESCRIPTIONS[name])
             return fn
         return deco
 
@@ -2533,6 +2590,51 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         return emit(t.debug_strategy(strategy, session_id=session_id, good=good, bad=bad, times=times,
                                      prepare=prepare, trace=trace, overlay=overlay))
 
+    if slim:
+        # the core menu's analyze and code_check: the arguments a question or an edit needs (the full profile, and
+        # the CLI, keep the rest: plans, test runs, tracing, budgets, environments)
+        def analyze_core(
+            question: Annotated[str, Field(description="The question.")],
+            budget_seconds: Annotated[float, Field(description="Wall-time budget in seconds (1-600).")] = 60,
+        ) -> dict[str, Any]:
+            return emit(t.analyze(question, budget_seconds=budget_seconds))
+
+        def code_check_core(
+            paths: Annotated[list[str] | None, Field(description="Repository-relative files or directories.")]
+            = None,
+            diff: Annotated[OptStr, Field(description="A revision (e.g. 'HEAD'): only lines changed against it.")]
+            = None,
+            snippet: Annotated[OptStr, Field(description="Code not written yet, checked as if it were in as_path.")]
+            = None,
+            as_path: Annotated[OptStr, Field(description="With snippet: the file it is for.")] = None,
+        ) -> dict[str, Any]:
+            return emit(t.code_check(paths=paths, diff=diff, snippet=snippet, as_path=as_path))
+
+        add("analyze", analyze_core, DESCRIPTIONS["analyze"])
+        add("code_check", code_check_core, DESCRIPTIONS["code_check"])
+    behind = [n for n in CORE_TOOLS if n in impl and n not in listed] if GATEWAY in listed else []
+    if behind:
+        import inspect
+
+        from pydantic import ValidationError, validate_call
+
+        def run_tool(
+            name: Annotated[Literal[tuple(behind)], Field(description="The tool.")],  # type: ignore[valid-type]
+            arguments: Annotated[dict[str, Any], Field(description="Its arguments, e.g. {\"name\": \"Cls.method\"}.")]
+            = {},  # noqa: B006 - never mutated
+        ) -> dict[str, Any]:
+            fn = impl[name]
+            try:
+                return validate_call(fn)(**(arguments or {}))  # the listed tools' own argument checks
+            except (ValidationError, TypeError) as exc:
+                params = ", ".join(inspect.signature(fn).parameters)
+                what = ("; ".join(f"{'.'.join(map(str, e['loc'])) or 'arguments'}: {e['msg']}" for e in exc.errors()[:4])
+                        if isinstance(exc, ValidationError) else str(exc))
+                return emit({"error": "invalid_arguments", "tool": GATEWAY, "message": f"{name}: {what}"[:300],
+                             "hint": f"{name}({params})"})
+
+        add(GATEWAY, run_tool, gateway_description(behind))
+
     _compact_schemas(srv)
     return srv
 
@@ -2686,7 +2788,7 @@ def serve(repo: Path, profile: str | None = None) -> None:
     served = getattr(srv, "verinoda_profile", DEFAULT_PROFILE)
     from verinoda import buildinfo
 
-    print(f"verinoda mcp: serving {repo} over stdio ({state}; {len(served_tools(repo, served))} tools, "
+    print(f"verinoda mcp: serving {repo} over stdio ({state}; {len(listed_tools(repo, served))} tools, "
           f"profile {served}); "
           f"build {buildinfo.server_version()} ({sys.executable})", file=sys.stderr, flush=True)
     try:

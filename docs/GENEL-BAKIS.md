@@ -680,7 +680,10 @@ gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
   yapılandırmada `mcp.profile: full`. Menü bir oturumun her isteğinde bağlamda
   durur: on bir araçlık çekirdek profille 50.029 karakterden 9.967 karaktere
   indi (`change_review` dallar birleştirilirken eklendi; menü yeniden
-  ölçülmedi). 2026-09-27'den beri (D60) karar kaydı olmayan projede
+  ölçülmedi). D61'den beri çekirdek menü dört araç (project_query, analyze,
+  code_check, index_update) ve diğer çekirdek araçlara adıyla ulaşan `run_tool`
+  listeler; bir oturumun ilk turu Verinoda'sız oturumdan 2.177 token büyük
+  (önce 3.933). 2026-09-27'den beri (D60) karar kaydı olmayan projede
   `decision_check` listelenmez; menü ve talimatlar Claude Code'un aldığı
   biçimde 14.647 karakterden 10.521'e indi. Hiç taranmamış klasörde
   `index_update` ilk taramayı yapar (ev klasörü, sürücü kökü ya da birden çok

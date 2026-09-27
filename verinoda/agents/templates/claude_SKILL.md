@@ -94,9 +94,9 @@ sandboxed shell), use the MCP tools: their server entry stores the absolute path
 ## MCP tools
 
 If the `verinoda` MCP server is connected (see /mcp), prefer its tools where they cover the task:
-they call the same core functions as the CLI. The server's default profile has the core tools (query,
-analyze, inspect/trace/map, claims, index_update, code_check, decision_check); use the CLI for the rest.
-When the CLI does not run here and a tool named below is not listed (core profile), ask the user for
+they call the same core functions as the CLI. The default profile lists project_query, analyze, code_check,
+index_update and run_tool (inspect/trace/map, claims, change_review, decision_check by name); CLI for the rest.
+When the CLI does not run here and a tool named below is not reachable (core profile), ask the user for
 `"mcp": {"profile": "full"}` in `.verinoda/config.json` and a restart; never skip that step of the protocol.
 The CLI prints plain text written for you: read it as it is. Add `--json` only for a field the text
 leaves out (every unknown site of `check`, an analysis' full record): JSON costs 2-5x the tokens.

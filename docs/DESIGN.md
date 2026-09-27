@@ -81,6 +81,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D58 | Less noise in an answer | implemented | Built 2026-09-27 (section 31): context the critique refuted is counted, not printed; a changed file is an unknown only when it spells a name that looks like one (not a plain word that happens to name a function); "how does X decide ..." is a mechanism, not a setting; `module.function` links to that module's function; no empty quote claims; the history view 100x faster; a why-answer quotes the section with the reason. |
 | D59 | Settings read by a string key | implemented | Built 2026-09-27 (section 32): a config question also gets the string-keyed setting reads (`Config.getInt("car.door-ticks", 140)`) in the files that ranked for it, matched by the question's words (and their Turkish glosses), with the default and the YAML / TOML / .properties line that sets the key. |
 | D60 | What an agent carries and cites | implemented | Built 2026-09-27 (section 33): passages number their lines (blank lines left out); the core MCP menu and instructions are about a quarter shorter and list decision_check only in a project with decision records; `index_update` scans a folder never scanned; the skills and instructions say to cite the narrowest lines and to run code_check on code written, not read. |
+| D61 | A four-tool menu and a gateway | implemented | Built 2026-09-27 (section 34): the core profile lists project_query, analyze, code_check and index_update (analyze and code_check with the arguments a question or an edit needs) and `run_tool`, which reaches the other core tools by name with their own argument checks; an agent session's first turn is 2,177 tokens larger than without Verinoda, 3,933 before. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3443,6 +3444,41 @@ the task's:
   (+3.0 % on orders_app and orders_app_tr, +2.4 % on graphify_core) and -1.7 % to +1.6 % for analyze; the sets
   whose answers fill the budget stay within 1 %.
 - The pilot's effect on the agent is measured again on the next frozen build, on tasks other than the pilot's.
+
+## 34. A four-tool menu and a gateway (D61, 2026-09-27)
+
+### 34.1 Why
+
+A size-threshold study (28 paired question sessions over repositories of 139 to 760,000 code lines, a model with
+file tools against the same model with Verinoda) found no repository size below which Verinoda should step back:
+the median paired token difference was -14 % on the smallest. What it did find: the Verinoda session's first
+turn was 3,933 tokens larger in every pair (the tool menu, the server instructions and the skill's description),
+the skill itself was opened in none, and where the model did not call Verinoda at all the session cost more
+(median +19 %). Over 51 benchmark sessions the model called analyze, project_query, index_update, node_inspect,
+code_check and relation_trace, and never map_view, the claim tools, change_review or decision_check. Those
+sessions were all question-answering: "never called" is shown for them, "never needed" is not - change_review
+and decision_check belong to editing, which the sessions did not do.
+
+### 34.2 Decisions
+
+- `CORE_DIRECT`: the core menu lists project_query, analyze, code_check and index_update. analyze takes the
+  question and a time budget, code_check paths, a diff, or a snippet with its path; plans, test runs, tracing,
+  call budgets and environments stay in the full profile and the CLI.
+- `run_tool {name, arguments}` reaches every other core tool: node_inspect, relation_trace, map_view,
+  claim_list, claim_inspect, evidence_inspect, change_review, and decision_check in a project with decision
+  records. Its description names each with its arguments; a call is checked against the tool's own signature
+  (pydantic `validate_call`), and a wrong one comes back as `invalid_arguments` with what was wrong and the
+  tool's parameters. Not read-only (change_review can run tests).
+- The instructions name the four tools, then what run_tool reaches, and keep the rules of D60 (narrowest lines,
+  code_check on code written).
+- `--profile full` is unchanged: every tool listed with every argument.
+
+### 34.3 Measured
+
+- Menu as listed: 9,385 -> 4,253 characters (5 tools; 11 before).
+- First turn of a Claude Code session (the same orders_app question with and without Verinoda, a build of this
+  code): +3,933 tokens before, +2,177 now (-45 %). Expected before measuring: 1,800-2,000.
+- Tests: run_tool reaches node_inspect and reports a wrong argument with the tool's parameters.
 
 ## Sources
 

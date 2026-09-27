@@ -45,14 +45,14 @@ sandboxed shell), use the MCP tools (their entry stores the absolute path). In P
 
 If the `verinoda` MCP server is configured (`[mcp_servers.verinoda]` in `~/.codex/config.toml`,
 or in the project's `.codex/config.toml` when the project is trusted), prefer its tools where they
-cover the task: they call the same core functions as the CLI. The server's default profile has the core
-tools (query, analyze, inspect/trace/map, claims, index_update, code_check, decision_check); run the CLI for
-the rest. The CLI prints plain text written for you: read it as it is. Add `--json` only for a field the
+cover the task: they call the same core functions as the CLI. The default profile lists project_query, analyze,
+code_check, index_update and run_tool (inspect/trace/map, claims, change_review, decision_check by name); run the
+CLI for the rest. The CLI prints plain text written for you: read it as it is. Add `--json` only for a field the
 text leaves out (every unknown site of `check`, an analysis' full record): JSON costs 2-5x the tokens.
 
 If the CLI fails inside the Codex sandbox (`PermissionError`/`ModuleNotFoundError` importing `verinoda`), use the
 MCP tools (they run outside it); `verinoda doctor` tells the user the fix. A tool named below that the server does
-not list (core profile): ask the user for `"mcp": {"profile": "full"}` in `.verinoda/config.json` and a restart.
+not reach (core profile): ask the user for `"mcp": {"profile": "full"}` in `.verinoda/config.json` and a restart.
 
 ## Evidence discipline (non-negotiable)
 

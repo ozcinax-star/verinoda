@@ -314,23 +314,32 @@ def test_registered_tools_have_descriptions_and_typed_params(repo):
 
 
 def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_path):
-    """The tool menu is standing context in every request of many clients: core by default (12 tools;
-    11 in a project without decision records), the full set behind --profile full or mcp.profile in the
-    project's config; no output schemas and no generated titles."""
+    """The tool menu is standing context in every request of many clients: core by default (4 tools and
+    run_tool, which reaches the other core tools; decision_check only in a project with decision records),
+    the full set behind --profile full or mcp.profile in the project's config; no output schemas and no
+    generated titles."""
     anyio = pytest.importorskip("anyio")
-    from verinoda.mcp.server import CORE_TOOLS, instructions, resolve_profile
+    from verinoda.mcp.server import CORE_DIRECT, CORE_TOOLS, GATEWAY, instructions, resolve_profile
 
     def listing(srv):
         return [t.model_dump(by_alias=True, exclude_none=True, mode="json") if hasattr(t, "model_dump") else t
                 for t in anyio.run(srv.list_tools)]
 
     core = listing(mcp_server.build_server(repo))
-    # no decision records in the example: nothing for decision_check to check, so it is not listed
-    assert sorted(t["name"] for t in core) == sorted(set(CORE_TOOLS) - {"decision_check"}) and len(CORE_TOOLS) == 12
-    assert set(CORE_TOOLS) <= set(TOOL_NAMES)
+    assert sorted(t["name"] for t in core) == sorted([*CORE_DIRECT, GATEWAY]) and len(CORE_TOOLS) == 12
+    assert set(CORE_TOOLS) <= set(TOOL_NAMES) and GATEWAY not in TOOL_NAMES
+    gate = next(t for t in core if t["name"] == GATEWAY)
+    behind = set(gate["inputSchema"]["properties"]["name"]["enum"])
+    # no decision records in the example: nothing for decision_check to check, so run_tool does not offer it
+    assert behind == set(CORE_TOOLS) - set(CORE_DIRECT) - {"decision_check"}
+    assert all(n in gate["description"] for n in behind)
+    assert gate["annotations"]["readOnlyHint"] is False  # change_review can run tests
+    # the core analyze and code_check take the arguments a question or an edit needs
+    by = {t["name"]: t["inputSchema"]["properties"] for t in core}
+    assert set(by["analyze"]) == {"question", "budget_seconds"} and "env" not in by["code_check"]
     wire = json.dumps(core, separators=(",", ":"))
-    # 50,029 chars for the 33 tools before (2026-09-25); 11,999 for the 12 core tools on 2026-09-26
-    assert len(wire) < 9000
+    # 50,029 chars for the 33 tools before (2026-09-25); 11,999 for 12 on 2026-09-26; 8,905 for 11 (D60)
+    assert len(wire) < 4500
     assert '"title"' not in wire and "outputSchema" not in wire
     text = instructions("core")
     assert all(n in text for n in CORE_TOOLS) and "--profile full" in text and "question_plan_draft" not in text
@@ -341,7 +350,8 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
     shutil.copytree(repo, rec)
     (rec / ".verinoda" / "decisions").mkdir(parents=True, exist_ok=True)
     (rec / ".verinoda" / "decisions" / "0001-x.md").write_text("---\nverinoda-decision: 1\n---\n", encoding="utf-8")
-    assert sorted(t["name"] for t in listing(mcp_server.build_server(rec))) == sorted(CORE_TOOLS)
+    gate = next(t for t in listing(mcp_server.build_server(rec)) if t["name"] == GATEWAY)
+    assert "decision_check" in gate["inputSchema"]["properties"]["name"]["enum"]
     full = mcp_server.build_server(repo, profile="full")
     assert full.verinoda_profile == "full" and len(listing(full)) == len(TOOL_NAMES)
     # the project's config picks the profile when the command line does not
@@ -389,7 +399,7 @@ def test_the_core_profile_names_only_tools_it_serves(repo):
     full = mcp_server.build_server(repo, profile="full")
     listed_full = json.dumps([t.model_dump(by_alias=True, exclude_none=True, mode="json")
                               for t in anyio.run(full.list_tools)])
-    assert "see question_plan_check" in listed_full and "`verinoda plan check`" in listed
+    assert "see question_plan_check" in listed_full and "plan_json" not in listed  # plans: the full profile
     # the invalid-plan hint names the CLI, and the MCP tools with the profile that serves them
     assert "`verinoda plan draft`" in PLAN_HINT and "profile full" in PLAN_HINT
     bad = AtlasTools(repo).analyze(plan_json="not json")
@@ -1564,16 +1574,16 @@ def test_stdio_server_starts_in_unscanned_dir(tmp_path):
         listed = await s.list_tools()
         out = []
         for name, args in (("project_query", {"question": "anything"}),
-                           ("claim_inspect", {"claim_id": "clm_x"}),
-                           ("node_inspect", {"name": "main"}),
+                           ("run_tool", {"name": "claim_inspect", "arguments": {"claim_id": "clm_x"}}),
+                           ("run_tool", {"name": "node_inspect", "arguments": {"name": "main"}}),
                            ("index_update", {})):
             out.append(await s.call_tool(name, args))
         return [t.name for t in listed.tools], out
 
     names, results = _session(plain, tmp_path / "server.err", body)
-    # the default profile, without decision_check (no decision records)
-    assert sorted(names) == sorted(set(mcp_server.CORE_TOOLS) - {"decision_check"})
-    assert "11 tools, profile core" in (tmp_path / "server.err").read_text(encoding="utf-8", errors="replace")
+    # the default profile: its direct tools and run_tool
+    assert sorted(names) == sorted([*mcp_server.CORE_DIRECT, mcp_server.GATEWAY])
+    assert "5 tools, profile core" in (tmp_path / "server.err").read_text(encoding="utf-8", errors="replace")
     for res in results[:3]:
         p = _payload(res)
         assert p["error"] == "not_initialised" and "index_update" in p["hint"]
@@ -1681,3 +1691,21 @@ def test_stdio_server_found_through_repo_of_names_its_build(tmp_path):
     log = err.read_text(encoding="utf-8", errors="replace")
     assert f"verinoda mcp: serving {proj.resolve()} over stdio" in log
     assert f"; build {want} ({sys.executable})" in log
+
+
+def test_run_tool_reaches_the_core_tools_not_listed_and_checks_their_arguments(repo):
+    """The core menu lists four tools and run_tool; run_tool calls the others with their own argument checks and
+    says which arguments a tool takes when the call is wrong."""
+    anyio = pytest.importorskip("anyio")
+    srv = mcp_server.build_server(repo)
+
+    async def body():
+        ok = await srv.call_tool("run_tool", {"name": "node_inspect", "arguments": {"name": "place_order"}})
+        bad = await srv.call_tool("run_tool", {"name": "node_inspect", "arguments": {"nme": "place_order"}})
+        return ok, bad
+
+    ok, bad = anyio.run(body)
+    ok_p, bad_p = _payload(ok), _payload(bad)
+    assert ok_p["node"]["file"] == "orders/service.py"
+    assert bad_p["error"] == "invalid_arguments" and bad_p["hint"] == "node_inspect(name)"
+    assert "nme: Unexpected keyword argument" in bad_p["message"]
