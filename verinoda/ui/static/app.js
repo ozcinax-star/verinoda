@@ -1623,7 +1623,7 @@
   if (!OFFLINE) setInterval(checkWatched, 15000);
 
   // -- the command bar (Ctrl+K): say what to do, in Turkish or English ---------------------------------
-  const pal = { box: $("#palette"), input: $("#pal-input"), list: $("#pal-list"), items: [], active: 0, seq: 0, timer: null };
+  const pal = { box: $("#palette"), input: $("#pal-input"), list: $("#pal-list"), items: [], active: 0, seq: 0, timer: null, pending: null };
   const fold = (s) => String(s).toLowerCase().replace(/ı/g, "i").replace(/i̇/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g")
     .replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c");
   const VERBS = [
@@ -1705,7 +1705,9 @@
     return hits.map((x) => ({ icon: kindBadge(x.kind), label: `${word}: ${x.title}`, hint: x.file || "",
       run: () => (verb === "open" ? goNote(x) : verb === "impact" ? (G3 ? goGraph3d().then(() => impact3d(x)) : goNote(x)) : flyTo(x)) }));
   }
-  async function runPalette() {
+  // the list for the text on screen: Enter waits for it (a search still on its way would leave the list of an older text)
+  function runPalette() { return (pal.pending = listPalette()); }
+  async function listPalette() {
     const q = pal.input.value.trim(), my = ++pal.seq;
     let items = [];
     const hit = VERBS.map((v) => [v, q.match(v.re)]).find(([, m]) => m);
@@ -1761,6 +1763,7 @@
     } else if (ev.key === "Enter") {
       ev.preventDefault();
       if (pal.timer) { clearTimeout(pal.timer); pal.timer = null; await runPalette(); } // what is on screen is for an older text
+      else if (pal.pending) await pal.pending;
       runItem(pal.items[pal.active]);
     } else if (ev.key === "Tab") {
       ev.preventDefault();
