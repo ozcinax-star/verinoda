@@ -24,7 +24,71 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60, D61, D62)
+## Upgrading from 0.3.2 (D60-D66)
+
+### D64: Ranked unknowns
+
+- `verinoda check --json` and MCP `code_check` list fewer unknown sites by default. Each unknown Python site
+  has `rank` (`high` / `medium` / `low`) and `rank_why`; LOW sites are no longer in `sites` unless `--all`
+  (`include_exists=true`) is given - `summary.unknown` still counts them, and the new `unknown_summary` gives the
+  counts per rank and the LOW sites per cause. Sites are ordered absent, HIGH unknown, not installed, MEDIUM
+  unknown, guarded, LOW unknown (then path and line), no longer by verdict alone. A script that read every unknown
+  from `sites` should pass `--all`.
+- MCP `code_check`: `sites` is a list of one-line strings (`VERDICT path:line:col kind expr | ...`), no longer of
+  objects, and `files` lists only the files that could not be read (`summary.files` counts all). The CLI's `--json`
+  keeps objects.
+- Text output labels unknowns `unknown HIGH` / `unknown MEDIUM` / `unknown LOW` and ends with a line of rank
+  counts and the largest LOW causes.
+- More sites are `exists` than before (a receiver's declared type is read where jedi's goto found nothing), an
+  import inside `with pytest.raises(ImportError)` is `guarded`, and a module listed by its exact name in a
+  requirements file anywhere in the project is `not_installed` with `optional: true` instead of `absent`. An
+  absent name that is the only statement of a `with raises(AttributeError / TypeError / KeyError)` block is
+  `unknown` (MEDIUM, `expected_error`).
+- MCP `code_check` lines also carry `guard: ...`, `swallowed by ...`, `optional dependency` and `elsewhere: ...`.
+- Cached check answers are recomputed once (`CHECK_VERSION` 6). The first check in an environment builds a word
+  index of its sources (about 10-40 s for 16,000 files) and keeps it in the user cache
+  (`%LOCALAPPDATA%/verinoda/Cache/names/`, `~/Library/Caches/verinoda/names/`, `~/.cache/verinoda/names/`, or
+  `$VERINODA_CACHE_DIR/names/`; derived, safe to delete); `VERINODA_NAME_INDEX_BUDGET_S` (default 120) bounds the
+  time one check spends on it, and the next check continues a build that was cut short. A
+  `.verinoda/cache/check/names-*.json` left by an earlier build of this change is no longer read and can be
+  deleted.
+- `docs/ARCHITECTURE.md` gained one row for `codecheck_rank.py` (tests/test_docs.py requires every module there).
+
+### D65: Fewer false calls, tests of more ecosystems
+
+- The graph changes on the next `verinoda update` (the extraction stamp and the AST cache schema changed, so the
+  whole graph is rebuilt once, unchanged files included): fewer calls edges in Go, Rust, PHP, Ruby, JS/TS and
+  Python (`super()`) code - a callers or trace answer that listed a same-named method of another object no
+  longer does, and some true same-file calls through an untyped local are no longer in the graph (analyze says
+  `unknown` for them instead of a wrong caller). No call from vendored (`vendor/` at the root or beside its manifest, `third_party/`, `_vendor/` ...) or
+  generated files is in the graph any more (their definitions stay, marked `vendored`, so calls into them
+  still bind); minified files keep only their file node. Search still reads their text. To keep everything, set
+  `"index": {"vendored": true}` in `.verinoda/config.json`; the next `verinoda update` rebuilds the graph (use
+  `verinoda scan . --force` if the update refuses a graph that shrinks).
+- Test files: .NET test projects (`UnitTests/`, `Foo.Tests/`, `Tests/`), Xcode test targets at the root
+  (`MyAppTests/`), XCTest `FooTests.swift`, GoogleTest `x_test.cc`, Dart and Elixir `x_test.*` now count as
+  tests: they rank lower in search, and the tests view, impact's `tests_to_run` and the change review list them
+  as tests.
+- `.hh .hxx .ipp .inl .tpp` files enter the graph as C++ on the next `verinoda update`.
+
+### D66: Faster scans
+
+- Nothing to run. `verinoda scan` / `update` list files through `git ls-files` in a git repository whose root
+  has a `.gitignore`, which applies git's own .gitignore semantics. On most trees the files indexed are the
+  same; where Verinoda's matcher read a rule differently from git, git's reading now counts: a `*` does
+  not cross `/` (`test*.py` no longer drops `tests/foo.py`), case follows `core.ignorecase`, and a file
+  renamed only in case without `git mv` keeps git's spelling on a case-folding file system. Such a file
+  is added by the next scan and never evicted by a later rebuild that has to walk. A file ignored only by
+  the global git excludes file (`core.excludesFile`) is indexed as before (detect never read that file).
+  An ignore file that is not UTF-8 (UTF-16 from Windows PowerShell 5.1, an ANSI code page) keeps the walk
+  and its decoding. The detect() result has a new key
+  `enumeration` (`"git"` or `"walk"`), and on the git path its `ignored` list is git's report of what
+  .gitignore dropped.
+- A full search-index build writes `.verinoda/index/search.db.build-<pid>` and renames it to `search.db`
+  when complete; a build that fails keeps the previous index (it used to be deleted first). A leftover
+  build file from a killed build is removed by the next full build after an hour, or can be deleted by hand.
+
+### D60-D62
 
 - D62: the server has 37 tools; the new one, `grep_context`, is what an optional Claude Code Grep hook calls
   (through run_tool in the core profile). Nothing calls it unless that hook is configured

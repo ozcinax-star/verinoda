@@ -83,6 +83,9 @@ own measurements, with their caveats. The benchmark harness results are in
 | D60 | What an agent carries and cites | implemented | Built 2026-09-27 (section 33): passages number their lines (blank lines left out); the core MCP menu and instructions are about a quarter shorter and list decision_check only in a project with decision records; `index_update` scans a folder never scanned; the skills and instructions say to cite the narrowest lines and to run code_check on code written, not read. |
 | D61 | A four-tool menu and a gateway | implemented | Built 2026-09-27 (section 34): the core profile lists project_query, analyze, code_check and index_update (analyze and code_check with the arguments a question or an edit needs) and `run_tool`, which reaches the other core tools by name with their own argument checks; an agent session's first turn is 2,177 tokens larger than without Verinoda, 3,933 before. |
 | D62 | Verinoda in the Grep the agent already runs | measured, off | Built 2026-09-27 (section 35): `grep_context` answers a Claude Code PostToolUse hook on Grep with the definition, callers and callees of a searched symbol (at most 450 characters, nothing when the name is unknown); the hook ships as a template, opt-in; `ANALYZE_FIRST` holds the sentence that asks for analyze before a search by hand. An adoption study (125 sessions) switched neither on: neither found more facts; both stay built and off. |
+| D64 | Ranked unknowns, declared types | implemented | Built 2026-09-28 (section 36): unknown Python sites are ranked HIGH (a name defined nowhere in a word index of the project, its environment and the stubs, or a close misspelling of the receiver's declared type), MEDIUM or LOW; LOW sites are counted by cause in `unknown_summary` and listed only with `--all`; sites are listed absent, HIGH, not installed, MEDIUM, guarded, LOW, and MCP `code_check` gives one line per site; declared types (jedi's inference, comprehension `for` targets, pathlib joins, declared return types, pytest's own fixtures) decide `exists`, never `absent`; `with raises(E)` guards an import and a module listed by its exact name in any requirements file is `not_installed` (optional); the environment's word index is kept in the user cache and resumed where its budget stopped it. On a planted-misspelling diff: 50 planted sites all absent/HIGH/MEDIUM, 0 real HIGH, real unknowns 125 -> 70, planted sites in the first MCP answer 12 -> 42. Not done: `**kwargs` following, mypy/pyright, runtime probes. |
+| D65 | A graph with fewer false calls, and the tests of more ecosystems | implemented | Built 2026-09-28 (section 37): member calls bind in the file only through the method's own receiver or a receiver whose type the file states (Python `super()` to an in-file base in C3 order; Go, Rust, PHP, Ruby, JS/TS); no call leaves vendored, minified or generated code (`index.vendored` keeps them); .NET, Xcode, GoogleTest, Dart and Elixir tests are test files; the C# type-reference pass is linear; `.hh .hxx .ipp .inl .tpp` are C++. |
+| D66 | Faster scans | implemented | Built 2026-09-28 (section 38): detect() takes the file list from git at the top of a work tree (git's own .gitignore semantics; the same corpus as the walk on the seven trees measured, known differences listed; the walk still runs for nested and embedded repositories, submodules, negated .graphifyignore rules, non-UTF-8 ignore files, unreadable directories; a rebuild never evicts a file git keeps), the receiver sidecar's Python parses serve the search index's spans, anchors are written in one transaction from one read, and a from-scratch search index is built in a separate file renamed into place. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -3517,6 +3520,409 @@ rises at most 10 %.
 - Adoption: sessions that called Verinoda 14 of 25 as shipped, 15 with (a), 18 with (b), 17 with both. The hook
   fired 41 times in the (b) arm, 22 of them with context, about 65 tokens per session.
 - Verinoda as shipped (D61) against no Verinoda on the same questions: facts 65 -> 70, total cost -19 %.
+
+## 36. Ranked unknowns, declared types (D64, 2026-09-28)
+
+### 36.1 Why
+
+A study of the name check's `unknown` verdicts (the diff of the last 20 commits of this repository, 568 sites)
+found 125 correct sites and 37 planted misspellings in one undifferentiated `unknown` list, sorted by path. MCP
+`code_check` cuts its answer at 12,000 characters, and a listed site averaged 610 characters: the first answer
+kept the 12-13 absent sites and none of the 37 planted unknowns. Most unknowns were correct code whose receiver
+type jedi did not infer; two jedi 0.20 defects accounted for many of them (a comprehension variable used in the
+comprehension's `if` clause infers to nothing; `Path / "x"` infers to `PurePath`, so `mkdir`, `write_text` and
+`exists` are not found), and pytest's own fixtures (`tmp_path`, `monkeypatch`) had no type at all. Two kinds of
+false `absent` were also seen: an import inside `with raises(ImportError)` that the test expects to fail, and an
+optional dependency listed only in a requirements file under `tests/`.
+
+### 36.2 Decisions
+
+- **A rank for every unknown Python site** (`rank`, `rank_why`, `codecheck_rank.py`); the verdict never changes.
+  - HIGH: the name is defined nowhere in a word index of the project, its environment's Python sources and
+    jedi's stubs; or the receiver's declared type lacks it and has a close name (edit similarity >= 0.8).
+  - MEDIUM: the declared type lacks it (only a subclass or runtime code could add it); a `**kwargs` callee would
+    take a name defined nowhere; a keyword defined nowhere that the checked code reads back as an attribute
+    (`SimpleNamespace(retry_ms=3)` ... `cfg.retry_ms`); the receiver is bound by an import that is not installed,
+    or is a local bound from such a receiver in the same function (`df = pd.read_csv(p)`); an import that was not
+    decided; a name not found in an index that stopped early; an absent name that is the whole body of a
+    `with raises(E)` block (below).
+  - LOW: the receiver's type is not known and the name is defined somewhere.
+- **The word index is a superset test.** Every identifier-like word in the text of site-packages, the standard
+  library and jedi's typeshed counts as defined (comments and docstrings included), plus option strings as
+  argparse turns them into names (`"--no-mcp"` -> `no_mcp`) and the running interpreter's built-in names. The
+  project's other files count with their words; the checked files only with the names they define (definitions,
+  parameters, stores, imports, string constants; for an attribute site also the keywords they pass), so the
+  misspelling itself never counts. Names that only a compiled extension defines are outside the index; a
+  `__getattr__` on the receiver's container keeps a site out of HIGH. The environment's index is built once per
+  environment fingerprint (and jedi version), kept in memory and in the user cache
+  (`%LOCALAPPDATA%/verinoda/Cache/names/names-<fingerprint>.txt`, `~/.cache/verinoda/...`, or
+  `$VERINODA_CACHE_DIR`; one JSON header line, then one word per line), whether or not the project has
+  `.verinoda/`; the fingerprint hashes the interpreter's absolute path, so projects that share an environment share
+  its index. One check spends at most 120 s on it (`VERINODA_NAME_INDEX_BUDGET_S`; a value that is not a number
+  falls back to 120 with a warning), and with a time budget (MCP `code_check`) at most what the budget left. A
+  build cut short is kept with the number of files it read (the walk is sorted, so the order is fixed) and the next
+  check continues it; until it is complete a name not found in it is MEDIUM, never HIGH, and the note names the
+  budget that stopped it. `--no-cache` does not touch it (it is an index of the environment, not of the checked
+  files; deleting the file rebuilds it).
+  The receivers bound by an import that is not installed are read from each checked file's own text (a snippet's
+  text; in a diff the whole file, so an unchanged import line counts): an import line that has a site keeps its
+  verdict, one without a site (a diff's unchanged lines) is looked up in the environment's search path.
+  Precision limit (not measured): without a project environment (`--env none`, no `.venv`) the index holds only
+  the standard library, the stubs and the project, so a name of an uninstalled third-party package reached
+  through another module (a function that returns a DataFrame) can be ranked HIGH.
+- **Order and listing.** Sites are listed absent, HIGH, not installed, MEDIUM, guarded, then LOW. LOW sites are
+  counted by cause in `unknown_summary` (`high`, `medium`, `low`, `low_by_cause` with an example and one next
+  step per cause) and listed only with `--all` / `include_exists`. The ranking runs after the per-file cache, since
+  a rank depends on what every other file defines. Java, Kotlin and TypeScript sites are not ranked and stay
+  listed (`unknown_summary.not_ranked` counts them, so the counts sum to `summary.unknown`). Every unknown carries a one-step `next_step` (the cause's step when the site had none).
+- **MCP one-line sites.** `code_check` returns each site as one line: `VERDICT path:line:col kind expr | why |
+  guard: ... | swallowed by ... | optional dependency | elsewhere: qualname (at) | nearest: names` (or `next:
+  step` when there are no nearest names; each part only when the site has it); a long `why` is cut in the middle,
+  so its tail (where the name was looked for, a swallowing handler) stays; HIGH, MEDIUM and LOW label unknowns;
+  the `files` list keeps only files that could not be read. The cap cuts from the end, so an absent or HIGH site
+  is never cut before a LOW one.
+- **Declared types decide `exists`, never `absent` (the D32 asymmetry).** When jedi's goto finds nothing, the
+  receiver's declared type is read: jedi's inference of the receiver; a comprehension variable at its `for`
+  target; a local bound once to a path join, and `a / b` itself, from the left operand's pathlib class; a call
+  from the called function's declared return type (jedi `execute`); an unannotated parameter of a `test*`
+  function or a fixture in a pytest file, named like one of pytest's own fixtures, from that fixture's class
+  (unless the project defines a fixture of the same name). Any other unannotated parameter (and an expression
+  that starts from one) has no declared type: jedi would infer it from the call sites it finds, and one caller's
+  class is not the parameter's type (`self` / `cls`, `*args` / `**kwargs`, and pytest tests and fixtures excepted). A name in that type
+  is `exists`. A name it lacks stays
+  `unknown` and carries `declared` and `nearest` only when the class is closed in itself (then only a subclass
+  can add it); a keyword outside the declared method's signature is `unknown` with the same fields.
+- **False absents.** An import inside `with raises(E)` (`pytest.raises`, `assertRaises`, sympy's `raises`)
+  whose E is `ImportError` (or a broad `Exception`) is `guarded`. An absent attribute, keyword or dict key is never
+  guarded by such a block: a misspelling there raises the expected `AttributeError` / `TypeError` / `KeyError`
+  before the error the test means, so the test passes for the wrong reason. Only when the site is exactly the one
+  statement of the block (`with raises(AttributeError): obj.gone`, a test that the name is missing) is it
+  `unknown` MEDIUM (`expected_error`) instead of `absent`. A module whose package a requirements file anywhere in
+  the project lists by exactly its name (normalized; `tests/requirements/postgres.txt`, a bare name counts) is
+  `not_installed` with `optional: true`, not `absent`. Those files belong to docs, examples and sub-projects too,
+  so a module that only resembles a listed package (`sentry` for `sentry-sdk`) stays `absent`, with the listed
+  name as a hint in its message; a file with a line that is not a requirement (a README in `requirements/`) is
+  not read.
+- Cached answers of the previous rule set are not reused (`CHECK_VERSION` 6).
+
+### 36.3 Measured
+
+`verinoda check --json --all --no-cache --diff HEAD~20` on two clones of this repository at dd60358 with 50 names
+planted on changed lines (30 attributes, 20 keywords), the worktree's `.venv` as the environment; 568 sites
+each. The planting and triage rules were written by the rule author (in-sample).
+
+| | planted: absent / HIGH / MEDIUM / LOW | real code: absent / HIGH / MEDIUM / LOW | real unknowns | planted in the first MCP answer |
+|---|---|---|---|---|
+| misspellings (two middle letters swapped), before | 13 / - / 37 unranked | 0 / - / 125 unranked | 125 | 12 of 50 |
+| misspellings, after | 13 / 30 / 7 / 0 | 0 / 0 / 4 / 66 | 70 | 42 of 50 |
+| invented names (`charset=`, `make_dir`, `tokenize`), before | 14 / - / 36 unranked | 0 / - / 131 unranked | 131 | 12 of 50 |
+| invented names, after | 14 / 12 / 10 / 14 | 0 / 0 / 3 / 64 | 67 | 36 of 50 |
+
+- `exists` on the same 568 sites: 393 -> 448 (misspelling clone), 387 -> 451 (invented clone), from declared types.
+- The 7 planted MEDIUM misspellings are `Field(descirption=)` (pydantic's `Field` takes `**extra`) and two
+  `rpeo` on declared types whose close names were not close enough; the 14 LOW invented names are names defined
+  elsewhere on receivers whose type is still not known (`m.group(2).trim`, `Field(descriptions=)`,
+  `info.update(commits=)`, which is valid code).
+- Time on a loaded machine (four builders): 105 s -> 130 s and 79 s -> 123 s for the whole check; the word index
+  of the environment (16,660 files) took 20-41 s of that and is paid once per environment when the project has
+  `.verinoda/` (the clones had none, so every run built it). jedi time fell from 47-55 s to 19-25 s.
+- False absents: on a copy of a Django checkout with its `.venv`, `django/contrib/postgres/signals.py` has 1
+  `not_installed (optional)` import (psycopg, listed in `tests/requirements/postgres.txt`) instead of an absent;
+  the two `psycopg2` imports stay absent (psycopg2 is listed in no requirements file; they sit under
+  `if is_psycopg3:`, a flag imported from a module that sets it in try/except ImportError, which is not read as a
+  guard). On a copy of a sympy checkout, `sympy/core/tests/test_numbers.py:1431` (`from sympy import Pi` inside
+  `with raises(ImportError):`) is `guarded` instead of `absent`; the file has no absent site left.
+- Tests: `tests/test_codecheck_rank.py` (ranks, summary, order, the name index's superset rule, argparse dests,
+  not-installed receivers, raises guards, optional dependencies, declared types for the two jedi defects, path-join
+  locals, call results and pytest fixtures, MCP one-line sites under the cap, CLI labels; and one test per
+  finding of the adversarial review: resembling requirement names, prose requirement files, diff and snippet
+  ranks, locals from a missing module, duck-typed parameters, keyword-defined attributes, MCP line fields, raises
+  blocks around attribute and keyword typos, the resumed index and its note, a bad budget value).
+- After the review's fixes, the real CLI (`python -m verinoda check verinoda/paths.py --repo <a copy of this
+  repository, 720 .py, no .verinoda/> --env <the worktree's .venv> --no-cache`), on a machine loaded by other
+  runs: the first run 44 s, of which 11 s built the environment's index (16,660 files, kept in the user cache);
+  then 2.3-4.2 s in most runs (26 s and 38 s once each, load), against 1.6-21 s for dd60358 in the same
+  alternating runs. The project's own words (720 files) take 0.7-1.2 s per call.
+
+### 36.4 Not done
+
+- `**kwargs` following (the study's M2), mypy or pyright as a second resolver, the opt-in runtime probes.
+- A flag imported from another module (`is_psycopg3`) as an import guard.
+- The project's own words are read again on every call (0.7-1.2 s for 720 files); a cache keyed by file stat
+  would save that.
+- `references/local.py` (`local_versions`, which `declared()` reads) still takes a prose line of a root
+  `requirements/*.txt` as a package; only the requirements files read for optional dependencies skip prose.
+- The close-name threshold (0.8) leaves a transposed four-letter name (`rpeo` for `repo`, 0.75) at MEDIUM.
+- The before/after counts on the study's 6-module, Django 30-file and sympy 30-file samples were not re-run.
+
+## 37. A graph with fewer false calls, and the tests of more ecosystems (D65, 2026-09-28)
+
+### 37.1 Why
+
+Measuring the graph on eight public repositories (Go, Rust, C#, Ruby, PHP, C, C++, TypeScript) and on a large
+Python web framework showed calls edges that do not exist, labelled `EXTRACTED`, and noise that crowds out
+the code a question is about:
+
+- A member call bound to whatever function of the same name its file defines. Python `super().__delattr__()`
+  inside `__delattr__` became a self-loop (828 of the framework's 944 self-loop calls edges, 825 of them
+  `EXTRACTED`), or an edge to another class's `__delattr__` of the file. Go `b.Bind(...)` (a parameter of an
+  interface type from another package) became `Context.ShouldBindWith -> Context.Bind`, and with it a false
+  cycle. Rust `builder.build_parallel().run()` bound to the file's free `run`, `Command::new()` to the file's
+  own `new`; PHP `$this->middlewareDispatcher->handle()` became `App::handle -> App::handle`. analyze printed
+  these as context (`called by: __delattr__ (...:111); __delattr__ (...:291)`, both false).
+- Vendored, minified and generated code was extracted like product code: three minified chart libraries were
+  31 % of the nodes and 69 % of the calls edges of a Ruby job-queue repository; flex/bison output added 188
+  call edges to a C repository.
+- A C# test project (`src/UnitTests/`, `src/IntegrationTests/`, `*.Tests/`) was product code to
+  `testcode.is_test_file`: 365 files of a 591-file C# repository, whose tests then led a ranking where the
+  product file belonged (study question A1). PHPUnit `FooTest.php` outside `tests/`, GoogleTest `x_test.cc`,
+  XCTest, Dart and Elixir tests were missed the same way.
+- The C# type-reference pass searched every node for each unresolved reference: 44 % of C# extraction in a
+  profile.
+- `.hh .hxx .ipp .inl .tpp` were in neither the detection nor the extractor table.
+
+### 37.2 Decisions
+
+- **Member calls bind in the file only through the method's own receiver** (`project_index/extractors/
+  engine.py`, `go.py`, `rust.py`; local changes to the vendored extractor, docs/UPSTREAM.md):
+  - Python `super().m()` binds to `m` of the enclosing class's bases that the file defines, in C3 order (Python's
+    MRO: `class D(B, C)` with `B(A)`, `C(A)` searches B, C, A); `object` is passed over; a base the file does not
+    define ends the search, and bases that admit no linearization bind nothing. Otherwise the call stays in
+    `raw_calls`, where no pass binds it by name. `self.m()` / `cls.m()` take the own class's `m`, then an in-file
+    base's, and only then the file-wide name as before.
+  - JS/TS and Ruby: a member call binds in the file on `this` / `self` / Ruby `self.class` (the own class first).
+    Ruby: a constant receiver naming a class the file defines with that method (`Foo.make`) binds to it; any
+    other Ruby receiver (`capsule.fetcher.x`, a block parameter) is deferred to the receiver-typed resolver
+    (`x = Foo.new`). JS/TS defer only `super.m()`; other JS/TS receivers keep the file-wide name as before.
+  - PHP: `$this->m()` binds to the own class. A receiver whose class the file states binds to that class's method
+    (a typed parameter `Foo $x`, `$x = new Foo()` in the method, a typed or promoted property, whose declared type
+    holds whatever is assigned, or `$this->p = new Foo()` in the class; a class of another file binds nothing in the file). An untyped receiver binds only to
+    the one same-named method of another class of the file, never to the caller's own class's or an in-file
+    base's (`$this->middlewareDispatcher->handle()` inside `App::handle`). There is no cross-file PHP
+    receiver-typed resolver.
+  - Go: a selector call binds to a method of the receiver's type, where the receiver is the method's own
+    receiver, a parameter declared with a type of the package (`func record(h *metricHistory)`), a local or
+    package variable of `&T{}`, `T{}`, `var x T` or a file function returning `T`/`*T` (`srv := NewServer()`),
+    or a field of such a receiver (`s.h.Serve()`); a method promoted from an embedded struct is found (the
+    shallowest depth, one candidate; none when an embedded type of another package comes first). Every name a
+    body declares (a range variable, a closure parameter ...) shadows a package variable. A name given
+    two types in one scope, a chained call result or a parameter of another package's type stays in
+    `raw_calls`. A bare `f()` never binds to a method.
+  - Rust: `self.m()` binds to the impl type's (or trait's) own `m`, else the existing `rust_self_type` path;
+    `Self::m()` / `Type::m()` / `Type::<T>::m()` bind only when the file has an impl of that type with `m`; a
+    bare `f()` or `module::f()` never binds to a method; any other receiver stays in `raw_calls`.
+  - `cache._AST_CACHE_SCHEMA` 7: per-file results of the old rules are not reused.
+- **No call leaves vendored, minified or generated code** (`project_index/vendored.py`, `vendored_reason`, applied
+  in `extract.py`):
+  - vendored: a folder `_vendor/`, `third_party/`, `third-party/` or `thirdparty/` anywhere below the scan root
+    (exact spelling); `vendor/` at the root, beside the manifest of a tool that vendors into it (`go.mod`,
+    `composer.json`, `Gemfile`, `Cargo.toml`) or under a static-asset folder (`static/`, `assets/`, `public/`,
+    `wwwroot/`); `deps/` at the root beside `mix.exs` / `rebar.config`; a git submodule (`.gitmodules`) under
+    `deps/` or `extern/`. A product namespace `Vendor/`, `Vendors/`, `app/controllers/vendor/`, `lib/deps/` or
+    `src/extern/` is product code. The folders are read from the path as the scan gives it, relative to the
+    root: a folder above the root, or the target of a junction or symlink, never counts.
+  - minified: a `.min.js` / `.bundle.js` name (a `make-bundle.js` script is not one), or a `.js`/`.mjs`/`.cjs`/
+    `.css` file (at least 4 KiB) whose first 64 KiB hold at least 90 % of their bytes in lines of code over
+    1,000 bytes (a long line of data, such as a lookup table, is not code; `.json` is never minified).
+  - generated: a generator's header among the first 40 lines. The marker opens a comment ("Code generated ...
+    DO NOT EDIT", `@generated` as a word, "This file is @generated", "A Bison parser, made by", "A lexical
+    scanner generated by flex", "Generated by the protocol buffer compiler"), or the comment opens with "This
+    file is auto-generated" / "Auto-generated by" and the head warns against editing it ("do not edit",
+    "regenerate", "will be lost"). A comment that only mentions generated code, and a marker written in a
+    string, are product code. `guards.is_generated` uses the same rule.
+
+  A minified file keeps its file node only (its names are machine names nobody imports). A vendored or generated
+  file keeps its definitions, each marked `vendored: <reason>`, so an import of them still binds to them and not
+  to a same-named product function (`from vendor.yamlish import parse`), but no edge other than its structure
+  (`contains`, `method`, `defines`, `inherits` ...) leaves it and its raw calls are dropped. The clusters, the map and the
+  callers views still show those definitions. The build prints which files were reduced. The search index still
+  reads the files' text. `"index": {"vendored": true}` in `.verinoda/config.json` (or `VERINODA_GRAPH_VENDORED=1`)
+  keeps everything; the value is part of the extraction stamp, so changing it rebuilds the graph on the next
+  `update`.
+- **Test files** (`testcode.TEST_FILE_RE`): a .NET test project folder (`Foo.Tests/`, `AutoMapper.UnitTests/`,
+  `Foo.Test/`, `UnitTests/`, `IntegrationTests/`, `FunctionalTests/`, `AcceptanceTests/`, `UITests/`,
+  `E2ETests/`, `Tests/`), an Xcode test target at the root (`MyAppTests/`), `unit_tests/`,
+  `integration-tests/` ...; XCTest `FooTests.swift`; `x_test.cc`, `x_unittest.cpp` (also `.c`, `.cxx`; not a
+  product's `self_test.c`); `x_test.dart`, `x_test.exs`. `Contests/`, `Latest.php`, `attest.cc`, a folder that
+  merely ends in `Tests` (`src/HealthTests/`, `Features/ABTests/`), `app/Models/LabTest.php` and
+  `SpeedTest.swift` are not tests (PHPUnit tests live in `tests/`).
+- **C# placeholders by label**: a dict label -> first placeholder, built once and updated on each new stub,
+  replaces the scan; the result is the same by construction and by test.
+- **C++ suffixes**: `.hh .hxx .ipp .inl .tpp` are C++ in detection, extraction, the C++ member-call resolver,
+  spans, anchors, search and the lexicon.
+
+### 37.3 Measured
+
+Graph built with `index.build(force=True)` on fresh copies, base = dd60358, with and without each change. These
+measurements predate the fixes of the review of D65 (the narrower vendored folders and generated header, the
+minified content rule, vendored definitions kept, PHP and Go receiver types, `self.class`, C3 order, the
+stricter test folders); they were not repeated after them.
+
+- **C# placeholders** (591-file C# repository, `extract()` of its 513 `.cs` files, twice each): the pass
+  4.15 / 4.27 s -> 0.05 / 0.05 s, `extract()` 15.7 / 15.5 s -> 12.8 / 10.7 s (loaded box). Full graph: 15,139
+  nodes, 30,677 edges before and after, 0 nodes and 0 edges different.
+- **Member calls** (calls edges whose call site is in a file of the language, before -> after, with the
+  vendored switch on so #4 does not mix in; "retargeted" = the same caller and line still has a calls edge, to
+  another target; hand-checked random samples of the purely removed edges):
+
+  | repository | calls | removed | retargeted | added | purely removed: sample read by hand |
+  |---|---|---|---|---|---|
+  | Python web framework (2,888 .py) | 22,844 -> 21,805 | 1,944 | 907 | 905 | 1,037, all at a `super()` call (1,017 `super().m()`, 20 `super(C, x).m()`): the caller itself or another class's `m`; none at `self.`. 483 of the added edges are `super()` calls bound to an in-file base; self-loop calls edges 944 -> 118 |
+  | Go web framework (130 files) | 1,346 -> 1,267 | 85 | 8 | 6 | 77; 20 read: 4 true (untyped locals `pairs`, `engine`, `msg`, a test recorder), 1 interface method, 15 false (`c.Request.Context()`, `mw.Close()`, `b.Bind()` ...) |
+  | Rust search tool (237 files) | 3,171 -> 1,694 | 1,809 | 636 | 332 | 1,173; 25 read: 3 true (a field and locals of in-file types), 22 false (`Command::new`, `PathBuf::from`, `path.parent()`, builder chains on external types) |
+  | PHP micro-framework (145 files) | 551 -> 526 | 25 | 3 | 0 | 22, all `$this->x->m()` delegations bound to the caller's own method: false; self-loops 23 -> 0 |
+  | Ruby job queue (.rb of 347 files) | 588 -> 458 | 133 | 11 | 3 | 122; 18 read: 5 true (`tab.quiet!`, `result.job_results[k].add_metric` ...), 13 false (`Array#each` -> `ProfileSet.each`, `config.handle_exception` -> the caller ...) |
+  | TS web framework (.ts of 481 files) | 746 -> 743 | 6 | 4 | 3 | 2 (`super.route()` self-loop, a `v.toString()`) |
+  | C (432 files), C++ (145 files) | 2,775 -> 2,775; 2,408 -> 2,408 | 0 | | 0 | unchanged |
+
+  Added edges, sampled the same way: 15 of the 483 `super()` edges in the Python framework, 14 right (the base
+  that defines the method, past in-file mixins that do not); the 15th was `super(override_settings,
+  self).__init__()` in a subclass, bound to `override_settings.__init__` - `super(C, obj)` now searches the bases
+  of C (after the measurement; the test covers it). 10 of Rust's 332 added edges: all right (`FormatBuilder::new()`
+  to `FormatBuilder.new`, not the file's other `new`s; `self.is_empty()` to the own type). A base written as
+  `module.Class` gives no `inherits` edge, so the search passes over it (right in the one case seen,
+  `socketserver.ThreadingMixIn` defines no `__init__`, but not in general).
+
+  A first version also deferred every JS/TS receiver other than `this`; on the TS framework it removed 37
+  edges of which a sample of 12 had 5-6 true (untyped locals of classes the file defines, a typed parameter the
+  TS resolver did not bind), so JS/TS defer `super.m()` only.
+
+  The false edges of the study's probe table are gone (`ShouldBindWith -> Context.Bind` and its cycle,
+  `files_parallel -> run`, `App::handle -> App::handle`, the `super().__delattr__` self-loop and the
+  cross-class `LazySettings.__delattr__ -> UserSettingsHolder.__delattr__`). The price: true same-file edges
+  through an untyped local (`engine := New(); engine.With()`, `let p = ...; p.add_child()`, a Ruby block
+  parameter) are gone too, about one in five of the purely removed Go edges, one in eight in Rust and one in
+  four in Ruby by the samples; typing Go locals from constructors and Rust `let x = Type::new()` would bring
+  them back. The graph does not report them as unknown yet: analyze's callers answer says "no call edge".
+- **Vendored / minified / generated** (graph before -> after, the member-call change in both):
+
+  | repository | nodes | edges | calls | files reduced to a node |
+  |---|---|---|---|---|
+  | Ruby job queue | 2,851 -> 1,981 | 4,468 -> 2,413 | 1,628 -> 507 | 3 minified chart libraries, a generated `db/schema.rb` |
+  | C JSON processor | 1,353 -> 903 | 5,465 -> 3,864 | | `vendor/decNumber/` (31 files), flex/bison `lexer.c/h`, `parser.c/h` |
+  | Python web framework | 47,392 -> 46,937 | 102,969 -> 102,186 | 22,127 -> 21,846 | 68 files under `admin/static/.../vendor/` (jQuery, select2, XRegExp) |
+  | Go web framework | 2,017 -> 1,980 | 4,761 -> 4,710 | 1,267 -> 1,260 | a protoc-generated `test.pb.go` |
+  | Rust, PHP, TS, C++ | unchanged | | | none |
+- **Test files** recognised by `is_test_file`: C# repository 61 -> 421 of 514 code files (+360: `src/UnitTests`
+  325, `src/IntegrationTests` 37, `src/AutoMapper.DI.Tests` 3); the C repository +1 (`src/jq_test.c`, its test
+  runner); the other seven repositories unchanged.
+
+## 38. Faster scans: the file list from git, one parse, one commit, a renamed search build (D66, 2026-09-28)
+
+### 38.1 Why
+
+A profile of a full scan of a django checkout (6,653 tracked files, 2,888 Python) put the time outside the
+tree-sitter pool: detect() spent about 18 s (profiled) evaluating every .gitignore rule per path in Python,
+taking a realpath per file and asking git for the tracked files anyway, and it ran again on every update
+(6 s of a one-edit update). Python files were parsed 9,209 times for 2,888 files: the receiver sidecar parsed
+1,585 of them outside the per-version parse cache that the search index's span lookups use, so the search
+index parsed them again. The anchors pass read and hashed each file twice and committed once per file. A full
+search-index build deleted `search.db` first and wrote the new one through the ordinary WAL connection, so a
+reader could meet a half-built index and a failed build left none.
+
+### 38.2 Decisions
+
+- detect() (vendored `project_index/detect.py`, hand-edited and marked "Verinoda patch") takes its file
+  list from git when the scan root is the top of a git work tree, .gitignore rules are in play at the root
+  and symlinks are not followed: `git ls-files --cached` (tracked files, which gitignore rules never drop)
+  plus `--others --exclude-per-directory=.gitignore --exclude-from=<info/exclude>`, the rules the walk
+  applies; the user's global excludes file is not passed because the walk never read it, and the directory
+  names the walk prunes unconditionally (`_SKIP_DIRS`: node_modules, venv, build, ...) are passed as
+  `--exclude=<name>/` so git does not enumerate an un-ignored one only for its files to be discarded.
+  The .gitignore rules are git's own, which the Python matcher of the walk does not reproduce everywhere:
+  its `*` crosses `/` (`test*.py` drops `tests/foo.py`; git keeps it), it folds case where the file
+  system does while git follows `core.ignorecase`, and a UTF-16 or ANSI-code-page .gitignore the walk
+  decodes is not valid UTF-8 to git. So the corpus of the git path is git's view of the tree; the walk
+  runs where the difference would be large (the encoding case, see below), and the reconcile step of
+  a rebuild (`ignored_predicate(gitignore=True)`) never takes a matcher-only verdict as evidence to
+  evict a file git lists as untracked and not ignored: the tracked-file exemption, extended to the
+  files git keeps, so a rebuild that walks after one that listed through git keeps them. Every git call
+  of detect.py drops the repository-local variables a git hook exports (`GIT_DIR`, `GIT_INDEX_FILE`,
+  ...), which would make `git -C <root>` describe another repository or index. The rest of what
+  the walk decides is still decided the same way: noise dirs and the output dir are pruned whatever git says,
+  `.graphifyignore` and `--exclude` rules (root chain and each directory's own file) are evaluated per
+  directory and per file, skipped names, sensitive files, and links: an lstat per file (the realpath check
+  only for a link), and a realpath once per directory, because git lists files through a Windows junction
+  as through a directory while the walk's per-file realpath check kept a junction out of the root out. The
+  walk still runs for a nested repository or an untracked worktree (git lists
+  it as `dir/`), a `.gitmodules` file or a gitlink without one (`git add` of a nested clone records an
+  embedded repository that way, and git lists none of its files), a `!` rule in .graphifyignore (it may
+  re-include a file .gitignore drops, which git never lists), a .gitignore or `info/exclude` that is not
+  UTF-8, a directory git cannot open (the walk names it in `walk_errors` and warns; git only warns on
+  stderr), a git failure, or `enumeration="walk"`. The directory checks run in a loop, not a recursion
+  (a path can be deeper than Python's recursion limit). The result says which ran
+  (`"enumeration"`); `ignored` on the git path is git's report of what .gitignore dropped (a wholly ignored
+  directory as one entry), which may group entries differently from the walk. A file renamed only in
+  case without `git mv` on a case-folding file system keeps the index's spelling on the git path (the
+  walk has the disk's); the path opens either way there, and checking the disk spelling would cost a
+  directory listing per directory on every scan. Word counts stay (they feed GRAPH_REPORT.md and are
+  stat-cached).
+- `refresh_receiver_sidecar` parses through the per-version cache (`_PYINFO_CACHE`), so the span lookups
+  of the search index that runs next in the same process reuse its parses.
+- `anchors.update_facts` computes each file's facts from the bytes it already read (it read and hashed the
+  file again through `facts_for`) and writes every new row in one transaction
+  (`Store.put_file_facts_many`); `facts_for` is unchanged for one-off callers.
+- A from-scratch search index is written to `search.db.build-<pid>` with no journal, no syncs and a 64 MB
+  page cache, switched to WAL, and renamed over `search.db` after the old index's `-wal` and `-shm` files are
+  removed (a WAL left next to the new file would be replayed into it). Where the old file is held open and
+  cannot be replaced (Windows), the pages are copied into it with SQLite's backup API. A failed build leaves
+  the old index; build files a killed build left are removed after an hour. The build file is opened for
+  installing without creating it (`mode=rw`) and must hold the index's `meta` table: a build file the
+  hour sweep removed while it was still being written (POSIX lets a live file be unlinked) fails the
+  build and keeps the old index instead of installing an empty database.
+- Not done: lexicon and anchors still parse Python separately (report item 6b), the three derived passes
+  still run one after the other (6e), and definition spans are not stored in graph nodes (item 9). Every
+  update still builds `ignored_predicate(gitignore=True)` in `watch._rebuild_code` for its reconcile step,
+  which runs `git ls-files` and evaluates the .gitignore rules for the graph's files (and, the first time
+  the rules alone drop a file, `git ls-files --others` to see whether git keeps it): part of the update
+  cost the report put on detect() remains there. The parse sharing of the sidecar is bounded by
+  `index._CACHE_MAX` (4,096 entries, cleared wholesale): a repository with more Python files than that
+  gets part of the gain (an existing limit).
+
+### 38.3 Measured
+
+Machine shared with other builds (CPU load 88-100 % throughout); every wall time is an upper bound and
+replicates differ by up to 2x. The django checkout was copied without its `.verinoda` folder.
+
+- Same corpus on the trees measured (not in general: see the matcher differences in 38.2): `files`,
+  `total_words` and `unclassified` (what the rebuild reads from detect()) identical, walk vs git, on seven
+  trees: the django checkout, hono (TS), sidekiq (Ruby), AutoMapper (C#), jq (C; it
+  has submodules, so the walk ran), the orders_app example with an ignored directory, an ignored file, an
+  untracked file and a tracked noise dir added, and this repository as a linked worktree (a `.git` file).
+- detect() on the django checkout, warm, under the profiler: 17.7 s (walk) -> 2.3 s (git). Unprofiled, two
+  runs each: walk 16.7 / 18.7 s, git 6.1 / 2.6 s (loaded box). hono 1.6 / 1.2 -> 0.9 / 1.3 s; sidekiq
+  0.8 / 0.4 -> 1.1 / 0.5 s (small trees: within noise).
+- `verinoda scan` and then two one-line-edit `update`s of a fresh django copy, twice per code version, each
+  from a frozen copy of the code. Wall seconds (scan / update 1 / update 2): before 281.9 / 90.0 / 110.2
+  and 302.9 / 81.5 / 64.5; after 276.8 / 156.7 / 127.2 and 246.1 / 141.5 / 117.1. Phase seconds of the
+  scans (index / search / lexicon / anchors): before 124.8 / 55.0 / 20.3 / 64.6 and 108.1 / 81.9 / 19.9 /
+  78.6; after 154.3 / 55.0 / 27.9 / 11.7 and 146.5 / 33.5 / 31.4 / 18.6. Index phase of the updates:
+  before 68.7, 61.3, 67.3, 45.8; after 102.0, 68.6, 116.1, 68.5.
+- Reading: the box was at 100 % CPU with about 28 Python processes of other builds during the after runs
+  (the before runs overlapped this build's own test runs instead), so the walls and the index phase are
+  load, not code: the lexicon phase, which this change does not touch, is 40-55 % slower in the after runs.
+  The one phase the load cannot explain is anchors: 64.6 / 78.6 s -> 11.7 / 18.6 s (one read, one commit).
+  The search phase (55.0 / 81.9 -> 55.0 / 33.5 s) mixes the renamed build with the sidecar's parse reuse;
+  the build file's effect alone was not isolated (an alternating build-only run was stopped because the
+  box did not free up). The detect() gain shows only in the profile above: the scan JSON has no detect
+  phase. An idle-box rerun of these two benches is needed before quoting end-to-end numbers. (The after
+  runs used the code before the once-per-directory junction check was added: one realpath per kept
+  directory, about 700 on django.)
+- Tests: `tests/test_detect_git.py` (git list == walk on a repository with tracked-but-ignored, nested
+  .gitignore, info/exclude, .graphifyignore dir and file, --exclude, a deleted tracked file, a noise dir,
+  the output dir, symlinks where available, a junction out of the root on Windows, an un-ignored
+  node_modules holding a repository, inherited `GIT_DIR`/`GIT_INDEX_FILE`; the walk for a negation, a
+  nested repository, .gitmodules, an embedded repository (gitlink without .gitmodules), a UTF-16 and an
+  ANSI .gitignore, an unreadable directory, no .gitignore, a git failure; a 1,100-level path; the ignore
+  predicate keeps what git keeps, and a full rebuild that walks after one through git evicts nothing
+  git keeps), `tests/test_search_build.py` (every table of the renamed build equals a build
+  through the ordinary connection and the default location, on two examples; a held index rebuilt through
+  the backup API; a failed build leaves the old index; a build file removed before it is installed fails
+  the build and keeps the old index), `tests/test_line_endings.py` (no CR bytes in the package and its
+  tests), `tests/test_anchors.py`
+  (`update_facts` stores the rows `facts_for` stores, in one commit, over every file of `examples/`),
+  `tests/test_index.py` (the sidecar's parses serve the span lookups); `tests_upstream/test_detect.py`
+  and the other detect tests pass unchanged (281 passed).
 
 ## Sources
 
