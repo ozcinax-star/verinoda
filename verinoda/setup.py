@@ -251,8 +251,15 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
     # already has whatever setup changed, so the next setup or update never finds setup's own writes as
     # changed files (a graph rebuild of the whole project when another interpreter ran setup). Verinoda's
     # own files are not in the index anyway (verinoda.selffiles); the rest of a shared config is.
-    installs = [(agent, installer.install(agent, scope, project_dir=repo, home=home, with_mcp=with_mcp))
-                for agent in chosen]
+    # One agent's install failing (a folder named .mcp.json, a config this user cannot read) is that agent's
+    # error in the report; the project is still indexed, as it was when setup indexed first.
+    def _install(agent: str) -> dict:
+        try:
+            return installer.install(agent, scope, project_dir=repo, home=home, with_mcp=with_mcp)
+        except OSError as exc:
+            return {"ok": False, "result": "error", "errors": [f"{type(exc).__name__}: {exc}"]}
+
+    installs = [(agent, _install(agent)) for agent in chosen]
     st = open_store(repo, create=True)
     try:
         first = not graph_path(repo).exists() or st.latest_snapshot() is None

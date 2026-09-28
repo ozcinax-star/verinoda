@@ -2638,11 +2638,13 @@ def _own_in_nodes(repo: Path, nodes) -> list[str]:
     """``source_file`` values of nodes from Verinoda's own files (:mod:`verinoda.selffiles`, D68). The build
     excludes those files and evicts their nodes; this catches what it kept anyway (a node the fail-closed
     reconcile preserves, such as one under a graph root recorded for another folder the index was copied from)."""
-    from verinoda.selffiles import own_filter
+    from verinoda.selffiles import could_be_own, own_filter
 
-    own = own_filter(repo)
+    own, maybe = own_filter(repo), could_be_own(repo)
     out: set[str] = set()
     for sf in {n.get("source_file") for n in nodes}:
+        if not isinstance(sf, str) or not maybe(sf):  # no path resolved for a file that cannot be one
+            continue
         p = _local_source(repo, sf)
         if p is not None:
             try:

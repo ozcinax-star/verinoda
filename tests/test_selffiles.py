@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from verinoda import buildlock, freshness, index, selffiles, workflow
+from verinoda import buildlock, freshness, index, selffiles, treestate, workflow
 from verinoda import setup as setup_mod
 from verinoda.agents import installer as _installer
 from verinoda.paths import graph_path, search_db_path
@@ -77,7 +77,8 @@ def test_the_installer_writes_its_skills_into_the_folders_the_rule_leaves_out(tm
     for agent in installer.AGENTS:
         t = installer._target(agent, "project", tmp_path, tmp_path / "home", True)
         rel = t.skill.relative_to(tmp_path).as_posix()
-        assert selffiles.is_own(rel) and rel.startswith(selffiles.SKILL_PREFIXES), rel
+        assert selffiles.in_skill_dir(rel) and rel.startswith(selffiles.SKILL_PREFIXES), rel
+        assert not selffiles.is_own(tmp_path, rel)  # no file there: nothing carries the marker
         assert t.manifest == tmp_path / selffiles.MANIFEST_DIR / selffiles.MANIFEST_NAME
     assert installer.MARKER.encode("utf-8").startswith(selffiles.MARKER_PREFIX)
 
@@ -85,7 +86,7 @@ def test_the_installer_writes_its_skills_into_the_folders_the_rule_leaves_out(tm
 def test_own_files_are_never_listed_tracked_or_not(project):
     _write(project, SKILL, "<!-- verinoda-managed v1 -->\nskill\n")
     _write(project, CODEX_SKILL, "<!-- verinoda-managed v1 -->\nskill\n")
-    _write(project, ".claude/skills/verinoda/notes.md", "anything in the skill folder\n")
+    _write(project, ".claude/skills/verinoda/notes.md", "the user's notes next to the skill (no marker)\n")
     _write(project, ".claude/skills/other/SKILL.md", "another skill: the project's\n")
     _write(project, "tools/verinoda_rules.md", "<!-- verinoda-managed v1 -->\nwritten whole by Verinoda\n")
     _write(project, "tools/taken_over.md", "listed, but the user replaced it (no marker)\n")
@@ -97,11 +98,13 @@ def test_own_files_are_never_listed_tracked_or_not(project):
                                                                          "args": ["mcp", "serve"]}}}))
     _git(project, "add", "-A", "--", ".claude", ".agents", "tools")  # a team may commit its skill
     files = set(list_files(project))
-    assert not {SKILL, CODEX_SKILL, ".claude/skills/verinoda/notes.md", "tools/verinoda_rules.md"} & files
-    # the user's own files stay: another skill, a listed file without the marker, a shared config
-    assert {".claude/skills/other/SKILL.md", "tools/taken_over.md", ".mcp.json", "orders/service.py"} <= files
-    assert selffiles.ignore_patterns(project) == ["/.claude/skills/verinoda/", "/.agents/skills/verinoda/",
-                                                  "/tools/verinoda_rules.md"]
+    assert not {SKILL, CODEX_SKILL, "tools/verinoda_rules.md"} & files
+    # the user's own files stay: a file without the marker in the skill folder, another skill, a listed file
+    # without the marker, a shared config
+    assert {".claude/skills/verinoda/notes.md", ".claude/skills/other/SKILL.md", "tools/taken_over.md",
+            ".mcp.json", "orders/service.py"} <= files
+    # one literal rule per own file (the marker decides; a folder rule would take notes.md too)
+    assert selffiles.ignore_patterns(project) == ["/" + CODEX_SKILL, "/" + SKILL, "/tools/verinoda_rules.md"]
 
 
 def test_a_broken_manifest_never_breaks_the_file_list(project):
@@ -273,3 +276,126 @@ def test_setup_cli_twice_is_a_noop(project, tmp_path):
     assert first.returncode == 0, first.stderr
     second = json.loads(subprocess.run(argv, capture_output=True, text=True, env=env, timeout=300).stdout)
     assert second["index"]["mode"] == "noop" and second["index"]["graph"] == "none"
+
+
+# -- review of D68: the marker decides, at any depth; the debug ledger's commit side; setup's order -------
+
+def _scan(repo: Path) -> dict:
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        return workflow.scan(st, repo)
+    finally:
+        st.close()
+
+
+def _update(repo: Path) -> dict:
+    st = open_store(repo)
+    try:
+        return workflow.update(st, repo)
+    finally:
+        st.close()
+
+
+def test_a_committed_skill_is_no_change_in_the_debug_ledgers_trees(project, tmp_path, monkeypatch):
+    """M1: the working-tree side left the skill out and the commit side kept it, so a committed skill
+    (a clean tree) read as deleted and "changed during the run" in every attempt."""
+    _launcher(monkeypatch)
+    _installer.install("claude", "project", project_dir=project, home=tmp_path / "home")
+    _git(project, "add", "-A")
+    _git(project, "commit", "-q", "-m", "the team commits its skill")
+    head = treestate.head_commit(project)
+    ids = treestate.current(project)["files"]
+    assert SKILL not in ids and ".mcp.json" in ids
+    ch = treestate.changes_from_ids(project, head, ids, treestate.base_ids(project, head))
+    assert ch["tree_files"] == {} and ch["drift"] == []
+    assert treestate.changes_vs_base(project, head)["tree_files"] == {}
+    # a commit-sourced tree of the same code is the same tree (the same code_tree_id)
+    assert treestate.commit_files(project, head) == ids
+    assert SKILL in treestate.commit_files(project, head, keep_own=True)
+    assert SKILL in {p for _, _, p in treestate.commit_entries(project, head, keep_own=True)}
+    between = treestate.changes_between_commits(project, treestate.resolve_commit(project, "HEAD~1"), head)
+    assert ".mcp.json" in between["tree_files"] and SKILL not in between["tree_files"]
+    # the user takes the skill over (the marker gone): theirs, compared like any other file on both sides
+    _write(project, SKILL, "our own notes now\n")
+    ids = treestate.current(project)["files"]
+    ch = treestate.changes_from_ids(project, head, ids, treestate.base_ids(project, head))
+    assert list(ch["tree_files"]) == [SKILL] and ch["drift"] == []
+    assert list(treestate.changes_vs_base(project, head)["tree_files"]) == [SKILL]
+
+
+def test_a_nested_projects_skill_is_left_out_of_the_enclosing_index(tmp_path, monkeypatch):
+    """M2: `verinoda setup mono/orders_app`, then the monorepo indexed at its root: the package's skill is
+    Verinoda's there too, and another interpreter's setup of the package rebuilds nothing at the root."""
+    if shutil.which("git") is None:
+        pytest.skip("git not available")
+    parent = tmp_path / "mono"
+    sub = parent / "orders_app"
+    shutil.copytree(EXAMPLE, sub, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc"))
+    _launcher(monkeypatch)
+    _installer.install("claude", "project", project_dir=sub, home=tmp_path / "home")
+    _git(parent, "init", "-q")
+    _git(parent, "add", "-A")
+    _git(parent, "commit", "-q", "-m", "init")
+    nested = "orders_app/" + SKILL
+    files = list_files(parent)
+    assert nested not in files and {"orders_app/.mcp.json", "orders_app/orders/service.py"} <= set(files)
+    assert selffiles.ignore_patterns(parent) == ["/" + nested]
+    res = _scan(parent)
+    assert "own_files_dropped" not in res  # the build's exclude rules kept it out, not the last-line drop
+    assert nested not in index.graph_source_files(parent) and nested not in _search_files(parent)
+    _launcher(monkeypatch, str(tmp_path / "other-venv" / "Scripts" / "python.exe"))
+    assert _installer.install("claude", "project", project_dir=sub, home=tmp_path / "home")["result"] == "updated"
+    assert freshness.check(parent)["count"] == 1  # the package's .mcp.json (Verinoda's entry) only
+    res = _update(parent)
+    assert res.get("index_mode", "none") == "none", res.get("changed")
+    assert nested not in str(res.get("changed"))
+    assert freshness.check(parent)["count"] == 0
+
+
+def test_a_skill_folder_file_without_the_marker_is_the_users(project, tmp_path, monkeypatch):
+    """M3: a marker-less SKILL.md (the installer refuses to overwrite it: not Verinoda's) and the files a
+    user keeps in the skill folder stay indexed; only a file carrying the marker is left out."""
+    _launcher(monkeypatch)
+    runbook = ".claude/skills/verinoda/runbook.md"
+    _write(project, SKILL, "# Verinoda gateway\n\nOur notes about the gateway service.\n")
+    _write(project, runbook, "# Runbook\n\nRestart the gateway service.\n")
+    _git(project, "add", "-A")
+    _git(project, "commit", "-q", "-m", "our skill")
+    plan = _installer.install("claude", "project", project_dir=project, home=tmp_path / "home", dry_run=True)
+    assert not plan["ok"] and "not managed by Verinoda" in " ".join(plan["errors"])
+    assert {SKILL, runbook} <= set(list_files(project))
+    assert selffiles.ignore_patterns(project) == []
+    _scan(project)
+    assert {SKILL, runbook} <= index.graph_source_files(project)
+    assert {SKILL, runbook} <= _search_files(project)
+    # the user hands the skill to Verinoda: the managed SKILL.md leaves the index, their runbook stays
+    (project / SKILL).unlink()
+    assert _installer.install("claude", "project", project_dir=project, home=tmp_path / "home")["ok"]
+    res = _update(project)
+    assert SKILL in res["changed"]["removed"]
+    assert SKILL not in index.graph_source_files(project) and runbook in index.graph_source_files(project)
+    assert SKILL not in _search_files(project) and runbook in _search_files(project)
+    assert freshness.check(project)["count"] == 0
+
+
+def test_a_case_variant_of_the_skill_folder_is_left_out_too(project):
+    """L2: on a case-insensitive file system the installer's .claude/skills/verinoda/SKILL.md lands in an
+    existing .Claude folder; the marker still makes it Verinoda's (and only it: settings.json stays)."""
+    variant = ".Claude/skills/verinoda/SKILL.md"
+    _write(project, ".Claude/settings.json", "{}\n")
+    _write(project, variant, "<!-- verinoda-managed v1 -->\nskill\n")
+    files = set(list_files(project))
+    assert ".Claude/settings.json" in files and variant not in files
+    assert selffiles.ignore_patterns(project) == ["/" + variant]
+
+
+def test_setup_still_indexes_when_an_agent_install_fails(project, tmp_path, monkeypatch):
+    """L1: setup installs before it indexes; an installer error (a folder where .mcp.json should be) is that
+    agent's error in the report and the project is indexed all the same."""
+    _launcher(monkeypatch)
+    (project / ".mcp.json").mkdir()
+    rep = setup_mod.setup_project(project, agents="claude", home=tmp_path / "home")
+    assert rep["index"]["mode"] == "scan" and graph_path(project).is_file()
+    agent = rep["agents"][0]
+    assert agent["ok"] is False and agent["error"] and rep["ok"] is False

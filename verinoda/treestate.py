@@ -3,6 +3,11 @@
 A *tree* is the file set :mod:`verinoda.experiments` copies (tracked plus
 untracked-not-ignored files, ``.verinoda`` excluded; see
 :func:`verinoda.snapshot.list_files`) or the regular files of one commit.
+Verinoda's own files (:mod:`verinoda.selffiles`, D68: its skill, tracked or
+not) are in neither: the working tree's list leaves them out, and so does
+every commit-side listing and diff here, by the same rule applied to the
+same paths, so a committed skill is never "deleted" or "changed during the
+run" (:func:`_own_filter`).
 
 * **Content id** of a file: sha256 of its bytes with CRLF turned into LF
   (:func:`content_id`), so a checkout with ``core.autocrlf`` and the committed
@@ -179,6 +184,16 @@ def current(repo: Path, *, store=None) -> dict:
     return {"hash": tree_id(files), "files": files, "count": len(files)}
 
 
+def _own_filter(repo: Path):
+    """``rel -> bool``: is ``rel`` one of Verinoda's own files in the working tree (:mod:`verinoda.selffiles`)?
+    The commit side is filtered by the working tree's verdict for the same path, so both sides of a diff
+    leave out the same paths (a file Verinoda owns now is left out of the base too; one the user deleted or
+    took over is compared as any other file)."""
+    from verinoda.selffiles import own_filter  # at call time: tests replace it
+
+    return own_filter(repo)
+
+
 # -- git plumbing -----------------------------------------------------------------------------
 
 def _git(repo: Path, *args: str, timeout: float = 120) -> str | None:
@@ -333,17 +348,20 @@ def read_blobs(repo: Path, specs: list[str], *, timeout: float = 300) -> dict[st
     return out
 
 
-def commit_entries(repo: Path, commit: str, skipped: list[dict] | None = None) -> list[tuple[str, str, str]]:
+def commit_entries(repo: Path, commit: str, skipped: list[dict] | None = None, *,
+                   keep_own: bool = False) -> list[tuple[str, str, str]]:
     """``(mode, blob id, path)`` of the regular files of ``commit`` under the project's directory, paths
     relative to the project (symlinks and submodules left out). Paths naming git's directory in any
     spelling, or ``.verinoda``, are never listed; names this OS cannot hold are left out and, when
-    ``skipped`` is given, appended to it as ``{"path", "why"}``."""
+    ``skipped`` is given, appended to it as ``{"path", "why"}``. Verinoda's own files are left out as the
+    working tree's list leaves them out (:func:`_own_filter`), unless ``keep_own``."""
     if not _SHA_RE.match(commit or ""):
         raise ValueError("commit_entries needs a full commit id (resolve it with resolve_commit)")
     out = _git(Path(repo), "ls-tree", "-r", "-z", "--full-tree", commit, timeout=300)
     if out is None:
         raise NotAGitTree(f"cannot list the files of commit {commit[:12]}")
     prefix = project_prefix(repo)
+    own = None if keep_own else _own_filter(repo)
     ents = []
     for rec in out.split("\0"):
         if not rec or "\t" not in rec:
@@ -358,6 +376,8 @@ def commit_entries(repo: Path, commit: str, skipped: list[dict] | None = None) -
             path = path[len(prefix):]
         if not safe_path(path) or set(path.split("/")) & _GIT_SKIP_DIRS:
             continue
+        if own is not None and own(path):
+            continue
         why = unwritable_here(path)
         if why:
             if skipped is not None:
@@ -370,9 +390,10 @@ def commit_entries(repo: Path, commit: str, skipped: list[dict] | None = None) -
 COMMIT_IDS_BATCH = 500   # blobs held in memory at once while computing a commit's content ids
 
 
-def commit_files(repo: Path, commit: str) -> dict[str, str]:
-    """``{path: content id}`` of a commit's regular files (reads every blob once, a batch at a time)."""
-    ents = commit_entries(repo, commit)
+def commit_files(repo: Path, commit: str, *, keep_own: bool = False) -> dict[str, str]:
+    """``{path: content id}`` of a commit's regular files (reads every blob once, a batch at a time);
+    Verinoda's own files left out unless ``keep_own`` (:func:`commit_entries`)."""
+    ents = commit_entries(repo, commit, keep_own=keep_own)
     out: dict[str, str] = {}
     for i in range(0, len(ents), COMMIT_IDS_BATCH):
         batch = ents[i:i + COMMIT_IDS_BATCH]
@@ -439,6 +460,8 @@ def changes_vs_base(repo: Path, base: str, files: dict[str, str] | None = None) 
     others = _git(repo, "ls-files", "-z", "--others", "--exclude-standard") or ""
     cands = {p for p in out.split("\0") if p and not _skipped(p, True) and safe_path(p)}
     cands |= {p for p in others.split("\0") if p and not _skipped(p, False) and safe_path(p)}
+    own = _own_filter(repo)
+    cands = {p for p in cands if not own(p)}
     base_raw = read_blobs(repo, [blob_spec(repo, base, p) for p in sorted(cands)])
     tree_files: dict[str, str | None] = {}
     contents: dict[str, bytes] = {}
@@ -471,7 +494,9 @@ def changes_vs_base(repo: Path, base: str, files: dict[str, str] | None = None) 
 
 
 def base_ids(repo: Path, base: str) -> dict[str, str]:
-    """``{path: content id}`` of commit ``base``, computed once and kept under ``runs/base-ids/``."""
+    """``{path: content id}`` of commit ``base``, computed once and kept under ``runs/base-ids/``.
+    Kept whole; Verinoda's own files are left out when it is read (which files those are depends on the
+    working tree now: :func:`_own_filter`)."""
     import json
 
     from verinoda.paths import runs_dir
@@ -484,16 +509,21 @@ def base_ids(repo: Path, base: str) -> dict[str, str]:
         got = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(got, dict) and got.get("commit") == base and got.get("v") == 2 and \
                 got.get("prefix") == prefix and isinstance(got.get("files"), dict):
-            return got["files"]
+            return _without_own(repo, got["files"])
     except (OSError, ValueError):
         pass
-    files = commit_files(repo, base)
+    files = commit_files(repo, base, keep_own=True)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps({"v": 2, "commit": base, "prefix": prefix, "files": files}, sort_keys=True),
                    encoding="utf-8")
     tmp.replace(p)
-    return files
+    return _without_own(repo, files)
+
+
+def _without_own(repo: Path, files: dict[str, str]) -> dict[str, str]:
+    own = _own_filter(repo)
+    return {p: c for p, c in files.items() if not own(p)}
 
 
 def changes_from_ids(repo: Path, base: str, ids: dict[str, str], base_map: dict[str, str]) -> dict:
@@ -512,8 +542,9 @@ def changes_from_ids(repo: Path, base: str, ids: dict[str, str], base_map: dict[
             links = index_symlinks(repo)
         return p in links
 
+    own = _own_filter(repo)  # ids recorded before D68 may hold them; a base map read elsewhere too
     changed = sorted(p for p in set(ids) | set(base_map) if ids.get(p) != base_map.get(p)
-                     and not (p not in base_map and symlink(p)))
+                     and not (p not in base_map and symlink(p)) and not own(p))
     tree_files: dict[str, str | None] = {p: ids.get(p) for p in changed}
     base_contents: dict[str, bytes] = {}
     missing = []
@@ -559,8 +590,9 @@ def changes_between_commits(repo: Path, base: str, commit: str) -> dict:
     out = _git(repo, "diff-tree", "-r", "--name-only", "-z", "--relative", "--no-renames", base, commit, "--")
     if out is None:
         raise NotAGitTree(f"git diff {base[:12]} {commit[:12]} failed")
+    own = _own_filter(repo)
     cands = sorted({p for p in out.split("\0") if p and not _skipped(p, True) and safe_path(p)
-                    and not unwritable_here(p)})
+                    and not unwritable_here(p) and not own(p)})
     raw = read_blobs(repo, [blob_spec(repo, base, p) for p in cands] + [blob_spec(repo, commit, p) for p in cands])
     tree_files: dict[str, str | None] = {}
     contents: dict[str, bytes] = {}
