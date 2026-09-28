@@ -40,7 +40,7 @@ from pathlib import Path, PurePosixPath
 
 import networkx as nx
 
-from verinoda.paths import configure_index_env, ensure_atlas, graph_path, index_dir, receiver_calls_path
+from verinoda.paths import configure_index_env, ensure_atlas, graph_path, index_dir, load_config, receiver_calls_path
 
 configure_index_env()
 
@@ -87,7 +87,7 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     empties = _known_empty_json(repo, replay=not force)
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
-    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _resolve_once(), _absolutize_once(),             _distinct_case_ids(repo), python_facts_cache(index_dir(repo), fresh=fresh_caches), python_cross_cache(index_dir(repo), fresh=fresh_caches), empties, keep:
+    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _vendored_switch(repo), _resolve_once(), _absolutize_once(),             _distinct_case_ids(repo), python_facts_cache(index_dir(repo), fresh=fresh_caches), python_cross_cache(index_dir(repo), fresh=fresh_caches), empties, keep:
         ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
     if keep.failed:  # the full path would have failed making its report: so does this build
         ok = False
@@ -390,6 +390,30 @@ class _known_empty_json:
                                               "files": self.kept})
             except OSError:
                 pass
+        return False
+
+
+class _vendored_switch:
+    """``VERINODA_GRAPH_VENDORED=1`` for a build when the config asks for vendored code (``index.vendored``).
+
+    By default the extractor keeps vendored, minified and generated files to their file node
+    (``project_index.extract.vendored_reason``). A variable already set wins over the config.
+    """
+
+    VAR = "VERINODA_GRAPH_VENDORED"
+
+    def __init__(self, repo: Path) -> None:
+        self.repo = repo
+
+    def __enter__(self):
+        self.ours = self.VAR not in os.environ and bool((load_config(self.repo).get("index") or {}).get("vendored"))
+        if self.ours:
+            os.environ[self.VAR] = "1"
+        return self
+
+    def __exit__(self, *a):
+        if self.ours:
+            os.environ.pop(self.VAR, None)
         return False
 
 
