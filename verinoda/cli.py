@@ -290,6 +290,10 @@ def _r_verify(r: dict) -> None:
     if r.get("experiment"):
         e = r["experiment"]
         print(f"  experiment {e['id']}: {e['outcome']} ({e['isolation']}), logs {e['logs']['stdout']}")
+    if (r.get("run") or {}).get("refused"):
+        print(f"  re-run refused: {r['run']['refused']}")
+        if r["run"].get("next_step"):
+            print(f"  next: {r['run']['next_step']}")
     for f in r.get("unconfirmed_files") or []:
         print(f"  unconfirmed: {f} changed and no re-checkable evidence covers it")
     if r.get("note"):
@@ -378,6 +382,45 @@ def cmd_init(args) -> int:
 
     res = workflow.init(Path(args.path or ".").resolve())
     _emit(args, res, lambda r: print(f"initialised {r['atlas_dir']}"))
+    return 0
+
+
+def cmd_trust(args) -> int:
+    """Record that the user trusts a project (docs/DESIGN.md D63): its tests then run with process isolation
+    and its own config may set the protected settings. Only a person runs this; no MCP tool can."""
+    from verinoda import paths
+
+    if args.list:
+        out = {"trust_file": str(paths.trust_path()), "trusted": paths.trust_entries()}
+
+        def render_list(r):
+            print(f"trust file: {r['trust_file']}")
+            for e in r["trusted"] or []:
+                print(f"  {e['path']}" + ("  (and its subfolders)" if e.get("subfolders") else ""))
+            if not r["trusted"]:
+                print("  (no project is trusted)")
+        _emit(args, out, render_list)
+        return 0
+    target = Path(args.path or ".").resolve()
+    if not target.is_dir():
+        raise SystemExit(f"error: {target} is not a folder")
+    if args.subfolders and not args.remove and (paths._is_home_or_above(target) or target.parent == target):
+        raise SystemExit(f"error: --subfolders on {target} would trust every project below it; trust the projects "
+                         "one by one (or a folder that holds only projects you trust)")
+    res = paths.set_trust(target, subfolders=args.subfolders, remove=args.remove)
+    res["means"] = ("its tests run with process isolation (with your privileges, network and files not confined) "
+                    "and its own .verinoda/config.json may set " + ", ".join(
+                        f"{k}.*" if v is None else ", ".join(f"{k}.{x}" for x in v)
+                        for k, v in paths.PROTECTED_SETTINGS.items()))
+
+    def render(r):
+        if r["trusted"]:
+            print(f"trusted: {r['path']}" + (" and its subfolders" if r["subfolders"] else ""))
+            print(f"  {r['means']}")
+        else:
+            print(f"{'no longer trusted' if r['removed'] else 'was not trusted'}: {r['path']}")
+        print(f"  recorded in {r['trust_file']}")
+    _emit(args, res, render)
     return 0
 
 
@@ -1955,7 +1998,8 @@ def cmd_debug(args) -> int:
             (sub == "rerun" and str(res.get("conclusion", "")).startswith("flaky")) else 0
     except experiments.ExperimentRefused as exc:
         out = experiments.refusal(repo, exc)
-        out["next_step"] = ("run the command yourself and record it: `verinoda debug try --hypothesis ... "
+        out["next_step"] = ((f"{exc.next_step}; or " if exc.untrusted and exc.next_step else "")
+                            + "run the command yourself and record it: `verinoda debug try --hypothesis ... "
                             "--observed-output FILE --exit-code N -- <the command you ran>` (agent-reported, lower "
                             "trust; to open a session: `verinoda debug start ... --observed-output FILE --exit-code N "
                             "-- <command>`)")
@@ -2448,6 +2492,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "below the project's own code unless a question names it or an alias; repeatable")
     sp = add("init", cmd_init, "create .verinoda/ (database + config) in a project", repo=False)
     sp.add_argument("path", nargs="?", default=".")
+    sp = add("trust", cmd_trust, "trust a project: its tests run with process isolation (your privileges) and its "
+                                 "own config may set experiments.*, mcp.profile and research.network; recorded "
+                                 "outside the repository", repo=False)
+    sp.add_argument("path", nargs="?", default=".")
+    sp.add_argument("--subfolders", action="store_true",
+                    help="also trust every folder below it (not those under a .verinoda folder)")
+    sp.add_argument("--remove", action="store_true", help="stop trusting it")
+    sp.add_argument("--list", action="store_true", help="list the trusted projects")
     sp = add("scan", cmd_scan, "index a repository (AST, no LLM) and record a snapshot", repo=False)
     sp.add_argument("path", nargs="?")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")

@@ -1654,7 +1654,8 @@ class AtlasTools:
                     return debug.compact(fn(debug, st))
                 except experiments.ExperimentRefused as exc:
                     out = experiments.refusal(self.repo, exc)
-                    out["next_step"] = ("run the command yourself and record it with debug_attempt(observed_output="
+                    out["next_step"] = ((f"{exc.next_step}; or " if exc.untrusted and exc.next_step else "")
+                                        + "run the command yourself and record it with debug_attempt(observed_output="
                                         "..., exit_code=..., command=[the command you ran]) (agent-reported, lower "
                                         "trust), or debug_start(..., observed_output=..., exit_code=...)")
                     return out
@@ -1725,7 +1726,8 @@ def _error_hint(exc: BaseException, repo: Path) -> str:
     if name == "ClaimRuleError":
         return "the evidence does not allow that status; inspect the claim with claim_inspect"
     if name == "ExperimentRefused":
-        return "the command is outside the process-isolation allowlist; enable docker/podman or run it manually"
+        return getattr(exc, "next_step", None) or ("the command is outside the process-isolation allowlist; enable "
+                                                   "docker/podman or run it manually")
     return (f"see the server log (stderr); `verinoda doctor --repo {repo}` checks the installation "
             "and index")
 
@@ -2078,25 +2080,33 @@ def _tool_annotations(name: str):
 
 def resolve_profile(repo: Path | str, profile: str | None = None) -> str:
     """The tool profile to serve: ``profile`` (``--profile``), else ``mcp.profile`` in the project's
-    config, else :data:`DEFAULT_PROFILE`. An unknown name, or a config the setting cannot be read from
-    (not JSON, ``mcp`` not an object), is an error, never a silent fallback; only a missing config file
-    or a config without ``mcp.profile`` serves the default."""
+    config when the user trusts the project (:func:`verinoda.paths.is_trusted`), else ``mcp.profile`` in
+    the user-level config, else :data:`DEFAULT_PROFILE`. A cloned repository's own config cannot switch
+    an untrusted project to the full tool list (docs/DESIGN.md D63). An unknown name, or a config the
+    setting cannot be read from (not JSON, ``mcp`` not an object), is an error, never a silent fallback;
+    only a missing config file or a config without ``mcp.profile`` serves the default."""
+    from verinoda.paths import is_trusted, user_config_path
+
     if profile is None:
-        cfg = atlas_dir(Path(repo)) / "config.json"
         fix = 'write it as {"mcp": {"profile": "full"}} (or "core"), or pass --profile'
-        user: Any = {}
-        if cfg.is_file():
-            try:
-                user = json.loads(cfg.read_text(encoding="utf-8"))
-            except (OSError, ValueError) as exc:
-                raise ValueError(f"cannot read the MCP tool profile from {cfg}: {exc}; {fix}") from None
-        mcp = user.get("mcp") if isinstance(user, dict) else None
-        if not isinstance(user, dict) or not isinstance(mcp, (dict, type(None))):
-            raise ValueError(f"cannot read the MCP tool profile from {cfg}: "
-                             f"{'the file' if not isinstance(user, dict) else 'mcp'} is not a JSON object; {fix}")
-        profile = (mcp or {}).get("profile")
-        if profile is not None and not isinstance(profile, str):
-            raise ValueError(f"mcp.profile in {cfg} must be a string, not {profile!r}; {fix}")
+        trusted = is_trusted(Path(repo))
+        for cfg, use in ((atlas_dir(Path(repo)) / "config.json", trusted), (user_config_path(), True)):
+            user: Any = {}
+            if cfg.is_file():
+                try:
+                    user = json.loads(cfg.read_text(encoding="utf-8"))
+                except (OSError, ValueError) as exc:
+                    raise ValueError(f"cannot read the MCP tool profile from {cfg}: {exc}; {fix}") from None
+            mcp = user.get("mcp") if isinstance(user, dict) else None
+            if not isinstance(user, dict) or not isinstance(mcp, (dict, type(None))):
+                raise ValueError(f"cannot read the MCP tool profile from {cfg}: "
+                                 f"{'the file' if not isinstance(user, dict) else 'mcp'} is not a JSON object; {fix}")
+            value = (mcp or {}).get("profile")
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f"mcp.profile in {cfg} must be a string, not {value!r}; {fix}")
+            if use and value is not None:
+                profile = value
+                break
     profile = profile or DEFAULT_PROFILE
     if profile not in PROFILES:
         raise ValueError(f"unknown MCP tool profile {profile!r}; choose one of: {', '.join(PROFILES)}")
@@ -2859,6 +2869,11 @@ def serve(repo: Path, profile: str | None = None) -> None:
     print(f"verinoda mcp: serving {repo} over stdio ({state}; {len(listed_tools(repo, served))} tools, "
           f"profile {served}); "
           f"build {buildinfo.server_version()} ({sys.executable})", file=sys.stderr, flush=True)
+    from verinoda.paths import ignored_settings_note
+
+    note = ignored_settings_note(repo)
+    if note:
+        print(f"verinoda mcp: {note}", file=sys.stderr, flush=True)
     try:
         srv.run("stdio")
     except KeyboardInterrupt:  # pragma: no cover - interactive stop

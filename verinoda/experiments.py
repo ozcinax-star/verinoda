@@ -21,27 +21,45 @@ Two isolation levels exist, and the one used is recorded on every run:
     (``fs_reads_confined`` / ``fs_writes_confined`` are false).
 
 ``container`` (docker or podman on PATH)
-    ``--network none``, memory/CPU/pid limits, read-write mount of the copy only;
-    the container is named ``verinoda-<experiment id>`` and killed by name on
-    timeout (killing the CLI client alone would leave it running).
+    ``--network none``, memory/CPU/pid limits, read-write mount of the copy only,
+    a read-only root with a ``/tmp`` tmpfs, no capabilities, no privilege gain, and
+    the host user (``--user``; rootless podman: ``--userns=keep-id``); the
+    container is named ``verinoda-<experiment id>`` and killed by name on timeout
+    (killing the CLI client alone would leave it running). The image comes from
+    ``experiments.container_image`` (user config, or a trusted project's config).
+
+Trust (docs/DESIGN.md D63): a project's tests are its own code and run with the
+user's privileges under ``process`` isolation, so they run that way only in a
+project the user trusts (``verinoda trust <path>``, recorded outside every
+repository, :func:`verinoda.paths.is_trusted`). An untrusted project's tests run
+in a container, or are refused with a ``next_step``.
 
 Policy (:func:`policy`): only commands matching the configured test-runner
 allowlist and free of shell metacharacters may run under ``process``
-isolation. An absolute path to a Python interpreter (e.g. the project's
-``.venv``, see :func:`python_for`) counts as ``python``. Every *argument* of an
+isolation. argv[0] is a bare runner name, looked up on PATH but never in the
+current directory, or an absolute path to a Python interpreter this system
+knows (or the trusted project's own ``.venv``, see :func:`python_for`), which
+counts as ``python``. Every *argument* of an
 allowlisted command must stay inside the repository copy: absolute paths,
 home-relative paths, URLs and ``..`` escapes are rejected wherever they appear
 (positional test paths, ``--opt=value``, ``-o key=value``, ``type:path``
 values such as ``--cov-report=xml:/x``, attached short options such as
 ``-c/x``), and runner options that execute arbitrary code or turn arguments
 into outside imports (``pytest --pyargs``, ``node -e``, ``go test -exec``,
-``cargo --config``, ``npm --script-shell``) are rejected. Anything else needs
+``cargo --config``, ``npm --script-shell``) are rejected. For pytest also
+``@file`` arguments (pytest reads more arguments from the file), ``-p NAME``
+other than ``-p no:NAME`` and Verinoda's own plugins, ``-o addopts=...``, and -
+read from the copy before the run - ``addopts`` and the path settings of the
+pytest config files (:func:`pytest_config_problem`); the run itself gets
+``-p no:cacheprovider`` and a ``--basetemp`` inside the throw-away directory.
+Anything else needs
 ``container`` isolation; without it the experiment is *refused*, not run, and
 the refusal names the offending argument. Commands are never passed through a
 shell, and no child inherits Verinoda's stdin (an MCP server's stdin is its
 protocol pipe; a child waiting on it hangs).
 
-Source of the copy: the working tree (default), or - with ``ref`` - the
+Source of the copy: the working tree (default; symbolic links and junctions are
+not followed but listed in ``source.skipped``), or - with ``ref`` - the
 regular files of one commit, read with ``git cat-file`` like ``git archive``
 would give them but without running smudge filters (``overlay`` can put
 working-tree files such as the current tests on top; the run says so). Either
@@ -83,7 +101,7 @@ from pathlib import Path, PurePosixPath
 
 from verinoda import evidence as evmod
 from verinoda import treestate
-from verinoda.paths import load_config, runs_dir
+from verinoda.paths import ignored_settings_note, is_trusted, load_config, runs_dir, user_config_path
 from verinoda.snapshot import list_files
 from verinoda.store import Store, new_id, now
 
@@ -125,38 +143,97 @@ FORBIDDEN_OPTIONS: dict[str, dict[str, str]] = {
 _DRIVE_RE = re.compile(r"^[A-Za-z]:")
 _URL_RE = re.compile(r"^[A-Za-z][\w+.-]*://")
 _TYPED_VALUE_RE = re.compile(r"^[\w.-]{2,}:(.*)$", re.S)  # xml:path, no:plugin (2+ chars: not a drive)
+# pytest options that need its cache plugin: with them the cache is moved (-o cache_dir) instead of switched off
+_PYTEST_CACHE_OPTIONS = {"--lf", "--last-failed", "--ff", "--failed-first", "--nf", "--new-first", "--sw",
+                         "--stepwise", "--sw-skip", "--stepwise-skip", "--sw-reset", "--stepwise-reset",
+                         "--cache-show", "--cache-clear", "--lfnf", "--last-failed-no-failures"}
+# pytest config files, in pytest's order, and the settings in them that name paths (docs/DESIGN.md D63)
+PYTEST_CONFIG_FILES = ("pytest.toml", ".pytest.toml", "pytest.ini", ".pytest.ini", "pyproject.toml", "tox.ini",
+                       "setup.cfg")
+PYTEST_PATH_SETTINGS = ("cache_dir", "log_file", "pythonpath", "testpaths", "pytester_example_dir")
+_LINK_TAGS = (0xA000000C, 0xA0000003)  # IO_REPARSE_TAG_SYMLINK, IO_REPARSE_TAG_MOUNT_POINT (a junction)
+# What the docker/podman *client* needs to reach its daemon or machine (contexts, rootless sockets, Colima,
+# podman machine); the container itself gets none of it, only the -e values Verinoda passes.
+CLIENT_ENV_ALLOW = {"DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY",
+                    "DOCKER_API_VERSION", "CONTAINER_HOST", "CONTAINER_CONNECTION", "CONTAINER_SSHKEY",
+                    "CONTAINERS_CONF", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "HOME", "USERPROFILE",
+                    "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "TMP", "TEMP", "TMPDIR", "USER", "USERNAME",
+                    "LOGNAME"}
+DEFAULT_CONTAINER_IMAGE = "python:3.12-slim"
 
 
 class ExperimentRefused(RuntimeError):
-    pass
+    """A run Verinoda does not start; ``next_step`` says what would let it run (None: the generic advice)."""
+
+    def __init__(self, reason: str, next_step: str | None = None, *, untrusted: bool = False):
+        super().__init__(reason)
+        self.next_step = next_step
+        self.untrusted = untrusted
+
+
+def untrusted_next_step(repo: Path) -> str:
+    """What to do when an untrusted project's tests would run with the user's privileges."""
+    return (f"if you trust this project's code, run `verinoda trust {Path(repo).resolve()}` once (your decision, "
+            "recorded outside the repository; an agent cannot make it) and run again; or install docker/podman: an "
+            "untrusted project's tests then run in a container (no network, only the copy writable)")
 
 
 def refusal(repo: Path, exc: BaseException) -> dict:
     """The structured answer for a refused experiment (the CLI and the MCP tools give the same)."""
     allow = load_config(repo)["experiments"]["process_isolation_allowlist"]
-    return {"status": "refused", "reason": str(exc),
-            "limits": ["without docker/podman only allowlisted test runners run, and only with process "
-                       "isolation (no network or filesystem confinement)",
-                       f"allowlist (config experiments.process_isolation_allowlist): {', '.join(allow)}"],
-            "next_step": "run the tests through an allowlisted runner with paths inside the repository, or "
-                         "install docker/podman for container isolation"}
+    out = {"status": "refused", "reason": str(exc), "trusted": is_trusted(repo),
+           "limits": ["without docker/podman only allowlisted test runners run, only with process isolation (no "
+                      "network or filesystem confinement) and only in a project you trust (`verinoda trust`)",
+                      f"allowlist (config experiments.process_isolation_allowlist): {', '.join(allow)}"],
+           "next_step": getattr(exc, "next_step", None) or (
+               "run the tests through an allowlisted runner with paths inside the repository, or install "
+               "docker/podman for container isolation")}
+    note = ignored_settings_note(repo)
+    if note:
+        out["limits"].append(note)
+    return out
 
 
 def python_for(repo: Path) -> str:
     """The interpreter to run a project's tests with.
 
     The project's own virtualenv when it has one (``.venv`` then ``venv``;
-    Windows ``Scripts/python.exe`` or POSIX ``bin/python``), else the
-    interpreter running Verinoda. Returned as an absolute path, which the
-    process-isolation allowlist accepts as ``python``.
+    Windows ``Scripts/python.exe`` or POSIX ``bin/python``) and the user trusts
+    the project (:func:`verinoda.paths.is_trusted`): in a cloned repository that
+    file can be any program. Else the interpreter running Verinoda. Returned as
+    an absolute path, which the process-isolation allowlist accepts as ``python``.
     """
     repo = Path(repo).resolve()
+    if not is_trusted(repo):
+        return sys.executable
     for env in (".venv", "venv"):
         for rel in (("Scripts", "python.exe"), ("bin", "python")):
             p = repo.joinpath(env, *rel)
             if p.is_file():
                 return str(p)
     return sys.executable
+
+
+def _which(name: str, path: str) -> str | None:
+    """``name`` looked up in the absolute directories of ``path`` only.
+
+    Never the current directory: Windows' own lookup, and ``shutil.which`` there, try it first, so a
+    ``pytest.cmd`` at the root of the project Verinoda runs from would be the program started.
+    """
+    if os.name == "nt":
+        exts = [e.lower() for e in os.environ.get("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(os.pathsep) if e]
+        names = ([name] if any(name.lower().endswith(e) for e in exts) else []) + [name + e for e in exts]
+    else:
+        names = [name]
+    for d in (path or "").split(os.pathsep):
+        d = _strip_quotes(d.strip())
+        if not d or not os.path.isabs(d):
+            continue
+        for n in names:
+            p = os.path.join(d, n)
+            if os.path.isfile(p) and (os.name == "nt" or os.access(p, os.X_OK)):
+                return p
+    return None
 
 
 def _strip_quotes(tok: str) -> str:
@@ -182,15 +259,34 @@ def _is_pytest(argv: list[str]) -> bool:
 
 
 def container_runtime() -> str | None:
+    """The docker or podman program (an absolute path, found on PATH but never in the current directory)
+    whose ``info`` answers, else None."""
     for rt in ("docker", "podman"):
-        if shutil.which(rt):
+        exe = _which(rt, os.environ.get("PATH", ""))
+        if exe:
             try:
-                r = subprocess.run([rt, "info"], capture_output=True, timeout=15, stdin=subprocess.DEVNULL)
+                r = subprocess.run([exe, "info"], capture_output=True, timeout=15, stdin=subprocess.DEVNULL)
                 if r.returncode == 0:
-                    return rt
+                    return exe
             except (OSError, subprocess.TimeoutExpired):
                 continue
     return None
+
+
+def _client_env() -> dict[str, str]:
+    """The environment of the docker/podman client process: what it needs to find its daemon, nothing else."""
+    return {k: v for k, v in os.environ.items() if k.upper() in ENV_ALLOW | CLIENT_ENV_ALLOW}
+
+
+def _container_user(runtime: str) -> list[str]:
+    """Run as the host user, so that what the tests write in the mounted copy can be deleted afterwards:
+    rootless podman maps the host user with ``--userns=keep-id`` (``--user <uid>`` there would be a sub-uid
+    the user cannot delete); docker gets ``--user uid:gid`` (Windows has no uid: 1000:1000)."""
+    if "podman" in Path(runtime).name.lower():
+        return ["--userns=keep-id"]
+    if hasattr(os, "getuid"):
+        return ["--user", f"{os.getuid()}:{os.getgid()}"]
+    return ["--user", "1000:1000"]
 
 
 def path_escape(value: str) -> str | None:
@@ -221,8 +317,20 @@ def path_escape(value: str) -> str | None:
     return None
 
 
-def _path_candidates(tok: str) -> list[str]:
-    """Every sub-string of an argument that a runner may treat as a path."""
+def _words(value: str) -> list[str]:
+    """``value`` split as a shell would (quotes kept together); a value shlex cannot split is split on spaces."""
+    try:
+        return shlex.split(value, posix=True)
+    except ValueError:
+        return value.split()
+
+
+def _path_candidates(tok: str, depth: int = 0) -> list[str]:
+    """Every sub-string of an argument that a runner may treat as a path.
+
+    An option nested in a value (``-o addopts=--junitxml=/x``, ``--override-ini=addopts=--basetemp=/x``)
+    gives its own candidates, and an ini override value holding several arguments (``addopts=-q --x=/y``)
+    is taken word by word."""
     out = [tok]
     if tok.startswith("-") and "=" in tok:            # --opt=value
         out.append(tok.split("=", 1)[1])
@@ -230,11 +338,18 @@ def _path_candidates(tok: str) -> list[str]:
         out.append(tok[2:])                          # attached short option value: -c/x, -oa=b
     for c in list(out):
         if "=" in c and not c.startswith("-"):      # ini override key=value (-o cache_dir=/x)
-            out.append(c.split("=", 1)[1])
+            val = c.split("=", 1)[1]
+            out.append(val)
+            if depth < 3 and any(ch.isspace() for ch in val.strip()):
+                out += _words(val)
     for c in list(out):
         m = _TYPED_VALUE_RE.match(c)                 # type:path (--cov-report=xml:/x)
         if m and not _URL_RE.match(c):
             out.append(m.group(1))
+    if depth < 3:
+        for c in list(out[1:]):
+            if c.startswith("-") and c != tok:
+                out += _path_candidates(c, depth + 1)[1:]
     return out
 
 
@@ -243,12 +358,115 @@ def _runner(argv: list[str]) -> str:
     return "pytest" if _is_pytest(argv) else exe
 
 
-def policy(argv: list[str], allowlist: list[str]) -> tuple[str, str | None]:
+def _ini_overrides(tokens: list[str]) -> list[str]:
+    """The ``key=value`` values of ``-o`` / ``--override-ini`` in ``tokens`` (every spelling pytest takes)."""
+    out = []
+    for i, raw in enumerate(tokens):
+        tok = _strip_quotes(raw)
+        if tok == "--":
+            break
+        if tok in ("-o", "--override-ini") and i + 1 < len(tokens):
+            out.append(_strip_quotes(tokens[i + 1]))
+        elif tok.startswith("--override-ini="):
+            out.append(tok[len("--override-ini="):])
+        elif tok.startswith("-o") and not tok.startswith("--") and len(tok) > 2:
+            out.append(tok[2:])
+    return out
+
+
+def _addopts_overridden(tokens: list[str]) -> bool:
+    """Does ``-o addopts=...`` replace the config files' ``addopts`` (``-o addopts=`` switches them off)?"""
+    return any(v.split("=", 1)[0].strip() == "addopts" for v in _ini_overrides(tokens) if "=" in v)
+
+
+def _pytest_rules(tokens: list[str], plugins: tuple[str, ...]) -> str | None:
+    """pytest's own ways past the argument check: ``@file`` arguments, ``-p NAME``, ``-o addopts=...``."""
+    for raw in tokens:
+        if _strip_quotes(raw).startswith("@"):
+            return (f"argument {raw!r}: pytest reads more arguments from the file named after '@', which the "
+                    "policy never sees; give the arguments themselves")
+    for v in _ini_overrides(tokens):
+        key, _, val = v.partition("=")
+        if key.strip() == "addopts" and val.strip():
+            return (f"-o {v!r}: an addopts override adds arguments the policy never sees as arguments; give them "
+                    "directly (only `-o addopts=`, which switches the config files' addopts off, is allowed)")
+    for i, raw in enumerate(tokens):
+        tok = _strip_quotes(raw)
+        if tok == "--":
+            break
+        name = None
+        if tok == "-p" and i + 1 < len(tokens):
+            name = _strip_quotes(tokens[i + 1])
+        elif tok.startswith("-p") and not tok.startswith("--") and len(tok) > 2:
+            name = tok[2:]
+        if name is not None and not name.startswith("no:") and name not in plugins:
+            return (f"-p {name}: loads a plugin module by name, which can come from outside the repository copy; "
+                    "only -p no:NAME (and Verinoda's own plugins) run under process isolation")
+    return None
+
+
+def _args_problem(tokens: list[str], runner: str, plugins: tuple[str, ...] = ()) -> str | None:
+    """Why arguments of an allowlisted ``runner`` are not allowed under process isolation, else None."""
+    forbidden = FORBIDDEN_OPTIONS.get(runner, {})
+    for tok in tokens:
+        opt = _strip_quotes(tok).split("=", 1)[0]
+        if opt in forbidden:
+            return forbidden[opt]
+        for cand in _path_candidates(_strip_quotes(tok)):
+            why = path_escape(cand)
+            if why:
+                return f"argument {tok!r}: {why}; {ARGS_CONFINED}"
+    if runner == "pytest":
+        return _pytest_rules(tokens, plugins)
+    return None
+
+
+def _arg0_problem(arg0: str, repo: Path | None) -> str | None:
+    """Why argv[0] is not a program the user installed, else None.
+
+    A bare name is looked up on PATH at run time (never in the current directory). A path must be a Python
+    interpreter: one this system knows (Verinoda's own, the registry, PATH, a Python manager's directory),
+    a virtual environment made from one outside the project, or the trusted project's own environment
+    (:func:`python_for`). Any other runner given by path could be a program the repository shipped."""
+    if len(_arg0_path(arg0).parts) <= 1:
+        return None
+    if _exe_name(arg0) != "python":
+        return (f"argv[0] {arg0!r} names the program by a path; a test runner other than a Python interpreter must "
+                "be a bare name, looked up on PATH")
+    exe = Path(_strip_quotes(arg0))
+    if not exe.is_absolute():
+        return f"argv[0] {arg0!r} is a relative interpreter path (a program of the repository copy)"
+    from verinoda import codecheck_env as ce
+
+    if ce.known_interpreter(exe) is not None:
+        return None
+    if repo is not None and is_trusted(repo):
+        own = python_for(repo)
+        if own != sys.executable and ce._same_file(own, exe):
+            return None
+    venv = ce.venv_of(exe)
+    if venv is not None and (repo is None or not ce._real_under(venv, repo)):
+        base = ce.base_interpreter(venv)
+        if base is not None and (repo is None or not ce._real_under(base, repo)) and \
+                ce.known_interpreter(base) is not None:
+            return None
+    return (f"argv[0] {arg0!r} is not a Python installation this system knows (Verinoda's own, the registry, PATH, "
+            "a Python manager's directory), a virtual environment made from one, or the trusted project's own "
+            "virtual environment")
+
+
+def policy(argv: list[str], allowlist: list[str], *, repo: Path | None = None,
+           plugins: tuple[str, ...] | list[str] = ()) -> tuple[str, str | None]:
     """``('allowlisted', None)`` or ``('risky', why)``.
 
-    Allowlisted means: argv starts with an allowlisted test runner, has no
-    shell metacharacters, no forbidden runner option, and no argument that
-    names a path outside the repository copy (see the module docstring).
+    Allowlisted means: argv starts with an allowlisted test runner given by a
+    bare name or as a known Python interpreter, has no shell metacharacters, no
+    forbidden runner option, and no argument that names a path outside the
+    repository copy (see the module docstring). ``repo`` lets a trusted
+    project's own ``.venv`` interpreter count; ``plugins`` are the module names
+    of Verinoda's own pytest plugins for this run (``-p NAME`` is allowed for
+    them). The pytest config files are checked after the copy is made
+    (:func:`pytest_config_problem`).
     """
     if not argv:
         return "risky", "empty command"
@@ -264,16 +482,191 @@ def policy(argv: list[str], allowlist: list[str]) -> tuple[str, str | None]:
             break
     if not matched:
         return "risky", f"{' '.join(argv[:3])!r} does not start with an allowlisted test runner"
-    forbidden = FORBIDDEN_OPTIONS.get(_runner(argv), {})
-    for tok in argv[1:]:
-        opt = _strip_quotes(tok).split("=", 1)[0]
-        if opt in forbidden:
-            return "risky", forbidden[opt]
-        for cand in _path_candidates(_strip_quotes(tok)):
-            why = path_escape(cand)
+    why = _arg0_problem(argv[0], Path(repo).resolve() if repo is not None else None)
+    if why:
+        return "risky", why
+    names = tuple(p.removesuffix(".py") for p in plugins)
+    why = _args_problem(argv[1:], _runner(argv), names)
+    return ("risky", why) if why else ("allowlisted", None)
+
+
+# -- the pytest config files of the copy ----------------------------------------------------------------------
+
+def _load_toml(text: str) -> dict | None:
+    """A TOML document (tomllib, else tomli), or None when neither is installed (Python 3.10)."""
+    try:
+        import tomllib  # type: ignore[import-not-found]
+    except ImportError:
+        try:
+            import tomli as tomllib  # type: ignore[import-not-found,no-redef]
+        except ImportError:
+            return None
+    try:
+        return tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(str(exc)) from None
+
+
+_TOML_STR_RE = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'|"((?:\\.|[^"\\\n])*)"|\'([^\'\n]*)\'', re.S)
+
+
+def _toml_settings_fallback(text: str) -> dict:
+    """The settings pytest reads that name arguments or paths, from a TOML file without a TOML parser: every
+    assignment of such a key anywhere in the file, as the strings in its value. More than pytest would use,
+    never less (the check only gets stricter)."""
+    keys = ("addopts", *PYTEST_PATH_SETTINGS)
+    out: dict[str, list[str]] = {}
+    for m in re.finditer(rf"^\s*(?:[\w.\"'-]+\.)?[\"']?({'|'.join(keys)})[\"']?\s*=\s*", text, re.M):
+        rest, depth, i, quote = text[m.end():], 0, 0, None
+        while i < len(rest):  # the value: to the end of its line, or of the array / multi-line string it opens
+            if quote:
+                if rest.startswith(quote, i):
+                    i += len(quote)
+                    quote = None
+                    continue
+                i += 2 if rest[i] == "\\" and quote in ('"', '"""') else 1
+                continue
+            q = next((q for q in ('"""', "'''", '"', "'") if rest.startswith(q, i)), None)
+            if q:
+                quote = q
+                i += len(q)
+                continue
+            c = rest[i]
+            if c == "[":
+                depth += 1
+            elif c == "]":
+                depth -= 1
+            elif c == "\n" and depth <= 0:
+                break
+            i += 1
+        strings = [s.group(s.lastindex or 0) for s in _TOML_STR_RE.finditer(rest[:i])]
+        out.setdefault(m.group(1), []).extend(strings)
+    return out
+
+
+def _pytest_settings(path: Path) -> dict | None:
+    """The pytest settings of one config file as pytest reads them, None when it has none (ValueError: the
+    file cannot be read)."""
+    import configparser
+
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if path.suffix == ".toml":
+        data = _load_toml(text)
+        if data is None:
+            return _toml_settings_fallback(text) if "pytest" in text else None
+        if path.name in ("pytest.toml", ".pytest.toml"):
+            return dict(data.get("pytest") or {})
+        tp = (data.get("tool") or {}).get("pytest") or {}
+        out = {k: v for k, v in tp.items() if k != "ini_options"}
+        out.update(tp.get("ini_options") or {})
+        return out or None
+    section = "tool:pytest" if path.suffix == ".cfg" else "pytest"
+    if f"[{section}]" not in text.replace(" ", ""):
+        return None
+    parser = configparser.ConfigParser(interpolation=None, strict=False, allow_no_value=True,
+                                       default_section="\0verinoda-no-defaults")
+    parser.optionxform = str  # type: ignore[assignment,method-assign]
+    try:
+        parser.read_string(text, source=path.name)
+    except configparser.Error as exc:
+        raise ValueError(str(exc).splitlines()[0]) from None
+    return dict(parser.items(section)) if parser.has_section(section) else None
+
+
+def _as_words(value) -> list[str]:
+    """A setting's value as the list of words pytest makes of it (a string is split like a shell would)."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [w for v in value for w in (_words(v) if isinstance(v, str) else [str(v)])]
+    return _words(str(value))
+
+
+def _pytest_config_files(copy: Path, argv: list[str]) -> list[Path]:
+    """The pytest config files the run may read: those in the copy's root and in every folder from there down
+    to each path argument (pytest looks for one upward from the arguments), and one given with ``-c``."""
+    at = 1 if _exe_name(argv[0]) == "pytest" else 3
+    rest = [_strip_quotes(t) for t in argv[at:]]
+    dirs: set[Path] = {copy}
+    explicit: list[str] = []
+
+    def chain(rel: str) -> None:
+        p = copy
+        parts = [x for x in rel.replace("\\", "/").split("/") if x not in ("", ".")]
+        for part in parts:
+            p = p / part if part != ".." else p.parent
+            if p.is_dir():
+                dirs.add(p)
+    for i, t in enumerate(rest):
+        if t in ("-c", "--config-file") and i + 1 < len(rest):
+            explicit.append(rest[i + 1])
+        elif t.startswith("--config-file="):
+            explicit.append(t.split("=", 1)[1])
+        elif t.startswith("-c") and not t.startswith("--") and len(t) > 2:
+            explicit.append(t[2:])
+        elif t.startswith("--rootdir="):
+            chain(t.split("=", 1)[1])
+        elif t and not t.startswith("-"):
+            chain(t.split("::", 1)[0])
+    files = [copy / e for e in explicit if (copy / e).is_file()]
+    for d in sorted(dirs):
+        files += [d / n for n in PYTEST_CONFIG_FILES if (d / n).is_file()]
+    return list(dict.fromkeys(files))
+
+
+def pytest_config_problem(copy: Path, argv: list[str], plugins: tuple[str, ...] | list[str] = ()) -> str | None:
+    """Why the pytest config files of the repository copy are not allowed under process isolation, else None.
+
+    ``addopts`` (unless ``-o addopts=`` switches it off) gets the same check as the command's own arguments,
+    and the settings that name paths (:data:`PYTEST_PATH_SETTINGS`) must stay inside the copy, each from where
+    pytest resolves it: ``log_file`` from the working directory (the copy's root), the others from the config
+    file's folder (the root folder pytest takes; with ``--rootdir`` from the copy's root as well). Nothing is
+    rewritten: the file and setting are named."""
+    names = tuple(p.removesuffix(".py") for p in plugins)
+    overridden = _addopts_overridden(argv)
+    rootdir_given = any(_strip_quotes(t).startswith("--rootdir") for t in argv)
+    for f in _pytest_config_files(copy, argv):
+        rel = f.relative_to(copy).as_posix()
+        folder = f.parent.relative_to(copy).as_posix()
+        try:
+            settings = _pytest_settings(f)
+        except (OSError, ValueError) as exc:
+            return f"{rel}: its pytest settings cannot be read to check them ({exc})"
+        if not settings:
+            continue
+        if not overridden:
+            why = _args_problem(_as_words(settings.get("addopts")), "pytest", names)
             if why:
-                return "risky", f"argument {tok!r}: {why}; {ARGS_CONFINED}"
-    return "allowlisted", None
+                return f"{rel}, setting addopts: {why}"
+        for key in PYTEST_PATH_SETTINGS:
+            bases = ["."] if key == "log_file" else [folder, "."] if rootdir_given else [folder]
+            for v in _as_words(settings.get(key)):
+                why = path_escape(v)
+                if why and "'..'" not in why:  # absolute, home-relative or a URL: wherever it is read from
+                    return f"{rel}, setting {key}: {why}; {ARGS_CONFINED}"
+                for base in bases:
+                    why = path_escape(v if base == "." else f"{base}/{v}")
+                    if why:
+                        return f"{rel}, setting {key}: {why}; {ARGS_CONFINED}"
+    return None
+
+
+def _pytest_extra(argv: list[str], scratch: Path) -> list[str]:
+    """``argv`` with ``-p no:cacheprovider`` (the cache moved into ``scratch`` instead when an option needs it)
+    and ``--basetemp`` in ``scratch``, before a ``--``: they come after the config files' addopts, so a
+    single-valued setting there is overridden, and pytest writes neither its cache nor its temporary
+    folders anywhere else. ``scratch`` is next to the copy, never the copy (pytest empties --basetemp)."""
+    toks = [_strip_quotes(a) for a in argv]
+    cut = toks.index("--") if "--" in toks else len(argv)
+    head, tail = list(argv[:cut]), list(argv[cut:])
+    extra: list[str] = []
+    if any(t.split("=", 1)[0] in _PYTEST_CACHE_OPTIONS for t in toks[:cut]):
+        extra += ["-o", f"cache_dir={scratch / 'cache'}"]
+    elif not any(t == "-pno:cacheprovider" or (t == "no:cacheprovider" and i and toks[i - 1] == "-p")
+                 for i, t in enumerate(toks[:cut])):
+        extra += ["-p", "no:cacheprovider"]
+    extra.append(f"--basetemp={scratch / 'basetemp'}")
+    return head + extra + tail
 
 
 def classify(argv: list[str], allowlist: list[str]) -> str:
@@ -291,13 +684,61 @@ def _scrubbed_env(home: Path) -> dict[str, str]:
     return env
 
 
-def _copy_repo(repo: Path, dst: Path, ids: dict[str, str] | None = None) -> int:
+def _entry_is_link(e: os.DirEntry) -> bool:
+    try:
+        if e.is_symlink():
+            return True
+        st = e.stat(follow_symlinks=False)  # Windows: from the directory listing, no extra call
+    except OSError:
+        return False
+    return getattr(st, "st_reparse_tag", 0) in _LINK_TAGS
+
+
+def _through_links(repo: Path, rels: list[str]) -> set[str]:
+    """The paths among ``rels`` that are, or lie under, a symbolic link or a junction.
+
+    Read from one listing per folder (not one call per file); on Windows only symlink and junction reparse
+    points count, not cloud placeholders or deduplicated files, which are ordinary files to read."""
+    fold = str.lower if os.name == "nt" else (lambda s: s)  # not normcase: it turns '/' into '\\'
+    wanted: dict[str, set[str]] = {}
+    for rel in rels:
+        parts = rel.split("/")
+        for i, name in enumerate(parts):
+            wanted.setdefault("/".join(parts[:i]), set()).add(fold(name))
+    links: set[str] = set()
+    for parent, names in wanted.items():
+        try:
+            with os.scandir(repo / parent if parent else repo) as it:
+                for e in it:
+                    if fold(e.name) in names and _entry_is_link(e):
+                        links.add(fold(f"{parent}/{e.name}" if parent else e.name))
+        except OSError:
+            continue
+    if not links:
+        return set()
+    out = set()
+    for rel in rels:
+        parts = fold(rel).split("/")
+        if any("/".join(parts[:i + 1]) in links for i in range(len(parts))):
+            out.add(rel)
+    return out
+
+
+def _copy_repo(repo: Path, dst: Path, ids: dict[str, str] | None = None, skipped: list[dict] | None = None) -> int:
     """Copy the working tree's file set; ``ids`` receives each copied file's content id.
 
+    A file that is, or lies under, a symbolic link or a junction is not copied (its target can lie outside
+    the repository, and its content would enter the copy and the tree hash); it is listed in ``skipped``.
     Bigger trees are copied by a few threads: per-file open/close (and on Windows
     the virus scanner) dominates, not bytes, so the files overlap.
     """
     rels = list_files(repo)
+    linked = _through_links(repo, rels)
+    if linked:
+        rels = [r for r in rels if r not in linked]
+        if skipped is not None:
+            skipped += [{"path": r, "why": "a symbolic link or junction (or under one): not followed"}
+                        for r in sorted(linked)]
     for d in sorted({(dst / r).parent for r in rels}):
         d.mkdir(parents=True, exist_ok=True)
 
@@ -750,13 +1191,19 @@ def run(
         if not ENV_EXTRA_RE.match(key):
             raise ValueError(f"env_extra may only set VERINODA_* variables, not {key!r}")
     timeout = float(timeout or cfg["default_timeout"])
-    kind, why_risky = policy(argv, cfg["process_isolation_allowlist"])
-    # probed only when it can matter: an allowlisted command under auto/process runs with process isolation
-    process_ok = kind == "allowlisted" and isolation in ("auto", "process")
+    plugin_names = tuple(n.removesuffix(".py") for n in plugins or {})
+    trusted = is_trusted(repo)
+    ignored_note = ignored_settings_note(repo)
+    kind, why_risky = policy(argv, cfg["process_isolation_allowlist"], repo=repo, plugins=plugin_names)
+    # An allowlisted command runs with process isolation only in a project the user trusts: its tests are the
+    # project's own code, run with the user's privileges (docs/DESIGN.md D63).
+    process_ok = kind == "allowlisted" and isolation in ("auto", "process") and trusted
+    # probed only when it can matter: an allowlisted command of a trusted project under auto/process runs
+    # with process isolation
     runtime = container_runtime() if isolation == "container" or (isolation == "auto" and not process_ok) else None
     if isolation == "container" and not runtime:
         level = None
-    elif kind == "allowlisted" and isolation in ("auto", "process"):
+    elif process_ok:
         level = "process"
     elif runtime:
         level = "container"
@@ -767,26 +1214,35 @@ def run(
         "id": eid, "hypothesis": hypothesis, "command": argv, "timeout_s": timeout,
         "claim_id": claim_id, "created_at": now(),
     }
+
+    def refuse(reason: str, next_step: str | None, untrusted: bool = False):
+        reason_src = f" (source: commit {source['commit'][:12]})" if source["kind"] == "commit" else ""
+        store.insert("experiments", {**base, "cwd": str(repo) + reason_src, "isolation": "none",
+                                     "status": "refused", "summary": reason,
+                                     "environment": {"policy": {"kind": kind, "reason": why_risky},
+                                                     "trusted": trusted, "source": source}})
+        raise ExperimentRefused(reason, next_step, untrusted=untrusted)
+
     if level is None:
-        if source["kind"] == "commit":
-            reason_src = f" (source: commit {source['commit'][:12]})"
-        else:
-            reason_src = ""
+        untrusted = kind == "allowlisted" and not trusted and isolation in ("auto", "process")
+        next_step = None
         if isolation == "container" and not runtime:
             reason = "container isolation was requested and no container runtime (docker/podman) is available"
+        elif untrusted:
+            reason = ("the project is not trusted: its tests are its own code and would run with your privileges "
+                      "under process isolation, so an untrusted project's tests run only in a container, and "
+                      + ("process isolation was requested" if isolation == "process" else
+                         "no container runtime (docker/podman) is available"))
+            next_step = untrusted_next_step(repo)
         else:
             reason = (f"command classified '{kind}' and no container runtime (docker/podman) is available; "
                       "Verinoda does not run non-allowlisted commands with process isolation only")
         if why_risky:
             reason = f"{reason} (why '{kind}': {why_risky})"
-        store.insert("experiments", {**base, "cwd": str(repo) + reason_src, "isolation": "none",
-                                     "status": "refused", "summary": reason,
-                                     "environment": {"policy": {"kind": kind, "reason": why_risky},
-                                                     "source": source}})
-        raise ExperimentRefused(reason)
+        if ignored_note:
+            reason = f"{reason}; {ignored_note}"
+        refuse(reason, next_step, untrusted)
 
-    out_dir = runs_dir(repo) / eid
-    out_dir.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="verinoda-exp-"))
     home = work / "_home"
     home.mkdir()
@@ -804,11 +1260,31 @@ def run(
                 source["overlay"] = _overlay(repo, copy, list(overlay), ids)
             where = f"copy of commit {source['commit'][:12]} of {repo}"
         else:
-            copied = _copy_repo(repo, copy, ids)
+            not_copied: list[dict] = []
+            copied = _copy_repo(repo, copy, ids, not_copied)
+            if not_copied:
+                source["skipped"] = not_copied[:50]
+                source["skipped_total"] = len(not_copied)
             where = f"copy of {repo}"
     except Exception:
         shutil.rmtree(work, ignore_errors=True)
         raise
+    if level == "process" and _is_pytest(argv):
+        # the pytest config files are part of the command: read from the copy, checked like its arguments
+        problem = pytest_config_problem(copy, argv, plugin_names)
+        if problem:
+            kind, why_risky = "risky", problem
+            runtime = container_runtime() if isolation == "auto" else None
+            if runtime:
+                level = "container"
+            else:
+                shutil.rmtree(work, ignore_errors=True)
+                refuse(f"command classified 'risky' and no container runtime (docker/podman) is available; "
+                       f"Verinoda does not run it with process isolation only (why 'risky': {problem})",
+                       f"change that setting to a path inside the repository (or remove it), or install "
+                       "docker/podman for container isolation")
+    out_dir = runs_dir(repo) / eid
+    out_dir.mkdir(parents=True, exist_ok=True)
     tree = {"hash": treestate.tree_id(ids), "files": len(ids)}
     if file_ids is not None:
         file_ids.update(ids)
@@ -833,9 +1309,16 @@ def run(
                "the tests run as the user: they can read and write files outside the copy"]
               if level == "process" else [])
     if source.get("skipped"):
-        limits.append(f"{source['skipped_total']} file(s) of the commit are missing from the copy (this OS cannot "
-                      "hold their names): " + ", ".join(s["path"] for s in source["skipped"][:5]))
+        what = ("of the commit are missing from the copy (this OS cannot hold their names)" if source["kind"] ==
+                "commit" else "are missing from the copy (symbolic links and junctions are not followed)")
+        limits.append(f"{source['skipped_total']} file(s) {what}: "
+                      + ", ".join(s["path"] for s in source["skipped"][:5]))
+    if ignored_note:
+        limits.append(ignored_note)
     container_name = f"verinoda-{eid}"
+    image = str(cfg.get("container_image") or DEFAULT_CONTAINER_IMAGE)
+    run_env = env
+    not_found = None
     if level == "container":
         extra: list[str] = []
         for k, v in (env_extra or {}).items():
@@ -844,19 +1327,28 @@ def run(
         if plugins:
             extra += ["-v", f"{plugins_dir}:/plugins:ro", "-e", "PYTHONPATH=/plugins"]
         cmd = [runtime, "run", "--rm", "--name", container_name, "--network", "none", "--memory", "1g",
-               "--cpus", "1", "--pids-limit", "256", "-v", f"{copy}:/work", "-w", "/work", *extra,
-               cfg.get("container_image", "python:3.12-slim"), *_container_argv(argv)]
+               "--cpus", "1", "--pids-limit", "256", "--read-only", "--tmpfs", "/tmp", "--cap-drop", "ALL",
+               "--security-opt", "no-new-privileges", *_container_user(runtime),
+               "-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "VERINODA_EXPERIMENT=1",
+               "-v", f"{copy}:/work", "-w", "/work", *extra, image, *_container_argv(argv)]
+        run_env = _client_env()  # the client needs its daemon's settings; the container gets only the -e values
     else:
         env.update(env_extra or {})
         env["VERINODA_ARTIFACTS"] = str(artifacts_dir)
         if plugins:
             env["PYTHONPATH"] = str(plugins_dir)
-        cmd = argv
-        exe = shutil.which(cmd[0], path=env["PATH"])
-        if exe:
-            cmd = [exe, *cmd[1:]]
+        cmd = list(argv)
+        if _is_pytest(argv):
+            (work / "_pytest").mkdir()  # pytest makes --basetemp itself, but not its parent
+            cmd = _pytest_extra(argv, work / "_pytest")
+        if len(_arg0_path(cmd[0]).parts) <= 1:
+            exe = _which(_strip_quotes(cmd[0]), env["PATH"])
+            if exe:
+                cmd = [exe, *cmd[1:]]
+            else:  # never hand a bare name to the OS: Windows would search the current directory first
+                not_found = f"{cmd[0]!r} was not found on PATH (the current directory is not searched)"
     t0 = time.monotonic()
-    kwargs: dict = {"cwd": str(copy), "env": env, "stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
+    kwargs: dict = {"cwd": str(copy), "env": run_env, "stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
                     "stdin": subprocess.DEVNULL}
     if os.name == "nt":
         # suspended until it is in the job object (_ProcessTree): nothing it starts can escape the job
@@ -865,6 +1357,8 @@ def run(
         kwargs["preexec_fn"] = _posix_limits(int(timeout) + 5, 2048)
     timed_out = False
     try:
+        if not_found:
+            raise FileNotFoundError(not_found)
         proc = subprocess.Popen(cmd, **kwargs)
         tree_procs = _ProcessTree(proc, suspended=os.name == "nt")
     except OSError as exc:
@@ -932,7 +1426,9 @@ def run(
         **base, "cwd": f"{where} ({copied} files)", "isolation": level,
         "environment": {"guarantees": guarantees, "limits": limits, "python": sys.version.split()[0],
                         "platform": sys.platform, **({"plugins": sorted(plugins)} if plugins else {}),
-                        "source": source, "tree_hash": tree["hash"]},
+                        "source": source, "tree_hash": tree["hash"], "trusted": trusted,
+                        **({"image": image} if level == "container" else {}),
+                        **({"argv": cmd[1:]} if level == "process" and cmd[1:] != argv[1:] else {})},
         "exit_code": code, "duration_s": round(duration, 3), "timed_out": int(timed_out),
         "status": outcome, "summary": "; ".join(([why] if why else []) + summ["summary_lines"]) or None,
         "stdout_path": str(out_dir / "stdout.txt"), "stderr_path": str(out_dir / "stderr.txt"),
@@ -954,13 +1450,19 @@ def run(
     res = {"id": eid, "isolation": level, "guarantees": guarantees, "outcome": outcome,
            "matches_expectation": matches, "duration_s": round(duration, 3), "evidence_id": ev_id,
            "summary": summ, "logs": {"stdout": str(out_dir / "stdout.txt"), "stderr": str(out_dir / "stderr.txt")},
-           "exit_code": code, "tree": tree, "source": source}
+           "exit_code": code, "tree": tree, "source": source, "trusted": trusted}
     if limits:
         res["limits"] = limits
     if artifacts:
         res["artifacts"] = artifacts
     if why:
         res["inconclusive_reason"] = why
-        res["next_step"] = ("install pytest in the project's environment (or create .venv) and re-run"
-                            if "not installed" in why else "check the test ids/arguments and re-run")
+        if "not installed" in why and level == "container":
+            res["next_step"] = (f"the container image {image} has no pytest (the container has no network to "
+                                "install it): set experiments.container_image in your user config "
+                                f"({user_config_path()}) to an image with pytest and the project's dependencies")
+        elif "not installed" in why:
+            res["next_step"] = "install pytest in the project's environment (or create .venv) and re-run"
+        else:
+            res["next_step"] = "check the test ids/arguments and re-run"
     return res

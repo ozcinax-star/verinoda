@@ -96,9 +96,14 @@ def _argv(command) -> list[str]:
 
 
 def _runnable(repo: Path, argv: list[str]) -> tuple[bool, str | None]:
-    kind, why = experiments.policy(argv, load_config(repo)["experiments"]["process_isolation_allowlist"])
-    if kind == "allowlisted":
+    """Can Verinoda run ``argv`` for this project: allowlisted in a trusted project, else in a container."""
+    from verinoda.paths import is_trusted
+
+    kind, why = experiments.policy(argv, load_config(repo)["experiments"]["process_isolation_allowlist"], repo=repo)
+    if kind == "allowlisted" and is_trusted(repo):
         return True, None
+    if kind == "allowlisted":
+        why = "the project is not trusted (`verinoda trust`), so its tests run only in a container"
     return (experiments.container_runtime() is not None), why
 
 

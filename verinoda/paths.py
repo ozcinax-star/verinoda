@@ -26,6 +26,11 @@ Everything lives under ``<repo>/.verinoda/``:
     research/<slug> pinned checkouts of reference repositories
                     (research/http-cache: offline-first HTTP cache of the reference resolver)
     config.json     budgets, experiment policy, research network mode, understanding thresholds
+                    (experiment policy, MCP profile and network mode only when the user trusts the
+                    project; otherwise from the user-level config, see :func:`user_config_dir`)
+
+Outside every project, in :func:`user_config_dir`: the user-level ``config.json`` and ``trust.json``
+(the projects the user trusts, written by ``verinoda trust``).
 
 The project_index package (derived from Graphify) reads its output directory
 from the GRAPHIFY_OUT environment variable *at import time*, so the Verinoda
@@ -190,17 +195,175 @@ def ensure_atlas(repo: Path) -> Path:
     return d
 
 
-def load_config(repo: Path) -> dict:
-    cfg = json.loads(json.dumps(DEFAULT_CONFIG))
+# -- the user's own settings and trust, kept outside every repository (docs/DESIGN.md D63) --------------------
+
+CONFIG_DIR_ENV = "VERINODA_CONFIG_DIR"
+# Settings a repository's own .verinoda/config.json may set only when the user trusts that repository: what
+# may run and how (experiments.*: the process-isolation allowlist, the container image, timeouts), which MCP
+# tools are served (mcp.profile) and whether reference resolution goes to the network (research.network).
+# A cloned repository can ship that file (force-added past .verinoda/.gitignore); without trust it cannot
+# widen them. None: every key of the section.
+PROTECTED_SETTINGS: dict[str, tuple[str, ...] | None] = {
+    "experiments": None, "mcp": ("profile",), "research": ("network",)}
+
+
+def user_config_dir() -> Path:
+    """Verinoda's per-user directory (``$VERINODA_CONFIG_DIR``; else ``%APPDATA%\\verinoda`` on Windows,
+    ``$XDG_CONFIG_HOME/verinoda`` or ``~/.config/verinoda`` elsewhere). No repository writes there."""
+    env = os.environ.get(CONFIG_DIR_ENV)
+    if env:
+        return Path(env)
+    if os.name == "nt":
+        return Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / "verinoda"
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "verinoda"
+
+
+def user_config_path() -> Path:
+    """The user-level config.json: every setting, the protected ones included, for every project."""
+    return user_config_dir() / "config.json"
+
+
+def trust_path() -> Path:
+    """Where ``verinoda trust`` records the repositories the user trusts."""
+    return user_config_dir() / "trust.json"
+
+
+def _read_json(p: Path):
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _trust_key(p: Path | str) -> str:
+    return os.path.normcase(os.path.realpath(str(p)))
+
+
+def trust_entries() -> list[dict]:
+    """The recorded trust entries (``path``, ``subfolders``, ``at``); unreadable entries are left out."""
+    data = _read_json(trust_path())
+    rows = data.get("trusted") if isinstance(data, dict) else None
+    return [e for e in rows or [] if isinstance(e, dict) and isinstance(e.get("path"), str) and e["path"]]
+
+
+def trust_record(repo: Path | str) -> dict | None:
+    """The entry that makes ``repo`` trusted, or None. An entry covers its own path, and with ``subfolders``
+    every folder below it except those under a ``.verinoda`` folder (reference checkouts live there)."""
+    key = _trust_key(repo)
+    for e in trust_entries():
+        root = _trust_key(e["path"])
+        if key == root:
+            return e
+        if e.get("subfolders") and key.startswith(root.rstrip(os.sep) + os.sep):
+            if ATLAS_DIRNAME not in Path(key[len(root.rstrip(os.sep)) + 1:]).parts:
+                return e
+    return None
+
+
+def is_trusted(repo: Path | str) -> bool:
+    """Has the user marked ``repo`` trusted (``verinoda trust``)? Only then do its tests run with process
+    isolation, and only then does its own config set the protected settings (:data:`PROTECTED_SETTINGS`)."""
+    return trust_record(repo) is not None
+
+
+def set_trust(path: Path | str, *, subfolders: bool = False, remove: bool = False) -> dict:
+    """Record (or with ``remove`` drop) trust in ``path``; returns what the trust file now says about it."""
+    from datetime import datetime, timezone
+
+    real = os.path.realpath(str(path))
+    key = _trust_key(real)
+    rows = [e for e in trust_entries() if _trust_key(e["path"]) != key]
+    removed = len(rows) != len(trust_entries())
+    if not remove:
+        rows.append({"path": real, "subfolders": bool(subfolders),
+                     "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+    p = trust_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_text(json.dumps({"version": 1, "trusted": rows}, indent=2), encoding="utf-8")
+    os.replace(tmp, p)
+    return {"path": real, "trusted": not remove, "subfolders": bool(subfolders) and not remove,
+            "removed": removed if remove else None, "trust_file": str(p)}
+
+
+def _merge(cfg: dict, over: dict) -> None:
+    for k, v in over.items():
+        if isinstance(v, dict) and isinstance(cfg.get(k), dict):
+            cfg[k].update(v)
+        else:
+            cfg[k] = v
+
+
+def _without_protected(repo_cfg: dict) -> dict:
+    out = {}
+    for k, v in repo_cfg.items():
+        if k not in PROTECTED_SETTINGS:
+            out[k] = v
+            continue
+        keys = PROTECTED_SETTINGS[k]
+        if keys is not None and isinstance(v, dict):
+            rest = {kk: vv for kk, vv in v.items() if kk not in keys}
+            if rest:
+                out[k] = rest
+    return out
+
+
+def _user_config() -> dict:
+    data = _read_json(user_config_path())
+    return data if isinstance(data, dict) else {}
+
+
+def _repo_config(repo: Path) -> dict | None:
+    """The repository's own config.json: None when missing or unreadable (the defaults then apply)."""
     p = atlas_dir(repo) / "config.json"
-    if p.exists():
-        try:
-            user = json.loads(p.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return cfg
-        for k, v in user.items():
-            if isinstance(v, dict) and isinstance(cfg.get(k), dict):
-                cfg[k].update(v)
-            else:
-                cfg[k] = v
+    if not p.exists():
+        return None
+    data = _read_json(p)
+    return data if isinstance(data, dict) else None
+
+
+def load_config(repo: Path) -> dict:
+    """The settings for ``repo``: the defaults, then the user-level config (:func:`user_config_path`), then the
+    repository's own ``.verinoda/config.json``. The protected settings (:data:`PROTECTED_SETTINGS`) are taken
+    from the repository's file only when the user trusts the repository (:func:`is_trusted`);
+    :func:`ignored_repo_settings` names the ones left out."""
+    cfg = json.loads(json.dumps(DEFAULT_CONFIG))
+    _merge(cfg, _user_config())
+    repo_cfg = _repo_config(repo)
+    if repo_cfg:
+        _merge(cfg, repo_cfg if is_trusted(repo) else _without_protected(repo_cfg))
     return cfg
+
+
+def ignored_repo_settings(repo: Path) -> list[str]:
+    """The protected settings (``experiments.process_isolation_allowlist``, ``mcp.profile``, ...) the
+    repository's own config sets to something other than what is used, because the repository is not
+    trusted. Values equal to the ones in use (``verinoda init`` writes the defaults) are not listed."""
+    repo_cfg = _repo_config(repo)
+    if not repo_cfg or is_trusted(repo):
+        return []
+    used = load_config(repo)
+    out = []
+    for section, keys in PROTECTED_SETTINGS.items():
+        v = repo_cfg.get(section)
+        if v is None:
+            continue
+        if not isinstance(v, dict):
+            if v != used.get(section):
+                out.append(section)
+            continue
+        for k, val in v.items():
+            if (keys is None or k in keys) and val != (used.get(section) or {}).get(k):
+                out.append(f"{section}.{k}")
+    return out
+
+
+def ignored_settings_note(repo: Path) -> str | None:
+    """One sentence for a result: which settings of the repository's config were ignored and what to do."""
+    names = ignored_repo_settings(repo)
+    if not names:
+        return None
+    return (f"{', '.join(names)} in the project's .verinoda/config.json "
+            f"{'is' if len(names) == 1 else 'are'} ignored: the project is not trusted (a cloned repository can "
+            f"ship that file); run `verinoda trust {Path(repo).resolve()}` if you trust it, or set "
+            f"{'it' if len(names) == 1 else 'them'} in your user config {user_config_path()}")
