@@ -5,11 +5,12 @@ and every step is idempotent, so running it again is how you refresh a project:
 
 1. ``init`` - create ``.verinoda/`` (database, config); never in the home
    directory itself unless ``allow_home``;
-2. ``scan`` on a first run, ``update`` afterwards - index the code (AST only,
-   no LLM, no network);
-3. agent skills (+ MCP) for the agents that are actually installed on this
+2. agent skills (+ MCP) for the agents that are actually installed on this
    machine (``agents="auto"``), or the ones named, through the same installer
    as ``verinoda install`` (it never overwrites files it does not own);
+3. ``scan`` on a first run, ``update`` afterwards - index the code (AST only,
+   no LLM, no network). After step 2, so the index already has what setup
+   wrote; Verinoda's own files are not indexed at all (:mod:`verinoda.selffiles`);
 4. a short checklist of what to do next, including install-layout warnings
    that ``doctor`` would report (for example a hardlinked install that a
    sandboxed agent cannot import).
@@ -246,6 +247,12 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
     if reference:
         report["reference"] = [add_reference(repo, spec) for spec in reference]
         report["steps"].append("reference")
+    # The agent files are written before the index is brought up to date (D68): the snapshot below then
+    # already has whatever setup changed, so the next setup or update never finds setup's own writes as
+    # changed files (a graph rebuild of the whole project when another interpreter ran setup). Verinoda's
+    # own files are not in the index anyway (verinoda.selffiles); the rest of a shared config is.
+    installs = [(agent, installer.install(agent, scope, project_dir=repo, home=home, with_mcp=with_mcp))
+                for agent in chosen]
     st = open_store(repo, create=True)
     try:
         first = not graph_path(repo).exists() or st.latest_snapshot() is None
@@ -281,6 +288,8 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
                 f"below your own code")
     report["index"] = {
         "mode": "scan" if first else res.get("mode", "update"),
+        # whether the code graph was rebuilt ("full") or left as it was ("none")
+        "graph": "full" if first else res.get("index_mode"),
         "files": snap.get("file_count"),
         "nodes": (res.get("graph") or {}).get("nodes", snap.get("graph_nodes")),
         "edges": (res.get("graph") or {}).get("edges", snap.get("graph_edges")),
@@ -293,8 +302,7 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
     from verinoda.buildinfo import build_info
 
     report["build"] = {k: build_info()[k] for k in ("version", "build", "commit", "source", "package", "python")}
-    for agent in chosen:
-        r = installer.install(agent, scope, project_dir=repo, home=home, with_mcp=with_mcp)
+    for agent, r in installs:
         report["agents"].append({"agent": agent, "scope": scope, "ok": r.get("ok", True),
                                  "result": r.get("result"), "skill": r.get("skill"),
                                  "server": (r.get("server") or {}).get("command"),

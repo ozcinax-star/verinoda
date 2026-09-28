@@ -43,13 +43,12 @@ from typing import Callable
 
 from verinoda.agents import _jsonedit as je
 from verinoda.agents import _tomledit as te
+# NAME, the ownership marker, the skill folders and the manifest's place are shared with the rule that
+# keeps these files out of the project's own index (verinoda.selffiles, D68)
+from verinoda.selffiles import MANIFEST_DIR, MANIFEST_NAME, MARKER, MARKER_PREFIX, NAME, SKILL_DIRS
 
 AGENTS = ("claude", "codex")
 SCOPES = ("project", "user")
-NAME = "verinoda"
-MARKER = "<!-- verinoda-managed v1 -->"
-MARKER_PREFIX = b"<!-- verinoda-managed"
-MANIFEST_NAME = "install-manifest.json"
 MANIFEST_VERSION = 1
 TEMPLATES = Path(__file__).parent / "templates"
 CLI_PLACEHOLDER = "{{VERINODA_CLI}}"
@@ -188,19 +187,18 @@ def _codex_home(home: Path, explicit_home: bool) -> Path:
 
 def _target(agent: str, scope: str, project_dir: Path, home: Path, explicit_home: bool) -> Target:
     root = project_dir if scope == "project" else home
+    skill = root.joinpath(*SKILL_DIRS[agent], "SKILL.md")
     if agent == "claude":
-        skill = root / ".claude" / "skills" / NAME / "SKILL.md"
         if scope == "project":
             kind, mcp = "json", project_dir / ".mcp.json"
         else:
             kind, mcp = "claude_cli", _claude_user_config(home, explicit_home)
     else:
-        skill = root / ".agents" / "skills" / NAME / "SKILL.md"
         kind = "toml"
         mcp = (project_dir / ".codex" / "config.toml" if scope == "project"
                else _codex_home(home, explicit_home) / "config.toml")
     return Target(agent, scope, root, home, explicit_home, project_dir, skill, kind, mcp,
-                  root / ".verinoda" / MANIFEST_NAME)
+                  root / MANIFEST_DIR / MANIFEST_NAME)
 
 
 # -- which program the agents start ------------------------------------------------------

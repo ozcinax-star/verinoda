@@ -106,7 +106,10 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
         pruned = sorted(set(pruned or ()) | set(keep.record.get("pruned") or ()))
     out = {"ok": bool(ok), "graph_path": str(gp), "nodes": len(data.get("nodes", [])),
            "edges": len(data.get("links", data.get("edges", []))), "log": buf.getvalue()[-2000:]}
-    rewrote = bool(pruned) or bool((portable or {}).get("changed"))
+    own = (portable or {}).pop("own_files", None)
+    if own:
+        out["own_files_dropped"] = own  # Verinoda's own files the build kept nodes of (D68)
+    rewrote = bool(pruned) or bool((portable or {}).get("changed")) or bool(own)
     keep.finish(data if ok and "error" not in (portable or {}) else None, pruned, rewrote)
     del data  # the sidecar refresh loads the graph again
     if portable is not None:
@@ -2631,6 +2634,26 @@ def _missing_in_nodes(repo: Path, nodes) -> list[str]:
     return sorted(sf for sf, gone in seen.items() if gone)
 
 
+def _own_in_nodes(repo: Path, nodes) -> list[str]:
+    """``source_file`` values of nodes from Verinoda's own files (:mod:`verinoda.selffiles`, D68). The build
+    excludes those files and evicts their nodes; this catches what it kept anyway (a node the fail-closed
+    reconcile preserves, such as one under a graph root recorded for another folder the index was copied from)."""
+    from verinoda.selffiles import own_filter
+
+    own = own_filter(repo)
+    out: set[str] = set()
+    for sf in {n.get("source_file") for n in nodes}:
+        p = _local_source(repo, sf)
+        if p is not None:
+            try:
+                rel = p.resolve().relative_to(repo).as_posix()
+            except (ValueError, OSError):
+                continue
+            if own(rel):
+                out.add(sf)
+    return sorted(out)
+
+
 def _drop_files(data: dict, gone: set[str]) -> None:
     """Remove, in place, the nodes of the files ``gone`` and the edges and hyperedges on them."""
     drop = {n["id"] for n in data.get("nodes", []) if n.get("source_file") in gone}
@@ -2660,9 +2683,11 @@ def _write_pruned(gp: Path, data: dict) -> None:
 def _post_process(gp: Path, repo: Path, *, prune: bool) -> tuple[dict, list[str] | None, dict]:
     """graph.json after a build, read once and written at most once: the ids made portable
     (:func:`verinoda.portable_ids.make_graph_portable`) and, with ``prune``, the nodes of
-    missing files dropped (:func:`prune_missing_files`). The file ends byte for byte as those
-    two steps one after the other leave it: in the format of the last one that wrote.
-    Returns ``({"changed": ids rewritten}, files pruned or None, the graph data)``."""
+    missing files dropped (:func:`prune_missing_files`), and those of Verinoda's own files
+    (:func:`_own_in_nodes`). The file ends byte for byte as those steps one after the other
+    leave it: in the format of the last one that wrote.
+    Returns ``({"changed": ids rewritten[, "own_files": own files dropped]}, files pruned or None,
+    the graph data)``."""
     from verinoda.portable_ids import strip_root_from_ids, write_graph
 
     repo = Path(repo).resolve()
@@ -2670,12 +2695,13 @@ def _post_process(gp: Path, repo: Path, *, prune: bool) -> tuple[dict, list[str]
     edges = data.get("links") if isinstance(data.get("links"), list) else data.get("edges") or []
     n = strip_root_from_ids(data.get("nodes") or [], edges, repo, data.get("hyperedges"))
     gone = _missing_in_nodes(repo, data.get("nodes", [])) if prune else []
-    if gone:
-        _drop_files(data, set(gone))
+    own = _own_in_nodes(repo, data.get("nodes", [])) if prune else []
+    if gone or own:
+        _drop_files(data, set(gone) | set(own))
         _write_pruned(gp, data)
     elif n:
         write_graph(gp, data)
-    return {"changed": n}, (gone if prune else None), data
+    return {"changed": n, **({"own_files": own} if own else {})}, (gone if prune else None), data
 
 
 def missing_source_files(repo: Path, gp: Path | None = None) -> list[str]:
