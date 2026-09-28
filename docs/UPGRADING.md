@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D67)
+## Upgrading from 0.3.2 (D60-D68)
 
 ### D63: Running a project's own tests safely
 
@@ -153,6 +153,25 @@ Add under a new heading "Upgrading to the 2026-09-28 code (D63)":
   counts the rest ("and 7 more").
 - A plan drafted by `verinoda plan draft` (or inside analyze) no longer turns a fenced code block or a quote
   left open across lines into one mention: inline code and quotes end on their line.
+
+### D68: Verinoda's own files are not the project's
+
+### D68: Verinoda's own files are not indexed
+
+- Nothing to run. The first `verinoda update` (or `setup`) after upgrading rebuilds the graph once: the
+  AST cache schema is 8 (an MCP config's extraction no longer includes Verinoda's own server entry), and the
+  skill files leave the index. After it, a file carrying the `verinoda-managed` marker under
+  `.claude/skills/verinoda/` or `.agents/skills/verinoda/` (at any depth, so a nested project's skill too)
+  or listed by the install manifest as Verinoda's is in no snapshot, graph, search index, lexicon, freshness
+  report or debug-ledger tree. A file without the marker there (your own `SKILL.md`, a `reference.md` next
+  to Verinoda's) stays indexed. `.mcp.json` stays indexed without Verinoda's `verinoda` entry.
+- `verinoda setup` installs the agent files before it indexes. Running it again, from the same or another
+  Verinoda install, no longer rebuilds the graph when only those files changed; the setup report's `index`
+  has `graph`: `"full"` or `"none"`.
+- A scan/update result may carry `own_files_dropped` (graph.json had nodes from Verinoda's own files and they
+  were dropped), and `build_stats.json` has `configs` (the MCP-config digests of the last graph build).
+- An index copied from another folder may keep the pre-D68 `verinoda` server node of `.mcp.json`; delete
+  `.verinoda/index` and run `verinoda scan` to clear it (derived files are disposable).
 
 ### D60-D62
 
