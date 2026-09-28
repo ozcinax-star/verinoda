@@ -1082,8 +1082,13 @@ def _install(build: Path, db: Path) -> None:
     replayed into it). When ``db`` is held open elsewhere and cannot be replaced (Windows), the build's
     pages are copied into it under SQLite's own locking instead, as the old in-place rebuild did.
     """
-    conn = sqlite3.connect(str(build))
+    # mode=rw: a build file removed meanwhile (the sweep in _open_for_write takes build files older than
+    # an hour, POSIX lets it unlink an open one) must fail here, not come back as a new empty database
+    # that replaces the index
+    conn = sqlite3.connect(build.absolute().as_uri() + "?mode=rw", uri=True)
     try:
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").fetchone() is None:
+            raise sqlite3.DatabaseError(f"{build} is not a complete search index build")
         conn.execute("PRAGMA journal_mode = WAL")  # the mode every writer sets anyway (_connect)
     finally:
         conn.close()

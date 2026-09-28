@@ -6,6 +6,7 @@ import os
 
 os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
+import json  # noqa: E402
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -88,7 +89,8 @@ def test_excludes_and_a_deleted_tracked_file(repo):
     assert fast["skipped_sensitive"] == walk["skipped_sensitive"]
 
 
-@pytest.mark.parametrize("case", ["negation", "nested_repo", "submodule_file", "no_gitignore"])
+@pytest.mark.parametrize("case", ["negation", "nested_repo", "submodule_file", "no_gitignore", "embedded_repo",
+                                  "utf16_gitignore", "ansi_gitignore"])
 def test_the_walk_runs_where_git_would_list_something_else(repo, case):
     if case == "negation":  # .graphifyignore may re-include what .gitignore drops; git never lists it
         _write(repo, ".graphifyignore", "vendor/\n!app/logs/today.log\n")
@@ -97,6 +99,23 @@ def test_the_walk_runs_where_git_would_list_something_else(repo, case):
         _git(repo / "tools" / "inner", "init", "-q")
     elif case == "submodule_file":
         _write(repo, ".gitmodules", "")
+    elif case == "embedded_repo":
+        # `git add` of a nested clone records a gitlink and no .gitmodules: git lists `inner` and none of
+        # its files, the walk descends (review of D66, finding 1)
+        _write(repo, "inner/lib/core.py", "def core():\n    return 1\n")
+        _git(repo / "inner", "init", "-q")
+        _git(repo / "inner", "add", "-A")
+        _git(repo / "inner", "commit", "-q", "-m", "inner")
+        _git(repo, "add", "inner")
+        _git(repo, "commit", "-q", "-m", "embed")
+    elif case == "utf16_gitignore":
+        # what Windows PowerShell 5.1 `"..." > .gitignore` writes: the walk decodes it, git reads bytes
+        # (review of D66, finding 4)
+        _write(repo, "private2/salaries.md", "# salaries\n")
+        (repo / ".gitignore").write_bytes("*.log\r\nscratch/\r\nprivate2/\r\n".encode("utf-16"))
+    elif case == "ansi_gitignore":  # an ANSI code page file: the walk decodes it, git matches the raw bytes
+        _write(repo, "Orçamento/plan.md", "# plan\n")
+        (repo / ".gitignore").write_bytes("*.log\nscratch/\nOrçamento/\n".encode("cp1254"))
     else:  # no .gitignore rules at the root: no git process at all
         (repo / ".gitignore").unlink()
         (repo / ".git" / "info" / "exclude").unlink()
@@ -104,6 +123,11 @@ def test_the_walk_runs_where_git_would_list_something_else(repo, case):
     assert fast["enumeration"] == "walk"
     for key in READ_BY_VERINODA:
         assert fast[key] == walk[key], key
+    if case == "embedded_repo":
+        assert str(repo / "inner" / "lib" / "core.py") in fast["files"]["code"]
+        assert not any("not a regular file" in s for s in fast["skipped_sensitive"])
+    elif case in ("utf16_gitignore", "ansi_gitignore"):
+        assert not any("salaries" in f or "plan.md" in f for f in fast["files"]["document"])
 
 
 def test_git_failure_falls_back_to_the_walk(repo, monkeypatch):
@@ -147,3 +171,126 @@ def test_a_junction_out_of_the_root_stays_out(repo, tmp_path):
         assert fast[key] == walk[key], key
     assert not any("secret.py" in f for f in fast["files"]["code"])
     assert any("linked" in s and "outside scan root" in s for s in fast["skipped_sensitive"])
+
+
+def test_inherited_git_variables_do_not_redirect_the_listing(repo, tmp_path, monkeypatch):
+    """A git hook exports GIT_DIR / GIT_INDEX_FILE for its own repository (review of D66, finding 9)."""
+    walk = dt.detect(repo, enumeration="walk")
+    other = tmp_path / "other"
+    _write(other, "elsewhere.py")
+    _git(other, "init", "-q")
+    _git(other, "add", "-A")
+    _git(other, "commit", "-q", "-m", "other")
+    monkeypatch.setenv("GIT_DIR", str(other / ".git"))
+    monkeypatch.setenv("GIT_INDEX_FILE", str(other / ".git" / "index"))
+    fast = dt.detect(repo)
+    assert fast["enumeration"] == "git"
+    for key in READ_BY_VERINODA:
+        assert fast[key] == walk[key], key
+
+
+def test_an_unignored_noise_directory_is_left_to_the_walks_rule(repo):
+    """git is told to skip the directories the walk prunes by name, so an un-ignored node_modules costs
+    no enumeration and a repository inside it does not force the walk (review of D66, finding 11)."""
+    _write(repo, "node_modules/dep/index.js", "module.exports = 1\n")
+    _git(repo / "node_modules" / "dep", "init", "-q")  # --others would list it as `node_modules/dep/`
+    fast, walk = _both(repo)
+    assert fast["enumeration"] == "git"
+    for key in READ_BY_VERINODA:
+        assert fast[key] == walk[key], key
+    assert str(repo / "node_modules") + os.sep in fast["pruned_noise_dirs"]
+
+
+def test_a_very_deep_path_does_not_exhaust_the_recursion_limit(repo, monkeypatch):
+    """One step per directory level was a recursive call (review of D66, finding 6)."""
+    deep = "a/" * 1100 + "f.py"
+    monkeypatch.setattr(dt, "_git_listed_files", lambda root: (["app/main.py", deep], []))
+    got = dt._git_enumerate(repo, [], set(), repo / ".verinoda" / "index")
+    assert got is not None
+    assert repo / "app" / "main.py" in got[0]
+
+
+def _deny_listing(d: Path):
+    """Make directory ``d`` unlistable for this user; return the undo, or None when that is not possible."""
+    if os.name == "nt":
+        user = subprocess.run(["whoami"], capture_output=True, text=True).stdout.strip()
+        if not user or subprocess.run(["icacls", str(d), "/deny", f"{user}:(RD)"],
+                                      capture_output=True).returncode != 0:
+            return None
+        return lambda: subprocess.run(["icacls", str(d), "/remove:d", user], capture_output=True)
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        return None  # root lists any directory
+    os.chmod(d, 0)
+    return lambda: os.chmod(d, 0o755)
+
+
+def test_an_unreadable_directory_is_reported_by_the_walk(repo):
+    """git only warns on stderr about a directory it cannot open; the walk names it in walk_errors
+    (review of D66, finding 8)."""
+    locked = _write(repo, "locked/a.py").parent
+    undo = _deny_listing(locked)
+    if undo is None:
+        pytest.skip("cannot make a directory unreadable here")
+    try:
+        try:
+            os.listdir(locked)
+            pytest.skip("the directory is still readable (elevated rights)")
+        except OSError:
+            pass
+        fast = dt.detect(repo)
+    finally:
+        undo()
+    assert fast["enumeration"] == "walk"
+    assert any("locked" in e for e in fast["walk_errors"])
+
+
+@pytest.fixture()
+def star_repo(tmp_path) -> Path:
+    """`.gitignore` = `test*.py`: git drops a file whose name matches, the Python matcher also
+    `tests/foo.py` (its `*` crosses `/`)."""
+    root = tmp_path / "star"
+    _write(root, "main.py", "def main():\n    return 1\n")
+    _write(root, ".gitignore", "test*.py\n")
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "init")
+    _write(root, "tests/foo.py", "def foo():\n    return 2\n")  # untracked, kept by git
+    _write(root, "test_x.py")  # untracked, ignored by both
+    return root
+
+
+def test_the_ignore_predicate_keeps_what_git_keeps(star_repo):
+    """The reconcile step asks ignored_predicate whether a corpus-absent file is ignored; a file git lists
+    is not (review of D66, finding 2)."""
+    fast, walk = _both(star_repo)
+    foo = star_repo / "tests" / "foo.py"
+    assert fast["enumeration"] == "git" and str(foo) in fast["files"]["code"]
+    assert str(foo) not in walk["files"]["code"]  # the two matchers differ here
+    ignored = dt.ignored_predicate(star_repo, gitignore=True)
+    assert ignored(foo) is False
+    assert ignored(star_repo / "test_x.py") is True
+    assert dt.ignored_predicate(star_repo, gitignore=False)(foo) is False
+    _write(star_repo, ".graphifyignore", "tests/foo.py\n")  # an explicit rule still decides
+    assert dt.ignored_predicate(star_repo, gitignore=True)(foo) is True
+
+
+def test_a_rebuild_that_walks_does_not_evict_what_git_listed(star_repo):
+    """Scan through git, then a full rebuild that has to walk (.gitmodules appeared), then git again: the
+    file git keeps stays in the graph throughout (review of D66, finding 2)."""
+    from verinoda.project_index import paths
+    from verinoda.project_index.watch import _rebuild_code
+
+    graph = star_repo / paths.GRAPHIFY_OUT / "graph.json"
+
+    def sources() -> set:
+        return {n.get("source_file") for n in json.loads(graph.read_text(encoding="utf-8"))["nodes"]}
+
+    assert _rebuild_code(star_repo, no_cluster=True, acquire_lock=False) is True
+    assert "tests/foo.py" in sources()
+    (star_repo / ".gitmodules").write_text("", encoding="utf-8")  # detect() walks from here on
+    assert dt.detect(star_repo)["enumeration"] == "walk"
+    assert _rebuild_code(star_repo, no_cluster=True, acquire_lock=False) is True
+    assert "tests/foo.py" in sources()
+    (star_repo / ".gitmodules").unlink()
+    assert _rebuild_code(star_repo, no_cluster=True, acquire_lock=False) is True
+    assert "tests/foo.py" in sources()

@@ -1096,6 +1096,39 @@ def _path_identity(path: Path) -> str:
     return _nfc(os.path.normcase(os.path.abspath(os.fspath(path))))
 
 
+# Verinoda patch: the repository-local variables git exports to hooks (and a tool working on another
+# repository or a temporary index may export). Inherited, they make `git -C <root>` describe that
+# repository or index instead of <root>, so they are dropped for every git call made here.
+_GIT_LOCAL_ENV = frozenset({
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_IMPLICIT_WORK_TREE", "GIT_PREFIX", "GIT_NAMESPACE",
+    "GIT_SHALLOW_FILE", "GIT_GRAFT_FILE", "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE",
+    "GIT_INTERNAL_SUPER_PREFIX",
+})
+
+
+def _git_env() -> dict[str, str]:
+    """The environment of a git call made here (Verinoda patch): no repository-local variables, no
+    optional locks, messages untranslated (stderr is matched in :func:`_git_listed_files`)."""
+    env = {k: v for k, v in os.environ.items() if k.upper() not in _GIT_LOCAL_ENV}
+    env.update(GIT_OPTIONAL_LOCKS="0", LC_ALL="C", LANGUAGE="C")
+    return env
+
+
+def _git_ls(root: Path, args: list[str], *, timeout: float = 60) -> tuple[bytes, str] | None:
+    """``(stdout, stderr)`` of ``git -C root ls-files -z <args>``, or None when git cannot run or fails
+    (Verinoda patch)."""
+    try:
+        proc = subprocess.run(["git", "-C", str(root), "ls-files", "-z", *args], stdin=subprocess.DEVNULL,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, timeout=timeout,
+                              env=_git_env())
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout, proc.stderr.decode("utf-8", "replace")
+
+
 def _git_tracked_path_keys(root: Path) -> tuple[set[str], set[str]]:
     """Return tracked-file keys and their ancestor-directory keys under *root*.
 
@@ -1109,24 +1142,13 @@ def _git_tracked_path_keys(root: Path) -> tuple[set[str], set[str]]:
     vcs_root = _find_vcs_root(root)
     if vcs_root is None or not (vcs_root / ".git").exists():
         return set(), set()
-    try:
-        proc = subprocess.run(
-            ["git", "-C", str(vcs_root), "ls-files", "-z", "--cached"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            check=False,
-            timeout=30,
-            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
-        )
-    except (OSError, subprocess.SubprocessError):
-        return set(), set()
-    if proc.returncode != 0:
+    listed = _git_ls(vcs_root, ["--cached"], timeout=30)
+    if listed is None:
         return set(), set()
 
     tracked_files: set[str] = set()
     tracked_dirs: set[str] = set()
-    for raw in proc.stdout.split(b"\0"):
+    for raw in listed[0].split(b"\0"):
         if not raw:
             continue
         path = Path(os.path.abspath(vcs_root / os.fsdecode(raw)))
@@ -1667,6 +1689,20 @@ def ignored_predicate(
     explicit_cache: dict[Path, bool] = {}
     # root's own ignore file is the last entry of _load_graphifyignore's chain.
     loaded_dirs: set[Path] = {root}
+    # Verinoda patch: at the top of a git work tree the tracked-file exemption extends to the untracked
+    # files git lists as not ignored. detect()'s git path indexes them by git's rules, which differ from
+    # the matcher here in places (`*` crossing `/`, case, ignore-file encoding); a rebuild that walked
+    # instead must not take a matcher-only verdict as evidence to evict them (review of D66, finding 2).
+    # Listed once, on the first path only .gitignore rules drop; git failing -> the matcher, as before.
+    # (the condition under which detect() takes the git path)
+    git_veto = gitignore and len(patterns) > len(explicit_patterns) and (root / ".git").exists()
+    git_kept: list[set[str] | None] = []
+
+    def _git_keeps(path: Path) -> bool:
+        if not git_kept:
+            git_kept.append(_git_kept_untracked(root))
+        kept = git_kept[0]
+        return kept is not None and _path_identity(path) in kept
 
     def _ignored(path: Path) -> bool:
         path = Path(os.path.abspath(path))
@@ -1694,7 +1730,7 @@ def ignored_predicate(
                 explicit_patterns.extend(
                     _load_dir_own_ignore(ancestor, gitignore=False)
                 )
-        return _is_scan_ignored(
+        if not _is_scan_ignored(
             path,
             root,
             patterns,
@@ -1703,7 +1739,11 @@ def ignored_predicate(
             tracked_dirs,
             cache=cache,
             explicit_cache=explicit_cache,
-        )
+        ):
+            return False
+        if not git_veto or _is_ignored(path, root, explicit_patterns, _cache=explicit_cache):
+            return True  # an explicit .graphifyignore/--exclude rule: git knows nothing of those
+        return not _git_keeps(path)
 
     return _ignored
 
@@ -1733,45 +1773,89 @@ def _resolves_under_root(path: Path, root: Path) -> bool:
     return True
 
 
+def _git_rules(root: Path) -> list[str]:
+    """The ignore arguments of the ``git ls-files --others`` calls (Verinoda patch): the rules detect()
+    applies - every directory's ``.gitignore`` and ``$GIT_DIR/info/exclude``, not the user's global
+    excludes file, which detect() never read - plus the directory names the walk prunes whatever the
+    rules say (``_SKIP_DIRS``), so git does not enumerate an un-ignored node_modules or venv only for
+    the files to be discarded."""
+    rules = ["--exclude-per-directory=.gitignore"]
+    info_exclude = _git_info_exclude(root)
+    if info_exclude is not None:
+        rules.append(f"--exclude-from={info_exclude}")
+    rules.extend(f"--exclude={name}/" for name in sorted(_SKIP_DIRS) if name != ".git")
+    return rules
+
+
+def _git_rules_are_utf8(root: Path, rels: set[str]) -> bool:
+    """Whether git reads the ignore files among ``rels`` (and ``info/exclude``) as the walk does: git
+    reads bytes, :func:`_read_ignore_text` decodes a UTF-16 or ANSI-code-page file (Verinoda patch)."""
+    paths = [root / rel for rel in rels if rel.rpartition("/")[2] == ".gitignore"]
+    info_exclude = _git_info_exclude(root)
+    if info_exclude is not None:
+        paths.append(info_exclude)
+    for path in paths:
+        try:
+            path.read_bytes().decode("utf-8-sig")  # git skips a UTF-8 byte order mark too
+        except UnicodeDecodeError:
+            return False
+        except OSError:
+            continue
+    return True
+
+
 def _git_listed_files(root: Path) -> tuple[list[str], list[str]] | None:
     """What a walk of the git work tree ``root`` would reach, from git: ``(files, gitignored)``, or None.
 
     Verinoda patch (not upstream). ``files``: root-relative POSIX paths from ``git ls-files --cached``
     (tracked files, which gitignore rules never drop) plus ``--others`` with the rules detect()
-    itself applies - every directory's ``.gitignore`` and ``$GIT_DIR/info/exclude``, not the user's
-    global excludes file, which detect() never read. ``gitignored``: the untracked paths those rules
-    drop, a wholly ignored directory as one ``dir/`` entry (the walk's ``ignored`` report). None -
-    the caller walks the tree as before - when ``root`` is not the top of a work tree, git fails, or
-    git would not list what the walk reaches: a nested repository or an untracked worktree
-    (``--others`` shows it as ``dir/``) or a submodule (a gitlink).
+    itself applies (:func:`_git_rules`). ``gitignored``: the untracked paths those rules drop, a wholly
+    ignored directory as one ``dir/`` entry (the walk's ``ignored`` report). None - the caller walks
+    the tree as before - when ``root`` is not the top of a work tree, git fails, or git would not
+    list what the walk reaches: a nested repository or an untracked worktree (``--others`` shows it
+    as ``dir/``), a submodule or an embedded repository (a gitlink, with or without ``.gitmodules``),
+    a directory git cannot open (the walk reports it), or an ignore file git would read differently
+    (not UTF-8, see :func:`_git_rules_are_utf8`).
     """
     dot_git = root / ".git"
     if not dot_git.exists() or (root / ".gitmodules").exists():
         return None
-    env = {**os.environ, "GIT_OPTIONAL_LOCKS": "0"}
-    base = ["git", "-C", str(root), "ls-files", "-z"]
-    rules = ["--exclude-per-directory=.gitignore"]
-    info_exclude = _git_info_exclude(root)
-    if info_exclude is not None:
-        rules.append(f"--exclude-from={info_exclude}")
+    rules = _git_rules(root)
     out: list[list[str]] = []
-    for cmd in ([*base, "--cached"], [*base, "--others", *rules],
-                [*base, "--others", "--ignored", "--directory", *rules]):
-        try:
-            proc = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                  stderr=subprocess.DEVNULL, check=False, timeout=60, env=env)
-        except (OSError, subprocess.SubprocessError):
+    for args in (["--stage", "--cached"], ["--others", *rules], ["--others", "--ignored", "--directory", *rules]):
+        listed = _git_ls(root, args)
+        if listed is None:
             return None
-        if proc.returncode != 0:
-            return None
-        out.append([os.fsdecode(raw) for raw in proc.stdout.split(b"\0") if raw])
-    cached, others, gitignored = out
+        stdout, stderr = listed
+        if "could not open directory" in stderr:
+            return None  # an unreadable directory: the walk names it in walk_errors and warns
+        out.append([os.fsdecode(raw) for raw in stdout.split(b"\0") if raw])
+    staged, others, gitignored = out
+    cached: list[str] = []
+    for entry in staged:  # "<mode> <object> <stage>\t<path>"
+        meta, _, rel = entry.partition("\t")
+        if meta.startswith("160000 "):
+            return None  # a gitlink: `git add` of a nested clone records one without .gitmodules
+        cached.append(rel)
     if any(rel.endswith("/") for rel in others):
         return None  # a nested repository the walk would descend into
     rels = set(cached) | set(others)  # a conflicted path is listed once per stage
+    if not _git_rules_are_utf8(root, rels):
+        return None
     if dot_git.is_file():
         rels.add(".git")  # a linked worktree's `.git` file: the walk lists it like any file
     return sorted(rels), sorted(set(gitignored))
+
+
+def _git_kept_untracked(root: Path) -> set[str] | None:
+    """Identities (:func:`_path_identity`) of the untracked files git lists under the work-tree top
+    ``root`` as not ignored, by the rules detect()'s git path applies; None when git cannot tell
+    (Verinoda patch). Files inside a nested repository are not listed: git has no verdict on them."""
+    listed = _git_ls(root, ["--others", *_git_rules(root)])
+    if listed is None:
+        return None
+    return {_path_identity(root / os.fsdecode(raw)) for raw in listed[0].split(b"\0")
+            if raw and not raw.endswith(b"/")}
 
 
 def _git_enumerate(
@@ -1818,27 +1902,37 @@ def _git_enumerate(
             noise[rel_dir] = got
         return got
 
-    def _dir_kept(rel_dir: str) -> bool:
+    def _enter(rel_dir: str) -> bool:
         # the walk's order: noise and output dirs, then ignore rules, then the directory's own file
+        d = root / rel_dir
+        if _noise(rel_dir):
+            pruned.append(str(d) + os.sep)
+            return False
+        if not _resolves_under_root(d, root):
+            # a directory link git lists through (a Windows junction): the walk's per-file
+            # realpath check kept its files out, so this once-per-directory check does
+            outside.append(str(d) + os.sep + " [symlink target outside scan root]")
+            return False
+        if _is_ignored(d, root, patterns, _cache=cache):
+            ignored.append(str(d) + os.sep)
+            return False
+        patterns.extend(_load_dir_own_ignore(d, gitignore=False))
+        return True
+
+    def _dir_kept(rel_dir: str) -> bool:
         got = kept_dirs.get(rel_dir)
-        if got is None:
-            got = _dir_kept(rel_dir.rpartition("/")[0])
-            if got:
-                d = root / rel_dir
-                if _noise(rel_dir):
-                    pruned.append(str(d) + os.sep)
-                    got = False
-                elif not _resolves_under_root(d, root):
-                    # a directory link git lists through (a Windows junction): the walk's per-file
-                    # realpath check kept its files out, so this once-per-directory check does
-                    outside.append(str(d) + os.sep + " [symlink target outside scan root]")
-                    got = False
-                elif _is_ignored(d, root, patterns, _cache=cache):
-                    ignored.append(str(d) + os.sep)
-                    got = False
-                else:
-                    patterns.extend(_load_dir_own_ignore(d, gitignore=False))
-            kept_dirs[rel_dir] = got
+        if got is not None:
+            return got
+        # from the nearest decided ancestor down, top first as the walk meets them; a loop, not
+        # recursion: a path in a checkout can be deeper than Python's recursion limit
+        pending: list[str] = []
+        while rel_dir not in kept_dirs:
+            pending.append(rel_dir)
+            rel_dir = rel_dir.rpartition("/")[0]
+        got = kept_dirs[rel_dir]
+        for d in reversed(pending):
+            got = got and _enter(d)
+            kept_dirs[d] = got
         return got
 
     files: list[Path] = []

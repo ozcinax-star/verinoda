@@ -104,3 +104,27 @@ def test_a_failed_build_leaves_the_old_index(built, tmp_path, monkeypatch):
         search_index.update(repo, g, rebuild=True, db=db)
     assert _dump(db) == first
     assert not list(db.parent.glob(db.name + search_index.BUILD_SUFFIX + "*"))
+
+
+def test_a_build_file_gone_before_install_does_not_replace_the_index(built, tmp_path, monkeypatch):
+    """The sweep of old build files may remove a live one (POSIX unlinks an open file); installing it
+    must fail and keep the old index, not install a new empty database (review of D66, finding 7)."""
+    repo, g = built
+    db = tmp_path / "search.db"
+    first = _build(repo, g, db)
+    install = search_index._install
+
+    def swept(build, target):
+        search_index._unlink(build)
+        install(build, target)
+
+    monkeypatch.setattr(search_index, "_install", swept)
+    with pytest.raises(sqlite3.Error):
+        search_index.update(repo, g, rebuild=True, db=db)
+    assert _dump(db) == first
+    assert not list(db.parent.glob(db.name + search_index.BUILD_SUFFIX + "*"))
+    empty = tmp_path / ("search.db" + search_index.BUILD_SUFFIX + "1")
+    sqlite3.connect(str(empty)).close()  # a file without the index's tables
+    with pytest.raises(sqlite3.Error):
+        install(empty, db)
+    assert _dump(db) == first
