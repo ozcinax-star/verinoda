@@ -313,6 +313,48 @@ def _scan(node: Any, parent: Any, key: Any, path: tuple, best: dict, protected: 
     return size
 
 
+def _clip(text: str, n: int) -> str:
+    return text if len(text) <= n else text[: n - 3] + "..."
+
+
+def check_site_line(s: dict) -> str:
+    """One name-check site as one line (docs/DESIGN.md D64): ``VERDICT path:line:col kind expr | why | nearest:
+    names | next: step``. Unknown sites are labelled by their rank (HIGH, MEDIUM, LOW)."""
+    v = s.get("verdict")
+    tag = {"absent": "ABSENT", "not_installed": "NOT_INSTALLED", "guarded": "GUARDED", "exists": "EXISTS"}.get(
+        str(v)) or str(s.get("rank") or "unknown").upper()
+    parts = [f"{tag} {s.get('at')} {s.get('kind')} {_clip(str(s.get('expr') or ''), 80)}"]
+    if v == "unknown":
+        if s.get("rank") in ("high", "medium") and s.get("rank_why"):
+            parts.append(_clip(str(s["rank_why"]), 140))
+        if s.get("why"):
+            parts.append("why: " + _clip(str(s["why"]), 90))
+    else:
+        detail = s.get("message") or s.get("why") or s.get("guard") or s.get("at_def")
+        if detail:
+            parts.append(_clip(str(detail), 200))
+    if s.get("nearest"):
+        parts.append("nearest: " + ", ".join(str(n.get("name")) + (f" ({n['at']})" if n.get("at") else "")
+                                             for n in s["nearest"][:3]))
+    if s.get("next_step") and v != "exists":
+        parts.append("next: " + _clip(str(s["next_step"]), 140))
+    return " | ".join(parts)
+
+
+def compact_check_result(res: dict) -> dict:
+    """code_check's MCP answer: each site as one line (:func:`check_site_line`), so the response cap keeps
+    about five times more sites, in rank order (absent and HIGH unknowns first)."""
+    if not isinstance(res.get("sites"), list):
+        return res
+    out = dict(res)
+    out["sites"] = [check_site_line(s) if isinstance(s, dict) else s for s in res["sites"]]
+    us = out.get("unknown_summary")
+    if isinstance(us, dict) and us.get("low_by_cause"):   # "N cause -> step", one line per cause
+        out["unknown_summary"] = {**us, "low_by_cause": [f"{g['sites']} {g['cause']} -> {g['next_step']}"
+                                                         for g in us["low_by_cause"][:10]]}
+    return out
+
+
 def cap_response(obj: dict, limit: int = MAX_RESPONSE_CHARS, *, first: tuple[str, ...] = (),
                  keep_tail: tuple[str, ...] = ("history",), keep: tuple[str, ...] = ()) -> dict:
     """Cut ``obj`` until its compact JSON (truncation note included) fits ``limit`` chars.
@@ -1251,11 +1293,12 @@ class AtlasTools:
                     raise ToolFailure("invalid_argument", f"as_path {ap!r} must be repository-relative",
                                       "pass a path such as 'pkg/module.py'")
             # env comes from the model, not the user: nothing the checked repository supplies is started
-            return codecheck.check(self.repo, ps, diff=_opt_text(diff), snippet=code, as_path=ap,
-                                   env=_opt_text(env) or "auto", include_exists=bool(include_exists),
-                                   budget_s=CODE_CHECK_BUDGET_S, trust_env=False)
+            return compact_check_result(codecheck.check(
+                self.repo, ps, diff=_opt_text(diff), snippet=code, as_path=ap, env=_opt_text(env) or "auto",
+                include_exists=bool(include_exists), budget_s=CODE_CHECK_BUDGET_S, trust_env=False))
         return self._run("code_check", go, first=("sites",),
-                         keep=("status", "summary", "exit", "exit_because", "incomplete", "not_checked", "env"))
+                         keep=("status", "summary", "exit", "exit_because", "incomplete", "not_checked", "env",
+                               "unknown_summary"))
 
     def api_members(self, target: str, env: str | None = None, private: bool = False) -> dict:
         def go():

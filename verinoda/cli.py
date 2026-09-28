@@ -2094,8 +2094,10 @@ def _r_check(r: dict) -> None:
             unknown += 1
             if unknown > CHECK_UNKNOWN_SHOWN:
                 continue
-        label = "ABSENT" if v == "absent" else v
+        label = "ABSENT" if v == "absent" else f"unknown {site['rank'].upper()}" if site.get("rank") else v
         print(f"{site['at']}  {label}  {site['kind']} {site['expr']}")
+        if v == "unknown" and site.get("rank") in ("high", "medium") and site.get("rank_why"):
+            print(f"    {site['rank_why']}")
         detail = site.get("message") or site.get("why") or site.get("guard") or site.get("at_def")
         if detail:
             print(f"    {detail}")
@@ -2104,11 +2106,21 @@ def _r_check(r: dict) -> None:
                                          for n in site["nearest"]))
         if site.get("elsewhere"):
             print("    defined elsewhere: " + ", ".join(f"{e['qualname']} ({e['at']})" for e in site["elsewhere"]))
-        if site.get("next_step") and v in ("absent", "not_installed"):
+        if site.get("next_step") and (v in ("absent", "not_installed") or site.get("rank") in ("high", "medium")):
             print(f"    next: {site['next_step']}")
     if unknown > CHECK_UNKNOWN_SHOWN:
         print(f"... {unknown - CHECK_UNKNOWN_SHOWN} more unknown sites (--json lists them all)")
-    if unknown:
+    us = r.get("unknown_summary")
+    if us:
+        low = us.get("low", 0)
+        print(f"unknown: {us.get('high', 0)} HIGH (likely mistakes), {us.get('medium', 0)} MEDIUM, {low} LOW"
+              + (" (listed last)" if any(x.get("rank") == "low" for x in r["sites"]) else
+                 " (not listed: --all lists them)" if low else ""))
+        for g in us.get("low_by_cause", [])[:6]:
+            print(f"  LOW {g['sites']:>4}  {g['cause']} (e.g. {g['example']}) -> {g['next_step']}")
+        if us.get("note"):
+            print(f"  note: {us['note']}")
+    if unknown or s["unknown"]:
         print("unknown = not checked (open container or receiver type not known); read the definition or run "
               "the tests")
 
