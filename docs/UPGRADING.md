@@ -26,6 +26,50 @@ always migrated forward, never silently reset.
 
 ## Upgrading from 0.3.2 (D60-D66)
 
+### D63: Running a project's own tests safely
+
+Add under a new heading "Upgrading to the 2026-09-28 code (D63)":
+
+- **Your projects are not trusted until you say so.** `analyze --run-tests`, `review --run-tests`,
+  `observe`, `experiment run`, `verify --run`, `probe` and the debug ledger - and the MCP tools behind them,
+  including core `change_review(run_tests/observe)` - now refuse to run an untrusted project's tests with
+  process isolation (the result says `refused ... the project is not trusted` with the next step). Run
+  `verinoda trust <path>` once per project whose code you trust (or `verinoda trust <folder> --subfolders` for a
+  folder of your own projects); it asks you to confirm, and in a script without a terminal needs `--yes` (so
+  does Git Bash/mintty on Windows, where Python sees no terminal). Do not let an agent run it for you. With docker or podman installed, an untrusted project's tests run in a
+  container instead. `verinoda trust --list` shows the list (a folder that no longer exists is marked
+  `missing`), `--remove` takes one off. The record lives in `%APPDATA%\verinoda\trust.json` (Windows) or
+  `~/.config/verinoda/trust.json`; `VERINODA_CONFIG_DIR` (an absolute path; a relative one is ignored) moves it.
+- **Settings that moved.** `experiments.*` (allowlist, container image, default timeout), `mcp.profile` and
+  `research.network` in a project's `.verinoda/config.json` apply only when the project is trusted. Otherwise
+  they are ignored and the experiment result (and `verinoda mcp serve` on stderr) says so. To keep one for an
+  untrusted project, put it in the user-level `config.json` next to `trust.json` (it applies to every project),
+  or trust the project. `"mcp": {"profile": "full"}` in the project's file (README, `mcp serve` row) therefore
+  needs a trusted project, `--profile full`, or the user-level config. In a trusted project the project's file
+  still wins over the user-level one, and `verinoda init` writes every default into it (`"mcp": {"profile":
+  "core"}`, `"research": {"network": "cache"}`, the experiment settings): delete a key from the project's file
+  to use the user-level value.
+- **An interpreter given by path** (`experiment run -- C:/.../python.exe -m pytest`) must be one this system
+  knows (Verinoda's own, the registry, PATH, a Python manager's folder), a virtual environment made from one
+  outside the project, or the trusted project's own `.venv`. Other runners (`pytest`, `npm`, `go`, `cargo`,
+  `node`) must be given as bare names; they are looked up on PATH but never in the current directory, and a name
+  not on PATH is an error.
+- **pytest runs** get `-p no:cacheprovider` and a `--basetemp` in the throw-away folder added (`--lf` and friends
+  keep working, with an empty cache). Refused under process isolation: `@file` arguments, `-p NAME` (except
+  `-p no:NAME`; after a `--` too), `-o addopts=...` (also as `-qoaddopts=...`), a path that names an environment
+  variable (`--junitxml=%TEMP%/x.xml`), and an `addopts` or path setting (`cache_dir`, `log_file`, `pythonpath`,
+  `testpaths`) in the project's pytest config files that points outside the project: the refusal names the file
+  and the setting. A `-p` in the `addopts` of the project's own config (`addopts = -p pytester`) runs; one in a
+  file named with `-c` that pytest would not find itself is refused.
+- **Symbolic links and junctions** in the working tree are not copied into the throw-away copy (listed under
+  `source.skipped`); a test that reads a fixture through a link sees it missing.
+- **Containers** run with `--read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges` as your
+  user (`--userns=keep-id` for podman). A test that writes outside `/work` and `/tmp` fails there. Set
+  `experiments.container_image` in the user-level config to an image with pytest and the project's
+  dependencies; the default `python:3.12-slim` has no pytest and gives `inconclusive`.
+- Scripts that call `experiments.policy()` directly: an absolute interpreter path that does not exist or is not
+  known is now `risky` (pass `repo=` for a trusted project's `.venv`, `plugins=` for your own `-p` modules).
+
 ### D64: Ranked unknowns
 
 - `verinoda check --json` and MCP `code_check` list fewer unknown sites by default. Each unknown Python site

@@ -4697,7 +4697,7 @@ def _tests(ctx: _Ctx, changes: list[Change], *, run_tests: bool, observe: bool, 
                                   "tree": (exp.get("tree") or {}).get("hash") if isinstance(exp.get("tree"), dict)
                                   else exp.get("tree"), "logs": exp.get("logs")}
                 except experiments.ExperimentRefused as exc:
-                    out["run"] = {"refused": str(exc)}
+                    out["run"] = {"refused": str(exc), **({"next_step": exc.next_step} if exc.next_step else {})}
         else:
             out["run"] = {"skipped": "no pytest test reaches the change statically"}
     return out

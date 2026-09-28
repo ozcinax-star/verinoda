@@ -135,6 +135,10 @@ The design decisions (D1-D40) and their implementation status are in
 ## State on disk
 
 ```
+<user config dir>/           %APPDATA%erinoda or ~/.config/verinoda ($VERINODA_CONFIG_DIR); never inside a project
+  config.json               settings for every project, the protected ones (experiments.*, mcp.profile,
+                            research.network) included
+  trust.json                the projects the user trusts (`verinoda trust`), keyed by the resolved path
 <repo>/.verinoda/
   atlas.db                  SQLite, schema v6: claims, evidence, history, plans, runtime runs, debug ledger,
                             change reviews (analyses rows `rev_...`), ...

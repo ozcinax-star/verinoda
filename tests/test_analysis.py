@@ -426,8 +426,9 @@ def test_pytest_ids_include_the_class_and_only_python_tests_run(tmp_path, monkey
         assert analysis._pytest_id(g, meth) == "tests/test_calc.py::TestAdd::test_small"
         assert analysis._pytest_id(g, plain) == "tests/test_calc.py::test_plain"
         res = analysis.analyze(st, repo, "Which tests cover add?", run_tests=True, budget=analysis.Budget(seconds=45))
-        assert seen["argv"][:4] == ["/project/.venv/bin/python", "-m", "pytest", "-q"]
-        assert set(seen["argv"][4:]) <= {"tests/test_calc.py::TestAdd::test_small", "tests/test_calc.py::test_plain"}
+        # -p no:cacheprovider like review and observe (D63)
+        assert seen["argv"][:6] == ["/project/.venv/bin/python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+        assert set(seen["argv"][6:]) <= {"tests/test_calc.py::TestAdd::test_small", "tests/test_calc.py::test_plain"}
         assert seen["timeout"] <= 45  # the remaining time budget, not the 120 s default
         run = next(c for c in res["claims"] if c["text"].startswith("Tests that reach `add()`"))
         assert run["status"] == "unknown"  # inconclusive: neither verified nor contradicted

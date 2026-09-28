@@ -101,7 +101,7 @@ def _probe(repo: Path, name: str, body: str) -> str:
     (["pytest"], "allowlisted"),
     (["pytest", "-q", "tests/test_pricing.py"], "allowlisted"),
     (["python", "-m", "pytest", "-q"], "allowlisted"),
-    ([r"C:\Python312\python.exe", "-m", "pytest"], "allowlisted"),
+    ([sys.executable, "-m", "pytest"], "allowlisted"),
     (["py", "-m", "pytest", "-x"], "allowlisted"),
     (["go", "test", "./..."], "allowlisted"),
     (["python", "-c", "print(1)"], "risky"),
@@ -314,17 +314,30 @@ def test_python_for_prefers_the_projects_virtualenv(tmp_path):
 
 @pytest.mark.parametrize("argv,expected", [
     ([sys.executable, "-m", "pytest", "-q"], "allowlisted"),
-    ([r"C:\work\proj\.venv\Scripts\python.exe", "-m", "pytest", "tests/test_x.py"], "allowlisted"),
-    (["/work/proj/.venv/bin/python", "-m", "pytest"], "allowlisted"),
-    (["/usr/local/bin/python3.12", "-m", "pytest", "-x"], "allowlisted"),
-    (['"C:\\Program Files\\Python312\\python.exe"', "-m", "pytest"], "allowlisted"),
-    ([r"C:\work\proj\.venv\Scripts\python.exe", "-m", "pip", "install", "x"], "risky"),
-    (["/work/proj/.venv/bin/python", "-c", "print(1)"], "risky"),
-    (["/work/proj/.venv/bin/python3.12", "script.py"], "risky"),
+    ([f'"{sys.executable}"', "-m", "pytest"], "allowlisted"),
+    ([sys.executable, "-m", "pip", "install", "x"], "risky"),
+    ([sys.executable, "-c", "print(1)"], "risky"),
+    ([sys.executable, "script.py"], "risky"),
     (["/tmp/pythonic-tool", "-m", "pytest"], "risky"),
 ])
 def test_classify_accepts_absolute_interpreter_paths_for_pytest_only(argv, expected):
     assert experiments.classify(argv, DEFAULT_CONFIG["experiments"]["process_isolation_allowlist"]) == expected
+
+
+@pytest.mark.parametrize("argv,why", [
+    # an interpreter this system does not know: in a cloned repository it can be any program (D63)
+    ([r"C:\work\proj\.venv\Scripts\python.exe", "-m", "pytest", "tests/test_x.py"], "not a Python installation"),
+    (["/work/proj/.venv/bin/python", "-m", "pytest"],
+     "relative interpreter path" if os.name == "nt" else "not a Python installation"),  # Windows: no drive
+    ([".venv/bin/python", "-m", "pytest"], "relative interpreter path"),
+    # another runner given by path: only a bare name, looked up on PATH
+    (["C:/anywhere/pytest.exe", "-q"], "bare name"),
+    (["/opt/tools/npm", "test"], "bare name"),
+    (["./node_modules/.bin/npm", "test"], "bare name"),
+])
+def test_policy_checks_argv0_too(argv, why):
+    kind, reason = experiments.policy(argv, DEFAULT_CONFIG["experiments"]["process_isolation_allowlist"])
+    assert kind == "risky" and why in reason, reason
 
 
 def test_container_argv_uses_the_images_python():
@@ -495,11 +508,11 @@ def test_no_child_inherits_stdin(monkeypatch, tmp_path):
         return subprocess.CompletedProcess(cmd, 1, b"", b"")
 
     monkeypatch.setattr(subprocess, "run", spy)
-    monkeypatch.setattr(experiments.shutil, "which", lambda name, *a, **k: sys.executable)
+    monkeypatch.setattr(experiments, "_which", lambda name, path: f"/fake/bin/{name}")
     snapshot.git(tmp_path, "rev-parse", "HEAD")
     assert experiments.container_runtime() is None  # "info" failed for both runtimes
     experiments._kill_container("fakedocker", "verinoda-x")
-    assert [c for c, _ in seen] == ["git", "docker", "podman", "fakedocker"]
+    assert [c for c, _ in seen] == ["git", "/fake/bin/docker", "/fake/bin/podman", "fakedocker"]
     assert all(stdin is subprocess.DEVNULL for _, stdin in seen), seen
 
 
@@ -552,7 +565,7 @@ def test_policy_rejects_arguments_that_leave_the_copy(argv, why):
     [*PYTEST, "--junitxml=reports/junit.xml", "--cov-report=term-missing", "tests/test_x.py::test_a[1/2]"],
     ["node", "--test", "tests/", "--test-reporter-destination=out.txt"],
     ["go", "test", "./...", "-run", "TestX"],
-    [r"C:\proj\.venv\Scripts\python.exe", "-m", "pytest", "tests"],  # argv[0] may be absolute
+    [sys.executable, "-m", "pytest", "tests"],  # argv[0] may be a known interpreter's absolute path
 ])
 def test_policy_keeps_paths_inside_the_copy_allowlisted(argv):
     assert experiments.policy(argv, ALLOW) == ("allowlisted", None)

@@ -703,6 +703,8 @@ def _run_side(store: Store, repo: Path, spec: dict, *, side: str, probe_id: str,
                                   plugins=plugins, env_extra=env, ref=ref)
         except experiments.ExperimentRefused as exc:
             res["error"] = f"refused: {exc}"
+            if exc.next_step:
+                res["next_step"] = exc.next_step
             return res
         except OSError as exc:
             res["error"] = f"could not start the run: {exc}"

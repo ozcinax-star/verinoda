@@ -51,8 +51,8 @@ CLI for the rest. The CLI prints plain text written for you: read it as it is. A
 text leaves out (every unknown site of `check`, an analysis' full record): JSON costs 2-5x the tokens.
 
 If the CLI fails inside the Codex sandbox (`PermissionError`/`ModuleNotFoundError` importing `verinoda`), use the
-MCP tools (they run outside it); `verinoda doctor` tells the user the fix. A tool named below that the server does
-not reach (core profile): ask the user for `"mcp": {"profile": "full"}` in `.verinoda/config.json` and a restart.
+MCP tools (they run outside it); `verinoda doctor` tells the user the fix. A tool below the server does not reach
+(core profile): ask the user for `"mcp": {"profile": "full"}` in their user-level Verinoda config and a restart.
 
 ## Evidence discipline (non-negotiable)
 
@@ -90,7 +90,7 @@ Rules:
   `claim add --source`, which downgrades a requested status the evidence does not allow).
 - Heuristics are labelled: map views (impact included) carry `coverage.method` and `coverage.limits`, and
   `analyze` shows the intent it guessed per sub-question. Repeat those limits when you rely on them.
-- If Verinoda returns `unknown`, report it with its `next_step`; do not fill the gap yourself.
+- An `unknown` the answer or the change depends on: take its `next_step` until it is settled; never guess it.
 
 ## Understand the question first
 
@@ -181,9 +181,9 @@ unresolved, say what evidence would settle it.
   runs out (`budget exhausted:` in the text, `usage.exhausted` in JSON), the remaining sub-questions come back as
   `unknown`: report them as such; raise a budget only if the user wants depth. Claims marked `[not challenged:
   budget]` were not critiqued - say so.
-- Keep context small: `--max-items` / `--max-chars` on `query`, `--max-lines` on `map`. Never paste whole files or
-  full logs; experiment logs stay on disk (the result gives the path). Experiments outside the test-runner
-  allowlist are refused without docker/podman: report the refusal; do not work around it.
+- Keep context small: `--max-items` / `--max-chars` on `query`, `--max-lines` on `map`. Never paste whole files or full
+  logs; experiment logs stay on disk (the result gives the path). Experiments outside the test-runner allowlist or of an
+  untrusted project are refused without docker/podman: report the refusal and its next_step, never run `verinoda trust`.
 
 ## Check the names code uses (Python)
 

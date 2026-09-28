@@ -563,7 +563,8 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
                               timeout=timeout, plugins={f"{PLUGIN_MODULE}.py": plugin_source()}, env_extra=env)
     except experiments.ExperimentRefused as exc:
         return {**base, "error": f"refused: {exc}",
-                "next_step": "check the test ids (paths must stay inside the repository) or enable a container"}
+                "next_step": exc.next_step or "check the test ids (paths must stay inside the repository) or enable a "
+                                              "container"}
     except OSError as exc:
         return {**base, "error": f"could not start the test run: {exc}",
                 "next_step": "check the project's Python interpreter (experiments.python_for)"}

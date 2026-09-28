@@ -163,6 +163,11 @@ def test_skill_templates_are_complete(env, agent):
     assert "fact, cite" not in body and "verified at snapshot X" in body and "snapshot.commit" in body
     assert body.count("| fact") == 0
     assert len(body.splitlines()) < 240  # concise: the business logic lives in the core
+    # review D63 L3/M3: the project's own config sets mcp.profile only when the user trusts the project, and
+    # trusting is the user's decision, never the agent's
+    assert "in `.verinoda/config.json` and a restart" not in body and "user-level Verinoda config" in body
+    assert "run `verinoda trust`" in body
+    assert not any("trust" in t for t in fm.get("allowed-tools") or [])
     if agent == "claude":
         # exactly one argument placeholder: any other $word would be substituted by Claude Code
         assert re.findall(r"(?<!\\)\$[A-Za-z0-9_]+", body) == ["$ARGUMENTS"]

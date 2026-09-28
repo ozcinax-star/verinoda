@@ -3340,11 +3340,12 @@ def _run_tests(store: Store, repo: Path, g: index.Graph, it: dict, test_nodes: l
     python = getattr(experiments, "python_for", None)
     exe = python(repo) if python else sys.executable
     try:
-        res = experiments.run(store, repo, [exe, "-m", "pytest", "-q", *ids],
+        res = experiments.run(store, repo, [exe, "-m", "pytest", "-q", "-p", "no:cacheprovider", *ids],
                               hypothesis=f"tests reaching {it['symbol']} pass at {(commit or '')[:10]}",
                               claim_id=None, commit=commit, timeout=timeout)
     except Exception as exc:  # refused or could not start
-        unknown({"question": question, "why": str(exc), "next_step": "run them manually or enable container isolation"})
+        unknown({"question": question, "why": str(exc),
+                 "next_step": getattr(exc, "next_step", None) or "run them manually or enable container isolation"})
         return
     step("experiment", f"{res['outcome']} in {res['duration_s']}s ({res['isolation']}, timeout {timeout:.0f}s)")
     # The run depends on the test files too: editing them must make this

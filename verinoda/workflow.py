@@ -479,13 +479,18 @@ def verify(store: Store, repo: Path, cid: str, *, run: bool = False) -> dict:
                 elif not (e.get("meta") or {}).get("root"):
                     confirmed.add(e["path"])
     reran = None
+    refused = None  # the re-run Verinoda would not start (an untrusted project, a command the policy refuses)
     spec = c.get("spec") or {}
     if run and spec.get("command"):
         from verinoda import experiments
 
-        reran = experiments.run(store, repo, [experiments.python_for(repo), "-m", "pytest", "-q", *spec["command"]],
-                                hypothesis=f"re-verify: {c['text']}", claim_id=cid,
-                                commit=(snap or {}).get("commit_sha") if current else None)
+        try:
+            reran = experiments.run(store, repo, [experiments.python_for(repo), "-m", "pytest", "-q",
+                                                  *spec["command"]],
+                                    hypothesis=f"re-verify: {c['text']}", claim_id=cid,
+                                    commit=(snap or {}).get("commit_sha") if current else None)
+        except experiments.ExperimentRefused as exc:  # verified as without --run; the result says why
+            refused = {"refused": str(exc), **({"next_step": exc.next_step} if exc.next_step else {})}
     inconclusive = reran is not None and reran["outcome"] == "inconclusive"
     old_files = store.snapshot_files(c["snapshot_id"]) if c["snapshot_id"] else {}
     if current:
@@ -515,7 +520,8 @@ def verify(store: Store, repo: Path, cid: str, *, run: bool = False) -> dict:
         unconfirmed = changed
         note = ("verify: " + ", ".join(changed) + " changed since the claim's snapshot and no re-checkable "
                 "evidence covers it" + ("; re-run with --run" if spec.get("command") and not run else "")
-                + (f"; the re-run was inconclusive ({reran.get('inconclusive_reason')})" if inconclusive else ""))
+                + (f"; the re-run was inconclusive ({reran.get('inconclusive_reason')})" if inconclusive else "")
+                + ("; the re-run was refused" if refused else ""))
         after = cl.set_status(cid, "stale", actor="verify", confidence=stale_conf, payload={"unconfirmed": changed},
                               reason=note)
     else:
@@ -529,6 +535,8 @@ def verify(store: Store, repo: Path, cid: str, *, run: bool = False) -> dict:
            "after": {"status": after["status"], "confidence": after["confidence"]},
            "source_checks": checks, "experiment": reran,
            "snapshot": {"id": after["snapshot_id"], "commit": after["commit_sha"]}}
+    if refused:
+        out["run"] = refused
     if assessed["facets"]:
         out["changed_facets"] = [{k: f[k] for k in ("dep", "facet", "file", "change") if k in f}
                                  for f in assessed["facets"][:10]]
