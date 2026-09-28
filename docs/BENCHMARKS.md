@@ -13,9 +13,10 @@ round: `before-round3/<set>.json`), produced by the commands in
 [Reproduce](#reproduce). Ratios quoted in the text are computed from those
 numbers. No number is carried over from Graphify's published benchmarks or
 from the research and track reports, and no savings factor is claimed beyond
-the measured ratios.
+the measured ratios. Competitors' headline claims are quoted as their claims
+(in the token multiplier section) and used in no computation.
 
-Sections: [Update 2026-09-26: query ranking](#update-2026-09-26-query-ranking-d40) · [Update 2026-09-26: case-distinct graph ids](#update-2026-09-26-case-distinct-graph-ids) · [Update 2026-09-26: check --diff with an absent name](#update-2026-09-26-check---diff-with-an-absent-name) · [Update 2026-09-26: honest verdicts (D39)](#update-2026-09-26-honest-verdicts-wrong-met-d39) · [Update 2026-09-26: JVM callbacks (D38)](#update-2026-09-26-jvm-callbacks-d38) · [Update 2026-09-26: the merged night, tokens against Graphify](#update-2026-09-26-the-merged-night-tokens-against-graphify) · [Update 2026-09-26: token wins](#update-2026-09-26-token-wins) · [Update 2026-09-26: exact names and a fresh index](#update-2026-09-26-exact-names-and-a-fresh-index-d37) · [Update 2026-09-26: never ok without looking](#update-2026-09-26-never-ok-without-looking) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-09-28: ContextBench](#update-2026-09-28-contextbench-an-outside-benchmark-no-model) · [Update 2026-09-28: the token multiplier, with its accuracy](#update-2026-09-28-the-token-multiplier-with-its-accuracy) · [Update 2026-09-26: query ranking](#update-2026-09-26-query-ranking-d40) · [Update 2026-09-26: case-distinct graph ids](#update-2026-09-26-case-distinct-graph-ids) · [Update 2026-09-26: check --diff with an absent name](#update-2026-09-26-check---diff-with-an-absent-name) · [Update 2026-09-26: honest verdicts (D39)](#update-2026-09-26-honest-verdicts-wrong-met-d39) · [Update 2026-09-26: JVM callbacks (D38)](#update-2026-09-26-jvm-callbacks-d38) · [Update 2026-09-26: the merged night, tokens against Graphify](#update-2026-09-26-the-merged-night-tokens-against-graphify) · [Update 2026-09-26: token wins](#update-2026-09-26-token-wins) · [Update 2026-09-26: exact names and a fresh index](#update-2026-09-26-exact-names-and-a-fresh-index-d37) · [Update 2026-09-26: never ok without looking](#update-2026-09-26-never-ok-without-looking) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -51,6 +52,81 @@ characters (1,500 tokens), scored by ContextBench's own evaluator. Verinoda was 
   plan invalid and analyze refused it; English issues answered in Turkish; the question restated at length before
   the passages); they are fixed in D67. Scans of the largest repositories took up to 41 minutes (per-file commits;
   D66 makes them one transaction).
+
+## Update 2026-09-28: the token multiplier, with its accuracy
+
+Result file: `benchmarks/results/token-multiplier-2026-09-28/multiplier.json`, written by
+`python benchmarks/token_multiplier.py` (standard library; it reads committed result files and runs no tool;
+`--check` compares the committed file with a fresh computation).
+
+Code-context tools headline one number: Graphify "71.5x fewer tokens per query vs reading raw files" (measured on a
+52-file corpus; its README also shows 5.4x on 4 files and about 1x on httpx, 6 files), codebase-memory-mcp "120x",
+code-review-graph "~63x". These are their claims, quoted as such; none of them says how many answers were right.
+The baseline is the same in all three: reading every file of the corpus. The same division on this page's seven
+public sets, next to the facts each approach found:
+
+- **Corpus tokens**: the corpus's bytes / 4 (rounded up, like the answers), with bytes and file count as the set's
+  result file records them (`corpus.bytes`, `corpus.file_count`): every file the set's include/exclude selects,
+  tracked and untracked-not-ignored. All seven corpora are text only: walked again with the set's include/exclude
+  (the corpora in this repository, and upstream Graphify at 20a20d30 for the two graphify sets), no file has a NUL
+  byte and the bytes equal the recorded ones. Bytes, not characters: the two differ only for non-ASCII text.
+- **Tokens per question**: chars/4 of what the approach returned, the mean over the set's questions (the
+  benchmark's count). **Multiplier** = corpus tokens / tokens per question; for the seven sets together, corpus
+  tokens x questions summed over the sets, divided by all answer tokens: reading the whole corpus for every
+  question against what the approach returned.
+- **Sources.** Verinoda's query and analyze text: `token-wins-2026-09-26/7-review-fixes.json` (`q_text`,
+  `an_bench`; fd30f5b), the latest committed per-set measurement with tokens. It predates query ranking (D40) and
+  the ContextBench fixes (D67); the merged night's rerun committed no per-set file. Graphify (vendored renderer and
+  upstream CLI) and raw search: `benchmarks/results/<set>.json` for the orders, graphify and heldout sets,
+  `mods-2026-09-24/final/<set>.json` for glow_mod and forge_mod. The CLI was not in the mod sets' runs, so its two
+  cells there come from the rounded table `token-wins-2026-09-26/graphify-baseline-c8da753.txt`. Corpus bytes come
+  from the file of the set's Graphify row (orders_app: 4,726 there, 4,724 in later runs).
+- **Check.** With the eighth set's rows from that table, the Graphify rows add up to the merged night's 69/319 at
+  1,391 tokens per question (vendored) and 68/319 at 1,480 (CLI), the raw rows to 129/319 at 3,991; the script
+  exits 1 otherwise. The eighth set, `verinoda_user_tr`, is not in the tables below: no committed result file
+  records its corpus size.
+
+Each cell: multiplier · tokens per question · facts found.
+
+| set | files | corpus tokens | Verinoda query (text) | Verinoda analyze (text) | Graphify, vendored renderer | Graphify, upstream CLI | raw text search |
+|---|---|---|---|---|---|---|---|
+| `orders_app` | 11 | 1,182 | 1.4x · 825 · 32/32 | 0.8x · 1,517 · 32/32 | 0.5x · 2,234 · 16/32 | 0.7x · 1,651 · 15/32 | 1.0x · 1,224 · 31/32 |
+| `orders_app_tr` | 11 | 1,182 | 1.4x · 818 · 32/32 | 0.8x · 1,526 · 32/32 | 1.0x · 1,218 · 6/32 | 1.3x · 926 · 5/32 | 3.7x · 318 · 10/32 |
+| `glow_mod` | 37 | 8,428 | 5.7x · 1,486 · 48/50 | 4.1x · 2,062 · 48/50 | 7.0x · 1,200 · 13/50 | 4.0x · 2,086 · 15/50 | 3.1x · 2,695 · 33/50 |
+| `forge_mod` | 55 | 13,358 | 9.0x · 1,485 · 67/68 | 6.3x · 2,129 · 67/68 | 9.9x · 1,344 · 12/68 | 10x · 1,322 · 12/68 | 3.0x · 4,471 · 36/68 |
+| `graphify_core` | 226 | 1,169,908 | 821x · 1,425 · 36/37 | 594x · 1,969 · 36/37 | 702x · 1,667 · 7/37 | 603x · 1,940 · 7/37 | 195x · 5,989 · 4/37 |
+| `graphify_core_tr` | 226 | 1,169,908 | 809x · 1,446 · 31/37 | 588x · 1,989 · 31/37 | 909x · 1,288 · 2/37 | 766x · 1,526 · 2/37 | 195x · 5,991 · 5/37 |
+| `heldout_repoatlas` | 106 | 547,332 | 385x · 1,421 · 26/33 | 277x · 1,976 · 28/33 | 332x · 1,647 · 8/33 | 333x · 1,644 · 8/33 | 91x · 5,992 · 9/33 |
+| **all seven** | 672 | 348,184 per question | **271x · 1,287 · 272/289** | **183x · 1,899 · 274/289** | **234x · 1,485 · 64/289** | **219x · 1,592 · 64/289** | **95x · 3,669 · 128/289** |
+
+| approach | facts found | tokens per question | facts per 1k tokens | multiplier, all seven | multiplier per set |
+|---|---|---|---|---|---|
+| Verinoda query (text) | 272/289 | 1,287 | 2.86 | 271x | 1.4x - 821x |
+| Verinoda analyze (text) | 274/289 | 1,899 | 1.95 | 183x | 0.8x - 594x |
+| Graphify, vendored renderer | 64/289 | 1,485 | 0.58 | 234x | 0.5x - 909x |
+| Graphify, upstream CLI | 64/289 | 1,592 | 0.54 | 219x | 0.7x - 766x |
+| raw text search | 128/289 | 3,669 | 0.47 | 95x | 1.0x - 195x |
+
+- **The multiplier measures the corpus more than the tool.** On orders_app (11 files, 1,182 tokens) every approach
+  is near 1x, and Graphify's vendored answer, 2,234 tokens per question, is larger than the whole corpus: 0.5x. On
+  graphify_core (226 files, 1,169,908 tokens) every approach is hundreds x, raw search included (195x). The highest
+  multiplier in the table is Graphify's vendored renderer on graphify_core_tr, 909x, with 2 of 37 facts found;
+  Verinoda's query there is 809x with 31. Over the seven sets Graphify's own multiple comes out in the same range
+  as Verinoda's (234x and 219x against 271x and 183x) while it finds 64 of 289 facts against 272 and 274. A
+  headline multiple says how large the test corpus was; Graphify's own 5.4x on 4 files and about 1x on 6 point the
+  same way.
+- **The number that tells tools apart is facts at the same budget**: 2.86 facts per 1k tokens for Verinoda's
+  query, 1.95 for analyze, 0.58 and 0.54 for Graphify's two renderers, 0.47 for raw search. The outside benchmark
+  at one budget for every tool is [ContextBench](#update-2026-09-28-contextbench-an-outside-benchmark-no-model)
+  above; the per-set tables are under [the merged night](#update-2026-09-26-the-merged-night-tokens-against-graphify)
+  and [token wins](#update-2026-09-26-token-wins).
+- **No agent reads every file.** The real alternative to a context tool is the agent's own search (grep, glob,
+  reading a few files). The raw-search column is a fixed stand-in for it (grep the question's words, read the best
+  five files up to 24,000 characters), and at 95x it is already far from the baseline the headlines divide by.
+  Agent sessions with a model in the loop measure that alternative; they are not on this page because their
+  questions are private.
+- Not measured here: a real tokenizer (chars/4 only), any model reading the answers, and the multiplier of
+  `verinoda_user_tr`.
 
 ## Update 2026-09-26: query ranking (D40)
 
@@ -2768,6 +2844,9 @@ G=<UPSTREAM_VENV>/Scripts/graphify.exe
 .venv/Scripts/python -m verinoda.benchmark markdown benchmarks/results/sweep/<set>.json
 .venv/Scripts/python -m verinoda.benchmark compare benchmarks/results/before-round3/<set>.json \
     benchmarks/results/<set>.json
+
+# the token multiplier with the facts found (reads committed result files only; --check writes nothing)
+.venv/Scripts/python benchmarks/token_multiplier.py
 
 # replace machine paths in result files written by an older harness (run on the machine that wrote them)
 .venv/Scripts/python -m verinoda.benchmark sanitize <file>.json
