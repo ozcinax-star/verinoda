@@ -36,6 +36,31 @@ jobs:
           git config --global user.name ci && git config --global user.email ci@example.invalid
           $PY -m pytest tests -q -rs -p no:cacheprovider
 
+  container:
+    # Container isolation run for real (docs/DESIGN.md D63): an untrusted project's tests go to docker; the
+    # test checks the promises (no network, only the copy writable, not root, no capabilities, timeout).
+    name: container isolation (ubuntu, real docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - name: venv + install
+        run: |
+          uv venv --python 3.12 .venv
+          uv pip install --python .venv -e . pytest
+      - name: test image (python + pytest, built once; the runs themselves have no network)
+        run: |
+          docker pull python:3.12-slim
+          printf 'FROM python:3.12-slim\nRUN pip install --no-cache-dir pytest\n' > "$RUNNER_TEMP/Dockerfile"
+          docker build -t verinoda-test-py:ci -f "$RUNNER_TEMP/Dockerfile" "$RUNNER_TEMP"
+      - name: container tests
+        env:
+          VERINODA_CONTAINER_TESTS: "1"
+          VERINODA_TEST_IMAGE: verinoda-test-py:ci
+        run: |
+          git config --global user.name ci && git config --global user.email ci@example.invalid
+          .venv/bin/python -m pytest tests/test_experiments_container.py -q -rs -p no:cacheprovider
+
   wheel:
     name: clean wheel install (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

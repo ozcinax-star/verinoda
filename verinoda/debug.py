@@ -96,9 +96,14 @@ def _argv(command) -> list[str]:
 
 
 def _runnable(repo: Path, argv: list[str]) -> tuple[bool, str | None]:
-    kind, why = experiments.policy(argv, load_config(repo)["experiments"]["process_isolation_allowlist"])
-    if kind == "allowlisted":
+    """Can Verinoda run ``argv`` for this project: allowlisted in a trusted project, else in a container."""
+    from verinoda.paths import is_trusted
+
+    kind, why = experiments.policy(argv, load_config(repo)["experiments"]["process_isolation_allowlist"], repo=repo)
+    if kind == "allowlisted" and is_trusted(repo):
         return True, None
+    if kind == "allowlisted":
+        why = "the project is not trusted (`verinoda trust`), so its tests run only in a container"
     return (experiments.container_runtime() is not None), why
 
 
@@ -121,9 +126,13 @@ def start(store: Store, repo: Path, symptom: str, command, *, base: str | None =
     if not agent:
         ok, why = _runnable(repo, argv)
         if not ok:
+            from verinoda.paths import is_trusted
+
+            untrusted = not is_trusted(repo)
             raise experiments.ExperimentRefused(
                 f"the repro command cannot run under Verinoda's policy ({why}); run it yourself and report the "
-                "output with --observed-output FILE --exit-code N (an agent-reported run)")
+                "output with --observed-output FILE --exit-code N (an agent-reported run)",
+                experiments.untrusted_next_step(repo) if untrusted else None, untrusted=untrusted)
     sid = new_id("dbg")
     cfg = _cfg(repo)
     settings = {"trace": bool(trace), "timeout": timeout, "max_no_progress": int(cfg.get("max_no_progress", 3))}
