@@ -406,19 +406,23 @@ def _called_by(funcs: dict[str, Function], fid: str) -> list[tuple[str, int, str
     return [(f.id, ln, how, d) for f in funcs.values() for ln, t, how, d in f.calls if t == fid]
 
 
-def _java_rows(ix: dict, fid: str) -> tuple[list[dict], list[dict]]:
-    """The Java calls of ``fid`` (own tree first), and the names built at run time that may be it (a known part
-    past the namespace: ``ns:prefix_*``; a bare ``ns:*`` fits every function and is said in the summary only)."""
+def _java_rows(ix: dict, fid: str) -> tuple[list[dict], list[dict], list[dict]]:
+    """The Java calls of ``fid`` (own tree first); the names built at run time that may be it (a known part past
+    the namespace: ``ns:prefix_*``); and the sites that build all of the name past the namespace (``ns:*``) or the
+    whole name, which fit every function and are listed in full in the summary only."""
     java = ix.get("java")
     if java is None:
-        return [], []
+        return [], [], []
     from verinoda.testcode import is_test_file
 
     calls = [c.record() for c in sorted((c for c in java.calls if not c.dynamic and c.target == fid),
                                         key=lambda c: (c.tree is not None, is_test_file(c.file), c.file, c.line))]
     maybe = [c.record() for c in java.calls if c.dynamic and ":" in c.target and not c.target.endswith(":")
              and c.matches(fid)]
-    return calls, maybe
+    bare = [c.record() for c in sorted((c for c in java.calls if c.dynamic and (not c.target or (
+        c.target.endswith(":") and c.matches(fid)))), key=lambda c: (c.tree is not None, is_test_file(c.file),
+                                                                     c.file, c.line))]
+    return calls, maybe, bare
 
 
 def _java_summary(java) -> dict:
@@ -467,20 +471,20 @@ def lookup(repo: Path, what: str | None = None, name: str | None = None) -> dict
                 "sites": [{"at": s.at, "lang": s.lang, "kind": s.kind, "text": s.text} for s in sites]}
     if what == "function":
         fn = ix["functions"].get(name or "")
-        java_calls, maybe = _java_rows(ix, name or "")
+        java_calls, maybe, bare = _java_rows(ix, name or "")
         if fn is None:
             from difflib import get_close_matches
 
             return {**base, "status": "not_found", "kind": "function", "name": name,
                     "nearest": get_close_matches(name or "", list(ix["functions"]), n=5),
-                    **({"called_by": java_calls} if java_calls else {})}
+                    **({"called_by": java_calls} if java_calls else {}), **({"dynamic": maybe} if maybe else {})}
         return {**base, "status": "found", "kind": "function", "name": fn.id, "files": fn.files, "events": fn.events,
                 "calls": [{"line": ln, "target": t, "how": how, **({"delay": d} if d else {})}
                           for ln, t, how, d in fn.calls],
                 "called_by": [{"kind": "mcfunction", "function": f, "at": f"{ix['functions'][f].files[0]}:{ln}",
                                "how": how, **({"delay": d} if d else {})}
                               for f, ln, how, d in _called_by(ix["functions"], fn.id)] + java_calls,
-                "dynamic": maybe}
+                "dynamic": maybe, "dynamic_any": bare}
     raise ValueError(f"datapack: unknown lookup {what!r} (tag, score, function)")
 
 
@@ -504,6 +508,9 @@ def render(res: dict) -> str:
     head = f"{res['functions']} function(s), {res['tags']} entity tag(s), {res['objectives']} objective(s)"
     if "java_calls" in res:
         head += f", {res['java_calls']} Java call(s) into the functions"
+        js = res.get("java")
+        if js and (js.get("in_tests") or js.get("in_reference_trees")):
+            head += f" ({js['calls'] - js['in_tests'] - js['in_reference_trees']} in product code)"
     if res["status"] == "no_datapack":
         return f"{head}: {res['note']}"
     if res["status"] == "not_found":
@@ -512,6 +519,7 @@ def render(res: dict) -> str:
         if res.get("called_by"):  # Java runs a function the datapacks do not have: the lookup finds nothing
             out.append(f"  Java calls it, and the datapacks have no {res['name']}:")
             out += ["  " + _java_line(c) for c in res["called_by"]]
+        out += ["  " + _dynamic_line(c) + " - may be this one" for c in res.get("dynamic") or []]
         return "\n".join(out)
     if res["kind"] == "summary":
         out = [head]
@@ -564,9 +572,14 @@ def render(res: dict) -> str:
         out += [f"  called by {c['function']} at {c['at']} ({c['how']}{' ' + c['delay'] if c.get('delay') else ''})"
                 if c.get("kind") != "java" else "  " + _java_line(c) for c in res["called_by"]]
         out += ["  " + _dynamic_line(c) + " - may be this one" for c in res.get("dynamic") or []]
-        if not res["calls"] and not res["called_by"] and not res["events"] and not res.get("dynamic"):
-            out.append("  no call in or out found in the datapacks or in Java (Java that builds the name at run "
-                       "time is listed in the summary)")
+        bare = res.get("dynamic_any") or []
+        if bare:  # Java builds the whole name at run time (a table, a command argument): it may run this one
+            shown = ", ".join(c["at"] + (" [test]" if c.get("test") else "") +
+                              (f" [reference tree {c['tree']}]" if c.get("tree") else "") for c in bare[:5])
+            out.append(f"  {len(bare)} Java site(s) build the name at run time and may run this one too (listed in "
+                       f"the summary): {shown}" + (" ..." if len(bare) > 5 else ""))
+        if not res["calls"] and not res["called_by"] and not res["events"] and not res.get("dynamic") and not bare:
+            out.append("  no call in or out found in the datapacks or in Java")
         return "\n".join(out)
     out = [f"{res['kind']} {res['name']}: {len(res['sites'])} site(s)"]
     out += [f"  {s['kind']:<6} {s['lang']:<10} {s['at']}: {s['text']}" for s in res["sites"][:40]]

@@ -14,16 +14,23 @@ A mod's Java runs its datapack functions in three ways, and :func:`scan` finds e
 - a **helper**: a method whose String parameter reaches that lookup with a constant namespace
   (``fromNamespaceAndPath("ns", name)``, ``"ns:" + name``, ``"prefix_" + name``); every call of it with a
   constant binds to the function the constant names. A helper is recognised by its body, never by its name,
-  and is keyed by class, name and argument count (a project may have several same-named helpers); a method
-  that passes its own parameter to a helper is a helper too. ``datapack.function_helpers`` in
-  ``.verinoda/config.json`` (``["Class.method:argIndex:namespace"]``) names one whose body is beyond reading.
+  and is its own declaration (a project may have several same-named helpers, and same-named classes in two
+  packages or trees); a call binds to it only when Java would resolve the call to it: a qualifier the caller's
+  file can see (same file or package, an import, a fully qualified name), or, unqualified, the innermost
+  enclosing class that declares a method of that name, or a static import. A method that passes its own
+  parameter to a helper is a helper too, an overload that delegates to it included.
+  ``datapack.function_helpers`` in ``.verinoda/config.json`` (``["Class.method:argIndex:namespace"]``) names one
+  whose body is beyond reading.
 
-A name built at run time (``"prefix_" + x``, a loop variable, a command argument) cannot be bound: it is
-reported as dynamic, with the part that is known (``ns:prefix_*``). The code is read (tree-sitter), not run,
-so a call is a lead, as for the rest of the datapack view.
+A constant, a local assigned once, a ``String.format`` / ``formatted`` argument and a loop over a constant table
+(``for (String[] e : TABLE) ... e[1]``, ``for (String n : List.of(...))``, the table in a local or a final field)
+are read; a name built at run time from anything else (``"prefix_" + x``, a command argument) cannot be bound:
+it is reported as dynamic, with the part that is known (``ns:prefix_*``). The code is read (tree-sitter), not
+run, so a call is a lead, as for the rest of the datapack view.
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,6 +43,7 @@ _ID_TYPES = ("Identifier", "ResourceLocation")
 _ID_PAIR = {"fromNamespaceAndPath", "of", "tryBuild"}             # (namespace, path)
 _ID_WHOLE = {"parse", "tryParse", "of", "bySeparator"}            # ("ns:path")
 _SAME_NAME = {"toLowerCase", "trim", "strip", "intern"}          # a String method that keeps the name
+_SEQUENCES = {"List", "Set", "Arrays", "Stream", "ImmutableList", "ImmutableSet"}   # List.of(...), Arrays.asList
 _SCOPES = {"method_declaration", "constructor_declaration", "compact_constructor_declaration",
            "static_initializer", "field_declaration"}
 _TYPES = {"class_declaration", "interface_declaration", "enum_declaration", "record_declaration"}
@@ -48,6 +56,11 @@ _TAIL = re.compile(r"\s*$|\s*\{|\s+with\s|\s+\x00")
 _SCHED_TAIL = re.compile(r"\s+(?:\d+(?:\.\d+)?[tsd]?|\x00\S*)(?:\s+(?:append|replace))?\s*$")
 _MANAGER_RX = re.compile(r"getFunctions|getCommandFunctionManager|getFunctionManager")
 _STRING_RX = re.compile(r'"[^"\n]*\bfunction\s|"""')   # a file with a string that may be a command
+_COND_TAIL = re.compile(r"\s+(?:run|if|unless|as|at|positioned|store)\s")
+# a String.format / formatted specifier: %s, %2$s, %-10d; %% and %n are text
+_FORMAT_SPEC = re.compile(r"%(?:(\d+)\$)?[-#+ 0,(<]*\d*(?:\.\d+)?([a-zA-Z%])")
+_PACKAGE = re.compile(r"^\s*package\s+([\w$.]+)\s*;", re.MULTILINE)
+_IMPORT = re.compile(r"^\s*import\s+(static\s+)?([\w$]+(?:\.[\w$]+)*?)(\.\*)?\s*;", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -105,6 +118,9 @@ class Helper:
     source: str = "body"   # body | config | forwards to Class.method
     tree: str | None = None
     takes_id: bool = False  # the parameter is an Identifier / ResourceLocation, not a String
+    pkg: str = ""          # the package of its file
+    path: str = ""         # its class with the classes around it (Outer.Inner); "" for a configured helper
+    start: int = -1        # the start byte of its declaration in ``file`` (-1: a configured helper)
 
     @property
     def label(self) -> str:
@@ -134,11 +150,32 @@ class Result:
 
 
 # -- values of expressions -------------------------------------------------------------------------------
-# ("const", s) | ("param", index, prefix, as_is) | ("prefix", s) | None (nothing known)
+# ("const", s) | ("consts", (s, ...)) | ("param", index, prefix, as_is) | ("prefix", s) | None (nothing known);
+# "consts" is one of several constants: a loop over a constant table (``for (String[] e : TABLE) ... e[1]``)
+
+_MAX_CONSTS = 64
+
+
+def _strs(v) -> tuple[str, ...]:
+    return (v[1],) if v[0] == "const" else v[1]
+
+
+def _consts(vals) -> tuple | None:
+    vals = tuple(dict.fromkeys(vals))
+    if not vals or len(vals) > _MAX_CONSTS:
+        return None
+    return ("const", vals[0]) if len(vals) == 1 else ("consts", vals)
+
 
 def _concat(a, b):
     if a is None:
         return None
+    if a[0] == "consts" or (b is not None and b[0] == "consts"):
+        if b is not None and a[0] in ("const", "consts") and b[0] in ("const", "consts"):
+            return _consts(x + y for x in _strs(a) for y in _strs(b))
+        known = os.path.commonprefix(list(_strs(a))) if a[0] in ("const", "consts") else (
+            a[2] if a[0] == "param" else a[1])
+        return ("prefix", known) if known else None
     if a[0] == "const":
         if b is None:
             return ("prefix", a[1]) if a[1] else None
@@ -181,6 +218,11 @@ class _File:
         self.root = _parser().parse(self.src).root_node
         self.consts = consts
         self._scopes: dict[tuple[int, int], _Scope] = {}
+        self._fields: dict | None = None
+        m = _PACKAGE.search(text)
+        self.pkg = m.group(1) if m else ""
+        # (static, name, wildcard): `import a.b.C;` -> (False, "a.b.C", False); `import a.b.*;` -> (False, "a.b", True)
+        self.imports = [(bool(m.group(1)), m.group(2), bool(m.group(3))) for m in _IMPORT.finditer(text)]
 
     def invocations(self, names) -> list:
         """The calls of methods named in ``names`` (code only: a name in a comment or a string is not a node)."""
@@ -243,9 +285,71 @@ class _File:
         cls, meth = self.where(n)
         return f"{cls}.{meth}" if meth else cls
 
+    def field(self, name: str):
+        """The initialiser of the ``final`` field ``name`` declared in this file (None: none, or two of them)."""
+        if self._fields is None:
+            seen: dict[str, list] = {}
+            stack = [self.root]
+            while stack:
+                n = stack.pop()
+                if n.type == "field_declaration":
+                    mods = next((c for c in n.children if c.type == "modifiers"), None)
+                    if n.parent is not None and n.parent.type == "interface_body" or (  # constants
+                            mods is not None and re.search(r"\bfinal\b", self.text(mods))):
+                        for d in n.named_children:
+                            nm = d.child_by_field_name("name") if d.type == "variable_declarator" else None
+                            if nm is not None:
+                                seen.setdefault(self.text(nm), []).append(d.child_by_field_name("value"))
+                elif n.type in ("program", "class_body", "enum_body", "enum_body_declarations", "interface_body") \
+                        or n.type in _TYPES:
+                    stack.extend(n.named_children)
+            self._fields = {k: v[0] for k, v in seen.items() if len(v) == 1 and v[0] is not None}
+        return self._fields.get(name)
+
+    def type_path(self, n) -> str:
+        """The named types around ``n``, outermost first (``Outer.Inner``)."""
+        names = []
+        p = n
+        while p is not None:
+            if p.type in _TYPES:
+                nm = p.child_by_field_name("name")
+                if nm is not None:
+                    names.append(self.text(nm))
+            p = p.parent
+        return ".".join(reversed(names))
+
+    def enclosing_types(self, n) -> list[tuple[str | None, object]]:
+        """``(name, body)`` of the types around ``n``, innermost first; an anonymous class has no name."""
+        out = []
+        p = n.parent
+        while p is not None:
+            if p.type in _TYPES:
+                nm, body = p.child_by_field_name("name"), p.child_by_field_name("body")
+                if body is not None:
+                    out.append((self.text(nm) if nm is not None else None, body))
+            elif p.type == "object_creation_expression":
+                body = next((c for c in p.named_children if c.type == "class_body"), None)
+                if body is not None and body.start_byte <= n.start_byte and n.end_byte <= body.end_byte:
+                    out.append((None, body))
+            p = p.parent
+        return out
+
+    def methods(self, body, name: str) -> list:
+        """The methods named ``name`` a type's body declares itself."""
+        out = []
+        for c in body.named_children:
+            for d in (c.named_children if c.type == "enum_body_declarations" else [c]):
+                if d.type == "method_declaration":
+                    nm = d.child_by_field_name("name")
+                    if nm is not None and self.text(nm) == name:
+                        out.append(d)
+        return out
+
 
 class _Scope:
-    """A method (or initialiser): its String/identifier parameters and the locals declared once in it."""
+    """A method (or initialiser): its String/identifier parameters and its locals. A local is kept as
+    ``(kind, scope node, start byte, node)``: kind "var" (node: its initialiser), "loop" (an enhanced-for variable;
+    node: what it loops over) or "other" (a catch or lambda parameter)."""
 
     def __init__(self, f: _File, node):
         self.f, self.node = f, node
@@ -281,12 +385,18 @@ class _Scope:
                         nm = d.child_by_field_name("name")
                         if nm is not None:
                             name = f.text(nm)
-                            self.locals.setdefault(name, []).append(d.child_by_field_name("value"))
+                            self.locals.setdefault(name, []).append(
+                                ("var", n.parent or n, d.start_byte, d.child_by_field_name("value")))
                             self.local_types[name] = f.text(ty) if ty is not None else ""
-            elif t in ("enhanced_for_statement", "catch_formal_parameter"):
-                nm = n.child_by_field_name("name")  # loop and catch variables: nothing known of them
+            elif t == "enhanced_for_statement":
+                nm = n.child_by_field_name("name")
                 if nm is not None:
-                    self.locals.setdefault(f.text(nm), []).append(None)
+                    self.locals.setdefault(f.text(nm), []).append(("loop", n, n.start_byte,
+                                                                   n.child_by_field_name("value")))
+            elif t == "catch_formal_parameter":
+                nm = n.child_by_field_name("name")  # a catch variable: nothing known of it
+                if nm is not None:
+                    self.locals.setdefault(f.text(nm), []).append(("other", n.parent or n, n.start_byte, None))
             elif t == "lambda_expression":
                 ps2 = n.child_by_field_name("parameters")
                 if ps2 is not None:
@@ -294,7 +404,7 @@ class _Scope:
                         c.child_by_field_name("name") or c for c in ps2.named_children]
                     for c in ids:
                         if c is not None and c.type == "identifier":
-                            self.locals.setdefault(f.text(c), []).append(None)
+                            self.locals.setdefault(f.text(c), []).append(("other", n, n.start_byte, None))
             elif t == "assignment_expression":
                 left = n.child_by_field_name("left")
                 if left is not None and left.type == "identifier":
@@ -303,12 +413,69 @@ class _Scope:
                 continue
             stack.extend(n.children)
 
-    def _local(self, name: str):
+    def _entry(self, name: str, at):
+        """The declaration of the local ``name`` that the use ``at`` sees; None when the local is assigned again
+        or the declaration is not certain."""
+        entries = self.locals.get(name) or []
+        if name in self.assigned or not entries:
+            return None
+        if len(entries) > 1 and at is not None:  # the same name in two blocks: the one around the use
+            entries = [e for e in entries if e[1].start_byte <= at.start_byte < e[1].end_byte and e[2] <= at.start_byte]
+        return entries[0] if len(entries) == 1 else None
+
+    def _local(self, name: str, at=None):
         """The one initialiser of a local never assigned again; False when the name is not a local."""
         if name not in self.locals:
             return False
-        inits = self.locals[name]
-        return inits[0] if len(inits) == 1 and name not in self.assigned else None
+        e = self._entry(name, at)
+        return e[3] if e is not None and e[0] == "var" else None
+
+    def _loop(self, name: str, at=None):
+        """What the enhanced-for variable ``name`` loops over (None when it is not one)."""
+        e = self._entry(name, at)
+        return e[3] if e is not None and e[0] == "loop" else None
+
+    def elements(self, it, k: int | None, depth: int = 0):
+        """The constants a loop over ``it`` gives (``k``: the column of a row, ``e[k]``): a local or final field
+        holding an array initialiser, ``new String[]{...}``, ``List.of(...)``, ``Arrays.asList(...)``."""
+        while it is not None and it.type == "parenthesized_expression" and it.named_children:
+            it = it.named_children[0]
+        if it is None or depth > 8:
+            return None
+        if it.type == "identifier":
+            name = self.f.text(it)
+            init = self._local(name, it)
+            if init is False:  # not a local: a final field of this file (a parameter of the name hides it)
+                init = self.f.field(name) if name not in self.params else None
+                return self.f.scope(init).elements(init, k, depth + 1) if init is not None else None
+            return self.elements(init, k, depth + 1) if init is not None else None
+        if it.type == "array_creation_expression":
+            it = it.child_by_field_name("value")
+        if it is not None and it.type == "array_initializer":
+            items = [c for c in it.named_children if c.type not in ("line_comment", "block_comment")]
+        elif it is not None and it.type == "method_invocation":
+            nm, obj = it.child_by_field_name("name"), it.child_by_field_name("object")
+            if nm is None or obj is None or self.f.text(nm) not in ("of", "asList") \
+                    or self.f.text(obj).rsplit(".", 1)[-1] not in _SEQUENCES:
+                return None
+            items = _args(it)
+        else:
+            return None
+        vals: list[str] = []
+        for e in items:
+            if k is not None:
+                if e.type == "array_creation_expression":
+                    e = e.child_by_field_name("value")
+                row = [c for c in e.named_children if c.type not in ("line_comment", "block_comment")] \
+                    if e is not None and e.type == "array_initializer" else []
+                if k >= len(row):
+                    return None
+                e = row[k]
+            v = self.value(e, depth + 1)
+            if v is None or v[0] not in ("const", "consts"):
+                return None
+            vals.extend(_strs(v))
+        return _consts(vals)
 
     def const(self, n) -> str | None:
         """A ``static final String`` constant named by ``n`` (``NAME``, ``Owner.NAME``)."""
@@ -342,19 +509,28 @@ class _Scope:
                            self.value(n.child_by_field_name("alternative"), depth + 1))
         if t == "identifier":
             name = self.f.text(n)
-            init = self._local(name)
+            init = self._local(name, n)
             if init is not False:
-                return self.value(init, depth + 1) if init is not None else None
+                if init is None:
+                    it = self._loop(name, n)  # for (String name : TABLE): each constant of the table
+                    return self.elements(it, None, depth + 1) if it is not None else None
+                return self.value(init, depth + 1)
             if name in self.params and name not in self.assigned:
                 return ("param", self.params[name], "", False)
+        if t == "array_access":  # for (String[] e : TABLE) ... e[1]: that column of each row
+            arr, idx = n.child_by_field_name("array"), n.child_by_field_name("index")
+            if arr is None or arr.type != "identifier" or idx is None or idx.type != "decimal_integer_literal":
+                return None
+            it = self._loop(self.f.text(arr), arr)
+            return self.elements(it, int(self.f.text(idx)), depth + 1) if it is not None else None
         if t == "method_invocation":  # name.toLowerCase(Locale.ROOT), name.trim(): still the name
             nm, obj = n.child_by_field_name("name"), n.child_by_field_name("object")
             how = self.f.text(nm) if nm is not None else ""
             if obj is None or how not in _SAME_NAME:
                 return None
             v = self.value(obj, depth + 1)
-            if v is not None and v[0] == "const":
-                return ("const", v[1].lower() if how == "toLowerCase" else v[1].strip())
+            if v is not None and v[0] in ("const", "consts"):
+                return _consts(s.lower() if how == "toLowerCase" else s.strip() for s in _strs(v))
             return v if v is not None and v[0] == "param" else None
         c = self.const(n)
         return ("const", c) if c is not None else None
@@ -368,13 +544,15 @@ class _Scope:
             return self.id_value(n.named_children[0] if n.named_children else None, depth + 1)
         if t == "identifier":
             name = self.f.text(n)
-            init = self._local(name)
+            init = self._local(name, n)
             if init is not False:
                 return self.id_value(init, depth + 1) if init is not None else None
-            if name in self.params and name not in self.assigned \
-                    and self.param_types.get(name, "").endswith(_ID_TYPES):
-                return ("param", self.params[name], "", True)
-            return None
+            if name in self.params:
+                if name not in self.assigned and self.param_types.get(name, "").endswith(_ID_TYPES):
+                    return ("param", self.params[name], "", True)
+                return None
+            init = self.f.field(name)  # static final Identifier TICK = Identifier.fromNamespaceAndPath(...)
+            return self.f.scope(init).id_value(init, depth + 1) if init is not None else None
         args = n.child_by_field_name("arguments")
         vals = [c for c in args.named_children if c.type not in ("line_comment", "block_comment")] \
             if args is not None else []
@@ -411,7 +589,7 @@ class _Scope:
             name = self.f.text(n)
             if self.local_types.get(name, "").rsplit(".", 1)[-1] in _MANAGER_TYPES:
                 return True
-            init = self._local(name)
+            init = self._local(name, n)
             return bool(init) and self.is_manager(init)
         return False
 
@@ -422,8 +600,8 @@ def _pair(ns, path):
     head = ns[1] + ":"
     if path is None:
         return ("prefix", head)
-    if path[0] == "const":
-        return ("const", head + path[1])
+    if path[0] in ("const", "consts"):
+        return _consts(head + p for p in _strs(path))
     if path[0] == "param":
         return ("param", path[1], head + path[2], False) if not path[3] else ("prefix", head)
     return ("prefix", head + path[1])
@@ -432,8 +610,8 @@ def _pair(ns, path):
 def _whole(v):
     if v is None:
         return None
-    if v[0] == "const":
-        return ("const", v[1] if ":" in v[1] else "minecraft:" + v[1])
+    if v[0] in ("const", "consts"):
+        return _consts(s if ":" in s else "minecraft:" + s for s in _strs(v))
     if v[0] == "param":
         return v if (not v[2] or ":" in v[2]) else None
     return v if ":" in v[1] else None
@@ -506,7 +684,14 @@ def scan(repo: Path, texts: dict[str, str], *, consts: dict[str, str] | None = N
 
     res = Result()
     helpers: list[Helper] = configured_helpers(repo)
-    seen_helper: set[tuple] = {(h.cls, h.name, h.arity, h.tree) for h in helpers}
+    seen_helper: set[tuple] = {_key(h) for h in helpers}
+
+    def add_helper(h: Helper | None) -> bool:
+        if h is None or _key(h) in seen_helper:
+            return False
+        seen_helper.add(_key(h))
+        helpers.append(h)
+        return True
 
     # 1. lookups: a constant id is a call; a parameter reaching it makes its method a helper
     for rel in [rel for rel, t in texts.items() if _MANAGER_RX.search(t)]:
@@ -524,13 +709,11 @@ def scan(repo: Path, texts: dict[str, str], *, consts: dict[str, str] | None = N
                 res.unresolved.append(f"{rel}:{line}")
                 continue
             if v[0] == "param":
-                h = _helper_of(f, sc, inv, v, "body", takes_id=_is_id_param(sc, v[1]))
-                if h is not None and (h.cls, h.name, h.arity, h.tree) not in seen_helper:
-                    seen_helper.add((h.cls, h.name, h.arity, h.tree))
-                    helpers.append(h)
+                add_helper(_helper_of(f, sc, inv, v, "body", takes_id=_is_id_param(sc, v[1])))
                 continue
-            res.calls.append(JavaCall(v[1], rel, line, "identifier", f.caller(inv), "lookup", None, f.tree,
-                                      v[0] == "prefix", f.line_text(line)))
+            for target in (_strs(v) if v[0] in ("const", "consts") else (v[1],)):
+                res.calls.append(JavaCall(target, rel, line, "identifier", f.caller(inv), "lookup", None, f.tree,
+                                          v[0] == "prefix", f.line_text(line)))
 
     # 2. command strings
     for rel in [rel for rel, t in texts.items() if _STRING_RX.search(t)]:
@@ -552,10 +735,7 @@ def scan(repo: Path, texts: dict[str, str], *, consts: dict[str, str] | None = N
             res.calls.extend(calls)
             for index, prefix in params:  # the method's parameter completes the name: a helper
                 sc = f.scope(top)
-                h = _helper_of(f, sc, top, ("param", index, prefix, not prefix), "body")
-                if h is not None and (h.cls, h.name, h.arity, h.tree) not in seen_helper:
-                    seen_helper.add((h.cls, h.name, h.arity, h.tree))
-                    helpers.append(h)
+                add_helper(_helper_of(f, sc, top, ("param", index, prefix, not prefix), "body"))
 
     # 3. helper calls; a method handing its own parameter to a helper is a helper too (a few rounds)
     found: list[JavaCall] = []
@@ -565,8 +745,18 @@ def scan(repo: Path, texts: dict[str, str], *, consts: dict[str, str] | None = N
             break
         found = []
         new = False
+        # a file that calls a helper names its method (as a call, not inside another word) and its class (the
+        # qualifier, an import, a declared type, or the class itself): a helper named `get` or `run` does not make
+        # every file with `.get(` a candidate
+        owners: dict[str, set[str]] = {}
+        for h in helpers:
+            owners.setdefault(h.name, set()).add(h.cls)
+        checks = [(n, sorted(cs), re.compile(rf"(?<![\w$]){re.escape(n)}\s*\("),
+                   re.compile(r"(?<![\w$])(?:" + "|".join(re.escape(c) for c in sorted(cs)) + r")(?![\w$])"))
+                  for n, cs in sorted(owners.items())]
         for rel, t in texts.items():
-            if not any(n in t for n in names):
+            if not any(n in t and any(c in t for c in cs) and call.search(t) and owner.search(t)
+                       for n, cs, call, owner in checks):  # the plain tests first: they are the fast ones
                 continue
             f = parsed(rel)
             if f is None:
@@ -579,27 +769,23 @@ def scan(repo: Path, texts: dict[str, str], *, consts: dict[str, str] | None = N
                 if h is None or h.arg >= len(args):
                     continue
                 v = sc.id_value(args[h.arg]) if h.takes_id else sc.value(args[h.arg])
-                line = inv.start_point[0] + 1
+                line = nm.start_point[0] + 1  # the name's line: a chained `.runFunction(` starts on its own
                 if v is not None and v[0] == "param":
-                    cls, meth = f.where(inv)
-                    if (h.cls, h.name) == (cls, meth):
-                        continue  # a helper handing the name on to itself
+                    if _is_self(f, sc, inv, h):
+                        continue  # a helper handing the name on to itself (an overload is another method)
                     fw = _helper_of(f, sc, inv, ("param", v[1], h.prefix + v[2], h.as_is and not v[2]),
                                     f"forwards to {h.label}", takes_id=h.takes_id)
-                    if fw is not None and (fw.cls, fw.name, fw.arity, fw.tree) not in seen_helper:
-                        seen_helper.add((fw.cls, fw.name, fw.arity, fw.tree))
-                        helpers.append(fw)
-                        new = True
+                    new = add_helper(fw) or new
                     if fw is not None:
                         continue
-                if v is not None and v[0] == "const":
-                    target, dyn = (v[1] if h.takes_id else h.bind(v[1])), False
+                if v is not None and v[0] in ("const", "consts"):  # consts: each row of a constant table
+                    targets, dyn = [x if h.takes_id else h.bind(x) for x in _strs(v)], False
                 elif v is not None and v[0] == "prefix":
-                    target, dyn = (v[1] if h.takes_id or (h.as_is and ":" in v[1]) else h.prefix + v[1]), True
+                    targets, dyn = [v[1] if h.takes_id or (h.as_is and ":" in v[1]) else h.prefix + v[1]], True
                 else:
-                    target, dyn = h.prefix, True
-                found.append(JavaCall(target, rel, line, "helper", f.caller(inv), "lookup", h.label, f.tree, dyn,
-                                      f.line_text(line)))
+                    targets, dyn = [h.prefix], True
+                found += [JavaCall(target, rel, line, "helper", f.caller(inv), "lookup", h.label, f.tree, dyn,
+                                   f.line_text(line)) for target in targets]
         if not new:
             break
     res.calls.extend(found)
@@ -626,42 +812,123 @@ def _helper_of(f: _File, sc: _Scope, n, v, source: str, *, takes_id: bool = Fals
         return None
     decl = sc.node.child_by_field_name("name") or sc.node
     return Helper(cls, meth, len(sc.params), v[1], v[2], v[3] or not v[2], f.rel, decl.start_point[0] + 1, source,
-                  f.tree, takes_id)
+                  f.tree, takes_id, f.pkg, f.type_path(sc.node) or cls, sc.node.start_byte)
+
+
+def _key(h: Helper) -> tuple:
+    """One helper: its declaration (two classes of the same name in two packages are two helpers)."""
+    return (h.file, h.start) if h.start >= 0 else (h.cls, h.name, h.arity, h.tree)
+
+
+def _is_self(f: _File, sc: _Scope, inv, h: Helper) -> bool:
+    """The call is written in the helper's own body (recursion), not in an overload that delegates to it."""
+    if h.start >= 0:
+        return h.file == f.rel and h.start == sc.node.start_byte
+    cls, meth = f.where(inv)
+    return (h.cls, h.name) == (cls, meth) and h.arity in (None, len(sc.params))
 
 
 def _pick(f: _File, sc: _Scope, inv, name: str, arity: int, helpers: list[Helper]) -> Helper | None:
-    """The helper a call names: by class (its qualifier, the declared type of the receiver, or the caller's own
-    class), name and argument count; one in the caller's tree first."""
-    cands = [h for h in helpers if h.name == name and (h.arity is None or h.arity == arity)]
+    """The helper a call names: the method Java resolves the call to, when that method is a helper. A qualified
+    call names the class (``Mod.runFunction``, ``pkg.Mod.runFunction``, an instance of a declared type), which the
+    caller's file must be able to see (the same file or package, an import, a fully qualified name); an unqualified
+    call goes to the innermost enclosing class that declares a method of that name, or to a static import. A helper
+    found by its body binds only calls in its own tree (a reference tree shares class and package names)."""
+    cands = [h for h in helpers if h.name == name and (h.arity is None or h.arity == arity)
+             and (h.source == "config" or h.tree == f.tree)]
     if not cands:
         return None
-    cands = [h for h in cands if h.tree == f.tree] or cands
     obj = inv.child_by_field_name("object")
     if obj is None or obj.type in ("this", "super"):
-        cls, _m = f.where(inv)
-        own = [h for h in cands if h.cls == cls and (h.file == f.rel or h.source == "config")] or \
-              [h for h in cands if h.file == f.rel]
-        if own:
-            return own[0]
-        text = f.src.decode("utf-8", "replace")
-        stat = [h for h in cands if re.search(rf"import\s+static\s+[\w.]*\b{re.escape(h.cls)}\."
-                                              rf"(?:\*|{re.escape(name)})\s*;", text)]
+        for tname, body in f.enclosing_types(inv):
+            decls = f.methods(body, name)
+            if not decls:
+                continue  # Java looks in the class around this one
+            conf = [h for h in cands if h.source == "config" and h.cls == tname]
+            if conf:
+                return conf[0]
+            fits = [d for d in decls if _param_count(d) == arity]
+            return next((h for h in cands for d in fits if h.file == f.rel and h.start == d.start_byte), None)
+        stat = [h for h in cands if _static_import(f, h, name)]
         return stat[0] if len(stat) == 1 else None
-    qual = f.text(obj).rsplit(".", 1)[-1]
-    if not qual[:1].isupper():  # an instance: the class its variable is declared with
-        declared = sc.local_types.get(qual) or sc.param_types.get(qual) or ""
-        qual = declared.rsplit(".", 1)[-1].split("<", 1)[0]
-    named = [h for h in cands if h.cls == qual]
+    q = re.sub(r"\s+", "", f.text(obj))
+    last = q.rsplit(".", 1)[-1]
+    if not last[:1].isupper():  # an instance: the class its variable is declared with
+        q = re.sub(r"\s+", "", (sc.local_types.get(last) or sc.param_types.get(last) or "").split("<", 1)[0])
+        last = q.rsplit(".", 1)[-1]
+    named = [h for h in cands if h.cls == last and (h.source == "config" or _sees(f, h, q))]
     if len({(h.file, h.arg, h.prefix) for h in named}) == 1:
         return named[0]
     return None
+
+
+def _param_count(decl) -> int:
+    ps = decl.child_by_field_name("parameters")
+    if ps is None:
+        return 0
+    return len([c for c in ps.named_children if c.type in ("formal_parameter", "spread_parameter")])
+
+
+def _sees(f: _File, h: Helper, q: str) -> bool:
+    """Whether the file ``f`` can name the helper's class as ``q`` (``Mod``, ``Outer.Mod``, ``pkg.Outer.Mod``)."""
+    if h.file == f.rel:
+        return True
+    path = (h.path or h.cls).split(".")
+    if q == ".".join(([h.pkg] if h.pkg else []) + path):  # fully qualified
+        return True
+    segs = q.split(".")
+    k = len(path) - len(segs)
+    if k < 0 or path[k:] != segs:
+        return False
+    if k == 0 and f.pkg == h.pkg:  # a top-level class of the same package
+        return True
+    home = ".".join(([h.pkg] if h.pkg else []) + path[:k])  # where the class the call names first is declared
+    return any((wild and name == home) or (not wild and name == f"{home}.{path[k]}".lstrip("."))
+               for _static, name, wild in f.imports)
+
+
+def _static_import(f: _File, h: Helper, name: str) -> bool:
+    """``import static pkg.Mod.runFunction;`` / ``import static pkg.Mod.*;`` in the caller's file."""
+    if h.source == "config":
+        text = f.src.decode("utf-8", "replace")
+        return bool(re.search(rf"import\s+static\s+[\w.]*\b{re.escape(h.cls)}\.(?:\*|{re.escape(name)})\s*;", text))
+    owner = ".".join(([h.pkg] if h.pkg else []) + (h.path or h.cls).split("."))
+    return any(static and ((wild and imp == owner) or (not wild and imp == f"{owner}.{name}"))
+               for static, imp, wild in f.imports)
+
+
+def _format_args(f: _File, n) -> list | None:
+    """The arguments a format string ``n`` is filled with: ``String.format(n, ...)`` (after a ``Locale``) or
+    ``n.formatted(...)``; None when ``n`` is not one."""
+    p = n.parent
+    if p is None:
+        return None
+    if p.type == "method_invocation" and p.child_by_field_name("object") == n:
+        nm = p.child_by_field_name("name")
+        return _args(p) if nm is not None and f.text(nm) == "formatted" else None
+    if p.type != "argument_list" or p.parent is None or p.parent.type != "method_invocation":
+        return None
+    inv = p.parent
+    nm, obj = inv.child_by_field_name("name"), inv.child_by_field_name("object")
+    if nm is None or f.text(nm) != "format" or obj is None or f.text(obj).rsplit(".", 1)[-1] != "String":
+        return None
+    args = _args(inv)
+    at = next((i for i, a in enumerate(args) if a == n), -1)
+    return args[at + 1:] if at in (0, 1) else None
 
 
 def _command_calls(f: _File, top) -> tuple[list[JavaCall], list[tuple[int, str]]]:
     """The ``function`` calls of one string expression that reads as a command, and ``(parameter index, prefix)``
     where the enclosing method's own parameter completes the name (``"function ns:" + name``: a helper)."""
     sc = f.scope(top)
-    pieces: list[tuple[str | None, int, int | None]] = []   # (text, or None when built at run time; line; param)
+    # (text, or None when built at run time; line; param; a text block, whose lines are the source's)
+    pieces: list[tuple[str | None, int, int | None, bool]] = []
+
+    def part(n):
+        """A part built at run time: a constant, the method's own parameter, or nothing known."""
+        c = _literal(f.src, n) if n.type == "string_literal" else sc.const(n)  # a literal: a format argument
+        v = sc.value(n) if c is None and n.type == "identifier" else None
+        pieces.append((c, n.start_point[0] + 1, v[1] if v and v[0] == "param" and not v[2] else None, False))
 
     def flat(n):
         if n.type == "parenthesized_expression" and n.named_children:
@@ -670,16 +937,33 @@ def _command_calls(f: _File, top) -> tuple[list[JavaCall], list[tuple[int, str]]
             flat(n.child_by_field_name("left"))
             flat(n.child_by_field_name("right"))
         elif n.type == "string_literal":
-            pieces.append((_literal(f.src, n), n.start_point[0] + 1, None))
+            body, line, block = _literal(f.src, n), n.start_point[0] + 1, f.src[n.start_byte:n.start_byte + 3] == b'"""'
+            fargs = _format_args(f, n)
+            if fargs is None:
+                pieces.append((body, line, None, block))
+                return
+            # String.format("function ns:%s", x) / "function ns:%s".formatted(x): each %s is its argument
+            k, last = 0, 0
+            for m in _FORMAT_SPEC.finditer(body):
+                pieces.append((body[last:m.start()], line + (body[:last].count("\n") if block else 0), None, block))
+                last = m.end()
+                if m.group(2) in "%n":
+                    pieces.append(("%" if m.group(2) == "%" else "\n", line, None, False))
+                    continue
+                index = int(m.group(1)) - 1 if m.group(1) else k
+                k += 0 if m.group(1) else 1
+                if 0 <= index < len(fargs):
+                    part(fargs[index])
+                else:
+                    pieces.append((None, line, None, False))
+            pieces.append((body[last:], line + (body[:last].count("\n") if block else 0), None, block))
         else:
-            c = sc.const(n)
-            v = sc.value(n) if c is None and n.type == "identifier" else None
-            pieces.append((c, n.start_point[0] + 1, v[1] if v and v[0] == "param" and not v[2] else None))
+            part(n)
 
     flat(top)
     text, starts, param_at = "", [], {}
-    for s, line, param in pieces:
-        starts.append((len(text), line))
+    for s, line, param, block in pieces:
+        starts.append((len(text), line, block))
         if s is None and param is not None:
             param_at[len(text)] = param
         text += s if s is not None else "\x00"
@@ -692,10 +976,16 @@ def _command_calls(f: _File, top) -> tuple[list[JavaCall], list[tuple[int, str]]
                 rest = cmd[m.end():]
                 ns, path = m.group(3), m.group(4)
                 dynamic = rest.startswith("\x00")
-                if not dynamic and (not path or not (_SCHED_TAIL.match(rest) if m.group(1) else _TAIL.match(rest))):
+                # `execute if function ns:check run ...`: the function runs as the condition
+                cond = bool(re.search(r"(?:^|\s)(?:if|unless)\s+$", cmd[:m.start()])) and not m.group(1)
+                if not dynamic and (not path or not (_SCHED_TAIL.match(rest) if m.group(1) else (
+                        _TAIL.match(rest) or (cond and _COND_TAIL.match(rest))))):
                     continue
                 pos = offset + (m.start(3) if ns else m.end())
-                line = max((ln for st, ln in starts if st <= pos), default=top.start_point[0] + 1)
+                st, line, block = max(((st, ln, b) for st, ln, b in starts if st <= pos),
+                                      default=(0, top.start_point[0] + 1, False))
+                if block:  # a text block: the line of this command, not of its opening quotes
+                    line += text[st:pos].count("\n")
                 if m.group(1):
                     how = "schedule"
                 elif re.search(r"(?:^|\s)(?:run|execute)\s", cmd[:m.start()]) or cmd.startswith("\x00"):

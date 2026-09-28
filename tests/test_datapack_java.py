@@ -370,3 +370,268 @@ def test_helper_that_normalises_its_parameter_and_an_unreadable_lookup(tmp_path)
 def test_not_calls(tmp_path, code):
     text = "class T {\n    void m(MinecraftServer server) {\n        " + code + "\n    }\n}\n"
     assert datapack_java.scan(tmp_path, {"T.java": text}).calls == []
+
+
+# -- review fixes: which method a call resolves to, overloads, tables, formats, lines -----------------------------
+
+LOOKUP = 's.getFunctions().get(Identifier.fromNamespaceAndPath("demo", name));'
+JM = "src/main/java"
+
+
+def _calls(res) -> set[tuple]:
+    return {(c.file, c.line, c.target, c.dynamic) for c in res.calls}
+
+
+def _util(pkg: str, body: str) -> str:
+    return (f"package {pkg};\n\npublic final class Util {{\n    public static void run(MinecraftServer s, String name) {{\n"
+            f"        {body}\n    }}\n}}\n")
+
+
+def _user(pkg: str, cls: str, imports: str, calls: str) -> str:
+    return f"package {pkg};\n\n{imports}class {cls} {{\n    void m(MinecraftServer s) {{\n{calls}    }}\n}}\n"
+
+
+def test_a_same_named_class_in_another_package_is_not_the_helper(tmp_path):
+    files = {
+        f"{DP}/alpha.mcfunction": "say alpha\n",
+        f"{JM}/a/Util.java": _util("a", LOOKUP),
+        f"{JM}/b/Util.java": _util("b", "System.out.println(name);"),
+        f"{JM}/c/User.java": _user("c", "User", "import b.Util;\n\n", '        Util.run(s, "hello_world");\n'),
+        f"{JM}/d/Other.java": _user("d", "Other", "import a.Util;\n\n", '        Util.run(s, "alpha");\n'),
+        f"{JM}/e/Wild.java": _user("e", "Wild", "import a.*;\n\n", '        Util.run(s, "alpha");\n'),
+        f"{JM}/f/Full.java": _user("f", "Full", "", '        a.Util.run(s, "alpha");\n'
+                                                    '        b.Util.run(s, "hello_world");\n'),
+        f"{JM}/a/Same.java": _user("a", "Same", "", '        Util.run(s, "alpha");\n'),
+        f"{JM}/g/Blind.java": _user("g", "Blind", "", '        Util.run(s, "hello_world");\n'),
+    }
+    root = tmp_path / "mod"
+    _write(root, files)
+    res = datapack_java.scan(root, {k: v for k, v in files.items() if k.endswith(".java")})
+    assert _calls(res) == {(f"{JM}/d/Other.java", 7, "demo:alpha", False), (f"{JM}/e/Wild.java", 7, "demo:alpha", False),
+                           (f"{JM}/f/Full.java", 5, "demo:alpha", False), (f"{JM}/a/Same.java", 5, "demo:alpha", False)}
+    assert [h.label for h in res.helpers] == ["Util.run"]
+    missing = datapack.lookup(root)["problems"]["missing_functions"]
+    assert not [r for r in missing if r["name"] == "demo:hello_world"]
+
+
+def test_nested_classes_resolve_as_java_does(tmp_path):
+    text = """package demo;
+
+class Outer {
+    static class A {
+        static void run(MinecraftServer s, String name) {
+            """ + LOOKUP + """
+        }
+    }
+
+    static class B {
+        static void run(MinecraftServer s, String name) {
+            System.out.println(name);
+        }
+
+        void m(MinecraftServer s) {
+            run(s, "not_a_function");
+            A.run(s, "alpha");
+            Outer.A.run(s, "beta");
+        }
+    }
+
+    void top(MinecraftServer s) {
+        A.run(s, "gamma");
+    }
+}
+"""
+    near = _user("demo", "Near", "", '        Outer.A.run(s, "delta");\n        A.run(s, "not_visible");\n')
+    res = datapack_java.scan(tmp_path, {"demo/Outer.java": text, "demo/Near.java": near})
+    assert _calls(res) == {("demo/Outer.java", 17, "demo:alpha", False), ("demo/Outer.java", 18, "demo:beta", False),
+                           ("demo/Outer.java", 23, "demo:gamma", False), ("demo/Near.java", 5, "demo:delta", False)}
+
+
+def test_a_reference_tree_helper_does_not_bind_product_calls(tmp_path):
+    ref = "original/src/main/java/a/Util.java"
+    files = {
+        ref: _util("a", LOOKUP).replace("    }\n}\n", '    }\n\n    void own(MinecraftServer s) {\n'
+                                                     '        Util.run(s, "alpha");\n    }\n}\n'),
+        f"{JM}/a/Util.java": _util("a", "System.out.println(name);"),
+        f"{JM}/c/User.java": _user("c", "User", "import a.Util;\n\n", '        Util.run(s, "hello_world");\n'),
+    }
+    root = tmp_path / "mod"
+    _write(root, files)
+    setup.add_reference(root, "original")
+    res = datapack_java.scan(root, files)
+    assert [(c.file, c.line, c.target, c.tree) for c in res.calls] == [(ref, 9, "demo:alpha", "original")]
+
+
+def test_an_overload_that_delegates_to_the_helper_is_a_helper(tmp_path):
+    text = """class ExampleMod {
+    static void runFunction(ServerPlayer p, String name) {
+        if (p == null) {
+            runFunction(p, name);
+        }
+        p.getServer().getFunctions().get(Identifier.fromNamespaceAndPath("demo", name));
+    }
+
+    static void runFunction(ServerPlayer p, String name, int delay) {
+        Scheduler.later(delay, () -> runFunction(p, name));
+    }
+
+    static void use(ServerPlayer p) {
+        runFunction(p, "beta", 20);
+        runFunction(p, "alpha");
+        Stream.of(1).forEach(x -> ExampleMod
+                .runFunction(p, "gamma"));
+    }
+}
+"""
+    res = datapack_java.scan(tmp_path, {"ExampleMod.java": text})
+    assert _calls(res) == {("ExampleMod.java", 14, "demo:beta", False), ("ExampleMod.java", 15, "demo:alpha", False),
+                           ("ExampleMod.java", 17, "demo:gamma", False)}   # a chained call: the line of its name
+    assert {(h.label, h.arity, h.source) for h in res.helpers} == {
+        ("ExampleMod.runFunction", 2, "body"), ("ExampleMod.runFunction", 3, "forwards to ExampleMod.runFunction")}
+
+
+def test_only_files_that_can_call_a_helper_are_read(tmp_path):
+    texts = {
+        "Runner.java": "class Runner {\n    static void run(MinecraftServer s, String name) {\n        " + LOOKUP
+                       + "\n    }\n}\n",
+        "User.java": 'class User {\n    void m(MinecraftServer s) {\n        Runner.run(s, "alpha");\n    }\n}\n',
+        "Busy.java": 'class Busy {\n    void m(Runnable task, Map<String, String> map) {\n        task.run();\n'
+                     '        map.get("k");\n        running(1);\n    }\n}\n',
+        "Word.java": "class Word {\n    // a file that merely says run(\n    void m() { rerun(); }\n}\n",
+    }
+    res = datapack_java.scan(tmp_path, texts)
+    assert _calls(res) == {("User.java", 3, "demo:alpha", False)}
+    assert res.files_read == 2
+
+
+TABLES = """package com.example.demo;
+
+final class Verbs {
+    private static final List<String> KITS = List.of("give_sword", "give_shield");
+    private static final List<String> names = List.of("delta");   // hidden by the parameter of `anything`
+
+    static void register(Dispatcher d) {
+        String[][] pairs = {
+                {"summon", "alpha"}, {"call", "beta"},
+                {"again", "alpha"},
+        };
+        for (String[] e : pairs) {
+            final String fn = e[1];
+            d.register(literal(e[0]).executes(ctx -> ExampleMod.runFunction(ctx.getPlayer(), fn)));      // MARK table
+        }
+        for (String kit : KITS) {
+            ExampleMod.runFunction(null, kit);      // MARK kits
+        }
+        for (String[] e : new String[][]{{"x", "gamma"}}) {
+            ExampleMod.runFunction(null, e[1]);      // MARK inline
+        }
+        for (String[] e : pairs) {
+            ExampleMod.runFunction(null, e[2]);      // MARK short-row
+        }
+    }
+
+    static void anything(ServerPlayer p, String[] names) {
+        for (String n : names) {
+            ExampleMod.runFunction(p, n);      // MARK any-name
+        }
+    }
+}
+"""
+
+
+def test_a_constant_table_binds_each_row_and_the_function_view_names_run_time_sites(tmp_path):
+    root = tmp_path / "mod"
+    rel = f"{J}/Verbs.java"
+    _write(root, {**FILES, rel: TABLES})
+
+    def line(mark: str) -> int:
+        return next(i for i, ln in enumerate(TABLES.splitlines(), 1) if f"MARK {mark}" in ln)
+
+    java = datapack.index(root)["java"]
+    got = {(c.line, c.target, c.dynamic) for c in java.calls if c.file == rel}
+    assert got == {(line("table"), "demo:alpha", False), (line("table"), "demo:beta", False),
+                   (line("kits"), "demo:give_sword", False), (line("kits"), "demo:give_shield", False),
+                   (line("inline"), "demo:gamma", False),
+                   (line("short-row"), "demo:", True), (line("any-name"), "demo:", True)}
+    assert not [r for r in datapack.lookup(root)["problems"]["missing_functions"] if r["called_at"].startswith(rel)]
+    one = datapack.lookup(root, "function", "demo:beta")
+    assert (f"{rel}:{line('table')}", "Verbs.register") in {(c["at"], c["caller"]) for c in one["called_by"]}
+    # a site that builds the whole name past the namespace may run any demo: function: the view says so
+    assert {c["at"] for c in one["dynamic_any"]} == {f"{rel}:{line('short-row')}", f"{rel}:{line('any-name')}"}
+    text = datapack.render(one)
+    assert "2 Java site(s) build the name at run time and may run this one too" in text
+    assert f"{rel}:{line('any-name')}" in text
+    assert "no call in or out found" not in datapack.render(datapack.lookup(root, "function", "demo:delta"))
+
+
+@pytest.mark.parametrize("code, target", [
+    ('server.runCommand(String.format("function demo:%s", kind));', "demo:"),
+    ('server.runCommand("function demo:give_%s".formatted(kind));', "demo:give_"),
+    ('server.runCommand(String.format(Locale.ROOT, "execute as @a run function %s", id));', ""),
+])
+def test_format_strings_are_dynamic(tmp_path, code, target):
+    text = ("class T {\n    void m(MinecraftServer server) {\n        String kind = pick(), id = pick();\n        "
+            + code + "\n    }\n}\n")
+    res = datapack_java.scan(tmp_path, {"T.java": text})
+    assert [(c.target, c.via, c.dynamic, c.line) for c in res.calls] == [(target, "command-string", True, 4)]
+
+
+def test_format_strings_fill_constants_and_make_helpers(tmp_path):
+    text = """class T {
+    static final String NS = "demo";
+
+    static void run(MinecraftServer server, String name) {
+        server.runCommand(String.format("function %s:%s", NS, name));
+    }
+
+    void m(MinecraftServer server) {
+        server.runCommand("function %s:alpha".formatted(NS));
+        run(server, "beta");
+        LOGGER.info(String.format("function demo:%s failed", "x"));
+    }
+}
+"""
+    res = datapack_java.scan(tmp_path, {"T.java": text})
+    assert [(c.target, c.via, c.line, c.dynamic) for c in res.calls] == [
+        ("demo:alpha", "command-string", 9, False), ("demo:beta", "helper", 10, False)]
+
+
+def test_execute_if_function_runs_the_function(tmp_path):
+    text = """class T {
+    void m(MinecraftServer server) {
+        server.runCommand("execute if function demo:check run say ok");
+        server.runCommand("execute as @a unless function demo:gate run function demo:other");
+        server.runCommand("say if function demo:nope run");
+    }
+}
+"""
+    res = datapack_java.scan(tmp_path, {"T.java": text})
+    assert [(c.target, c.line, c.how) for c in res.calls] == [
+        ("demo:check", 3, "execute run"), ("demo:gate", 4, "execute run"), ("demo:other", 4, "execute run")]
+
+
+def test_each_command_of_a_text_block_has_its_own_line(tmp_path):
+    text = ('class T {\n    void m(MinecraftServer server) {\n        run("""\n            say hi\n'
+            '            function demo:a\n            function demo:b\n            """);\n    }\n}\n')
+    res = datapack_java.scan(tmp_path, {"T.java": text})
+    assert [(c.target, c.line) for c in res.calls] == [("demo:a", 5), ("demo:b", 6)]
+
+
+def test_a_final_identifier_field_is_bound(tmp_path):
+    text = """class T {
+    private static final ResourceLocation TICK = new ResourceLocation("demo", "tick");
+
+    void m(MinecraftServer server) {
+        server.getFunctions().get(TICK);
+    }
+}
+"""
+    res = datapack_java.scan(tmp_path, {"T.java": text})
+    assert [(c.target, c.via, c.line) for c in res.calls] == [("demo:tick", "identifier", 5)]
+    assert res.unresolved == []
+
+
+def test_a_missing_function_lists_the_run_time_names_that_may_be_it(repo):
+    res = datapack.lookup(repo, "function", "demo:give_axe")
+    assert res["status"] == "not_found" and len(res["dynamic"]) == 2
+    assert "may be this one" in datapack.render(res)
