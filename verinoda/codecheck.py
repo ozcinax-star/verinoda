@@ -1586,8 +1586,8 @@ class Checker:
 
     def _untyped_param(self, fx: FileCtx, name: ast.Name) -> bool:
         """``name`` is an unannotated parameter of its function (or of an enclosing one) that the function
-        never rebinds - not ``self``/``cls``, and not a parameter of a pytest test or fixture (jedi reads
-        those from the fixture of that name)."""
+        never rebinds - not ``self``/``cls``, not ``*args`` / ``**kwargs``, and not a parameter of a pytest test
+        or fixture (jedi reads those from the fixture of that name)."""
         fn = fx.scope_of(name)
         for _ in range(4):
             if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
@@ -1599,8 +1599,8 @@ class Checker:
             stored = any(isinstance(x, ast.Name) and x.id == name.id and isinstance(x.ctx, ast.Store)
                          for st in body for x in cf._walk_no_scopes(st))
             if param is not None:
-                if param.annotation is not None or stored:
-                    return False
+                if param.annotation is not None or stored or param is a.vararg or param is a.kwarg:
+                    return False   # *args / **kwargs: a tuple / a dict by syntax, not from call sites
                 first = [*a.posonlyargs, *a.args][:1]
                 is_static = any((dotted(d) or "").rsplit(".", 1)[-1] == "staticmethod"
                                 for d in getattr(fn, "decorator_list", []))

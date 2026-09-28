@@ -69,7 +69,7 @@ optional dependency listed only in a requirements file under `tests/`.
   function or a fixture in a pytest file, named like one of pytest's own fixtures, from that fixture's class
   (unless the project defines a fixture of the same name). Any other unannotated parameter (and an expression
   that starts from one) has no declared type: jedi would infer it from the call sites it finds, and one caller's
-  class is not the parameter's type (`self` / `cls` and pytest tests and fixtures excepted). A name in that type
+  class is not the parameter's type (`self` / `cls`, `*args` / `**kwargs`, and pytest tests and fixtures excepted). A name in that type
   is `exists`. A name it lacks stays
   `unknown` and carries `declared` and `nearest` only when the class is closed in itself (then only a subclass
   can add it); a keyword outside the declared method's signature is `unknown` with the same fields.
@@ -163,5 +163,7 @@ each. The planting and triage rules were written by the rule author (in-sample).
   index of its sources (about 10-40 s for 16,000 files) and keeps it in the user cache
   (`%LOCALAPPDATA%/verinoda/Cache/names/`, `~/Library/Caches/verinoda/names/`, `~/.cache/verinoda/names/`, or
   `$VERINODA_CACHE_DIR/names/`; derived, safe to delete); `VERINODA_NAME_INDEX_BUDGET_S` (default 120) bounds the
-  time one check spends on it, and the next check continues a build that was cut short.
+  time one check spends on it, and the next check continues a build that was cut short. A
+  `.verinoda/cache/check/names-*.json` left by an earlier build of this change is no longer read and can be
+  deleted.
 - `docs/ARCHITECTURE.md` gained one row for `codecheck_rank.py` (tests/test_docs.py requires every module there).

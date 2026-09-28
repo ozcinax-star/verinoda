@@ -379,6 +379,10 @@ def is_done(stream):
 
 def demo():
     return is_done(Reader())
+
+
+def opts(**kwargs):
+    return kwargs.gett("x")
 '''
 
 
@@ -390,6 +394,8 @@ def test_an_unannotated_parameter_takes_no_declared_type_from_one_caller(tmp_pat
     s = _one(res, "closed")
     assert s["verdict"] == "unknown" and "declared" not in s and s["rank"] != "high", s
     assert "declared type" not in s["next_step"] and "declared type" not in s["rank_why"]
+    kw = _one(res, "gett")                                   # **kwargs is a dict by syntax: still declared
+    assert kw.get("declared") == "builtins.dict" and kw["rank"] == "high", kw
 
 
 def test_an_attribute_set_by_a_keyword_in_the_checked_file_is_not_high(tmp_path):
