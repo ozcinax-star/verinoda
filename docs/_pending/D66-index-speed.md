@@ -55,7 +55,7 @@ reader could meet a half-built index and a failed build left none.
 
 ### NN.3 Measured
 
-Machine shared with other builds (CPU load 76-96 % throughout); every wall time is an upper bound and
+Machine shared with other builds (CPU load 88-100 % throughout); every wall time is an upper bound and
 replicates differ by up to 2x. The django checkout was copied without its `.verinoda` folder.
 
 - Same corpus: `files`, `total_words` and `unclassified` (what the rebuild reads from detect()) identical,
@@ -65,9 +65,22 @@ replicates differ by up to 2x. The django checkout was copied without its `.veri
 - detect() on the django checkout, warm, under the profiler: 17.7 s (walk) -> 2.3 s (git). Unprofiled, two
   runs each: walk 16.7 / 18.7 s, git 6.1 / 2.6 s (loaded box). hono 1.6 / 1.2 -> 0.9 / 1.3 s; sidekiq
   0.8 / 0.4 -> 1.1 / 0.5 s (small trees: within noise).
-- Search index, full build of the django checkout, old vs new code, two runs each: SEARCH_NUMBERS.
-- `verinoda scan` and a one-line-edit `update` of the django checkout, two runs each (scan, update 1,
-  update 2; wall seconds): before BEFORE_NUMBERS; after AFTER_NUMBERS.
+- `verinoda scan` and then two one-line-edit `update`s of a fresh django copy, twice per code version, each
+  from a frozen copy of the code. Wall seconds (scan / update 1 / update 2): before 281.9 / 90.0 / 110.2
+  and 302.9 / 81.5 / 64.5; after 276.8 / 156.7 / 127.2 and 246.1 / 141.5 / 117.1. Phase seconds of the
+  scans (index / search / lexicon / anchors): before 124.8 / 55.0 / 20.3 / 64.6 and 108.1 / 81.9 / 19.9 /
+  78.6; after 154.3 / 55.0 / 27.9 / 11.7 and 146.5 / 33.5 / 31.4 / 18.6. Index phase of the updates:
+  before 68.7, 61.3, 67.3, 45.8; after 102.0, 68.6, 116.1, 68.5.
+- Reading: the box was at 100 % CPU with about 28 Python processes of other builds during the after runs
+  (the before runs overlapped this build's own test runs instead), so the walls and the index phase are
+  load, not code: the lexicon phase, which this change does not touch, is 40-55 % slower in the after runs.
+  The one phase the load cannot explain is anchors: 64.6 / 78.6 s -> 11.7 / 18.6 s (one read, one commit).
+  The search phase (55.0 / 81.9 -> 55.0 / 33.5 s) mixes the renamed build with the sidecar's parse reuse;
+  the build file's effect alone was not isolated (an alternating build-only run was stopped because the
+  box did not free up). The detect() gain shows only in the profile above: the scan JSON has no detect
+  phase. An idle-box rerun of these two benches is needed before quoting end-to-end numbers. (The after
+  runs used the code before the once-per-directory junction check was added: one realpath per kept
+  directory, about 700 on django.)
 - Tests: `tests/test_detect_git.py` (git list == walk on a repository with tracked-but-ignored, nested
   .gitignore, info/exclude, .graphifyignore dir and file, --exclude, a deleted tracked file, a noise dir,
   the output dir, symlinks where available, a junction out of the root on Windows; the walk for a negation, a nested repository, .gitmodules, no
