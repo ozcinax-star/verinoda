@@ -158,7 +158,7 @@ def test_mcp_code_check_lists_one_line_per_site_in_rank_order(ranked):
     assert list(out)[:5] == ["status", "summary", "exit", "exit_because", "env"]
     assert all(isinstance(s, str) for s in out["sites"])
     assert out["sites"][0].startswith("ABSENT app.py:") and out["sites"][1].startswith("HIGH app.py:")
-    assert "defined nowhere" in out["sites"][1] and "next:" in out["sites"][1]
+    assert "defined nowhere" in out["sites"][1] and ("next:" in out["sites"][1] or "nearest:" in out["sites"][1])
     assert out["unknown_summary"]["high"] == 2 and isinstance(out["unknown_summary"]["low_by_cause"][0], str)
     # the cap cuts from the end: many LOW lines never push an absent or HIGH site out
     many = dict(res, sites=res["sites"] + [dict(res["sites"][-1], rank="low", at=f"app.py:{i}:1",
@@ -199,6 +199,9 @@ def use(lines: list[str], root: Path, st: Store):
     (root / "x" / "y").write_text("t", encdoing="utf-8")
     st.colse()
     st.close()
+    p = root / "x"
+    p.mkdir()
+    root.as_posix().starts_with("x")
     return a, b, [m for m in map(re.compile, lines) if m.pattern]
 
 
@@ -232,6 +235,9 @@ def test_declared_types_decide_exists_and_rank_a_close_misspelling_high(tmp_path
     assert at('(root / "x").mkdir(parents=True)', "parents")["verdict"] == "exists"
     assert at('encoding="utf-8"', "encoding")["verdict"] == "exists"
     assert at("st.close()", "close")["verdict"] == "exists"
+    assert at("p.mkdir()", "mkdir")["verdict"] == "exists"                  # a local bound once to a path join
+    ret = at('root.as_posix().starts_with("x")', "starts_with")              # what the called method returns
+    assert ret["declared"] == "builtins.str" and ret["rank"] == "high" and ret["nearest"][0]["name"] == "startswith"
     # pytest's own fixtures: an unannotated test parameter named so has the fixture's type
     assert at("tmp_path.mkdir(exist_ok=True)", "mkdir")["verdict"] == "exists"
     assert at('monkeypatch.setattr("os.sep"', "setattr")["verdict"] == "exists"

@@ -1505,19 +1505,47 @@ class Checker:
             fixture = self._fixture_type(fx, base)
             if fixture is not None:
                 return fixture
+            value = self._only_value(fx, base)
+            if isinstance(value, ast.BinOp) and isinstance(value.op, ast.Div):   # p = root / "x"
+                joined = self._declared_type(fx, value, depth + 1)
+                if joined is not None:
+                    return joined
             line, col = self._comprehension_target(fx, base) or (base.lineno, base.col_offset)
             return self._inferred(fx, line, col)
         if isinstance(base, ast.Attribute) and not _dunder(base.attr):
             return self._inferred(fx, base.end_lineno or base.lineno,
                                   (base.end_col_offset or 0) - len(base.attr.encode()))
+        if isinstance(base, ast.Call) and isinstance(base.func, (ast.Name, ast.Attribute)):
+            f = base.func   # what the called function is declared to return (`-> Path`, str.lower)
+            if isinstance(f, ast.Name):
+                return self._inferred(fx, f.lineno, f.col_offset, call=True)
+            return self._inferred(fx, f.end_lineno or f.lineno, (f.end_col_offset or 0) - len(f.attr.encode()),
+                                  call=True)
         return None
 
-    def _inferred(self, fx: FileCtx, line: int, byte_col: int) -> Container | None:
-        """The one class jedi infers for the name at (line, byte column), as a declared type."""
+    def _only_value(self, fx: FileCtx, name: ast.Name) -> ast.AST | None:
+        """The value of the one assignment that binds ``name`` in its scope, or None."""
+        scope = fx.scope_of(name)
+        body = getattr(scope, "body", None)
+        if not isinstance(body, list):
+            return None
+        binds = [x for st in body for x in cf._walk_no_scopes(st) if isinstance(x, ast.Name) and x.id == name.id
+                 and isinstance(x.ctx, (ast.Store, ast.Del))]
+        if len(binds) != 1:
+            return None
+        st = fx.parents.get(id(binds[0]))
+        return st.value if isinstance(st, ast.Assign) and st.targets == [binds[0]] else None
+
+    def _inferred(self, fx: FileCtx, line: int, byte_col: int, call: bool = False) -> Container | None:
+        """The one class jedi infers for the name at (line, byte column) - with ``call``, for what calling it
+        returns - as a declared type."""
         t0 = time.perf_counter()
         self.stats["jedi_calls"] += 1
         try:
             vals = fx.script().infer(*fx.pos(line, byte_col))
+            if call:
+                vals = [r for v in vals if v.type == "function" for r in v.execute()] \
+                    if vals and all(v.type == "function" for v in vals) else []
         except Exception:  # noqa: BLE001 - jedi internal errors happen
             vals = []
         self.stats["jedi_s"] += time.perf_counter() - t0

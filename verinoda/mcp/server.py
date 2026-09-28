@@ -326,18 +326,17 @@ def check_site_line(s: dict) -> str:
     parts = [f"{tag} {s.get('at')} {s.get('kind')} {_clip(str(s.get('expr') or ''), 80)}"]
     if v == "unknown":
         if s.get("rank") in ("high", "medium") and s.get("rank_why"):
-            parts.append(_clip(str(s["rank_why"]), 140))
-        if s.get("why"):
+            parts.append(_clip(str(s["rank_why"]), 120))
+        elif s.get("why"):
             parts.append("why: " + _clip(str(s["why"]), 90))
     else:
         detail = s.get("message") or s.get("why") or s.get("guard") or s.get("at_def")
         if detail:
-            parts.append(_clip(str(detail), 200))
-    if s.get("nearest"):
-        parts.append("nearest: " + ", ".join(str(n.get("name")) + (f" ({n['at']})" if n.get("at") else "")
-                                             for n in s["nearest"][:3]))
-    if s.get("next_step") and v != "exists":
-        parts.append("next: " + _clip(str(s["next_step"]), 140))
+            parts.append(_clip(str(detail), 130))
+    if s.get("nearest"):   # the fix is among them; the next step is then implied
+        parts.append("nearest: " + ", ".join(str(n.get("name")) for n in s["nearest"][:3]))
+    elif s.get("next_step") and v != "exists":
+        parts.append("next: " + _clip(str(s["next_step"]), 100))
     return " | ".join(parts)
 
 
@@ -348,6 +347,8 @@ def compact_check_result(res: dict) -> dict:
         return res
     out = dict(res)
     out["sites"] = [check_site_line(s) if isinstance(s, dict) else s for s in res["sites"]]
+    if isinstance(res.get("files"), list):   # summary.files counts them; the ones not read are listed
+        out["files"] = [f for f in res["files"] if isinstance(f, dict) and f.get("error")]
     us = out.get("unknown_summary")
     if isinstance(us, dict) and us.get("low_by_cause"):   # "N cause -> step", one line per cause
         out["unknown_summary"] = {**us, "low_by_cause": [f"{g['sites']} {g['cause']} -> {g['next_step']}"
