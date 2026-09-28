@@ -212,3 +212,24 @@ def test_lean_is_the_same_content_as_json():
         "tool-call budget 3 spent"
     assert av.lean(_result(plan_source="host"))["plan_id"] == "qpl_1"
     assert len(json.dumps(lean)) < len(json.dumps(res))
+
+
+def test_a_long_subquestion_is_not_repeated_by_its_heading_and_unknowns():
+    """D67: an issue pasted as the question: the heading shows one clipped line of it, and an unknown that only
+    repeats the sub-question's text is printed without the repeat."""
+    long_text = "Where is an order saved?\r\n\r\n" + " ".join(f"log line {i} says the save failed." for i in range(80))
+    clipped = av.tn.clip(long_text, av.ECHO_CHARS)
+    res = _result(subquestions=[{**_result()["subquestions"][0], "text": long_text}],
+                  unknowns=[{"question": clipped, "why": "no test reaches it", "sub_question": "q1"},
+                            {"question": "which tests reach save?", "why": "none found", "sub_question": "q1"}],
+                  plan_fallback={"drafted_plan_id": "qpl_0", "why": "the plan drafted for the question failed its "
+                                 "own checks; answered without it", "errors": ["/references: 1.2.3 dropped"]})
+    text = av.render_text(res)
+    lines = text.splitlines()
+    assert lines[2] == ("note: the plan drafted for the question failed its own checks; answered without it "
+                        "(/references: 1.2.3 dropped)")
+    assert f"q1 [met_with_inference] flow: {clipped}" in lines
+    assert "  unknown: no test reaches it" in lines and "  unknown: which tests reach save?: none found" in lines
+    assert text.count("log line 79") == 0 and text.count("log line 1 ") <= 1
+    lean = av.lean(res)
+    assert lean["subquestions"][0]["text"] == clipped and lean["plan_fallback"] == res["plan_fallback"]

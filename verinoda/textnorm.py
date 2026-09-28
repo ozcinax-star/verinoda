@@ -86,6 +86,103 @@ def fold_tr(text: str) -> str:
     return out
 
 
+# An English contraction's tail ("I've", "don't", "we'll") is no word of its own: split at the
+# apostrophe, "ve" would count as the Turkish "and". A Turkish suffix after an apostrophe ("API'de",
+# "Order'ı") is not in this list and keeps counting.
+_EN_CONTRACTION = re.compile(r"(?<=\w)['’ʼ](?:s|t|d|m|ve|re|ll)\b", re.I)
+# A fenced code block: ``` closed on its own line, or ``` that opens a block (at the start of a line, or
+# ending its line after an optional language tag: "see: ```python") up to the closing ``` or the end of the
+# message (a truncated paste). A ``` in the middle of a sentence and not closed on its line opens nothing:
+# it would take the rest of the message, the user's own question included, for code (D67).
+FENCE_RX = re.compile(r"```[^\n]*?```|(?:(?<![^\n])[ \t]*```|```(?=[\w+.#-]*[ \t]*\n)).*?(?:```|\Z)", re.S)
+# What is not prose: fenced and inline code, URLs. Their words are identifiers, flags and paths
+# ("-o", "var", "en"), not the language the message is written in.
+_NOT_PROSE = re.compile(FENCE_RX.pattern + r"|`[^`\n]*`|https?://\S+", re.S)
+_SENTENCE_END = re.compile(r"(?<=[.?!])\s+")
+
+
+def _prose(text: str) -> str:
+    """``text`` without code and URLs (all of it when nothing else is left), contraction tails dropped."""
+    prose = _NOT_PROSE.sub(" ", text)
+    if not _WORD.search(prose):
+        prose = text
+    return _EN_CONTRACTION.sub("", prose)
+
+
+def _prose_words(text: str) -> list[str]:
+    """The words of ``text`` outside code and URLs (all of them when nothing else is left), contraction
+    tails dropped."""
+    return _WORD.findall(_prose(text))
+
+
+def _own_sentences(prose: str) -> list[str]:
+    """The first and the last sentence of the prose (quoted ``>`` lines left out): where a message pasting
+    an issue, a log or an error puts the user's own question."""
+    lines = [ln.strip() for ln in prose.splitlines() if _WORD.search(ln) and not ln.lstrip().startswith(">")]
+    if not lines:
+        return []
+    first = [s for s in _SENTENCE_END.split(lines[0]) if _WORD.search(s)]
+    last = [s for s in _SENTENCE_END.split(lines[-1]) if _WORD.search(s)]
+    return list(dict.fromkeys(first[:1] + last[-1:]))
+
+
+def _turkish_sentence(sentence: str) -> bool:
+    """A sentence asked in Turkish: a Turkish question word or two Turkish function words, and more Turkish
+    signals (those plus words with Turkish letters) than English function words. A Turkish word quoted in
+    an English sentence ("Where is the ölçü field read?") is not one."""
+    words = _WORD.findall(sentence)
+    toks = [fold_tr(w) for w in words]
+    tr_q = sum(1 for w in toks if w in TR_QUESTION_WORDS)
+    tr_fn = sum(1 for w in toks if w in TR_STOPWORDS or w in TR_QUESTION_WORDS)
+    tr_letters = sum(1 for w in words if any(ch in _TR_LETTERS for ch in w))
+    en = sum(1 for w in toks if w in EN_STOPWORDS)
+    return (tr_q >= 1 or tr_fn >= 2) and tr_fn + tr_letters > en
+
+
+def clip(text: str, n: int) -> str:
+    """``text`` on one line (runs of whitespace, line breaks included, become one space) and at most ``n``
+    characters: a longer one is cut at a word boundary and ends with an ellipsis."""
+    s = " ".join(str(text or "").split())
+    if len(s) <= n:
+        return s
+    cut = s[:max(1, n - 1)]
+    space = cut.rfind(" ")
+    if space >= n * 0.6:
+        cut = cut[:space]
+    return cut.rstrip(" ,;:|-") + "…"
+
+
+def clip_middle(text: str, n: int) -> str:
+    """``text`` on one line and at most ``n`` characters, cut in the middle: the head and the last words are
+    kept (``Which functions … apply_discount?``, ``compute_total nerede … tanımlı?``). A clause's subject
+    or object is often at its end, and a Turkish clause ends with its predicate."""
+    s = " ".join(str(text or "").split())
+    if len(s) <= n:
+        return s
+    if n < 16:
+        return clip(s, n)
+    sep = " … "
+    words = s.split(" ")
+    tail_room = max(n * 2 // 5, min(len(words[-1]), n * 3 // 5))
+    tail: list[str] = []
+    for w in reversed(words[1:]):
+        if len(" ".join([w] + tail)) > tail_room:
+            break
+        tail.insert(0, w)
+    if not tail:
+        return clip(s, n)
+    tail_s = " ".join(tail)
+    head_room = n - len(sep) - len(tail_s)
+    head = ""
+    for w in words[:len(words) - len(tail)]:
+        cand = f"{head} {w}" if head else w
+        if len(cand) > head_room:
+            break
+        head = cand
+    head = (head or words[0][:max(1, head_room)]).rstrip(" ,;:|-")
+    return head + sep + tail_s
+
+
 def has_turkish(text: str) -> bool:
     if any(ch in _TR_LETTERS for ch in text):
         return True
@@ -277,16 +374,28 @@ def tr_stem_candidates(word: str, min_len: int = 3) -> list[str]:
 
 
 def detect_language(text: str) -> str:
-    """``"tr"``, ``"en"``, ``"mixed"`` or ``"other"`` from letters and function words."""
-    toks = [fold_tr(w) for w in _WORD.findall(text)]
+    """``"tr"``, ``"en"``, ``"mixed"`` or ``"other"`` from letters and function words.
+
+    Only the prose counts (:func:`_prose_words`: no code, URLs or contraction tails). A message whose
+    English function words outnumber its Turkish signals (function words plus words with Turkish
+    letters) three to one, at least three of them, is English even when it quotes a Turkish word or
+    names "Gödel": the answer follows the language the message is written in (docs/DESIGN.md D67).
+    Unless the user's own question, the first or the last sentence, is asked in Turkish
+    (:func:`_turkish_sentence`): a Turkish question about a pasted English issue, log or error is Turkish."""
+    prose = _prose(text)
+    words = _WORD.findall(prose)
+    toks = [fold_tr(w) for w in words]
     if not toks:
         return "other"
-    tr_letters = any(ch in _TR_LETTERS for ch in text)
+    tr_letter_words = sum(1 for w in words if any(ch in _TR_LETTERS for ch in w))
     tr_words = sum(1 for w in toks if w in TR_STOPWORDS or w in TR_QUESTION_WORDS)
     en_words = sum(1 for w in toks if w in EN_STOPWORDS)
-    is_tr = tr_letters or tr_words >= 2 or (tr_words >= 1 and en_words == 0)
+    asked_tr = any(_turkish_sentence(s) for s in _own_sentences(prose))
+    is_tr = asked_tr or tr_letter_words > 0 or tr_words >= 2 or (tr_words >= 1 and en_words == 0)
     is_en = en_words >= 2 or (en_words >= 1 and not is_tr)
     if is_tr and is_en:
+        if not asked_tr and en_words >= 3 and en_words >= 3 * (tr_words + tr_letter_words):
+            return "en"
         return "mixed"
     if is_tr:
         return "tr"

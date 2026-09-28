@@ -608,6 +608,99 @@ def test_invalid_plan_is_refused_before_any_work(proj):
     assert res["status"] == "invalid_plan" and res["errors"][0]["code"] == "schema"
 
 
+def test_a_typed_question_is_answered_when_its_drafted_plan_is_invalid(proj, monkeypatch):
+    """D67: the plan drafted for a typed question failed its own checks -> the question is answered without
+    it (and says so); the invalid draft is kept for the record. A host's plan is still refused (above)."""
+    from verinoda import analysis_view as av
+
+    repo, st = proj
+    real_draft = qp.draft
+
+    def broken_draft(question, graph, lexicon=None):
+        p = real_draft(question, graph, lexicon)
+        p["sub_questions"][0]["mentions"] = ["m99"]  # a dangling id: invalid
+        return p
+
+    monkeypatch.setattr(qp, "draft", broken_draft)
+    res = analysis.analyze(st, repo, "Where is compute_total defined?", challenge=False)
+    assert res["status"] == "answered" and res["plan_source"] == "fallback"
+    fb = res["plan_fallback"]
+    assert "m99" in fb["errors"][0] and st.get("question_plans", fb["drafted_plan_id"])["status"] == "invalid"
+    used = st.get("question_plans", res["plan_id"])
+    assert used["parent_id"] == fb["drafted_plan_id"] and len(used["plan"]["sub_questions"]) == 1
+    (sq,) = res["subquestions"]
+    assert sq["status"] == "met" and any("compute_total" in c["text"] for c in res["claims"])
+    assert res["understood_as"].startswith("Understood (rules): q1 [locate]")
+    text = av.render_text(res)
+    assert "\nnote: the plan drafted for the question failed its own checks" in text
+    assert "plan_fallback" in av.lean(res)
+
+
+def test_a_long_question_is_not_echoed_before_the_evidence(proj):
+    """D67: an issue pasted as the question is restated in a short understood_as; unknowns and the text view
+    do not repeat each sub-question's whole text."""
+    from verinoda import analysis_view as av
+
+    repo, st = proj
+    q = ("Where is compute_total defined?\n\n" + "\n\n".join(f"Log line {i}: the flux capacitor overheated "
+                                                             "while the warp coil hummed." for i in range(60)))
+    res = analysis.analyze(st, repo, q, challenge=False)
+    assert res["status"] == "answered" and len(res["understood_as"]) <= qp.GOAL_CHARS
+    assert all(len(u["question"]) <= analysis.ECHO_CHARS and "\n" not in u["question"] for u in res["unknowns"])
+    text = av.render_text(res)
+    echoing = [ln for ln in text.splitlines() if "flux capacitor" in ln]
+    assert len(echoing) <= 1 + len(res["subquestions"])  # understood as + each heading at most
+    for s in res["subquestions"]:
+        heading = next(ln for ln in text.splitlines() if ln.startswith(f"{s['id']} ["))
+        assert len(heading) <= analysis.ECHO_CHARS + 40
+    assert len(av.lean(res)["subquestions"][0]["text"]) <= analysis.ECHO_CHARS
+
+
+def _version_notes(res: dict, sq_id: str) -> list[str]:
+    return [u["why"] for u in res["unknowns"] if u.get("sub_question") == sq_id and "the question names" in u["why"]]
+
+
+def test_both_versions_of_a_two_version_question_are_named(proj):
+    """D67 review H1: 2.0.1 is not dropped as "contained" in 2.0.10."""
+    repo, st = proj
+    res = analysis.analyze(st, repo, "Why did 2.0.10 break compute_total when it worked in 2.0.1?", challenge=False)
+    assert res["status"] == "answered" and "plan_fallback" not in res
+    notes = [n for s in res["subquestions"] for n in _version_notes(res, s["id"])]
+    assert notes and all("2.0.10 (2.0.10)" in n and "2.0.1 (2.0.1)" in n for n in notes)
+
+
+def test_the_subquestion_naming_versions_of_an_overflowing_issue_says_so(proj):
+    """D67 review M1: the upgrade the user asks about is not folded into a pasted dump's sub-question."""
+    repo, st = proj
+    q = ("Where is compute_total defined? It raises a warning when I call it.\n### Versions\n```\n"
+         + "\n".join(f"pkg{i}: {i}.{i + 1}.{i + 2}" for i in range(1, 13))
+         + "\n```\nIt started after upgrading from v2.0.1 to v2.0.10 (see #12 and #123).\n")
+    res = analysis.analyze(st, repo, q, challenge=False)
+    assert res["status"] == "answered" and "plan_fallback" not in res
+    upgrade = next(s for s in res["subquestions"] if "upgrading" in s["text"])
+    (note,) = _version_notes(res, upgrade["id"])
+    assert "v2.0.1 (v2.0.1)" in note and "v2.0.10 (v2.0.10)" in note and "and 1 more" in note
+    dump = next(s for s in res["subquestions"] if "pkg12" in s["text"])
+    (note,) = _version_notes(res, dump["id"])
+    assert "and 9 more" in note  # every folded version counted, not only the carrier's first
+
+
+def test_a_turkish_question_about_a_pasted_english_issue_is_understood_in_turkish(proj):
+    """D67 review H2."""
+    repo, st = proj
+    res = analysis.analyze(st, repo, "compute_total ne yapar? it is called by the service and by the tests",
+                           challenge=False)
+    assert res["understood_as"].startswith("Anladığım (kurallarla):")
+
+
+def test_a_blank_question_is_refused(proj):
+    """D67 review L1: the fallback for a failed drafted plan never answers an empty question."""
+    repo, st = proj
+    for q in ("", "   "):
+        res = analysis.analyze(st, repo, q, challenge=False)
+        assert res["status"] == "invalid_plan" and not res.get("claims")
+
+
 def test_plan_can_come_from_a_file(proj, tmp_path):
     repo, st = proj
     p = _host_plan("Where is compute_total defined?",
