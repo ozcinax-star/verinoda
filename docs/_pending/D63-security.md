@@ -85,6 +85,8 @@ the argument rules protect a trusted repository from an agent whose arguments ca
   `k m W c p o r` counts as a flag, so a plugin's flag cannot hide one). A path that names an environment
   variable (`%NAME%`, `$NAME`, `${NAME}`) is refused like an absolute one: pytest expands them in `--junitxml`,
   `--rootdir` and `cache_dir`, and the child's environment has `SYSTEMDRIVE`, `WINDIR`, `LANG`, `PATH`, `HOME`.
+  The rule is lexical and applies to every runner, so any argument with two `%` (a `--grep "%s%d"`) is refused
+  too (a known false positive, accepted: it fails closed; one `%`, as in a test id `[5%]`, passes).
   Path candidates are found recursively (`-o addopts=--junitxml=/x`,
   `--override-ini=addopts=--basetemp=/x`, several words in one ini value). After the copy is made, the config
   files pytest may read (the copy's root and every folder down to each path argument, and a `-c` file) are
@@ -179,8 +181,8 @@ Add under a new heading "Upgrading to the 2026-09-28 code (D63)":
   including core `change_review(run_tests/observe)` - now refuse to run an untrusted project's tests with
   process isolation (the result says `refused ... the project is not trusted` with the next step). Run
   `verinoda trust <path>` once per project whose code you trust (or `verinoda trust <folder> --subfolders` for a
-  folder of your own projects); it asks you to confirm, and in a script without a terminal needs `--yes`. Do
-  not let an agent run it for you. With docker or podman installed, an untrusted project's tests run in a
+  folder of your own projects); it asks you to confirm, and in a script without a terminal needs `--yes` (so
+  does Git Bash/mintty on Windows, where Python sees no terminal). Do not let an agent run it for you. With docker or podman installed, an untrusted project's tests run in a
   container instead. `verinoda trust --list` shows the list (a folder that no longer exists is marked
   `missing`), `--remove` takes one off. The record lives in `%APPDATA%\verinoda\trust.json` (Windows) or
   `~/.config/verinoda/trust.json`; `VERINODA_CONFIG_DIR` (an absolute path; a relative one is ignored) moves it.
@@ -222,6 +224,10 @@ Add under a new heading "Upgrading to the 2026-09-28 code (D63)":
   the user-level config and the protected settings.
 - docs/ARCHITECTURE.md, "State on disk": add the per-user directory (`config.json`, `trust.json`) outside the
   project.
+- README.md, known limits (the line "Under process isolation a test run can still write outside the throw-away
+  copy through pytest `@argsfile` or `--junitxml` indirection"): both are refused now (`@file`, paths outside
+  the copy or naming an environment variable, `-o addopts=`, the config files' addopts); what remains is that
+  the tests themselves are the project's code, which runs with process isolation only in a trusted project.
 
 ## Review fixes (adversarial review of this branch, 2026-09-28)
 

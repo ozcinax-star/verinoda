@@ -417,7 +417,8 @@ def cmd_trust(args) -> int:
         if sys.stdin is None or not sys.stdin.isatty():
             raise SystemExit(f"error: trusting {what} is the user's decision: its tests then run with the user's "
                              "privileges. Run `verinoda trust` yourself in a terminal (it asks to confirm), or add "
-                             "--yes in a script of your own. An agent must not run it for the user.")
+                             "--yes in a script of your own (also in Git Bash/mintty on Windows, where Python sees "
+                             "no terminal). An agent must not run it for the user.")
         sys.stderr.write(f"Trust {what}? Its tests will run with your privileges (process isolation: network and "
                          "files not confined) and its own .verinoda/config.json may set the protected settings. "
                          "[y/N] ")
