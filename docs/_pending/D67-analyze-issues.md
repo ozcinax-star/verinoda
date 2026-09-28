@@ -75,16 +75,75 @@ showed three defects that have nothing to do with retrieval:
     repeats that text is printed as `unknown: <why>; next: ...`. `--json` keeps every text whole, and the plan
     keeps each sub-question's whole text, because retrieval reads it.
   - The note "the question names A (A), B (B); these claims describe the working tree" that every claim of a
-    sub-question with named versions carries names the first three versions and counts the rest.
+    sub-question with named versions carries names the first three versions (each on one line of at most 60
+    characters: a URL is one of them) and counts the rest.
+  - The draft's tokens for inline code and quotes end on their line (`question_plan._TOKEN_RX`): a fenced
+    block (```` ```python ... ``` ````) or a quote left open in a pasted log used to be one "name" hundreds of
+    characters long, a required mention that was echoed in the plan links and in every "Which one do you mean
+    by '...'?" clarification each claim of the sub-question carried. The words inside such a block are read
+    as words, and a name written as code inside it (`compute_total`) is still a code mention.
 - Not done: the Turkish-cue test for intents (`has_turkish`) still counts a contraction tail such as `ve`; it
   is also read at scan time by the lexicon, so fixing it needs rebuilt indexes and its own measurement. The
   "plan links" line still links common words of an issue ("First", "time", "missed") to code, and a claim's
   repeated uncertainties are still printed on every claim; both take room before the passages on issue-shaped
-  questions. The passages still come after the claims and context claims (the answer first).
+  questions. The passages still come after the claims and context claims (the answer first). The
+  measurement below is a targeted subset of 17 of the 80, not a re-run of the whole set; the effect on the
+  retrieval scores (files and lines found) was not measured.
 
 ### NN.3 Measured
 
-MEASURED_PLACEHOLDER
+Offline, on the 80 issue texts (the rule draft and the plan check without a graph, so only the parts that do
+not depend on a repository): drafted plans that fail their own check 4 -> 0; messages detected as Turkish or
+mixed 4 -> 0 (all 80 English); the longest drafted "understood as" 296 characters. The tokenizer change alters
+the drafted mention list of 6 of the 80 (18 had an inline-code or quote token spanning lines).
+
+`verinoda analyze "<issue text>" --repo <checkout>` (default text output, default budget) on 17 of the 80,
+chosen for the defects, not sampled: the 3 refused ones whose checkout is small enough to index quickly (the
+fourth, a 75 MB checkout, is covered by the offline check above; one of the three was also answered in
+Turkish), the other 3 answered in Turkish, 8 whose code passages began after character 6,000, and 3 short
+questions as a regression check. One fresh index per checkout, built once with the base code (the change does
+not touch indexing); each arm ran from a copy of that clean `.verinoda` folder, so no arm reused another's
+claims. Code
+trees were frozen with `git archive` and imported through `PYTHONPATH` in one virtual environment (checked:
+`verinoda.__file__` is the frozen tree's). "run" is the original no-model run's output (an older frozen build),
+"base" the branch point of this change (D66), "after" this change. Two offsets: where the `passages (...)`
+header starts, and where the first printed source line starts (a numbered line under a file header).
+
+| | run | base | after |
+|---|---|---|---|
+| exit 2, "the plan is invalid" | 3 / 17 | 3 / 17 | 0 / 17 |
+| answered in Turkish | 4 / 17 | 4 / 17 | 0 / 17 |
+| passages header at or after character 6,000, or none | 14 / 17 | 14 / 17 | 7 / 17 |
+| first source line at or after character 6,000, or none | 14 / 17 | 14 / 17 | 9 / 17 |
+
+On the 14 answered by both base and after: the passages header moved from a median character 8,231 to 5,633
+and the first source line from 8,564 to 5,987 (earlier by 1,966 characters on average, median 2,151, from 58 on
+a 54-character question to 3,939 on a 4,384-character one; never later). The whole output's median went from
+13,830 to 11,251 characters. The three questions that were refused are now answered in 4 to 13 seconds
+(first source line at characters 4,501, 9,085 and 10,263). "run" and "base" differ by at most 700
+characters on any instance (in the answers, not the restatement), so nothing between the older build and the
+branch point touched this. A first "after" build without the tokenizer change and the 60-character clip of
+the version note had its first source line at median 6,460 over the 17 and late on 10; those two changes
+took most from the questions with a pasted code block and a URL (for example 13,659 -> 10,263 and
+10,664 -> 9,085).
+
+What still comes before the passages on the late ones: the claims and context claims (the answer first, by
+design), one "unknown" line per open point, the plan links of common words, and uncertainties repeated on
+each claim; see "Not done". Wall times were measured on a shared, loaded machine and are not compared.
+
+Tests: `tests/test_textnorm.py` (an English issue with contractions, a quoted Turkish word, a name with
+Turkish letters and code full of Turkish-looking tokens is English; `API'de`, a Turkish question around a code
+block, a Turkish question quoting English stay Turkish / mixed; `clip`), `tests/test_question_plan.py` (an
+issue with 15 package versions, repeated PR numbers and SHAs drafts 10 references that carry every version
+and passes the check; a long message's goals are at most 300 characters and one line, a short one unchanged;
+an English issue with contractions drafts in English; a fenced block is no mention; the fallback plan keeps
+the drafted mentions, turns a dropped version into a warning, and drops mentions that are themselves broken),
+`tests/test_analysis.py` (a drafted plan made invalid is answered as one sub-question with `plan_fallback`,
+the invalid draft stored as its parent, the note in the text and the field in the MCP view; a host's invalid
+plan is still refused, unchanged test; a long question's unknowns are one line of at most 160 characters and
+its text is printed at most once per heading), `tests/test_analysis_view.py` (the clipped heading, the unknown
+without the repeat, the note line, the MCP view's clipped text and `plan_fallback`). The existing analysis,
+plan, view, MCP, CLI, verdict-gate, decide, docs and reference tests pass unchanged.
 
 ## Decision table row
 
@@ -103,8 +162,11 @@ MEASURED_PLACEHOLDER
   most 300 characters on one line; an unknown's `question` is at most 160 characters on one line; the text and
   MCP views show a sub-question's `text` the same way and no longer repeat it in the unknowns under it.
   `--json` keeps each sub-question's whole `text`. A script that matched an unknown's question against the
-  whole sub-question text should compare the first 160 characters, or read `sub_question`.
+  whole sub-question text to find its sub-question should read the unknown's `sub_question` instead.
 - `textnorm.detect_language` (the plan's `language`, the answer language, `decide` briefs, reference
   resolution) reads only the prose: an English message with "I've", code or one Turkish word is `en` where it
   was `mixed`, so it is answered in English.
-- The "the question names ..." uncertainty lists at most three versions and counts the rest ("and 7 more").
+- The "the question names ..." uncertainty lists at most three versions, each clipped to 60 characters, and
+  counts the rest ("and 7 more").
+- A plan drafted by `verinoda plan draft` (or inside analyze) no longer turns a fenced code block or a quote
+  left open across lines into one mention: inline code and quotes end on their line.
