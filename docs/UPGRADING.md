@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D66)
+## Upgrading from 0.3.2 (D60-D67)
 
 ### D63: Running a project's own tests safely
 
@@ -131,6 +131,28 @@ Add under a new heading "Upgrading to the 2026-09-28 code (D63)":
 - A full search-index build writes `.verinoda/index/search.db.build-<pid>` and renames it to `search.db`
   when complete; a build that fails keeps the previous index (it used to be deleted first). A leftover
   build file from a killed build is removed by the next full build after an hour, or can be deleted by hand.
+
+### D67: Issue-shaped questions
+
+### D67: Issue-shaped questions
+
+- Nothing to run. `verinoda analyze "<question>"` (and MCP `analyze` without `plan_json`) no longer exits 2
+  with "the plan is invalid" because the plan it drafted failed its own checks: a question that names more
+  versions than a plan holds is answered, and a drafted plan that still fails is replaced by a one-sub-question
+  plan; the result then has `plan_fallback` (JSON and MCP) and the text a `note:` line after "understood as".
+  A plan passed with `--plan` / `plan_json` that fails its checks is still refused (exit 2).
+- The drafted "understood as" (`understood_as`, the plan's `restated_goal` and `restated_goal_user_lang`) is at
+  most 300 characters on one line; an unknown's `question` is at most 160 characters on one line; the text and
+  MCP views show a sub-question's `text` the same way and no longer repeat it in the unknowns under it.
+  `--json` keeps each sub-question's whole `text`. A script that matched an unknown's question against the
+  whole sub-question text to find its sub-question should read the unknown's `sub_question` instead.
+- `textnorm.detect_language` (the plan's `language`, the answer language, `decide` briefs, reference
+  resolution) reads only the prose: an English message with "I've", code or one Turkish word is `en` where it
+  was `mixed`, so it is answered in English.
+- The "the question names ..." uncertainty lists at most three versions, each clipped to 60 characters, and
+  counts the rest ("and 7 more").
+- A plan drafted by `verinoda plan draft` (or inside analyze) no longer turns a fenced code block or a quote
+  left open across lines into one mention: inline code and quotes end on their line.
 
 ### D60-D62
 

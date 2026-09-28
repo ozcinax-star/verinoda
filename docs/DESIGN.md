@@ -87,6 +87,7 @@ own measurements, with their caveats. The benchmark harness results are in
 | D64 | Ranked unknowns, declared types | implemented | Built 2026-09-28 (section 36): unknown Python sites are ranked HIGH (a name defined nowhere in a word index of the project, its environment and the stubs, or a close misspelling of the receiver's declared type), MEDIUM or LOW; LOW sites are counted by cause in `unknown_summary` and listed only with `--all`; sites are listed absent, HIGH, not installed, MEDIUM, guarded, LOW, and MCP `code_check` gives one line per site; declared types (jedi's inference, comprehension `for` targets, pathlib joins, declared return types, pytest's own fixtures) decide `exists`, never `absent`; `with raises(E)` guards an import and a module listed by its exact name in any requirements file is `not_installed` (optional); the environment's word index is kept in the user cache and resumed where its budget stopped it. On a planted-misspelling diff: 50 planted sites all absent/HIGH/MEDIUM, 0 real HIGH, real unknowns 125 -> 70, planted sites in the first MCP answer 12 -> 42. Not done: `**kwargs` following, mypy/pyright, runtime probes. |
 | D65 | A graph with fewer false calls, and the tests of more ecosystems | implemented | Built 2026-09-28 (section 37): member calls bind in the file only through the method's own receiver or a receiver whose type the file states (Python `super()` to an in-file base in C3 order; Go, Rust, PHP, Ruby, JS/TS); no call leaves vendored, minified or generated code (`index.vendored` keeps them); .NET, Xcode, GoogleTest, Dart and Elixir tests are test files; the C# type-reference pass is linear; `.hh .hxx .ipp .inl .tpp` are C++. |
 | D66 | Faster scans | implemented | Built 2026-09-28 (section 38): detect() takes the file list from git at the top of a work tree (git's own .gitignore semantics; the same corpus as the walk on the seven trees measured, known differences listed; the walk still runs for nested and embedded repositories, submodules, negated .graphifyignore rules, non-UTF-8 ignore files, unreadable directories; a rebuild never evicts a file git keeps), the receiver sidecar's Python parses serve the search index's spans, anchors are written in one transaction from one read, and a from-scratch search index is built in a separate file renamed into place. |
+| D67 | Issue-shaped questions | implemented | Built 2026-09-28 (section 40): a typed question is never refused because the plan drafted for it failed its own checks (the draft carries every version the message names within the reference limit; a drafted plan that still fails is kept for the record and the question is answered as one sub-question about its mentions, saying so; a host's plan is still refused); the answer's language is the prose's (code, URLs and English contraction tails do not count; English function words outnumbering Turkish signals three to one make it English unless the user's own first or last sentence is Turkish); an issue-sized message's drafted "understood as" is at most 300 characters and a sub-question's text is printed once, clipped to 160 characters, so the passages come earlier. |
 
 Delivery plan (section 5): step 1 (round 3) and step 2 (integration) are done.
 Step 3 (measurement) is in progress: see BENCHMARKS.md for which numbers
@@ -4081,6 +4082,161 @@ Decision functions called directly, before and after (Windows, Python 3.12, pyte
   the templates' trust and profile lines.
 - Not measured here: the container path itself (no docker/podman on this machine). The CI job `container` is its
   first real run; the flags follow the docker and podman documentation.
+
+## 40. Issue-shaped questions: never refused for the drafted plan, answered in the question's language, restated briefly (D67, 2026-09-28)
+
+### 40.1 Why
+
+A no-model run of `verinoda analyze` on 80 real issue texts used verbatim as questions (bug reports and pull
+request descriptions with their templates, logs and environment dumps; median 405 characters, longest 6,367)
+showed three defects that have nothing to do with retrieval:
+
+1. **Refused questions.** 4 of 80 exited 2 with "the plan is invalid; nothing was analysed". A typed question
+   runs through a plan drafted by rules (D1-D4), and the draft kept at most 10 references
+   (`LIMITS["references"]`) while the plan check requires every version-like token of the message to be
+   carried by a reference (`version_dropped`, "never drop a version the user named"). An environment dump
+   ("numpy: 1.23.5", "scipy: 1.10.0", ...) or a changelog of commit SHAs and pull-request numbers names 14 to
+   56 of them, so the draft dropped every one past the tenth and failed its own check. The user had asked a
+   question, not written a plan, and got nothing.
+2. **Answers in Turkish for English issues.** 4 of 80 were understood as Turkish (`understood as: Anladığım
+   (kurallarla)`, sub-question kinds `[etki]`, `[akış]`). `detect_language` split words at apostrophes, so
+   every "I've" / "we've" gave the token `ve`, which is the Turkish "and": two of them made the message "mixed",
+   and "mixed" is answered in Turkish. Code in the message (`-o` flags, `var`, locale names such as `en`)
+   and a single Turkish letter anywhere (a quoted Turkish word, "Gödel") had the same effect.
+3. **The question printed again and again before the evidence.** The drafted `restated_goal_user_lang`
+   (shown as "understood as") joined every sub-question's whole text; each sub-question heading printed its
+   whole text again; and most unknowns carry the sub-question's text as their `question`, so a sub-question
+   with three unknowns printed the issue three more times. On 27 of 80 issues the first code passage came after
+   character 6,000 (the median issue's passages began at character 4,759). The echoes are also charged to the
+   context budget: every unknown is charged at its serialised size, so a long issue spent budget on copies of
+   itself that could have gone to claims.
+
+### 40.2 Decisions
+
+- **The draft carries every version, whatever the limit** (`question_plan._draft_references`,
+  `_fold_overflow`). A version named again (the same SHA or pull-request number twice, a short SHA after its
+  full SHA) is one reference. Only the same version is merged: `2.0.1` is not `2.0.10`, `#12` is not `#123`
+  nor the `12` of `10.11.12`, and `scipy 1.23.5` is not `numpy 1.23.5` (`_same_version`, equality per kind).
+  When more references remain than a plan may hold, the versions of the user's own sentences stay references
+  of their own first, then those of pasted blocks (fenced code, lines that only pair a name with a version);
+  one last reference (`derived_by: ...:version_overflow`) keeps the user's own words as its `text` and lists
+  every remaining version in `version.evidence`, where the version check finds them. The draft lists it under
+  every sub-question that names one of its versions, and the "the question names ..." note counts each of
+  them. None is dropped and the plan stays within its limits. A host's plan that drops a version is still an
+  error, and the check now needs the version as a whole token (`_carried`): a plan carrying `2.0.10` or `#123`
+  no longer passes for `2.0.1` or `#12`. Relative versions ("the previous release") always stay references
+  of their own, because a version clarification is about them.
+- **A typed question is never refused for its drafted plan** (`analysis.analyze`, `question_plan.fallback`).
+  When the drafted plan still fails its checks, it is stored as it was (status `invalid`) and the question is
+  answered with a fallback plan: the whole message as one sub-question (intent from the rule cues) about the
+  drafted plan's mentions, without references, stored with the drafted plan as its `parent_id`. Without the
+  mentions every word of the question would look absent from the repository (the "words occur nowhere" check
+  reads the plan's links); when the mentions are what failed, the sub-question has none. A plan without
+  references cannot carry the message's versions, so for this plan only (`check(..., refuse_versions=False)`)
+  a dropped version is a warning: there is no plan the user could fix. A blank question is still refused
+  (`invalid_plan`): the fallback's own plan must pass every other check. The answer says so: the result has
+  `plan_fallback` (the drafted plan's id, why, its first errors), the text view prints a `note:` line after
+  "understood as", and the MCP view carries `plan_fallback`. A plan the host passed (`--plan`, MCP
+  `plan_json`) that fails its checks is still refused with `invalid_plan` and exit 2, unchanged.
+- **The language is the prose's** (`textnorm.detect_language`). Only prose counts: fenced and inline code and
+  URLs are left out (all of the text counts when nothing else is left), and the tails of English contractions
+  (`'s 't 'd 'm 've 're 'll`) are dropped before the text is split into words; a Turkish suffix after an
+  apostrophe (`API'de`, `Order'ı`) is not in that list and still counts. When both languages show, a message
+  whose English function words number at least three and at least three times its Turkish signals (Turkish
+  function words plus words with Turkish letters) is English, unless the user's own question, the first or
+  the last sentence of the prose (`>` quotes left out), is asked in Turkish (a Turkish question word or two
+  Turkish function words, and more Turkish signals than English function words in that sentence). A Turkish
+  question about a pasted English issue, log or error ("Bu hata neden oluyor?" over an English log), or with
+  English identifiers or an English phrase in it, stays "mixed" and is answered in Turkish as before. A lone
+  triple backtick in the middle of a sentence, not closed on its line, opens no code block. The intent cue
+  tables still use their own test (`has_turkish`, unchanged: it feeds the lexicon at scan time, and changing
+  it would change the index).
+- **The question is restated briefly.**
+  - An ordinary question is restated whole, as before, however many clauses it has ("Understood (rules): q1
+    [locate] Where is compute_total defined?"). Only an issue-sized message (its sub-questions' text over 600
+    characters, `ISSUE_CHARS`, or pasting lines or a fence) gets a drafted `restated_goal` /
+    `restated_goal_user_lang` of at most 300 characters (`GOAL_CHARS`) on one line: every `qN [intent]` head
+    is kept, a text that fits its share is whole and leaves the rest to the longer ones, a clause is cut in the
+    middle (`Which functions … apply_discount?`: its subject, and a Turkish predicate, are at its end), a text
+    pasting lines is shown by its first line, and the glosses get what the texts leave. A host's goal is shown
+    as the host wrote it. The "Understood as" contract of the answer is unchanged.
+  - An unknown's `question` is kept on one line and at most 160 characters (`ECHO_CHARS`), where it is made,
+    so what the budget is charged for is the clipped text; the verdict check's notes, which are added without
+    the analysis's charging function, are clipped before they are charged.
+  - The views (the default text of `verinoda analyze` and the MCP `analyze` response) show a sub-question's
+    text on one line of at most 160 characters, and under a sub-question an unknown whose question only
+    repeats that text is printed as `unknown: <why>; next: ...`. `--json` keeps every text whole, and the plan
+    keeps each sub-question's whole text, because retrieval reads it.
+  - The note "the question names A (A), B (B); these claims describe the working tree" that every claim of a
+    sub-question with named versions carries names the first three versions (each on one line of at most 60
+    characters: a URL is one of them) and counts the rest.
+  - The draft's tokens for inline code and quotes end on their line (`question_plan._TOKEN_RX`): a fenced
+    block (```` ```python ... ``` ````) or a quote left open in a pasted log used to be one "name" hundreds of
+    characters long, a required mention that was echoed in the plan links and in every "Which one do you mean
+    by '...'?" clarification each claim of the sub-question carried. The words inside such a block are read
+    as words, and a name written as code inside it (`compute_total`) is still a code mention.
+- Not done: the Turkish-cue test for intents (`has_turkish`) still counts a contraction tail such as `ve`; it
+  is also read at scan time by the lexicon, so fixing it needs rebuilt indexes and its own measurement. The
+  "plan links" line still links common words of an issue ("First", "time", "missed") to code, and a claim's
+  repeated uncertainties are still printed on every claim; both take room before the passages on issue-shaped
+  questions. The passages still come after the claims and context claims (the answer first). The
+  measurement below is a targeted subset of 17 of the 80, not a re-run of the whole set; the effect on the
+  retrieval scores (files and lines found) was not measured.
+
+### 40.3 Measured
+
+Offline, on the 80 issue texts (the rule draft and the plan check without a graph, so only the parts that do
+not depend on a repository): drafted plans that fail their own check 4 -> 0; messages detected as Turkish or
+mixed 4 -> 0 (all 80 English); the longest drafted "understood as" 296 characters. The tokenizer change alters
+the drafted mention list of 6 of the 80 (18 had an inline-code or quote token spanning lines).
+
+`verinoda analyze "<issue text>" --repo <checkout>` (default text output, default budget) on 17 of the 80,
+chosen for the defects, not sampled: the 3 refused ones whose checkout is small enough to index quickly (the
+fourth, a 75 MB checkout, is covered by the offline check above; one of the three was also answered in
+Turkish), the other 3 answered in Turkish, 8 whose code passages began after character 6,000, and 3 short
+questions as a regression check. One fresh index per checkout, built once with the base code (the change does
+not touch indexing); each arm ran from a copy of that clean `.verinoda` folder, so no arm reused another's
+claims. Code
+trees were frozen with `git archive` and imported through `PYTHONPATH` in one virtual environment (checked:
+`verinoda.__file__` is the frozen tree's). "run" is the original no-model run's output (an older frozen build),
+"base" the branch point of this change (D66), "after" this change. Two offsets: where the `passages (...)`
+header starts, and where the first printed source line starts (a numbered line under a file header).
+
+| | run | base | after |
+|---|---|---|---|
+| exit 2, "the plan is invalid" | 3 / 17 | 3 / 17 | 0 / 17 |
+| answered in Turkish | 4 / 17 | 4 / 17 | 0 / 17 |
+| passages header at or after character 6,000, or none | 14 / 17 | 14 / 17 | 7 / 17 |
+| first source line at or after character 6,000, or none | 14 / 17 | 14 / 17 | 9 / 17 |
+
+On the 14 answered by both base and after: the passages header moved from a median character 8,231 to 5,633
+and the first source line from 8,564 to 5,987 (earlier by 1,966 characters on average, median 2,151, from 58 on
+a 54-character question to 3,939 on a 4,384-character one; never later). The whole output's median went from
+13,830 to 11,251 characters. The three questions that were refused are now answered in 4 to 13 seconds
+(first source line at characters 4,501, 9,085 and 10,263). "run" and "base" differ by at most 700
+characters on any instance (in the answers, not the restatement), so nothing between the older build and the
+branch point touched this. A first "after" build without the tokenizer change and the 60-character clip of
+the version note had its first source line at median 6,460 over the 17 and late on 10; those two changes
+took most from the questions with a pasted code block and a URL (for example 13,659 -> 10,263 and
+10,664 -> 9,085).
+
+What still comes before the passages on the late ones: the claims and context claims (the answer first, by
+design), one "unknown" line per open point, the plan links of common words, and uncertainties repeated on
+each claim; see "Not done". Wall times were measured on a shared, loaded machine and are not compared.
+
+Tests: `tests/test_textnorm.py` (an English issue with contractions, a quoted Turkish word, a name with
+Turkish letters and code full of Turkish-looking tokens is English; `API'de`, a Turkish question around a code
+block, a Turkish question quoting English stay Turkish / mixed; `clip`), `tests/test_question_plan.py` (an
+issue with 15 package versions, repeated PR numbers and SHAs drafts 10 references that carry every version
+and passes the check; a long message's goals are at most 300 characters and one line, a short one unchanged;
+an English issue with contractions drafts in English; a fenced block is no mention; the fallback plan keeps
+the drafted mentions, turns a dropped version into a warning, and drops mentions that are themselves broken),
+`tests/test_analysis.py` (a drafted plan made invalid is answered as one sub-question with `plan_fallback`,
+the invalid draft stored as its parent, the note in the text and the field in the MCP view; a host's invalid
+plan is still refused, unchanged test; a long question's unknowns are one line of at most 160 characters and
+its text is printed at most once per heading), `tests/test_analysis_view.py` (the clipped heading, the unknown
+without the repeat, the note line, the MCP view's clipped text and `plan_fallback`). The existing analysis,
+plan, view, MCP, CLI, verdict-gate, decide, docs and reference tests pass unchanged.
 
 ## Sources
 
