@@ -2760,6 +2760,7 @@ _LANG_FAMILY_BY_EXT: dict[str, str] = {
     # C-family: shared headers, Objective-C/C++ mix, Swift↔ObjC bridging
     ".c": "native", ".h": "native", ".cpp": "native", ".cc": "native",
     ".cxx": "native", ".hpp": "native", ".cu": "native", ".cuh": "native",
+    ".hh": "native", ".hxx": "native", ".ipp": "native", ".inl": "native", ".tpp": "native",
     ".metal": "native", ".m": "native", ".mm": "native", ".swift": "native",
     # Single-language families
     ".py": "python",
@@ -5188,7 +5189,8 @@ register_language_resolver(
 register_language_resolver(
     LanguageResolver(
         "cpp_member_calls",
-        frozenset({".cpp", ".cc", ".cxx", ".hpp", ".cu", ".cuh", ".metal", ".h"}),
+        frozenset({".cpp", ".cc", ".cxx", ".hpp", ".cu", ".cuh", ".metal", ".h",
+                   ".hh", ".hxx", ".ipp", ".inl", ".tpp"}),
         _resolve_cpp_member_calls,
     )
 )
@@ -6304,6 +6306,12 @@ _DISPATCH: dict[str, Any] = {
     ".cc": extract_cpp,
     ".cxx": extract_cpp,
     ".hpp": extract_cpp,
+    # Local change (Verinoda): the other C++ header and inline-implementation suffixes.
+    ".hh": extract_cpp,
+    ".hxx": extract_cpp,
+    ".ipp": extract_cpp,
+    ".inl": extract_cpp,
+    ".tpp": extract_cpp,
     ".cu": extract_cpp,
     ".cuh": extract_cpp,
     ".metal": extract_cpp,
@@ -6521,6 +6529,45 @@ def _is_cpp_header(path: Path) -> bool:
     except OSError:
         return False
     return any(marker in head for marker in _CPP_HEADER_MARKERS)
+
+
+# Local change (Verinoda): vendored, minified and generated code does not flood the call graph, the clusters and
+# the callers views (one Ruby corpus: 31 % of nodes and 69 % of calls edges came from three minified chart
+# libraries). A minified file keeps its file node only; a vendored or generated file keeps its definitions (so an
+# import of them still binds to them, not to a same-named product function) but no edge other than its structure
+# leaves it. The rules are in project_index/vendored.py. VERINODA_GRAPH_VENDORED=1 (Verinoda: config
+# index.vendored) keeps everything.
+from verinoda.project_index.vendored import vendored_reason  # noqa: E402,F401
+
+# the edges a vendored or generated file keeps: its own structure (a definition and its members, a type and its
+# bases), not its calls, imports or references
+_VENDORED_KEEP_RELATIONS = frozenset({"contains", "method", "defines", "case_of", "inherits", "implements",
+                                      "extends", "embeds", "mixes_in"})
+
+
+def _include_vendored() -> bool:
+    return os.environ.get("VERINODA_GRAPH_VENDORED", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _file_node_only(result: dict, path: Path, reason: str) -> dict:
+    """*result* reduced to the node of the file itself, marked with *reason*; no symbols, edges or raw calls."""
+    file_nid = _make_id(str(path))
+    keep = [n for n in result.get("nodes", []) if n.get("id") == file_nid]
+    if not keep:
+        keep = [n for n in result.get("nodes", []) if n.get("label") == path.name][:1]
+    keep = [dict(n, vendored=reason) for n in keep]
+    return {"nodes": keep, "edges": [], "vendored": reason}
+
+
+def _definitions_only(result: dict, path: Path, reason: str) -> dict:
+    """*result* with the nodes of the file itself marked with *reason* (not a stub it shares with other files),
+    only its structural edges and no raw calls."""
+    out = {k: v for k, v in result.items() if k not in ("nodes", "edges", "raw_calls")}
+    out["nodes"] = [dict(n, vendored=reason) if str(n.get("source_file") or "") == str(path) else n
+                    for n in result.get("nodes", [])]
+    out["edges"] = [e for e in result.get("edges", []) if e.get("relation") in _VENDORED_KEEP_RELATIONS]
+    out["vendored"] = reason
+    return out
 
 
 def _get_extractor(path: Path) -> Any | None:
@@ -6959,6 +7006,34 @@ def extract(
                 "nodes": [], "edges": [],
                 "error": "internal: no extraction result produced",
             }
+
+    # Local change (Verinoda): a minified file keeps its file node only, a vendored or generated one its
+    # definitions without their calls (see _definitions_only and the edge filter before the return).
+    _vendored_files: dict[str, list[str]] = {}
+    if not _include_vendored():
+        _vendored_cache: dict = {}
+        for i, path in enumerate(paths):
+            res = per_file[i]
+            if res and res.get("nodes") and not res.get("error"):
+                reason = vendored_reason(path, root, _vendored_cache)
+                if reason:
+                    per_file[i] = (_file_node_only(res, path, reason) if reason == "minified"
+                                   else _definitions_only(res, path, reason))
+                    _vendored_files.setdefault(reason, []).append(str(path))
+        if _vendored_files:
+            def _shown_path(x: str) -> str:
+                try:
+                    return os.path.relpath(x, str(root)).replace("\\", "/")
+                except ValueError:
+                    return Path(x).name
+            _names = [_shown_path(x) for xs in _vendored_files.values() for x in xs]
+            print(
+                "  note: " + ", ".join(f"{len(v)} {k}" for k, v in sorted(_vendored_files.items()))
+                + " file(s) are kept out of the call graph (no call from them is extracted; a minified file is "
+                f"its file node only; config index.vendored keeps them): {', '.join(_names[:5])}"
+                + (f" (+{len(_names) - 5} more)" if len(_names) > 5 else ""),
+                file=sys.stderr, flush=True,
+            )
 
     # #1666: surface any source file an extractor accepted but that produced zero
     # nodes (not even a file node). Such a file is silently absent from the graph,
@@ -8185,6 +8260,13 @@ def extract(
                 e["source"] = _canon(e["source"])
             if e.get("target"):
                 e["target"] = _canon(e["target"])
+
+    # Local change (Verinoda): no edge leaves a vendored or generated file but its structure, whichever pass
+    # made it (the per-file edges and raw calls were dropped above; the language resolvers read other keys)
+    _vendored_nids = {n["id"] for n in all_nodes if n.get("vendored") and n.get("id")}
+    if _vendored_nids:
+        all_edges[:] = [e for e in all_edges
+                        if e.get("source") not in _vendored_nids or e.get("relation") in _VENDORED_KEEP_RELATIONS]
 
     # origin_file is an internal disambiguation hint (#1462): the colliding-id pass
     # above reads it to keep same-named cross-file stubs distinct, after which nothing

@@ -65,7 +65,10 @@ DEFAULT_CONFIG: dict = {
     # Reference trees (an original implementation being ported, a vendored copy): paths, or
     # {"path": ..., "aliases": [...]}, whose code ranks lower unless the question names the path
     # or an alias (verinoda.search_index.REFERENCE_FACTOR). `verinoda setup --reference PATH` adds one.
-    "index": {"reference": []},
+    # vendored: keep the calls of vendored (vendor/, third_party/ ...), minified and generated files in the graph;
+    # by default no call from them is extracted and a minified file is its file node only
+    # (verinoda.project_index.vendored.vendored_reason).
+    "index": {"reference": [], "vendored": False},
     # Debug ledger (docs/DESIGN.md D34): stop after this many fix attempts in a row without measured progress;
     # reruns of the flaky-check strategy; bisect run budget.
     "debug": {"max_no_progress": 3, "rerun_times": 5, "bisect_max_runs": 12},
@@ -188,6 +191,15 @@ def ensure_atlas(repo: Path) -> Path:
     if not gi.exists():
         gi.write_text("*\n", encoding="utf-8")
     return d
+
+
+def index_vendored(repo: Path) -> bool:
+    """Config ``index.vendored``: keep vendored, minified and generated code in the graph. On only for a JSON
+    ``true`` (or the text "true", "1", "yes", "on"); ``"false"`` and anything else are off."""
+    value = (load_config(repo).get("index") or {}).get("vendored")
+    if isinstance(value, bool):
+        return value
+    return isinstance(value, str) and value.strip().lower() in ("1", "true", "yes", "on")
 
 
 def load_config(repo: Path) -> dict:

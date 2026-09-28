@@ -3165,6 +3165,116 @@ def _ruby_local_class_bindings(body_node, source: bytes) -> dict[str, str | None
     visit(body_node)
     return bindings
 
+# Local change (Verinoda): PHP receiver types of one file (M3 of the D65 review)
+def _php_type_name(type_node, source: bytes) -> str | None:
+    """``Foo``, ``?Foo``, a qualified ``App\\Foo`` -> ``Foo``; a union, intersection or builtin type -> None."""
+    if type_node is not None and type_node.type == "optional_type":
+        type_node = next(iter(type_node.named_children), None)
+    if type_node is None or type_node.type != "named_type":
+        return None
+    name = _read_text(type_node, source).lstrip("\\").rsplit("\\", 1)[-1]
+    return name if name.isidentifier() and name.lower() not in ("self", "static", "parent") else None
+
+
+def _php_new_class(node, source: bytes) -> str | None:
+    """``new Foo(...)`` -> ``Foo``; ``new $cls``, ``new static``, an anonymous class -> None."""
+    if node is None or node.type != "object_creation_expression":
+        return None
+    for child in node.named_children:
+        if child.type in ("name", "qualified_name"):
+            name = _read_text(child, source).lstrip("\\").rsplit("\\", 1)[-1]
+            return name if name.isidentifier() and name.lower() not in ("self", "static", "parent") else None
+        if child.type != "arguments":
+            return None
+    return None
+
+
+_PHP_SCOPE_TYPES = frozenset({"function_definition", "method_declaration", "anonymous_function",
+                              "anonymous_function_creation_expression", "arrow_function", "class_declaration"})
+
+
+def _php_local_types(method_node, source: bytes) -> dict[str, str | None]:
+    """``$var -> Class`` in one PHP function: typed parameters and ``$var = new Class(...)``. A variable given
+    two classes, an untyped parameter or a variable also assigned anything else maps to None."""
+    out: dict[str, str | None] = {}
+
+    def bind(var: str, cls: str | None) -> None:
+        out[var] = cls if out.get(var, cls) == cls else None
+
+    params = method_node.child_by_field_name("parameters")
+    for param in (params.named_children if params is not None else ()):
+        if param.type in ("simple_parameter", "property_promotion_parameter", "variadic_parameter"):
+            name = param.child_by_field_name("name")
+            if name is not None:
+                bind(_read_text(name, source), _php_type_name(param.child_by_field_name("type"), source)
+                     if param.type != "variadic_parameter" else None)
+
+    def visit(n) -> None:
+        for child in n.children:
+            if child.type in _PHP_SCOPE_TYPES:
+                continue
+            if child.type == "assignment_expression":
+                left = child.child_by_field_name("left")
+                if left is not None and left.type == "variable_name":
+                    bind(_read_text(left, source), _php_new_class(child.child_by_field_name("right"), source))
+            visit(child)
+
+    body = method_node.child_by_field_name("body")
+    if body is not None:
+        visit(body)
+    return out
+
+
+def _php_property_types(class_node, source: bytes) -> dict[str, str | None]:
+    """``prop -> Class`` of one PHP class. A declared type (a typed property, a promoted constructor parameter) is
+    authoritative: PHP enforces it, so ``$this->foo = $foo`` in a constructor keeps ``private Foo $foo`` a Foo
+    (a union or builtin declared type maps to None). An undeclared or untyped property takes the class of
+    ``$this->prop = new Class(...)`` in the class's methods, and None when it is also assigned anything else."""
+    declared: dict[str, str | None] = {}
+    assigned: dict[str, str | None] = {}
+
+    def visit(n) -> None:
+        for child in n.children:
+            if child.type in _PHP_SCOPE_TYPES:
+                continue
+            if child.type == "assignment_expression":
+                left = child.child_by_field_name("left")
+                if left is not None and left.type == "member_access_expression":
+                    obj = left.child_by_field_name("object")
+                    prop = left.child_by_field_name("name")
+                    if obj is not None and prop is not None and _read_text(obj, source) == "$this":
+                        name = _read_text(prop, source)
+                        cls = _php_new_class(child.child_by_field_name("right"), source)
+                        assigned[name] = cls if assigned.get(name, cls) == cls else None
+            visit(child)
+
+    body = class_node.child_by_field_name("body")
+    bodies = []
+    for member in (body.named_children if body is not None else ()):
+        if member.type == "property_declaration":
+            type_node = member.child_by_field_name("type")
+            if type_node is not None:
+                for element in member.named_children:
+                    if element.type == "property_element":
+                        name = element.child_by_field_name("name")
+                        if name is not None:
+                            declared[_read_text(name, source).lstrip("$")] = _php_type_name(type_node, source)
+        elif member.type == "method_declaration":
+            params = member.child_by_field_name("parameters")
+            for param in (params.named_children if params is not None else ()):
+                if param.type == "property_promotion_parameter":
+                    name = param.child_by_field_name("name")
+                    type_node = param.child_by_field_name("type")
+                    if name is not None and type_node is not None:
+                        declared[_read_text(name, source).lstrip("$")] = _php_type_name(type_node, source)
+            method_body = member.child_by_field_name("body")
+            if method_body is not None:
+                bodies.append(method_body)
+    for method_body in bodies:
+        visit(method_body)
+    return {**{k: v for k, v in assigned.items() if k not in declared}, **declared}
+
+
 def _ruby_const_last_name(node, source: bytes) -> str:
     """Last constant of a ``constant`` or ``scope_resolution`` (``A::B::C`` -> ``C``)."""
     if node is None:
@@ -5707,6 +5817,127 @@ def _extract_generic(
             queue.extend(_local_bases.get(cls, []))
         return merged
 
+    # Local change (Verinoda): the methods each class of this file owns, so a member call on the method's own
+    # receiver binds to its class (and ``super()`` to a base) instead of any same-named definition of the file.
+    _node_label = {n["id"]: n.get("label") for n in nodes}
+    _methods_of: dict[str, dict[str, str]] = {}
+    _method_owner: dict[str, str] = {}
+    for _e in edges:
+        if _e.get("relation") == "method":
+            _mname = str(_node_label.get(_e["target"]) or "").strip("()").lstrip(".")
+            _methods_of.setdefault(_e["source"], {}).setdefault(_mname, _e["target"])
+            _method_owner.setdefault(_e["target"], _e["source"])
+
+    def _enclosing_class(nid: str | None) -> str | None:
+        """The class whose method *nid* is, or whose method lexically encloses *nid* (a nested function)."""
+        seen: set[str] = set()
+        while nid and nid not in seen:
+            seen.add(nid)
+            owner = _method_owner.get(nid)
+            if owner:
+                return owner
+            nid = scope_parents.get(nid)
+        return None
+
+    def _is_python_object(nid: str) -> bool:
+        # `class A(object)`: object defines no method a user calls through super() or self (L2 of the D65 review)
+        return config.ts_module == "tree_sitter_python" and not nid_to_sf.get(nid) and _node_label.get(nid) == "object"
+
+    _mro_memo: dict[str, list[str] | None] = {}
+
+    def _linearization(class_nid: str, active: frozenset = frozenset()) -> list[str] | None:
+        """The C3 method resolution order of *class_nid* over the bases this file states (Python's MRO; the
+        depth-first chain for single inheritance). A base the file does not define stays one entry; None when
+        the bases admit no linearization (or form a cycle)."""
+        if class_nid in _mro_memo:
+            return _mro_memo[class_nid]
+        if class_nid in active:
+            return None
+        bases = [b for b in _local_bases.get(class_nid, []) if not _is_python_object(b)]
+        seqs: list[list[str]] = []
+        for base in bases:
+            if nid_to_sf.get(base):
+                lin = _linearization(base, active | {class_nid})
+                if lin is None:
+                    _mro_memo[class_nid] = None
+                    return None
+                seqs.append(list(lin))
+            else:
+                seqs.append([base])
+        seqs.append(list(bases))
+        result = [class_nid]
+        while True:
+            seqs = [q for q in seqs if q]
+            if not seqs:
+                break
+            head = next((q[0] for q in seqs if not any(q[0] in t[1:] for t in seqs)), None)
+            if head is None:
+                _mro_memo[class_nid] = None
+                return None
+            result.append(head)
+            for q in seqs:
+                if q[0] == head:
+                    del q[0]
+        _mro_memo[class_nid] = result
+        return result
+
+    def _inherited_method(class_nid: str, name: str) -> tuple[str | None, bool]:
+        """The method *name* the bases of *class_nid* define in this file, in C3 order (Python's MRO).
+
+        Returns ``(nid, known)``: ``known`` is False when the search reached a base this file does not
+        define before finding the method (the method may come from that base, so no in-file answer holds),
+        or when the bases admit no linearization. ``object`` is passed over.
+        """
+        order = _linearization(class_nid)
+        if order is None:
+            return None, False
+        for base in order[1:]:
+            if not nid_to_sf.get(base):
+                return None, False
+            hit = _methods_of.get(base, {}).get(name)
+            if hit:
+                return hit, True
+        return None, True
+
+    # Local change (Verinoda): PHP receivers whose class this file states (M3 of the D65 review): `$x` of a typed
+    # parameter or `$x = new Foo()` in the method, `$this->p` of a typed or promoted property or of
+    # `$this->p = new Foo()` in the class. Filled before the call walk.
+    php_var_types: dict[str, dict[str, str | None]] = {}
+    php_prop_types: dict[str, dict[str, str | None]] = {}
+    _methods_by_name: dict[str, list[str]] = {}
+    for _mnid in _method_owner:
+        _methods_by_name.setdefault(str(_node_label.get(_mnid) or "").strip("()").lstrip("."), []).append(_mnid)
+
+    def _class_method(class_name: str | None, name: str) -> tuple[bool, str | None]:
+        """(the file defines class *class_name*, its method *name* or an in-file base's)."""
+        cls = label_to_nid.get(class_name or "")
+        if not cls or not nid_to_sf.get(cls) or not (cls in _methods_of or cls in _local_bases):
+            return False, None
+        return True, _methods_of.get(cls, {}).get(name) or _inherited_method(cls, name)[0]
+
+    def _php_receiver_class(obj, caller: str) -> str | None:
+        if obj is None:
+            return None
+        if obj.type == "variable_name":
+            return php_var_types.get(caller, {}).get(_read_text(obj, source))
+        if obj.type == "member_access_expression":
+            inner = obj.child_by_field_name("object")
+            prop = obj.child_by_field_name("name")
+            if inner is not None and prop is not None and _read_text(inner, source) == "$this":
+                return php_prop_types.get(_enclosing_class(caller) or "", {}).get(_read_text(prop, source))
+        return None
+
+    def _other_class_method(caller: str, name: str) -> str | None:
+        """The one method *name* of this file that is not the caller's own class's or an in-file base's: an
+        untyped PHP receiver other than ``$this`` is another object (``$this->dispatcher->handle()`` inside
+        ``App::handle`` is not ``App::handle``)."""
+        own = _enclosing_class(caller)
+        mine: set[str] = set()
+        if own:
+            mine = set(_linearization(own) or [own])
+        cands = [m for m in _methods_by_name.get(name, []) if _method_owner.get(m) not in mine]
+        return cands[0] if len(cands) == 1 else None
+
     java_receiver_types = {
         body_id: _java_method_receiver_types(
             method_node,
@@ -5946,6 +6177,11 @@ def _extract_generic(
             is_this_field_call: bool = False
             swift_receiver: str | None = None
             member_receiver: str | None = None
+            # Local change (Verinoda): the member call's receiver is the method's own (`self`, `this`, `$this`)
+            own_receiver: bool = False
+            js_super_receiver: bool = False   # JS/TS `super.m()`
+            php_receiver_node = None          # the object of a PHP `$obj->m()`
+            python_super_class: str | None = None   # C of Python `super(C, obj).m()`
             kotlin_qualified_prefix: str | None = None
             kotlin_object_receiver: str | None = None
             csharp_qualified_prefix: str | None = None
@@ -6207,6 +6443,9 @@ def _extract_generic(
                     name_node = node.child_by_field_name("name")
                     if name_node:
                         callee_name = _read_text(name_node, source)
+                    php_object = node.child_by_field_name("object")
+                    own_receiver = php_object is not None and _read_text(php_object, source) == "$this"
+                    php_receiver_node = php_object
             elif config.ts_module == "tree_sitter_cpp":
                 # C++: function field, then field_expression/qualified_identifier
                 func_node = node.child_by_field_name(config.call_function_field) if config.call_function_field else None
@@ -6276,6 +6515,12 @@ def _extract_generic(
                 recv = node.child_by_field_name("receiver")
                 if recv is not None:
                     is_member_call = True
+                    # `self.m` and `self.class.m` (a class method of the own class, M6 of the D65 review)
+                    _recv_recv = recv.child_by_field_name("receiver") if recv.type == "call" else None
+                    own_receiver = recv.type == "self" or (
+                        _recv_recv is not None and _recv_recv.type == "self"
+                        and _read_text(recv.child_by_field_name("method"), source) == "class"
+                        and recv.child_by_field_name("arguments") is None)
                     if recv.type in ("identifier", "constant"):
                         member_receiver = _read_text(recv, source)
                     elif recv.type == "scope_resolution":
@@ -6307,8 +6552,12 @@ def _extract_generic(
                             # (#1446). Chained receivers (`a.b.method()`) are skipped
                             # UNLESS the chain is `this.field.method()` (#1316).
                             obj = func_node.child_by_field_name(config.call_accessor_object_field)
+                            own_receiver = obj is not None and obj.type == "this"
+                            js_super_receiver = obj is not None and obj.type == "super"
                             if obj is not None and obj.type == "identifier":
                                 member_receiver = _read_text(obj, source)
+                                own_receiver = (config.ts_module == "tree_sitter_python"
+                                                and member_receiver in ("self", "cls"))
                             elif (
                                 config.ts_module == "tree_sitter_python"
                                 and obj is not None
@@ -6324,6 +6573,13 @@ def _extract_generic(
                                     and _read_text(receiver_func, source) == "super"
                                 ):
                                     member_receiver = "super"
+                                    # Local change (Verinoda): `super(C, obj)` starts after C, which need not be
+                                    # the enclosing class
+                                    super_args = obj.child_by_field_name("arguments")
+                                    first = next((c for c in (super_args.children if super_args else ())
+                                                  if c.is_named), None)
+                                    if first is not None:
+                                        python_super_class = _read_text(first, source)
                             elif (obj is not None
                                   and obj.type in config.call_accessor_node_types
                                   and config.call_accessor_object_field):
@@ -6381,7 +6637,37 @@ def _extract_generic(
                 _java_defer = (
                     config.ts_module == "tree_sitter_java" and is_member_call
                 )
-                if _python_defer or _java_defer or _builtin_member_call or (
+                # Local change (Verinoda): PHP and Ruby member calls on any receiver other than the method's own
+                # (`$this`, `self`) defer too, and JS/TS `super.m()`. `$this->dispatcher->handle()`,
+                # `capsule.fetcher.retrieve_work` and `super.m()` name a method of another object, not whatever
+                # same-named function this file defines; the receiver-typed resolvers (Ruby `x = Foo.new`) still
+                # see them. Other JS/TS receivers keep the file-wide name: measured, about half of the edges
+                # that rule removed were true (an untyped local of a class the file defines).
+                # PHP: a receiver whose class the file states binds to that class's method (or to nothing when
+                # the class is not in the file); an untyped one to the one same-named method of another class of
+                # the file, never to the caller's own class's (M3 of the D65 review).
+                _php_target = None
+                if config.ts_module == "tree_sitter_php" and is_member_call and not own_receiver:
+                    _php_class = _php_receiver_class(php_receiver_node, caller_nid)
+                    if _php_class:
+                        _php_target = _class_method(_php_class, callee_name)[1]
+                    else:
+                        _php_target = _other_class_method(caller_nid, callee_name)
+                _foreign_receiver_defer = is_member_call and (
+                    js_super_receiver
+                    or (not own_receiver and config.ts_module == "tree_sitter_ruby")
+                    or (not own_receiver and config.ts_module == "tree_sitter_php" and _php_target is None)
+                )
+                _object_method = None
+                if _foreign_receiver_defer and member_receiver:
+                    # ... unless the receiver names a class or object this file defines with that method (Ruby
+                    # `Foo.make`)
+                    _object_method = _methods_of.get(label_to_nid.get(member_receiver, ""), {}).get(callee_name)
+                if _php_target is not None:
+                    tgt_nid = _php_target
+                elif _object_method is not None:
+                    tgt_nid = _object_method
+                elif _python_defer or _java_defer or _builtin_member_call or _foreign_receiver_defer or (
                     is_member_call
                     and member_receiver
                     and (
@@ -6391,8 +6677,34 @@ def _extract_generic(
                     )
                 ):
                     tgt_nid = None
+                elif (
+                    config.ts_module == "tree_sitter_python"
+                    and is_member_call
+                    and member_receiver == "super"
+                ):
+                    # Local change (Verinoda): ``super().m()`` calls a base class's ``m``, never the caller
+                    # itself or another class's ``m`` of the file (825 such self-loops in one Python corpus).
+                    # Bound when the file defines that base; otherwise left to raw_calls, where no pass
+                    # binds it to a same-named definition.
+                    _cls = _enclosing_class(caller_nid)
+                    if _cls and python_super_class and python_super_class != _node_label.get(_cls):
+                        # `super(C, obj)`: the bases of C, when this file defines C
+                        _named = label_to_nid.get(python_super_class)
+                        _cls = _named if _named and _named in _local_bases and nid_to_sf.get(_named) else None
+                    tgt_nid = _inherited_method(_cls, callee_name)[0] if _cls else None
                 else:
-                    if config.ts_module == "tree_sitter_python" and not is_member_call:
+                    _own_nid = None
+                    if is_member_call and own_receiver:
+                        # Local change (Verinoda): the caller's own class (then its in-file bases) first; a
+                        # same-named method of another class of the file only when neither defines it.
+                        _cls = _enclosing_class(caller_nid)
+                        if _cls:
+                            _own_nid = _methods_of.get(_cls, {}).get(callee_name)
+                            if _own_nid is None:
+                                _own_nid = _inherited_method(_cls, callee_name)[0]
+                    if _own_nid is not None:
+                        tgt_nid = _own_nid
+                    elif config.ts_module == "tree_sitter_python" and not is_member_call:
                         curr_scope = caller_nid
                         tgt_nid = None
                         while curr_scope:
@@ -6768,6 +7080,19 @@ def _extract_generic(
     if config.ts_module == "tree_sitter_ruby":
         for caller_nid, body_node in function_bodies:
             ruby_var_types[caller_nid] = _ruby_local_class_bindings(body_node, source)
+
+    # Local change (Verinoda): PHP receiver types (see php_var_types)
+    if config.ts_module == "tree_sitter_php":
+        for caller_nid, body_node in function_bodies:
+            method_node = body_node.parent
+            if method_node is None:
+                continue
+            php_var_types[caller_nid] = _php_local_types(method_node, source)
+            cls_nid = _enclosing_class(caller_nid)
+            holder = method_node.parent.parent if method_node.parent is not None else None
+            if (cls_nid and cls_nid not in php_prop_types and holder is not None
+                    and holder.type in ("class_declaration", "trait_declaration", "enum_declaration")):
+                php_prop_types[cls_nid] = _php_property_types(holder, source)
 
     # C++: build the per-file `var -> ClassName` table from local declarations in
     # every function body so the cross-file member-call pass can type a receiver

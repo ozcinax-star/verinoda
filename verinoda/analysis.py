@@ -1374,7 +1374,8 @@ def _h_callers(ctx: _Ctx, sub: _Sub) -> None:
             sub.flags.setdefault("empty_sets", []).append(g.label(t))
             _unknown(ctx, sub, {"question": f"which code calls {g.label(t)}?",
                                 "why": "no call edge into it in the graph (dynamic, reflective or external callers "
-                                       "are not extracted)",
+                                       "are not extracted, and a method call on a receiver whose type the "
+                                       "extractor could not tell - an untyped local, a chain - is left unbound)",
                                 "next_step": f"search for '{callsite.target_token(g.label(t))}(' in the code, or "
                                              "observe it at runtime"})
             continue
@@ -2579,7 +2580,8 @@ def _exclusive_guard(ctx: _Ctx, sub: _Sub, links: list[dict]) -> None:
                 hits.append((guards.VIOLATED if d.get("confidence") == "EXTRACTED" else guards.POSSIBLE,
                              rel, int(ln), f"call edge ({d.get('confidence') or '?'})", (u, d)))
         limits = ["every call edge the index extracted into it was read; calls through another name (an import "
-                  "alias, a variable) and dynamic, reflective or external callers may be missing, so this is an "
+                  "alias, a variable), method calls on a receiver of unknown type and dynamic, reflective or "
+                  "external callers may be missing, so this is an "
                   "inference, not a proof that no other call exists"]
         pattern = rf"(?<!def )(?<![\w.]){re.escape(target)}\s*\("
     ctx.step("exclusive", f"{target}: {len(hits)} call site(s), allowed {where}")

@@ -106,6 +106,7 @@ param params arg type types default see note todo fixme xxx also used use uses u
 """.split())
 CODE_SUFFIXES = {".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".go", ".rs", ".java",
                  ".kt", ".kts", ".scala", ".rb", ".php", ".cs", ".c", ".h", ".cc", ".cpp", ".hpp",
+                 ".hh", ".hxx", ".ipp", ".inl", ".tpp",
                  ".swift", ".lua", ".sh", ".bash", ".ps1", ".sql", ".ex", ".exs", ".jl", ".zig", ".m",
                  ".groovy", ".dart", ".vue", ".svelte"}
 DOC_SUFFIXES = {".md", ".rst", ".txt", ".adoc"}

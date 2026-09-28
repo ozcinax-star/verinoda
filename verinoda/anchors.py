@@ -75,6 +75,8 @@ TS_LANGS: dict[str, tuple[str, str]] = {
     ".h": ("tree_sitter_c", "language"), ".cc": ("tree_sitter_cpp", "language"),
     ".cpp": ("tree_sitter_cpp", "language"), ".cxx": ("tree_sitter_cpp", "language"),
     ".hpp": ("tree_sitter_cpp", "language"), ".hh": ("tree_sitter_cpp", "language"),
+    ".hxx": ("tree_sitter_cpp", "language"), ".ipp": ("tree_sitter_cpp", "language"),
+    ".inl": ("tree_sitter_cpp", "language"), ".tpp": ("tree_sitter_cpp", "language"),
     ".rb": ("tree_sitter_ruby", "language"), ".cs": ("tree_sitter_c_sharp", "language"),
     ".php": ("tree_sitter_php", "language_php"), ".kt": ("tree_sitter_kotlin", "language"),
     ".kts": ("tree_sitter_kotlin", "language"), ".scala": ("tree_sitter_scala", "language"),

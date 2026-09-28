@@ -218,11 +218,13 @@ def updater_argv(repo: Path) -> list[str]:
 _STAMP: str | None = None
 
 
-def extraction_stamp() -> str:
+def extraction_stamp(repo: Path | None = None) -> str:
     """Which extraction builds a graph now: the AST cache schema and a hash of the extractor's source files. A
     graph built under another stamp describes the code as an older extractor read it (Java overloads as one node
     before D57). The source, not the installed version: two installs of the same code (the MCP server's and a
-    development checkout's, whose metadata can say another version) agree, and never rebuild each other's graph."""
+    development checkout's, whose metadata can say another version) agree, and never rebuild each other's graph.
+    With *repo*: ``-vendored`` when that repository keeps vendored code in its graph (config ``index.vendored``
+    or ``VERINODA_GRAPH_VENDORED``), so turning the switch on or off rebuilds the graph on the next ``update``."""
     global _STAMP
     if _STAMP is None:
         import hashlib
@@ -231,13 +233,26 @@ def extraction_stamp() -> str:
 
         base = Path(__file__).resolve().parent / "project_index"
         h = hashlib.sha1()
-        for p in [base / "extract.py", *sorted((base / "extractors").glob("*.py"))]:
+        for p in [base / "extract.py", base / "vendored.py", *sorted((base / "extractors").glob("*.py"))]:
             try:
                 h.update(p.name.encode() + b"\0" + p.read_bytes().replace(b"\r\n", b"\n"))
             except OSError:
                 continue
         _STAMP = f"s{_AST_CACHE_SCHEMA}-{h.hexdigest()[:12]}"
+    if repo is not None and _keeps_vendored(repo):
+        return _STAMP + "-vendored"
     return _STAMP
+
+
+def _keeps_vendored(repo: Path) -> bool:
+    import os
+
+    from verinoda.paths import index_vendored
+
+    env = os.environ.get("VERINODA_GRAPH_VENDORED")
+    if env is not None:
+        return env.strip().lower() in ("1", "true", "yes", "on")
+    return index_vendored(Path(repo))
 
 
 def recorded_extraction(repo: Path) -> str | None:
@@ -264,7 +279,8 @@ def record_build(repo: Path, *, graph_seconds: float | None, files: int | None) 
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_name(p.name + ".tmp")
         tmp.write_text(json.dumps({"graph_seconds": round(float(graph_seconds), 3), "files": files,
-                                   "at": time.time(), "extraction": extraction_stamp()}) + "\n", encoding="utf-8")
+                                   "at": time.time(), "extraction": extraction_stamp(repo)}) + "\n",
+                       encoding="utf-8")
         tmp.replace(p)
     except OSError:
         pass

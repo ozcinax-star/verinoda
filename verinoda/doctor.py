@@ -337,7 +337,7 @@ def _extraction(repo: Path, checks: list[dict]) -> dict:
     """Was the graph built by this version's extraction? (An older one is rebuilt by the next `update`.)"""
     from verinoda import buildlock
 
-    was, now = buildlock.recorded_extraction(repo), buildlock.extraction_stamp()
+    was, now = buildlock.recorded_extraction(repo), buildlock.extraction_stamp(repo)
     checks.append(_check("extraction", was == now, f"graph built by this extraction ({now})" if was == now else
                          f"graph built by {was or 'an older version'}, this version extracts as {now}: the next "
                          "`verinoda update` rebuilds it (unchanged files included)", "warn"))

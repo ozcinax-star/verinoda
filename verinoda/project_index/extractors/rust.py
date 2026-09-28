@@ -130,6 +130,11 @@ def extract_rust(path: Path) -> dict:
     edges: list[dict] = []
     seen_ids: set[str] = set()
     function_bodies: list[tuple[str, object, str | None, str | None]] = []
+    # Local change (Verinoda): the methods of each impl type (or trait) of this file and each method's owner, so
+    # `self.m()` / `Self::m()` / `Type::m()` bind to that type's `m` and no other member call binds to a same-named
+    # function of the file.
+    methods_by_owner: dict[tuple[str, str], str] = {}
+    owner_of: dict[str, str] = {}
     impl_keys: dict[str, str | None] = {}
 
     def add_node(nid: str, label: str, line: int) -> None:
@@ -227,6 +232,9 @@ def extract_rust(path: Path) -> dict:
                     func_nid = _make_id(parent_impl_nid, func_name)
                     add_node(func_nid, f".{func_name}()", line)
                     add_edge(parent_impl_nid, func_nid, "method", line)
+                    owner = parent_impl_type or parent_impl_nid
+                    methods_by_owner.setdefault((owner, func_name), func_nid)
+                    owner_of[func_nid] = owner
                 else:
                     func_nid = _make_id(stem, func_name)
                     add_node(func_nid, f"{func_name}()", line)
@@ -256,6 +264,7 @@ def extract_rust(path: Path) -> dict:
                     func_nid = _make_id(parent_impl_nid, func_name)
                     add_node(func_nid, f".{func_name}()", line)
                     add_edge(parent_impl_nid, func_nid, "method", line)
+                    methods_by_owner.setdefault((parent_impl_type or parent_impl_nid, func_name), func_nid)
                 else:
                     func_nid = _make_id(stem, func_name)
                     add_node(func_nid, f"{func_name}()", line)
@@ -487,10 +496,13 @@ def extract_rust(path: Path) -> dict:
     walk(root)
 
     label_to_nid: dict[str, str] = {}
+    bare_label_to_nid: dict[str, str] = {}  # without methods: a bare `f()` or `module::f()` never calls a method
     for n in nodes:
         raw = n["label"]
         normalised = raw.strip("()").lstrip(".")
         label_to_nid[normalised] = n["id"]
+        if not raw.startswith("."):
+            bare_label_to_nid[normalised] = n["id"]
 
     seen_call_pairs: set[tuple[str, str]] = set()
     raw_calls: list[dict] = []
@@ -509,6 +521,7 @@ def extract_rust(path: Path) -> dict:
             is_member_call: bool = False
             is_scoped_call: bool = False
             is_self_call: bool = False
+            scope_type: str | None = None  # `Type` of `Type::m()`, `Self` resolved to the caller's owner
             if func_node:
                 if func_node.type == "identifier":
                     callee_name = _read_text(func_node, source)
@@ -528,8 +541,28 @@ def extract_rust(path: Path) -> dict:
                     name = func_node.child_by_field_name("name")
                     if name:
                         callee_name = _read_text(name, source)
+                    path_node = func_node.child_by_field_name("path")
+                    if path_node is not None:
+                        # generic arguments dropped first: the turbofish `Pool::<u8>::new()` is Pool's `new`
+                        path_text, depth = "", 0
+                        for ch in _read_text(path_node, source):
+                            depth += (ch == "<") - (ch == ">")
+                            if depth == 0 and ch != ">":
+                                path_text += ch
+                        last = path_text.rstrip(": \t\n").rsplit("::", 1)[-1].strip()
+                        if last == "Self":
+                            scope_type = owner_of.get(caller_nid) or self_type or ""
+                        elif last[:1].isupper():
+                            scope_type = last
             if callee_name and callee_name not in _LANGUAGE_BUILTIN_GLOBALS:
-                tgt_nid = label_to_nid.get(callee_name)
+                if is_member_call:
+                    # only `self.m()` binds in this file, to the caller's own type's `m`
+                    own = owner_of.get(caller_nid) or self_type
+                    tgt_nid = methods_by_owner.get((own, callee_name)) if is_self_call and own else None
+                elif scope_type is not None:
+                    tgt_nid = methods_by_owner.get((scope_type, callee_name))
+                else:
+                    tgt_nid = bare_label_to_nid.get(callee_name)
                 if tgt_nid and tgt_nid != caller_nid:
                     pair = (caller_nid, tgt_nid)
                     if pair not in seen_call_pairs:

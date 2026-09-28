@@ -28,11 +28,13 @@ enters this repository. It:
    `tests_upstream/conftest.py` (see below);
 5. writes the upstream commit SHA to `verinoda/project_index/UPSTREAM_COMMIT`.
 
-No file under `verinoda/project_index/` is hand-edited. Everything Verinoda
-adds lives outside that directory, including the one runtime patch described
-under [Runtime patch applied from outside the vendored tree](#runtime-patch-applied-from-outside-the-vendored-tree).
+Files under `verinoda/project_index/` are hand-edited only for the local
+changes listed under [Modified](#modified), each marked `Local change (Verinoda)`
+in the code. Everything else Verinoda adds lives outside that directory,
+including the one runtime patch described under
+[Runtime patch applied from outside the vendored tree](#runtime-patch-applied-from-outside-the-vendored-tree).
 Re-syncing is therefore: check out a newer upstream commit, re-run the script,
-review `git diff`, run both test suites.
+re-apply the local changes, review `git diff`, run both test suites.
 
 The import rewrite was necessary rather than cosmetic: keeping a top-level
 `graphify` package would collide with an installed `graphifyy` in the same
@@ -222,6 +224,10 @@ installer list is a subset of the static list, and that ordinary commands
 | Output directory | unchanged in the module (`GRAPHIFY_OUT`, default `graphify-out`); Verinoda entry points set `GRAPHIFY_OUT=.verinoda/index` before importing it |
 | `watch._StoredSourcePaths` (at run time only) | memoised by the path-identity monkeypatch; source file unchanged |
 | `tests_upstream/conftest.py` | appended port-adjustment block (above) |
+| `extractors/csharp.py` `_resolve_csharp_type_references` (local change, D65) | a dangling type reference finds the first placeholder of its label through a dict built once, not a scan of all nodes per reference; the same graph, the pass 4.2 s -> 0.05 s on a 591-file C# repository |
+| `extractors/engine.py` call binding, `extractors/go.py`, `extractors/rust.py` (local change, D65) | a member call binds to a same-file definition only through the method's own receiver (`self`/`cls`, `this`, `$this`, Ruby `self`/`self.class`, the Go receiver, Rust `self`/`Self::`/`Type::`, also with a turbofish) or a receiver whose type the file states (Go: a parameter, a local or package variable of `&T{}` / `T{}` / a constructor `NewT()`, a struct field, a method promoted from an embedded struct; PHP: a typed parameter, `$x = new T()`, a typed or promoted property, `$this->p = new T()`); an untyped PHP receiver binds only to the one same-named method of another class of the file; Python `super().m()` binds to an in-file base's `m` in C3 order (past `object`) or not at all; `self.m()` prefers the own class; bare Go/Rust calls never bind to a method. `cache._AST_CACHE_SCHEMA` is 7 |
+| `extract.py` `extract`, new `vendored.py` (local change, D65) | vendored files (`vendor/` at the root, beside `go.mod`/`composer.json`/`Gemfile`/`Cargo.toml` or under a static-asset folder; `_vendor/`, `third_party/`, `third-party/`, `thirdparty/`; `deps/` beside `mix.exs`/`rebar.config`; a git submodule under `deps/` or `extern/`) and generated files (a generator's header comment) keep their definitions, marked `vendored`, but no edge other than their structure (`contains`, `method`, `defines`, `inherits` ...) leaves them; minified files (`.min.js`/`.bundle.js`, or a script mostly in lines of code over 1,000 bytes) keep their file node only; `VERINODA_GRAPH_VENDORED=1` (config `index.vendored`) keeps everything. `guards.is_generated` uses the same header rule |
+| `detect.py` `CODE_EXTENSIONS`, `extract.py` `_DISPATCH` and the C++ resolver's suffixes (local change, D65) | `.hh .hxx .ipp .inl .tpp` are C++ |
 
 ### New in Verinoda (not in Graphify)
 

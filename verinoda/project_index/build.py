@@ -150,7 +150,7 @@ _EDGE_LANG_FAMILY: dict[str, str] = {
     ".go": "go", ".rs": "rs",
     ".java": "jvm", ".kt": "jvm", ".scala": "jvm", ".groovy": "jvm",
     ".c": "c", ".h": "c", ".cc": "c", ".cpp": "c", ".hpp": "c",
-    ".cxx": "c", ".hh": "c", ".hxx": "c",
+    ".cxx": "c", ".hh": "c", ".hxx": "c", ".ipp": "c", ".inl": "c", ".tpp": "c",
     ".cu": "c", ".cuh": "c", ".metal": "c", ".m": "c", ".mm": "c",
     ".rb": "rb", ".rake": "rb", ".php": "php", ".cs": "cs", ".swift": "swift", ".lua": "lua",
 }

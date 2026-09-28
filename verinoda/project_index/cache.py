@@ -36,7 +36,9 @@ except Exception:
     _EXTRACTOR_VERSION = "unknown"
 
 # Bump when AST cache-key semantics change independently of the package version.
-_AST_CACHE_SCHEMA = 5  # 4: Rust generic-impl identity markers + Terraform block attributes; 5: Java/C# overloads
+_AST_CACHE_SCHEMA = 7  # 4: Rust generic-impl identity markers + Terraform block attributes; 5: Java/C# overloads;
+# 6 (Verinoda D65): member calls bind in-file only on the own receiver (super(), Go, Rust, PHP, Ruby, JS)
+# 7 (Verinoda, review of D65): PHP and Go receiver types, Ruby self.class, super() in C3 order, Rust turbofish
 
 # Version dirs already swept this process — cleanup runs once per (base, version).
 _cleaned_ast_dirs: set[str] = set()

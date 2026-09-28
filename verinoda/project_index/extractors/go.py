@@ -108,6 +108,31 @@ def extract_go(path: Path) -> dict:
     edges: list[dict] = []
     seen_ids: set[str] = set()
     function_bodies: list[tuple[str, object]] = []
+    # Local change (Verinoda): a method's own receiver (name, type) and the methods of each receiver type of this
+    # file, so `c.m()` on the method's own receiver binds to its type's `m` and no other selector call binds to a
+    # same-named function of the file.
+    own_receiver_of: dict[str, tuple[str | None, str]] = {}
+    methods_by_type: dict[tuple[str, str], str] = {}
+    param_types_of: dict[str, dict[str, str]] = {}  # function -> parameter name -> its declared local type
+
+    def _param_types(func_node) -> dict[str, str]:
+        """Parameters declared with a type of this package (`h *metricHistory`, `c Context`); not `pkg.T`,
+        slices, maps or funcs."""
+        out: dict[str, str] = {}
+        params = func_node.child_by_field_name("parameters")
+        for param in (params.children if params is not None else ()):
+            if param.type != "parameter_declaration":
+                continue
+            type_node = param.child_by_field_name("type")
+            if type_node is None:
+                continue
+            tname = _read_text(type_node, source).lstrip("*").split("[", 1)[0].strip()
+            if not tname.isidentifier():
+                continue
+            for child in param.children:
+                if child.type == "identifier" and child != type_node:
+                    out[_read_text(child, source)] = tname
+        return out
     # local package name (including aliases) -> written Go import path
     go_imported_pkgs: dict[str, str] = {}
 
@@ -281,6 +306,7 @@ def extract_go(path: Path) -> dict:
                 add_node(func_nid, f"{func_name}()", line)
                 add_edge(file_nid, func_nid, "contains", line)
                 emit_go_method_refs(node, func_nid, line)
+                param_types_of[func_nid] = _param_types(node)
                 body = node.child_by_field_name("body")
                 if body:
                     function_bodies.append((func_nid, body))
@@ -289,12 +315,16 @@ def extract_go(path: Path) -> dict:
         if t == "method_declaration":
             receiver = node.child_by_field_name("receiver")
             receiver_type: str | None = None
+            receiver_name: str | None = None
             if receiver:
                 for param in receiver.children:
                     if param.type == "parameter_declaration":
                         type_node = param.child_by_field_name("type")
                         if type_node:
                             receiver_type = _read_text(type_node, source).lstrip("*").strip()
+                        rname = param.child_by_field_name("name")
+                        if rname is not None:
+                            receiver_name = _read_text(rname, source)
                         break
             name_node = node.child_by_field_name("name")
             if not name_node:
@@ -308,6 +338,11 @@ def extract_go(path: Path) -> dict:
                 method_nid = symbol_nid(_make_id(parent_nid, method_name), method_name)
                 add_node(method_nid, f".{method_name}()", line)
                 add_edge(parent_nid, method_nid, "method", line)
+                own_type = receiver_type.split("[", 1)[0].strip()
+                methods_by_type.setdefault((own_type, method_name), method_nid)
+                own_receiver_of[method_nid] = (
+                    receiver_name if receiver_name and receiver_name != "_" else None, own_type)
+                param_types_of[method_nid] = _param_types(node)
             else:
                 method_nid = symbol_nid(_make_id(stem, method_name), method_name)
                 add_node(method_nid, f"{method_name}()", line)
@@ -457,11 +492,190 @@ def extract_go(path: Path) -> dict:
     _scan_declarations(root)
     walk(root)
 
+    # Local change (Verinoda): the receiver types this file states (M4 of the D65 review): each struct's named
+    # fields and embedded types, the type a file function returns (`func NewT() *T`), package-level
+    # `var x = &T{}` / `T{}` / `NewT()` / `var x T`, and the same forms as locals of each function body (with
+    # its parameters). A name given two types in one scope has none.
+    struct_fields: dict[str, dict[str, str]] = {}
+    struct_embedded: dict[str, list[str | None]] = {}   # None: an embedded type of another package
+    func_returns: dict[str, str] = {}
+    pkg_var_types: dict[str, str | None] = {}
+    local_types_of: dict[str, dict[str, str | None]] = {}
+
+    def _local_type(type_node) -> str | None:
+        """`T`, `*T`, `T[int]` -> `T`; another package's type, a slice, map, func or interface -> None."""
+        if type_node is not None and type_node.type == "pointer_type":
+            type_node = next(iter(type_node.named_children), None)
+        if type_node is not None and type_node.type == "generic_type":
+            type_node = type_node.child_by_field_name("type")
+        if type_node is None or type_node.type != "type_identifier":
+            return None
+        return _read_text(type_node, source)
+
+    def _expr_type(expr) -> str | None:
+        """The local type of `&T{}`, `T{}` or `NewT()` (a file function returning `T` or `*T`)."""
+        if expr is not None and expr.type == "unary_expression" and _read_text(
+                expr.child_by_field_name("operator"), source) == "&":
+            expr = expr.child_by_field_name("operand")
+        if expr is None:
+            return None
+        if expr.type == "composite_literal":
+            return _local_type(expr.child_by_field_name("type"))
+        if expr.type == "call_expression":
+            fn = expr.child_by_field_name("function")
+            if fn is not None and fn.type == "identifier":
+                return func_returns.get(_read_text(fn, source))
+        return None
+
+    def _bind(table: dict, name: str, typ: str | None) -> None:
+        if name and name != "_":
+            table[name] = typ if table.get(name, typ) == typ else None
+
+    def _bind_spec(table: dict, spec) -> None:
+        """One `var_spec` / `short_var_declaration` / `const_spec` into *table*."""
+        if spec.type == "short_var_declaration":
+            left = spec.child_by_field_name("left")
+            right = spec.child_by_field_name("right")
+            names = [c for c in (left.named_children if left is not None else ()) if c.type == "identifier"]
+            values = list(right.named_children) if right is not None else []
+            declared = None
+        else:
+            names = [c for c in spec.children if c.type == "identifier"]
+            value = spec.child_by_field_name("value")
+            values = list(value.named_children) if value is not None else []
+            declared = _local_type(spec.child_by_field_name("type"))
+        for i, ident in enumerate(names):
+            typ = declared
+            if typ is None and len(values) == len(names):
+                typ = _expr_type(values[i])
+            _bind(table, _read_text(ident, source), typ)
+
+    for top in root.children:
+        if top.type == "function_declaration":
+            fname = top.child_by_field_name("name")
+            rtype = _local_type(top.child_by_field_name("result"))
+            if fname is not None and rtype:
+                func_returns[_read_text(fname, source)] = rtype
+        elif top.type == "type_declaration":
+            for spec in top.named_children:
+                if spec.type != "type_spec":
+                    continue
+                tname = spec.child_by_field_name("name")
+                stype = spec.child_by_field_name("type")
+                if tname is None or stype is None or stype.type != "struct_type":
+                    continue
+                fields: dict[str, str] = {}
+                embedded: list[str | None] = []
+                flist = next((c for c in stype.named_children if c.type == "field_declaration_list"), None)
+                for fd in (flist.named_children if flist is not None else ()):
+                    if fd.type != "field_declaration":
+                        continue
+                    ftype = fd.child_by_field_name("type")
+                    fnames = [c for c in fd.children if c.type == "field_identifier"]
+                    if fnames:
+                        local = _local_type(ftype)
+                        for fn in fnames:
+                            if local:
+                                fields[_read_text(fn, source)] = local
+                    else:
+                        embedded.append(_local_type(ftype))
+                struct_fields[_read_text(tname, source)] = fields
+                struct_embedded[_read_text(tname, source)] = embedded
+    for top in root.children:
+        if top.type == "var_declaration":
+            for spec in top.named_children:
+                if spec.type == "var_spec":
+                    _bind_spec(pkg_var_types, spec)
+
+    def _collect_locals(n, table: dict) -> None:
+        """Every name the body declares: typed by `_bind_spec`, or None (a range variable, a closure parameter,
+        a select receive, a type switch alias), so no local falls through to a package variable of its name."""
+        for child in n.children:
+            if child.type in ("short_var_declaration", "var_spec", "const_spec"):
+                _bind_spec(table, child)
+            elif child.type in ("range_clause", "receive_statement", "type_switch_statement"):
+                names = child.child_by_field_name("alias" if child.type == "type_switch_statement" else "left")
+                for ident in (names.named_children if names is not None else ()):
+                    if ident.type == "identifier":
+                        _bind(table, _read_text(ident, source), None)
+            elif child.type == "func_literal":
+                params = child.child_by_field_name("parameters")
+                for param in (params.named_children if params is not None else ()):
+                    for ident in param.children:
+                        if ident.type == "identifier":
+                            _bind(table, _read_text(ident, source), None)
+            _collect_locals(child, table)
+
+    for fnid, body in function_bodies:
+        # every parameter shadows a package variable of its name; only those of a local type carry one
+        table: dict[str, str | None] = {}
+        params = body.parent.child_by_field_name("parameters") if body.parent is not None else None
+        for param in (params.named_children if params is not None else ()):
+            for child in param.children:
+                if child.type == "identifier":
+                    table[_read_text(child, source)] = None
+        table.update(param_types_of.get(fnid, {}))
+        own_name, own_type = own_receiver_of.get(fnid, (None, ""))
+        if own_name:
+            table[own_name] = own_type
+        _collect_locals(body, table)
+        local_types_of[fnid] = table
+
+    def _method_of_type(typ: str, name: str) -> str | None:
+        """*typ*'s method *name*, or the one a struct it embeds promotes (the shallowest depth, one candidate;
+        none when an embedded type of another package at a shallower depth may define it)."""
+        hit = methods_by_type.get((typ, name))
+        if hit:
+            return hit
+        level, seen = [typ], {typ}
+        while level:
+            found: list[str] = []
+            nxt: list[str] = []
+            external = False
+            for t in level:
+                for emb in struct_embedded.get(t, ()):
+                    if emb is None:
+                        external = True
+                    elif emb not in seen:
+                        seen.add(emb)
+                        nxt.append(emb)
+                        if (emb, name) in methods_by_type:
+                            found.append(methods_by_type[(emb, name)])
+            if found:
+                return found[0] if len(set(found)) == 1 else None
+            if external:
+                return None
+            level = nxt
+        return None
+
+    def _receiver_type(operand, caller: str) -> str | None:
+        """The local type of a call's receiver: a typed name of the caller's scope or the package, or a field
+        of a typed receiver (`s.h`)."""
+        if operand is None:
+            return None
+        if operand.type == "identifier":
+            name = _read_text(operand, source)
+            scope = local_types_of.get(caller, {})
+            if name in scope:
+                return scope[name]
+            return pkg_var_types.get(name)
+        if operand.type == "selector_expression":
+            base = _receiver_type(operand.child_by_field_name("operand"), caller)
+            field = operand.child_by_field_name("field")
+            if base and field is not None:
+                return struct_fields.get(base, {}).get(_read_text(field, source))
+        if operand.type == "parenthesized_expression":
+            return _receiver_type(next(iter(operand.named_children), None), caller)
+        return None
+
     label_to_nid: dict[str, str] = {}
+    bare_label_to_nid: dict[str, str] = {}  # without methods: a bare `f()` never calls a method
     for n in nodes:
         raw = n["label"]
         normalised = raw.strip("()").lstrip(".")
         label_to_nid[normalised] = n["id"]
+        if not raw.startswith("."):
+            bare_label_to_nid[normalised] = n["id"]
 
     seen_call_pairs: set[tuple[str, str]] = set()
     raw_calls: list[dict] = []
@@ -476,6 +690,8 @@ def extract_go(path: Path) -> dict:
             is_bare_identifier: bool = False
             package_receiver: str | None = None
             import_path: str | None = None
+            receiver_name = ""
+            operand_node = None
             if func_node:
                 if func_node.type == "identifier":
                     is_bare_identifier = True
@@ -483,6 +699,7 @@ def extract_go(path: Path) -> dict:
                 elif func_node.type == "selector_expression":
                     field = func_node.child_by_field_name("field")
                     operand = func_node.child_by_field_name("operand")
+                    operand_node = operand
                     receiver_name = _read_text(operand, source) if operand else ""
                     # Package-qualified call (e.g. fmt.Println) → allow cross-file resolution.
                     # Receiver method call (e.g. s.logger.Log) → skip, no import evidence.
@@ -500,7 +717,17 @@ def extract_go(path: Path) -> dict:
                 callee_name = None
             if callee_name and callee_name not in _LANGUAGE_BUILTIN_GLOBALS:
                 # Never resolve an imported selector through a bare local name.
-                tgt_nid = None if import_path else label_to_nid.get(callee_name)
+                if import_path:
+                    tgt_nid = None
+                elif is_member_call:
+                    # a receiver whose type this file states: the method's own receiver, a parameter, a local
+                    # or package variable of a local type, a field of one; a promoted method of an embedded struct
+                    recv_type = _receiver_type(operand_node, caller_nid)
+                    tgt_nid = _method_of_type(recv_type, callee_name) if recv_type else None
+                elif is_bare_identifier:
+                    tgt_nid = bare_label_to_nid.get(callee_name)
+                else:
+                    tgt_nid = label_to_nid.get(callee_name)
                 if tgt_nid and tgt_nid != caller_nid:
                     pair = (caller_nid, tgt_nid)
                     if pair not in seen_call_pairs:
