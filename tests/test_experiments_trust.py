@@ -687,7 +687,7 @@ def test_the_copy_skips_symlinks_and_junctions(proj, tmp_path):
     assert not any(k == "linked" or k.startswith("linked/") for k in ids)
     assert not (dst / "linked").exists()
     res = experiments.run(st, repo, [*PYTEST, "tests/test_pricing.py"], hypothesis="h")
-    assert res["source"]["skipped_total"] == len(got)
+    assert res["source"].get("skipped_total", 0) == len(got)  # the key is there only when something was left out
     assert not got or any("not followed" in lim for lim in res["limits"])
 
 
