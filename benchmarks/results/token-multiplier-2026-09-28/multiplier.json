@@ -1,14 +1,15 @@
 {
  "generated_by": "python benchmarks/token_multiplier.py",
  "method": {
-  "corpus_tokens": "ceil(corpus.bytes / 4); bytes and file_count as the set's result file records them (every file the set's include/exclude selects, tracked and untracked-not-ignored; all seven corpora are text only)",
+  "corpus_tokens": "ceil(chars / 4); chars = UTF-8 characters of the corpus's committed files with CRLF read as LF, the files the set's include/exclude selects (corpus.json)",
   "tokens_per_question": "chars/4 of what the approach returned, mean over the set's questions",
   "multiplier": "corpus tokens / tokens per question; all sets: sum(corpus tokens x questions) / sum(answer tokens)",
   "facts_per_1k_tokens": "facts found / answer tokens x 1000",
-  "baseline": "reading every file of the corpus for every question (the competitors' baseline)"
+  "baseline": "reading every file of the corpus for every question (the baseline of Graphify's and code-review-graph's headline numbers)"
  },
  "sources": {
   "root": "benchmarks/results",
+  "corpus": "token-multiplier-2026-09-28/corpus.json",
   "verinoda": "token-wins-2026-09-26/7-review-fixes.json",
   "graphify_and_raw": {
    "orders_app": "orders_app.json",
@@ -19,17 +20,24 @@
    "graphify_core_tr": "graphify_core_tr.json",
    "heldout_repoatlas": "heldout_repoatlas.json"
   },
-  "graphify_cli_on_mod_sets": "token-wins-2026-09-26/graphify-baseline-c8da753.txt"
+  "rounded_table": "token-wins-2026-09-26/graphify-baseline-c8da753.txt",
+  "rounded_table_rows": "graphify_cli on glow_mod and forge_mod; every Graphify and raw row of verinoda_user_tr"
  },
  "sets": {
   "orders_app": {
    "corpus": {
+    "id": "examples/orders_app",
     "files": 11,
-    "bytes": 4726,
-    "tokens": 1182,
-    "source": "orders_app.json corpus"
+    "chars": 4724,
+    "tokens": 1181,
+    "source": "corpus.json examples/orders_app"
    },
    "questions": 10,
+   "graphify_raw_run": {
+    "file": "orders_app.json",
+    "date_utc": "2026-09-23T01:42:55+00:00",
+    "graphify_cli": "graphify 0.9.65"
+   },
    "approaches": {
     "verinoda_query": {
      "found": 32,
@@ -72,7 +80,7 @@
      "total": 32,
      "tokens_per_question": 1224.2,
      "answer_tokens": 12242,
-     "multiplier": 0.97,
+     "multiplier": 0.96,
      "facts_per_1k_tokens": 2.53,
      "source": "orders_app.json summary.raw"
     }
@@ -80,12 +88,18 @@
   },
   "orders_app_tr": {
    "corpus": {
+    "id": "examples/orders_app",
     "files": 11,
-    "bytes": 4726,
-    "tokens": 1182,
-    "source": "orders_app_tr.json corpus"
+    "chars": 4724,
+    "tokens": 1181,
+    "source": "corpus.json examples/orders_app"
    },
    "questions": 10,
+   "graphify_raw_run": {
+    "file": "orders_app_tr.json",
+    "date_utc": "2026-09-23T01:52:15+00:00",
+    "graphify_cli": "graphify 0.9.65"
+   },
    "approaches": {
     "verinoda_query": {
      "found": 32,
@@ -136,12 +150,18 @@
   },
   "glow_mod": {
    "corpus": {
+    "id": "examples/glow_mod",
     "files": 37,
-    "bytes": 33709,
-    "tokens": 8428,
-    "source": "mods-2026-09-24/final/glow_mod.json corpus"
+    "chars": 33699,
+    "tokens": 8425,
+    "source": "corpus.json examples/glow_mod"
    },
    "questions": 14,
+   "graphify_raw_run": {
+    "file": "mods-2026-09-24/final/glow_mod.json",
+    "date_utc": "2026-09-24T01:08:14+00:00",
+    "graphify_cli": null
+   },
    "approaches": {
     "verinoda_query": {
      "found": 48,
@@ -192,19 +212,25 @@
   },
   "forge_mod": {
    "corpus": {
+    "id": "examples/forge_mod",
     "files": 55,
-    "bytes": 53429,
-    "tokens": 13358,
-    "source": "mods-2026-09-24/final/forge_mod.json corpus"
+    "chars": 53385,
+    "tokens": 13347,
+    "source": "corpus.json examples/forge_mod"
    },
    "questions": 14,
+   "graphify_raw_run": {
+    "file": "mods-2026-09-24/final/forge_mod.json",
+    "date_utc": "2026-09-24T01:08:06+00:00",
+    "graphify_cli": null
+   },
    "approaches": {
     "verinoda_query": {
      "found": 67,
      "total": 68,
      "tokens_per_question": 1484.6,
      "answer_tokens": 20784,
-     "multiplier": 9.0,
+     "multiplier": 8.99,
      "facts_per_1k_tokens": 3.22,
      "source": "token-wins-2026-09-26/7-review-fixes.json q_text"
     },
@@ -222,7 +248,7 @@
      "total": 68,
      "tokens_per_question": 1343.7,
      "answer_tokens": 18812,
-     "multiplier": 9.94,
+     "multiplier": 9.93,
      "facts_per_1k_tokens": 0.64,
      "source": "mods-2026-09-24/final/forge_mod.json summary.graphify_vendored"
     },
@@ -248,19 +274,25 @@
   },
   "graphify_core": {
    "corpus": {
+    "id": "upstream Graphify 20a20d30",
     "files": 226,
-    "bytes": 4679630,
-    "tokens": 1169908,
-    "source": "graphify_core.json corpus"
+    "chars": 4567742,
+    "tokens": 1141936,
+    "source": "corpus.json upstream Graphify 20a20d30"
    },
    "questions": 9,
+   "graphify_raw_run": {
+    "file": "graphify_core.json",
+    "date_utc": "2026-09-23T01:44:41+00:00",
+    "graphify_cli": "graphify 0.9.65"
+   },
    "approaches": {
     "verinoda_query": {
      "found": 36,
      "total": 37,
      "tokens_per_question": 1424.9,
      "answer_tokens": 12824,
-     "multiplier": 821.05,
+     "multiplier": 801.42,
      "facts_per_1k_tokens": 2.81,
      "source": "token-wins-2026-09-26/7-review-fixes.json q_text"
     },
@@ -269,7 +301,7 @@
      "total": 37,
      "tokens_per_question": 1968.9,
      "answer_tokens": 17720,
-     "multiplier": 594.2,
+     "multiplier": 579.99,
      "facts_per_1k_tokens": 2.03,
      "source": "token-wins-2026-09-26/7-review-fixes.json an_bench"
     },
@@ -278,7 +310,7 @@
      "total": 37,
      "tokens_per_question": 1667.4,
      "answer_tokens": 15007,
-     "multiplier": 701.62,
+     "multiplier": 684.84,
      "facts_per_1k_tokens": 0.47,
      "source": "graphify_core.json summary.graphify_vendored"
     },
@@ -287,7 +319,7 @@
      "total": 37,
      "tokens_per_question": 1939.7,
      "answer_tokens": 17457,
-     "multiplier": 603.15,
+     "multiplier": 588.73,
      "facts_per_1k_tokens": 0.4,
      "source": "graphify_core.json summary.graphify_cli"
     },
@@ -296,7 +328,7 @@
      "total": 37,
      "tokens_per_question": 5989.4,
      "answer_tokens": 53905,
-     "multiplier": 195.33,
+     "multiplier": 190.66,
      "facts_per_1k_tokens": 0.07,
      "source": "graphify_core.json summary.raw"
     }
@@ -304,19 +336,25 @@
   },
   "graphify_core_tr": {
    "corpus": {
+    "id": "upstream Graphify 20a20d30",
     "files": 226,
-    "bytes": 4679630,
-    "tokens": 1169908,
-    "source": "graphify_core_tr.json corpus"
+    "chars": 4567742,
+    "tokens": 1141936,
+    "source": "corpus.json upstream Graphify 20a20d30"
    },
    "questions": 9,
+   "graphify_raw_run": {
+    "file": "graphify_core_tr.json",
+    "date_utc": "2026-09-23T01:54:01+00:00",
+    "graphify_cli": "graphify 0.9.65"
+   },
    "approaches": {
     "verinoda_query": {
      "found": 31,
      "total": 37,
      "tokens_per_question": 1445.7,
      "answer_tokens": 13011,
-     "multiplier": 809.25,
+     "multiplier": 789.9,
      "facts_per_1k_tokens": 2.38,
      "source": "token-wins-2026-09-26/7-review-fixes.json q_text"
     },
@@ -325,7 +363,7 @@
      "total": 37,
      "tokens_per_question": 1988.7,
      "answer_tokens": 17898,
-     "multiplier": 588.29,
+     "multiplier": 574.22,
      "facts_per_1k_tokens": 1.73,
      "source": "token-wins-2026-09-26/7-review-fixes.json an_bench"
     },
@@ -334,7 +372,7 @@
      "total": 37,
      "tokens_per_question": 1287.7,
      "answer_tokens": 11589,
-     "multiplier": 908.55,
+     "multiplier": 886.83,
      "facts_per_1k_tokens": 0.17,
      "source": "graphify_core_tr.json summary.graphify_vendored"
     },
@@ -343,7 +381,7 @@
      "total": 37,
      "tokens_per_question": 1526.4,
      "answer_tokens": 13738,
-     "multiplier": 766.43,
+     "multiplier": 748.1,
      "facts_per_1k_tokens": 0.15,
      "source": "graphify_core_tr.json summary.graphify_cli"
     },
@@ -352,7 +390,7 @@
      "total": 37,
      "tokens_per_question": 5991.3,
      "answer_tokens": 53922,
-     "multiplier": 195.27,
+     "multiplier": 190.6,
      "facts_per_1k_tokens": 0.09,
      "source": "graphify_core_tr.json summary.raw"
     }
@@ -360,19 +398,25 @@
   },
   "heldout_repoatlas": {
    "corpus": {
+    "id": "heldout_repoatlas_7371990",
     "files": 106,
-    "bytes": 2189328,
-    "tokens": 547332,
-    "source": "heldout_repoatlas.json corpus"
+    "chars": 2185725,
+    "tokens": 546432,
+    "source": "corpus.json heldout_repoatlas_7371990"
    },
    "questions": 8,
+   "graphify_raw_run": {
+    "file": "heldout_repoatlas.json",
+    "date_utc": "2026-09-23T01:48:56+00:00",
+    "graphify_cli": "graphify 0.9.65"
+   },
    "approaches": {
     "verinoda_query": {
      "found": 26,
      "total": 33,
      "tokens_per_question": 1421.4,
      "answer_tokens": 11371,
-     "multiplier": 385.07,
+     "multiplier": 384.44,
      "facts_per_1k_tokens": 2.29,
      "source": "token-wins-2026-09-26/7-review-fixes.json q_text"
     },
@@ -381,7 +425,7 @@
      "total": 33,
      "tokens_per_question": 1976.5,
      "answer_tokens": 15812,
-     "multiplier": 276.92,
+     "multiplier": 276.46,
      "facts_per_1k_tokens": 1.77,
      "source": "token-wins-2026-09-26/7-review-fixes.json an_bench"
     },
@@ -390,7 +434,7 @@
      "total": 33,
      "tokens_per_question": 1647.4,
      "answer_tokens": 13179,
-     "multiplier": 332.24,
+     "multiplier": 331.7,
      "facts_per_1k_tokens": 0.61,
      "source": "heldout_repoatlas.json summary.graphify_vendored"
     },
@@ -399,7 +443,7 @@
      "total": 33,
      "tokens_per_question": 1644.0,
      "answer_tokens": 13152,
-     "multiplier": 332.93,
+     "multiplier": 332.38,
      "facts_per_1k_tokens": 0.61,
      "source": "heldout_repoatlas.json summary.graphify_cli"
     },
@@ -408,9 +452,67 @@
      "total": 33,
      "tokens_per_question": 5992.4,
      "answer_tokens": 47939,
-     "multiplier": 91.34,
+     "multiplier": 91.19,
      "facts_per_1k_tokens": 0.19,
      "source": "heldout_repoatlas.json summary.raw"
+    }
+   }
+  },
+  "verinoda_user_tr": {
+   "corpus": {
+    "id": "verinoda 3bd1b94",
+    "files": 78,
+    "chars": 2131289,
+    "tokens": 532823,
+    "source": "corpus.json verinoda 3bd1b94"
+   },
+   "questions": 12,
+   "graphify_raw_run": null,
+   "approaches": {
+    "verinoda_query": {
+     "found": 13,
+     "total": 30,
+     "tokens_per_question": 1454.2,
+     "answer_tokens": 17451,
+     "multiplier": 366.39,
+     "facts_per_1k_tokens": 0.74,
+     "source": "token-wins-2026-09-26/7-review-fixes.json q_text"
+    },
+    "verinoda_analyze": {
+     "found": 13,
+     "total": 30,
+     "tokens_per_question": 1714.5,
+     "answer_tokens": 20574,
+     "multiplier": 310.77,
+     "facts_per_1k_tokens": 0.63,
+     "source": "token-wins-2026-09-26/7-review-fixes.json an_bench"
+    },
+    "graphify_vendored": {
+     "found": 5,
+     "total": 30,
+     "tokens_per_question": 813.0,
+     "answer_tokens": 9756,
+     "multiplier": 655.38,
+     "facts_per_1k_tokens": 0.51,
+     "source": "token-wins-2026-09-26/graphify-baseline-c8da753.txt (rounded tokens/question)"
+    },
+    "graphify_cli": {
+     "found": 4,
+     "total": 30,
+     "tokens_per_question": 788.0,
+     "answer_tokens": 9456,
+     "multiplier": 676.17,
+     "facts_per_1k_tokens": 0.42,
+     "source": "token-wins-2026-09-26/graphify-baseline-c8da753.txt (rounded tokens/question)"
+    },
+    "raw": {
+     "found": 1,
+     "total": 30,
+     "tokens_per_question": 5979.0,
+     "answer_tokens": 71748,
+     "multiplier": 89.12,
+     "facts_per_1k_tokens": 0.01,
+     "source": "token-wins-2026-09-26/graphify-baseline-c8da753.txt (rounded tokens/question)"
     }
    }
   }
@@ -423,89 +525,87 @@
    "forge_mod",
    "graphify_core",
    "graphify_core_tr",
-   "heldout_repoatlas"
+   "heldout_repoatlas",
+   "verinoda_user_tr"
   ],
-  "questions": 74,
-  "corpus_tokens_per_question": 348184.4,
+  "questions": 86,
+  "corpus_tokens_per_question": 368007.1,
+  "distinct_corpora": 6,
+  "distinct_files": 513,
   "approaches": {
    "verinoda_query": {
     "label": "Verinoda query (text)",
-    "found": 272,
-    "total": 289,
-    "tokens_per_question": 1286.7,
-    "multiplier": 270.6,
+    "found": 285,
+    "total": 319,
+    "tokens_per_question": 1310.1,
+    "multiplier": 280.9,
     "multiplier_min": 1.43,
-    "multiplier_max": 821.05,
-    "facts_per_1k_tokens": 2.86
+    "multiplier_max": 801.42,
+    "facts_per_1k_tokens": 2.53
    },
    "verinoda_analyze": {
     "label": "Verinoda analyze (text)",
-    "found": 274,
-    "total": 289,
-    "tokens_per_question": 1899.1,
-    "multiplier": 183.3,
+    "found": 287,
+    "total": 319,
+    "tokens_per_question": 1873.3,
+    "multiplier": 196.4,
     "multiplier_min": 0.77,
-    "multiplier_max": 594.2,
-    "facts_per_1k_tokens": 1.95
+    "multiplier_max": 579.99,
+    "facts_per_1k_tokens": 1.78
    },
    "graphify_vendored": {
     "label": "Graphify, vendored renderer",
-    "found": 64,
-    "total": 289,
-    "tokens_per_question": 1485.2,
-    "multiplier": 234.4,
+    "found": 69,
+    "total": 319,
+    "tokens_per_question": 1391.4,
+    "multiplier": 264.5,
     "multiplier_min": 0.53,
-    "multiplier_max": 908.55,
+    "multiplier_max": 886.83,
     "facts_per_1k_tokens": 0.58
    },
    "graphify_cli": {
     "label": "Graphify, upstream CLI",
-    "found": 64,
-    "total": 289,
-    "tokens_per_question": 1592.3,
-    "multiplier": 218.7,
+    "found": 68,
+    "total": 319,
+    "tokens_per_question": 1480.1,
+    "multiplier": 248.6,
     "multiplier_min": 0.72,
-    "multiplier_max": 766.43,
-    "facts_per_1k_tokens": 0.54
+    "multiplier_max": 748.1,
+    "facts_per_1k_tokens": 0.53
    },
    "raw": {
     "label": "raw text search",
-    "found": 128,
-    "total": 289,
-    "tokens_per_question": 3669.0,
-    "multiplier": 94.9,
-    "multiplier_min": 0.97,
-    "multiplier_max": 195.33,
-    "facts_per_1k_tokens": 0.47
+    "found": 129,
+    "total": 319,
+    "tokens_per_question": 3991.3,
+    "multiplier": 92.2,
+    "multiplier_min": 0.96,
+    "multiplier_max": 190.66,
+    "facts_per_1k_tokens": 0.38
    }
   }
  },
  "merged_night_check": {
-  "extra_sets": [
-   "verinoda_user_tr"
-  ],
-  "approaches": {
-   "graphify_vendored": {
-    "found": 69,
-    "total": 319,
-    "tokens_per_question": 1391.4,
-    "merged_night": "69/319 at 1391",
-    "ok": true
-   },
-   "graphify_cli": {
-    "found": 68,
-    "total": 319,
-    "tokens_per_question": 1480.1,
-    "merged_night": "68/319 at 1480",
-    "ok": true
-   },
-   "raw": {
-    "found": 129,
-    "total": 319,
-    "tokens_per_question": 3991.3,
-    "merged_night": "129/319 at 3991",
-    "ok": true
-   }
+  "graphify_vendored": {
+   "found": 69,
+   "total": 319,
+   "tokens_per_question": 1391.4,
+   "merged_night": "69/319 at 1391",
+   "ok": true
+  },
+  "graphify_cli": {
+   "found": 68,
+   "total": 319,
+   "tokens_per_question": 1480.1,
+   "merged_night": "68/319 at 1480",
+   "ok": true
+  },
+  "raw": {
+   "found": 129,
+   "total": 319,
+   "tokens_per_question": 3991.3,
+   "merged_night": "129/319 at 3991",
+   "ok": true
   }
  }
 }

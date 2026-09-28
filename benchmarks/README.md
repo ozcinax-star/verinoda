@@ -17,7 +17,8 @@ results/trust/critique_eval.json            critique evaluation on the labelled 
 results/before-round3/<set>.json            the round-2 measurement, moved here unchanged
 results/before-fixes/<set>.json             the round-1 measurement (05890a1, before the round-2 fixes)
 results/token-multiplier-2026-09-28/        corpus tokens / tokens per question with the facts found, per set
-                                            and approach (benchmarks/token_multiplier.py, from committed files)
+                                            and approach (benchmarks/token_multiplier.py, from committed files);
+                                            corpus.json: the corpus sizes (--measure-corpus, from git objects)
 ```
 
 Sets (question files in `verinoda/benchmark/questions/`, each with a

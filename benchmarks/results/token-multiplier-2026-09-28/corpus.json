@@ -1,0 +1,178 @@
+{
+ "generated_by": "python benchmarks/token_multiplier.py --measure-corpus --graphify-repo <a clone of upstream Graphify with commit 20a20d30>",
+ "method": "git ls-tree + git cat-file of the commit (the committed bytes, no checkout and no line-ending conversion), the benchmark harness's include/exclude; chars = UTF-8 characters with CRLF read as LF; tokens = ceil(chars / 4). runs_recorded: what each run recorded (its bytes are the files as copied or exported at run time)",
+ "corpora": {
+  "examples/orders_app": {
+   "repository": "this repository",
+   "commit": "849ca6379b4b3dd47c6517c45f12499d841ffcd2",
+   "path": "examples/orders_app/",
+   "include": null,
+   "exclude": null,
+   "files": 11,
+   "bytes": 4724,
+   "crlf": 0,
+   "crlf_files": 0,
+   "line_ends": 159,
+   "chars": 4724,
+   "nul_files": 0,
+   "non_utf8_files": 0,
+   "tokens": 1181,
+   "runs_recorded": {
+    "orders_app": {
+     "file": "orders_app.json",
+     "file_count": 11,
+     "bytes": 4726,
+     "snapshot": "working tree (tracked + untracked, not ignored)"
+    },
+    "orders_app_tr": {
+     "file": "orders_app_tr.json",
+     "file_count": 11,
+     "bytes": 4726,
+     "snapshot": "working tree (tracked + untracked, not ignored)"
+    }
+   }
+  },
+  "examples/glow_mod": {
+   "repository": "this repository",
+   "commit": "849ca6379b4b3dd47c6517c45f12499d841ffcd2",
+   "path": "examples/glow_mod/",
+   "include": null,
+   "exclude": null,
+   "files": 37,
+   "bytes": 33709,
+   "crlf": 0,
+   "crlf_files": 0,
+   "line_ends": 910,
+   "chars": 33699,
+   "nul_files": 0,
+   "non_utf8_files": 0,
+   "tokens": 8425,
+   "runs_recorded": {
+    "glow_mod": {
+     "file": "mods-2026-09-24/final/glow_mod.json",
+     "file_count": 37,
+     "bytes": 33709,
+     "snapshot": "working tree (tracked + untracked, not ignored)"
+    }
+   }
+  },
+  "examples/forge_mod": {
+   "repository": "this repository",
+   "commit": "849ca6379b4b3dd47c6517c45f12499d841ffcd2",
+   "path": "examples/forge_mod/",
+   "include": null,
+   "exclude": null,
+   "files": 55,
+   "bytes": 53429,
+   "crlf": 0,
+   "crlf_files": 0,
+   "line_ends": 1527,
+   "chars": 53385,
+   "nul_files": 0,
+   "non_utf8_files": 0,
+   "tokens": 13347,
+   "runs_recorded": {
+    "forge_mod": {
+     "file": "mods-2026-09-24/final/forge_mod.json",
+     "file_count": 55,
+     "bytes": 53429,
+     "snapshot": "working tree (tracked + untracked, not ignored)"
+    }
+   }
+  },
+  "upstream Graphify 20a20d30": {
+   "repository": "upstream Graphify",
+   "commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7",
+   "path": ".",
+   "include": [
+    "graphify",
+    "tests/test_security.py",
+    "tests/test_querylog.py",
+    "pyproject.toml"
+   ],
+   "exclude": [
+    "*/__pycache__/*"
+   ],
+   "files": 226,
+   "bytes": 4583013,
+   "crlf": 0,
+   "crlf_files": 0,
+   "line_ends": 96617,
+   "chars": 4567742,
+   "nul_files": 0,
+   "non_utf8_files": 0,
+   "tokens": 1141936,
+   "runs_recorded": {
+    "graphify_core": {
+     "file": "graphify_core.json",
+     "file_count": 226,
+     "bytes": 4679630,
+     "snapshot": "working tree (tracked + untracked, not ignored)"
+    },
+    "graphify_core_tr": {
+     "file": "graphify_core_tr.json",
+     "file_count": 226,
+     "bytes": 4679630,
+     "snapshot": "working tree (tracked + untracked, not ignored)"
+    }
+   }
+  },
+  "heldout_repoatlas_7371990": {
+   "repository": "this repository",
+   "commit": "849ca6379b4b3dd47c6517c45f12499d841ffcd2",
+   "path": "benchmarks/corpora/heldout_repoatlas_7371990/",
+   "include": [
+    "repoatlas",
+    "tests"
+   ],
+   "exclude": [
+    "repoatlas/project_index/*",
+    "repoatlas/benchmark/questions/*",
+    "tests/fixtures/*",
+    "*/__pycache__/*"
+   ],
+   "files": 106,
+   "bytes": 2189328,
+   "crlf": 2862,
+   "crlf_files": 4,
+   "line_ends": 46561,
+   "chars": 2185725,
+   "nul_files": 0,
+   "non_utf8_files": 0,
+   "tokens": 546432,
+   "runs_recorded": {
+    "heldout_repoatlas": {
+     "file": "heldout_repoatlas.json",
+     "file_count": 106,
+     "bytes": 2189328,
+     "snapshot": "git archive 73719901c9dea49c2e87120ca040c6b998298fe3"
+    }
+   }
+  },
+  "verinoda 3bd1b94": {
+   "repository": "this repository",
+   "commit": "3bd1b94a5cfcd8689d423bcb0dafa06974f8769f",
+   "path": ".",
+   "include": [
+    "verinoda",
+    "pyproject.toml"
+   ],
+   "exclude": [
+    "verinoda/project_index/*",
+    "verinoda/benchmark/questions/*",
+    "verinoda/data/*",
+    "*/__pycache__/*"
+   ],
+   "files": 78,
+   "bytes": 2132839,
+   "crlf": 497,
+   "crlf_files": 2,
+   "line_ends": 43503,
+   "chars": 2131289,
+   "nul_files": 0,
+   "non_utf8_files": 0,
+   "tokens": 532823,
+   "runs_recorded": {}
+  }
+ }
+}
