@@ -100,6 +100,7 @@ PERSISTENCE_TARGET = "(persistence)"
 # and clipped to ECHO_CHARS, the length the views show a sub-question's text with (the plan keeps the whole
 # text; D67).
 PINNED_SHOWN = 3            # versions the "the question names ..." note lists by name (the rest are counted)
+PINNED_CHARS = 60           # ... each on one line of at most this many characters (a URL, a pasted command)
 
 
 @dataclass
@@ -2248,7 +2249,8 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
                  if r in refs and (refs[r].get("version") or {}).get("spec")]
     chosen = [a["choice"] for a in ctx.plan.get("answers") or [] if a.get("clarification_id") == "c-version"
               or any(a.get("clarification_id") == f"c-{r}" for r in sq.get("references") or [])]
-    pinned_elsewhere = [f"{r.get('text')} ({r['version']['spec']})" for r in versioned] + chosen
+    pinned_elsewhere = [f"{tn.clip(r.get('text') or '', PINNED_CHARS)} "
+                        f"({tn.clip(r['version']['spec'], PINNED_CHARS)})" for r in versioned] + chosen
     if pinned_elsewhere and sq["intent"] != "compare_reference":
         extra_unc.append(f"{_pinned_note(pinned_elsewhere)}; these claims describe the working tree "
                          f"at {(ctx.commit or 'uncommitted')[:10]}")

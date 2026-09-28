@@ -2341,7 +2341,9 @@ def get_plan(store, plan_id: str) -> dict | None:
 
 # -- draft (rules) ----------------------------------------------------------------------------------
 
-_TOKEN_RX = re.compile(r"`[^`]+`|\"[^\"]{2,}\"|“[^”]{2,}”|[\w][\w.'’/-]*[\w]|\w", re.UNICODE)
+# Inline code and quotes end on their line: a fenced block (```...```) or a quote left open in a pasted log is
+# not one token, which would be a "name" hundreds of characters long echoed in every link and clarification (D67).
+_TOKEN_RX = re.compile(r"`[^`\n]+`|\"[^\"\n]{2,}\"|“[^”\n]{2,}”|[\w][\w.'’/-]*[\w]|\w", re.UNICODE)
 _UPPER_SNAKE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
 _GENERIC_EN = frozenset("""
 test tests testing function functions method methods class classes code file files module modules line lines call

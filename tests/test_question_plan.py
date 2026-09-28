@@ -949,6 +949,16 @@ def test_draft_restates_a_long_message_briefly(orders):
     assert short["restated_goal_user_lang"] == "Understood (rules): q1 [locate] Where is compute_total defined?"
 
 
+def test_draft_never_takes_a_fenced_block_for_one_name(orders):
+    repo, g, lex = orders
+    msg = ("Where is compute_total defined?\n\n```python\nfrom orders.pricing import compute_total\n"
+           "print(compute_total([]))\n```\n\nIt prints \"0.0\n and then fails.")
+    p = qp.draft(msg, g, lex)
+    assert all("\n" not in m["text"] for m in p["mentions"])
+    assert "compute_total" in {m["text"] for m in p["mentions"]}
+    assert qp.check(p, g, repo, lex)["status"] != "invalid"
+
+
 def test_draft_of_an_english_issue_with_contractions_is_english(orders):
     repo, g, lex = orders
     msg = ("I've seen the total change after a discount. I've checked the tests and we've found nothing: "
