@@ -13,9 +13,11 @@ kind of bug neither side shows alone.
 :func:`problems` lists the mismatches. The Java that runs a function - a command string, the function manager's
 lookup of an identifier, or the project's own helper around it (D69) - is read by :mod:`verinoda.datapack_java`, so
 ``datapack function ns:x`` lists Java callers beside mcfunction ones and a Java call to a function that does not
-exist is a mismatch too. Read from the text as written: a tag or objective name built at run time (``"x" + i``, a
-macro ``$(name)``) is not seen, so a mismatch is a lead to check, not a proof; a function name built at run time is
-listed as dynamic.
+exist is a mismatch too. Read from the text as written: a Java tag constant is the one Java binds (its class's own,
+``Owner.NAME``, a static import; D70), ``c ? A : B`` adds both, and a tag name Java builds at run time (``a.tag +
+"_at"``) is a pattern (``*_at``) that marks a checked tag as maybe added, never as added; an objective name built at
+run time or a macro ``$(name)`` is not seen, so a mismatch is a lead to check, not a proof; a function name built at
+run time is listed as dynamic.
 """
 from __future__ import annotations
 
@@ -40,11 +42,16 @@ _PLAYERS = re.compile(r"(?:^|\s)scoreboard\s+players\s+(set|add|remove|reset|get
 _IF_SCORE = re.compile(r"\b(?:if|unless)\s+score\s+\S+\s+([A-Za-z0-9_.+-]+)(?:\s+(?:[<>=]+)\s+\S+\s+([A-Za-z0-9_.+-]+))?")
 _STORE_SCORE = re.compile(r"\bstore\s+(?:result|success)\s+score\s+\S+\s+([A-Za-z0-9_.+-]+)")
 
-# Java: tags through the entity API, objectives by name
-_J_TAG = re.compile(r"\.(addTag|removeTag|addScoreboardTag|removeScoreboardTag)\s*\(\s*([^()]*?)\s*\)")
-_J_TAG_CHECK = re.compile(r"\.(?:entityTags|getTags|getScoreboardTags|getCommandTags)\s*\(\s*\)\s*\.\s*contains\s*\(\s*"
-                          r"([^()]*?)\s*\)")
+# Java: tags through the entity API (the methods, or the live set `entityTags()` returns), objectives by name
+_J_TAG_CALL = re.compile(r"\.(addTag|removeTag|addScoreboardTag|removeScoreboardTag)\s*\("
+                         r"|\.(?:entityTags|getTags|getScoreboardTags|getCommandTags)\s*\(\s*\)\s*\.\s*(add|remove|contains)"
+                         r"\s*\(")
 _J_STR_CONST = re.compile(r"\bstatic\s+final\s+String\s+([A-Z][A-Z0-9_]*)\s*=\s*\"([^\"\\]*)\"\s*;")
+_J_CONST_DECL = re.compile(r"\bstatic\s+final\s+String\s+([A-Z][A-Z0-9_]*)\s*=\s*([^;]+);")
+_J_CLASS = re.compile(r"\b(?:class|interface|enum|record)\s+([A-Z][\w$]*)[^{;]*\{")
+_J_METHOD = re.compile(r"\b[\w<>\[\], ?]+\s+([a-z][\w$]*)\s*\(([^()]*)\)\s*(?:throws\s+[\w., ]+)?\{")
+_J_STATIC_IMPORT = re.compile(r"^\s*import\s+static\s+(?:[\w$]+\.)*([A-Z][\w$]*)\.([A-Z][A-Z0-9_]*|\*)\s*;", re.M)
+_J_CONST_NAME = re.compile(r"(?:[A-Za-z_$][\w$]*\.)*[A-Z][A-Z0-9_]*")
 _J_STRING = re.compile(r"\"([A-Za-z0-9_.+-]{2,})\"")
 
 
@@ -198,23 +205,204 @@ def functions(repo: Path) -> dict[str, Function]:
     return out
 
 
-def _java_constants(texts: dict[str, str]) -> dict[str, str]:
-    """``NAME`` -> value of every ``static final String NAME = "value";`` of the project (by simple name; a name
-    two classes give different values is dropped)."""
-    seen: dict[str, set[str]] = {}
-    for t in texts.values():
-        for m in _J_STR_CONST.finditer(t):
-            seen.setdefault(m.group(1), set()).add(m.group(2))
-    return {k: next(iter(v)) for k, v in seen.items() if len(v) == 1}
+_J_NOISE = re.compile(r"""//[^\n]*|/\*.*?(?:\*/|\Z)|\"\"\".*?(?:\"\"\"|\Z)|"(?:[^"\\\n]|\\.)*"?|'(?:[^'\\\n]|\\.)*'?""",
+                      re.S)
+_BRACKETS = re.compile(r"[()\[\]{}]")
+_NOT_NEWLINE = re.compile(r"[^\n]")
+_NEWLINE = re.compile(r"\n")
+_TAG_API = re.compile(r"\b(?:add|remove)(?:Scoreboard)?Tag\b|\b(?:entityTags|getTags|getScoreboardTags|getCommandTags)\b")
 
 
-def _java_value(expr: str, consts: dict[str, str]) -> str | None:
+def _blank_match(m: re.Match) -> str:
+    s = m.group(0)
+    if s[:2] in ("//", "/*"):
+        return _NOT_NEWLINE.sub(" ", s)
+    q = '"""' if s.startswith('"""') else s[0]
+    tail = q if len(s) >= 2 * len(q) and s.endswith(q) else ""
+    return q + _NOT_NEWLINE.sub(" ", s[len(q):len(s) - len(tail)]) + tail
+
+
+def _blank(text: str) -> str:
+    """``text`` with the inside of its string and char literals and its comments replaced by spaces (newlines and
+    offsets kept), so a brace, a parenthesis or a call spelled in a string is not code."""
+    return _J_NOISE.sub(_blank_match, text)
+
+
+def _close(text: str, open_pos: int) -> int:
+    """The offset of the bracket closing the one at ``open_pos`` in a :func:`_blank`-ed text, or -1."""
+    opener = text[open_pos]
+    closer = {"(": ")", "[": "]", "{": "}"}[opener]
+    depth = 0
+    for m in _BRACKETS.finditer(text, open_pos):
+        c = m.group()
+        if c == opener:
+            depth += 1
+        elif c == closer:
+            depth -= 1
+            if depth == 0:
+                return m.start()
+    return -1
+
+
+def _top_level(expr: str, chars: str) -> list[int]:
+    """Offsets of ``chars`` in ``expr`` outside brackets and literals (``::`` and ``++`` are not operators here)."""
+    b, depth, out = _blank(expr), 0, []
+    for i, ch in enumerate(b):
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0 and ch in chars and b[i - 1:i + 1] != "::" and b[i:i + 2] not in ("::", "++") \
+                and b[i - 1:i + 1] != "++":
+            out.append(i)
+    return out
+
+
+def _split(expr: str, ch: str) -> list[str]:
+    cuts = _top_level(expr, ch)
+    return [expr[a + 1:b] for a, b in zip([-1] + cuts, cuts + [len(expr)])]
+
+
+class _Consts:
+    """The project's ``static final String`` constants by the class that declares them (D70): ``ETIKET`` in one
+    class and in another are two constants, and a use reads the one Java binds - its own class (or an enclosing
+    one), a class it names (``Croatoan.ETIKET``), a static import, another class of its file - before a name only
+    one class declares. A constant may be built from others (``PREFIX + "_x"``)."""
+
+    def __init__(self, texts: dict[str, str]):
+        self.spans: dict[str, list[tuple[int, int, str]]] = {}         # file -> classes (start, end, name)
+        self.decls: dict[tuple[str, int], dict[str, tuple[str, int]]] = {}  # class -> NAME -> (expr, offset)
+        self.by_class: dict[str, list[tuple[str, int]]] = {}           # simple class name -> classes
+        self.imports: dict[str, list[tuple[str, str]]] = {}            # file -> (owner, NAME or *)
+        self.texts, self._blanked = texts, {}
+        self._memo: dict[tuple[tuple[str, int], str], str | None] = {}
+        for f, t in texts.items():  # the files that declare one; a file that only uses them is read when asked
+            if _J_CONST_DECL.search(t):
+                self.blank(f)
+
+    def blank(self, f: str) -> str:
+        """``f``'s :func:`_blank`-ed text; the first call reads its classes, constants and static imports."""
+        if f not in self._blanked:
+            t = self.texts[f]
+            b = self._blanked[f] = _blank(t)
+            spans = []
+            for m in _J_CLASS.finditer(b):
+                end = _close(b, m.end() - 1)
+                spans.append((m.start(), end if end > 0 else len(b), m.group(1)))
+                self.by_class.setdefault(m.group(1), []).append((f, m.start()))
+            self.spans[f] = spans
+            for m in _J_CONST_DECL.finditer(b):
+                cls = self._innermost(f, m.start())
+                if cls is not None:
+                    self.decls.setdefault(cls, {})[m.group(1)] = (t[m.start(2):m.end(2)], m.start())
+            self.imports[f] = [(m.group(1), m.group(2)) for m in _J_STATIC_IMPORT.finditer(b)]
+        return self._blanked[f]
+
+    def _enclosing(self, f: str, pos: int) -> list[tuple[str, int]]:
+        """The classes of ``f`` around ``pos``, innermost first."""
+        if f in self.texts:
+            self.blank(f)
+        around = [s for s in self.spans.get(f, []) if s[0] <= pos <= s[1]]
+        return [(f, s[0]) for s in sorted(around, key=lambda s: s[0], reverse=True)]
+
+    def _innermost(self, f: str, pos: int) -> tuple[str, int] | None:
+        around = self._enclosing(f, pos)
+        return around[0] if around else None
+
+    def _in(self, cls: tuple[str, int], name: str, depth: int) -> str | None:
+        if (cls, name) not in self._memo:
+            self._memo[(cls, name)] = None  # a constant built from itself stays unknown
+            expr, at = self.decls[cls][name]
+            vals, pats = _values(expr, lambda e, d: self.value(e, cls[0], at, d), depth + 1)
+            self._memo[(cls, name)] = next(iter(vals)) if len(vals) == 1 and not pats else None
+        return self._memo[(cls, name)]
+
+    def _of(self, classes, name: str, depth: int) -> str | None:
+        """The value ``name`` has in ``classes`` when they agree on one."""
+        vals = {self._in(c, name, depth) for c in classes if name in self.decls.get(c, {})}
+        vals.discard(None)
+        return next(iter(vals)) if len(vals) == 1 else None
+
+    def value(self, expr: str, f: str, pos: int, depth: int = 0) -> str | None:
+        """The value of the constant ``expr`` (``NAME``, ``Owner.NAME``, ``pkg.Owner.NAME``) used in ``f`` at
+        ``pos``, or None."""
+        if depth > 8 or not _J_CONST_NAME.fullmatch(expr):
+            return None
+        *owner, name = expr.split(".")
+        if owner and owner[-1] != "this":
+            v = self._of(self.by_class.get(owner[-1], []), name, depth)
+            if v is not None:
+                return v
+        else:
+            for cls in self._enclosing(f, pos):
+                if name in self.decls.get(cls, {}):
+                    return self._in(cls, name, depth)
+            for own, what in self.imports.get(f, []):
+                if what in (name, "*"):
+                    v = self._of(self.by_class.get(own, []), name, depth)
+                    if v is not None:
+                        return v
+            v = self._of([(f, s[0]) for s in self.spans.get(f, [])], name, depth)
+            if v is not None:
+                return v
+        return self._of(list(self.decls), name, depth)
+
+    def unique(self) -> dict[str, str]:
+        """``NAME`` -> value for every name whose declarations that can be read agree on one value (the table
+        :mod:`verinoda.datapack_java` looks names up in)."""
+        names = {n for d in self.decls.values() for n in d}
+        out = {n: self._of(list(self.decls), n, 0) for n in names}
+        return {k: v for k, v in out.items() if v is not None}
+
+
+def _unquote(lit: str) -> str:
+    return re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), lit)
+
+
+def _values(expr: str, const, depth: int = 0) -> tuple[set[str], list[str]]:
+    """What a Java String expression can be: ``(names, patterns)``. A literal or a constant (``const(expr, depth)``)
+    is one name; ``c ? A : B`` is both; a concatenation of known parts is a name, and with an unknown part a pattern
+    (``a.tag + "_at"`` -> ``*_at``); anything else is the pattern ``*``."""
     e = expr.strip()
-    m = re.fullmatch(r"\"([^\"\\]*)\"", e)
+    while e.startswith("(") and _close(_blank(e), 0) == len(e) - 1:
+        e = e[1:-1].strip()
+    if not e or depth > 8:
+        return set(), ["*"]
+    q = _top_level(e, "?")
+    if q:
+        colons = [c for c in _top_level(e, ":") if c > q[0]]
+        # the colon of this conditional: the first one after as many nested conditionals as the branch opens
+        nested = [p for p in q[1:] if p < (colons[0] if colons else len(e))]
+        if len(colons) > len(nested):
+            c = colons[len(nested)]
+            a, b = _values(e[q[0] + 1:c], const, depth + 1), _values(e[c + 1:], const, depth + 1)
+            return a[0] | b[0], a[1] + b[1]
+        return set(), ["*"]
+    parts = _split(e, "+")
+    if len(parts) > 1:
+        options, pattern, exact = [""], "", True
+        for p in parts:
+            vals, pats = _values(p, const, depth + 1)
+            if len(vals) == 1 and not pats:
+                v = next(iter(vals))
+                options = [o + v for o in options]
+                pattern += v.replace("*", "")
+            elif vals and not pats and len(options) * len(vals) <= 16:
+                options = [o + v for o in options for v in sorted(vals)]
+                pattern += "*"
+            else:
+                exact = False
+                pattern += "*"
+        return (set(options), []) if exact else (set(), [re.sub(r"\*+", "*", pattern)])
+    m = re.fullmatch(r"\"((?:[^\"\\]|\\.)*)\"", e)
     if m:
-        return m.group(1)
-    m = re.fullmatch(r"(?:[A-Za-z_$][\w$]*\.)*([A-Z][A-Z0-9_]*)", e)
-    return consts.get(m.group(1)) if m else None
+        return {_unquote(m.group(1))}, []
+    v = const(e, depth) if _J_CONST_NAME.fullmatch(e) else None
+    return ({v}, []) if v is not None else (set(), ["*"])
+
+
+def _pattern_rx(pattern: str) -> re.Pattern:
+    return re.compile(".*".join(re.escape(p) for p in pattern.split("*")))
 
 
 _READ_HINT = re.compile(r"getPlayerScoreInfo|getScore\b|\.value\(\)|getOrCreatePlayerScore\([^)]*\)\s*\.\s*get\b"
@@ -251,46 +439,60 @@ def index(repo: Path, *, java_files: list[str] | None = None, java_calls: bool =
             texts[f] = (repo / f).read_text(encoding="utf-8", errors="replace")
         except OSError:
             pass
-    consts = _java_constants(texts)
+    cx = _Consts(texts)
     java = None
     if java_calls:
         from verinoda import datapack_java
 
-        java = datapack_java.scan(repo, texts, consts=consts)
+        java = datapack_java.scan(repo, texts, consts=cx.unique())
     known_objs = set(objs)
     helpers = _tag_helpers(texts)
+    patterns: list[tuple[str, Site]] = []   # tag names Java builds at run time: (pattern, the add)
+    helper_rx = re.compile(rf"(?<![\w$.])({'|'.join(map(re.escape, sorted(helpers)))})\s*\(") if helpers else None
     for f, t in texts.items():
         lines = t.splitlines()
-        starts = [0]
-        for k, ch in enumerate(t):
-            if ch == "\n":
-                starts.append(k + 1)
+        starts = [0] + [m.end() for m in _NEWLINE.finditer(t)]
 
         def line_of(pos: int) -> int:
             import bisect
             return bisect.bisect_right(starts, pos)
 
-        for m in _J_TAG.finditer(t):
-            name = _java_value(m.group(2), consts)
-            if name:
-                ln = line_of(m.start())
-                kind = "add" if m.group(1).startswith("add") else "remove"
-                tags.setdefault(name, []).append(Site(f, ln, "java", kind, lines[ln - 1].strip()[:160]))
-        for m in _J_TAG_CHECK.finditer(t):
-            name = _java_value(m.group(1), consts)
-            if name:
-                ln = line_of(m.start())
-                tags.setdefault(name, []).append(Site(f, ln, "java", "check", lines[ln - 1].strip()[:160]))
-        if helpers:  # the project's own tag helpers: `tag(e, "x")`, `etiketle(e, HURDA_ETIKET)`
-            for m in re.finditer(r"(?<![\w$.])([a-z][\w$]*)\s*\(([^()]*)\)", t):
+        tagged = _J_TAG_CALL.search(t) or (helper_rx is not None and helper_rx.search(t))
+        b = cx.blank(f) if tagged else ""
+        methods = [(m.start(), {p.split()[-1] for p in m.group(2).split(",") if "String" in p and p.split()})
+                   for m in _J_METHOD.finditer(b)]
+
+        def tag_site(pos: int, expr: str, kind: str) -> None:
+            ln = line_of(pos)
+            site = Site(f, ln, "java", kind, lines[ln - 1].strip()[:160])
+            names, pats = _values(expr, lambda e, d: cx.value(e, f, pos, d))
+            for name in sorted(names):
+                tags.setdefault(name, []).append(site)
+            if kind != "add":
+                return
+            for p in dict.fromkeys(pats):
+                if p == "*" and re.fullmatch(r"[a-z_$][\w$]*", expr.strip()):
+                    own = next((ps for at, ps in reversed(methods) if at < pos), set())
+                    if expr.strip() in own:  # a method handing its own parameter on: its callers name the tag
+                        continue
+                patterns.append((p, site))
+
+        for m in _J_TAG_CALL.finditer(b):
+            end = _close(b, m.end() - 1)
+            if end < 0:
+                continue
+            verb = m.group(1) or m.group(2)
+            kind = "check" if verb == "contains" else "add" if verb.startswith("add") else "remove"
+            tag_site(m.start(), t[m.end():end], kind)
+        if helper_rx is not None:  # the project's own tag helpers: `tag(e, "x")`, `etiketle(e, HURDA_ETIKET)`
+            for m in helper_rx.finditer(b):
                 h = helpers.get(m.group(1))
-                args = m.group(2).split(",")
-                if not h or h[1] >= len(args):
+                end = _close(b, m.end() - 1) if h else -1
+                if end < 0 or re.match(r"\s*(?:\{|throws\b)", b[end + 1:end + 40]):  # the declaration itself
                     continue
-                name = _java_value(args[h[1]], consts)
-                if name:
-                    ln = line_of(m.start())
-                    tags.setdefault(name, []).append(Site(f, ln, "java", h[0], lines[ln - 1].strip()[:160]))
+                args = _split(t[m.end():end], ",")
+                if h[1] < len(args):
+                    tag_site(m.start(), args[h[1]], h[0])
         # commands written as strings in Java (run through the server's command dispatcher)
         for m in re.finditer(r'"((?:[^"\\\n]|\\.){6,})"', t):
             s = m.group(1).replace('\\"', '"')
@@ -322,7 +524,7 @@ def index(repo: Path, *, java_files: list[str] | None = None, java_calls: bool =
                 elif _READ_HINT.search(probe):
                     kind = "read"
             objs.setdefault(name, []).append(Site(f, ln, "java", kind, stmt.strip()[:160]))
-    return {"functions": funcs, "tags": tags, "objectives": objs, "java": java}
+    return {"functions": funcs, "tags": tags, "objectives": objs, "java": java, "tag_patterns": patterns}
 
 
 def _tag_helpers(texts: dict[str, str]) -> dict[str, tuple[str, int]]:
@@ -331,18 +533,21 @@ def _tag_helpers(texts: dict[str, str]) -> dict[str, tuple[str, int]]:
     out: dict[str, set[tuple[str, int]]] = {}
     decl = re.compile(r"\b(?:static\s+)?(?:boolean|void|[A-Z][\w<>]*)\s+([a-z][\w$]*)\s*\(([^)]*String[^)]*)\)\s*\{")
     for text in texts.values():
+        if not _TAG_API.search(text):  # a helper's body calls the tag API
+            continue
         for m in decl.finditer(text):
             body = _method_body(text, m.group(1)) or ""
             if len(body) > 1500:
                 continue
             params = [(k, p.split()[-1]) for k, p in enumerate(m.group(2).split(",")) if "String" in p and p.split()]
+            live = r"(?:entityTags|getTags|getScoreboardTags|getCommandTags)\s*\(\s*\)\s*\.\s*"
             for k, prm in params:
-                if re.search(rf"\.(?:addTag|addScoreboardTag)\s*\(\s*{re.escape(prm)}\s*\)", body):
+                arg = rf"\s*\(\s*{re.escape(prm)}\s*\)"
+                if re.search(rf"\.(?:addTag|addScoreboardTag){arg}|{live}add{arg}", body):
                     out.setdefault(m.group(1), set()).add(("add", k))
-                elif re.search(rf"\.(?:removeTag|removeScoreboardTag)\s*\(\s*{re.escape(prm)}\s*\)", body):
+                elif re.search(rf"\.(?:removeTag|removeScoreboardTag){arg}|{live}remove{arg}", body):
                     out.setdefault(m.group(1), set()).add(("remove", k))
-                elif re.search(rf"(?:entityTags|getTags|getScoreboardTags)\s*\(\s*\)\s*\.\s*contains\s*\(\s*"
-                               rf"{re.escape(prm)}\s*\)", body):
+                elif re.search(rf"{live}contains{arg}", body):
                     out.setdefault(m.group(1), set()).add(("check", k))
     return {k: next(iter(v)) for k, v in out.items() if len(v) == 1}
 
@@ -374,12 +579,19 @@ def problems(ix: dict) -> dict:
     macro = [s.at for s in ix["tags"].get("*", [])]
     if macro:  # tags a macro fills in cannot be matched: said, not guessed
         out["tags_added_by_macros"] = macro[:10]
+    built = [{"at": s.at, "pattern": p} for p, s in ix.get("tag_patterns") or []]
+    if built:  # tag names Java builds at run time: matched as patterns, never as a name
+        out["tags_added_dynamically"] = built
     for name, sites in sorted(ix["tags"].items()):
         if name == "*":
             continue
         kinds = {s.kind for s in sites}
         if "check" in kinds and "add" not in kinds:
-            out["tags_checked_never_added"].append({"name": name, "sites": [s.at for s in sites if s.kind == "check"]})
+            row = {"name": name, "sites": [s.at for s in sites if s.kind == "check"]}
+            maybe = _maybe_added_by(ix, name)
+            if maybe:  # no add spells it, but a name built at run time may be it: a lead, not "never"
+                row["maybe_added_by"] = maybe
+            out["tags_checked_never_added"].append(row)
         elif "add" in kinds and "check" not in kinds:
             out["tags_added_never_checked"].append({"name": name, "sites": [s.at for s in sites if s.kind == "add"]})
     for name, sites in sorted(ix["objectives"].items()):
@@ -400,6 +612,13 @@ def problems(ix: dict) -> dict:
                                              "caller": c.caller, **({"helper": c.helper} if c.helper else {}),
                                              **({"tree": c.tree} if c.tree else {})})
     return out
+
+
+def _maybe_added_by(ix: dict, name: str) -> list[dict]:
+    """The Java adds whose name, built at run time, fits ``name`` (``*_at`` fits ``olum_at``); a name nothing about
+    is known (``*``) fits every tag and is listed in the summary only."""
+    return [{"at": s.at, "pattern": p} for p, s in ix.get("tag_patterns") or []
+            if p != "*" and _pattern_rx(p).fullmatch(name)]
 
 
 def _called_by(funcs: dict[str, Function], fid: str) -> list[tuple[str, int, str, str | None]]:
@@ -457,18 +676,21 @@ def lookup(repo: Path, what: str | None = None, name: str | None = None) -> dict
                                                             "entity tags in Java"}
         return {**base, "status": "found", "kind": "summary", "problems": problems(ix),
                 **({"java": _java_summary(ix["java"])} if ix.get("java") is not None else {}),
-                "note": "read from the text: names built at run time are not seen (a function's is listed as "
-                        "dynamic); a mismatch is a lead"}
+                "note": "read from the text: a name built at run time is not a name (a function's is listed as "
+                        "dynamic, a Java tag's matched as a pattern); a mismatch is a lead"}
     if what in ("tag", "score", "objective"):
         table = ix["tags"] if what == "tag" else ix["objectives"]
         sites = table.get(name or "")
+        maybe = _maybe_added_by(ix, name or "") if what == "tag" else []
         if not sites:
             from difflib import get_close_matches
 
             return {**base, "status": "not_found", "kind": what, "name": name,
-                    "nearest": get_close_matches(name or "", [k for k in table if k != "*"], n=5)}
+                    "nearest": get_close_matches(name or "", [k for k in table if k != "*"], n=5),
+                    **({"maybe_added_by": maybe} if maybe else {})}
         return {**base, "status": "found", "kind": what, "name": name,
-                "sites": [{"at": s.at, "lang": s.lang, "kind": s.kind, "text": s.text} for s in sites]}
+                "sites": [{"at": s.at, "lang": s.lang, "kind": s.kind, "text": s.text} for s in sites],
+                **({"maybe_added_by": maybe} if maybe else {})}
     if what == "function":
         fn = ix["functions"].get(name or "")
         java_calls, maybe, bare = _java_rows(ix, name or "")
@@ -520,6 +742,7 @@ def render(res: dict) -> str:
             out.append(f"  Java calls it, and the datapacks have no {res['name']}:")
             out += ["  " + _java_line(c) for c in res["called_by"]]
         out += ["  " + _dynamic_line(c) + " - may be this one" for c in res.get("dynamic") or []]
+        out += [f"  dynamic: {_built_add(d)} - may be this one" for d in res.get("maybe_added_by") or []]
         return "\n".join(out)
     if res["kind"] == "summary":
         out = [head]
@@ -535,11 +758,15 @@ def render(res: dict) -> str:
                 where = r.get("called_at") or ", ".join(r.get("sites", [])[:2])
                 java = f" (Java {r['caller']}, {r['how'][5:].replace('-', ' ')})" if r.get("caller") else ""
                 tree = f" [reference tree {r['tree']}]" if r.get("tree") else ""
-                out.append(f"  {r['name']}  {where}{java}{tree}")
+                out.append(f"  {r['name']}  {where}{java}{tree}{_maybe_note(r.get('maybe_added_by'))}")
             if len(rows) > 15:
                 out.append(f"  (+{len(rows) - 15} more: --json)")
         if pr.get("tags_added_by_macros"):
             out.append("tags a macro fills in (not matched): " + ", ".join(pr["tags_added_by_macros"][:3]))
+        built = pr.get("tags_added_dynamically") or []
+        if built:
+            out.append(f"tag names Java builds at run time ({len(built)}): "
+                       + ", ".join(_built_add(d) for d in built[:3]) + (" ..." if len(built) > 3 else ""))
         java = res.get("java")
         if java:
             by = ", ".join(f"{k.replace('-', ' ')} {v}" for k, v in sorted(java["by_via"].items()))
@@ -583,4 +810,17 @@ def render(res: dict) -> str:
         return "\n".join(out)
     out = [f"{res['kind']} {res['name']}: {len(res['sites'])} site(s)"]
     out += [f"  {s['kind']:<6} {s['lang']:<10} {s['at']}: {s['text']}" for s in res["sites"][:40]]
+    out += [f"  maybe  java       {_built_add(d)} (a name built at run time)" for d in res.get("maybe_added_by") or []]
     return "\n".join(out)
+
+
+def _built_add(d: dict) -> str:
+    return f"{d['at']} adds " + (d["pattern"] if d["pattern"] != "*" else "a name the text does not spell")
+
+
+def _maybe_note(maybe: list[dict] | None) -> str:
+    """``  (maybe added by Atlilar.java:751: *_at)`` after a tag checked but never added by name."""
+    if not maybe:
+        return ""
+    shown = ", ".join(f"{d['at']}: {d['pattern']}" for d in maybe[:2])
+    return f"  (maybe added by {shown}" + (f" +{len(maybe) - 2} more" if len(maybe) > 2 else "") + ")"

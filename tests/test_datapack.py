@@ -159,3 +159,180 @@ def test_links_whose_target_is_gone_are_skipped_not_fatal(tmp_path):
         pytest.skip("links cannot be made here")
     res = datapack.lookup(root, None, None)
     assert res["functions"] == 1 and res["status"] == "found"
+
+
+# D70 (GitHub issue #2): tags added through a class's own constant, a conditional, the live tag set, or a name built
+# at run time. Two classes give ETIKET different values; each call site reads its own class's (or the one it names).
+TAGS = {
+    "src/main/java/mod/Croatoan.java": """package mod;
+
+public class Croatoan {
+    public static final String ETIKET = "croat";
+
+    void mark(Villager sakin) {
+        sakin.addTag(ETIKET);
+    }
+}
+""",
+    "src/main/java/mod/Musallat.java": """package mod;
+
+public class Musallat {
+    private static final String ETIKET = "musallat";
+    static final String ESKI_KOYLU = "musallat_koylu";
+    static final String ESKI_SAKIN = "musallat_sakin";
+    static final String KORUMALI = "musallat_korumali";
+
+    void haunt(Entity vucut, boolean koyluydu) {
+        vucut.addTag(koyluydu ? ESKI_KOYLU : ESKI_SAKIN);
+        vucut.addTag(ETIKET);
+    }
+
+    boolean was(Entity e) {
+        return e.entityTags().contains(ESKI_KOYLU) || e.entityTags().contains(ESKI_SAKIN)
+            || e.entityTags().contains(ETIKET);
+    }
+
+    boolean guarded(Entity e) {
+        return e.entityTags().contains(KORUMALI);
+    }
+}
+""",
+    "src/main/java/mod/LuciferTeklifi.java": """package mod;
+
+public class LuciferTeklifi {
+    boolean taken(Entity e) {
+        return e.entityTags().contains(Croatoan.ETIKET);
+    }
+}
+""",
+    "src/main/java/mod/Atlilar.java": """package mod;
+
+public class Atlilar {
+    void mount(Entity at, Rider a) {
+        at.addTag(a.tag + "_at");
+    }
+
+    boolean deathHorse(Entity e) {
+        return e.entityTags().contains("olum_at");
+    }
+
+    static void tagAll(Entity e, String tag) {
+        e.addTag(tag);
+    }
+}
+""",
+    "src/main/java/mod/Inis.java": """package mod;
+
+public class Inis {
+    static final String HURDA_ETIKET = "yikim_hurda";
+
+    void wreck(Entity araba) {
+        araba.entityTags().add(HURDA_ETIKET);
+    }
+
+    boolean wrecked(Entity e) {
+        return e.entityTags().contains(HURDA_ETIKET);
+    }
+
+    void repair(Entity araba) {
+        araba.getTags().remove(HURDA_ETIKET);
+    }
+}
+""",
+}
+
+
+@pytest.fixture()
+def tag_repo(tmp_path) -> Path:
+    root = tmp_path / "mod"
+    for rel, text in TAGS.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(text.encode("utf-8"))
+    return root
+
+
+def _line(rel: str, needle: str) -> str:
+    return f"{rel}:{next(i for i, t in enumerate(TAGS[rel].splitlines(), 1) if needle in t)}"
+
+
+def test_tags_added_through_constants_conditionals_and_the_live_set(tag_repo):
+    ix = datapack.index(tag_repo, java_calls=False)
+    sites = lambda name: {(s.at, s.kind) for s in ix["tags"].get(name, [])}  # noqa: E731
+    croat = sites("croat")
+    assert (_line("src/main/java/mod/Croatoan.java", "sakin.addTag"), "add") in croat          # own class's ETIKET
+    assert (_line("src/main/java/mod/LuciferTeklifi.java", "Croatoan.ETIKET"), "check") in croat  # Owner.NAME
+    assert (_line("src/main/java/mod/Musallat.java", "addTag(ETIKET)"), "add") in sites("musallat")
+    koylu = _line("src/main/java/mod/Musallat.java", "koyluydu ?")
+    assert (koylu, "add") in sites("musallat_koylu") and (koylu, "add") in sites("musallat_sakin")
+    inis = "src/main/java/mod/Inis.java"
+    assert sites("yikim_hurda") >= {(_line(inis, "entityTags().add"), "add"), (_line(inis, "getTags().remove"), "remove"),
+                                    (_line(inis, "contains(HURDA"), "check")}
+
+
+def test_a_checked_tag_a_built_name_may_add_is_marked_not_dropped(tag_repo):
+    pr = datapack.problems(datapack.index(tag_repo, java_calls=False))
+    rows = {r["name"]: r for r in pr["tags_checked_never_added"]}
+    assert set(rows) == {"musallat_korumali", "olum_at"}         # croat, musallat_koylu, yikim_hurda are added
+    built = _line("src/main/java/mod/Atlilar.java", "_at\")")
+    assert rows["olum_at"]["maybe_added_by"] == [{"at": built, "pattern": "*_at"}]
+    assert "maybe_added_by" not in rows["musallat_korumali"]      # nothing could add it: never added
+    assert pr["tags_added_dynamically"] == [{"at": built, "pattern": "*_at"}]   # a helper's own parameter is not one
+
+
+def test_datapack_summary_and_tag_lookup_render_the_dynamic_add(tag_repo, capsys):
+    assert cli.main(["datapack", "--repo", str(tag_repo)]) == 0
+    out = capsys.readouterr().out
+    built = _line("src/main/java/mod/Atlilar.java", "_at\")")
+    assert "tags checked but never added (2):" in out
+    assert f"olum_at  {_line('src/main/java/mod/Atlilar.java', 'contains(')}  (maybe added by {built}: *_at)" in out
+    assert f"tag names Java builds at run time (1): {built} adds *_at" in out
+    assert cli.main(["datapack", "tag", "croat", "--repo", str(tag_repo)]) == 0
+    out = capsys.readouterr().out
+    assert f"add    java       {_line('src/main/java/mod/Croatoan.java', 'sakin.addTag')}" in out
+
+
+def test_values_of_a_string_expression():
+    known = {"A": "a", "B": "b", "PRE": "pre_"}
+    const = lambda e, d: known.get(e.rsplit(".", 1)[-1])  # noqa: E731
+    v = lambda e: datapack._values(e, const)  # noqa: E731
+    assert v('"x"') == ({"x"}, []) and v("(A)") == ({"a"}, [])
+    assert v("c ? A : B") == ({"a", "b"}, [])
+    assert v("c ? A : d ? B : \"z\"") == ({"a", "b", "z"}, [])
+    assert v("c ? d ? A : B : \"z\"") == ({"a", "b", "z"}, [])
+    assert v('c ? "q?" : "r:"') == ({"q?", "r:"}, [])            # a ? or : in a literal is not the operator
+    assert v('PRE + "x"') == ({"pre_x"}, []) and v('PRE + (c ? A : B)') == ({"pre_a", "pre_b"}, [])
+    assert v('a.tag + "_at"') == (set(), ["*_at"]) and v('PRE + i + "_" + j') == (set(), ["pre_*_*"])
+    assert v("name") == (set(), ["*"]) and v('String.format("%s_x", n)') == (set(), ["*"])
+
+
+def test_constants_bind_where_java_binds_them():
+    texts = {
+        "a/Tags.java": 'package a;\npublic final class Tags {\n    public static final String BASE = "mod_";\n'
+                       '    public static final String HURDA = BASE + "hurda";\n'
+                       '    public static final String ETIKET = "tags";\n}\n',
+        "b/Uses.java": 'package b;\nimport static a.Tags.HURDA;\nclass Uses {\n    static final String ETIKET = "uses";\n'
+                       '    static class Inner {\n        static final String ETIKET = "inner";\n'
+                       '        void f() { x(ETIKET); }\n    }\n    void g() { x(ETIKET); x(HURDA); }\n}\n',
+        "c/Loop.java": 'class Loop {\n    static final String SELF = SELF + "x";\n    // static final String GHOST = "g";\n}\n',
+    }
+    cx = datapack._Consts(texts)
+    at = lambda f, needle: texts[f].index(needle)  # noqa: E731
+    assert cx.value("HURDA", "a/Tags.java", at("a/Tags.java", "HURDA")) == "mod_hurda"
+    assert cx.value("ETIKET", "b/Uses.java", at("b/Uses.java", "void f")) == "inner"
+    assert cx.value("ETIKET", "b/Uses.java", at("b/Uses.java", "void g")) == "uses"
+    assert cx.value("HURDA", "b/Uses.java", at("b/Uses.java", "void g")) == "mod_hurda"   # the static import
+    assert cx.value("Tags.ETIKET", "b/Uses.java", 0) == "tags"
+    assert cx.value("ETIKET", "c/Loop.java", 0) is None                  # three classes disagree: not guessed
+    assert cx.value("SELF", "c/Loop.java", at("c/Loop.java", "SELF")) is None and cx.value("GHOST", "c/Loop.java", 0) is None
+    assert cx.unique() == {"BASE": "mod_", "HURDA": "mod_hurda"}
+
+
+def test_a_tag_call_in_a_comment_or_string_is_not_one(tmp_path):
+    src = tmp_path / "m" / "src" / "A.java"
+    src.parent.mkdir(parents=True)
+    src.write_text('class A {\n    // e.addTag("ghost");\n    String s = "e.addTag(\\"ghost2\\")";\n'
+                   '    /* e.entityTags().add("ghost3"); */ void f(Entity e) { e.entityTags().add("real"); }\n}\n',
+                   encoding="utf-8")
+    ix = datapack.index(tmp_path / "m", java_calls=False)
+    assert set(ix["tags"]) == {"real"} and ix["tag_patterns"] == []
