@@ -1,5 +1,7 @@
 # D66-index-speed (pending doc text for the operator to merge)
 
+Section numbers are left as `NN` for the operator (the next free DESIGN.md section).
+
 ## DESIGN section
 
 ## NN. Faster scans: the file list from git, one parse, one commit, a renamed search build (D66, 2026-09-28)
@@ -24,8 +26,10 @@ reader could meet a half-built index and a failed build left none.
   applies; the user's global excludes file is not passed because the walk never read it. Everything else
   the walk decides is still decided the same way: noise dirs and the output dir are pruned whatever git says,
   `.graphifyignore` and `--exclude` rules (root chain and each directory's own file) are evaluated per
-  directory and per file, skipped names, sensitive files, and symlinks (an lstat per file; the realpath
-  check only for links). The walk still runs for a nested repository or an untracked worktree (git lists
+  directory and per file, skipped names, sensitive files, and links: an lstat per file (the realpath check
+  only for a link), and a realpath once per directory, because git lists files through a Windows junction
+  as through a directory while the walk's per-file realpath check kept a junction out of the root out. The
+  walk still runs for a nested repository or an untracked worktree (git lists
   it as `dir/`), a `.gitmodules` file, a `!` rule in .graphifyignore (it may re-include a file .gitignore
   drops, which git never lists), a git failure, or `enumeration="walk"`. The result says which ran
   (`"enumeration"`); `ignored` on the git path is git's report of what .gitignore dropped (a wholly ignored
@@ -42,7 +46,12 @@ reader could meet a half-built index and a failed build left none.
   cannot be replaced (Windows), the pages are copied into it with SQLite's backup API. A failed build leaves
   the old index; build files a killed build left are removed after an hour.
 - Not done: lexicon and anchors still parse Python separately (report item 6b), the three derived passes
-  still run one after the other (6e), and definition spans are not stored in graph nodes (item 9).
+  still run one after the other (6e), and definition spans are not stored in graph nodes (item 9). Every
+  update still builds `ignored_predicate(gitignore=True)` in `watch._rebuild_code` for its reconcile step,
+  which runs `git ls-files` and evaluates the .gitignore rules for the graph's files: part of the update
+  cost the report put on detect() remains there. The parse sharing of the sidecar is bounded by
+  `index._CACHE_MAX` (4,096 entries, cleared wholesale): a repository with more Python files than that
+  gets part of the gain (an existing limit).
 
 ### NN.3 Measured
 
@@ -61,7 +70,7 @@ replicates differ by up to 2x. The django checkout was copied without its `.veri
   update 2; wall seconds): before BEFORE_NUMBERS; after AFTER_NUMBERS.
 - Tests: `tests/test_detect_git.py` (git list == walk on a repository with tracked-but-ignored, nested
   .gitignore, info/exclude, .graphifyignore dir and file, --exclude, a deleted tracked file, a noise dir,
-  the output dir, symlinks where available; the walk for a negation, a nested repository, .gitmodules, no
+  the output dir, symlinks where available, a junction out of the root on Windows; the walk for a negation, a nested repository, .gitmodules, no
   .gitignore, a git failure), `tests/test_search_build.py` (every table of the renamed build equals a build
   through the ordinary connection and the default location, on two examples; a held index rebuilt through
   the backup API; a failed build leaves the old index), `tests/test_anchors.py`
