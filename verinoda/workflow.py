@@ -176,11 +176,12 @@ def _scan(store: Store, repo: Path, *, force: bool) -> dict:
     missing_before = index.missing_source_files(repo) if had_graph else []
     asked = force  # `scan --force`: derived data, the per-file caches included, is rebuilt from the files
     force = force or not had_graph or bool(missing_before)
+    configs = _config_digests(repo)
     stats = index.build(repo, force=force, prune_missing=True, fresh_caches=asked)
     t_index = time.monotonic() - t0
     if not stats.get("ok", True):
         return {**_index_refused(store, repo, stats, force=force), "index_seconds": round(t_index, 3)}
-    buildlock.record_build(repo, graph_seconds=t_index, files=stats.get("files"))
+    buildlock.record_build(repo, graph_seconds=t_index, files=stats.get("files"), configs=configs)
     before = store.latest_snapshot()
     stats, pruned, dangling = _no_missing_files(repo, stats, store.snapshot_files(before["id"]) if before else ())
     snap = take_snapshot(store, repo, graph_stats=stats)
@@ -196,13 +197,34 @@ def _scan(store: Store, repo: Path, *, force: bool) -> dict:
         out["pruned_missing_files"] = pruned[:20]
     if dangling:
         out["dropped_dangling_references"] = {"count": len(dangling), "files": dangling[:20]}
+    if stats.get("own_files_dropped"):  # Verinoda's own files the build still had nodes of (D68)
+        out["own_files_dropped"] = stats["own_files_dropped"][:20]
     return out
+
+
+def _config_digests(repo: Path, files=None) -> dict[str, str]:
+    """The MCP configs' digests to record with a graph build (:func:`verinoda.selffiles.config_digests`),
+    taken before the build reads the files: a config edited meanwhile then differs from its recorded digest
+    and rebuilds the graph next time, instead of passing for what the graph read. ``files``: the listing
+    at hand (else the project is listed)."""
+    from verinoda import selffiles
+    from verinoda.snapshot import listed_files
+
+    try:
+        return selffiles.config_digests(repo, files if files is not None else listed_files(repo))
+    except Exception:  # noqa: BLE001 - no digest: a change to the config rebuilds the graph, as before D68
+        return {}
 
 
 def _graph_affected(repo: Path, diff: dict, in_graph: set[str] | None = None) -> bool:
     """Can the changed files change the code graph? A file the graph has nodes from, or a new file
-    the extractor reads (code, package manifests). An edited README, data file or document is
-    only re-indexed for search: rebuilding the graph for it costs as much as for a code edit.
+    the extractor reads (code, package manifests). An edited file the graph has no nodes from (a
+    data file) is only re-indexed for search: rebuilding the graph for it costs as much as for a
+    code edit. A Markdown document, a README included, has nodes (its headings), so editing one
+    still rebuilds the whole graph (D68 measured it; not changed).
+    An MCP config (``.mcp.json``) whose content, Verinoda's own server entry left out, is what the last
+    graph build read does not count either: ``verinoda setup`` rewrites that entry whenever another
+    interpreter runs it, and the graph never has it (:mod:`verinoda.selffiles`, D68).
     ``in_graph``: the graph's files when a loaded graph gives them (else graph.json is read)."""
     from verinoda.project_index.detect import FileType, classify_file
 
@@ -211,7 +233,15 @@ def _graph_affected(repo: Path, diff: dict, in_graph: set[str] | None = None) ->
             in_graph = index.graph_source_files(repo)
         except Exception:  # noqa: BLE001 - no readable graph: rebuild
             return True
-    if any(f in in_graph for f in diff["modified"] + diff["removed"]):
+    modified = [f for f in diff["modified"] if f in in_graph]
+    if modified:
+        from verinoda.selffiles import config_digest, is_mcp_config
+
+        if any(is_mcp_config(f) for f in modified):
+            read = buildlock.recorded_configs(repo)
+            modified = [f for f in modified
+                        if not (is_mcp_config(f) and f in read and config_digest(repo / f) == read[f])]
+    if modified or any(f in in_graph for f in diff["removed"]):
         return True
     from verinoda.project_index.extract import _get_extractor
 
@@ -346,6 +376,7 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
         changed += behind
     t0 = time.monotonic()
     stats = None
+    configs: dict[str, str] = {}
     index_mode = "none"
     forced = False
     # a graph an older extraction built (an upgrade): rebuilt once, even when no file changed - unchanged files
@@ -361,6 +392,7 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
         # are lost (orders_app: editing service.py dropped its 4 edges into pricing.py and
         # repository.py). The whole corpus is re-extracted instead; unchanged files come
         # from the AST cache.
+        configs = _config_digests(repo, state["files"])
         stats = index.build(repo, prune_missing=True)
         index_mode = "full"
         if not stats.get("ok", True) and diff["removed"]:
@@ -370,7 +402,7 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
             forced = True
     t_index = time.monotonic() - t0
     if stats is not None and stats.get("ok", True):
-        buildlock.record_build(repo, graph_seconds=t_index, files=stats.get("files"))
+        buildlock.record_build(repo, graph_seconds=t_index, files=stats.get("files"), configs=configs)
     if stats is not None and not stats.get("ok", True):
         return {**_index_refused(store, repo, stats, force=forced, files=state["files"]),
                 "changed": diff, "changed_count": len(changed), "mode": "index_refused",
@@ -401,6 +433,8 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
         out["pruned_missing_files"] = pruned[:20]
     if dangling:
         out["dropped_dangling_references"] = {"count": len(dangling), "files": dangling[:20]}
+    if (stats or {}).get("own_files_dropped"):  # Verinoda's own files the build still had nodes of (D68)
+        out["own_files_dropped"] = stats["own_files_dropped"][:20]
     return out
 
 

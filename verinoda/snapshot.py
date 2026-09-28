@@ -114,8 +114,16 @@ def _is_file(p: Path) -> bool:
 
 
 def list_files(repo: Path) -> list[str]:
-    """Repo-relative POSIX paths of tracked + untracked-not-ignored files."""
+    """Repo-relative POSIX paths of tracked + untracked-not-ignored files.
+
+    Verinoda's own agent-integration files (files carrying its ownership marker in a skill folder at any
+    depth, or listed by its install manifest) are never listed, tracked or not: they are not the
+    project's (:mod:`verinoda.selffiles`, D68).
+    """
+    from verinoda.selffiles import own_filter
+
     repo = Path(repo).resolve()
+    own = own_filter(repo)
     tracked = git(repo, "ls-files", "-z", "--cached")
     if tracked is not None:
         # a tracked build/ or dist/ is source (a Java package named `build`); an untracked,
@@ -123,12 +131,14 @@ def list_files(repo: Path) -> list[str]:
         others = git(repo, "ls-files", "-z", "--others", "--exclude-standard") or ""
         rels = {r for r in tracked.split("\0") if r and not set(Path(r).parts) & _GIT_SKIP_DIRS}
         rels |= {r for r in others.split("\0") if r and not set(Path(r).parts) & _SKIP_DIRS}
-        return sorted(r for r in rels if _is_file(repo / r))
+        return sorted(r for r in rels if not own(r) and _is_file(repo / r))
     rels = []
     for dirpath, dirnames, filenames in os.walk(repo):
         dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and not d.endswith(".egg-info")]
         for fn in filenames:
-            rels.append((Path(dirpath) / fn).relative_to(repo).as_posix())
+            rel = (Path(dirpath) / fn).relative_to(repo).as_posix()
+            if not own(rel):
+                rels.append(rel)
     return sorted(rels)
 
 

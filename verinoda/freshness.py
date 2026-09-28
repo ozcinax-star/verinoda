@@ -296,6 +296,11 @@ def check(repo: Path, *, with_new: bool = True) -> dict:
                         n_files += 1
                 if n_files >= MAX_NEW_FOLDER_FILES:
                     break
+    if new:  # Verinoda's own files are never listed (verinoda.selffiles, D68): no update could add them
+        from verinoda.selffiles import own_filter
+
+        own = own_filter(repo)
+        new = [r for r in new if not own(r)]
     new = _new_listed(root, snap, sorted(new))
     files = modified + new + sorted(removed)
     return {"checked": True, "snapshot": snap, "count": len(files), "files": files,

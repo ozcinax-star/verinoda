@@ -267,9 +267,11 @@ def recorded_extraction(repo: Path) -> str | None:
     return v if isinstance(v, str) else None
 
 
-def record_build(repo: Path, *, graph_seconds: float | None, files: int | None) -> None:
+def record_build(repo: Path, *, graph_seconds: float | None, files: int | None,
+                 configs: dict[str, str] | None = None) -> None:
     """Remember how long the last graph build took and which extraction made it (``build_stats.json`` beside
-    the index)."""
+    the index). ``configs``: the digest of each MCP config the build read, Verinoda's own server entry left
+    out (:func:`verinoda.selffiles.config_digest`, taken before the build read the files)."""
     if graph_seconds is None:
         return
     from verinoda.paths import index_dir
@@ -279,11 +281,24 @@ def record_build(repo: Path, *, graph_seconds: float | None, files: int | None) 
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_name(p.name + ".tmp")
         tmp.write_text(json.dumps({"graph_seconds": round(float(graph_seconds), 3), "files": files,
-                                   "at": time.time(), "extraction": extraction_stamp(repo)}) + "\n",
+                                   "at": time.time(), "extraction": extraction_stamp(repo),
+                                   **({"configs": configs} if configs else {})}) + "\n",
                        encoding="utf-8")
         tmp.replace(p)
     except OSError:
         pass
+
+
+def recorded_configs(repo: Path) -> dict[str, str]:
+    """``{path: digest}`` of the MCP configs the last recorded graph build read (see :func:`record_build`)."""
+    from verinoda.paths import index_dir
+
+    try:
+        data = json.loads((index_dir(Path(repo)) / STATS_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    v = data.get("configs") if isinstance(data, dict) else None
+    return {k: d for k, d in v.items() if isinstance(k, str) and isinstance(d, str)} if isinstance(v, dict) else {}
 
 
 def last_build_seconds(repo: Path) -> float | None:

@@ -65,14 +65,12 @@ from typing import Any
 
 from verinoda.project_index.ids import make_id as _shared_make_id
 from verinoda.project_index.security import sanitize_label
+from verinoda.selffiles import MCP_CONFIG_NAMES, is_own_mcp_entry
 
 
-MCP_CONFIG_FILENAMES: frozenset[str] = frozenset({
-    ".mcp.json",
-    "claude_desktop_config.json",
-    "mcp.json",
-    "mcp_servers.json",
-})
+# .mcp.json, claude_desktop_config.json, mcp.json, mcp_servers.json - one list with the check that a
+# change to Verinoda's own entry in one of them does not rebuild the graph (Verinoda patch, D68)
+MCP_CONFIG_FILENAMES: frozenset[str] = MCP_CONFIG_NAMES
 
 _MAX_BYTES = 1_048_576  # 1 MiB — same cap as extract_json
 _MAX_SERVERS_PER_FILE = 200  # generous; flags pathological configs
@@ -147,6 +145,10 @@ def extract_mcp_config(path: Path) -> dict[str, Any]:
         if not isinstance(spec, dict):
             # Skip non-object server entries silently — the broken entry is
             # the user's, not ours.
+            continue
+        if is_own_mcp_entry(server_name, spec):
+            # Verinoda patch (D68): Verinoda's own server entry, written by `verinoda setup` with the path of
+            # the interpreter that ran it, is not the project's; it never shapes the project's graph
             continue
         if server_count >= _MAX_SERVERS_PER_FILE:
             break
