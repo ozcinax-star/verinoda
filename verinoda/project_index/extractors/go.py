@@ -108,6 +108,31 @@ def extract_go(path: Path) -> dict:
     edges: list[dict] = []
     seen_ids: set[str] = set()
     function_bodies: list[tuple[str, object]] = []
+    # Local change (Verinoda): a method's own receiver (name, type) and the methods of each receiver type of this
+    # file, so `c.m()` on the method's own receiver binds to its type's `m` and no other selector call binds to a
+    # same-named function of the file.
+    own_receiver_of: dict[str, tuple[str | None, str]] = {}
+    methods_by_type: dict[tuple[str, str], str] = {}
+    param_types_of: dict[str, dict[str, str]] = {}  # function -> parameter name -> its declared local type
+
+    def _param_types(func_node) -> dict[str, str]:
+        """Parameters declared with a type of this package (`h *metricHistory`, `c Context`); not `pkg.T`,
+        slices, maps or funcs."""
+        out: dict[str, str] = {}
+        params = func_node.child_by_field_name("parameters")
+        for param in (params.children if params is not None else ()):
+            if param.type != "parameter_declaration":
+                continue
+            type_node = param.child_by_field_name("type")
+            if type_node is None:
+                continue
+            tname = _read_text(type_node, source).lstrip("*").split("[", 1)[0].strip()
+            if not tname.isidentifier():
+                continue
+            for child in param.children:
+                if child.type == "identifier" and child != type_node:
+                    out[_read_text(child, source)] = tname
+        return out
     # local package name (including aliases) -> written Go import path
     go_imported_pkgs: dict[str, str] = {}
 
@@ -281,6 +306,7 @@ def extract_go(path: Path) -> dict:
                 add_node(func_nid, f"{func_name}()", line)
                 add_edge(file_nid, func_nid, "contains", line)
                 emit_go_method_refs(node, func_nid, line)
+                param_types_of[func_nid] = _param_types(node)
                 body = node.child_by_field_name("body")
                 if body:
                     function_bodies.append((func_nid, body))
@@ -289,12 +315,16 @@ def extract_go(path: Path) -> dict:
         if t == "method_declaration":
             receiver = node.child_by_field_name("receiver")
             receiver_type: str | None = None
+            receiver_name: str | None = None
             if receiver:
                 for param in receiver.children:
                     if param.type == "parameter_declaration":
                         type_node = param.child_by_field_name("type")
                         if type_node:
                             receiver_type = _read_text(type_node, source).lstrip("*").strip()
+                        rname = param.child_by_field_name("name")
+                        if rname is not None:
+                            receiver_name = _read_text(rname, source)
                         break
             name_node = node.child_by_field_name("name")
             if not name_node:
@@ -308,6 +338,11 @@ def extract_go(path: Path) -> dict:
                 method_nid = symbol_nid(_make_id(parent_nid, method_name), method_name)
                 add_node(method_nid, f".{method_name}()", line)
                 add_edge(parent_nid, method_nid, "method", line)
+                own_type = receiver_type.split("[", 1)[0].strip()
+                methods_by_type.setdefault((own_type, method_name), method_nid)
+                own_receiver_of[method_nid] = (
+                    receiver_name if receiver_name and receiver_name != "_" else None, own_type)
+                param_types_of[method_nid] = _param_types(node)
             else:
                 method_nid = symbol_nid(_make_id(stem, method_name), method_name)
                 add_node(method_nid, f"{method_name}()", line)
@@ -458,10 +493,13 @@ def extract_go(path: Path) -> dict:
     walk(root)
 
     label_to_nid: dict[str, str] = {}
+    bare_label_to_nid: dict[str, str] = {}  # without methods: a bare `f()` never calls a method
     for n in nodes:
         raw = n["label"]
         normalised = raw.strip("()").lstrip(".")
         label_to_nid[normalised] = n["id"]
+        if not raw.startswith("."):
+            bare_label_to_nid[normalised] = n["id"]
 
     seen_call_pairs: set[tuple[str, str]] = set()
     raw_calls: list[dict] = []
@@ -476,6 +514,7 @@ def extract_go(path: Path) -> dict:
             is_bare_identifier: bool = False
             package_receiver: str | None = None
             import_path: str | None = None
+            receiver_name = ""
             if func_node:
                 if func_node.type == "identifier":
                     is_bare_identifier = True
@@ -500,7 +539,20 @@ def extract_go(path: Path) -> dict:
                 callee_name = None
             if callee_name and callee_name not in _LANGUAGE_BUILTIN_GLOBALS:
                 # Never resolve an imported selector through a bare local name.
-                tgt_nid = None if import_path else label_to_nid.get(callee_name)
+                if import_path:
+                    tgt_nid = None
+                elif is_member_call:
+                    # the method's own receiver, or a parameter declared with a type of this package
+                    own_name, own_type = own_receiver_of.get(caller_nid, (None, ""))
+                    if own_name and receiver_name == own_name:
+                        recv_type = own_type
+                    else:
+                        recv_type = param_types_of.get(caller_nid, {}).get(receiver_name, "")
+                    tgt_nid = methods_by_type.get((recv_type, callee_name)) if recv_type else None
+                elif is_bare_identifier:
+                    tgt_nid = bare_label_to_nid.get(callee_name)
+                else:
+                    tgt_nid = label_to_nid.get(callee_name)
                 if tgt_nid and tgt_nid != caller_nid:
                     pair = (caller_nid, tgt_nid)
                     if pair not in seen_call_pairs:

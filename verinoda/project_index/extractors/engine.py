@@ -5707,6 +5707,49 @@ def _extract_generic(
             queue.extend(_local_bases.get(cls, []))
         return merged
 
+    # Local change (Verinoda): the methods each class of this file owns, so a member call on the method's own
+    # receiver binds to its class (and ``super()`` to a base) instead of any same-named definition of the file.
+    _node_label = {n["id"]: n.get("label") for n in nodes}
+    _methods_of: dict[str, dict[str, str]] = {}
+    _method_owner: dict[str, str] = {}
+    for _e in edges:
+        if _e.get("relation") == "method":
+            _mname = str(_node_label.get(_e["target"]) or "").strip("()").lstrip(".")
+            _methods_of.setdefault(_e["source"], {}).setdefault(_mname, _e["target"])
+            _method_owner.setdefault(_e["target"], _e["source"])
+
+    def _enclosing_class(nid: str | None) -> str | None:
+        """The class whose method *nid* is, or whose method lexically encloses *nid* (a nested function)."""
+        seen: set[str] = set()
+        while nid and nid not in seen:
+            seen.add(nid)
+            owner = _method_owner.get(nid)
+            if owner:
+                return owner
+            nid = scope_parents.get(nid)
+        return None
+
+    def _inherited_method(class_nid: str, name: str) -> tuple[str | None, bool]:
+        """The method *name* the bases of *class_nid* define in this file, depth first and left to right.
+
+        Returns ``(nid, known)``: ``known`` is False when the search reached a base this file does not
+        define before finding the method, so the method may come from that base and no in-file answer holds.
+        """
+        seen: set[str] = {class_nid}
+        stack = list(reversed(_local_bases.get(class_nid, [])))
+        while stack:
+            base = stack.pop()
+            if base in seen:
+                continue
+            seen.add(base)
+            if not nid_to_sf.get(base):
+                return None, False
+            hit = _methods_of.get(base, {}).get(name)
+            if hit:
+                return hit, True
+            stack.extend(reversed(_local_bases.get(base, [])))
+        return None, True
+
     java_receiver_types = {
         body_id: _java_method_receiver_types(
             method_node,
@@ -5946,6 +5989,9 @@ def _extract_generic(
             is_this_field_call: bool = False
             swift_receiver: str | None = None
             member_receiver: str | None = None
+            # Local change (Verinoda): the member call's receiver is the method's own (`self`, `this`, `$this`)
+            own_receiver: bool = False
+            js_super_receiver: bool = False   # JS/TS `super.m()`
             kotlin_qualified_prefix: str | None = None
             kotlin_object_receiver: str | None = None
             csharp_qualified_prefix: str | None = None
@@ -6207,6 +6253,8 @@ def _extract_generic(
                     name_node = node.child_by_field_name("name")
                     if name_node:
                         callee_name = _read_text(name_node, source)
+                    php_object = node.child_by_field_name("object")
+                    own_receiver = php_object is not None and _read_text(php_object, source) == "$this"
             elif config.ts_module == "tree_sitter_cpp":
                 # C++: function field, then field_expression/qualified_identifier
                 func_node = node.child_by_field_name(config.call_function_field) if config.call_function_field else None
@@ -6276,6 +6324,7 @@ def _extract_generic(
                 recv = node.child_by_field_name("receiver")
                 if recv is not None:
                     is_member_call = True
+                    own_receiver = recv.type == "self"
                     if recv.type in ("identifier", "constant"):
                         member_receiver = _read_text(recv, source)
                     elif recv.type == "scope_resolution":
@@ -6307,8 +6356,12 @@ def _extract_generic(
                             # (#1446). Chained receivers (`a.b.method()`) are skipped
                             # UNLESS the chain is `this.field.method()` (#1316).
                             obj = func_node.child_by_field_name(config.call_accessor_object_field)
+                            own_receiver = obj is not None and obj.type == "this"
+                            js_super_receiver = obj is not None and obj.type == "super"
                             if obj is not None and obj.type == "identifier":
                                 member_receiver = _read_text(obj, source)
+                                own_receiver = (config.ts_module == "tree_sitter_python"
+                                                and member_receiver in ("self", "cls"))
                             elif (
                                 config.ts_module == "tree_sitter_python"
                                 and obj is not None
@@ -6381,7 +6434,24 @@ def _extract_generic(
                 _java_defer = (
                     config.ts_module == "tree_sitter_java" and is_member_call
                 )
-                if _python_defer or _java_defer or _builtin_member_call or (
+                # Local change (Verinoda): PHP and Ruby member calls on any receiver other than the method's own
+                # (`$this`, `self`) defer too, and JS/TS `super.m()`. `$this->dispatcher->handle()`,
+                # `capsule.fetcher.retrieve_work` and `super.m()` name a method of another object, not whatever
+                # same-named function this file defines; the receiver-typed resolvers (Ruby `x = Foo.new`) still
+                # see them. Other JS/TS receivers keep the file-wide name: measured, about half of the edges
+                # that rule removed were true (an untyped local of a class the file defines).
+                _foreign_receiver_defer = is_member_call and (
+                    js_super_receiver
+                    or (not own_receiver and config.ts_module in ("tree_sitter_php", "tree_sitter_ruby"))
+                )
+                _object_method = None
+                if _foreign_receiver_defer and member_receiver:
+                    # ... unless the receiver names an object this file defines with that method
+                    # (`const api = {}; api.load = ...; api.load()`)
+                    _object_method = _methods_of.get(label_to_nid.get(member_receiver, ""), {}).get(callee_name)
+                if _object_method is not None:
+                    tgt_nid = _object_method
+                elif _python_defer or _java_defer or _builtin_member_call or _foreign_receiver_defer or (
                     is_member_call
                     and member_receiver
                     and (
@@ -6391,8 +6461,30 @@ def _extract_generic(
                     )
                 ):
                     tgt_nid = None
+                elif (
+                    config.ts_module == "tree_sitter_python"
+                    and is_member_call
+                    and member_receiver == "super"
+                ):
+                    # Local change (Verinoda): ``super().m()`` calls a base class's ``m``, never the caller
+                    # itself or another class's ``m`` of the file (825 such self-loops in one Python corpus).
+                    # Bound when the file defines that base; otherwise left to raw_calls, where no pass
+                    # binds it to a same-named definition.
+                    _cls = _enclosing_class(caller_nid)
+                    tgt_nid = _inherited_method(_cls, callee_name)[0] if _cls else None
                 else:
-                    if config.ts_module == "tree_sitter_python" and not is_member_call:
+                    _own_nid = None
+                    if is_member_call and own_receiver:
+                        # Local change (Verinoda): the caller's own class (then its in-file bases) first; a
+                        # same-named method of another class of the file only when neither defines it.
+                        _cls = _enclosing_class(caller_nid)
+                        if _cls:
+                            _own_nid = _methods_of.get(_cls, {}).get(callee_name)
+                            if _own_nid is None:
+                                _own_nid = _inherited_method(_cls, callee_name)[0]
+                    if _own_nid is not None:
+                        tgt_nid = _own_nid
+                    elif config.ts_module == "tree_sitter_python" and not is_member_call:
                         curr_scope = caller_nid
                         tgt_nid = None
                         while curr_scope:
