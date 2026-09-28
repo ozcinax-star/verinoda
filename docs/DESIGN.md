@@ -4593,6 +4593,78 @@ superclass is not bound on an unqualified call (the subclass has no declaration 
 call whether or not it reaches the dispatcher (`assertEquals("function ns:x", s)`); an existence check
 (`getFunctions().get(id).isPresent()`) counts as a lookup.
 
+## 43. Entity tags Java adds through a constant, a conditional, the live set or a built name (D70, 2026-09-29)
+
+### 43.1 Why
+
+GitHub issue #2: in the mod that raised it, 4 of the 5 rows of "tags checked but never added" that were checked by
+hand were false alarms, and the fifth (a tag set by hand with `/tag`) was right. The list is there to find one kind
+of bug (a tag something checks and nothing adds); when most rows are wrong, every row has to be checked by hand and
+the list stops being used. The four adds it missed:
+
+1. **A class's own constant.** `sakin.addTag(ETIKET)` with `public static final String ETIKET = "croat"` in the same
+   class. The constants were one table by simple name, and a name two classes give different values was dropped;
+   `ETIKET` ("tag") is the name every class of that mod gives its own tag, so the constant was never read.
+2. **A conditional.** `vucut.addTag(koyluydu ? ESKI_KOYLU : ESKI_SAKIN)` adds one of two tags.
+3. **The live set.** `araba.entityTags().add(HURDA_ETIKET)`: in Minecraft 26.2 `Entity.entityTags()` returns the
+   entity's own `tags` set, so adding to it is `addTag` without the size limit. Only `.contains` on it was read.
+4. **A built name.** `at.addTag(a.tag + "_at")` adds `olum_at` when `a.tag` is `"olum"`. It cannot be resolved from
+   the text, and it was skipped without a word, so the checked `olum_at` read as never added.
+
+### 43.2 Decisions
+
+- **A constant is the one Java binds** (`_Consts`). Each `static final String` belongs to the innermost class that
+  declares it (classes and their bodies are found on a copy of the text whose literals and comments are blanked).
+  A use reads, in order: the enclosing classes, innermost first; for `Owner.NAME` (or `pkg.Owner.NAME`) the classes
+  named `Owner` when they agree; a static import (`import static pkg.Owner.NAME;` or `.*`); another class of the same
+  file; and last a name only one value is declared under anywhere. A constant may be built from others
+  (`BASE + "hurda"`); one built from itself stays unknown. `datapack_java` still gets one table by name (the names
+  whose declarations agree), now including constants built from others.
+- **What a String expression can be** (`_values`): a literal or a constant is one name; `c ? A : B` both (nested
+  conditionals and a `?` or `:` inside a literal handled); a concatenation of known parts a name (with a small
+  conditional inside, each combination, up to 16); a concatenation with an unknown part a **pattern**
+  (`a.tag + "_at"` -> `*_at`, `PRE + i + "_" + j` -> `pre_*_*`); anything else the pattern `*`.
+- **The live set counts**: `entityTags()` / `getTags()` / `getScoreboardTags()` / `getCommandTags()` followed by
+  `.add(...)` is an add, `.remove(...)` a remove, `.contains(...)` a check, and a project helper whose body does
+  one of them with its String parameter is a tag helper like one that calls `addTag`. The argument is read to its
+  closing parenthesis, so `addTag(name.toLowerCase())` and `addTag(tagOf(e))` are read (as `*`) instead of not
+  matched; a call spelled in a comment or a string is not one.
+- **A built name is a lead, never an add.** The adds whose name is a pattern are listed once in the summary
+  (`tag names Java builds at run time (N): Atlilar.java:751 adds *_at`) and in the JSON (`tags_added_dynamically`,
+  `{at, pattern}`). A checked tag no add spells stays in "tags checked but never added"; when a pattern fits it the
+  row says so (`olum_at  Atlilar.java:1668  (maybe added by Atlilar.java:751: *_at)`, JSON `maybe_added_by`), so
+  "never added" (nothing could add it) and "no add spells it, but this line may" are two answers. A pattern of `*`
+  fits every tag and marks none; it is listed in the summary as "adds a name the text does not spell". A method
+  that hands its own String parameter to `addTag` is not one: its callers name the tag (and are read through the
+  helper). `datapack tag NAME` lists the fitting built adds after the sites (`maybe  java  Atlilar.java:751 adds
+  *_at (a name built at run time)`), also when no site names the tag.
+- **Cost.** Only the files that declare a `static final String` or call the tag API (or a tag helper) are blanked
+  and read for classes; the tag helpers are looked for only in files that call the tag API; a file's line starts
+  come from one regex instead of a loop over its characters.
+
+### 43.3 Measured
+
+- **Fixture of the issue** (`tests/test_datapack.py`): the four shapes and the hand-set tag in five classes, two of
+  them declaring `ETIKET` with different values. Before: "tags checked but never added (5)"; after: 2, `olum_at`
+  with `maybe added by Atlilar.java:5: *_at` and `musallat_korumali` with nothing; `datapack tag croat` lists
+  `Croatoan.java:7` as the add and `LuciferTeklifi.java:5` (`Croatoan.ETIKET`) as the check.
+- **The example mods** (`examples/forge_mod`, `examples/glow_mod`): the summary is unchanged, line for line.
+- **A synthetic mod** of 430 Java files (5.4 MB; 86 of them declare their own `ETIKET`, add it directly and through
+  a conditional, check it and add a built name): before, 0 tags (every `ETIKET` dropped); after, 172 tags, 0
+  "never added", 86 built adds. `index` + `problems`, median of five: 1.48 s -> 1.32 s (the line-start and helper
+  changes pay for the new reading).
+- The private mod of the issue is not on this machine: its acceptance (croat, musallat_koylu and yikim_hurda leave
+  the list; olum_at stays with the note; musallat_korumali stays) is shown on the fixture that copies its shapes,
+  not on the mod.
+
+### 43.4 Not done
+
+A tag held in a local or a field (`String t = c ? A : B; e.addTag(t)`) is `*`; a constant inherited from a
+superclass or an interface that another class also declares with another value is not bound (the superclass is not
+followed); a name built with `String.format` / `.formatted` / a `StringBuilder` is `*`, not a pattern; a check whose
+name is built (`contains(a.tag + "_at")`) is not a check of any tag; mcfunction macros (`tag @s add $(x)_at`) are
+still listed apart without a pattern; Kotlin.
+
 ## Sources
 
 - **Retrieval:**

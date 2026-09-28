@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D69)
+## Upgrading from 0.3.2 (D60-D70)
 
 ### D63: Running a project's own tests safely
 
@@ -187,6 +187,16 @@ function (also in a `not_found` answer), and `dynamic_any` the sites that build 
 namespace. The summary JSON has `java_calls` and `java`, and a `missing_functions` row from Java has `how: "java
 <via>"`, `caller` and `helper` / `tree` when they apply. A helper whose body Verinoda cannot read can be named in
 `.verinoda/config.json`: `{"datapack": {"function_helpers": ["Class.method:argIndex:namespace"]}}`.
+
+### D70: Entity tags added through a constant, a conditional, the live set or a built name
+
+Nothing to run: `verinoda datapack` reads the Java at query time. "Tags checked but never added" gets shorter where
+Java adds a tag through its class's own constant (a constant name several classes declare is no longer dropped),
+`c ? A : B`, or `entityTags().add(...)`; `datapack tag NAME` lists those adds. A row whose tag a name built at run
+time may add stays, with `(maybe added by File.java:N: *_at)`; JSON: the row has `maybe_added_by` (`[{at,
+pattern}]`), the summary's `problems` has `tags_added_dynamically`, a `datapack tag` answer (found or not) has
+`maybe_added_by`, and the text summary has a line "tag names Java builds at run time (N)". The summary's `note`
+text changed. A script that counted the rows of the list sees fewer.
 
 ### D60-D62
 
