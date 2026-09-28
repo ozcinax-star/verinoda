@@ -146,7 +146,7 @@ On a copy of the private mod that raised the issue (one datapack namespace, 314 
 Java calls as graph edges (`when` / `trace` from a Java method to a function; the MCP `analyze` / `node_inspect`
 still see the mcfunction callers only), Kotlin, advancement rewards and predicates. A table built by code rather
 than written out (`map.put(...)` in a loop, a table in another file) is still dynamic; a helper inherited from a
-superclass in another file is not bound on an unqualified call. A command string is reported where its text is
+superclass is not bound on an unqualified call (the subclass has no declaration of it). A command string is reported where its text is
 (a `static final String` command at its declaration, not at each dispatch), and a string that holds a command is a
 call whether or not it reaches the dispatcher (`assertEquals("function ns:x", s)`); an existence check
 (`getFunctions().get(id).isPresent()`) counts as a lookup.
