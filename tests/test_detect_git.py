@@ -131,3 +131,19 @@ def test_symlinks_are_checked_like_the_walk(repo, tmp_path):
     for key in READ_BY_VERINODA:
         assert fast[key] == walk[key], key
     assert any("link_out.py" in s and "outside scan root" in s for s in fast["skipped_sensitive"])
+
+
+@pytest.mark.skipif(os.name != "nt", reason="junctions are a Windows directory link")
+def test_a_junction_out_of_the_root_stays_out(repo, tmp_path):
+    """git lists files through a junction as through a directory; the walk's realpath check kept them out."""
+    _write(tmp_path, "outside/secret.py")
+    made = subprocess.run(["cmd", "/c", "mklink", "/J", str(repo / "linked"), str(tmp_path / "outside")],
+                          capture_output=True)
+    if made.returncode != 0:
+        pytest.skip("mklink /J is not available here")
+    fast, walk = _both(repo)
+    assert fast["enumeration"] == "git"
+    for key in READ_BY_VERINODA:
+        assert fast[key] == walk[key], key
+    assert not any("secret.py" in f for f in fast["files"]["code"])
+    assert any("linked" in s and "outside scan root" in s for s in fast["skipped_sensitive"])

@@ -1779,10 +1779,10 @@ def _git_enumerate(
     explicit_patterns: list[tuple[Path, str]],
     configured_out_names: set[str],
     configured_out_dir: Path,
-) -> tuple[list[Path], list[tuple[Path, str]], list[str], list[str]] | None:
+) -> tuple[list[Path], list[tuple[Path, str]], list[str], list[str], list[str]] | None:
     """The walk's candidate files from :func:`_git_listed_files` (Verinoda patch).
 
-    Returns ``(files, nested .graphifyignore patterns, pruned noise dirs, ignored)``: the listed
+    Returns ``(files, nested .graphifyignore patterns, pruned noise dirs, ignored, outside)``: the listed
     files minus ``_SKIP_FILES`` and everything under a directory the walk prunes whatever git says
     (noise dirs, the configured output dir, a directory an explicit .graphifyignore/--exclude rule
     ignores). Explicit rules on single files are left to the caller. ``ignored`` has the walk's
@@ -1798,6 +1798,7 @@ def _git_enumerate(
     n_root = len(patterns)
     cache: dict[Path, bool] = {}
     pruned: list[str] = []
+    outside: list[str] = []  # skipped_sensitive entries: directories that resolve outside the root
     ignored: list[str] = []
     noise: dict[str, bool] = {}
     kept_dirs: dict[str, bool] = {"": True}
@@ -1827,6 +1828,11 @@ def _git_enumerate(
                 if _noise(rel_dir):
                     pruned.append(str(d) + os.sep)
                     got = False
+                elif not _resolves_under_root(d, root):
+                    # a directory link git lists through (a Windows junction): the walk's per-file
+                    # realpath check kept its files out, so this once-per-directory check does
+                    outside.append(str(d) + os.sep + " [symlink target outside scan root]")
+                    got = False
                 elif _is_ignored(d, root, patterns, _cache=cache):
                     ignored.append(str(d) + os.sep)
                     got = False
@@ -1851,7 +1857,7 @@ def _git_enumerate(
         ignored.append(str(root / bare) + (os.sep if rel.endswith("/") else ""))
     if any(_parse_ignore_pattern(p)[0] for _, p in patterns):
         return None
-    return files, patterns[n_root:], pruned, ignored
+    return files, patterns[n_root:], pruned, ignored, outside
 
 
 def detect(root: Path, *, follow_symlinks: bool | None = None, google_workspace: bool | None = None, extra_excludes: list[str] | None = None, cache_root: Path | None = None, gitignore: bool = True, enumeration: str = "auto") -> dict:
@@ -1934,7 +1940,8 @@ def detect(root: Path, *, follow_symlinks: bool | None = None, google_workspace:
         else None
     )
     if git_files is not None:
-        all_git_files, nested_explicit, pruned_noise, ignored = git_files
+        all_git_files, nested_explicit, pruned_noise, ignored, outside = git_files
+        skipped_sensitive.extend(outside)
         # git applied the .gitignore rules; what is left for Python are the explicit ones
         explicit_ignore_patterns.extend(nested_explicit)
         ignore_patterns = explicit_ignore_patterns
