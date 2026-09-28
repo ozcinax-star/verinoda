@@ -78,14 +78,16 @@ The whole-corpus division on this page's eight public sets, next to the facts ea
 
 - **Corpus tokens**: chars/4 (rounded up) of the files the set's include/exclude selects, read from the commit
   with git (`git ls-tree`, `git cat-file`: the committed bytes, no checkout) as UTF-8 with CRLF read as LF. That
-  is the unit the answers are counted in: chars/4, and no answer carries a CR. `corpus.json` records per corpus
+  is the unit the answers are counted in: chars/4, and the committed answer texts (under `benchmarks/results/raw/`)
+  carry no CR. `corpus.json` records per corpus
   the commit, files, bytes, CRLFs, characters and the files with a NUL byte or invalid UTF-8 (none in any
   corpus). The commits: upstream Graphify 20a20d30 for the two graphify sets; `verinoda_user_tr` pins 3bd1b94 of
   this repository in its question file; the others are this repository's `examples/` and
   `benchmarks/corpora/heldout_repoatlas_7371990/` at 849ca63. Every file count equals what the set's run
-  recorded. The bytes differ where a run copied a working tree:
+  recorded. The bytes, against what the runs recorded:
   - graphify_core: the runs recorded 4,679,630 bytes, a Windows checkout (autocrlf) of an LF repository, which
-    is the 4,583,013 committed bytes plus one CR for each of the 96,617 line ends (2.1%). Its 4,567,742
+    is the 4,583,013 committed bytes plus one CR for each of the 96,617 line ends (2.1% of the committed
+    bytes). Its 4,567,742
     characters give 1,141,936 corpus tokens.
   - orders_app: 4,726 bytes recorded (a working tree with uncommitted changes at the time), 4,724 committed.
   - heldout_repoatlas, glow_mod and forge_mod: equal to the recorded bytes. Four heldout files are committed with
