@@ -127,8 +127,8 @@ Decision functions called directly, before and after (Windows, Python 3.12, pyte
 - Link check of the copy: 121-170 ms for 2,561 files in 335 folders (this repository, Windows, one directory
   listing per folder, five runs); the copy itself took 7-43 s on the same (shared, loaded) machine, so the check
   is a few percent at most.
-- Tests: tests/test_experiments_trust.py (48 tests: protected settings, trust store and command, refusal and
-  next_step per entry point, container command and client environment through a fake runtime, argv[0], `_which`
+- Tests: tests/test_experiments_trust.py (49 tests: protected settings, trust store and command, refusal and
+  next_step per entry point (verify --run included), container command and client environment through a fake runtime, argv[0], `_which`
   without the current directory, the pytest argument and config-file rules, the TOML fallback, `--basetemp`
   in the throw-away folder, links not followed); tests/test_experiments.py updated for the argv[0] rule.
 - Not measured here: the container path itself (no docker/podman on this machine). The CI job `container` is its

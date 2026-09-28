@@ -182,6 +182,9 @@ def test_every_entry_point_says_how_to_trust(proj, untrusted, no_container):
     assert "not trusted" in res["error"] and "verinoda trust" in res["next_step"]
     ok, why = debug._runnable(repo, PYTEST)
     assert not ok and "not trusted" in why
+    with pytest.raises(experiments.ExperimentRefused) as exc:
+        debug.start(st, repo, "pricing fails", PYTEST)
+    assert exc.value.untrusted and "verinoda trust" in exc.value.next_step
     from verinoda.mcp.server import _error_hint
 
     exc = experiments.ExperimentRefused("r", experiments.untrusted_next_step(repo), untrusted=True)
