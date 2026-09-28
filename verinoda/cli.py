@@ -2610,8 +2610,9 @@ def build_parser() -> argparse.ArgumentParser:
                                      "a line or symbol (docs/BACKLOG.md rows and headings)")
     sp.add_argument("target", help="an item id (69.3), path/File.java:LINE[-LINE], or a symbol")
     sp = add("datapack", cmd_datapack, "Minecraft datapacks: entity tags checked but never added, objectives written "
-                                       "but never read, calls to missing functions; or one tag, score or function "
-                                       "across mcfunction and Java")
+                                       "but never read, calls to missing functions (from mcfunction or Java); or "
+                                       "one tag, score or function across mcfunction and Java (a function's Java "
+                                       "callers: command strings, identifier lookups, the project's helpers)")
     sp.add_argument("what", nargs="?", choices=["tag", "score", "function"], help="look one up (default: the summary)")
     sp.add_argument("name", nargs="?", help="the tag, objective or function id (ns:path)")
     sp = add("trace-log", cmd_trace_log, "the stack traces and GameTest results of a log mapped onto the code: project "

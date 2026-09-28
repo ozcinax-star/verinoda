@@ -10,8 +10,12 @@ kind of bug neither side shows alone.
 
 :func:`functions` finds the function files (``data/<ns>/function[s]/<path>.mcfunction`` outside build output);
 :func:`parse_function` reads one; :func:`index` builds the cross-language index of tags and objectives;
-:func:`problems` lists the two kinds of mismatch. Read from the text as written: a tag or objective name built at
-run time (``"x" + i``, a macro ``$(name)``) is not seen, so a mismatch is a lead to check, not a proof.
+:func:`problems` lists the mismatches. The Java that runs a function - a command string, the function manager's
+lookup of an identifier, or the project's own helper around it (D69) - is read by :mod:`verinoda.datapack_java`, so
+``datapack function ns:x`` lists Java callers beside mcfunction ones and a Java call to a function that does not
+exist is a mismatch too. Read from the text as written: a tag or objective name built at run time (``"x" + i``, a
+macro ``$(name)``) is not seen, so a mismatch is a lead to check, not a proof; a function name built at run time is
+listed as dynamic.
 """
 from __future__ import annotations
 
@@ -218,9 +222,10 @@ _READ_HINT = re.compile(r"getPlayerScoreInfo|getScore\b|\.value\(\)|getOrCreateP
 _WRITE_HINT = re.compile(r"\.set\(|setScore|\.add\(|increment|resetSinglePlayerScore|resetAllPlayerScores")
 
 
-def index(repo: Path, *, java_files: list[str] | None = None) -> dict:
-    """``{"functions", "tags": {name: [Site]}, "objectives": {name: [Site]}}`` over the datapacks and the Java
-    sources (``java_files``, default every ``.java`` outside build output)."""
+def index(repo: Path, *, java_files: list[str] | None = None, java_calls: bool = True) -> dict:
+    """``{"functions", "tags": {name: [Site]}, "objectives": {name: [Site]}, "java": datapack_java.Result}`` over
+    the datapacks and the Java sources (``java_files``, default every ``.java`` outside build output); ``java`` is
+    None when ``java_calls`` is False."""
     repo = Path(repo)
     funcs = functions(repo)
     tags: dict[str, list[Site]] = {}
@@ -247,6 +252,11 @@ def index(repo: Path, *, java_files: list[str] | None = None) -> dict:
         except OSError:
             pass
     consts = _java_constants(texts)
+    java = None
+    if java_calls:
+        from verinoda import datapack_java
+
+        java = datapack_java.scan(repo, texts, consts=consts)
     known_objs = set(objs)
     helpers = _tag_helpers(texts)
     for f, t in texts.items():
@@ -312,7 +322,7 @@ def index(repo: Path, *, java_files: list[str] | None = None) -> dict:
                 elif _READ_HINT.search(probe):
                     kind = "read"
             objs.setdefault(name, []).append(Site(f, ln, "java", kind, stmt.strip()[:160]))
-    return {"functions": funcs, "tags": tags, "objectives": objs}
+    return {"functions": funcs, "tags": tags, "objectives": objs, "java": java}
 
 
 def _tag_helpers(texts: dict[str, str]) -> dict[str, tuple[str, int]]:
@@ -356,7 +366,9 @@ def _method_body(text: str, name: str) -> str | None:
 
 def problems(ix: dict) -> dict:
     """Tags something checks that nothing adds, tags added that nothing checks, objectives written that nothing
-    reads (a Java ``use`` of an objective counts as a possible read), and calls to functions that do not exist."""
+    reads (a Java ``use`` of an objective counts as a possible read), and calls to functions that do not exist:
+    from mcfunction, and from Java into a namespace the datapacks define (``getFunctions().get`` of a missing
+    function returns nothing and the call does nothing, silently)."""
     out: dict[str, list] = {"tags_checked_never_added": [], "tags_added_never_checked": [],
                             "scores_written_never_read": [], "missing_functions": []}
     macro = [s.at for s in ix["tags"].get("*", [])]
@@ -380,6 +392,13 @@ def problems(ix: dict) -> dict:
         for ln, target, how, _d in fn.calls:
             if not target.startswith("#") and target not in funcs:
                 out["missing_functions"].append({"name": target, "called_at": f"{fn.files[0]}:{ln}", "how": how})
+    spaces = {fid.split(":", 1)[0] for fid in funcs}
+    for c in (ix.get("java").calls if ix.get("java") else []):
+        if not c.dynamic and not c.target.startswith("#") and c.target not in funcs \
+                and c.target.split(":", 1)[0] in spaces:
+            out["missing_functions"].append({"name": c.target, "called_at": c.at, "how": f"java {c.via}",
+                                             "caller": c.caller, **({"helper": c.helper} if c.helper else {}),
+                                             **({"tree": c.tree} if c.tree else {})})
     return out
 
 
@@ -387,18 +406,59 @@ def _called_by(funcs: dict[str, Function], fid: str) -> list[tuple[str, int, str
     return [(f.id, ln, how, d) for f in funcs.values() for ln, t, how, d in f.calls if t == fid]
 
 
+def _java_rows(ix: dict, fid: str) -> tuple[list[dict], list[dict], list[dict]]:
+    """The Java calls of ``fid`` (own tree first); the names built at run time that may be it (a known part past
+    the namespace: ``ns:prefix_*``); and the sites that build all of the name past the namespace (``ns:*``) or the
+    whole name, which fit every function and are listed in full in the summary only."""
+    java = ix.get("java")
+    if java is None:
+        return [], [], []
+    from verinoda.testcode import is_test_file
+
+    calls = [c.record() for c in sorted((c for c in java.calls if not c.dynamic and c.target == fid),
+                                        key=lambda c: (c.tree is not None, is_test_file(c.file), c.file, c.line))]
+    maybe = [c.record() for c in java.calls if c.dynamic and ":" in c.target and not c.target.endswith(":")
+             and c.matches(fid)]
+    bare = [c.record() for c in sorted((c for c in java.calls if c.dynamic and (not c.target or (
+        c.target.endswith(":") and c.matches(fid)))), key=lambda c: (c.tree is not None, is_test_file(c.file),
+                                                                     c.file, c.line))]
+    return calls, maybe, bare
+
+
+def _java_summary(java) -> dict:
+    from verinoda.testcode import is_test_file
+
+    by_via: dict[str, int] = {}
+    for c in java.calls:
+        if not c.dynamic:
+            by_via[c.via] = by_via.get(c.via, 0) + 1
+    bound = [c for c in java.calls if not c.dynamic]
+    helpers = sorted(java.helpers, key=lambda h: (h.tree is not None, is_test_file(h.file), h.source != "body",
+                                                  h.file, h.line))
+    return {"calls": len(bound), "by_via": by_via,
+            "in_tests": len([c for c in bound if not c.tree and is_test_file(c.file)]),
+            "in_reference_trees": len([c for c in bound if c.tree]),
+            "helpers": [h.record() for h in helpers],
+            "dynamic": [c.record() for c in java.calls if c.dynamic],
+            "unresolved_lookups": java.unresolved}
+
+
 def lookup(repo: Path, what: str | None = None, name: str | None = None) -> dict:
     """``verinoda datapack``: no argument -> the functions, tags and objectives counted and the mismatches;
     ``tag NAME`` / ``score NAME`` -> every site; ``function ID`` -> what it calls and what calls it."""
-    ix = index(repo)
+    ix = index(repo, java_calls=what in (None, "", "function"))
     base = {"functions": len(ix["functions"]), "tags": len([t for t in ix["tags"] if t != "*"]),
             "objectives": len(ix["objectives"])}
+    if ix.get("java") is not None:
+        base["java_calls"] = len([c for c in ix["java"].calls if not c.dynamic])
     if not what:
         if not ix["functions"] and not ix["tags"]:
             return {**base, "status": "no_datapack", "note": "no data/<namespace>/function[s]/*.mcfunction and no "
                                                             "entity tags in Java"}
         return {**base, "status": "found", "kind": "summary", "problems": problems(ix),
-                "note": "read from the text: names built at run time are not seen; a mismatch is a lead"}
+                **({"java": _java_summary(ix["java"])} if ix.get("java") is not None else {}),
+                "note": "read from the text: names built at run time are not seen (a function's is listed as "
+                        "dynamic); a mismatch is a lead"}
     if what in ("tag", "score", "objective"):
         table = ix["tags"] if what == "tag" else ix["objectives"]
         sites = table.get(name or "")
@@ -411,26 +471,56 @@ def lookup(repo: Path, what: str | None = None, name: str | None = None) -> dict
                 "sites": [{"at": s.at, "lang": s.lang, "kind": s.kind, "text": s.text} for s in sites]}
     if what == "function":
         fn = ix["functions"].get(name or "")
+        java_calls, maybe, bare = _java_rows(ix, name or "")
         if fn is None:
             from difflib import get_close_matches
 
             return {**base, "status": "not_found", "kind": "function", "name": name,
-                    "nearest": get_close_matches(name or "", list(ix["functions"]), n=5)}
+                    "nearest": get_close_matches(name or "", list(ix["functions"]), n=5),
+                    **({"called_by": java_calls} if java_calls else {}), **({"dynamic": maybe} if maybe else {})}
         return {**base, "status": "found", "kind": "function", "name": fn.id, "files": fn.files, "events": fn.events,
                 "calls": [{"line": ln, "target": t, "how": how, **({"delay": d} if d else {})}
                           for ln, t, how, d in fn.calls],
-                "called_by": [{"function": f, "at": f"{ix['functions'][f].files[0]}:{ln}", "how": how,
-                               **({"delay": d} if d else {})} for f, ln, how, d in _called_by(ix["functions"], fn.id)]}
+                "called_by": [{"kind": "mcfunction", "function": f, "at": f"{ix['functions'][f].files[0]}:{ln}",
+                               "how": how, **({"delay": d} if d else {})}
+                              for f, ln, how, d in _called_by(ix["functions"], fn.id)] + java_calls,
+                "dynamic": maybe, "dynamic_any": bare}
     raise ValueError(f"datapack: unknown lookup {what!r} (tag, score, function)")
+
+
+def _java_line(c: dict) -> str:
+    """``called by Java Weapon.fire at src/Weapon.java:42 (helper Mod.runFunction)``."""
+    via = {"helper": f"helper {c.get('helper')}", "identifier": "identifier",
+           "command-string": "command string" + (f", {c['how']}" if c.get("how") not in (None, "function") else "")}
+    tree = f" [reference tree {c['tree']}]" if c.get("tree") else ""
+    test = " [test]" if c.get("test") else ""
+    return f"called by Java {c['caller']} at {c['at']} ({via.get(c['via'], c['via'])}){test}{tree}"
+
+
+def _dynamic_line(c: dict) -> str:
+    what = f"builds {c['target']}" if c["target"] != "*" else "builds the whole name at run time"
+    tree = f" [reference tree {c['tree']}]" if c.get("tree") else ""
+    how = f"helper {c['helper']}" if c.get("helper") else c["via"].replace("-", " ")
+    return f"dynamic: {c['at']} {what} (Java {c['caller']}, {how}){tree}"
 
 
 def render(res: dict) -> str:
     head = f"{res['functions']} function(s), {res['tags']} entity tag(s), {res['objectives']} objective(s)"
+    if "java_calls" in res:
+        head += f", {res['java_calls']} Java call(s) into the functions"
+        js = res.get("java")
+        if js and (js.get("in_tests") or js.get("in_reference_trees")):
+            head += f" ({js['calls'] - js['in_tests'] - js['in_reference_trees']} in product code)"
     if res["status"] == "no_datapack":
         return f"{head}: {res['note']}"
     if res["status"] == "not_found":
         near = ", ".join(res.get("nearest") or [])
-        return f"{res['kind']} {res['name']}: not found" + (f" (nearest: {near})" if near else "")
+        out = [f"{res['kind']} {res['name']}: not found" + (f" (nearest: {near})" if near else "")]
+        if res.get("called_by"):  # Java runs a function the datapacks do not have: the lookup finds nothing
+            out.append(f"  Java calls it, and the datapacks have no {res['name']}:")
+            out += ["  " + _java_line(c) for c in res["called_by"]]
+        out += ["  " + _dynamic_line(c) + " - may be this one" for c in res.get("dynamic") or []]
+        return "\n".join(out)
     if res["kind"] == "summary":
         out = [head]
         pr = res["problems"]
@@ -443,11 +533,35 @@ def render(res: dict) -> str:
             out.append(f"{label} ({len(rows)}):")
             for r in rows[:15]:
                 where = r.get("called_at") or ", ".join(r.get("sites", [])[:2])
-                out.append(f"  {r['name']}  {where}")
+                java = f" (Java {r['caller']}, {r['how'][5:].replace('-', ' ')})" if r.get("caller") else ""
+                tree = f" [reference tree {r['tree']}]" if r.get("tree") else ""
+                out.append(f"  {r['name']}  {where}{java}{tree}")
             if len(rows) > 15:
                 out.append(f"  (+{len(rows) - 15} more: --json)")
         if pr.get("tags_added_by_macros"):
             out.append("tags a macro fills in (not matched): " + ", ".join(pr["tags_added_by_macros"][:3]))
+        java = res.get("java")
+        if java:
+            by = ", ".join(f"{k.replace('-', ' ')} {v}" for k, v in sorted(java["by_via"].items()))
+            where = [f"{java[k]} {w}" for k, w in (("in_tests", "in tests"), ("in_reference_trees",
+                                                                                "in reference trees")) if java.get(k)]
+            out.append(f"Java calls into the functions ({java['calls']}): {by or 'none'}"
+                       + (f"; {', '.join(where)}" if where else ""))
+            if java["helpers"]:
+                hs = [f"{h['helper']} ({h['at'].rsplit('/', 1)[-1]})" if h.get("at") else f"{h['helper']} (config)"
+                      for h in java["helpers"][:8]]
+                more = f" (+{len(java['helpers']) - 8} more: --json)" if len(java["helpers"]) > 8 else ""
+                out.append(f"  helpers recognised ({len(java['helpers'])}): " + ", ".join(hs) + more)
+            dyn = java["dynamic"]
+            if dyn:
+                out.append(f"function names Java builds at run time ({len(dyn)}, not bound to a function):")
+                out += ["  " + _dynamic_line(c) for c in dyn[:15]]
+                if len(dyn) > 15:
+                    out.append(f"  (+{len(dyn) - 15} more: --json)")
+            if java.get("unresolved_lookups"):
+                un = java["unresolved_lookups"]
+                out.append(f"function lookups whose id the text does not spell ({len(un)}): " + ", ".join(un[:5])
+                           + (" ..." if len(un) > 5 else ""))
         out.append(f"note: {res['note']}")
         return "\n".join(out)
     if res["kind"] == "function":
@@ -456,9 +570,16 @@ def render(res: dict) -> str:
         out += [f"  calls {c['target']} ({c['how']}{' ' + c['delay'] if c.get('delay') else ''}) at line {c['line']}"
                 for c in res["calls"]]
         out += [f"  called by {c['function']} at {c['at']} ({c['how']}{' ' + c['delay'] if c.get('delay') else ''})"
-                for c in res["called_by"]]
-        if not res["calls"] and not res["called_by"] and not res["events"]:
-            out.append("  no call in or out found in the datapacks (Java may run it as a command string)")
+                if c.get("kind") != "java" else "  " + _java_line(c) for c in res["called_by"]]
+        out += ["  " + _dynamic_line(c) + " - may be this one" for c in res.get("dynamic") or []]
+        bare = res.get("dynamic_any") or []
+        if bare:  # Java builds the whole name at run time (a table, a command argument): it may run this one
+            shown = ", ".join(c["at"] + (" [test]" if c.get("test") else "") +
+                              (f" [reference tree {c['tree']}]" if c.get("tree") else "") for c in bare[:5])
+            out.append(f"  {len(bare)} Java site(s) build the name at run time and may run this one too (listed in "
+                       f"the summary): {shown}" + (" ..." if len(bare) > 5 else ""))
+        if not res["calls"] and not res["called_by"] and not res["events"] and not res.get("dynamic") and not bare:
+            out.append("  no call in or out found in the datapacks or in Java")
         return "\n".join(out)
     out = [f"{res['kind']} {res['name']}: {len(res['sites'])} site(s)"]
     out += [f"  {s['kind']:<6} {s['lang']:<10} {s['at']}: {s['text']}" for s in res["sites"][:40]]
