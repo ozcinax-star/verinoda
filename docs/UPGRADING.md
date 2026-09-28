@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D68)
+## Upgrading from 0.3.2 (D60-D69)
 
 ### D63: Running a project's own tests safely
 
@@ -172,6 +172,21 @@ Add under a new heading "Upgrading to the 2026-09-28 code (D63)":
   were dropped), and `build_stats.json` has `configs` (the MCP-config digests of the last graph build).
 - An index copied from another folder may keep the pre-D68 `verinoda` server node of `.mcp.json`; delete
   `.verinoda/index` and run `verinoda scan` to clear it (derived files are disposable).
+
+### D69: Datapack functions called from Java
+
+Add to "Upgrading from 0.3.2 (D60-D69)":
+
+### D69: Datapack functions called from Java
+
+Nothing to run: `verinoda datapack` reads the Java at query time, the index is unchanged. `datapack function`
+now lists Java callers after the mcfunction ones, and its JSON changed: each `called_by` row has `kind`
+(`mcfunction` or `java`; a Java row has `via`, `helper`, `caller`, `at`, `how`, `target`, `text` and, when they
+apply, `tree` and `test`), a new `dynamic` list holds the names Java builds at run time that may be the
+function (also in a `not_found` answer), and `dynamic_any` the sites that build all of the name past the
+namespace. The summary JSON has `java_calls` and `java`, and a `missing_functions` row from Java has `how: "java
+<via>"`, `caller` and `helper` / `tree` when they apply. A helper whose body Verinoda cannot read can be named in
+`.verinoda/config.json`: `{"datapack": {"function_helpers": ["Class.method:argIndex:namespace"]}}`.
 
 ### D60-D62
 
