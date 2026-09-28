@@ -73,6 +73,8 @@ def test_the_renamed_build_has_the_tables_of_a_build_in_place(built, tmp_path, m
     assert _dump(search_index.db_path_for(g)) == renamed
 
 
+@pytest.mark.skipif(os.name != "nt", reason="only Windows refuses to replace a file another process has open; "
+                    "POSIX replaces it, so the in-place fallback is not reached there")
 def test_a_held_index_is_rebuilt_in_place(built, tmp_path, monkeypatch):
     repo, g = built
     db = tmp_path / "search.db"

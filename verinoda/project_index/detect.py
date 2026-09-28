@@ -1288,7 +1288,11 @@ def _load_dir_own_ignore(d: Path, *, gitignore: bool = True) -> list[tuple[Path,
     patterns: list[tuple[Path, str]] = []
     for fname in ((".gitignore", ".graphifyignore") if gitignore else (".graphifyignore",)):
         ignore_file = d / fname
-        if ignore_file.exists():
+        try:  # Verinoda patch: a path past the system's limit (macOS: ENAMETOOLONG) has no ignore file to read
+            present = ignore_file.exists()
+        except OSError:
+            present = False
+        if present:
             for raw in _read_ignore_text(ignore_file).splitlines():
                 line = _parse_gitignore_line(raw)
                 if line:

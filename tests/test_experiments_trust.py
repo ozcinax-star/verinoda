@@ -643,8 +643,8 @@ def test_pytest_runs_with_its_temporary_folders_in_the_throw_away_directory(proj
     (repo / "tests" / "test_where.py").write_text(
         "import os, pathlib\n\n"
         "def test_tmp_path_is_in_the_throw_away_dir(tmp_path):\n"
-        "    work = pathlib.Path(os.environ['VERINODA_ARTIFACTS']).parent\n"
-        "    assert work in tmp_path.parents, (work, tmp_path)\n", encoding="utf-8")
+        "    work = pathlib.Path(os.environ['VERINODA_ARTIFACTS']).parent.resolve()\n"
+        "    assert work in tmp_path.resolve().parents, (work, tmp_path)\n", encoding="utf-8")  # macOS: /var link
     res = experiments.run(st, repo, ["python", "-m", "pytest", "-q", "tests/test_where.py"], hypothesis="h")
     assert res["outcome"] == "pass", res["summary"]
     env = st.get("experiments", res["id"])["environment"]
@@ -678,7 +678,9 @@ def test_the_copy_skips_symlinks_and_junctions(proj, tmp_path):
     ids, skipped = {}, []
     n = experiments._copy_repo(repo, dst, ids, skipped)
     assert not (dst / "linked").exists() and "linked/secret.txt" not in ids
-    assert [s["path"] for s in skipped] == ["linked/secret.txt"] and n == len(ids) > 0
+    # a junction's files are listed one by one; git lists a POSIX symlink to a folder as one entry
+    assert [s["path"] for s in skipped] in (["linked/secret.txt"], ["linked"]) and n == len(ids) > 0
+    assert not any(k == "linked" or k.startswith("linked/") for k in ids)
     res = experiments.run(st, repo, [*PYTEST, "tests/test_pricing.py"], hypothesis="h")
     assert res["source"]["skipped_total"] == 1 and any("not followed" in lim for lim in res["limits"])
 

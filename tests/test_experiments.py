@@ -326,7 +326,8 @@ def test_classify_accepts_absolute_interpreter_paths_for_pytest_only(argv, expec
 
 @pytest.mark.parametrize("argv,why", [
     # an interpreter this system does not know: in a cloned repository it can be any program (D63)
-    ([r"C:\work\proj\.venv\Scripts\python.exe", "-m", "pytest", "tests/test_x.py"], "not a Python installation"),
+    ([r"C:\work\proj\.venv\Scripts\python.exe", "-m", "pytest", "tests/test_x.py"],
+     "not a Python installation" if os.name == "nt" else "relative interpreter path"),  # POSIX: not absolute
     (["/work/proj/.venv/bin/python", "-m", "pytest"],
      "relative interpreter path" if os.name == "nt" else "not a Python installation"),  # Windows: no drive
     ([".venv/bin/python", "-m", "pytest"], "relative interpreter path"),
