@@ -737,7 +737,10 @@ def test_analyze_gives_the_refresh_time_back_to_the_budget(proj, monkeypatch):
         st.close()
     ref = res["index_refresh"]
     assert ref["ran"] is True and ref["seconds"] >= 12.0
-    assert res["usage"]["exhausted"] is None or "time" not in res["usage"]["exhausted"], res["usage"]
+    # the refresh is not charged: a time budget may run out only on the answer's own time (a loaded CI runner
+    # once took 10.3 s to answer, where a local run takes under 1 s)
+    exhausted = res["usage"]["exhausted"] or ""
+    assert "time" not in exhausted or res["usage"]["elapsed_s"] >= 10.0, res["usage"]
     assert res["usage"]["elapsed_s"] <= wall - 12.0 + 0.5  # the refresh is not in the answer's time
 
 
