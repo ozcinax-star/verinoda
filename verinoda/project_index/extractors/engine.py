@@ -5992,6 +5992,7 @@ def _extract_generic(
             # Local change (Verinoda): the member call's receiver is the method's own (`self`, `this`, `$this`)
             own_receiver: bool = False
             js_super_receiver: bool = False   # JS/TS `super.m()`
+            python_super_class: str | None = None   # C of Python `super(C, obj).m()`
             kotlin_qualified_prefix: str | None = None
             kotlin_object_receiver: str | None = None
             csharp_qualified_prefix: str | None = None
@@ -6377,6 +6378,13 @@ def _extract_generic(
                                     and _read_text(receiver_func, source) == "super"
                                 ):
                                     member_receiver = "super"
+                                    # Local change (Verinoda): `super(C, obj)` starts after C, which need not be
+                                    # the enclosing class
+                                    super_args = obj.child_by_field_name("arguments")
+                                    first = next((c for c in (super_args.children if super_args else ())
+                                                  if c.is_named), None)
+                                    if first is not None:
+                                        python_super_class = _read_text(first, source)
                             elif (obj is not None
                                   and obj.type in config.call_accessor_node_types
                                   and config.call_accessor_object_field):
@@ -6471,6 +6479,10 @@ def _extract_generic(
                     # Bound when the file defines that base; otherwise left to raw_calls, where no pass
                     # binds it to a same-named definition.
                     _cls = _enclosing_class(caller_nid)
+                    if _cls and python_super_class and python_super_class != _node_label.get(_cls):
+                        # `super(C, obj)`: the bases of C, when this file defines C
+                        _named = label_to_nid.get(python_super_class)
+                        _cls = _named if _named and _named in _local_bases and nid_to_sf.get(_named) else None
                     tgt_nid = _inherited_method(_cls, callee_name)[0] if _cls else None
                 else:
                     _own_nid = None

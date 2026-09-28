@@ -1,6 +1,6 @@
 """Local changes to the vendored graph extractor (verinoda/project_index, docs/UPSTREAM.md "Modified"):
 the C# placeholder index, member calls that no longer bind to a same-named function of the file, vendored,
-minified and generated files kept to a file node, more C/C++ header suffixes and ``#include`` evidence."""
+minified and generated files kept to a file node, and more C/C++ header suffixes."""
 
 from __future__ import annotations
 
@@ -94,6 +94,10 @@ class Child(Base):
 class Holder:
     def __delattr__(self, name):
         super().__delattr__(name)
+
+class Grandchild(Child):
+    def save(self):
+        return super(Child, self).save()
 
 class Other:
     def save(self):
@@ -201,6 +205,8 @@ def test_member_calls_bind_to_the_own_receiver_only(tmp_path):
     assert not any(src == tgt for _, src, tgt in pairs), sorted(p for p in pairs if p[1] == p[2])
     assert not any(src == "Holder.__delattr__" for _, src, _ in pairs)
     assert ("settings.py", "Child.reset", "Child.save") in pairs          # self.m(): the own class, not Other
+    assert ("settings.py", "Grandchild.save", "Base.save") in pairs      # super(Child, self) skips Child
+    assert ("settings.py", "Grandchild.save", "Child.save") not in pairs
     assert not any(tgt == "Other.save" for _, _, tgt in pairs)
     # Go: `b.Bind()` on a parameter is not the method's own Context.Bind; `c.MustBindWith()` is
     assert ("context.go", "Context.Bind", "Context.MustBindWith") in pairs

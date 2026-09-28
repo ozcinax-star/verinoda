@@ -92,6 +92,14 @@ Graph built with `index.build(force=True)` on fresh copies, base = dd60358, with
   | TS web framework (.ts of 481 files) | 746 -> 743 | 6 | 4 | 3 | 2 (`super.route()` self-loop, a `v.toString()`) |
   | C (432 files), C++ (145 files) | 2,775 -> 2,775; 2,408 -> 2,408 | 0 | | 0 | unchanged |
 
+  Added edges, sampled the same way: 15 of the 483 `super()` edges in the Python framework, 14 right (the base
+  that defines the method, past in-file mixins that do not); the 15th was `super(override_settings,
+  self).__init__()` in a subclass, bound to `override_settings.__init__` - `super(C, obj)` now searches the bases
+  of C (after the measurement; the test covers it). 10 of Rust's 332 added edges: all right (`FormatBuilder::new()`
+  to `FormatBuilder.new`, not the file's other `new`s; `self.is_empty()` to the own type). A base written as
+  `module.Class` gives no `inherits` edge, so the search passes over it (right in the one case seen,
+  `socketserver.ThreadingMixIn` defines no `__init__`, but not in general).
+
   A first version also deferred every JS/TS receiver other than `this`; on the TS framework it removed 37
   edges of which a sample of 12 had 5-6 true (untyped locals of classes the file defines, a typed parameter the
   TS resolver did not bind), so JS/TS defer `super.m()` only.
