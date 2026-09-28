@@ -87,6 +87,37 @@ def test_detect_language():
     assert tn.detect_language("") == "other"
 
 
+def test_detect_language_follows_the_prose_of_an_english_issue():
+    # "I've" split at the apostrophe is "ve", the Turkish "and": four of them made an English issue Turkish
+    issue = ("I've also left a comment about the rest of the directives. I've fixed this bug, but I've moved the "
+             "test to the validator and we've reverted the changes to the runner.")
+    assert tn.detect_language(issue) == "en"
+    # a Turkish word quoted in English prose, a name with Turkish letters, code in the message: still English
+    assert tn.detect_language("Where is the ölçü field read?") == "en"
+    assert tn.detect_language('The label shows "sürüm" instead of version when the locale is tr; where is it '
+                              "chosen?") == "en"
+    assert tn.detect_language("Gödel numbering: where is the encoder that the parser calls defined?") == "en"
+    assert tn.detect_language("Where is the parser defined?\n```js\nvar ne = de(o, ki)\nvar bu = en\n```\n"
+                              "Run it with `-o ve` and see https://example.org/o/ve/de") == "en"
+    # Turkish stays Turkish: suffixes after an apostrophe count, code does not
+    assert tn.detect_language("API'de sipariş nereden geliyor?") == "tr"
+    assert tn.detect_language("Bu kod neden hata veriyor?\n```\nfor x in items:\n    if x is None: pass\n```") == "tr"
+    assert tn.detect_language("`sipariş`") == "tr"
+    # a Turkish question that quotes English stays Turkish (mixed)
+    assert tn.detect_language('Uygulama açılırken "The system cannot find the file specified" hatası veriyor, bu '
+                              "hata nereden geliyor?") == "mixed"
+    assert tn.detect_language("Sipariş nerede kaydediliyor, the order service or the repository?") == "mixed"
+
+
+def test_clip_keeps_one_line_and_cuts_at_a_word():
+    assert tn.clip("how is an order saved?", 300) == "how is an order saved?"
+    assert tn.clip("a\r\n\r\nb   c", 300) == "a b c"
+    long = "word " * 100
+    out = tn.clip(long, 60)
+    assert len(out) <= 60 and out.endswith("…") and set(out[:-1].split(" ")) == {"word"}
+    assert tn.clip("x" * 100, 10) == "x" * 9 + "…"
+
+
 def test_tr_stem_candidates_longest_first():
     cands = tn.tr_stem_candidates("veritabanına")
     assert cands[0] == "veritabanina" and "veritabani" in cands

@@ -64,6 +64,7 @@ from verinoda import architecture_map as am
 from verinoda import evidence as evmod
 from verinoda import question_plan as qp
 from verinoda import textnorm as tn
+from verinoda.analysis_view import ECHO_CHARS
 from verinoda.claims import ORDER, VERIFIED, ClaimRuleError, Claims
 from verinoda.paths import load_config
 from verinoda.snapshot import current_state, git
@@ -94,6 +95,11 @@ LOCATION_FIRST = {"locate", "define", "behaviour", "performance", "architecture"
 UNGROUNDED_MAJORITY = 0.5   # more than this share of content words absent from the repo -> unknown
 MIN_STATUS_DEFAULT = "strong_inference"
 PERSISTENCE_TARGET = "(persistence)"
+# An unknown's question is often its sub-question's whole text; for an issue pasted as the question that
+# is the issue again, once per unknown and charged to the context budget each time. It is kept on one line
+# and clipped to ECHO_CHARS, the length the views show a sub-question's text with (the plan keeps the whole
+# text; D67).
+PINNED_SHOWN = 3            # versions the "the question names ..." note lists by name (the rest are counted)
 
 
 @dataclass
@@ -554,6 +560,20 @@ def _begin(ctx: _Ctx, sub: _Sub, section: str) -> bool:
     _unknown(ctx, sub, {"question": SUBQUESTIONS.get(section, section), "why": ctx.budget.exhausted_reason,
                         "next_step": NEXT_BUDGET})
     return False
+
+
+def _clip_echo(u: dict) -> None:
+    """Keep an unknown's question on one line and at most ECHO_CHARS (in place: the same dict may be listed
+    under its sub-question too)."""
+    q = u.get("question")
+    if isinstance(q, str) and (len(q) > ECHO_CHARS or "\n" in q):
+        u["question"] = tn.clip(q, ECHO_CHARS)
+
+
+def _pinned_note(pinned: list[str]) -> str:
+    """``the question names A, B, C and 4 more`` (the first PINNED_SHOWN by name)."""
+    more = len(pinned) - PINNED_SHOWN
+    return "the question names " + ", ".join(pinned[:PINNED_SHOWN]) + (f" and {more} more" if more > 0 else "")
 
 
 def _unknown(ctx: _Ctx, sub: _Sub | None, u: dict) -> None:
@@ -2230,7 +2250,7 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
               or any(a.get("clarification_id") == f"c-{r}" for r in sq.get("references") or [])]
     pinned_elsewhere = [f"{r.get('text')} ({r['version']['spec']})" for r in versioned] + chosen
     if pinned_elsewhere and sq["intent"] != "compare_reference":
-        extra_unc.append(f"the question names {', '.join(pinned_elsewhere)}; these claims describe the working tree "
+        extra_unc.append(f"{_pinned_note(pinned_elsewhere)}; these claims describe the working tree "
                          f"at {(ctx.commit or 'uncommitted')[:10]}")
     plan_ref = {"plan_id": ctx.plan_id, "sub_question": sq["id"], "mentions": sq.get("mentions") or []}
     ctx.rec.begin(sq["id"], share, plan_ref, extra_unc)
@@ -2281,7 +2301,7 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
         sub.flags["not_found"] = not_found
     if pinned_elsewhere and sq["intent"] != "compare_reference":
         _unknown(ctx, sub, {"question": sq.get("text") or "",
-                            "why": f"the question names {', '.join(pinned_elsewhere)}; only the working tree was "
+                            "why": f"{_pinned_note(pinned_elsewhere)}; only the working tree was "
                                    "analysed",
                             "next_step": "read that version with `verinoda research <repository> --ref <version>` "
                                          "(or `verinoda resolve` the reference first)"})
@@ -3038,6 +3058,7 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
         return budget.spend(1, _size(rec_))
 
     def unknown(u: dict) -> None:
+        _clip_echo(u)
         unknowns.append(u)
         budget.spend(0, _size(u))
 
@@ -3080,7 +3101,20 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
     else:
         check_res = qp.check(the_plan, g, repo, lex, source=source)
         stored_plan = the_plan
-    plan_id = qp.store_plan(store, stored_plan, check_res, source, analysis_id=aid, snapshot_id=snap["id"])
+    drafted_id, fallback = None, None
+    if source == "fallback" and check_res["status"] == "invalid":
+        # A question the user typed is never refused because the plan drafted for it failed its own
+        # checks (D67): the drafted plan is kept for the record, and the question is answered as one
+        # sub-question without it. A host's plan that fails is still refused (below).
+        drafted_id = qp.store_plan(store, stored_plan, check_res, source, analysis_id=aid, snapshot_id=snap["id"])
+        fallback = {"drafted_plan_id": drafted_id,
+                    "why": "the plan drafted for the question failed its own checks; answered without it",
+                    "errors": [f"{p.get('at', '/')}: {p.get('msg')}" for p in check_res["errors"][:3]]
+                    + ([f"+{len(check_res['errors']) - 3} more"] if len(check_res["errors"]) > 3 else [])}
+        the_plan, check_res = qp.fallback(question, g, repo, lex, drafted=stored_plan)
+        stored_plan = the_plan
+    plan_id = qp.store_plan(store, stored_plan, check_res, source, parent_id=drafted_id, analysis_id=aid,
+                            snapshot_id=snap["id"])
     sqs = (the_plan or {}).get("sub_questions") or []
     step("plan", f"{source} plan {plan_id}: {check_res['status']}, {len(sqs)} sub-question(s)"
          + (f", {len(check_res.get('clarifications') or [])} clarification(s)" if check_res.get("clarifications")
@@ -3091,6 +3125,10 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
     base = {"analysis_id": aid, "question": question, "intents": intents, "plan_id": plan_id, "plan_source": source,
             "understood_as": understood,
             "snapshot": {"id": snap["id"], "commit": commit, "dirty": bool(snap["dirty"])}}
+    if fallback:
+        base["plan_fallback"] = fallback
+        step("plan_fallback", f"drafted plan {drafted_id} invalid ({len(fallback['errors'])} error line(s)); "
+                              "answered as one sub-question")
     on_ambiguity = (the_plan or {}).get("on_ambiguity") or ("ask" if source == "host" else "answer_all")
     if check_res["status"] == "invalid" or (check_res["status"] == "needs_clarification" and on_ambiguity == "ask"):
         status = "invalid_plan" if check_res["status"] == "invalid" else "needs_clarification"
@@ -3194,6 +3232,8 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
                                answer_claims(by_id[s["id"]], rows, flags), step=gate_step)
         except Exception as exc:  # noqa: BLE001 - a failed check is said, the verdict is capped, never raised
             flags.setdefault(verdict_gate.CAPPED, []).append(f"verdict check failed: {type(exc).__name__}")
+        for u in unknowns[n_unknowns:]:  # the gate adds its notes directly (the same dicts as s["unknowns"])
+            _clip_echo(u)
         budget.chars += sum(_size(u) for u in unknowns[n_unknowns:])
         s["status"] = judge(by_id[s["id"]], rows, flags)
         ans = answer_claims(by_id[s["id"]], rows, flags)

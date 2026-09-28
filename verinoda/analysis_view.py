@@ -28,10 +28,15 @@ from __future__ import annotations
 import re
 from typing import Callable
 
+from verinoda import textnorm as tn
 from verinoda.claims import CONFIDENCE_CAP
 
 # verified statuses whose cited lines are the whole support: a printed passage shows the same
 LINE_VERIFIED = ("statically_verified", "primary_source_verified")
+# A sub-question's text as the views repeat it (its heading; an unknown's question is clipped to the same
+# length where it is made): one line, at most this long. A long message pasted as the question is not
+# printed again before the evidence; ``--json`` keeps every text whole (docs/DESIGN.md D67).
+ECHO_CHARS = 160
 _LOC_RX = re.compile(r"([A-Za-z0-9_.][\w.\-/]*\.[A-Za-z0-9_]+:\d+(?:-\d+)?)")
 _HEAD_RX = re.compile(r"^## (\S+):(\d+)-(\d+)(?: |$)")
 _SUB_RX = re.compile(r"^  (\S+):(\d+)-(\d+)$")
@@ -187,14 +192,16 @@ def lean(res: dict, *, shown_by: list[str] | None = None) -> dict:
     if snap:
         out["snapshot"] = {"id": snap.get("id"), "commit": snap.get("commit"), **({"dirty": True} if snap.get("dirty")
                                                                                    else {})}
-    for k in ("errors", "clarifications", "index_refresh_error", "index_refresh"):  # a stale answer is never silent
+    # a stale answer is never silent, nor one given without the plan drafted for it
+    for k in ("errors", "clarifications", "plan_fallback", "index_refresh_error", "index_refresh"):
         if res.get(k):
             out[k] = res[k]
     if res.get("plan_check"):
         out["plan_check"] = lean_plan_check(res["plan_check"])
     if res.get("plan_source") == "host":
         out["plan_id"] = res.get("plan_id")
-    out["subquestions"] = [{k: s[k] for k in SUB_KEYS if s.get(k)} for s in res.get("subquestions") or []]
+    out["subquestions"] = [{k: (tn.clip(s[k], ECHO_CHARS) if k == "text" else s[k]) for k in SUB_KEYS if s.get(k)}
+                           for s in res.get("subquestions") or []]
     hidden = shown_by_passages(res if shown_by is None else {**res, "passages": shown_by})
     out["claims"] = [lean_claim(c) for c in res.get("claims") or [] if c["id"] not in hidden]
     if hidden:
@@ -285,8 +292,11 @@ def _brief(b: dict) -> list[str]:
     return out
 
 
-def _unknown(u: dict) -> str:
-    return f"unknown: {u.get('question')}: {u.get('why')}" + (f"; next: {u['next_step']}" if u.get("next_step") else "")
+def _unknown(u: dict, echo: str | None = None) -> str:
+    """One unknown as a line; under a sub-question whose text it only repeats (``echo``), without the repeat."""
+    q = u.get("question")
+    head = "unknown: " if echo is not None and q in (echo, tn.clip(echo, ECHO_CHARS)) else f"unknown: {q}: "
+    return head + f"{u.get('why')}" + (f"; next: {u['next_step']}" if u.get("next_step") else "")
 
 
 def render_text(res: dict) -> str:
@@ -300,6 +310,11 @@ def render_text(res: dict) -> str:
     out.append(head)
     if res.get("understood_as"):
         out.append(f"understood as: {res['understood_as']}")
+    fb = res.get("plan_fallback") or {}
+    if fb:
+        first = (fb.get("errors") or [""])[0]
+        out.append(f"note: {fb.get('why') or 'answered without the drafted plan'}"
+                   + (f" ({tn.clip(first, ECHO_CHARS)})" if first else ""))
     status = res.get("status")
     pc = res.get("plan_check") or {}
     if res.get("plan_source") == "host":
@@ -329,7 +344,8 @@ def render_text(res: dict) -> str:
     unknowns = list(res.get("unknowns") or [])
     printed: set[str] = set()
     for s in res.get("subquestions") or []:
-        out.append(f"{s['id']} [{s.get('status') or '?'}] {s.get('intent')}: {s.get('text') or ''}")
+        text = tn.clip(s.get("text") or "", ECHO_CHARS)
+        out.append(f"{s['id']} [{s.get('status') or '?'}] {s.get('intent')}: {text}")
         b = s.get("decision_brief") or {}
         if b.get("forces") is not None:  # a choice: what the human decides with (no recommendation)
             out.append(f"  decision brief {b.get('brief_id')} [{b.get('verdict')}]: {b.get('understood_as')}")
@@ -341,7 +357,7 @@ def render_text(res: dict) -> str:
                 out.append("  " + claim_line(claims[cid]))
                 printed.add(cid)
         for u in [u for u in unknowns if u.get("sub_question") == s["id"]]:
-            out.append("  " + _unknown(u))
+            out.append("  " + _unknown(u, s.get("text") or ""))
     hidden = shown_by_passages(res)
     rest = [c for c in claims.values() if c["id"] not in printed and c["id"] not in hidden]
     # context the critique refuted on the way is not part of the answer: counted, not printed (nor its critique)

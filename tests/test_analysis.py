@@ -607,6 +607,54 @@ def test_invalid_plan_is_refused_before_any_work(proj):
     assert res["status"] == "invalid_plan" and res["errors"][0]["code"] == "schema"
 
 
+def test_a_typed_question_is_answered_when_its_drafted_plan_is_invalid(proj, monkeypatch):
+    """D67: the plan drafted for a typed question failed its own checks -> the question is answered without
+    it (and says so); the invalid draft is kept for the record. A host's plan is still refused (above)."""
+    from verinoda import analysis_view as av
+
+    repo, st = proj
+    real_draft = qp.draft
+
+    def broken_draft(question, graph, lexicon=None):
+        p = real_draft(question, graph, lexicon)
+        p["sub_questions"][0]["mentions"] = ["m99"]  # a dangling id: invalid
+        return p
+
+    monkeypatch.setattr(qp, "draft", broken_draft)
+    res = analysis.analyze(st, repo, "Where is compute_total defined?", challenge=False)
+    assert res["status"] == "answered" and res["plan_source"] == "fallback"
+    fb = res["plan_fallback"]
+    assert "m99" in fb["errors"][0] and st.get("question_plans", fb["drafted_plan_id"])["status"] == "invalid"
+    used = st.get("question_plans", res["plan_id"])
+    assert used["parent_id"] == fb["drafted_plan_id"] and len(used["plan"]["sub_questions"]) == 1
+    (sq,) = res["subquestions"]
+    assert sq["status"] == "met" and any("compute_total" in c["text"] for c in res["claims"])
+    assert res["understood_as"].startswith("Understood (rules): q1 [locate]")
+    text = av.render_text(res)
+    assert "\nnote: the plan drafted for the question failed its own checks" in text
+    assert "plan_fallback" in av.lean(res)
+
+
+def test_a_long_question_is_not_echoed_before_the_evidence(proj):
+    """D67: an issue pasted as the question is restated in a short understood_as; unknowns and the text view
+    do not repeat each sub-question's whole text."""
+    from verinoda import analysis_view as av
+
+    repo, st = proj
+    q = ("Where is compute_total defined?\n\n" + "\n\n".join(f"Log line {i}: the flux capacitor overheated "
+                                                             "while the warp coil hummed." for i in range(60)))
+    res = analysis.analyze(st, repo, q, challenge=False)
+    assert res["status"] == "answered" and len(res["understood_as"]) <= qp.GOAL_CHARS
+    assert all(len(u["question"]) <= analysis.ECHO_CHARS and "\n" not in u["question"] for u in res["unknowns"])
+    text = av.render_text(res)
+    echoing = [ln for ln in text.splitlines() if "flux capacitor" in ln]
+    assert len(echoing) <= 1 + len(res["subquestions"])  # understood as + each heading at most
+    for s in res["subquestions"]:
+        heading = next(ln for ln in text.splitlines() if ln.startswith(f"{s['id']} ["))
+        assert len(heading) <= analysis.ECHO_CHARS + 40
+    assert len(av.lean(res)["subquestions"][0]["text"]) <= analysis.ECHO_CHARS
+
+
 def test_plan_can_come_from_a_file(proj, tmp_path):
     repo, st = proj
     p = _host_plan("Where is compute_total defined?",

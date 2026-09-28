@@ -86,6 +86,37 @@ def fold_tr(text: str) -> str:
     return out
 
 
+# An English contraction's tail ("I've", "don't", "we'll") is no word of its own: split at the
+# apostrophe, "ve" would count as the Turkish "and". A Turkish suffix after an apostrophe ("API'de",
+# "Order'ı") is not in this list and keeps counting.
+_EN_CONTRACTION = re.compile(r"(?<=\w)['’ʼ](?:s|t|d|m|ve|re|ll)\b", re.I)
+# What is not prose: fenced and inline code, URLs. Their words are identifiers, flags and paths
+# ("-o", "var", "en"), not the language the message is written in.
+_NOT_PROSE = re.compile(r"```.*?(?:```|$)|`[^`\n]*`|https?://\S+", re.S)
+
+
+def _prose_words(text: str) -> list[str]:
+    """The words of ``text`` outside code and URLs (all of them when nothing else is left), contraction
+    tails dropped."""
+    prose = _NOT_PROSE.sub(" ", text)
+    if not _WORD.search(prose):
+        prose = text
+    return _WORD.findall(_EN_CONTRACTION.sub("", prose))
+
+
+def clip(text: str, n: int) -> str:
+    """``text`` on one line (runs of whitespace, line breaks included, become one space) and at most ``n``
+    characters: a longer one is cut at a word boundary and ends with an ellipsis."""
+    s = " ".join(str(text or "").split())
+    if len(s) <= n:
+        return s
+    cut = s[:max(1, n - 1)]
+    space = cut.rfind(" ")
+    if space >= n * 0.6:
+        cut = cut[:space]
+    return cut.rstrip(" ,;:|-") + "…"
+
+
 def has_turkish(text: str) -> bool:
     if any(ch in _TR_LETTERS for ch in text):
         return True
@@ -277,16 +308,24 @@ def tr_stem_candidates(word: str, min_len: int = 3) -> list[str]:
 
 
 def detect_language(text: str) -> str:
-    """``"tr"``, ``"en"``, ``"mixed"`` or ``"other"`` from letters and function words."""
-    toks = [fold_tr(w) for w in _WORD.findall(text)]
+    """``"tr"``, ``"en"``, ``"mixed"`` or ``"other"`` from letters and function words.
+
+    Only the prose counts (:func:`_prose_words`: no code, URLs or contraction tails). A message whose
+    English function words outnumber its Turkish signals (function words plus words with Turkish
+    letters) three to one, at least three of them, is English even when it quotes a Turkish word or
+    names "Gödel": the answer follows the language the message is written in (docs/DESIGN.md D67)."""
+    words = _prose_words(text)
+    toks = [fold_tr(w) for w in words]
     if not toks:
         return "other"
-    tr_letters = any(ch in _TR_LETTERS for ch in text)
+    tr_letter_words = sum(1 for w in words if any(ch in _TR_LETTERS for ch in w))
     tr_words = sum(1 for w in toks if w in TR_STOPWORDS or w in TR_QUESTION_WORDS)
     en_words = sum(1 for w in toks if w in EN_STOPWORDS)
-    is_tr = tr_letters or tr_words >= 2 or (tr_words >= 1 and en_words == 0)
+    is_tr = tr_letter_words > 0 or tr_words >= 2 or (tr_words >= 1 and en_words == 0)
     is_en = en_words >= 2 or (en_words >= 1 and not is_tr)
     if is_tr and is_en:
+        if en_words >= 3 and en_words >= 3 * (tr_words + tr_letter_words):
+            return "en"
         return "mixed"
     if is_tr:
         return "tr"

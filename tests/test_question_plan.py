@@ -911,6 +911,71 @@ def test_draft_off_topic_question_has_no_mentions(orders):
     assert p["mentions"] == [] and p["sub_questions"][0]["intent"] == "locate"
 
 
+# An issue pasted as the question: a report whose environment dump names more versions than a plan may
+# hold references (D67). Every package line is "name: version".
+ENV_DUMP_ISSUE = ("Where is compute_total defined? It raises a warning when I call it.\n\n### Versions\n\n```\n"
+                  + "\n".join(f"pkg{i}: {i}.{i + 1}.{i + 2}" for i in range(1, 16))
+                  + "\n```\nSee #12 and #12 again, commit 9aaed49 and 9aaed49.\n")
+
+
+def test_draft_carries_every_version_even_past_the_reference_limit(orders):
+    repo, g, lex = orders
+    p = qp.draft(ENV_DUMP_ISSUE, g, lex)
+    refs = p["references"]
+    assert len(refs) == qp.LIMITS["references"]
+    carrier = refs[-1]
+    assert carrier["derived_by"].endswith(":version_overflow")
+    # the carrier's text is the user's own words; the rest of the versions are listed in its evidence
+    assert carrier["text"] in ENV_DUMP_ISSUE and "15.16.17" in carrier["version"]["evidence"]
+    res = qp.check(p, g, repo, lex)
+    assert res["status"] != "invalid" and "version_dropped" not in codes(res["errors"])
+    for tok in qp.version_tokens(ENV_DUMP_ISSUE):
+        assert qp._carried(tok["text"], refs), tok
+    # a version named twice is one reference
+    assert sum(1 for r in refs if r["version"].get("spec") == "#12") <= 1
+
+
+def test_draft_restates_a_long_message_briefly(orders):
+    repo, g, lex = orders
+    long_msg = ENV_DUMP_ISSUE + "\n".join(f"Step {i}: the order total differs after the discount is applied."
+                                          for i in range(40))
+    p = qp.draft(long_msg, g, lex)
+    for key in ("restated_goal", "restated_goal_user_lang"):
+        assert len(p[key]) <= qp.GOAL_CHARS and "\n" not in p[key]
+    assert p["restated_goal_user_lang"].startswith("Understood (rules): q1 [")
+    # the plan itself keeps every sub-question's whole text: retrieval reads it
+    assert "".join(sq["text"] for sq in p["sub_questions"]).count("Step") >= 1
+    short = qp.draft("Where is compute_total defined?", g, lex)
+    assert short["restated_goal_user_lang"] == "Understood (rules): q1 [locate] Where is compute_total defined?"
+
+
+def test_draft_of_an_english_issue_with_contractions_is_english(orders):
+    repo, g, lex = orders
+    msg = ("I've seen the total change after a discount. I've checked the tests and we've found nothing: "
+           "where is compute_total defined?")
+    p = qp.draft(msg, g, lex)
+    assert p["language"] == "en" and p["restated_goal_user_lang"].startswith("Understood (rules)")
+
+
+def test_fallback_answers_the_message_as_one_subquestion_about_the_drafted_mentions(orders):
+    repo, g, lex = orders
+    drafted = qp.draft(ENV_DUMP_ISSUE, g, lex)
+    p, res = qp.fallback(ENV_DUMP_ISSUE, g, repo, lex, drafted=drafted)
+    assert qp.validate(p) == [] and len(p["sub_questions"]) == 1 and "references" not in p
+    assert p["sub_questions"][0]["text"] == ENV_DUMP_ISSUE and len(p["restated_goal_user_lang"]) <= qp.GOAL_CHARS
+    assert p["mentions"] == drafted["mentions"] and p["sub_questions"][0]["mentions"] == [
+        m["id"] for m in drafted["mentions"]]
+    # no reference carries the versions: the plain check refuses such a plan, the fallback keeps it as a warning
+    assert qp.check(p, g, repo, lex, source="fallback")["status"] == "invalid"
+    assert res["status"] in ("ready", "needs_clarification") and not res["errors"]
+    assert "version_dropped" in codes(res["warnings"])
+    assert any(lk["text"] == "compute_total" and lk["status"] == "linked" for lk in res["links"])
+    # mentions that are themselves broken are left out: the message alone is the sub-question
+    broken = {**drafted, "mentions": [{"id": "m1", "text": "QueryTokenizer", "kind": "symbol"}]}
+    p2, res2 = qp.fallback(ENV_DUMP_ISSUE, g, repo, lex, drafted=broken)
+    assert p2["mentions"] == [] and not res2["errors"]
+
+
 def test_retrieval_inputs_expand_only_words_the_repository_lacks(orders):
     repo, g, lex = orders
     p = qp.draft("İndirim nerede uygulanıyor?", g, lex)

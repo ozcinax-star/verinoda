@@ -2202,8 +2202,11 @@ def _versions(plan: dict) -> tuple[list[dict], list[dict], list[dict]]:
     return errors, warnings, clar
 
 
-def check(plan: dict, graph, repo=None, lexicon=None, *, source: str = "host") -> dict:
-    """Validate and ground a plan. Pure apart from reading source lines and local git tags."""
+def check(plan: dict, graph, repo=None, lexicon=None, *, source: str = "host", refuse_versions: bool = True) -> dict:
+    """Validate and ground a plan. Pure apart from reading source lines and local git tags.
+
+    ``refuse_versions=False`` (the fallback plan of a typed question, :func:`fallback`) keeps a version no
+    reference carries as a warning instead of an error."""
     result: dict = {"schema": CHECK_SCHEMA_ID, "plan_hash": plan_hash(plan) if isinstance(plan, dict) else None,
                     "source": source, "status": "invalid", "errors": [], "warnings": [], "thresholds": THRESHOLDS,
                     "language_detected": None, "intents_detected": [], "intent_divergence": [], "topo_order": [],
@@ -2219,6 +2222,8 @@ def check(plan: dict, graph, repo=None, lexicon=None, *, source: str = "host") -
     errors, warnings, order = _integrity(plan)
     e2, w2 = _grounding(plan)
     e3, w3, clar_v = _versions(plan)
+    if not refuse_versions:
+        e3, w3 = [], e3 + w3
     errors += e2 + e3
     warnings += w2 + w3
     result["topo_order"] = order
@@ -2570,19 +2575,75 @@ def draft(question: str, graph, lexicon=None) -> dict:
     return plan
 
 
+def bare_plan(question: str, lexicon=None, mentions: list[dict] | None = None) -> dict:
+    """The whole message as one sub-question (intent from the rule cues) about ``mentions``, with no
+    references. What analyze answers a typed question with when the plan drafted for it fails its own
+    checks (:func:`fallback`, docs/DESIGN.md D67)."""
+    lang = tn.detect_language(question)
+    cues = clause_cues(question, lexicon)
+    intent = cues[0]["intent"] if cues else "locate"
+    kind, min_status, detail = DEFAULT_DONE[intent]
+    ms = [dict(m) for m in mentions or []]
+    ids = [m["id"] for m in ms]
+    sq = {"id": "q1", "text": question, "text_user_lang": question, "intent": intent, "mentions": ids,
+          "done_when": {"kind": kind, "subjects": ids, "min_status": min_status, "detail": detail},
+          "derived_by": f"{DRAFT_RULES}:bare"}
+    return {"schema": SCHEMA_ID, "user_message": question, "language": lang,
+            "restated_goal": _goal_en([sq], ms), "restated_goal_user_lang": _goal_user([sq], ms, lang),
+            "sub_questions": [sq], "mentions": ms,
+            "assumptions": ["the plan drafted by rules failed its own checks; the message is answered as one "
+                            "sub-question " + ("about the drafted plan's mentions" if ms else "without mentions")
+                            + ", without references"],
+            "on_ambiguity": "answer_all", "host": "cli", "derived_by": f"{DRAFT_RULES}:bare"}
+
+
+def fallback(question: str, graph, repo=None, lexicon=None, drafted: dict | None = None) -> tuple[dict, dict]:
+    """``(plan, check)`` for a typed question whose drafted plan failed its own checks (D67).
+
+    The user asked a question, not for a plan: it is answered without the drafted plan, never refused.
+    The message becomes one sub-question about the drafted plan's mentions (the words it matched to
+    the code; without them every word of the question would look absent from the repository), or about
+    none when those are what failed. A bare plan carries no reference, so a version the message names
+    is a warning here, not a refusal: there is no plan the user could fix."""
+    kept = [m for m in (drafted or {}).get("mentions") or [] if isinstance(m, dict)][:LIMITS["mentions"]]
+    for ms in ([kept, []] if kept else [[]]):
+        plan = bare_plan(question, lexicon, ms)
+        res = check(plan, graph, repo, lexicon, source="fallback", refuse_versions=False)
+        if not res["errors"]:
+            return plan, res
+    res["warnings"] = res["errors"] + res["warnings"]  # a plan of our own making: said, never refused
+    res["errors"] = []
+    res["status"] = "needs_clarification" if res["clarifications"] else "ready"
+    return plan, res
+
+
+# A drafted restated goal is the reading of the message, not the message again: an issue pasted as the
+# question (thousands of characters with its logs) would otherwise be printed once more before any
+# evidence. Each sub-question's text gets an equal share; short messages are shown whole (D67).
+GOAL_CHARS = 300
+
+
+def _goal(prefix: str, sqs: list[dict], label, extra: str) -> str:
+    heads = [f"{sq['id']} [{label(sq['intent'])}] " for sq in sqs]
+    texts = [" ".join(str(sq["text"]).split()) for sq in sqs]
+    room = GOAL_CHARS - len(prefix) - len(extra) - sum(len(h) + 3 for h in heads)
+    if sum(len(t) for t in texts) > room:
+        share = max(24, room // max(1, len(texts)))
+        texts = [tn.clip(t, share) for t in texts]
+    return tn.clip(prefix + " | ".join(h + t for h, t in zip(heads, texts)) + extra, GOAL_CHARS)
+
+
 def _goal_en(sqs: list[dict], mentions: list[dict]) -> str:
-    parts = [f"{sq['id']} [{sq['intent']}] {sq['text']}" for sq in sqs]
     gl = [f"{m['text']}={m['gloss_en']}" for m in mentions if m.get("gloss_en")]
-    return "Rule-based reading: " + " | ".join(parts) + (f" (glosses: {', '.join(gl)})" if gl else "")
+    return _goal("Rule-based reading: ", sqs, str, f" (glosses: {', '.join(gl)})" if gl else "")
 
 
 def _goal_user(sqs: list[dict], mentions: list[dict], lang: str) -> str:
     if lang not in ("tr", "mixed"):
-        return "Understood (rules): " + " | ".join(f"{sq['id']} [{sq['intent']}] {sq['text']}" for sq in sqs)
+        return _goal("Understood (rules): ", sqs, str, "")
     gl = [f"{m['text']}={m['gloss_en']}" for m in mentions if m.get("gloss_en")]
-    return ("Anladığım (kurallarla): "
-            + " | ".join(f"{sq['id']} [{INTENT_NAMES_TR[sq['intent']]}] {sq['text']}" for sq in sqs)
-            + (f" (karşılıklar: {', '.join(gl)})" if gl else ""))
+    return _goal("Anladığım (kurallarla): ", sqs, INTENT_NAMES_TR.get,
+                 f" (karşılıklar: {', '.join(gl)})" if gl else "")
 
 
 def _draft_references(question: str) -> tuple[list[dict], list[tuple[int, int]]]:
@@ -2605,6 +2666,9 @@ def _draft_references(question: str) -> tuple[list[dict], list[tuple[int, int]]]
         spans.append((s, e))
     for tok in version_tokens(question):
         if any(a <= tok["start"] < b for a, b in spans):
+            continue
+        if tok["strong"] and _carried(tok["text"], refs):  # a version named again (a PR number, a SHA in a log)
+            spans.append((tok["start"], tok["end"]))
             continue
         s, e = tok["start"], tok["end"]
         kind = {"sha": "commit", "pr": "pull_request", "issue": "issue"}.get(tok["kind"], "git_repo")
@@ -2636,7 +2700,40 @@ def _draft_references(question: str) -> tuple[list[dict], list[tuple[int, int]]]
                      "purpose": "context", "derived_by": f"{DRAFT_RULES}:relative_version"})
         spans.append((s, e))
     refs.sort(key=lambda r: r["span"][0])
-    return refs, spans
+    return _fold_overflow(refs), spans
+
+
+def _fold_overflow(refs: list[dict]) -> list[dict]:
+    """At most ``LIMITS["references"]`` references that still carry every version the message names.
+
+    An issue with an environment dump or a log names more versions than a plan may hold references
+    (15 package versions, 20 commit SHAs). The first ones stay references of their own; the last
+    reference lists the rest in ``version.evidence``, where the version check finds them, so none is
+    dropped and the plan stays valid (docs/DESIGN.md D67). Relative versions ("the previous release")
+    always stay references of their own: they are what a version clarification is about."""
+    limit = LIMITS["references"]
+    if len(refs) <= limit:
+        return refs
+    relative = [r for r in refs if (r.get("version") or {}).get("source") == "user_relative"][:limit - 1]
+    others = [r for r in refs if all(r is not x for x in relative)]
+    room = limit - 1 - len(relative)
+    rest = others[room:]
+    named: list[str] = []
+    for r in rest:
+        spec = (r.get("version") or {}).get("spec")
+        for t in ([spec] if spec else []) + [t["text"] for t in version_tokens(r.get("text") or "")]:
+            if t not in named:
+                named.append(t)
+    first = rest[0]
+    carrier = {"text": first["text"], "span": first["span"], "kind": first["kind"],
+               **({"locator": first["locator"], "locator_source": first.get("locator_source", "user_message")}
+                  if first.get("locator") else {}),
+               "version": {"spec": named[0] if named else first["text"], "source": "user_explicit",
+                           "evidence": ", ".join(named) or first["text"]},
+               "purpose": "context", "derived_by": f"{DRAFT_RULES}:version_overflow"}
+    out = others[:room] + relative + [carrier]
+    out.sort(key=lambda r: r["span"][0])
+    return out
 
 
 # -- inputs for retrieval ---------------------------------------------------------------------------
