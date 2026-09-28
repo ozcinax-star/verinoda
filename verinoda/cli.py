@@ -2094,8 +2094,10 @@ def _r_check(r: dict) -> None:
             unknown += 1
             if unknown > CHECK_UNKNOWN_SHOWN:
                 continue
-        label = "ABSENT" if v == "absent" else v
+        label = "ABSENT" if v == "absent" else f"unknown {site['rank'].upper()}" if site.get("rank") else v
         print(f"{site['at']}  {label}  {site['kind']} {site['expr']}")
+        if v == "unknown" and site.get("rank") in ("high", "medium") and site.get("rank_why"):
+            print(f"    {site['rank_why']}")
         detail = site.get("message") or site.get("why") or site.get("guard") or site.get("at_def")
         if detail:
             print(f"    {detail}")
@@ -2104,11 +2106,21 @@ def _r_check(r: dict) -> None:
                                          for n in site["nearest"]))
         if site.get("elsewhere"):
             print("    defined elsewhere: " + ", ".join(f"{e['qualname']} ({e['at']})" for e in site["elsewhere"]))
-        if site.get("next_step") and v in ("absent", "not_installed"):
+        if site.get("next_step") and (v in ("absent", "not_installed") or site.get("rank") in ("high", "medium")):
             print(f"    next: {site['next_step']}")
     if unknown > CHECK_UNKNOWN_SHOWN:
-        print(f"... {unknown - CHECK_UNKNOWN_SHOWN} more unknown sites (--json lists them all)")
-    if unknown:
+        print(f"... {unknown - CHECK_UNKNOWN_SHOWN} more unknown sites (--all --json lists them all)")
+    us = r.get("unknown_summary")
+    if us:
+        low = us.get("low", 0)
+        print(f"unknown: {us.get('high', 0)} HIGH (likely mistakes), {us.get('medium', 0)} MEDIUM, {low} LOW"
+              + (" (listed last)" if any(x.get("rank") == "low" for x in r["sites"]) else
+                 " (not listed: --all lists them)" if low else ""))
+        for g in us.get("low_by_cause", [])[:6]:
+            print(f"  LOW {g['sites']:>4}  {g['cause']} (e.g. {g['example']}) -> {g['next_step']}")
+        if us.get("note"):
+            print(f"  note: {us['note']}")
+    if unknown or s["unknown"]:
         print("unknown = not checked (open container or receiver type not known); read the definition or run "
               "the tests")
 
@@ -2892,8 +2904,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--stdin", action="store_true", help="check the code on stdin before it is written")
     sp.add_argument("--as", dest="as_path", metavar="PATH", help="with --stdin: the file the code is meant for")
     sp.add_argument("--env", default="auto", help=env_help)
-    sp.add_argument("--all", action="store_true", help="also list the sites that exist")
-    sp.add_argument("--no-cache", action="store_true", help="do not read or write .verinoda/cache/check")
+    sp.add_argument("--all", action="store_true", help="also list the sites that exist and the LOW unknowns")
+    sp.add_argument("--no-cache", action="store_true",
+                    help="do not read or write .verinoda/cache/check (the environment's name index, kept per "
+                         "environment in the user cache, is still used: delete its names-*.txt to rebuild it)")
     sp = add("api", cmd_api, "the real members of a Python module, class or function in the project's environment, "
                              "or of a Java class as the build sees it (classpath and JDK, with access), with "
                              "signatures and locations (exit 3: not found; a name that "

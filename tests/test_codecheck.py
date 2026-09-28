@@ -1178,9 +1178,14 @@ def test_a_large_project_says_what_it_did_not_read(tmp_path, monkeypatch):
         _write(tmp_path, f"b{i}.py", "x = 1\n")
     _write(tmp_path, "zzz/setup_extra.py", "import conf\nconf.EXTRA = 1\n")
     (tmp_path / ".verinoda").mkdir()
-    one = codecheck.check(tmp_path, ["a_main.py"], env="none")
-    assert {s["name"]: s["verdict"] for s in one["sites"]} == {"EXTRA": "unknown", "DEBUGG": "unknown"}
-    assert "more than 3 Python files" in one["sites"][0]["why"] and "more than 3" in one["cache"]["off"]
+    one = codecheck.check(tmp_path, ["a_main.py"], env="none", include_exists=True)
+    odd = [s for s in one["sites"] if s["verdict"] != "exists"]
+    assert {s["name"]: s["verdict"] for s in odd} == {"EXTRA": "unknown", "DEBUGG": "unknown"}
+    assert "more than 3 Python files" in odd[0]["why"] and "more than 3" in one["cache"]["off"]
+    # the name index read only part of the project: a name not found in it is MEDIUM, never HIGH
+    debugg = next(s for s in odd if s["name"] == "DEBUGG")
+    assert debugg["rank"] == "medium" and "stopped early" in debugg["rank_why"]
+    assert "stopped early" in one["unknown_summary"]["note"]
     whole = codecheck.check(tmp_path, ["."], env="none")
     assert whole["summary"]["files"] == 3 and "stopped at 3 Python files" in whole["incomplete"][0]
     codecheck.reset_caches()
@@ -1786,7 +1791,7 @@ def test_a_jedi_internal_error_is_named_in_the_unknown(tmp_path, monkeypatch):
         return orig(self, line, column, **kw)
 
     monkeypatch.setattr(jedi.Script, "goto", goto)
-    res = codecheck.check(tmp_path, ["m.py"], env="none", use_cache=False)
+    res = codecheck.check(tmp_path, ["m.py"], env="none", use_cache=False, include_exists=True)
     (s,) = [x for x in res["sites"] if x["name"] == "inner"]
     assert s["verdict"] == "unknown" and "jedi also failed internally" in s["why"] and "boom" in s["why"], s
 
@@ -1794,7 +1799,7 @@ def test_a_jedi_internal_error_is_named_in_the_unknown(tmp_path, monkeypatch):
 def test_a_class_whose_base_is_a_call_and_a_failing_site_do_not_stop_the_check(tmp_path, monkeypatch):
     _write(tmp_path, "nt.py", "from collections import namedtuple\n\n\nclass P(namedtuple('P', 'x y')):\n    pass\n\n\n"
                               "def use():\n    p = P(1, 2)\n    return p.x, p.zz, P(1, 2).zz\n")
-    res = codecheck.check(tmp_path, ["nt.py"], env="none", use_cache=False)
+    res = codecheck.check(tmp_path, ["nt.py"], env="none", use_cache=False, include_exists=True)
     zz = [s for s in res["sites"] if s["name"] == "zz"]
     assert len(zz) == 2 and all(s["verdict"] == "unknown" and "is an expression" in s["why"] for s in zz), zz
     # a defect of the check on one site: that site is unknown and listed as not decided, the rest is checked
