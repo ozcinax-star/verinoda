@@ -679,10 +679,16 @@ def test_the_copy_skips_symlinks_and_junctions(proj, tmp_path):
     n = experiments._copy_repo(repo, dst, ids, skipped)
     assert not (dst / "linked").exists() and "linked/secret.txt" not in ids
     # a junction's files are listed one by one; git lists a POSIX symlink to a folder as one entry
-    assert [s["path"] for s in skipped] in (["linked/secret.txt"], ["linked"]) and n == len(ids) > 0
+    # what matters: nothing behind the link enters the copy. How it is left out depends on the listing: a
+    # junction's files are listed one by one and skipped; git lists a POSIX symlink to a folder as one entry,
+    # which the working-tree listing drops as not a file (then nothing is listed as skipped)
+    got = [s["path"] for s in skipped]
+    assert got in (["linked/secret.txt"], ["linked"], []) and n == len(ids) > 0
     assert not any(k == "linked" or k.startswith("linked/") for k in ids)
+    assert not (dst / "linked").exists()
     res = experiments.run(st, repo, [*PYTEST, "tests/test_pricing.py"], hypothesis="h")
-    assert res["source"]["skipped_total"] == 1 and any("not followed" in lim for lim in res["limits"])
+    assert res["source"]["skipped_total"] == len(got)
+    assert not got or any("not followed" in lim for lim in res["limits"])
 
 
 def test_through_links_finds_nothing_in_an_ordinary_tree(proj):
