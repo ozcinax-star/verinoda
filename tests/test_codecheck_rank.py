@@ -263,6 +263,14 @@ def test_a_project_fixture_of_the_same_name_is_not_typed_as_pytests(tmp_path):
     assert s["verdict"] == "unknown" and s.get("declared") == "builtins.str"
 
 
+def test_sites_of_other_languages_are_counted_as_not_ranked(tmp_path):
+    java = {"at": "A.java:3:5", "path": "A.java", "line": 3, "col": 5, "kind": "method", "expr": "x.f()",
+            "name": "f", "verdict": "unknown", "why": "the receiver's type is not known", "language": "Java"}
+    got = codecheck_rank.rank_sites(None, tmp_path, [java], [], jedi=True)
+    assert got["not_ranked"] == 1 and got["high"] == got["medium"] == got["low"] == 0 and "rank" not in java
+    assert codecheck_rank.order_key(java)[0] == 3                              # listed with the MEDIUM ones
+
+
 def test_defined_names_reads_definitions_not_uses():
     import ast
 

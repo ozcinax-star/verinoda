@@ -34,11 +34,14 @@ optional dependency listed only in a requirements file under `tests/`.
   of HIGH. The environment's index is built once per environment fingerprint (and jedi version), kept in memory
   and, with `.verinoda/`, in `.verinoda/cache/check/names-<fingerprint>.json`; the build stops after 120 s
   (`VERINODA_NAME_INDEX_BUDGET_S`), and a name not found in an incomplete index is MEDIUM, never HIGH.
+  Precision limit (not measured): without a project environment (`--env none`, no `.venv`) the index holds only
+  the standard library, the stubs and the project, so a name of an uninstalled third-party package reached
+  indirectly (not through an import in the same file, which makes the site MEDIUM) can be ranked HIGH.
 - **Order and listing.** Sites are listed absent, HIGH, not installed, MEDIUM, guarded, then LOW. LOW sites are
   counted by cause in `unknown_summary` (`high`, `medium`, `low`, `low_by_cause` with an example and one next
   step per cause) and listed only with `--all` / `include_exists`. The ranking runs after the per-file cache, since
   a rank depends on what every other file defines. Java, Kotlin and TypeScript sites are not ranked and stay
-  listed. Every unknown carries a one-step `next_step` (the cause's step when the site had none).
+  listed (`unknown_summary.not_ranked` counts them, so the counts sum to `summary.unknown`). Every unknown carries a one-step `next_step` (the cause's step when the site had none).
 - **MCP one-line sites.** `code_check` returns each site as one line: `VERDICT path:line:col kind expr | why |
   nearest: names` (or `next: step` when there are no nearest names); HIGH, MEDIUM and LOW label unknowns; the
   `files` list keeps only files that could not be read. The cap cuts from the end, so an absent or HIGH site is
@@ -82,7 +85,8 @@ each. The planting and triage rules were written by the rule author (in-sample).
   `not_installed (optional)` import (psycopg, listed in `tests/requirements/postgres.txt`) instead of an absent;
   the two `psycopg2` imports stay absent (psycopg2 is listed in no requirements file; they sit under
   `if is_psycopg3:`, a flag imported from a module that sets it in try/except ImportError, which is not read as a
-  guard).
+  guard). On a copy of a sympy checkout, `sympy/core/tests/test_numbers.py:1431` (`from sympy import Pi` inside
+  `with raises(ImportError):`) is `guarded` instead of `absent`; the file has no absent site left.
 - Tests: `tests/test_codecheck_rank.py` (ranks, summary, order, the name index's superset rule, argparse dests,
   not-installed receivers, raises guards, optional dependencies, declared types for the two jedi defects, path-join
   locals, call results and pytest fixtures, MCP one-line sites under the cap, CLI labels).
@@ -92,6 +96,8 @@ each. The planting and triage rules were written by the rule author (in-sample).
 - `**kwargs` following (the study's M2), mypy or pyright as a second resolver, the opt-in runtime probes.
 - A flag imported from another module (`is_psycopg3`) as an import guard.
 - A user-level cache of the environment's word index for projects without `.verinoda/`.
+- The close-name threshold (0.8) leaves a transposed four-letter name (`rpeo` for `repo`, 0.75) at MEDIUM.
+- The before/after counts on the study's 6-module, Django 30-file and sympy 30-file samples were not re-run.
 
 ## Decision table row
 

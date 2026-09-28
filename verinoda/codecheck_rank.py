@@ -361,7 +361,9 @@ def _missing_roots(sites: list[dict], repo: Path) -> dict[str, dict[str, str]]:
             continue
         names: dict[str, str] = {}
         for n in ast.walk(tree):
-            if isinstance(n, (ast.Import, ast.ImportFrom)) and n.lineno in at:
+            # a parenthesised from-import's names may sit on later lines than the statement
+            if isinstance(n, (ast.Import, ast.ImportFrom)) and \
+                    (n.lineno in at or any(getattr(al, "lineno", None) in at for al in n.names)):
                 for al in n.names:
                     if al.name == "*":
                         continue
@@ -463,6 +465,9 @@ def rank_sites(env, repo: Path, sites: list[dict], checked: list[tuple[Path, str
                                      "next_step": step})
         g["sites"] += 1
     out: dict = {**counts, "low_by_cause": sorted(groups.values(), key=lambda g: (-g["sites"], g["cause"]))}
+    others = sum(1 for s in sites if s["verdict"] == "unknown" and s.get("language"))
+    if others:   # Java, Kotlin and TypeScript sites are listed, not ranked
+        out["not_ranked"] = others
     if idx is not None:
         out["name_index"] = {"environment_files": idx.env.files, "seconds": idx.env.seconds,
                              "complete": idx.complete}

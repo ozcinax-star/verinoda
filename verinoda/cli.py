@@ -2109,7 +2109,7 @@ def _r_check(r: dict) -> None:
         if site.get("next_step") and (v in ("absent", "not_installed") or site.get("rank") in ("high", "medium")):
             print(f"    next: {site['next_step']}")
     if unknown > CHECK_UNKNOWN_SHOWN:
-        print(f"... {unknown - CHECK_UNKNOWN_SHOWN} more unknown sites (--json lists them all)")
+        print(f"... {unknown - CHECK_UNKNOWN_SHOWN} more unknown sites (--all --json lists them all)")
     us = r.get("unknown_summary")
     if us:
         low = us.get("low", 0)
