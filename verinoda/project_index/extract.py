@@ -6539,8 +6539,10 @@ def _is_cpp_header(path: Path) -> bool:
 # index.vendored) keeps everything.
 from verinoda.project_index.vendored import vendored_reason  # noqa: E402,F401
 
-# the edges a vendored or generated file keeps: its own structure, not its calls, imports or references
-_VENDORED_KEEP_RELATIONS = frozenset({"contains", "method", "inherits", "implements", "extends"})
+# the edges a vendored or generated file keeps: its own structure (a definition and its members, a type and its
+# bases), not its calls, imports or references
+_VENDORED_KEEP_RELATIONS = frozenset({"contains", "method", "defines", "case_of", "inherits", "implements",
+                                      "extends", "embeds", "mixes_in"})
 
 
 def _include_vendored() -> bool:

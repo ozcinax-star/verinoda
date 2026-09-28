@@ -588,9 +588,22 @@ def extract_go(path: Path) -> dict:
                     _bind_spec(pkg_var_types, spec)
 
     def _collect_locals(n, table: dict) -> None:
+        """Every name the body declares: typed by `_bind_spec`, or None (a range variable, a closure parameter,
+        a select receive, a type switch alias), so no local falls through to a package variable of its name."""
         for child in n.children:
-            if child.type in ("short_var_declaration", "var_spec"):
+            if child.type in ("short_var_declaration", "var_spec", "const_spec"):
                 _bind_spec(table, child)
+            elif child.type in ("range_clause", "receive_statement", "type_switch_statement"):
+                names = child.child_by_field_name("alias" if child.type == "type_switch_statement" else "left")
+                for ident in (names.named_children if names is not None else ()):
+                    if ident.type == "identifier":
+                        _bind(table, _read_text(ident, source), None)
+            elif child.type == "func_literal":
+                params = child.child_by_field_name("parameters")
+                for param in (params.named_children if params is not None else ()):
+                    for ident in param.children:
+                        if ident.type == "identifier":
+                            _bind(table, _read_text(ident, source), None)
             _collect_locals(child, table)
 
     for fnid, body in function_bodies:

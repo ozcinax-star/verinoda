@@ -3226,12 +3226,12 @@ def _php_local_types(method_node, source: bytes) -> dict[str, str | None]:
 
 
 def _php_property_types(class_node, source: bytes) -> dict[str, str | None]:
-    """``prop -> Class`` of one PHP class: typed properties, promoted constructor parameters and
-    ``$this->prop = new Class(...)`` in its methods; a property also assigned anything else maps to None."""
-    out: dict[str, str | None] = {}
-
-    def bind(prop: str, cls: str | None) -> None:
-        out[prop] = cls if out.get(prop, cls) == cls else None
+    """``prop -> Class`` of one PHP class. A declared type (a typed property, a promoted constructor parameter) is
+    authoritative: PHP enforces it, so ``$this->foo = $foo`` in a constructor keeps ``private Foo $foo`` a Foo
+    (a union or builtin declared type maps to None). An undeclared or untyped property takes the class of
+    ``$this->prop = new Class(...)`` in the class's methods, and None when it is also assigned anything else."""
+    declared: dict[str, str | None] = {}
+    assigned: dict[str, str | None] = {}
 
     def visit(n) -> None:
         for child in n.children:
@@ -3243,31 +3243,36 @@ def _php_property_types(class_node, source: bytes) -> dict[str, str | None]:
                     obj = left.child_by_field_name("object")
                     prop = left.child_by_field_name("name")
                     if obj is not None and prop is not None and _read_text(obj, source) == "$this":
-                        bind(_read_text(prop, source), _php_new_class(child.child_by_field_name("right"), source))
+                        name = _read_text(prop, source)
+                        cls = _php_new_class(child.child_by_field_name("right"), source)
+                        assigned[name] = cls if assigned.get(name, cls) == cls else None
             visit(child)
 
     body = class_node.child_by_field_name("body")
+    bodies = []
     for member in (body.named_children if body is not None else ()):
         if member.type == "property_declaration":
-            cls = _php_type_name(member.child_by_field_name("type"), source)
-            if cls:
+            type_node = member.child_by_field_name("type")
+            if type_node is not None:
                 for element in member.named_children:
                     if element.type == "property_element":
                         name = element.child_by_field_name("name")
                         if name is not None:
-                            bind(_read_text(name, source).lstrip("$"), cls)
+                            declared[_read_text(name, source).lstrip("$")] = _php_type_name(type_node, source)
         elif member.type == "method_declaration":
             params = member.child_by_field_name("parameters")
             for param in (params.named_children if params is not None else ()):
                 if param.type == "property_promotion_parameter":
                     name = param.child_by_field_name("name")
-                    if name is not None:
-                        bind(_read_text(name, source).lstrip("$"),
-                             _php_type_name(param.child_by_field_name("type"), source))
+                    type_node = param.child_by_field_name("type")
+                    if name is not None and type_node is not None:
+                        declared[_read_text(name, source).lstrip("$")] = _php_type_name(type_node, source)
             method_body = member.child_by_field_name("body")
             if method_body is not None:
-                visit(method_body)
-    return out
+                bodies.append(method_body)
+    for method_body in bodies:
+        visit(method_body)
+    return {**{k: v for k, v in assigned.items() if k not in declared}, **declared}
 
 
 def _ruby_const_last_name(node, source: bytes) -> str:

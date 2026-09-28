@@ -65,8 +65,9 @@ DEFAULT_CONFIG: dict = {
     # Reference trees (an original implementation being ported, a vendored copy): paths, or
     # {"path": ..., "aliases": [...]}, whose code ranks lower unless the question names the path
     # or an alias (verinoda.search_index.REFERENCE_FACTOR). `verinoda setup --reference PATH` adds one.
-    # vendored: keep the symbols and calls of vendored (vendor/, third_party/ ...), minified and generated files
-    # in the graph; by default they are a file node only (verinoda.project_index.extract.vendored_reason).
+    # vendored: keep the calls of vendored (vendor/, third_party/ ...), minified and generated files in the graph;
+    # by default no call from them is extracted and a minified file is its file node only
+    # (verinoda.project_index.vendored.vendored_reason).
     "index": {"reference": [], "vendored": False},
     # Debug ledger (docs/DESIGN.md D34): stop after this many fix attempts in a row without measured progress;
     # reruns of the flaky-check strategy; bisect run budget.

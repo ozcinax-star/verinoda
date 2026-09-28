@@ -431,7 +431,7 @@ _RECEIVER_FIXTURES = {
 class Foo { public function bar() { return 1; } }
 class Baz {
   private Foo $foo;
-  public function __construct(private Foo $promoted) {}
+  public function __construct(private Foo $promoted, Foo $foo) { $this->foo = $foo; }
   public function run(Foo $x) { return $x->bar(); }
   public function go() { $y = new Foo(); return $y->bar(); }
   public function viaProp() { return $this->foo->bar(); }
@@ -472,6 +472,13 @@ func (m *metricHistory) add() {}
 func record(h *metricHistory) { h.add() }
 
 func Shadow(defaultServer *other.Server) int { return defaultServer.Run() }
+
+func Loop(xs []*other.Server) {
+	for _, defaultServer := range xs {
+		defaultServer.Run()
+	}
+	go func(defaultServer *other.Server) { defaultServer.Run() }(nil)
+}
 ''',
     # M6: `self.class.make` is the own class's class method
     "baz.rb": '''class Baz
@@ -527,7 +534,8 @@ fn make2() -> Pool<u8> { Pool::<u8>::new() }
 
 def test_receivers_whose_type_the_file_states_bind_to_that_type(tmp_path):
     pairs = _call_pairs(tmp_path, _RECEIVER_FIXTURES)
-    # M3: a typed parameter, a `new` local, a typed and a promoted property; a type of another file binds nothing
+    # M3: a typed parameter, a `new` local, a typed property (also assigned from an injected parameter) and a
+    # promoted one; a type of another file binds nothing
     for caller in ("Baz.run", "Baz.go", "Baz.viaProp", "Baz.viaPromoted"):
         assert ("Baz.php", caller, "Foo.bar") in pairs, caller
     assert not any(src == "Baz.external" for f, src, _ in pairs if f == "Baz.php")
@@ -536,7 +544,8 @@ def test_receivers_whose_type_the_file_states_bind_to_that_type(tmp_path):
     for src, tgt in (("Server.Run", "Base.Hello"), ("Server.Run", "Handler.Serve"), ("Start", "Server.Run"),
                      ("Main", "Server.Run"), ("record", "metricHistory.add")):
         assert ("server.go", src, tgt) in pairs, (src, tgt)
-    assert ("server.go", "Shadow", "Server.Run") not in pairs     # a parameter of another package's type shadows
+    # a parameter, a range variable or a closure parameter of another package's type shadows the package variable
+    assert ("server.go", "Shadow", "Server.Run") not in pairs and ("server.go", "Loop", "Server.Run") not in pairs
     # M6
     assert ("baz.rb", "Baz.helper", "Baz.make") in pairs
     # L1: D's MRO is D, B, C, A: super().m() is C.m; L2: `(object)` does not end the search

@@ -46,8 +46,8 @@ the code a question is about:
     other Ruby receiver (`capsule.fetcher.x`, a block parameter) is deferred to the receiver-typed resolver
     (`x = Foo.new`). JS/TS defer only `super.m()`; other JS/TS receivers keep the file-wide name as before.
   - PHP: `$this->m()` binds to the own class. A receiver whose class the file states binds to that class's method
-    (a typed parameter `Foo $x`, `$x = new Foo()` in the method, a typed or promoted property, `$this->p = new
-    Foo()` in the class; a class of another file binds nothing in the file). An untyped receiver binds only to
+    (a typed parameter `Foo $x`, `$x = new Foo()` in the method, a typed or promoted property, whose declared type
+    holds whatever is assigned, or `$this->p = new Foo()` in the class; a class of another file binds nothing in the file). An untyped receiver binds only to
     the one same-named method of another class of the file, never to the caller's own class's or an in-file
     base's (`$this->middlewareDispatcher->handle()` inside `App::handle`). There is no cross-file PHP
     receiver-typed resolver.
@@ -55,7 +55,8 @@ the code a question is about:
     receiver, a parameter declared with a type of the package (`func record(h *metricHistory)`), a local or
     package variable of `&T{}`, `T{}`, `var x T` or a file function returning `T`/`*T` (`srv := NewServer()`),
     or a field of such a receiver (`s.h.Serve()`); a method promoted from an embedded struct is found (the
-    shallowest depth, one candidate; none when an embedded type of another package comes first). A name given
+    shallowest depth, one candidate; none when an embedded type of another package comes first). Every name a
+    body declares (a range variable, a closure parameter ...) shadows a package variable. A name given
     two types in one scope, a chained call result or a parameter of another package's type stays in
     `raw_calls`. A bare `f()` never binds to a method.
   - Rust: `self.m()` binds to the impl type's (or trait's) own `m`, else the existing `rust_self_type` path;
@@ -84,7 +85,7 @@ the code a question is about:
   A minified file keeps its file node only (its names are machine names nobody imports). A vendored or generated
   file keeps its definitions, each marked `vendored: <reason>`, so an import of them still binds to them and not
   to a same-named product function (`from vendor.yamlish import parse`), but no edge other than its structure
-  (`contains`, `method`, `inherits`) leaves it and its raw calls are dropped. The clusters, the map and the
+  (`contains`, `method`, `defines`, `inherits` ...) leaves it and its raw calls are dropped. The clusters, the map and the
   callers views still show those definitions. The build prints which files were reduced. The search index still
   reads the files' text. `"index": {"vendored": true}` in `.verinoda/config.json` (or `VERINODA_GRAPH_VENDORED=1`)
   keeps everything; the value is part of the extraction stamp, so changing it rebuilds the graph on the next
