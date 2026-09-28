@@ -543,7 +543,13 @@ def extract_rust(path: Path) -> dict:
                         callee_name = _read_text(name, source)
                     path_node = func_node.child_by_field_name("path")
                     if path_node is not None:
-                        last = _read_text(path_node, source).rsplit("::", 1)[-1].split("<", 1)[0].strip()
+                        # generic arguments dropped first: the turbofish `Pool::<u8>::new()` is Pool's `new`
+                        path_text, depth = "", 0
+                        for ch in _read_text(path_node, source):
+                            depth += (ch == "<") - (ch == ">")
+                            if depth == 0 and ch != ">":
+                                path_text += ch
+                        last = path_text.rstrip(": \t\n").rsplit("::", 1)[-1].strip()
                         if last == "Self":
                             scope_type = owner_of.get(caller_nid) or self_type or ""
                         elif last[:1].isupper():

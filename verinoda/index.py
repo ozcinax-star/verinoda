@@ -40,7 +40,7 @@ from pathlib import Path, PurePosixPath
 
 import networkx as nx
 
-from verinoda.paths import configure_index_env, ensure_atlas, graph_path, index_dir, load_config, receiver_calls_path
+from verinoda.paths import configure_index_env, ensure_atlas, graph_path, index_dir, index_vendored, receiver_calls_path
 
 configure_index_env()
 
@@ -396,8 +396,10 @@ class _known_empty_json:
 class _vendored_switch:
     """``VERINODA_GRAPH_VENDORED=1`` for a build when the config asks for vendored code (``index.vendored``).
 
-    By default the extractor keeps vendored, minified and generated files to their file node
-    (``project_index.extract.vendored_reason``). A variable already set wins over the config.
+    By default the extractor keeps vendored, minified and generated code out of the call graph
+    (``project_index.vendored.vendored_reason``). A variable already set wins over the config; the value is part
+    of the extraction stamp (``buildlock.extraction_stamp``), so changing it rebuilds the graph on the next
+    ``update``.
     """
 
     VAR = "VERINODA_GRAPH_VENDORED"
@@ -406,7 +408,7 @@ class _vendored_switch:
         self.repo = repo
 
     def __enter__(self):
-        self.ours = self.VAR not in os.environ and bool((load_config(self.repo).get("index") or {}).get("vendored"))
+        self.ours = self.VAR not in os.environ and index_vendored(self.repo)
         if self.ours:
             os.environ[self.VAR] = "1"
         return self

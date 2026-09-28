@@ -36,36 +36,66 @@ the code a question is about:
 
 - **Member calls bind in the file only through the method's own receiver** (`project_index/extractors/
   engine.py`, `go.py`, `rust.py`; local changes to the vendored extractor, docs/UPSTREAM.md):
-  - Python `super().m()` binds to `m` of the enclosing class's bases that the file defines (depth first, left to
-    right; a base the file does not define ends the search), otherwise it stays in `raw_calls`, where no pass
-    binds it by name. `self.m()` / `cls.m()` take the own class's `m`, then an in-file base's, and only then
-    the file-wide name as before.
-  - JS/TS, PHP and Ruby: a member call binds in the file only on `this` / `$this` / `self` (the own class first),
-    or when the receiver names an object the file defines with that method (`const api = {}; api.load = ...;
-    api.load()`). Any other receiver (`other.match()`, `$this->dispatcher->handle()`, `capsule.fetcher.x`,
-    `super.m()`) is deferred to the receiver-typed resolvers (Ruby `x = Foo.new`, TypeScript typed parameters
-    and imports), which still bind it when they can.
+  - Python `super().m()` binds to `m` of the enclosing class's bases that the file defines, in C3 order (Python's
+    MRO: `class D(B, C)` with `B(A)`, `C(A)` searches B, C, A); `object` is passed over; a base the file does not
+    define ends the search, and bases that admit no linearization bind nothing. Otherwise the call stays in
+    `raw_calls`, where no pass binds it by name. `self.m()` / `cls.m()` take the own class's `m`, then an in-file
+    base's, and only then the file-wide name as before.
+  - JS/TS and Ruby: a member call binds in the file on `this` / `self` / Ruby `self.class` (the own class first).
+    Ruby: a constant receiver naming a class the file defines with that method (`Foo.make`) binds to it; any
+    other Ruby receiver (`capsule.fetcher.x`, a block parameter) is deferred to the receiver-typed resolver
+    (`x = Foo.new`). JS/TS defer only `super.m()`; other JS/TS receivers keep the file-wide name as before.
+  - PHP: `$this->m()` binds to the own class. A receiver whose class the file states binds to that class's method
+    (a typed parameter `Foo $x`, `$x = new Foo()` in the method, a typed or promoted property, `$this->p = new
+    Foo()` in the class; a class of another file binds nothing in the file). An untyped receiver binds only to
+    the one same-named method of another class of the file, never to the caller's own class's or an in-file
+    base's (`$this->middlewareDispatcher->handle()` inside `App::handle`). There is no cross-file PHP
+    receiver-typed resolver.
   - Go: a selector call binds to a method of the receiver's type, where the receiver is the method's own
-    receiver or a parameter declared with a type of the package (`func record(h *metricHistory)`); a local,
-    a chained receiver or a parameter of another package's type stays in `raw_calls`. A bare `f()` never
-    binds to a method.
+    receiver, a parameter declared with a type of the package (`func record(h *metricHistory)`), a local or
+    package variable of `&T{}`, `T{}`, `var x T` or a file function returning `T`/`*T` (`srv := NewServer()`),
+    or a field of such a receiver (`s.h.Serve()`); a method promoted from an embedded struct is found (the
+    shallowest depth, one candidate; none when an embedded type of another package comes first). A name given
+    two types in one scope, a chained call result or a parameter of another package's type stays in
+    `raw_calls`. A bare `f()` never binds to a method.
   - Rust: `self.m()` binds to the impl type's (or trait's) own `m`, else the existing `rust_self_type` path;
-    `Self::m()` / `Type::m()` bind only when the file has an impl of that type with `m`; a bare `f()` or
-    `module::f()` never binds to a method; any other receiver stays in `raw_calls`.
-  - `cache._AST_CACHE_SCHEMA` 6: per-file results of the old rules are not reused.
-- **Vendored, minified and generated files are a file node only** (`project_index/extract.py`,
-  `vendored_reason`): a directory `vendor/`, `vendors/`, `_vendor/`, `third_party/`, `third-party/`,
-  `thirdparty/`, `deps/` or `extern/` below the scan root; a `.min.js` / `.bundle.js` name; more than 300 bytes
-  per line on average over the first 64 KiB (at least 4 KiB); or a generator's header comment in the first 40
-  lines ("Code generated ... DO NOT EDIT", `@generated`, "A Bison parser", flex, protoc, "auto-generated
-  file"). The marker must be in a comment, so a generator that writes the marker in a string is product code.
-  The file node carries `vendored: <reason>`; its symbols, edges and raw calls are dropped. The search index
-  still reads the file's text. `"index": {"vendored": true}` in `.verinoda/config.json` (or
-  `VERINODA_GRAPH_VENDORED=1`) keeps everything.
-- **Test files** (`testcode.TEST_FILE_RE`): a folder ending in `Tests` (`UnitTests/`, `AutoMapper.UnitTests/`,
-  `MyAppTests/`), `Test/` or `Foo.Test/`, `unit_tests/`, `integration-tests/` ...; `FooTest.php`,
-  `FooTests.swift`; `x_test.cc`, `x_unittest.cpp` (also `.c`, `.cxx`); `x_test.dart`, `x_test.exs`.
-  `Contests/`, `Latest.php` and `attest.cc` are not tests.
+    `Self::m()` / `Type::m()` / `Type::<T>::m()` bind only when the file has an impl of that type with `m`; a
+    bare `f()` or `module::f()` never binds to a method; any other receiver stays in `raw_calls`.
+  - `cache._AST_CACHE_SCHEMA` 7: per-file results of the old rules are not reused.
+- **No call leaves vendored, minified or generated code** (`project_index/vendored.py`, `vendored_reason`, applied
+  in `extract.py`):
+  - vendored: a folder `_vendor/`, `third_party/`, `third-party/` or `thirdparty/` anywhere below the scan root
+    (exact spelling); `vendor/` at the root, beside the manifest of a tool that vendors into it (`go.mod`,
+    `composer.json`, `Gemfile`, `Cargo.toml`) or under a static-asset folder (`static/`, `assets/`, `public/`,
+    `wwwroot/`); `deps/` at the root beside `mix.exs` / `rebar.config`; a git submodule (`.gitmodules`) under
+    `deps/` or `extern/`. A product namespace `Vendor/`, `Vendors/`, `app/controllers/vendor/`, `lib/deps/` or
+    `src/extern/` is product code. The folders are read from the path as the scan gives it, relative to the
+    root: a folder above the root, or the target of a junction or symlink, never counts.
+  - minified: a `.min.js` / `.bundle.js` name (a `make-bundle.js` script is not one), or a `.js`/`.mjs`/`.cjs`/
+    `.css` file (at least 4 KiB) whose first 64 KiB hold at least 90 % of their bytes in lines of code over
+    1,000 bytes (a long line of data, such as a lookup table, is not code; `.json` is never minified).
+  - generated: a generator's header among the first 40 lines. The marker opens a comment ("Code generated ...
+    DO NOT EDIT", `@generated` as a word, "This file is @generated", "A Bison parser, made by", "A lexical
+    scanner generated by flex", "Generated by the protocol buffer compiler"), or the comment opens with "This
+    file is auto-generated" / "Auto-generated by" and the head warns against editing it ("do not edit",
+    "regenerate", "will be lost"). A comment that only mentions generated code, and a marker written in a
+    string, are product code. `guards.is_generated` uses the same rule.
+
+  A minified file keeps its file node only (its names are machine names nobody imports). A vendored or generated
+  file keeps its definitions, each marked `vendored: <reason>`, so an import of them still binds to them and not
+  to a same-named product function (`from vendor.yamlish import parse`), but no edge other than its structure
+  (`contains`, `method`, `inherits`) leaves it and its raw calls are dropped. The clusters, the map and the
+  callers views still show those definitions. The build prints which files were reduced. The search index still
+  reads the files' text. `"index": {"vendored": true}` in `.verinoda/config.json` (or `VERINODA_GRAPH_VENDORED=1`)
+  keeps everything; the value is part of the extraction stamp, so changing it rebuilds the graph on the next
+  `update`.
+- **Test files** (`testcode.TEST_FILE_RE`): a .NET test project folder (`Foo.Tests/`, `AutoMapper.UnitTests/`,
+  `Foo.Test/`, `UnitTests/`, `IntegrationTests/`, `FunctionalTests/`, `AcceptanceTests/`, `UITests/`,
+  `E2ETests/`, `Tests/`), an Xcode test target at the root (`MyAppTests/`), `unit_tests/`,
+  `integration-tests/` ...; XCTest `FooTests.swift`; `x_test.cc`, `x_unittest.cpp` (also `.c`, `.cxx`; not a
+  product's `self_test.c`); `x_test.dart`, `x_test.exs`. `Contests/`, `Latest.php`, `attest.cc`, a folder that
+  merely ends in `Tests` (`src/HealthTests/`, `Features/ABTests/`), `app/Models/LabTest.php` and
+  `SpeedTest.swift` are not tests (PHPUnit tests live in `tests/`).
 - **C# placeholders by label**: a dict label -> first placeholder, built once and updated on each new stub,
   replaces the scan; the result is the same by construction and by test.
 - **C++ suffixes**: `.hh .hxx .ipp .inl .tpp` are C++ in detection, extraction, the C++ member-call resolver,
@@ -73,7 +103,10 @@ the code a question is about:
 
 ### NN.3 Measured
 
-Graph built with `index.build(force=True)` on fresh copies, base = dd60358, with and without each change.
+Graph built with `index.build(force=True)` on fresh copies, base = dd60358, with and without each change. These
+measurements predate the fixes of the review of D65 (the narrower vendored folders and generated header, the
+minified content rule, vendored definitions kept, PHP and Go receiver types, `self.class`, C3 order, the
+stricter test folders); they were not repeated after them.
 
 - **C# placeholders** (591-file C# repository, `extract()` of its 513 `.cs` files, twice each): the pass
   4.15 / 4.27 s -> 0.05 / 0.05 s, `extract()` 15.7 / 15.5 s -> 12.8 / 10.7 s (loaded box). Full graph: 15,139
@@ -126,7 +159,7 @@ Graph built with `index.build(force=True)` on fresh copies, base = dd60358, with
 
 ## DESIGN decision table row
 
-| D65 | A graph with fewer false calls, and the tests of more ecosystems | implemented | Built 2026-09-28 (section NN): member calls bind in the file only through the method's own receiver (Python `super()` to an in-file base; Go, Rust, PHP, Ruby, JS/TS); vendored, minified and generated files are a file node only (`index.vendored` keeps them); .NET, Xcode, PHPUnit, GoogleTest, Dart and Elixir tests are test files; the C# type-reference pass is linear; `.hh .hxx .ipp .inl .tpp` are C++. |
+| D65 | A graph with fewer false calls, and the tests of more ecosystems | implemented | Built 2026-09-28 (section NN): member calls bind in the file only through the method's own receiver or a receiver whose type the file states (Python `super()` to an in-file base in C3 order; Go, Rust, PHP, Ruby, JS/TS); no call leaves vendored, minified or generated code (`index.vendored` keeps them); .NET, Xcode, GoogleTest, Dart and Elixir tests are test files; the C# type-reference pass is linear; `.hh .hxx .ipp .inl .tpp` are C++. |
 
 ## UPGRADING note
 
@@ -134,11 +167,13 @@ Graph built with `index.build(force=True)` on fresh copies, base = dd60358, with
   whole graph is rebuilt once, unchanged files included): fewer calls edges in Go, Rust, PHP, Ruby, JS/TS and
   Python (`super()`) code - a callers or trace answer that listed a same-named method of another object no
   longer does, and some true same-file calls through an untyped local are no longer in the graph (analyze says
-  `unknown` for them instead of a wrong caller). Vendored (`vendor/`, `third_party/`, `deps/`, `extern/` ...),
-  minified and generated files keep only their file node: their functions no longer appear in the map, the
-  callers views or the clusters, while search still reads their text. To keep them, set
-  `"index": {"vendored": true}` in `.verinoda/config.json` and run `verinoda scan . --force`.
-- Test files: .NET test projects (`UnitTests/`, `Foo.Tests/`), Xcode test targets (`MyAppTests/`), PHPUnit
-  `FooTest.php`, GoogleTest `x_test.cc`, Dart and Elixir `x_test.*` now count as tests: they rank lower in
-  search, and the tests view, impact's `tests_to_run` and the change review list them as tests.
+  `unknown` for them instead of a wrong caller). No call from vendored (`vendor/` at the root or beside its manifest, `third_party/`, `_vendor/` ...) or
+  generated files is in the graph any more (their definitions stay, marked `vendored`, so calls into them
+  still bind); minified files keep only their file node. Search still reads their text. To keep everything, set
+  `"index": {"vendored": true}` in `.verinoda/config.json`; the next `verinoda update` rebuilds the graph (use
+  `verinoda scan . --force` if the update refuses a graph that shrinks).
+- Test files: .NET test projects (`UnitTests/`, `Foo.Tests/`, `Tests/`), Xcode test targets at the root
+  (`MyAppTests/`), XCTest `FooTests.swift`, GoogleTest `x_test.cc`, Dart and Elixir `x_test.*` now count as
+  tests: they rank lower in search, and the tests view, impact's `tests_to_run` and the change review list them
+  as tests.
 - `.hh .hxx .ipp .inl .tpp` files enter the graph as C++ on the next `verinoda update`.

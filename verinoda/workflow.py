@@ -351,10 +351,10 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
     # a graph an older extraction built (an upgrade): rebuilt once, even when no file changed - unchanged files
     # would otherwise keep what the old extractor made of them
     built_by = buildlock.recorded_extraction(repo)
-    outdated = built_by != buildlock.extraction_stamp()
+    outdated = built_by != buildlock.extraction_stamp(repo)
     if fast and ((changed and _graph_affected(repo, diff)) or outdated):
         return {**_deferred(store, repo, prev, state, diff, changed),
-                **({"extraction": {"was": built_by, "now": buildlock.extraction_stamp()}} if outdated else {})}
+                **({"extraction": {"was": built_by, "now": buildlock.extraction_stamp(repo)}} if outdated else {})}
     if (changed and _graph_affected(repo, diff)) or outdated:
         # Graphify's incremental pass extracts only the changed files, and its cross-file
         # passes see only that batch: a changed file's imports and calls into unchanged files
@@ -392,7 +392,7 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
     stale = invalidate_stale(store, snap)
     out = {"snapshot": snap, "changed": diff, "changed_count": len(changed), "stale": stale,
            "mode": "incremental", "index_mode": index_mode, "index_seconds": round(t_index, 3),
-           **({"extraction": {"was": built_by, "now": buildlock.extraction_stamp()}} if outdated else {})}
+           **({"extraction": {"was": built_by, "now": buildlock.extraction_stamp(repo)}} if outdated else {})}
     if changed:
         files = store.snapshot_files(snap["id"])
         out["derived"] = _derive(store, repo, changed=changed, all_files=sorted(files), file_hashes=files,

@@ -40,7 +40,8 @@ pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not ava
     # .NET test projects, Xcode test targets, PHPUnit, XCTest, GoogleTest, Dart, Elixir
     "src/UnitTests/Bug/NullableMaps.cs", "src/IntegrationTests/Inheritance.cs", "src/AutoMapper.DI.Tests/A.cs",
     "src/Foo.Test/Helpers.cs", "MyAppTests/LoginViewModel.swift", "crates/integration_tests/src/lib.rs",
-    "src/Http/RequestTest.php", "Sources/App/Views/LoginTests.swift", "base/strings/str_util_test.cc",
+    "Tests/Http/RequestTest.php", "Sources/App/Views/LoginTests.swift", "base/strings/str_util_test.cc",
+    "src/Tests/Probe.cs", "MyAppUITests/LoginUITests.swift", "src/AutoMapper.UnitTests/Maps.cs",
     "base/files/file_unittest.cpp", "src/jq_test.c", "lib/parser_test.dart", "lib/router_test.exs",
 ])
 def test_a_test_file_by_its_path(path):
@@ -54,6 +55,9 @@ def test_a_test_file_by_its_path(path):
     "rs/src/lib.rs", "src/main/java/a/testing/DebugCommand.java", "", None,
     "src/Contests/Rules.cs", "src/Latest/Feed.cs", "app/Latest.php", "Sources/Contest.swift", "src/attest.cc",
     "src/latest.c", "lib/manifest.dart", "lib/contest.exs", "src/AutoMapper/TestSupport.cs",
+    # product code whose name ends in Test(s) (review of D65, M5)
+    "providers/fips/self_test.c", "lib/power_on_self_test.c", "app/Models/LabTest.php", "app/Services/ABTest.php",
+    "Sources/Network/SpeedTest.swift", "Features/ABTests/Experiment.swift", "src/HealthTests/Probe.cs",
 ])
 def test_not_a_test_file(path):
     assert not testcode.is_test_file(path) and not testcode.is_test_or_support_file(path)

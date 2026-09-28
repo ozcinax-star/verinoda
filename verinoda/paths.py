@@ -192,6 +192,15 @@ def ensure_atlas(repo: Path) -> Path:
     return d
 
 
+def index_vendored(repo: Path) -> bool:
+    """Config ``index.vendored``: keep vendored, minified and generated code in the graph. On only for a JSON
+    ``true`` (or the text "true", "1", "yes", "on"); ``"false"`` and anything else are off."""
+    value = (load_config(repo).get("index") or {}).get("vendored")
+    if isinstance(value, bool):
+        return value
+    return isinstance(value, str) and value.strip().lower() in ("1", "true", "yes", "on")
+
+
 def load_config(repo: Path) -> dict:
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
     p = atlas_dir(repo) / "config.json"
