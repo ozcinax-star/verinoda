@@ -70,7 +70,7 @@ from verinoda import codecheck_env as cenv
 from verinoda import codecheck_facts as cf
 from verinoda.codecheck_facts import Member, Sig, dotted
 
-CHECK_VERSION = "5"   # answers cached by an older rule set are not reused
+CHECK_VERSION = "6"   # answers cached by an older rule set are not reused
 PROJECT_CONTENT = Path("<project-content>")   # a cache dependency on the content of every project file
 VERDICTS = ("absent", "not_installed", "unknown", "guarded", "exists")
 SITE_KINDS = ("import", "attribute", "kwarg", "dict_key")
@@ -1494,6 +1494,13 @@ class Checker:
     def _declared_type(self, fx: FileCtx, base: ast.AST, depth: int) -> Container | None:
         if depth > 6:
             return None
+        root = base
+        while isinstance(root, (ast.Attribute, ast.Call)):
+            root = root.value if isinstance(root, ast.Attribute) else root.func
+        if isinstance(root, ast.Name) and self._untyped_param(fx, root):
+            # jedi infers an unannotated parameter from the call sites it finds (dynamic params): one caller's
+            # class is not the parameter's type (duck typing), so nothing is declared
+            return None
         if isinstance(base, ast.BinOp) and isinstance(base.op, ast.Div):
             left = self.receiver(fx, base.left) if depth == 0 or not isinstance(base.left, ast.BinOp) else None
             if not isinstance(left, Container):
@@ -1577,6 +1584,35 @@ class Checker:
             cur = fx.parents.get(id(cur))
         return None
 
+    def _untyped_param(self, fx: FileCtx, name: ast.Name) -> bool:
+        """``name`` is an unannotated parameter of its function (or of an enclosing one) that the function
+        never rebinds - not ``self``/``cls``, and not a parameter of a pytest test or fixture (jedi reads
+        those from the fixture of that name)."""
+        fn = fx.scope_of(name)
+        for _ in range(4):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                return False
+            a = fn.args
+            params = [*a.posonlyargs, *a.args, *a.kwonlyargs, *[x for x in (a.vararg, a.kwarg) if x]]
+            param = next((p for p in params if p.arg == name.id), None)
+            body = fn.body if isinstance(fn.body, list) else [fn.body]
+            stored = any(isinstance(x, ast.Name) and x.id == name.id and isinstance(x.ctx, ast.Store)
+                         for st in body for x in cf._walk_no_scopes(st))
+            if param is not None:
+                if param.annotation is not None or stored:
+                    return False
+                first = [*a.posonlyargs, *a.args][:1]
+                is_static = any((dotted(d) or "").rsplit(".", 1)[-1] == "staticmethod"
+                                for d in getattr(fn, "decorator_list", []))
+                if first and first[0] is param and isinstance(fx.parents.get(id(fn)), ast.ClassDef) and \
+                        not is_static:
+                    return False   # self / cls
+                return not (isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) and _pytest_function(fx, fn))
+            if stored:
+                return False   # a local of the inner function
+            fn = fx.scope_of(fn)
+        return False
+
     def _fixture_type(self, fx: FileCtx, name: ast.Name) -> Container | None:
         """The type of pytest's own fixture ``name`` when ``name`` is an unannotated parameter of a test or a
         fixture in a pytest file, and the project defines no fixture of that name."""
@@ -1584,14 +1620,9 @@ class Checker:
         fn = fx.scope_of(name)
         if spec is None or not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
             return None
-        stem = fx.path.stem
-        if not (stem.startswith("test_") or stem.endswith("_test") or stem == "conftest"):
-            return None
         a = fn.args
         param = next((p for p in [*a.posonlyargs, *a.args, *a.kwonlyargs] if p.arg == name.id), None)
-        is_fixture = any((dotted(d.func if isinstance(d, ast.Call) else d) or "").rsplit(".", 1)[-1] == "fixture"
-                         for d in fn.decorator_list)
-        if param is None or param.annotation is not None or not (fn.name.startswith("test") or is_fixture):
+        if param is None or param.annotation is not None or not _pytest_function(fx, fn):
             return None
         if any(kind == "function" for _p, _l, kind, _q in self._project_defs().get(name.id)):
             return None   # the project overrides the fixture (a conftest's own tmp_path)
@@ -1859,8 +1890,11 @@ class Checker:
                 return self._verdict(site, "unknown", why=f"site-packages runs import hooks ({u.hooks[0]}); "
                                                           "modules may come from elsewhere")
             near = nearest(top, {n: Member(n, "module") for n in u.top_level_names()})
+            listed = self.optional_near(top)   # sentry-sdk listed, `import sentry`: a hint, not a verdict
             v = self._verdict(site, "absent", container=f"sys.path of {self.env.label}",
-                              message=f"module {top} not found in this project or in {self.env.label}",
+                              message=f"module {top} not found in this project or in {self.env.label}" +
+                                      (f"; {listed}, a different name (not installed): if that package provides "
+                                       f"{top}, install it" if listed else ""),
                               nearest=near, source="project")
             return self._guarded(v, guard)
         parent = ".".join(parts[:miss_at])
@@ -2192,6 +2226,17 @@ class Checker:
             v["verdict"] = "guarded"
             v["guard"] = guard
             v.pop("next_step", None)
+        elif fx is not None and node is not None and v["verdict"] == "absent" and \
+                _raises_around(fx, node, v.get("kind", "")):
+            # `with pytest.raises(AttributeError): obj.gone` - the one statement of the block is this site: the
+            # test may check exactly that the name is missing, or a typo may make it pass for the wrong reason
+            expects, line = _raises_around(fx, node, v.get("kind", ""))
+            v["verdict"] = "unknown"
+            v["expected_error"] = f"with {expects} (line {line})"
+            v["why"] = f"{v.pop('message', None) or 'absent'}; but it is the only statement of `with {expects}` " \
+                       f"(line {line}): the test may expect exactly this error"
+            v["next_step"] = "if the test means this name to be missing, nothing to fix; otherwise the name is " \
+                             "wrong and the test passes for the wrong reason: use a real name"
         elif fx is not None and node is not None and v["verdict"] == "absent":
             broad = _broad_handler(fx, node)
             if broad:  # `except Exception: log` hides the error at run time; the name is still wrong
@@ -2238,9 +2283,12 @@ class Checker:
                     if specific or (broad and kind == "import"):
                         return f"inside try/except {', '.join(sorted(caught)) if caught else ''} (line {p.lineno})" \
                             .replace("except  ", "except ")
-            elif isinstance(p, (ast.With, ast.AsyncWith)) and any(cur is s for s in p.body):
+            elif isinstance(p, (ast.With, ast.AsyncWith)) and kind == "import" and any(cur is s for s in p.body):
+                # `with pytest.raises(ImportError): from x import gone` - the test wants it to fail. Only imports:
+                # a misspelt attribute or keyword inside `raises(AttributeError / TypeError)` raises before the
+                # error the test means, so the test passes for the wrong reason (see _raises_around)
                 expects = _expects_error(p, kind)
-                if expects:   # `with pytest.raises(ImportError): from x import gone` - the test wants it to fail
+                if expects:
                     return f"inside `with {expects}` (line {p.lineno}): the code expects the error"
             elif isinstance(p, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
                 in_function = True
@@ -2445,39 +2493,85 @@ class Checker:
                 self._declared = {}
         return _match_dist(module, self._declared)
 
-    def optional_declared(self, module: str) -> str | None:
-        """Where a requirements file anywhere in the project (``tests/requirements/postgres.txt``,
-        ``docs/requirements.txt``; a bare name counts) lists a package that provides ``module``: "file:line",
-        or None. Such a package is optional: the code that imports it runs only where it is installed."""
+    def _optional_dists(self) -> dict[str, str]:
+        """normalized distribution name -> "file:line" of every requirements file in the project; a file with a
+        line that is not a requirement (a README in ``requirements/``) is not one."""
         if self._optional is None:
             found: dict[str, str] = {}
             for p in _requirement_files(self.repo):
                 try:
-                    lines = cf.read_text(p).splitlines()
+                    names = _requirement_names(cf.read_text(p).splitlines())
                 except OSError:
                     continue
-                for i, raw in enumerate(lines, 1):
-                    s = raw.split("#", 1)[0].strip()
-                    m = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)", s) if s and not s.startswith("-") else None
-                    if m:
-                        found.setdefault(cenv._norm_dist(m.group(1)), f"{self.disp(p)}:{i}")
+                for name, i in names or []:
+                    found.setdefault(cenv._norm_dist(name), f"{self.disp(p)}:{i}")
             self._optional = found
-        return _match_dist(module, self._optional)
+        return self._optional
+
+    def optional_declared(self, module: str) -> str | None:
+        """Where a requirements file anywhere in the project (``tests/requirements/postgres.txt``,
+        ``docs/requirements.txt``; a bare name counts) lists a package named exactly like ``module``
+        (normalized): "file:line", or None. Such a package is optional: the code that imports it runs only
+        where it is installed. Only the exact name counts: these files belong to docs, examples and
+        sub-projects too, so a module that merely resembles a listed package (``sentry`` for ``sentry-sdk``,
+        ``storage`` for ``google-cloud-storage``) is what an invented import looks like (see
+        :meth:`optional_near`)."""
+        got = _find_dist(module, self._optional_dists())
+        return got[1] if got is not None and got[2] else None
+
+    def optional_near(self, module: str) -> str | None:
+        """A requirements file's package whose name only resembles ``module`` ("docs/requirements.txt:2 lists
+        sentry-sdk"), or None: a hint for an absent import, never a verdict."""
+        got = _find_dist(module, self._optional_dists())
+        return f"{got[1]} lists {got[0]}" if got is not None and not got[2] else None
 
 
-def _match_dist(module: str, dists: dict[str, str]) -> str | None:
-    """Where ``dists`` (normalized distribution name -> where declared) declares a package that provides the
-    module ``module``, or None. A package named differently from its module (PyYAML/yaml, psycopg2-binary/
-    psycopg2) is matched when its name contains the module's name; that match is labelled "probably"."""
+def _find_dist(module: str, dists: dict[str, str]) -> tuple[str, str, bool] | None:
+    """(distribution, where declared, exact) of a package in ``dists`` (normalized distribution name -> where
+    declared) that provides the module ``module``, or None. A package named differently from its module
+    (PyYAML/yaml, psycopg2-binary/psycopg2) is matched, not exactly, when its name contains the module's
+    name."""
     key = cenv._norm_dist(module)
     if key in dists:
-        return f"{dists[key]}"
+        return key, dists[key], True
     if len(key) >= 3:
         for name, loc in sorted(dists.items()):
             if key in name.split("-") or name.replace("-", "") in (f"py{key}", f"python{key}") or \
                     name.startswith(key):
-                return f"probably as {name}, {loc}"
+                return name, loc, False
     return None
+
+
+def _match_dist(module: str, dists: dict[str, str]) -> str | None:
+    """Where ``dists`` declares a package that provides the module ``module`` (:func:`_find_dist`), or None;
+    a match that is not exact is labelled "probably"."""
+    got = _find_dist(module, dists)
+    if got is None:
+        return None
+    name, loc, exact = got
+    return loc if exact else f"probably as {name}, {loc}"
+
+
+# one line of a requirements file: name, extras, version specifiers, a direct reference, an environment marker
+_REQ_OP = r"(?:===?|~=|!=|<=?|>=?)\s*[^\s,;()]+"
+_REQ_LINE = re.compile(r"([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*"
+                       rf"(?:\(?\s*{_REQ_OP}(?:\s*,\s*{_REQ_OP})*\s*\)?)?\s*(?:@\s*\S+)?\s*(?:;.*)?")
+
+
+def _requirement_names(lines: list[str]) -> list[tuple[str, int]] | None:
+    """(package name, line) of each requirement in a requirements file's lines, or None when a line is not a
+    requirement, an option (``-r``, ``--hash``) or a URL: then the file is prose, not a requirements file."""
+    out: list[tuple[str, int]] = []
+    for i, raw in enumerate(lines, 1):
+        s = re.sub(r"(^|\s)#.*$", "", raw).strip().rstrip("\\").strip()
+        if not s or s.startswith(("-", ".", "/")) or "://" in s.split("@", 1)[0]:
+            continue   # an option (-r, -e, --hash), a local path or a URL
+        s = re.sub(r"\s--?[A-Za-z][\w-]*(=\S*)?", "", f" {s}").strip()   # per-line options (pkg==1 --hash=...)
+        m = _REQ_LINE.fullmatch(s)
+        if m is None:
+            return None
+        out.append((m.group(1), i))
+    return out
 
 
 def _requirement_files(repo: Path, depth: int = 4) -> list[Path]:
@@ -2848,6 +2942,17 @@ def _scan_stores(tree: ast.Module, fs: _FileStores) -> None:
     visit(tree, None, None, [])
 
 
+def _pytest_function(fx: FileCtx, fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """``fn`` is a test (``test*``) or a fixture (``@pytest.fixture``) in a pytest file (``test_*.py``,
+    ``*_test.py``, ``conftest.py``)."""
+    stem = fx.path.stem
+    if not (stem.startswith("test_") or stem.endswith("_test") or stem == "conftest"):
+        return False
+    return fn.name.startswith("test") or any(
+        (dotted(d.func if isinstance(d, ast.Call) else d) or "").rsplit(".", 1)[-1] == "fixture"
+        for d in fn.decorator_list)
+
+
 def _is_path_class(full: str | None) -> bool:
     """A pathlib path class (``pathlib.Path``; ``pathlib._local.Path`` on Python 3.13)."""
     return bool(full) and str(full).split(".")[0] == "pathlib" and str(full).rsplit(".", 1)[-1] in _PATH_CLASSES
@@ -2900,6 +3005,25 @@ def _expects_error(w: ast.With | ast.AsyncWith, kind: str) -> str | None:
             caught = _caught(c.args[0]) or set()
             if caught & _CATCH.get(kind, set()) or (kind == "import" and caught & _BROAD):
                 return _short(c, 70)
+    return None
+
+
+def _raises_around(fx: FileCtx, node: ast.AST, kind: str) -> tuple[str, int] | None:
+    """(the ``raises(E)`` text, its line) when the site ``node`` (an attribute, a call that has the keyword, a
+    subscript) is exactly the one statement of a ``with raises(E)`` block whose E is what this kind of site
+    raises; else None. ``with raises(AttributeError): obj.gone`` may be a test that the name is missing."""
+    if kind == "import":
+        return None
+    st = fx.parents.get(id(node))
+    if kind == "attribute" and isinstance(st, ast.Call) and st.func is node:   # obj.gone()
+        node, st = st, fx.parents.get(id(st))
+    if not (isinstance(st, (ast.Expr, ast.Assign, ast.AnnAssign, ast.Return)) and getattr(st, "value", None) is node):
+        return None
+    w = fx.parents.get(id(st))
+    if isinstance(w, (ast.With, ast.AsyncWith)) and len(w.body) == 1 and w.body[0] is st:
+        expects = _expects_error(w, kind)
+        if expects:
+            return expects, w.lineno
     return None
 
 
@@ -3737,7 +3861,7 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     java_overrides: dict[str, bytes] = {}
     ts_targets: list[tuple[str, Path, set[int] | None]] = []     # imports checked by codecheck_ts (D46)
     ts_suffixes = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")
-    checked_py: list[tuple[Path, str | None]] = []   # the Python files checked (a snippet: with its text)
+    checked_py: list[tuple[Path, str | None, str]] = []   # the Python files checked (a snippet: with its text)
     if snippet is not None:
         rel = (as_path or "snippet.py").replace("\\", "/")
         abs_path = (repo / rel).resolve()
@@ -3753,7 +3877,7 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
         else:
             with cf.override(abs_path, snippet):   # the snippet's own definitions, not the file on disk
                 got, _deps, err = check_source(ck, rel, abs_path, snippet, None, jedi_why)
-            checked_py.append((abs_path, snippet))
+            checked_py.append((abs_path, snippet, rel))
             files.append({"path": rel, "sites": len(got), **({"error": err} if err else {})})
             sites += got
     else:
@@ -3797,7 +3921,7 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
                     cache.put(rel, sha, got, deps, lines)
             files.append({"path": rel, "sites": len(got), **({"cached": True} if cached else {}),
                           **({"error": err} if err else {})})
-            checked_py.append((f, None))
+            checked_py.append((f, None, rel))
             sites += got
     java_res = None
     if java_targets:
@@ -3859,7 +3983,13 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     # names every other file defines
     from verinoda import codecheck_rank
 
-    unknown_summary = codecheck_rank.rank_sites(envinfo, repo, sites, checked_py, ck is not None)
+    def finds(path: Path, top: str) -> bool:   # an import on a line without a site (a diff's unchanged lines)
+        return bool(ck.universe(path.parent).find_top(top)) or ck.project_module(top) is not None
+
+    # the environment's name index counts against the time budget (MCP: code_check holds the server)
+    left = None if budget_s is None else max(0.0, budget_s - (time.perf_counter() - t0))
+    unknown_summary = codecheck_rank.rank_sites(envinfo, repo, sites, checked_py, ck is not None,
+                                                finds if ck is not None else None, left)
     counts = {v: 0 for v in VERDICTS}
     for s in sites:
         counts[s["verdict"]] = counts.get(s["verdict"], 0) + 1

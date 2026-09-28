@@ -2904,8 +2904,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--stdin", action="store_true", help="check the code on stdin before it is written")
     sp.add_argument("--as", dest="as_path", metavar="PATH", help="with --stdin: the file the code is meant for")
     sp.add_argument("--env", default="auto", help=env_help)
-    sp.add_argument("--all", action="store_true", help="also list the sites that exist")
-    sp.add_argument("--no-cache", action="store_true", help="do not read or write .verinoda/cache/check")
+    sp.add_argument("--all", action="store_true", help="also list the sites that exist and the LOW unknowns")
+    sp.add_argument("--no-cache", action="store_true",
+                    help="do not read or write .verinoda/cache/check (the environment's name index, kept per "
+                         "environment in the user cache, is still used: delete its names-*.txt to rebuild it)")
     sp = add("api", cmd_api, "the real members of a Python module, class or function in the project's environment, "
                              "or of a Java class as the build sees it (classpath and JDK, with access), with "
                              "signatures and locations (exit 3: not found; a name that "

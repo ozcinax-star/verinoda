@@ -317,22 +317,41 @@ def _clip(text: str, n: int) -> str:
     return text if len(text) <= n else text[: n - 3] + "..."
 
 
+def _clip_mid(text: str, n: int) -> str:
+    """``text`` cut in the middle to ``n`` characters: the head says what, the tail often says why (a
+    swallowing handler, where the name was looked for)."""
+    if len(text) <= n:
+        return text
+    head = (n - 5) * 2 // 5
+    return f"{text[:head]} ... {text[len(text) - (n - 5 - head):]}"
+
+
 def check_site_line(s: dict) -> str:
-    """One name-check site as one line (docs/DESIGN.md D64): ``VERDICT path:line:col kind expr | why | nearest:
-    names | next: step``. Unknown sites are labelled by their rank (HIGH, MEDIUM, LOW)."""
+    """One name-check site as one line (docs/DESIGN.md D64): ``VERDICT path:line:col kind expr | why | guard:
+    ... | swallowed by ... | optional dependency | elsewhere: qualname (at) | nearest: names | next: step``.
+    Unknown sites are labelled by their rank (HIGH, MEDIUM, LOW)."""
     v = s.get("verdict")
     tag = {"absent": "ABSENT", "not_installed": "NOT_INSTALLED", "guarded": "GUARDED", "exists": "EXISTS"}.get(
         str(v)) or str(s.get("rank") or "unknown").upper()
     parts = [f"{tag} {s.get('at')} {s.get('kind')} {_clip(str(s.get('expr') or ''), 80)}"]
     if v == "unknown":
         if s.get("rank") in ("high", "medium") and s.get("rank_why"):
-            parts.append(_clip(str(s["rank_why"]), 120))
+            parts.append(_clip_mid(str(s["rank_why"]), 140))
         elif s.get("why"):
-            parts.append("why: " + _clip(str(s["why"]), 90))
+            parts.append("why: " + _clip_mid(str(s["why"]), 110))
     else:
-        detail = s.get("message") or s.get("why") or s.get("guard") or s.get("at_def")
+        detail = s.get("message") or s.get("why") or (None if s.get("guard") else s.get("at_def"))
         if detail:
-            parts.append(_clip(str(detail), 130))
+            parts.append(_clip_mid(str(detail), 150))
+    if s.get("guard"):   # what makes a guarded site safe (or not): the reader judges it
+        parts.append("guard: " + _clip(str(s["guard"]), 90))
+    if s.get("swallowed_by") and "swallow" not in (parts[-1] if len(parts) > 1 else ""):
+        parts.append("swallowed by " + _clip(str(s["swallowed_by"]), 60))
+    if s.get("optional"):
+        parts.append("optional dependency")
+    if s.get("elsewhere"):   # the fix, when the name is defined in another module
+        parts.append("elsewhere: " + ", ".join(f"{e.get('qualname')} ({e.get('at')})" for e in s["elsewhere"][:2]
+                                               if isinstance(e, dict)))
     if s.get("nearest"):   # the fix is among them; the next step is then implied
         parts.append("nearest: " + ", ".join(str(n.get("name")) for n in s["nearest"][:3]))
     elif s.get("next_step") and v != "exists":
@@ -2422,7 +2441,7 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         as_path: Annotated[OptStr, Field(description="With snippet: the repository-relative file it is for.")]
         = None,
         env: EnvArg = None,
-        include_exists: Annotated[bool, Field(description="Also list the sites that exist.")] = False,
+        include_exists: Annotated[bool, Field(description="Also list the sites that exist and the LOW unknowns.")] = False,
     ) -> dict[str, Any]:
         return emit(t.code_check(paths=paths, diff=diff, snippet=snippet, as_path=as_path, env=env,
                                  include_exists=include_exists))
