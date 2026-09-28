@@ -22,43 +22,69 @@ optional dependency listed only in a requirements file under `tests/`.
   - HIGH: the name is defined nowhere in a word index of the project, its environment's Python sources and
     jedi's stubs; or the receiver's declared type lacks it and has a close name (edit similarity >= 0.8).
   - MEDIUM: the declared type lacks it (only a subclass or runtime code could add it); a `**kwargs` callee would
-    take a name defined nowhere; the receiver is bound by an import that is not installed; an import that was
-    not decided; a name not found in an index that stopped early.
+    take a name defined nowhere; a keyword defined nowhere that the checked code reads back as an attribute
+    (`SimpleNamespace(retry_ms=3)` ... `cfg.retry_ms`); the receiver is bound by an import that is not installed,
+    or is a local bound from such a receiver in the same function (`df = pd.read_csv(p)`); an import that was not
+    decided; a name not found in an index that stopped early; an absent name that is the whole body of a
+    `with raises(E)` block (below).
   - LOW: the receiver's type is not known and the name is defined somewhere.
 - **The word index is a superset test.** Every identifier-like word in the text of site-packages, the standard
   library and jedi's typeshed counts as defined (comments and docstrings included), plus option strings as
   argparse turns them into names (`"--no-mcp"` -> `no_mcp`) and the running interpreter's built-in names. The
   project's other files count with their words; the checked files only with the names they define (definitions,
-  parameters, stores, imports, string constants), so the misspelling itself never counts. Names that only a
-  compiled extension defines are outside the index; a `__getattr__` on the receiver's container keeps a site out
-  of HIGH. The environment's index is built once per environment fingerprint (and jedi version), kept in memory
-  and, with `.verinoda/`, in `.verinoda/cache/check/names-<fingerprint>.json`; the build stops after 120 s
-  (`VERINODA_NAME_INDEX_BUDGET_S`), and a name not found in an incomplete index is MEDIUM, never HIGH.
+  parameters, stores, imports, string constants; for an attribute site also the keywords they pass), so the
+  misspelling itself never counts. Names that only a compiled extension defines are outside the index; a
+  `__getattr__` on the receiver's container keeps a site out of HIGH. The environment's index is built once per
+  environment fingerprint (and jedi version), kept in memory and in the user cache
+  (`%LOCALAPPDATA%/verinoda/Cache/names/names-<fingerprint>.txt`, `~/.cache/verinoda/...`, or
+  `$VERINODA_CACHE_DIR`; one JSON header line, then one word per line), whether or not the project has
+  `.verinoda/`; the fingerprint hashes the interpreter's absolute path, so projects that share an environment share
+  its index. One check spends at most 120 s on it (`VERINODA_NAME_INDEX_BUDGET_S`; a value that is not a number
+  falls back to 120 with a warning), and with a time budget (MCP `code_check`) at most what the budget left. A
+  build cut short is kept with the number of files it read (the walk is sorted, so the order is fixed) and the next
+  check continues it; until it is complete a name not found in it is MEDIUM, never HIGH, and the note names the
+  budget that stopped it. `--no-cache` does not touch it (it is an index of the environment, not of the checked
+  files; deleting the file rebuilds it).
+  The receivers bound by an import that is not installed are read from each checked file's own text (a snippet's
+  text; in a diff the whole file, so an unchanged import line counts): an import line that has a site keeps its
+  verdict, one without a site (a diff's unchanged lines) is looked up in the environment's search path.
   Precision limit (not measured): without a project environment (`--env none`, no `.venv`) the index holds only
   the standard library, the stubs and the project, so a name of an uninstalled third-party package reached
-  indirectly (not through an import in the same file, which makes the site MEDIUM) can be ranked HIGH.
+  through another module (a function that returns a DataFrame) can be ranked HIGH.
 - **Order and listing.** Sites are listed absent, HIGH, not installed, MEDIUM, guarded, then LOW. LOW sites are
   counted by cause in `unknown_summary` (`high`, `medium`, `low`, `low_by_cause` with an example and one next
   step per cause) and listed only with `--all` / `include_exists`. The ranking runs after the per-file cache, since
   a rank depends on what every other file defines. Java, Kotlin and TypeScript sites are not ranked and stay
   listed (`unknown_summary.not_ranked` counts them, so the counts sum to `summary.unknown`). Every unknown carries a one-step `next_step` (the cause's step when the site had none).
 - **MCP one-line sites.** `code_check` returns each site as one line: `VERDICT path:line:col kind expr | why |
-  nearest: names` (or `next: step` when there are no nearest names); HIGH, MEDIUM and LOW label unknowns; the
-  `files` list keeps only files that could not be read. The cap cuts from the end, so an absent or HIGH site is
-  never cut before a LOW one.
+  guard: ... | swallowed by ... | optional dependency | elsewhere: qualname (at) | nearest: names` (or `next:
+  step` when there are no nearest names; each part only when the site has it); a long `why` is cut in the middle,
+  so its tail (where the name was looked for, a swallowing handler) stays; HIGH, MEDIUM and LOW label unknowns;
+  the `files` list keeps only files that could not be read. The cap cuts from the end, so an absent or HIGH site
+  is never cut before a LOW one.
 - **Declared types decide `exists`, never `absent` (the D32 asymmetry).** When jedi's goto finds nothing, the
   receiver's declared type is read: jedi's inference of the receiver; a comprehension variable at its `for`
   target; a local bound once to a path join, and `a / b` itself, from the left operand's pathlib class; a call
   from the called function's declared return type (jedi `execute`); an unannotated parameter of a `test*`
   function or a fixture in a pytest file, named like one of pytest's own fixtures, from that fixture's class
-  (unless the project defines a fixture of the same name). A name in that type is `exists`. A name it lacks stays
+  (unless the project defines a fixture of the same name). Any other unannotated parameter (and an expression
+  that starts from one) has no declared type: jedi would infer it from the call sites it finds, and one caller's
+  class is not the parameter's type (`self` / `cls` and pytest tests and fixtures excepted). A name in that type
+  is `exists`. A name it lacks stays
   `unknown` and carries `declared` and `nearest` only when the class is closed in itself (then only a subclass
   can add it); a keyword outside the declared method's signature is `unknown` with the same fields.
-- **False absents.** A site inside `with raises(E)` (`pytest.raises`, `assertRaises`, sympy's `raises`) whose E
-  is the error that kind of site raises (an import: also a broad `Exception`) is `guarded`. A module whose package
-  a requirements file anywhere in the project lists (`tests/requirements/postgres.txt`, a bare name counts) is
-  `not_installed` with `optional: true`, not `absent`.
-- Cached answers of the previous rule set are not reused (`CHECK_VERSION` 5).
+- **False absents.** An import inside `with raises(E)` (`pytest.raises`, `assertRaises`, sympy's `raises`)
+  whose E is `ImportError` (or a broad `Exception`) is `guarded`. An absent attribute, keyword or dict key is never
+  guarded by such a block: a misspelling there raises the expected `AttributeError` / `TypeError` / `KeyError`
+  before the error the test means, so the test passes for the wrong reason. Only when the site is exactly the one
+  statement of the block (`with raises(AttributeError): obj.gone`, a test that the name is missing) is it
+  `unknown` MEDIUM (`expected_error`) instead of `absent`. A module whose package a requirements file anywhere in
+  the project lists by exactly its name (normalized; `tests/requirements/postgres.txt`, a bare name counts) is
+  `not_installed` with `optional: true`, not `absent`. Those files belong to docs, examples and sub-projects too,
+  so a module that only resembles a listed package (`sentry` for `sentry-sdk`) stays `absent`, with the listed
+  name as a hint in its message; a file with a line that is not a requirement (a README in `requirements/`) is
+  not read.
+- Cached answers of the previous rule set are not reused (`CHECK_VERSION` 6).
 
 ### NN.3 Measured
 
@@ -89,19 +115,30 @@ each. The planting and triage rules were written by the rule author (in-sample).
   `with raises(ImportError):`) is `guarded` instead of `absent`; the file has no absent site left.
 - Tests: `tests/test_codecheck_rank.py` (ranks, summary, order, the name index's superset rule, argparse dests,
   not-installed receivers, raises guards, optional dependencies, declared types for the two jedi defects, path-join
-  locals, call results and pytest fixtures, MCP one-line sites under the cap, CLI labels).
+  locals, call results and pytest fixtures, MCP one-line sites under the cap, CLI labels; and one test per
+  finding of the adversarial review: resembling requirement names, prose requirement files, diff and snippet
+  ranks, locals from a missing module, duck-typed parameters, keyword-defined attributes, MCP line fields, raises
+  blocks around attribute and keyword typos, the resumed index and its note, a bad budget value).
+- After the review's fixes, the real CLI (`python -m verinoda check verinoda/paths.py --repo <a copy of this
+  repository, 720 .py, no .verinoda/> --env <the worktree's .venv> --no-cache`), on a machine loaded by other
+  runs: the first run 44 s, of which 11 s built the environment's index (16,660 files, kept in the user cache);
+  then 2.3-4.2 s in most runs (26 s and 38 s once each, load), against 1.6-21 s for dd60358 in the same
+  alternating runs. The project's own words (720 files) take 0.7-1.2 s per call.
 
 ### NN.4 Not done
 
 - `**kwargs` following (the study's M2), mypy or pyright as a second resolver, the opt-in runtime probes.
 - A flag imported from another module (`is_psycopg3`) as an import guard.
-- A user-level cache of the environment's word index for projects without `.verinoda/`.
+- The project's own words are read again on every call (0.7-1.2 s for 720 files); a cache keyed by file stat
+  would save that.
+- `references/local.py` (`local_versions`, which `declared()` reads) still takes a prose line of a root
+  `requirements/*.txt` as a package; only the requirements files read for optional dependencies skip prose.
 - The close-name threshold (0.8) leaves a transposed four-letter name (`rpeo` for `repo`, 0.75) at MEDIUM.
 - The before/after counts on the study's 6-module, Django 30-file and sympy 30-file samples were not re-run.
 
 ## Decision table row
 
-| D64 | Ranked unknowns, declared types | implemented | Built 2026-09-28 (section NN): unknown Python sites are ranked HIGH (a name defined nowhere in a word index of the project, its environment and the stubs, or a close misspelling of the receiver's declared type), MEDIUM or LOW; LOW sites are counted by cause in `unknown_summary` and listed only with `--all`; sites are listed absent, HIGH, not installed, MEDIUM, guarded, LOW, and MCP `code_check` gives one line per site; declared types (jedi's inference, comprehension `for` targets, pathlib joins, declared return types, pytest's own fixtures) decide `exists`, never `absent`; `with raises(E)` is a guard and a module listed in any requirements file is `not_installed` (optional). On a planted-misspelling diff: 50 planted sites all absent/HIGH/MEDIUM, 0 real HIGH, real unknowns 125 -> 70, planted sites in the first MCP answer 12 -> 42. Not done: `**kwargs` following, mypy/pyright, runtime probes. |
+| D64 | Ranked unknowns, declared types | implemented | Built 2026-09-28 (section NN): unknown Python sites are ranked HIGH (a name defined nowhere in a word index of the project, its environment and the stubs, or a close misspelling of the receiver's declared type), MEDIUM or LOW; LOW sites are counted by cause in `unknown_summary` and listed only with `--all`; sites are listed absent, HIGH, not installed, MEDIUM, guarded, LOW, and MCP `code_check` gives one line per site; declared types (jedi's inference, comprehension `for` targets, pathlib joins, declared return types, pytest's own fixtures) decide `exists`, never `absent`; `with raises(E)` guards an import and a module listed by its exact name in any requirements file is `not_installed` (optional); the environment's word index is kept in the user cache and resumed where its budget stopped it. On a planted-misspelling diff: 50 planted sites all absent/HIGH/MEDIUM, 0 real HIGH, real unknowns 125 -> 70, planted sites in the first MCP answer 12 -> 42. Not done: `**kwargs` following, mypy/pyright, runtime probes. |
 
 ## UPGRADING note
 
@@ -117,9 +154,14 @@ each. The planting and triage rules were written by the rule author (in-sample).
 - Text output labels unknowns `unknown HIGH` / `unknown MEDIUM` / `unknown LOW` and ends with a line of rank
   counts and the largest LOW causes.
 - More sites are `exists` than before (a receiver's declared type is read where jedi's goto found nothing), an
-  import inside `with pytest.raises(ImportError)` is `guarded`, and a module listed in a requirements file anywhere
-  in the project is `not_installed` with `optional: true` instead of `absent`.
-- Cached check answers are recomputed once (`CHECK_VERSION` 5). The first check in an environment builds a word
-  index of its sources (about 15-40 s for 16,000 files) and keeps it in `.verinoda/cache/check/names-*.json`
-  (derived, safe to delete); `VERINODA_NAME_INDEX_BUDGET_S` (default 120) bounds that build.
+  import inside `with pytest.raises(ImportError)` is `guarded`, and a module listed by its exact name in a
+  requirements file anywhere in the project is `not_installed` with `optional: true` instead of `absent`. An
+  absent name that is the only statement of a `with raises(AttributeError / TypeError / KeyError)` block is
+  `unknown` (MEDIUM, `expected_error`).
+- MCP `code_check` lines also carry `guard: ...`, `swallowed by ...`, `optional dependency` and `elsewhere: ...`.
+- Cached check answers are recomputed once (`CHECK_VERSION` 6). The first check in an environment builds a word
+  index of its sources (about 10-40 s for 16,000 files) and keeps it in the user cache
+  (`%LOCALAPPDATA%/verinoda/Cache/names/`, `~/Library/Caches/verinoda/names/`, `~/.cache/verinoda/names/`, or
+  `$VERINODA_CACHE_DIR/names/`; derived, safe to delete); `VERINODA_NAME_INDEX_BUDGET_S` (default 120) bounds the
+  time one check spends on it, and the next check continues a build that was cut short.
 - `docs/ARCHITECTURE.md` gained one row for `codecheck_rank.py` (tests/test_docs.py requires every module there).
