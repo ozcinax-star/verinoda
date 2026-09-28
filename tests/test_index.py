@@ -290,6 +290,26 @@ def test_stale_sidecar_is_recomputed_and_matches_the_in_memory_pass(built):
     assert stats == {"edges": 2, "files_parsed": 0, "files_reused": stats["files_reused"]}
 
 
+def test_the_sidecar_parse_is_the_one_the_span_lookups_reuse(built, monkeypatch):
+    """A file the receiver sidecar parses is not parsed again for its spans in the same process."""
+    repo, _ = built
+    sc = index_dir(repo) / "receiver_calls.json"
+    before = sc.read_bytes()
+    sc.unlink()  # every file's facts are computed again
+    index._PYINFO_CACHE.clear()
+    parses: list[int] = []
+    real = index._py_info
+    monkeypatch.setattr(index, "_py_info", lambda data: parses.append(1) or real(data))
+    stats = index.refresh_receiver_sidecar(repo)
+    assert stats["files_parsed"] == len(parses) > 0
+    # same sidecar as the build wrote (the file facts and edges; the graph identity is unchanged)
+    assert json.loads(sc.read_text(encoding="utf-8")) == json.loads(before)
+    g = index.load(repo, augment=False)
+    spans = [g.span(n) for f in ("orders/service.py", "orders/repository.py") for n in g.symbols_in(f)]
+    assert spans and all(spans)
+    assert len(parses) == stats["files_parsed"]  # the spans came from the sidecar's parses
+
+
 # -- vendored rebuild: the path-identity memo keeps the graph byte-identical ---------------------------
 
 def _update_once(tmp_path: Path, name: str, memo: bool) -> bytes:

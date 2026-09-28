@@ -2542,6 +2542,7 @@ def refresh_receiver_sidecar(repo: Path, g: Graph | None = None) -> dict:
         nonlocal parsed
         p = repo / f
         try:
+            key = _stat_key(p)  # taken before the read, as py_file_info does
             data = p.read_bytes()
         except OSError:
             return None
@@ -2551,7 +2552,9 @@ def refresh_receiver_sidecar(repo: Path, g: Graph | None = None) -> dict:
             files[f] = prev
             return prev.get("facts")
         try:
-            facts = _py_info(data).receivers
+            # through the per-version parse cache: the span lookups of the search index that runs
+            # next in the same process (py_file_info) reuse this parse instead of parsing again
+            facts = _cached(_PYINFO_CACHE, key, lambda: _py_info(data)).receivers
         except (SyntaxError, ValueError, RecursionError):
             facts = None
         parsed += 1

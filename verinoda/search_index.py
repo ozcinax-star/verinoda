@@ -1026,8 +1026,34 @@ class _Writer:
         _set_meta(self.conn, **self.totals, **meta)
 
 
-def _open_for_write(db: Path, rebuild: bool) -> tuple[sqlite3.Connection, bool]:
-    """Open (creating when needed) and say whether the index must be built from scratch."""
+BUILD_SUFFIX = ".build-"   # a from-scratch index is written to search.db.build-<pid>, then renamed
+BUILD_CACHE_KIB = 65536    # page cache of that build connection (64 MB)
+
+
+def _unlink(p: Path) -> None:
+    try:
+        p.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _connect_build(db: Path) -> sqlite3.Connection:
+    """A connection for a from-scratch build into a file nobody else reads: no journal, no syncs, a large
+    page cache. A crash leaves a broken build file, never a broken index: the file is renamed into place
+    only once it is complete."""
+    conn = sqlite3.connect(str(db), timeout=30.0)
+    conn.execute("PRAGMA journal_mode = OFF")
+    conn.execute("PRAGMA synchronous = OFF")
+    conn.execute(f"PRAGMA cache_size = -{BUILD_CACHE_KIB}")
+    return conn
+
+
+def _open_for_write(db: Path, rebuild: bool) -> tuple[sqlite3.Connection, Path | None]:
+    """Open the index for an update, or a build file when it must be built from scratch.
+
+    Returns the connection and, for a from-scratch build, the build file that :func:`_install` puts in
+    place of ``db`` once it is complete (None: ``db`` itself is updated).
+    """
     fresh = rebuild or not db.exists()
     if db.exists() and not fresh:
         conn = _connect(db)
@@ -1036,25 +1062,57 @@ def _open_for_write(db: Path, rebuild: bool) -> tuple[sqlite3.Connection, bool]:
             fresh = True
         else:
             conn.executescript(_SCHEMA)
-            return conn, False
+            return conn, None
         conn.close()
-    if fresh and db.exists():
-        for suffix in ("", "-wal", "-shm"):
-            try:
-                Path(str(db) + suffix).unlink()
-            except FileNotFoundError:
-                pass
-            except OSError:  # held open elsewhere: empty it in place instead
-                conn = _connect(db)
-                for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall():
-                    conn.execute(f"DROP TABLE IF EXISTS {name}")
-                conn.commit()
-                conn.close()
-                break
     db.parent.mkdir(parents=True, exist_ok=True)
-    conn = _connect(db)
+    for old in db.parent.glob(db.name + BUILD_SUFFIX + "*"):  # left by a build that was killed
+        try:
+            if time.time() - old.stat().st_mtime > 3600:
+                old.unlink()
+        except OSError:
+            pass
+    build = db.with_name(f"{db.name}{BUILD_SUFFIX}{os.getpid()}")
+    _unlink(build)
+    conn = _connect_build(build)
     conn.executescript(_SCHEMA)
-    return conn, True
+    return conn, build
+
+
+def _install(build: Path, db: Path) -> None:
+    """Put the complete ``build`` database in the place of ``db``.
+
+    The old index's WAL and shared-memory files go first (a WAL left next to the new file would be
+    replayed into it). When ``db`` is held open elsewhere and cannot be replaced (Windows), the build's
+    pages are copied into it under SQLite's own locking instead, as the old in-place rebuild did.
+    """
+    # mode=rw: a build file removed meanwhile (the sweep in _open_for_write takes build files older than
+    # an hour, POSIX lets it unlink an open one) must fail here, not come back as a new empty database
+    # that replaces the index
+    conn = sqlite3.connect(build.absolute().as_uri() + "?mode=rw", uri=True)
+    try:
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").fetchone() is None:
+            raise sqlite3.DatabaseError(f"{build} is not a complete search index build")
+        conn.execute("PRAGMA journal_mode = WAL")  # the mode every writer sets anyway (_connect)
+    finally:
+        conn.close()
+    try:
+        for suffix in ("-wal", "-shm"):
+            _unlink(Path(str(db) + suffix))
+        os.replace(build, db)
+        return
+    except OSError:
+        pass
+    src = sqlite3.connect(str(build))
+    try:
+        dst = _connect(db)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+    finally:
+        src.close()
+    for suffix in ("", "-wal", "-shm"):
+        _unlink(Path(str(build) + suffix))
 
 
 def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: Path | None = None) -> dict:
@@ -1072,7 +1130,9 @@ def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: P
     repo = Path(repo).resolve()
     g = graph if graph is not None else ix.load(repo, augment=False)
     db = Path(db) if db else db_path_for(g)
-    conn, fresh = _open_for_write(db, rebuild)
+    conn, build = _open_for_write(db, rebuild)
+    fresh = build is not None
+    installed = False
     try:
         stored = {} if fresh else {r[0]: r[1:] for r in conn.execute(
             "SELECT file, sha256, gsig, size, mtime_ns FROM files")}
@@ -1149,8 +1209,14 @@ def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: P
                  built_at=m.get("built_at") if not fresh and m.get("built_at") else time.time())
         conn.commit()
         n_units = w.totals["n_units"]
+        if build is not None:
+            conn.close()
+            _install(build, db)
+            installed = True
     finally:
         conn.close()
+        if build is not None and not installed:
+            _unlink(build)  # a failed build leaves the old index as it was
     _HANDLES.pop(str(db), None)
     return {"mode": "full" if fresh else ("incremental" if indexed or removed else "noop"),
             "files_indexed": indexed, "files_removed": removed, "files_unchanged": unchanged,
