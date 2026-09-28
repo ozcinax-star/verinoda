@@ -571,6 +571,19 @@ def _clip_echo(u: dict) -> None:
         u["question"] = tn.clip(q, ECHO_CHARS)
 
 
+def _pinned(versioned: list[dict]) -> list[str]:
+    """The versions a sub-question's references name, as ``text (spec)``. The drafted overflow carrier
+    (``:version_overflow``, docs/DESIGN.md D67) names each version it folded, not only its first."""
+    out = []
+    for r in versioned:
+        v = r["version"]
+        if str(r.get("derived_by") or "").endswith(":version_overflow"):
+            out += [tn.clip(x, PINNED_CHARS) for x in (v.get("evidence") or v["spec"]).split(", ") if x.strip()]
+        else:
+            out.append(f"{tn.clip(r.get('text') or '', PINNED_CHARS)} ({tn.clip(v['spec'], PINNED_CHARS)})")
+    return out
+
+
 def _pinned_note(pinned: list[str]) -> str:
     """``the question names A, B, C and 4 more`` (the first PINNED_SHOWN by name)."""
     more = len(pinned) - PINNED_SHOWN
@@ -2249,8 +2262,7 @@ def _run_subquestion(ctx: _Ctx, sq: dict, share: int | None) -> dict:
                  if r in refs and (refs[r].get("version") or {}).get("spec")]
     chosen = [a["choice"] for a in ctx.plan.get("answers") or [] if a.get("clarification_id") == "c-version"
               or any(a.get("clarification_id") == f"c-{r}" for r in sq.get("references") or [])]
-    pinned_elsewhere = [f"{tn.clip(r.get('text') or '', PINNED_CHARS)} "
-                        f"({tn.clip(r['version']['spec'], PINNED_CHARS)})" for r in versioned] + chosen
+    pinned_elsewhere = list(dict.fromkeys(_pinned(versioned))) + chosen
     if pinned_elsewhere and sq["intent"] != "compare_reference":
         extra_unc.append(f"{_pinned_note(pinned_elsewhere)}; these claims describe the working tree "
                          f"at {(ctx.commit or 'uncommitted')[:10]}")

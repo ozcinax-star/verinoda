@@ -656,6 +656,51 @@ def test_a_long_question_is_not_echoed_before_the_evidence(proj):
     assert len(av.lean(res)["subquestions"][0]["text"]) <= analysis.ECHO_CHARS
 
 
+def _version_notes(res: dict, sq_id: str) -> list[str]:
+    return [u["why"] for u in res["unknowns"] if u.get("sub_question") == sq_id and "the question names" in u["why"]]
+
+
+def test_both_versions_of_a_two_version_question_are_named(proj):
+    """D67 review H1: 2.0.1 is not dropped as "contained" in 2.0.10."""
+    repo, st = proj
+    res = analysis.analyze(st, repo, "Why did 2.0.10 break compute_total when it worked in 2.0.1?", challenge=False)
+    assert res["status"] == "answered" and "plan_fallback" not in res
+    notes = [n for s in res["subquestions"] for n in _version_notes(res, s["id"])]
+    assert notes and all("2.0.10 (2.0.10)" in n and "2.0.1 (2.0.1)" in n for n in notes)
+
+
+def test_the_subquestion_naming_versions_of_an_overflowing_issue_says_so(proj):
+    """D67 review M1: the upgrade the user asks about is not folded into a pasted dump's sub-question."""
+    repo, st = proj
+    q = ("Where is compute_total defined? It raises a warning when I call it.\n### Versions\n```\n"
+         + "\n".join(f"pkg{i}: {i}.{i + 1}.{i + 2}" for i in range(1, 13))
+         + "\n```\nIt started after upgrading from v2.0.1 to v2.0.10 (see #12 and #123).\n")
+    res = analysis.analyze(st, repo, q, challenge=False)
+    assert res["status"] == "answered" and "plan_fallback" not in res
+    upgrade = next(s for s in res["subquestions"] if "upgrading" in s["text"])
+    (note,) = _version_notes(res, upgrade["id"])
+    assert "v2.0.1 (v2.0.1)" in note and "v2.0.10 (v2.0.10)" in note and "and 1 more" in note
+    dump = next(s for s in res["subquestions"] if "pkg12" in s["text"])
+    (note,) = _version_notes(res, dump["id"])
+    assert "and 9 more" in note  # every folded version counted, not only the carrier's first
+
+
+def test_a_turkish_question_about_a_pasted_english_issue_is_understood_in_turkish(proj):
+    """D67 review H2."""
+    repo, st = proj
+    res = analysis.analyze(st, repo, "compute_total ne yapar? it is called by the service and by the tests",
+                           challenge=False)
+    assert res["understood_as"].startswith("Anladığım (kurallarla):")
+
+
+def test_a_blank_question_is_refused(proj):
+    """D67 review L1: the fallback for a failed drafted plan never answers an empty question."""
+    repo, st = proj
+    for q in ("", "   "):
+        res = analysis.analyze(st, repo, q, challenge=False)
+        assert res["status"] == "invalid_plan" and not res.get("claims")
+
+
 def test_plan_can_come_from_a_file(proj, tmp_path):
     repo, st = proj
     p = _host_plan("Where is compute_total defined?",

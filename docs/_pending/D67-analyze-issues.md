@@ -35,13 +35,18 @@ showed three defects that have nothing to do with retrieval:
 ### NN.2 Decisions
 
 - **The draft carries every version, whatever the limit** (`question_plan._draft_references`,
-  `_fold_overflow`). A version named again (the same SHA or pull-request number twice) is one reference. When
-  more references remain than a plan may hold, the first ones stay references of their own and the last one
-  (`derived_by: ...:version_overflow`) keeps the user's own words as its `text` and lists every remaining
-  version in `version.evidence`, where the version check finds them. None is dropped, the plan stays within
-  its limits, and the check is unchanged: a host's plan that drops a version is still an error. Relative
-  versions ("the previous release") always stay references of their own, because a version clarification is
-  about them.
+  `_fold_overflow`). A version named again (the same SHA or pull-request number twice, a short SHA after its
+  full SHA) is one reference. Only the same version is merged: `2.0.1` is not `2.0.10`, `#12` is not `#123`
+  nor the `12` of `10.11.12`, and `scipy 1.23.5` is not `numpy 1.23.5` (`_same_version`, equality per kind).
+  When more references remain than a plan may hold, the versions of the user's own sentences stay references
+  of their own first, then those of pasted blocks (fenced code, lines that only pair a name with a version);
+  one last reference (`derived_by: ...:version_overflow`) keeps the user's own words as its `text` and lists
+  every remaining version in `version.evidence`, where the version check finds them. The draft lists it under
+  every sub-question that names one of its versions, and the "the question names ..." note counts each of
+  them. None is dropped and the plan stays within its limits. A host's plan that drops a version is still an
+  error, and the check now needs the version as a whole token (`_carried`): a plan carrying `2.0.10` or `#123`
+  no longer passes for `2.0.1` or `#12`. Relative versions ("the previous release") always stay references
+  of their own, because a version clarification is about them.
 - **A typed question is never refused for its drafted plan** (`analysis.analyze`, `question_plan.fallback`).
   When the drafted plan still fails its checks, it is stored as it was (status `invalid`) and the question is
   answered with a fallback plan: the whole message as one sub-question (intent from the rule cues) about the
@@ -49,7 +54,8 @@ showed three defects that have nothing to do with retrieval:
   mentions every word of the question would look absent from the repository (the "words occur nowhere" check
   reads the plan's links); when the mentions are what failed, the sub-question has none. A plan without
   references cannot carry the message's versions, so for this plan only (`check(..., refuse_versions=False)`)
-  a dropped version is a warning: there is no plan the user could fix. The answer says so: the result has
+  a dropped version is a warning: there is no plan the user could fix. A blank question is still refused
+  (`invalid_plan`): the fallback's own plan must pass every other check. The answer says so: the result has
   `plan_fallback` (the drafted plan's id, why, its first errors), the text view prints a `note:` line after
   "understood as", and the MCP view carries `plan_fallback`. A plan the host passed (`--plan`, MCP
   `plan_json`) that fails its checks is still refused with `invalid_plan` and exit 2, unchanged.
@@ -58,15 +64,23 @@ showed three defects that have nothing to do with retrieval:
   (`'s 't 'd 'm 've 're 'll`) are dropped before the text is split into words; a Turkish suffix after an
   apostrophe (`API'de`, `Order'ı`) is not in that list and still counts. When both languages show, a message
   whose English function words number at least three and at least three times its Turkish signals (Turkish
-  function words plus words with Turkish letters) is English. A Turkish question with English identifiers or
-  an English phrase in it stays "mixed" and is answered in Turkish as before ("Where is sipariş kaydediliyor?",
-  a Turkish question quoting an English error message). The intent cue tables still use their own test
-  (`has_turkish`, unchanged: it feeds the lexicon at scan time, and changing it would change the index).
+  function words plus words with Turkish letters) is English, unless the user's own question, the first or
+  the last sentence of the prose (`>` quotes left out), is asked in Turkish (a Turkish question word or two
+  Turkish function words, and more Turkish signals than English function words in that sentence). A Turkish
+  question about a pasted English issue, log or error ("Bu hata neden oluyor?" over an English log), or with
+  English identifiers or an English phrase in it, stays "mixed" and is answered in Turkish as before. A lone
+  triple backtick in the middle of a sentence, not closed on its line, opens no code block. The intent cue
+  tables still use their own test (`has_turkish`, unchanged: it feeds the lexicon at scan time, and changing
+  it would change the index).
 - **The question is restated briefly.**
-  - A drafted `restated_goal` / `restated_goal_user_lang` is at most 300 characters (`GOAL_CHARS`): on one
-    line, each sub-question's text given an equal share and clipped at a word with an ellipsis. A short
-    message is shown whole, as before ("Understood (rules): q1 [locate] Where is compute_total defined?"). A
-    host's goal is shown as the host wrote it. The "Understood as" contract of the answer is unchanged.
+  - An ordinary question is restated whole, as before, however many clauses it has ("Understood (rules): q1
+    [locate] Where is compute_total defined?"). Only an issue-sized message (its sub-questions' text over 600
+    characters, `ISSUE_CHARS`, or pasting lines or a fence) gets a drafted `restated_goal` /
+    `restated_goal_user_lang` of at most 300 characters (`GOAL_CHARS`) on one line: every `qN [intent]` head
+    is kept, a text that fits its share is whole and leaves the rest to the longer ones, a clause is cut in the
+    middle (`Which functions … apply_discount?`: its subject, and a Turkish predicate, are at its end), a text
+    pasting lines is shown by its first line, and the glosses get what the texts leave. A host's goal is shown
+    as the host wrote it. The "Understood as" contract of the answer is unchanged.
   - An unknown's `question` is kept on one line and at most 160 characters (`ECHO_CHARS`), where it is made,
     so what the budget is charged for is the clipped text; the verdict check's notes, which are added without
     the analysis's charging function, are clipped before they are charged.
@@ -147,7 +161,7 @@ plan, view, MCP, CLI, verdict-gate, decide, docs and reference tests pass unchan
 
 ## Decision table row
 
-| D67 | Issue-shaped questions | implemented | Built 2026-09-28 (section NN): a typed question is never refused because the plan drafted for it failed its own checks (the draft carries every version the message names within the reference limit; a drafted plan that still fails is kept for the record and the question is answered as one sub-question about its mentions, saying so; a host's plan is still refused); the answer's language is the prose's (code, URLs and English contraction tails do not count; English function words outnumbering Turkish signals three to one make it English); the drafted "understood as" is at most 300 characters and a sub-question's text is printed once, clipped to 160 characters, so the passages come earlier. |
+| D67 | Issue-shaped questions | implemented | Built 2026-09-28 (section NN): a typed question is never refused because the plan drafted for it failed its own checks (the draft carries every version the message names within the reference limit; a drafted plan that still fails is kept for the record and the question is answered as one sub-question about its mentions, saying so; a host's plan is still refused); the answer's language is the prose's (code, URLs and English contraction tails do not count; English function words outnumbering Turkish signals three to one make it English unless the user's own first or last sentence is Turkish); an issue-sized message's drafted "understood as" is at most 300 characters and a sub-question's text is printed once, clipped to 160 characters, so the passages come earlier. |
 
 ## UPGRADING note
 

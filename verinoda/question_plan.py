@@ -1923,16 +1923,63 @@ def version_tokens(message: str) -> list[dict]:
     return out
 
 
+_REF_NUM_RX = re.compile(r"^(?:#|pr\s?#?|pull/|mr\s?!?|!|issues/)0*(\d+)$", re.I)
+_SHA_RX = re.compile(r"(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,40}")
+
+
+def _ref_number(tok: str) -> str | None:
+    """The number of a PR/issue token (``#12``, ``PR 12``, ``pull/12``, ``MR !12``, ``issues/12``), else None."""
+    m = _REF_NUM_RX.match(tok.strip())
+    return m.group(1) if m else None
+
+
 def _carried(tok: str, refs: list[dict]) -> bool:
+    """Whether a reference carries the version token ``tok`` (in its spec, evidence, locator or text) as a
+    whole token. ``2.0.1`` is not carried by ``2.0.10``, nor ``#12`` by ``#123`` or by the ``12`` of
+    ``10.11.12``: a plan that keeps one of two versions the user named drops the other (D67). A leading
+    ``v`` is optional on either side, and a short SHA is carried by the full SHA it starts."""
     t = tn.ground_key(tok)
-    num = re.sub(r"\D", "", tok) if re.match(r"^(#|pr|pull/|mr|!|issues/)", tok, re.I) else None
+    num = _ref_number(t)
+    if num is not None:
+        rx = re.compile(rf"(?:#|\bpr\s?#?|\bpull/|\bmr\s?!?|!|\bissues/|/merge_requests/)0*{num}(?!\d)")
+    else:
+        core = t[1:] if t[:1] == "v" and t[1:2].isdigit() else t
+        tail = "[0-9a-f]*" if _SHA_RX.fullmatch(core) else ""
+        rx = re.compile(rf"(?<![\w.])v?{re.escape(core)}{tail}(?![\w]|[.-]\w)")
     for r in refs:
         v = r.get("version") or {}
+        if num is not None and tn.ground_key(v.get("spec") or "").lstrip("#!") == num:
+            return True
         hay = " ".join(tn.ground_key(x) for x in (v.get("spec") or "", v.get("evidence") or "", r.get("locator") or "",
                                                   r.get("text") or ""))
-        if t in hay or (num and re.search(rf"(?<!\d){num}(?!\d)", hay)):
+        if rx.search(hay):
             return True
-        if t.lstrip("v") and t.lstrip("v") == tn.ground_key(v.get("spec") or "").lstrip("v"):
+    return False
+
+
+def _same_version(tok: dict, name: str | None, refs: list[dict]) -> bool:
+    """Whether ``refs`` already hold the version token ``tok`` (named by ``name``, a package, or by none): the
+    same version named again, a PR number or a SHA repeated in a log. Equality only, never containment
+    (``2.0.1`` is not ``2.0.10``, ``#12`` not ``#123``, ``scipy 1.23.5`` not ``numpy 1.23.5``); a short SHA
+    is the full SHA it starts."""
+    t = tn.ground_key(tok["text"])
+    num = _ref_number(t) if tok["kind"] in ("pr", "issue") else None
+    key = t[1:] if t[:1] == "v" and t[1:2].isdigit() else t
+    for r in refs:
+        v = r.get("version") or {}
+        spec = tn.ground_key(v.get("spec") or "")
+        if num is not None:
+            m = re.search(r"/(?:pull|issues|merge_requests)/(\d+)", r.get("locator") or "")
+            nums = {_ref_number(spec), spec.lstrip("#!") if spec.lstrip("#!").isdigit() else None,
+                    m.group(1).lstrip("0") or "0" if m else None}
+            if num in nums:
+                return True
+            continue
+        rspec = spec[1:] if spec[:1] == "v" and spec[1:2].isdigit() else spec
+        if tok["kind"] == "sha":
+            if rspec and _SHA_RX.fullmatch(rspec) and rspec.startswith(key):
+                return True
+        elif rspec == key and (name is None or tn.ground_key(r.get("locator") or "") == tn.ground_key(name)):
             return True
     return False
 
@@ -2424,7 +2471,7 @@ def draft(question: str, graph, lexicon=None) -> dict:
     lang = tn.detect_language(question)
     clauses = segment(question)[:LIMITS["sub_questions"]]
     toks = _tokens(question)
-    ref_list, ref_spans = _draft_references(question)
+    ref_list, ref_spans, folded_at = _draft_references(question)
     mentions: list[dict] = []
     per_clause: dict[int, list[str]] = defaultdict(list)
     anaphoric: dict[int, bool] = {}
@@ -2534,6 +2581,10 @@ def draft(question: str, graph, lexicon=None) -> dict:
     ref_clause = defaultdict(list)
     for r in references:
         ref_clause[clause_of(r["span"][0])].append(r["id"])
+        if r["derived_by"].endswith(":version_overflow"):  # every sub-question naming a folded version
+            for ci in dict.fromkeys(clause_of(pos) for pos in folded_at):
+                if r["id"] not in ref_clause[ci]:
+                    ref_clause[ci].append(r["id"])
     sqs = []
     for ci, c in enumerate(clauses):
         cues = clause_cues(c["text"], lex)
@@ -2606,50 +2657,101 @@ def fallback(question: str, graph, repo=None, lexicon=None, drafted: dict | None
     The message becomes one sub-question about the drafted plan's mentions (the words it matched to
     the code; without them every word of the question would look absent from the repository), or about
     none when those are what failed. A bare plan carries no reference, so a version the message names
-    is a warning here, not a refusal: there is no plan the user could fix."""
+    is a warning here, not a refusal: there is no plan the user could fix. A bare plan without mentions
+    that still fails (an empty or blank question) is returned invalid: there is no question to answer."""
     kept = [m for m in (drafted or {}).get("mentions") or [] if isinstance(m, dict)][:LIMITS["mentions"]]
     for ms in ([kept, []] if kept else [[]]):
         plan = bare_plan(question, lexicon, ms)
         res = check(plan, graph, repo, lexicon, source="fallback", refuse_versions=False)
+        if not (question or "").strip() and not res["errors"]:  # "   " passes the schema's minLength
+            res["errors"].append(_problem("/user_message", "schema", "must not be blank", "give a question"))
+            res["status"] = "invalid"
         if not res["errors"]:
             return plan, res
-    res["warnings"] = res["errors"] + res["warnings"]  # a plan of our own making: said, never refused
-    res["errors"] = []
-    res["status"] = "needs_clarification" if res["clarifications"] else "ready"
     return plan, res
 
 
 # A drafted restated goal is the reading of the message, not the message again: an issue pasted as the
 # question (thousands of characters with its logs) would otherwise be printed once more before any
-# evidence. Each sub-question's text gets an equal share; short messages are shown whole (D67).
+# evidence. Only such a message is clipped (its sub-questions' text is longer than ISSUE_CHARS, or pastes
+# lines or a fence): to GOAL_CHARS, every "qN [intent]" head kept, the room shared so that a short text is
+# shown whole and the longer ones get the rest, a clause cut in the middle (its subject and a Turkish
+# predicate are at its end). An ordinary question is restated whole, however many clauses it has (D67).
 GOAL_CHARS = 300
+ISSUE_CHARS = 600
+GOAL_TEXT_MIN = 24          # a clipped sub-question's text keeps at least this much
+GOAL_GLOSS_CHARS = 80       # the glosses of a clipped restatement
 
 
-def _goal(prefix: str, sqs: list[dict], label, extra: str) -> str:
+def _glosses(word: str, gl: list[str], room: int | None = None) -> str:
+    """`` (glosses: a=b, c=d)``, within ``room`` characters when given (whole glosses, then "+N more")."""
+    if not gl:
+        return ""
+    whole = f" ({word}: {', '.join(gl)})"
+    if room is None or len(whole) <= room:
+        return whole
+    for k in range(len(gl) - 1, 0, -1):
+        cut = f" ({word}: {', '.join(gl[:k])} +{len(gl) - k})"
+        if len(cut) <= room:
+            return cut
+    return ""
+
+
+def _shares(lengths: list[int], room: int) -> list[int]:
+    """Characters for each text: a text that fits its equal share keeps its whole length and leaves the rest
+    to the longer ones; none gets less than GOAL_TEXT_MIN."""
+    out = list(lengths)
+    left = sorted(range(len(lengths)), key=lambda i: lengths[i])
+    while left:
+        share = max(GOAL_TEXT_MIN, room // len(left))
+        if lengths[left[0]] <= share:
+            room -= lengths[left.pop(0)]
+            continue
+        for i in left:
+            out[i] = share
+        break
+    return out
+
+
+def _goal(prefix: str, sqs: list[dict], label, gloss_word: str, gl: list[str]) -> str:
     heads = [f"{sq['id']} [{label(sq['intent'])}] " for sq in sqs]
-    texts = [" ".join(str(sq["text"]).split()) for sq in sqs]
-    room = GOAL_CHARS - len(prefix) - len(extra) - sum(len(h) + 3 for h in heads)
-    if sum(len(t) for t in texts) > room:
-        share = max(24, room // max(1, len(texts)))
-        texts = [tn.clip(t, share) for t in texts]
-    return tn.clip(prefix + " | ".join(h + t for h, t in zip(heads, texts)) + extra, GOAL_CHARS)
+    raw = [str(sq["text"]) for sq in sqs]
+    texts = [" ".join(t.split()) for t in raw]
+    if sum(len(t) for t in texts) <= ISSUE_CHARS and not any("\n" in t.strip() or "```" in t for t in raw):
+        return prefix + " | ".join(h + t for h, t in zip(heads, texts)) + _glosses(gloss_word, gl)
+    room = GOAL_CHARS - len(prefix) - sum(len(h) for h in heads) - 3 * (len(heads) - 1)
+    # the glosses get what the texts leave; a text that pastes lines is shown by its first line
+    extra = _glosses(gloss_word, gl, min(GOAL_GLOSS_CHARS, room - sum(len(t) for t in texts)))
+    shares = _shares([len(t) for t in texts], room - len(extra))
+    return prefix + " | ".join(h + (t if len(t) <= n else _clip_text(r, n))
+                               for h, t, r, n in zip(heads, texts, raw, shares)) + extra
+
+
+def _clip_text(raw: str, n: int) -> str:
+    """A sub-question's text in ``n`` characters: a clause cut in the middle; a text that pastes lines (a log,
+    a dump) by its first line and an ellipsis."""
+    lines = [ln for ln in raw.strip().splitlines() if ln.strip()]
+    if len(lines) < 2:
+        return tn.clip_middle(raw, n)
+    first = " ".join(lines[0].split())
+    return first + " …" if len(first) + 2 <= n else tn.clip_middle(first, n)
 
 
 def _goal_en(sqs: list[dict], mentions: list[dict]) -> str:
     gl = [f"{m['text']}={m['gloss_en']}" for m in mentions if m.get("gloss_en")]
-    return _goal("Rule-based reading: ", sqs, str, f" (glosses: {', '.join(gl)})" if gl else "")
+    return _goal("Rule-based reading: ", sqs, str, "glosses", gl)
 
 
 def _goal_user(sqs: list[dict], mentions: list[dict], lang: str) -> str:
     if lang not in ("tr", "mixed"):
-        return _goal("Understood (rules): ", sqs, str, "")
+        return _goal("Understood (rules): ", sqs, str, "", [])
     gl = [f"{m['text']}={m['gloss_en']}" for m in mentions if m.get("gloss_en")]
-    return _goal("Anladığım (kurallarla): ", sqs, INTENT_NAMES_TR.get,
-                 f" (karşılıklar: {', '.join(gl)})" if gl else "")
+    return _goal("Anladığım (kurallarla): ", sqs, INTENT_NAMES_TR.get, "karşılıklar", gl)
 
 
-def _draft_references(question: str) -> tuple[list[dict], list[tuple[int, int]]]:
-    """References with the versions the user wrote; every strong version token is carried."""
+def _draft_references(question: str) -> tuple[list[dict], list[tuple[int, int]], list[int]]:
+    """References with the versions the user wrote; every strong version token is carried. Also the spans
+    they cover and the offsets of the versions folded into the overflow carrier (:func:`_fold_overflow`)."""
     refs: list[dict] = []
     spans: list[tuple[int, int]] = []
     derived = f"{DRAFT_RULES}:version_token"
@@ -2669,9 +2771,6 @@ def _draft_references(question: str) -> tuple[list[dict], list[tuple[int, int]]]
     for tok in version_tokens(question):
         if any(a <= tok["start"] < b for a, b in spans):
             continue
-        if tok["strong"] and _carried(tok["text"], refs):  # a version named again (a PR number, a SHA in a log)
-            spans.append((tok["start"], tok["end"]))
-            continue
         s, e = tok["start"], tok["end"]
         kind = {"sha": "commit", "pr": "pull_request", "issue": "issue"}.get(tok["kind"], "git_repo")
         text, locator = tok["text"], None
@@ -2686,6 +2785,9 @@ def _draft_references(question: str) -> tuple[list[dict], list[tuple[int, int]]]
                 locator = name
                 kind = "package" if nm.group(2) in ("==", "@") else "git_repo"
         if not tok["strong"] and not locator:
+            continue
+        if _same_version(tok, locator, refs):  # a version named again (a PR number, a SHA in a log)
+            spans.append((s, e))
             continue
         refs.append({"text": text, "span": [s, e], "kind": kind,
                      **({"locator": locator, "locator_source": "user_message"} if locator else {}),
@@ -2702,24 +2804,43 @@ def _draft_references(question: str) -> tuple[list[dict], list[tuple[int, int]]]
                      "purpose": "context", "derived_by": f"{DRAFT_RULES}:relative_version"})
         spans.append((s, e))
     refs.sort(key=lambda r: r["span"][0])
-    return _fold_overflow(refs), spans
+    refs, folded = _fold_overflow(refs, question)
+    return refs, spans, folded
 
 
-def _fold_overflow(refs: list[dict]) -> list[dict]:
-    """At most ``LIMITS["references"]`` references that still carry every version the message names.
+# A line of an environment dump or a dependency list: "- numpy: 1.23.5", "requests==2.31.0", "| torch | 2.1 |".
+_DUMP_LINE_RX = re.compile(r"(?m)^[ \t]*(?:[-*+|][ \t]*)?[\w.\-/\[\] ]{1,40}?[ \t]*(?::|==|@|\|)[ \t]*v?\d+(?:\.\d+)+"
+                           r"\S*[ \t]*\|?[ \t]*$")
+
+
+def _dump_spans(question: str) -> list[tuple[int, int]]:
+    """Where the message pastes rather than asks: fenced blocks (a log, an environment dump) and lines that
+    only pair a name with a version."""
+    return [m.span() for rx in (tn.FENCE_RX, _DUMP_LINE_RX) for m in rx.finditer(question)]
+
+
+def _fold_overflow(refs: list[dict], question: str = "") -> tuple[list[dict], list[int]]:
+    """At most ``LIMITS["references"]`` references that still carry every version the message names, and
+    the offsets of the versions folded into one reference.
 
     An issue with an environment dump or a log names more versions than a plan may hold references
-    (15 package versions, 20 commit SHAs). The first ones stay references of their own; the last
-    reference lists the rest in ``version.evidence``, where the version check finds them, so none is
-    dropped and the plan stays valid (docs/DESIGN.md D67). Relative versions ("the previous release")
-    always stay references of their own: they are what a version clarification is about."""
+    (15 package versions, 20 commit SHAs). The versions of the user's own sentences stay references of
+    their own first, then those of the pasted blocks; one last reference (the carrier) lists the rest in
+    ``version.evidence``, where the version check finds them, so none is dropped and the plan stays valid
+    (docs/DESIGN.md D67). The draft lists the carrier under every sub-question that names one of them.
+    Relative versions ("the previous release") always stay references of their own: they are what a
+    version clarification is about."""
     limit = LIMITS["references"]
     if len(refs) <= limit:
-        return refs
+        return refs, []
     relative = [r for r in refs if (r.get("version") or {}).get("source") == "user_relative"][:limit - 1]
     others = [r for r in refs if all(r is not x for x in relative)]
     room = limit - 1 - len(relative)
-    rest = others[room:]
+    pasted = _dump_spans(question)
+    in_paste = [any(a <= r["span"][0] < b for a, b in pasted) for r in others]
+    ranked = [r for r, p in zip(others, in_paste) if not p] + [r for r, p in zip(others, in_paste) if p]
+    kept = ranked[:room]
+    rest = sorted(ranked[room:], key=lambda r: r["span"][0])
     named: list[str] = []
     for r in rest:
         spec = (r.get("version") or {}).get("spec")
@@ -2733,9 +2854,9 @@ def _fold_overflow(refs: list[dict]) -> list[dict]:
                "version": {"spec": named[0] if named else first["text"], "source": "user_explicit",
                            "evidence": ", ".join(named) or first["text"]},
                "purpose": "context", "derived_by": f"{DRAFT_RULES}:version_overflow"}
-    out = others[:room] + relative + [carrier]
+    out = kept + relative + [carrier]
     out.sort(key=lambda r: r["span"][0])
-    return out
+    return out, [r["span"][0] for r in rest]
 
 
 # -- inputs for retrieval ---------------------------------------------------------------------------

@@ -923,16 +923,99 @@ def test_draft_carries_every_version_even_past_the_reference_limit(orders):
     p = qp.draft(ENV_DUMP_ISSUE, g, lex)
     refs = p["references"]
     assert len(refs) == qp.LIMITS["references"]
-    carrier = refs[-1]
-    assert carrier["derived_by"].endswith(":version_overflow")
+    (carrier,) = [r for r in refs if r["derived_by"].endswith(":version_overflow")]
     # the carrier's text is the user's own words; the rest of the versions are listed in its evidence
     assert carrier["text"] in ENV_DUMP_ISSUE and "15.16.17" in carrier["version"]["evidence"]
     res = qp.check(p, g, repo, lex)
     assert res["status"] != "invalid" and "version_dropped" not in codes(res["errors"])
     for tok in qp.version_tokens(ENV_DUMP_ISSUE):
         assert qp._carried(tok["text"], refs), tok
-    # a version named twice is one reference
-    assert sum(1 for r in refs if r["version"].get("spec") == "#12") <= 1
+    # a version named twice is one reference; the versions of the user's own sentence are references of their own
+    assert sum(1 for r in refs if r["version"].get("spec") == "#12") == 1
+    assert sum(1 for r in refs if r["version"].get("spec") == "9aaed49") == 1
+    assert "#12" not in carrier["version"]["evidence"] and "9aaed49" not in carrier["version"]["evidence"]
+
+
+@pytest.mark.parametrize("msg, texts", [
+    ("What changed between PR #123 and PR #12?", ["PR #123", "PR #12"]),
+    ("Why did 2.0.10 break what worked in 2.0.1?", ["2.0.10", "2.0.1"]),
+    ("Compare numpy 1.23.5 with scipy 1.23.5", ["numpy 1.23.5", "scipy 1.23.5"]),
+    ("v1.2.30 ile v1.2.3 arasında ne değişti?", ["v1.2.30", "v1.2.3"]),
+    # the same version named again is one reference: a PR number, a SHA and its short form, a URL's PR
+    ("See PR #12 and #12 again, commit 9aaed49abc1234 and 9aaed49.", ["PR #12", "9aaed49abc1234"]),
+    ("https://github.com/o/r/pull/12 broke it; is #12 reverted in v2.0.1 or v2.0.1?",
+     ["https://github.com/o/r/pull/12", "v2.0.1"]),
+])
+def test_draft_keeps_every_distinct_version_and_merges_only_the_same_one(msg, texts):
+    """D67 review H1: a version that another one contains (2.0.1 in 2.0.10, #12 in #123) is its own version."""
+    refs = qp.draft(msg, None)["references"]
+    assert [r["text"] for r in refs] == texts
+    assert "scipy" not in msg or {r.get("locator") for r in refs} == {"numpy", "scipy"}
+    for tok in qp.version_tokens(msg):
+        assert qp._carried(tok["text"], refs), tok
+
+
+def test_a_pr_number_inside_a_dumped_version_is_still_its_own_reference():
+    msg = ("Where is compute_total defined?\n```\n" + "\n".join(f"pkg{i}: {i}.{i + 1}.{i + 2}" for i in range(8, 13))
+           + "\n```\nIt broke in #12.")
+    refs = qp.draft(msg, None)["references"]
+    assert "#12" in [r["version"]["spec"] for r in refs]
+
+
+def test_check_needs_the_exact_version_carried():
+    """D67 review S1: a plan carrying only the longer of two versions drops the shorter one."""
+    for msg, keep, dropped in (("Why did 2.0.10 break compute_total when it worked in 2.0.1?", "2.0.10", "2.0.1"),
+                               ("What changed between PR #123 and PR #12?", "PR #123", "PR #12"),
+                               ("Did 10.11.12 or #12 break it?", "10.11.12", "#12")):
+        p = qp.draft(msg, None)
+        p["references"] = [r for r in p["references"] if r["text"] == keep]
+        for sq in p["sub_questions"]:
+            sq["references"] = [r for r in sq.get("references") or [] if r in {x["id"] for x in p["references"]}]
+            sq["done_when"]["subjects"] = [x for x in sq["done_when"]["subjects"] if not x.startswith("r")
+                                           or x in sq["references"]]
+        res = qp.check(p, None, source="host")
+        assert res["status"] == "invalid" and any(e["code"] == "version_dropped" and repr(dropped) in e["msg"]
+                                                  for e in res["errors"]), (msg, res["errors"])
+    # still carried: the same version with or without v, a short SHA by its full SHA, a PR by its URL
+    ref = [{"id": "r1", "text": "x", "kind": "commit", "version": {"spec": "v2.0.1", "source": "user_explicit"},
+            "locator": "https://github.com/o/r/pull/12"},
+           {"id": "r2", "text": "y", "kind": "commit", "version": {"spec": "9aaed49abc1234", "source": "user_explicit"}}]
+    for tok in ("2.0.1", "v2.0.1", "#12", "PR 12", "pull/12", "9aaed49", "9aaed49abc1234"):
+        assert qp._carried(tok, ref), tok
+    for tok in ("2.0", "2.0.10", "#1", "#123", "9aaed49abc12345", "9aaed48"):
+        assert not qp._carried(tok, ref), tok
+
+
+# An issue whose environment dump overflows the reference limit, and whose own last sentence asks about an
+# upgrade (D67 review M1).
+UPGRADE_ISSUE = ("Where is compute_total defined? It raises a warning when I call it.\n### Versions\n```\n"
+                 + "\n".join(f"pkg{i}: {i}.{i + 1}.{i + 2}" for i in range(1, 13))
+                 + "\n```\nIt started after upgrading from v2.0.1 to v2.0.10 (see #12 and #123).\n")
+
+
+def test_folding_keeps_the_users_own_versions_and_lists_the_carrier_where_its_versions_are():
+    p = qp.draft(UPGRADE_ISSUE, None)
+    refs = {r["id"]: r for r in p["references"]}
+    assert len(refs) == qp.LIMITS["references"]
+    (carrier,) = [r for r in refs.values() if r["derived_by"].endswith(":version_overflow")]
+    upgrade = next(sq for sq in p["sub_questions"] if "upgrading" in sq["text"])
+    assert {refs[r]["version"]["spec"] for r in upgrade["references"]} == {"v2.0.1", "v2.0.10", "#12", "#123"}
+    assert "12.13.14" in carrier["version"]["evidence"] and "v2.0" not in carrier["version"]["evidence"]
+    dump = next(sq for sq in p["sub_questions"] if "pkg12" in sq["text"])
+    assert carrier["id"] in dump["references"]
+    assert qp.check(p, None)["status"] != "invalid"
+    # the user's own versions overflow too: the carrier is listed under every sub-question it folds from
+    many = UPGRADE_ISSUE + "Which functions call apply_discount since " + ", ".join(
+        f"v3.{i}.0" for i in range(12)) + "?"
+    p = qp.draft(many, None)
+    refs = {r["id"]: r for r in p["references"]}
+    (carrier,) = [r for r in refs.values() if r["derived_by"].endswith(":version_overflow")]
+    last = next(sq for sq in p["sub_questions"] if "apply_discount" in sq["text"])
+    assert carrier["id"] in last["references"] and "v3.11.0" in carrier["version"]["evidence"]
+    assert carrier["id"] in next(sq for sq in p["sub_questions"] if "pkg12" in sq["text"])["references"]
+    assert qp.check(p, None)["status"] != "invalid"
+    for tok in qp.version_tokens(many):
+        assert qp._carried(tok["text"], list(refs.values())), tok
 
 
 def test_draft_restates_a_long_message_briefly(orders):
@@ -947,6 +1030,58 @@ def test_draft_restates_a_long_message_briefly(orders):
     assert "".join(sq["text"] for sq in p["sub_questions"]).count("Step") >= 1
     short = qp.draft("Where is compute_total defined?", g, lex)
     assert short["restated_goal_user_lang"] == "Understood (rules): q1 [locate] Where is compute_total defined?"
+
+
+SIX_EN = ("Where is compute_total defined? Which functions call apply_discount? What does place_order return? "
+          "How does an order get from the API to the SQLite database? Why does OrderRepository use SQLite? "
+          "Which environment variables configure pricing?")
+SIX_TR = ("compute_total nerede tanımlı? apply_discount fonksiyonunu hangi fonksiyonlar çağırıyor? place_order ne "
+          "döndürüyor? Sipariş API'den veritabanına nasıl gidiyor? OrderRepository neden SQLite kullanıyor? "
+          "Fiyatlandırmayı hangi ortam değişkenleri yapılandırıyor?")
+
+
+@pytest.mark.parametrize("msg", [SIX_EN, SIX_TR])
+def test_an_ordinary_multi_part_question_is_restated_whole(orders, msg):
+    """D67 review M2: only an issue-sized message is clipped; six ordinary clauses are restated whole."""
+    repo, g, lex = orders
+    p = qp.draft(msg, g, lex)
+    assert len(p["sub_questions"]) == 6
+    for key in ("restated_goal", "restated_goal_user_lang"):
+        assert "…" not in p[key]
+        for sq in p["sub_questions"]:
+            assert f"{sq['id']} [" in p[key] and sq["text"] in p[key], (key, sq["text"])
+
+
+def test_a_clipped_restatement_keeps_every_subquestion_and_its_end(orders):
+    repo, g, lex = orders
+    msg = SIX_TR + "\n\n```\n" + "\n".join(f"hata satırı {i}: sipariş kaydedilemedi" for i in range(60)) + "\n```"
+    p = qp.draft(msg, g, lex)
+    goal = p["restated_goal_user_lang"]
+    assert len(p["sub_questions"]) == 6 and len(goal) <= qp.GOAL_CHARS and "\n" not in goal
+    assert all(f"{sq['id']} [" in goal for sq in p["sub_questions"])
+    # a short clause is whole; a long one keeps its head and its predicate
+    assert "compute_total nerede tanımlı?" in goal and "yapılandırıyor?" in goal
+    assert "hata satırı 59" not in goal
+
+
+def test_the_plan_language_check_accepts_turkish_for_a_turkish_question_about_english():
+    """D67 review L2: a host that answers a Turkish question quoting an English issue in Turkish is not told
+    the message is English."""
+    msg = ("Bu issue'yu nasıl çözerim?\n\nWhen I call compute_total with an empty list, it returns 0 but the docs "
+           "say it should raise. I have checked the tests and they do not cover it. Is this a bug or is it expected?")
+    doc = {"schema": qp.SCHEMA_ID, "user_message": msg, "language": "tr", "restated_goal": "x",
+           "sub_questions": [{"id": "q1", "text": msg, "intent": "behaviour",
+                              "done_when": {"kind": "claim_exists", "detail": "x"}}]}
+    res = qp.check(doc, None)
+    assert res["language_detected"] in ("tr", "mixed") and "language" not in codes(res["warnings"])
+
+
+def test_fallback_refuses_an_empty_question(orders):
+    """D67 review L1: the fallback answers a question whose drafted plan failed, never a blank one."""
+    repo, g, lex = orders
+    for q in ("", "   "):
+        p, res = qp.fallback(q, g, repo, lex, drafted=qp.draft(q, g, lex))
+        assert res["status"] == "invalid" and res["errors"]
 
 
 def test_draft_never_takes_a_fenced_block_for_one_name(orders):

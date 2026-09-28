@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from verinoda import textnorm as tn
 
 
@@ -107,6 +109,42 @@ def test_detect_language_follows_the_prose_of_an_english_issue():
     assert tn.detect_language('Uygulama açılırken "The system cannot find the file specified" hatası veriyor, bu '
                               "hata nereden geliyor?") == "mixed"
     assert tn.detect_language("Sipariş nerede kaydediliyor, the order service or the repository?") == "mixed"
+
+
+@pytest.mark.parametrize("msg", [
+    # a Turkish question about a pasted English error, issue body or explanation: the user asked in Turkish
+    "Bu hata neden oluyor?\nERROR: could not open the file because it is locked by another process and the lock "
+    "was not released in time",
+    "Bu issue'yu nasıl çözerim?\n\nWhen I call compute_total with an empty list, it returns 0 but the docs say it "
+    "should raise. I have checked the tests and they do not cover it. Is this a bug or is it expected?",
+    "compute_total ne yapar? it is called by the service and by the tests",
+    "Neden?\n> The quick fix is to set the flag and then restart the service when it is done",
+    # ... or the Turkish question comes last, after the pasted English
+    "When I call compute_total with an empty list, it returns 0 but the docs say it should raise. I have checked "
+    "the tests and they do not cover it.\n\nBunu nasıl çözerim?",
+    # a lone ``` in a sentence opens no code block: the Turkish question after it is still prose
+    "The label is wrapped in ``` when the order is saved and it is shown to the user. Bu neden böyle oluyor, "
+    "sipariş kaydı nerede yapılıyor, hangi fonksiyon çağırıyor?",
+])
+def test_a_turkish_question_quoting_english_stays_turkish(msg):
+    assert tn.detect_language(msg) == "mixed"
+
+
+def test_fences_and_lone_backticks():
+    assert tn.detect_language("Bu neden oluyor?\n```\nthe file is locked by the other process and it is\n```") == "tr"
+    # a fence opened after text, ending its line, still takes the block out of the prose
+    assert tn.detect_language("Bu neden oluyor? ```python\nfor it in the_list: print(it)\n```") == "tr"
+    # closed on one line
+    assert tn.detect_language("Bu ```the one of the``` neden oluyor?") == "tr"
+
+
+def test_clip_middle_keeps_the_head_and_the_last_words():
+    assert tn.clip_middle("Which functions call apply_discount?", 60) == "Which functions call apply_discount?"
+    out = tn.clip_middle("Which functions in the service layer call apply_discount?", 34)
+    assert len(out) <= 34 and out.startswith("Which") and out.endswith(" … apply_discount?")
+    out = tn.clip_middle("compute_total fonksiyonu hangi modülde ve hangi dosyada tanımlı?", 36)
+    assert len(out) <= 36 and out.startswith("compute_total") and out.endswith("tanımlı?")
+    assert "\n" not in tn.clip_middle("a\nb " * 40, 30) and len(tn.clip_middle("a\nb " * 40, 30)) <= 30
 
 
 def test_clip_keeps_one_line_and_cuts_at_a_word():
