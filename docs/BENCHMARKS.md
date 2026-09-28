@@ -24,6 +24,34 @@ Sections: [Update 2026-09-26: query ranking](#update-2026-09-26-query-ranking-d4
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
 
+## Update 2026-09-28: ContextBench, an outside benchmark (no model)
+
+Result files: `benchmarks/results/contextbench-2026-09-28/` (`results.json`, `predictions.jsonl`, `summary.json`,
+`scores.json`); harness, design and full results: `benchmarks/contextbench/` (`DESIGN.md` was written before the
+run, `RESULTS.md` has every table and the deviations).
+
+ContextBench (arXiv 2602.05892; `contextbench_verified`, human-annotated gold files and line spans; 8 languages) is
+the first benchmark in this page that Verinoda was not developed on. A stratified sample of 10 instances per
+language (80, seed 20260928), the GitHub issue text as the question, every tool's output cut to about 6,000
+characters (1,500 tokens), scored by ContextBench's own evaluator. Verinoda was the frozen build `bench-freeze-4`
+(3f0e72c); Graphify 0.9.69 from PyPI; BM25 is a file ranker over identifiers taken from the issue.
+
+| approach | file recall (per instance) | file recall (micro) | file precision | cited span F1 | tokens |
+|---|---|---|---|---|---|
+| Verinoda query (text) | **0.570** | **0.306** | 0.098 | 0.059 | 1,396 |
+| Verinoda analyze (text) | 0.453 | 0.220 | 0.094 | **0.090** | 1,405 |
+| Graphify query | 0.404 | 0.210 | 0.037 | 0.007 | 1,481 |
+| BM25 over files | 0.370 | 0.167 | **0.156** | 0.037 | 1,488 |
+
+- At the same budget Verinoda's query named the gold files most often: 0.570 per instance against 0.404 for
+  Graphify and 0.370 for BM25. BM25 is the most precise (about 5 files per answer; Verinoda about 15, Graphify 28).
+- Every approach shows under 3 % of the gold code within 1,500 tokens: a long issue text is a hard query, and
+  none of the numbers above is an end-to-end result with an agent in the loop.
+- The run found four defects in Verinoda's analyze on issue-shaped questions (a version-heavy issue made the drafted
+  plan invalid and analyze refused it; English issues answered in Turkish; the question restated at length before
+  the passages); they are fixed in D67. Scans of the largest repositories took up to 41 minutes (per-file commits;
+  D66 makes them one transaction).
+
 ## Update 2026-09-26: query ranking (D40)
 
 The senior review found that `verinoda query` put tests first and ignored module names outside the benchmark
