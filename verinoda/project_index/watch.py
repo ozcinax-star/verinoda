@@ -1461,9 +1461,10 @@ def _rebuild_code(
         # hook rebuild does not silently re-include deliberately excluded paths
         # (#1886).
         _persisted_excludes = _read_build_excludes(out)
-        # Verinoda patch (D68): Verinoda's own agent-integration files (its skill folders, the files its
-        # install manifest lists as its own) are never graph input. As --exclude rules they apply to
-        # tracked files too, and the reconcile below evicts the nodes an older graph has from them.
+        # Verinoda patch (D68): Verinoda's own agent-integration files (files carrying its ownership
+        # marker in a skill folder at any depth, or listed by its install manifest) are never graph input.
+        # As --exclude rules (one per file) they apply to tracked files too, and the reconcile below
+        # evicts the nodes an older graph has from them.
         from verinoda.selffiles import ignore_patterns as _own_patterns
         _persisted_excludes = _persisted_excludes + [
             p for p in _own_patterns(watch_root) if p not in _persisted_excludes]

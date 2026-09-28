@@ -116,8 +116,9 @@ def _is_file(p: Path) -> bool:
 def list_files(repo: Path) -> list[str]:
     """Repo-relative POSIX paths of tracked + untracked-not-ignored files.
 
-    Verinoda's own agent-integration files (its skill folders, files its install manifest lists as its
-    own) are never listed, tracked or not: they are not the project's (:mod:`verinoda.selffiles`, D68).
+    Verinoda's own agent-integration files (files carrying its ownership marker in a skill folder at any
+    depth, or listed by its install manifest) are never listed, tracked or not: they are not the
+    project's (:mod:`verinoda.selffiles`, D68).
     """
     from verinoda.selffiles import own_filter
 

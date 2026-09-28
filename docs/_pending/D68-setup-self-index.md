@@ -47,7 +47,7 @@ answered questions about the project.
   malformed manifest lists nothing) and remembered by its size and time, as is each file's marker check,
   because the file list is taken many times in one analysis; a path is split and stat'ed only when it
   contains `skills/verinoda/` or is listed.
-- **Applied where the corpus is listed, in three places, not per consumer:**
+- **Applied where the corpus is listed, not per consumer:**
   - `snapshot.list_files`, tracked or not (a team may commit its skill). Everything that reads the file
     list inherits it: the snapshot and its stale-claim diff, the search index's data files, the lexicon's
     candidates, the syntax facts, experiment copies, the UI and `treestate.current`.
