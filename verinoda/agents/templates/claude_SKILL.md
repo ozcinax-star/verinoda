@@ -137,7 +137,7 @@ Rules:
   --source`, which downgrades a requested status the evidence does not allow).
 - Heuristics are labelled: map views (impact included) carry `coverage.method` and `coverage.limits`, and `analyze`
   shows the intent it guessed per sub-question. Repeat those limits when you rely on them.
-- If Verinoda returns `unknown`, report it with its `next_step`; do not fill the gap yourself.
+- An `unknown` the answer or the change depends on: take its `next_step` until it is settled; never guess it.
 
 ## Understand the question first
 
