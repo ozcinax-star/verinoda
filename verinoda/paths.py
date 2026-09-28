@@ -209,10 +209,13 @@ PROTECTED_SETTINGS: dict[str, tuple[str, ...] | None] = {
 
 def user_config_dir() -> Path:
     """Verinoda's per-user directory (``$VERINODA_CONFIG_DIR``; else ``%APPDATA%\\verinoda`` on Windows,
-    ``$XDG_CONFIG_HOME/verinoda`` or ``~/.config/verinoda`` elsewhere). No repository writes there."""
+    ``$XDG_CONFIG_HOME/verinoda`` or ``~/.config/verinoda`` elsewhere). No repository writes there.
+
+    A relative ``$VERINODA_CONFIG_DIR`` is ignored: it would resolve against the current directory, which can
+    be a cloned repository shipping its own ``trust.json`` and ``config.json``."""
     env = os.environ.get(CONFIG_DIR_ENV)
-    if env:
-        return Path(env)
+    if env and Path(env).expanduser().is_absolute():
+        return Path(env).expanduser()
     if os.name == "nt":
         return Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / "verinoda"
     return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "verinoda"
@@ -365,5 +368,6 @@ def ignored_settings_note(repo: Path) -> str | None:
         return None
     return (f"{', '.join(names)} in the project's .verinoda/config.json "
             f"{'is' if len(names) == 1 else 'are'} ignored: the project is not trusted (a cloned repository can "
-            f"ship that file); run `verinoda trust {Path(repo).resolve()}` if you trust it, or set "
-            f"{'it' if len(names) == 1 else 'them'} in your user config {user_config_path()}")
+            f"ship that file); the user runs `verinoda trust {Path(repo).resolve()}` if they trust it (their "
+            f"decision, never an agent's), or sets {'it' if len(names) == 1 else 'them'} in the user config "
+            f"{user_config_path()}")

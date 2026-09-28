@@ -387,26 +387,44 @@ def cmd_init(args) -> int:
 
 def cmd_trust(args) -> int:
     """Record that the user trusts a project (docs/DESIGN.md D63): its tests then run with process isolation
-    and its own config may set the protected settings. Only a person runs this; no MCP tool can."""
+    and its own config may set the protected settings. Only a person runs this; no MCP tool can. Trusting asks
+    to confirm on a terminal and, without one, needs ``--yes``: an agent with a shell that is told to run it
+    gets a refusal that says the decision is the user's. ``--remove`` and ``--list`` ask nothing."""
     from verinoda import paths
 
     if args.list:
-        out = {"trust_file": str(paths.trust_path()), "trusted": paths.trust_entries()}
+        out = {"trust_file": str(paths.trust_path()),
+               "trusted": [{**e, "missing": True} if not Path(e["path"]).is_dir() else e
+                           for e in paths.trust_entries()]}
 
         def render_list(r):
             print(f"trust file: {r['trust_file']}")
             for e in r["trusted"] or []:
-                print(f"  {e['path']}" + ("  (and its subfolders)" if e.get("subfolders") else ""))
+                print(f"  {e['path']}" + ("  (and its subfolders)" if e.get("subfolders") else "")
+                      + ("  (missing: `verinoda trust <path> --remove` drops it)" if e.get("missing") else ""))
             if not r["trusted"]:
                 print("  (no project is trusted)")
         _emit(args, out, render_list)
         return 0
     target = Path(args.path or ".").resolve()
-    if not target.is_dir():
+    if not args.remove and not target.is_dir():  # a folder deleted since it was trusted can still be removed
         raise SystemExit(f"error: {target} is not a folder")
     if args.subfolders and not args.remove and (paths._is_home_or_above(target) or target.parent == target):
         raise SystemExit(f"error: --subfolders on {target} would trust every project below it; trust the projects "
                          "one by one (or a folder that holds only projects you trust)")
+    if not args.remove and not args.yes:
+        what = f"{target}" + (" and every folder below it" if args.subfolders else "")
+        if sys.stdin is None or not sys.stdin.isatty():
+            raise SystemExit(f"error: trusting {what} is the user's decision: its tests then run with the user's "
+                             "privileges. Run `verinoda trust` yourself in a terminal (it asks to confirm), or add "
+                             "--yes in a script of your own. An agent must not run it for the user.")
+        sys.stderr.write(f"Trust {what}? Its tests will run with your privileges (process isolation: network and "
+                         "files not confined) and its own .verinoda/config.json may set the protected settings. "
+                         "[y/N] ")
+        sys.stderr.flush()
+        if sys.stdin.readline().strip().lower() not in ("y", "yes"):
+            print(f"not trusted: {target}", file=sys.stderr)
+            return 1
     res = paths.set_trust(target, subfolders=args.subfolders, remove=args.remove)
     res["means"] = ("its tests run with process isolation (with your privileges, network and files not confined) "
                     "and its own .verinoda/config.json may set " + ", ".join(
@@ -2498,8 +2516,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("path", nargs="?", default=".")
     sp.add_argument("--subfolders", action="store_true",
                     help="also trust every folder below it (not those under a .verinoda folder)")
-    sp.add_argument("--remove", action="store_true", help="stop trusting it")
+    sp.add_argument("--remove", action="store_true", help="stop trusting it (also a folder deleted since)")
     sp.add_argument("--list", action="store_true", help="list the trusted projects")
+    sp.add_argument("--yes", action="store_true",
+                    help="do not ask to confirm (needed without a terminal; never for an agent to add)")
     sp = add("scan", cmd_scan, "index a repository (AST, no LLM) and record a snapshot", repo=False)
     sp.add_argument("path", nargs="?")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")

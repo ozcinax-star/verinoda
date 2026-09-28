@@ -97,7 +97,7 @@ If the `verinoda` MCP server is connected (see /mcp), prefer its tools where the
 they call the same core functions as the CLI. The default profile lists project_query, analyze, code_check,
 index_update and run_tool (inspect/trace/map, claims, change_review, decision_check by name); CLI for the rest.
 When the CLI does not run here and a tool named below is not reachable (core profile), ask the user for
-`"mcp": {"profile": "full"}` in `.verinoda/config.json` and a restart; never skip that step of the protocol.
+`"mcp": {"profile": "full"}` in their user-level Verinoda config (or a trusted project) and a restart; never skip it.
 The CLI prints plain text written for you: read it as it is. Add `--json` only for a field the text
 leaves out (every unknown site of `check`, an analysis' full record): JSON costs 2-5x the tokens.
 
@@ -230,8 +230,8 @@ unresolved, say what evidence would settle it.
 - Claims marked `[not challenged: budget]` (`challenged: false`) were not critiqued - say so.
 - Keep context small: `--max-items` / `--max-chars` on `query`, `--max-lines` on `map`. Never
   paste whole files or full logs; experiment logs stay on disk (the result gives the path).
-- Experiments outside the test-runner allowlist are refused without docker/podman. Report the
-  refusal; do not work around it.
+- Experiments outside the test-runner allowlist, or in a project the user has not trusted, are refused without
+  docker/podman. Report the refusal and its next_step; do not work around it. Never run `verinoda trust` yourself.
 
 ## Check the names code uses (Python)
 

@@ -6,8 +6,10 @@ Branch of the security review of `experiment run`, `observe`, `analyze --run-tes
 table row below), docs/UPGRADING.md (the note below) and, where they describe the old behaviour, README.md and
 docs/ARCHITECTURE.md (see "Docs that describe the old behaviour" at the end).
 
-The one doc edit made on the branch: README.md's Commands table has a row for the new `trust` command
-(tests/test_docs.py requires every CLI command there).
+The doc edits made on the branch: README.md's Commands table has a row for the new `trust` command
+(tests/test_docs.py requires every CLI command there), and the agent skill templates
+(`verinoda/agents/templates/claude_SKILL.md`, `codex_SKILL.md`) say where `mcp.profile` now goes and that the
+agent never runs `verinoda trust` (review fixes, see "Review fixes" at the end).
 
 ## DESIGN section: 36. Running a project's own tests safely (D63, 2026-09-28)
 
@@ -42,16 +44,23 @@ the argument rules protect a trusted repository from an agent whose arguments ca
 
 ### 36.2 Decisions
 
-- **Trust is the user's decision, stored outside every repository.** `verinoda trust [path] [--subfolders]
+- **Trust is the user's decision, stored outside every repository.** `verinoda trust [path] [--subfolders] [--yes]
   [--remove] [--list]` writes `trust.json` in the per-user directory (`$VERINODA_CONFIG_DIR`, else
   `%APPDATA%\verinoda` on Windows, `$XDG_CONFIG_HOME/verinoda` or `~/.config/verinoda` elsewhere; keyed by the
   resolved path). `--subfolders` covers the folders below, never those under a `.verinoda` folder (reference
   checkouts live there), and is refused for the home folder and a drive root. No MCP tool sets trust: an agent
-  steered by the repository's text cannot trust it.
+  steered by the repository's text cannot trust it through MCP. An agent with a shell can run the command, so
+  trusting asks the user to confirm on a terminal and, without a terminal, is refused unless `--yes` is given
+  (a speed bump with a clear message, not a boundary: an agent that adds `--yes` gets past it); the skill
+  templates tell the agent never to run it. `--remove` works on a folder deleted since (else the stale entry
+  would trust whatever is created there later) and `--list` marks such entries `missing`. A relative
+  `$VERINODA_CONFIG_DIR` is ignored (it would resolve against the current directory, which can be a clone that
+  ships its own `trust.json`); `~` is expanded.
 - **An untrusted project's tests run only in a container.** `experiments.run` chooses process isolation only for
   an allowlisted command in a trusted project; an untrusted one goes to docker/podman when available, else it
-  is refused with `next_step` "`verinoda trust <path>` if you trust this project's code, or install
-  docker/podman". Every entry point goes through `experiments.run`, so this covers `experiment run`,
+  is refused with a `next_step` addressed to the user through the agent: "ask the user: if they trust this
+  project's code, they run `verinoda trust <path>` themselves in a terminal ... an agent must never run it for
+  them; or install docker/podman". Every entry point goes through `experiments.run`, so this covers `experiment run`,
   `observe`, `analyze --run-tests`, `review --run-tests`, `verify --run`, `probe`, the debug ledger and their MCP
   tools; each passes the refusal's `next_step` on (`ExperimentRefused.next_step`). Results carry `trusted`.
 - **Protected settings.** `experiments.*`, `mcp.profile` and `research.network` come from the defaults, the
@@ -59,7 +68,8 @@ the argument rules protect a trusted repository from an agent whose arguments ca
   when the project is trusted (`paths.PROTECTED_SETTINGS`, `load_config`, `resolve_profile`). The other settings
   still come from the project's file. What was ignored is said: in the experiment's `limits` and refusal
   (`ignored_settings_note`), and on stderr when `verinoda mcp serve` starts. Values equal to the ones in use
-  (what `verinoda init` writes) are not reported.
+  (what `verinoda init` writes) are not reported. `resolve_profile` does not read an untrusted project's file at
+  all, so a broken one cannot stop `mcp serve`.
 - **argv[0].** A bare runner name is looked up in the absolute PATH directories only (`experiments._which`, with
   PATHEXT on Windows); when it is not there the run is an error, never a bare name handed to the OS. A path is
   accepted only for a Python interpreter this system knows (`codecheck_env.known_interpreter`: Verinoda's own,
@@ -67,15 +77,28 @@ the argument rules protect a trusted repository from an agent whose arguments ca
   or the trusted project's own `.venv` (`python_for` returns it only for a trusted project). Any other runner
   must be a bare name. The container runtime is resolved the same way.
 - **pytest.** Refused under process isolation: `@file` arguments, `-p NAME` other than `-p no:NAME` and
-  Verinoda's own plugins of that run, `-o addopts=<something>` (`-o addopts=`, which switches the files'
-  addopts off, stays allowed; probe uses it). Path candidates are found recursively (`-o addopts=--junitxml=/x`,
+  Verinoda's own plugins of that run (read the way pytest's `consider_preparse` reads it: `-p X` and `-pX`
+  anywhere, after a `--` too; `-qpX` loads nothing and stays allowed), `-o addopts=<something>` (`-o addopts=`,
+  which switches the files' addopts off, stays allowed; probe uses it). Single-dash clusters are split the way
+  pytest's argparse reads them before `-o` and `-c` are looked for and before the path check (`-qoaddopts=X` is
+  `-q -oaddopts=X`, `-qcFILE` is `-q -cFILE`, `-q=oX` is `-q -oX`; every letter other than pytest's value-taking
+  `k m W c p o r` counts as a flag, so a plugin's flag cannot hide one). A path that names an environment
+  variable (`%NAME%`, `$NAME`, `${NAME}`) is refused like an absolute one: pytest expands them in `--junitxml`,
+  `--rootdir` and `cache_dir`, and the child's environment has `SYSTEMDRIVE`, `WINDIR`, `LANG`, `PATH`, `HOME`.
+  Path candidates are found recursively (`-o addopts=--junitxml=/x`,
   `--override-ini=addopts=--basetemp=/x`, several words in one ini value). After the copy is made, the config
   files pytest may read (the copy's root and every folder down to each path argument, and a `-c` file) are
-  parsed: `addopts` gets the same check as the arguments (unless `-o addopts=`), and `cache_dir`, `log_file`,
+  parsed: `addopts` gets the same check as the arguments (unless `-o addopts=`), except that `-p NAME` there is
+  refused only in a file the command names with `-c` and pytest would not find itself (any file of the copy, a
+  test fixture too): in the config pytest finds, it is the trusted project's own choice, like `pytest_plugins`
+  in its `conftest.py` (`addopts = -p pytester` is common). `cache_dir`, `log_file`,
   `pythonpath`, `testpaths` and `pytester_example_dir` must stay inside the copy, each resolved where pytest
-  resolves it (`log_file` from the working directory, the others from the file's folder). Nothing is
-  rewritten: a refusal names the file and the setting. TOML is read with tomllib, else tomli, else a
-  conservative reader (every assignment of those keys, as the strings in its value). The run gets
+  resolves it (`log_file` from the working directory, the others from the file's folder). A string value is
+  split like pytest splits it and, for the single-string settings (`cache_dir`, `log_file`), also checked
+  whole; a TOML list item is taken as it is, as pytest does (a shell split would eat a Windows `..\`). Nothing
+  is rewritten: a refusal names the file and the setting, and its `next_step` says what to change for that rule
+  (a path, the `-p` of a `-c` file, the file's syntax). TOML is read with tomllib, else tomli, else a
+  conservative reader (every assignment of those keys, as the strings in its value, each whole and split). The run gets
   `-p no:cacheprovider` (or, when `--lf`/`--ff`/`--sw`... need the cache, `-o cache_dir=` in the throw-away
   folder) and `--basetemp` in the throw-away folder, before a `--`, so they come after the files' addopts; the
   record keeps the caller's command in `command` and the command run in `environment.argv`.
@@ -123,14 +146,23 @@ Decision functions called directly, before and after (Windows, Python 3.12, pyte
 | repo config `{"experiments": {"process_isolation_allowlist": ["python"]}, "mcp": {"profile": "full"}, "research": {"network": "on"}}`, project not trusted | allowlist `['python']`, profile full, network on | defaults, profile core, network cache (reported as ignored) |
 | `python_for` with `<repo>/.venv/Scripts/python.exe` present, project not trusted | the repository's file | Verinoda's own interpreter |
 | `zzvnprobe.cmd` in the current directory, not on PATH | `shutil.which`: `.\zzvnprobe.CMD` | `_which`: not found |
+| `python -m pytest --junitxml=%SYSTEMDRIVE%/Users/Public/x.xml` (also `--rootdir=%SYSTEMDRIVE%/`) | allowlisted (the review wrote a file outside the copy through `%LANG%`) | risky (environment variable) |
+| `python -m pytest tests -- -pX`, `-qoaddopts=-pX`, `-qo addopts=-pX` | allowlisted (the review's runs imported X) | risky (-p / addopts override) |
+| `python -m pytest -qcsub/evil.ini` with `addopts = -pX` in that file | ran (X imported) | refused (the `-c` file's addopts) |
+| trusted project, `pytest.ini` `addopts = -p pytester` | refused without a container (a regression of this branch) | runs with process isolation |
+| `pyproject.toml` `addopts = ["--junitxml=..\\..\\out\\x.xml"]` | allowed (shell split ate the backslashes; the review wrote the file outside) | refused ('..') |
 
 - Link check of the copy: 121-170 ms for 2,561 files in 335 folders (this repository, Windows, one directory
   listing per folder, five runs); the copy itself took 7-43 s on the same (shared, loaded) machine, so the check
   is a few percent at most.
-- Tests: tests/test_experiments_trust.py (49 tests: protected settings, trust store and command, refusal and
-  next_step per entry point (verify --run included), container command and client environment through a fake runtime, argv[0], `_which`
-  without the current directory, the pytest argument and config-file rules, the TOML fallback, `--basetemp`
-  in the throw-away folder, links not followed); tests/test_experiments.py updated for the argv[0] rule.
+- Tests: tests/test_experiments_trust.py (84 tests: protected settings, trust store and command (confirmation,
+  `--yes`, a deleted folder), refusal and next_step per entry point (verify --run included), container command
+  and client environment through a fake runtime, argv[0], `_which` without the current directory, the pytest
+  argument and config-file rules (environment variables, `-p` after `--`, clusters, `-p` in a `-c` file only, TOML
+  list items), a real pytest run showing it reads those spellings, the TOML fallback, `--basetemp` in the
+  throw-away folder, links not followed, a relative `VERINODA_CONFIG_DIR`, an untrusted project's broken
+  config and `mcp serve`); tests/test_experiments.py updated for the argv[0] rule; tests/test_agents.py checks
+  the templates' trust and profile lines.
 - Not measured here: the container path itself (no docker/podman on this machine). The CI job `container` is its
   first real run; the flags follow the docker and podman documentation.
 
@@ -147,9 +179,11 @@ Add under a new heading "Upgrading to the 2026-09-28 code (D63)":
   including core `change_review(run_tests/observe)` - now refuse to run an untrusted project's tests with
   process isolation (the result says `refused ... the project is not trusted` with the next step). Run
   `verinoda trust <path>` once per project whose code you trust (or `verinoda trust <folder> --subfolders` for a
-  folder of your own projects). With docker or podman installed, an untrusted project's tests run in a
-  container instead. `verinoda trust --list` shows the list, `--remove` takes one off. The record lives in
-  `%APPDATA%\verinoda\trust.json` (Windows) or `~/.config/verinoda/trust.json`; `VERINODA_CONFIG_DIR` moves it.
+  folder of your own projects); it asks you to confirm, and in a script without a terminal needs `--yes`. Do
+  not let an agent run it for you. With docker or podman installed, an untrusted project's tests run in a
+  container instead. `verinoda trust --list` shows the list (a folder that no longer exists is marked
+  `missing`), `--remove` takes one off. The record lives in `%APPDATA%\verinoda\trust.json` (Windows) or
+  `~/.config/verinoda/trust.json`; `VERINODA_CONFIG_DIR` (an absolute path; a relative one is ignored) moves it.
 - **Settings that moved.** `experiments.*` (allowlist, container image, default timeout), `mcp.profile` and
   `research.network` in a project's `.verinoda/config.json` apply only when the project is trusted. Otherwise
   they are ignored and the experiment result (and `verinoda mcp serve` on stderr) says so. To keep one for an
@@ -166,9 +200,11 @@ Add under a new heading "Upgrading to the 2026-09-28 code (D63)":
   not on PATH is an error.
 - **pytest runs** get `-p no:cacheprovider` and a `--basetemp` in the throw-away folder added (`--lf` and friends
   keep working, with an empty cache). Refused under process isolation: `@file` arguments, `-p NAME` (except
-  `-p no:NAME`), `-o addopts=...`, and an `addopts` or path setting (`cache_dir`, `log_file`, `pythonpath`,
+  `-p no:NAME`; after a `--` too), `-o addopts=...` (also as `-qoaddopts=...`), a path that names an environment
+  variable (`--junitxml=%TEMP%/x.xml`), and an `addopts` or path setting (`cache_dir`, `log_file`, `pythonpath`,
   `testpaths`) in the project's pytest config files that points outside the project: the refusal names the file
-  and the setting. A project whose `addopts` loads a plugin with `-p` runs only in a container.
+  and the setting. A `-p` in the `addopts` of the project's own config (`addopts = -p pytester`) runs; one in a
+  file named with `-c` that pytest would not find itself is refused.
 - **Symbolic links and junctions** in the working tree are not copied into the throw-away copy (listed under
   `source.skipped`); a test that reads a fixture through a link sees it missing.
 - **Containers** run with `--read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges` as your
@@ -186,3 +222,19 @@ Add under a new heading "Upgrading to the 2026-09-28 code (D63)":
   the user-level config and the protected settings.
 - docs/ARCHITECTURE.md, "State on disk": add the per-user directory (`config.json`, `trust.json`) outside the
   project.
+
+## Review fixes (adversarial review of this branch, 2026-09-28)
+
+- H1: a path argument or config value that names an environment variable was accepted and pytest expanded it
+  (`--junitxml=%SYSTEMDRIVE%/...` overwrote a file outside the copy): refused now, in argv and in config files.
+- M1: `-p` after `--`, `-o addopts=` inside a cluster (`-qoaddopts=`), and a config file named inside a cluster
+  (`-qcFILE`) got past the rules: pytest's own reading is mirrored now (a test runs pytest to show it reads them).
+- M2: this branch refused a trusted project whose own config says `addopts = -p pytester`: `-p` in addopts is now
+  checked only in a file the command names with `-c`; the refusal's `next_step` is per rule.
+- M3: `verinoda trust` confirms on a terminal and needs `--yes` without one; the refusal's `next_step` and the
+  skill templates tell the agent the decision is the user's and never to run it.
+- L1-L5: TOML list items taken as pytest takes them; `trust --remove` of a deleted folder; the skill templates'
+  `mcp.profile` advice; an untrusted project's broken config no longer stops `mcp serve`; a relative
+  `VERINODA_CONFIG_DIR` is ignored.
+- Open (L6, not reproducible without a container runtime): podman detection by file name (`--userns=keep-id` for
+  rootful podman, `--user uid:gid` for the podman-docker shim). The CI job `container` runs docker only.

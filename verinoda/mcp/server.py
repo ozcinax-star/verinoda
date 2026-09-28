@@ -2084,13 +2084,16 @@ def resolve_profile(repo: Path | str, profile: str | None = None) -> str:
     the user-level config, else :data:`DEFAULT_PROFILE`. A cloned repository's own config cannot switch
     an untrusted project to the full tool list (docs/DESIGN.md D63). An unknown name, or a config the
     setting cannot be read from (not JSON, ``mcp`` not an object), is an error, never a silent fallback;
-    only a missing config file or a config without ``mcp.profile`` serves the default."""
+    only a missing config file or a config without ``mcp.profile`` serves the default. An untrusted project's
+    file is not read (a broken one cannot stop the server)."""
     from verinoda.paths import is_trusted, user_config_path
 
     if profile is None:
         fix = 'write it as {"mcp": {"profile": "full"}} (or "core"), or pass --profile'
         trusted = is_trusted(Path(repo))
         for cfg, use in ((atlas_dir(Path(repo)) / "config.json", trusted), (user_config_path(), True)):
+            if not use:  # an untrusted project's file is not read at all: it cannot stop the server either
+                continue
             user: Any = {}
             if cfg.is_file():
                 try:
@@ -2104,7 +2107,7 @@ def resolve_profile(repo: Path | str, profile: str | None = None) -> str:
             value = (mcp or {}).get("profile")
             if value is not None and not isinstance(value, str):
                 raise ValueError(f"mcp.profile in {cfg} must be a string, not {value!r}; {fix}")
-            if use and value is not None:
+            if value is not None:
                 profile = value
                 break
     profile = profile or DEFAULT_PROFILE

@@ -41,17 +41,22 @@ current directory, or an absolute path to a Python interpreter this system
 knows (or the trusted project's own ``.venv``, see :func:`python_for`), which
 counts as ``python``. Every *argument* of an
 allowlisted command must stay inside the repository copy: absolute paths,
-home-relative paths, URLs and ``..`` escapes are rejected wherever they appear
-(positional test paths, ``--opt=value``, ``-o key=value``, ``type:path``
-values such as ``--cov-report=xml:/x``, attached short options such as
-``-c/x``), and runner options that execute arbitrary code or turn arguments
-into outside imports (``pytest --pyargs``, ``node -e``, ``go test -exec``,
-``cargo --config``, ``npm --script-shell``) are rejected. For pytest also
-``@file`` arguments (pytest reads more arguments from the file), ``-p NAME``
-other than ``-p no:NAME`` and Verinoda's own plugins, ``-o addopts=...``, and -
-read from the copy before the run - ``addopts`` and the path settings of the
-pytest config files (:func:`pytest_config_problem`); the run itself gets
-``-p no:cacheprovider`` and a ``--basetemp`` inside the throw-away directory.
+home-relative paths, URLs, ``..`` escapes and environment variable references
+(``%NAME%``, ``$NAME``: pytest expands them in ``--junitxml``, ``--rootdir``,
+``cache_dir``) are rejected wherever they appear (positional test paths,
+``--opt=value``, ``-o key=value``, ``type:path`` values such as
+``--cov-report=xml:/x``, attached short options such as ``-c/x``, pytest's
+combined short flags such as ``-qc/x``), and runner options that execute
+arbitrary code or turn arguments into outside imports (``pytest --pyargs``,
+``node -e``, ``go test -exec``, ``cargo --config``, ``npm --script-shell``) are
+rejected. For pytest also ``@file`` arguments (pytest reads more arguments from
+the file), ``-p NAME`` other than ``-p no:NAME`` and Verinoda's own plugins
+(anywhere, after a ``--`` too, as pytest reads it), ``-o addopts=...`` (also
+inside a cluster: ``-qoaddopts=...``), and - read from the copy before the
+run - ``addopts`` and the path settings of the pytest config files
+(:func:`pytest_config_problem`; ``-p`` there only in a file the command names
+with ``-c``); the run itself gets ``-p no:cacheprovider`` and a ``--basetemp``
+inside the throw-away directory.
 Anything else needs
 ``container`` isolation; without it the experiment is *refused*, not run, and
 the refusal names the offending argument. Commands are never passed through a
@@ -142,6 +147,12 @@ FORBIDDEN_OPTIONS: dict[str, dict[str, str]] = {
 }
 _DRIVE_RE = re.compile(r"^[A-Za-z]:")
 _URL_RE = re.compile(r"^[A-Za-z][\w+.-]*://")
+# An environment variable reference as os.path.expandvars reads it (Windows: %NAME%, $NAME, ${NAME}; POSIX:
+# $NAME, ${NAME}). pytest expands them in --junitxml, --rootdir and cache_dir (plugins in more options), and the
+# child's environment has SYSTEMDRIVE, WINDIR, PATH, HOME...: a path that names one can be anywhere.
+_ENV_REF_RE = re.compile(r"%[^%]+%|\$(?:\{|[A-Za-z0-9_-])")
+# pytest's short options that take a value; any other letter in a single-dash cluster is read as a flag
+_PYTEST_VALUE_SHORT = frozenset("kmWcpor")
 _TYPED_VALUE_RE = re.compile(r"^[\w.-]{2,}:(.*)$", re.S)  # xml:path, no:plugin (2+ chars: not a drive)
 # pytest options that need its cache plugin: with them the cache is moved (-o cache_dir) instead of switched off
 _PYTEST_CACHE_OPTIONS = {"--lf", "--last-failed", "--ff", "--failed-first", "--nf", "--new-first", "--sw",
@@ -173,9 +184,10 @@ class ExperimentRefused(RuntimeError):
 
 def untrusted_next_step(repo: Path) -> str:
     """What to do when an untrusted project's tests would run with the user's privileges."""
-    return (f"if you trust this project's code, run `verinoda trust {Path(repo).resolve()}` once (your decision, "
-            "recorded outside the repository; an agent cannot make it) and run again; or install docker/podman: an "
-            "untrusted project's tests then run in a container (no network, only the copy writable)")
+    return (f"ask the user: if they trust this project's code, they run `verinoda trust {Path(repo).resolve()}` "
+            "themselves in a terminal (it asks them to confirm; recorded outside the repository) and then run again - "
+            "an agent must never run it for them; or install docker/podman: an untrusted project's tests then run in "
+            "a container (no network, only the copy writable)")
 
 
 def refusal(repo: Path, exc: BaseException) -> dict:
@@ -299,6 +311,10 @@ def path_escape(value: str) -> str | None:
     v = _strip_quotes(value).strip()
     if not v:
         return None
+    ref = _ENV_REF_RE.search(v)
+    if ref:
+        return (f"{value!r} names an environment variable ({ref.group(0)}), which pytest and other runners expand, "
+                "so the path can lead anywhere")
     s = v.replace("\\", "/")
     if s.startswith("~"):
         return f"{value!r} is relative to the home directory"
@@ -358,9 +374,34 @@ def _runner(argv: list[str]) -> str:
     return "pytest" if _is_pytest(argv) else exe
 
 
+def _pytest_expanded(tokens: list[str]) -> list[str]:
+    """``tokens`` with single-dash clusters split the way pytest's argparse reads them, up to a ``--``:
+    ``-qoaddopts=X`` is ``-q -oaddopts=X``, ``-qc f.ini`` is ``-q -c f.ini``, ``-q=oX`` is ``-q -oX``. The
+    cluster ends at the first of pytest's value-taking short options (:data:`_PYTEST_VALUE_SHORT`), which takes
+    the rest as its value; every other character is read as a flag, so a flag a plugin or a later pytest adds
+    cannot hide an ``-o`` or a ``-c`` behind it."""
+    out: list[str] = []
+    for i, raw in enumerate(tokens):
+        tok = _strip_quotes(raw)
+        if tok == "--":
+            return out + list(tokens[i:])
+        if len(tok) > 2 and tok[0] == "-" and tok[1] != "-" and tok[1] not in _PYTEST_VALUE_SHORT:
+            j = 1
+            while j < len(tok) and tok[j] not in _PYTEST_VALUE_SHORT:
+                out.append("-" + tok[j])
+                j += 1
+            if j < len(tok):
+                out.append("-" + tok[j:])
+        else:
+            out.append(raw)
+    return out
+
+
 def _ini_overrides(tokens: list[str]) -> list[str]:
-    """The ``key=value`` values of ``-o`` / ``--override-ini`` in ``tokens`` (every spelling pytest takes)."""
+    """The ``key=value`` values of ``-o`` / ``--override-ini`` in ``tokens`` (every spelling pytest takes,
+    combined short flags such as ``-qoaddopts=X`` included)."""
     out = []
+    tokens = _pytest_expanded(tokens)
     for i, raw in enumerate(tokens):
         tok = _strip_quotes(raw)
         if tok == "--":
@@ -379,8 +420,13 @@ def _addopts_overridden(tokens: list[str]) -> bool:
     return any(v.split("=", 1)[0].strip() == "addopts" for v in _ini_overrides(tokens) if "=" in v)
 
 
-def _pytest_rules(tokens: list[str], plugins: tuple[str, ...]) -> str | None:
-    """pytest's own ways past the argument check: ``@file`` arguments, ``-p NAME``, ``-o addopts=...``."""
+def _pytest_rules(tokens: list[str], plugins: tuple[str, ...], *, check_plugins: bool = True) -> str | None:
+    """pytest's own ways past the argument check: ``@file`` arguments, ``-p NAME``, ``-o addopts=...``.
+
+    ``-p`` is read the way pytest's ``consider_preparse`` reads it: ``-p NAME`` and ``-pNAME`` anywhere, after a
+    ``--`` too (it scans every argument), never inside a cluster (``-qpNAME`` loads nothing). ``check_plugins``
+    False: the ``addopts`` of a config file pytest finds itself (the project's own, see
+    :func:`pytest_config_problem`)."""
     for raw in tokens:
         if _strip_quotes(raw).startswith("@"):
             return (f"argument {raw!r}: pytest reads more arguments from the file named after '@', which the "
@@ -390,10 +436,10 @@ def _pytest_rules(tokens: list[str], plugins: tuple[str, ...]) -> str | None:
         if key.strip() == "addopts" and val.strip():
             return (f"-o {v!r}: an addopts override adds arguments the policy never sees as arguments; give them "
                     "directly (only `-o addopts=`, which switches the config files' addopts off, is allowed)")
+    if not check_plugins:
+        return None
     for i, raw in enumerate(tokens):
         tok = _strip_quotes(raw)
-        if tok == "--":
-            break
         name = None
         if tok == "-p" and i + 1 < len(tokens):
             name = _strip_quotes(tokens[i + 1])
@@ -405,10 +451,17 @@ def _pytest_rules(tokens: list[str], plugins: tuple[str, ...]) -> str | None:
     return None
 
 
-def _args_problem(tokens: list[str], runner: str, plugins: tuple[str, ...] = ()) -> str | None:
-    """Why arguments of an allowlisted ``runner`` are not allowed under process isolation, else None."""
+def _args_problem(tokens: list[str], runner: str, plugins: tuple[str, ...] = (), *,
+                  check_plugins: bool = True) -> str | None:
+    """Why arguments of an allowlisted ``runner`` are not allowed under process isolation, else None.
+
+    For pytest the path check also sees the single-dash clusters split (:func:`_pytest_expanded`): the value of
+    ``-qc/x.ini`` is ``/x.ini``, not ``c/x.ini``."""
     forbidden = FORBIDDEN_OPTIONS.get(runner, {})
-    for tok in tokens:
+    checked = list(tokens)
+    if runner == "pytest":
+        checked += [t for t in _pytest_expanded(tokens) if t not in tokens]
+    for tok in checked:
         opt = _strip_quotes(tok).split("=", 1)[0]
         if opt in forbidden:
             return forbidden[opt]
@@ -417,7 +470,7 @@ def _args_problem(tokens: list[str], runner: str, plugins: tuple[str, ...] = ())
             if why:
                 return f"argument {tok!r}: {why}; {ARGS_CONFINED}"
     if runner == "pytest":
-        return _pytest_rules(tokens, plugins)
+        return _pytest_rules(tokens, plugins, check_plugins=check_plugins)
     return None
 
 
@@ -540,7 +593,9 @@ def _toml_settings_fallback(text: str) -> dict:
                 break
             i += 1
         strings = [s.group(s.lastindex or 0) for s in _TOML_STR_RE.finditer(rest[:i])]
-        out.setdefault(m.group(1), []).extend(strings)
+        # a string value is split like a shell would, a list item is taken as it is: which one this was is not
+        # known here, so both
+        out.setdefault(m.group(1), []).extend(w for s in strings for w in dict.fromkeys([s, *_words(s)]))
     return out
 
 
@@ -574,19 +629,34 @@ def _pytest_settings(path: Path) -> dict | None:
 
 
 def _as_words(value) -> list[str]:
-    """A setting's value as the list of words pytest makes of it (a string is split like a shell would)."""
+    """A setting's value as the list of words pytest makes of it: a string is split like a shell would, the
+    items of a (TOML) list are taken as they are (pytest does not split them)."""
     if value is None:
         return []
     if isinstance(value, (list, tuple)):
-        return [w for v in value for w in (_words(v) if isinstance(v, str) else [str(v)])]
+        return [str(v) for v in value]
     return _words(str(value))
+
+
+def _path_values(value) -> list[str]:
+    """The paths a path setting can name: :func:`_as_words`, and a string also whole (``cache_dir`` and
+    ``log_file`` are single strings to pytest; splitting would drop a Windows backslash)."""
+    words = _as_words(value)
+    return list(dict.fromkeys([value, *words])) if isinstance(value, str) else words
 
 
 def _pytest_config_files(copy: Path, argv: list[str]) -> list[Path]:
     """The pytest config files the run may read: those in the copy's root and in every folder from there down
     to each path argument (pytest looks for one upward from the arguments), and one given with ``-c``."""
+    explicit, found = _pytest_config_sources(copy, argv)
+    return list(dict.fromkeys([*explicit, *found]))
+
+
+def _pytest_config_sources(copy: Path, argv: list[str]) -> tuple[list[Path], list[Path]]:
+    """``(named, found)``: the config file the command names (``-c``, ``--config-file``, also inside a cluster
+    such as ``-qcFILE``) and the ones pytest may find itself (see :func:`_pytest_config_files`)."""
     at = 1 if _exe_name(argv[0]) == "pytest" else 3
-    rest = [_strip_quotes(t) for t in argv[at:]]
+    rest = [_strip_quotes(t) for t in _pytest_expanded(argv[at:])]
     dirs: set[Path] = {copy}
     explicit: list[str] = []
 
@@ -608,10 +678,11 @@ def _pytest_config_files(copy: Path, argv: list[str]) -> list[Path]:
             chain(t.split("=", 1)[1])
         elif t and not t.startswith("-"):
             chain(t.split("::", 1)[0])
-    files = [copy / e for e in explicit if (copy / e).is_file()]
+    found: list[Path] = []
     for d in sorted(dirs):
-        files += [d / n for n in PYTEST_CONFIG_FILES if (d / n).is_file()]
-    return list(dict.fromkeys(files))
+        found += [d / n for n in PYTEST_CONFIG_FILES if (d / n).is_file()]
+    named = [copy / e for e in explicit if (copy / e).is_file() and copy / e not in found]
+    return list(dict.fromkeys(named)), found
 
 
 def pytest_config_problem(copy: Path, argv: list[str], plugins: tuple[str, ...] | list[str] = ()) -> str | None:
@@ -621,12 +692,20 @@ def pytest_config_problem(copy: Path, argv: list[str], plugins: tuple[str, ...] 
     and the settings that name paths (:data:`PYTEST_PATH_SETTINGS`) must stay inside the copy, each from where
     pytest resolves it: ``log_file`` from the working directory (the copy's root), the others from the config
     file's folder (the root folder pytest takes; with ``--rootdir`` from the copy's root as well). Nothing is
-    rewritten: the file and setting are named."""
+    rewritten: the file and setting are named.
+
+    ``-p NAME`` in ``addopts`` is refused only in a file the command names with ``-c`` (any file of the copy,
+    a test fixture too): in a config file pytest finds itself it is the trusted project's own choice, like
+    ``pytest_plugins`` in its ``conftest.py`` (only a trusted project runs under process isolation)."""
     names = tuple(p.removesuffix(".py") for p in plugins)
     overridden = _addopts_overridden(argv)
     rootdir_given = any(_strip_quotes(t).startswith("--rootdir") for t in argv)
-    for f in _pytest_config_files(copy, argv):
-        rel = f.relative_to(copy).as_posix()
+    named, found = _pytest_config_sources(copy, argv)
+    for f in [*named, *found]:
+        try:
+            rel = f.relative_to(copy).as_posix()
+        except ValueError:  # outside the copy: the argument check refuses that path before this
+            return f"{f}: a pytest config file outside the repository copy; {ARGS_CONFINED}"
         folder = f.parent.relative_to(copy).as_posix()
         try:
             settings = _pytest_settings(f)
@@ -635,12 +714,12 @@ def pytest_config_problem(copy: Path, argv: list[str], plugins: tuple[str, ...] 
         if not settings:
             continue
         if not overridden:
-            why = _args_problem(_as_words(settings.get("addopts")), "pytest", names)
+            why = _args_problem(_as_words(settings.get("addopts")), "pytest", names, check_plugins=f in named)
             if why:
                 return f"{rel}, setting addopts: {why}"
         for key in PYTEST_PATH_SETTINGS:
             bases = ["."] if key == "log_file" else [folder, "."] if rootdir_given else [folder]
-            for v in _as_words(settings.get(key)):
+            for v in _path_values(settings.get(key)):
                 why = path_escape(v)
                 if why and "'..'" not in why:  # absolute, home-relative or a URL: wherever it is read from
                     return f"{rel}, setting {key}: {why}; {ARGS_CONFINED}"
@@ -649,6 +728,20 @@ def pytest_config_problem(copy: Path, argv: list[str], plugins: tuple[str, ...] 
                     if why:
                         return f"{rel}, setting {key}: {why}; {ARGS_CONFINED}"
     return None
+
+
+def _config_next_step(problem: str) -> str:
+    """What lets a run refused for its pytest config files (:func:`pytest_config_problem`) run, per rule."""
+    container = "or install docker/podman for container isolation"
+    if "loads a plugin module" in problem:
+        return ("the config file the command names with -c loads a plugin with -p in its addopts: run without "
+                f"that -c, remove the -p from that file's addopts, or pass `-o addopts=` to switch it off; {container}")
+    if "cannot be read" in problem:
+        return f"fix that file's syntax (pytest would read it as well), {container}"
+    if "setting addopts" in problem:
+        return (f"change that setting (a path inside the repository, the arguments themselves instead of an @file "
+                f"or an addopts override) or remove it, or pass `-o addopts=` to switch it off; {container}")
+    return f"change that setting to a path inside the repository (or remove it), {container}"
 
 
 def _pytest_extra(argv: list[str], scratch: Path) -> list[str]:
@@ -1281,8 +1374,7 @@ def run(
                 shutil.rmtree(work, ignore_errors=True)
                 refuse(f"command classified 'risky' and no container runtime (docker/podman) is available; "
                        f"Verinoda does not run it with process isolation only (why 'risky': {problem})",
-                       f"change that setting to a path inside the repository (or remove it), or install "
-                       "docker/podman for container isolation")
+                       _config_next_step(problem))
     out_dir = runs_dir(repo) / eid
     out_dir.mkdir(parents=True, exist_ok=True)
     tree = {"hash": treestate.tree_id(ids), "files": len(ids)}

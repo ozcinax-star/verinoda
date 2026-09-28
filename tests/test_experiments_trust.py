@@ -13,6 +13,7 @@ import os
 
 os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
+import io  # noqa: E402
 import json  # noqa: E402
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
@@ -141,7 +142,7 @@ def test_trust_command(tmp_path, untrusted, capsys):
 
     repo = tmp_path / "p"
     repo.mkdir()
-    assert cli.main(["trust", str(repo), "--json"]) == 0
+    assert cli.main(["trust", str(repo), "--json", "--yes"]) == 0  # no terminal here: --yes
     out = json.loads(capsys.readouterr().out)
     assert out["trusted"] is True and Path(out["trust_file"]).parent == untrusted and "process isolation" in \
         out["means"]
@@ -152,6 +153,81 @@ def test_trust_command(tmp_path, untrusted, capsys):
     assert "no longer trusted" in capsys.readouterr().out and not paths.is_trusted(repo)
     with pytest.raises(SystemExit, match="every project below it"):
         cli.main(["trust", str(Path.home()), "--subfolders"])
+
+
+class _Terminal(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+def test_trusting_is_the_users_decision(tmp_path, untrusted, capsys, monkeypatch):
+    """Review D63 M3: an agent with a shell that is handed the command gets a refusal without a terminal;
+    on a terminal the user confirms. The refusal's next_step is addressed to the user."""
+    from verinoda import cli
+
+    repo = tmp_path / "p"
+    repo.mkdir()
+    monkeypatch.setattr(sys, "stdin", io.StringIO("y\n"))  # not a terminal, like an agent's shell tool
+    with pytest.raises(SystemExit, match="the user's decision"):
+        cli.main(["trust", str(repo)])
+    assert not paths.is_trusted(repo)
+    monkeypatch.setattr(sys, "stdin", _Terminal("n\n"))
+    assert cli.main(["trust", str(repo)]) == 1 and not paths.is_trusted(repo)
+    assert "Trust " in capsys.readouterr().err
+    monkeypatch.setattr(sys, "stdin", _Terminal("y\n"))
+    assert cli.main(["trust", str(repo), "--subfolders"]) == 0 and paths.is_trusted(repo / "sub")
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))  # --remove and --list ask nothing
+    assert cli.main(["trust", str(repo), "--remove"]) == 0 and not paths.is_trusted(repo)
+    step = experiments.untrusted_next_step(repo)
+    assert step.startswith("ask the user") and "an agent must never run it" in step and \
+        f"verinoda trust {repo.resolve()}" in step
+
+
+def test_a_deleted_trusted_folder_can_be_removed(tmp_path, untrusted, capsys):
+    """Review D63 L2: else the entry stays, and whatever is created at that path later is trusted."""
+    from verinoda import cli
+
+    repo = tmp_path / "gone"
+    repo.mkdir()
+    paths.set_trust(repo)
+    shutil.rmtree(repo)
+    assert cli.main(["trust", "--list", "--json"]) == 0
+    assert [e.get("missing") for e in json.loads(capsys.readouterr().out)["trusted"]] == [True]
+    assert cli.main(["trust", str(repo), "--remove"]) == 0
+    assert "no longer trusted" in capsys.readouterr().out and paths.trust_entries() == []
+    with pytest.raises(SystemExit, match="is not a folder"):  # trusting still needs the folder
+        cli.main(["trust", str(repo), "--yes"])
+
+
+def test_an_untrusted_projects_broken_config_cannot_stop_the_mcp_server(tmp_path, untrusted):
+    """Review D63 L4: the file is ignored for an untrusted project, so it is not read either."""
+    from verinoda.mcp.server import resolve_profile
+
+    repo = tmp_path / "clone"
+    (repo / ".verinoda").mkdir(parents=True)
+    (repo / ".verinoda" / "config.json").write_text("{not json", encoding="utf-8")
+    assert resolve_profile(repo) == "core"
+    paths.set_trust(repo)
+    with pytest.raises(ValueError, match="cannot read the MCP tool profile"):
+        resolve_profile(repo)
+
+
+def test_a_relative_config_dir_is_ignored(tmp_path, monkeypatch):
+    """Review D63 L5: a relative VERINODA_CONFIG_DIR would be read from the current directory - a clone could
+    ship a trust.json that trusts itself."""
+    clone = tmp_path / "clone"
+    (clone / "evil-user").mkdir(parents=True)
+    (clone / "evil-user" / "trust.json").write_text(json.dumps(
+        {"version": 1, "trusted": [{"path": str(clone), "subfolders": True}]}), encoding="utf-8")
+    default_base = tmp_path / "appdata"
+    monkeypatch.setenv("APPDATA", str(default_base))  # the default per-user folder: a temporary one here
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(default_base))
+    monkeypatch.chdir(clone)
+    monkeypatch.setenv(paths.CONFIG_DIR_ENV, "evil-user")
+    assert paths.user_config_dir() == default_base / "verinoda"
+    assert not paths.is_trusted(clone)
+    monkeypatch.setenv(paths.CONFIG_DIR_ENV, "~/vn-config")  # home-relative is absolute once expanded
+    assert paths.user_config_dir() == Path("~/vn-config").expanduser()
 
 
 # -- R2: an untrusted project's tests run only in a container -----------------------------------------------------
@@ -352,6 +428,24 @@ def test_a_bare_runner_not_on_path_is_an_error_not_a_lookup_in_the_cwd(proj, mon
     ([*PYTEST, "-oaddopts=--junitxml=/x.xml"], "absolute path"),
     ([*PYTEST, "--override-ini=addopts=--basetemp=C:/x"], "absolute path"),
     ([*PYTEST, "-o", "addopts=-q --basetemp=../../x"], "'..'"),
+    # environment variables: pytest expands them in --junitxml, --rootdir and cache_dir (review D63 H1)
+    ([*PYTEST, "--junitxml=%SYSTEMDRIVE%/Users/Public/x.xml"], "environment variable (%SYSTEMDRIVE%)"),
+    ([*PYTEST, "--junitxml=%WINDIR%/../Users/Public/x.xml"], "environment variable"),
+    ([*PYTEST, "--junit-xml=reports/%LANG%/x.xml"], "environment variable"),
+    ([*PYTEST, "--rootdir=%SYSTEMDRIVE%/"], "environment variable"),
+    ([*PYTEST, "-o", "cache_dir=%TEMP%/c", "--lf"], "environment variable"),
+    ([*PYTEST, "--junit-xml=$SYSTEMROOT/x"], "shell metacharacters"),  # $ in argv: refused as before
+    # -p after --: pytest's consider_preparse reads every argument (review D63 M1)
+    ([*PYTEST, "tests", "--", "-pzzd63_after_dashdash"], "loads a plugin module by name"),
+    ([*PYTEST, "tests", "--", "-p", "zzd63_after_dashdash"], "loads a plugin module by name"),
+    # combined short flags: argparse reads -qoX as -q -oX and -qcX as -q -cX
+    ([*PYTEST, "-qoaddopts=-pzzd63_via_addopts"], "addopts override"),
+    ([*PYTEST, "-qo", "addopts=-pzzd63"], "addopts override"),
+    ([*PYTEST, "-qoaddopts=@args.txt"], "addopts override"),
+    ([*PYTEST, "-q=oaddopts=-pzzd63"], "addopts override"),
+    ([*PYTEST, "-vqo", "addopts=-x"], "addopts override"),
+    ([*PYTEST, "-qc/abs/evil.ini"], "absolute path"),
+    ([*PYTEST, "-qc../evil.ini"], "'..'"),
 ])
 def test_pytest_argument_rules(argv, why):
     kind, reason = experiments.policy(argv, ALLOW)
@@ -363,7 +457,10 @@ def test_pytest_argument_rules(argv, why):
     ([*PYTEST, "-p", "verinoda_probe"], ("verinoda_probe.py",)),
     ([*PYTEST, "-o", "addopts=", "--noconftest"], ()),  # switching the config files' addopts off
     ([*PYTEST, "-o", "cache_dir=.cache"], ()),
-    ([*PYTEST, "--", "-p"], ()),  # after --, a test path named -p
+    ([*PYTEST, "--", "-p"], ()),  # a trailing -p with no name: pytest loads nothing (its preparse stops there)
+    ([*PYTEST, "-qpzzd63"], ()),  # -p inside a cluster: pytest's preparse reads only -p X / -pX, loads nothing
+    ([*PYTEST, "-kfoo_pc", "-rfE", "-Wignore::DeprecationWarning", "-vv"], ()),  # values of value-taking options
+    ([*PYTEST, "tests/test_fmt.py::test_percent[5%]"], ()),  # one % is no variable
 ])
 def test_pytest_argument_rules_keep_safe_uses(argv, plugins):
     assert experiments.policy(argv, ALLOW, plugins=plugins) == ("allowlisted", None)
@@ -371,7 +468,12 @@ def test_pytest_argument_rules_keep_safe_uses(argv, plugins):
 
 @pytest.mark.parametrize("name,text,why", [
     ("pytest.ini", "[pytest]\naddopts = -q --junitxml=/tmp/x.xml\n", "pytest.ini, setting addopts"),
-    (".pytest.ini", "[pytest]\naddopts = -p evil_plugin\n", "loads a plugin module"),
+    (".pytest.ini", "[pytest]\naddopts = --junitxml=$SYSTEMDRIVE/x.xml\n", "environment variable"),
+    ("pytest.ini", "[pytest]\ncache_dir = ${HOME}/c\n", "setting cache_dir"),
+    ("pytest.ini", "[pytest]\ncache_dir = ..\\..\\cache\n", "'..'"),  # one string to pytest: backslashes kept
+    # a TOML list item is taken as it is (pytest does not shlex-split it), backslashes included (review D63 L1)
+    ("pyproject.toml", '[tool.pytest.ini_options]\naddopts = ["--junitxml=..\\\\..\\\\out\\\\x.xml"]\n', "'..'"),
+    ("pyproject.toml", '[tool.pytest.ini_options]\ntestpaths = ["..\\\\..\\\\elsewhere"]\n', "setting testpaths"),
     ("tox.ini", "[pytest]\ncache_dir = ../../cache\n", "tox.ini, setting cache_dir"),
     ("setup.cfg", "[tool:pytest]\npythonpath = src ../outside\n", "setup.cfg, setting pythonpath"),
     ("setup.cfg", "[tool:pytest]\naddopts =\n    -q\n    @more_args\n", "reads more arguments"),
@@ -442,6 +544,87 @@ def test_a_config_file_that_leaves_the_copy_refuses_the_run(proj, tmp_path, no_c
     rows = st.all("SELECT * FROM experiments")
     assert [r["status"] for r in rows] == ["refused"] and rows[0]["environment"]["policy"]["kind"] == "risky"
     assert not runs_dir(repo).exists() or not any(runs_dir(repo).iterdir())
+
+
+def test_a_plugin_in_the_projects_own_config_is_its_choice_one_in_a_named_file_is_checked(tmp_path):
+    """Review D63 M2: `addopts = -p pytester` in the config pytest finds itself is the trusted project's own
+    choice (like pytest_plugins in conftest.py); a file the command names with -c (any file of the copy, a test
+    fixture too) still gets the -p rule, in every spelling of -c."""
+    copy = tmp_path / "copy"
+    (copy / "sub").mkdir(parents=True)
+    (copy / "pytest.ini").write_text("[pytest]\naddopts = -p pytester\n", encoding="utf-8")
+    (copy / "sub" / "evil.ini").write_text("[pytest]\naddopts = -pzzd63_via_qc\n", encoding="utf-8")
+    assert experiments.pytest_config_problem(copy, PYTEST) is None
+    assert experiments.pytest_config_problem(copy, [*PYTEST, "-c", "pytest.ini"]) is None  # the one it finds
+    for spelling in (["-c", "sub/evil.ini"], ["-csub/evil.ini"], ["--config-file=sub/evil.ini"],
+                     ["-qcsub/evil.ini"], ["-qc", "sub/evil.ini"], ["-q=csub/evil.ini"]):
+        problem = experiments.pytest_config_problem(copy, [*PYTEST, *spelling])
+        assert problem and "sub/evil.ini, setting addopts" in problem and "loads a plugin module" in problem, \
+            (spelling, problem)
+        assert "-c" in experiments._config_next_step(problem)
+    # the other rules still apply to the project's own file
+    (copy / "pytest.ini").write_text("[pytest]\naddopts = -p pytester --junitxml=/x.xml\n", encoding="utf-8")
+    assert "absolute path" in experiments.pytest_config_problem(copy, PYTEST)
+
+
+def test_a_trusted_project_whose_addopts_loads_a_plugin_runs(proj, no_container):
+    repo, st = proj
+    (repo / "pytest.ini").write_text("[pytest]\naddopts = -p pytester\n", encoding="utf-8")
+    res = experiments.run(st, repo, [*PYTEST, "tests/test_pricing.py"], hypothesis="h")
+    assert res["outcome"] == "pass" and res["isolation"] == "process", res
+
+
+def test_an_environment_variable_in_an_argument_writes_nothing_outside(proj, tmp_path, monkeypatch, no_container):
+    """Review D63 H1, end to end: LANG is passed to the child, and pytest expands it in --junitxml."""
+    repo, st = proj
+    outside = tmp_path / "OUTSIDE"
+    outside.mkdir()
+    monkeypatch.setenv("LANG", str(outside))
+    with pytest.raises(experiments.ExperimentRefused, match="environment variable"):
+        experiments.run(st, repo, [*PYTEST, "--junitxml=%LANG%/escaped_by_argv.xml", "tests/test_pricing.py"],
+                        hypothesis="h")
+    (repo / "pytest.ini").write_text("[pytest]\naddopts = --junitxml=$LANG/escaped_by_ini.xml\n", encoding="utf-8")
+    with pytest.raises(experiments.ExperimentRefused, match="pytest.ini, setting addopts") as exc:
+        experiments.run(st, repo, [*PYTEST, "tests/test_pricing.py"], hypothesis="h")
+    assert "environment variable" in str(exc.value) and "that setting" in exc.value.next_step
+    assert list(outside.iterdir()) == []
+
+
+def test_a_config_file_named_in_a_cluster_is_checked_before_the_run(proj, no_container):
+    """Review D63 M1.3: `-qcsub/evil.ini` makes pytest read that file; it was never checked."""
+    repo, st = proj
+    (repo / "sub").mkdir()
+    (repo / "sub" / "evil.ini").write_text("[pytest]\naddopts = -pzzd63_via_qc\n", encoding="utf-8")
+    with pytest.raises(experiments.ExperimentRefused, match="loads a plugin module") as exc:
+        experiments.run(st, repo, [*PYTEST, "-qcsub/evil.ini", "tests/test_pricing.py"], hypothesis="h")
+    assert "-c" in exc.value.next_step and "that setting to a path" not in exc.value.next_step
+
+
+@pytest.mark.parametrize("extra,loads", [
+    (["-qoaddopts=-pzzd63_probe_plugin"], True),
+    (["--", "-pzzd63_probe_plugin"], True),
+    (["-qcsub/evil.ini"], True),
+    (["-qpzzd63_probe_plugin"], False),
+])
+def test_pytest_itself_reads_these_spellings(tmp_path, extra, loads):
+    """The rules above follow how pytest reads its arguments; if a pytest release changes that, this says so."""
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "evil.ini").write_text("[pytest]\naddopts = -pzzd63_probe_plugin\n", encoding="utf-8")
+    (tmp_path / "test_one.py").write_text("def test_one():\n    pass\n", encoding="utf-8")
+    r = subprocess.run([sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "--co", "test_one.py", *extra],
+                       cwd=tmp_path, capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
+    assert ("zzd63_probe_plugin" in r.stdout + r.stderr) is loads, r.stdout + r.stderr
+
+
+def test_the_toml_fallback_splits_strings_and_keeps_list_items(tmp_path, monkeypatch):
+    monkeypatch.setattr(experiments, "_load_toml", lambda text: None)
+    copy = tmp_path / "copy"
+    copy.mkdir()
+    (copy / "custom.toml").write_text('[tool.pytest.ini_options]\naddopts = "-q -p evil_plugin"\n', encoding="utf-8")
+    assert "loads a plugin module" in experiments.pytest_config_problem(copy, [*PYTEST, "-c", "custom.toml"])
+    (copy / "pyproject.toml").write_text('[tool.pytest.ini_options]\naddopts = ["--junitxml=..\\\\..\\\\x.xml"]\n',
+                                         encoding="utf-8")
+    assert "'..'" in experiments.pytest_config_problem(copy, PYTEST)
 
 
 def test_pytest_extra_arguments():
