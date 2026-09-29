@@ -130,16 +130,21 @@ def _partition(G: nx.Graph, resolution: float = 1.0) -> dict[str, int]:
     # the dependency; for nx.Graph the orientation carries no meaning anyway.
     # A simple graph holds one edge per pair, so the pair alone orders it (the attributes, dumped as
     # JSON per edge and per split pass, were a second of an update); a multigraph also needs them.
+    # Local change (Verinoda): the edge view is handed to sorted() as an iterator. sorted() asks a
+    # sized iterable for its length first, and on a subgraph view (every call here: cluster() passes
+    # G.subgraph(...)) that length walks every filtered adjacency once more - a third of this
+    # function's time on a 30,000-node graph. The iterator yields the same rows in the same order,
+    # and sorted() is stable, so edge_rows is the same list.
     if G.is_multigraph():
         edge_rows = sorted(
-            G.edges(data=True),
+            iter(G.edges(data=True)),
             key=lambda row: (
                 *sorted((str(row[0]), str(row[1]))),
                 json.dumps(row[2], sort_keys=True, ensure_ascii=False, default=str),
             ),
         )
     else:
-        edge_rows = sorted(G.edges(data=True), key=lambda row: tuple(sorted((str(row[0]), str(row[1])))))
+        edge_rows = sorted(iter(G.edges(data=True)), key=lambda row: tuple(sorted((str(row[0]), str(row[1])))))
     for src, tgt, attrs in edge_rows:
         stable.add_edge(src, tgt, **attrs)
 
@@ -342,7 +347,14 @@ def cluster(
 def _split_community(G: nx.Graph, nodes: list[str]) -> list[list[str]]:
     """Run a second Leiden pass on a community subgraph to split it further."""
     subgraph = G.subgraph(nodes)
-    if subgraph.number_of_edges() == 0:
+    # Local change (Verinoda): the edge count of a plain graph from its adjacency (see
+    # _member_edge_counts), not by walking the subgraph view. Only for a list, which G.subgraph
+    # above has not used up (cluster() always passes one).
+    if _plain_graph(G) and isinstance(nodes, list):
+        edge_count = _subgraph_edge_count(G, nodes)
+    else:
+        edge_count = subgraph.number_of_edges()
+    if edge_count == 0:
         # No edges - split into individual nodes
         return [[n] for n in sorted(nodes)]
     try:
@@ -362,6 +374,12 @@ def cohesion_score(G: nx.Graph, community_nodes: list[str]) -> float:
     n = len(community_nodes)
     if n <= 1:
         return 1.0
+    if _plain_graph(G):
+        # Local change (Verinoda): the same count, read from G's adjacency (see
+        # _intra_pair_edges) instead of through a subgraph view.
+        actual = _intra_pair_edges(G, community_nodes)
+        possible = n * (n - 1) / 2
+        return actual / possible if possible > 0 else 0.0
     subgraph = G.subgraph(community_nodes)
     # Exclude self-loops. ``build_from_json`` deliberately keeps recursive
     # ``calls`` self-edges ("real program structure rather than
@@ -375,8 +393,106 @@ def cohesion_score(G: nx.Graph, community_nodes: list[str]) -> float:
     return actual / possible if possible > 0 else 0.0
 
 
+# Local change (Verinoda): cohesion_score and _split_community without counting through a subgraph
+# view. Counting the edges of G.subgraph(nodes) walks every member's neighbours through two layers
+# of filtering Python views (cohesion_score did it twice: number_of_edges, then the self-loops); on
+# a 30,000-node graph that was most of score_all's and of the cohesion-split pass's time. For a
+# plain undirected simple graph the same numbers come straight from the adjacency dicts. Any other
+# graph (directed, multigraph, a view, a subclass) takes the original code.
+def _plain_graph(G) -> bool:
+    return type(G) is nx.Graph and type(G._adj) is dict
+
+
+def _member_edge_counts(G: nx.Graph, community_nodes) -> tuple[int, int]:
+    """For a plain nx.Graph: (sum over the members u of |N(u) & S|, members with a self-loop).
+
+    S is the member set G.subgraph builds (``G.nbunch_iter``: members absent from G are dropped,
+    the same errors for an unhashable member). The sum counts every edge between two distinct
+    members twice and every self-loop once. The subgraph view's degree counts a self-loop twice,
+    so its number_of_edges (half the degree sum) is (sum + loops) / 2 and its self-loop count is
+    loops.
+    """
+    members = set(G.nbunch_iter(community_nodes))
+    adj = G._adj
+    twice = loops = 0
+    for u in members:
+        nbrs = adj[u]
+        twice += len(nbrs.keys() & members)
+        if u in nbrs:
+            loops += 1
+    return twice, loops
+
+
+def _intra_pair_edges(G: nx.Graph, community_nodes) -> int:
+    """``G.subgraph(community_nodes).number_of_edges()`` minus its self-loops, for a plain nx.Graph:
+    (sum + loops) / 2 - loops = (sum - loops) / 2."""
+    twice, loops = _member_edge_counts(G, community_nodes)
+    return (twice - loops) // 2
+
+
+def _subgraph_edge_count(G: nx.Graph, community_nodes) -> int:
+    """``G.subgraph(community_nodes).number_of_edges()`` for a plain nx.Graph."""
+    twice, loops = _member_edge_counts(G, community_nodes)
+    return (twice + loops) // 2
+
+
 def score_all(G: nx.Graph, communities: dict[int, list[str]]) -> dict[int, float]:
     return {cid: cohesion_score(G, nodes) for cid, nodes in communities.items()}
+
+
+def _overlaps_by_intersection(
+    communities: dict[int, list[str]],
+    previous_node_community: dict[str, int],
+) -> list[tuple[int, int, int]]:
+    """(overlap, old_cid, new_cid) for every old/new pair that shares a node, old community by
+    old community in first-appearance order, new ones in ``communities`` order."""
+    new_sets = {cid: set(nodes) for cid, nodes in communities.items()}
+    old_sets: dict[int, set[str]] = {}
+    for node, old_cid in previous_node_community.items():
+        old_sets.setdefault(old_cid, set()).add(node)
+
+    overlaps: list[tuple[int, int, int]] = []
+    for old_cid, old_nodes in old_sets.items():
+        for new_cid, new_nodes in new_sets.items():
+            overlap = len(old_nodes & new_nodes)
+            if overlap > 0:
+                overlaps.append((overlap, old_cid, new_cid))
+    return overlaps
+
+
+# Local change (Verinoda): the overlaps counted in one pass over the previous map instead of a set
+# intersection for every (old, new) pair - O(nodes) instead of O(old x new communities), which on a
+# 30,000-node graph with ~1,000 communities each side was over a second, run twice per update.
+def _overlaps_by_count(
+    communities: dict[int, list[str]],
+    previous_node_community: dict[str, int],
+) -> list[tuple[int, int, int]] | None:
+    """The list ``_overlaps_by_intersection`` returns, same tuples in the same order, or None when
+    a node belongs to two new communities (then only the intersections give the old counts).
+
+    |old_set & new_set| is the number of previous-map entries with that old cid whose node is in
+    that new community: each node is in exactly one new community, and the previous map's keys are
+    distinct. The pairs come out old cid by old cid in first-appearance order (the order old_sets
+    is built in), and within one old cid in ``communities`` order.
+    """
+    node_to_new: dict = {}
+    for new_cid, nodes in communities.items():
+        for node in nodes:
+            if node_to_new.setdefault(node, new_cid) != new_cid:
+                return None
+    position = {cid: i for i, cid in enumerate(communities)}
+    counts: dict = {}
+    missing = object()
+    for node, old_cid in previous_node_community.items():
+        per_old = counts.setdefault(old_cid, {})
+        new_cid = node_to_new.get(node, missing)
+        if new_cid is not missing:
+            per_old[new_cid] = per_old.get(new_cid, 0) + 1
+    return [
+        (per_old[new_cid], old_cid, new_cid)
+        for old_cid, per_old in counts.items()
+        for new_cid in sorted(per_old, key=position.__getitem__)
+    ]
 
 
 def remap_communities_to_previous(
@@ -391,17 +507,9 @@ def remap_communities_to_previous(
     if not communities:
         return {}
 
-    new_sets = {cid: set(nodes) for cid, nodes in communities.items()}
-    old_sets: dict[int, set[str]] = {}
-    for node, old_cid in previous_node_community.items():
-        old_sets.setdefault(old_cid, set()).add(node)
-
-    overlaps: list[tuple[int, int, int]] = []
-    for old_cid, old_nodes in old_sets.items():
-        for new_cid, new_nodes in new_sets.items():
-            overlap = len(old_nodes & new_nodes)
-            if overlap > 0:
-                overlaps.append((overlap, old_cid, new_cid))
+    overlaps = _overlaps_by_count(communities, previous_node_community)
+    if overlaps is None:
+        overlaps = _overlaps_by_intersection(communities, previous_node_community)
     overlaps.sort(key=lambda x: (-x[0], x[1], x[2]))
 
     new_to_final: dict[int, int] = {}
