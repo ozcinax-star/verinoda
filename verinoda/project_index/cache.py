@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import atexit
+import contextlib
 import hashlib
 import json
 import os
+import pickle
 import re
+import stat as _stat_mod
 import tempfile
 import time
 import warnings
@@ -43,6 +46,44 @@ _AST_CACHE_SCHEMA = 8  # 4: Rust generic-impl identity markers + Terraform block
 
 # Version dirs already swept this process — cleanup runs once per (base, version).
 _cleaned_ast_dirs: set[str] = set()
+
+# Local change (Verinoda): memos that live for one build (build_memo()). During a build the tree is
+# taken not to move (Verinoda's index.build memoises Path.resolve for the same span), so what this
+# module derives from resolved paths - a root's anchor forms, a file's hash salt, the AST cache
+# directory - is computed once per build instead of once per file. Outside a build nothing is kept and
+# every function runs as upstream wrote it.
+_build_memo: "dict | None" = None
+_build_depth = 0
+_builds_done = 0
+# Local change (Verinoda): restored AST cache entries kept in memory from one build to the next
+# (_load_ast_in_build). A pickle of the entry as load_cached returns it (after the source_file and id
+# re-anchoring), keyed by the entry file and the anchors it was restored with, and checked against the
+# entry's stat signature; a hit is unpickled, a fresh object each time (extract mutates what it gets).
+# Kept only by a process that has finished a build before (MCP index_update, watch): a one-shot CLI
+# build would pay the pickling for nothing. After each build only the entries it used are kept.
+_restored_entries: dict[tuple, tuple] = {}
+
+
+@contextlib.contextmanager
+def build_memo():
+    """Local change (Verinoda): the span of one build, for the memos above.
+
+    Nested scopes share the outer one's memo; the memo is dropped when the outermost scope ends.
+    """
+    global _build_memo, _build_depth, _builds_done, _restored_entries
+    if _build_depth == 0:
+        _build_memo = {"restored_used": set(), "store": _builds_done > 0, "pid": os.getpid()}
+    _build_depth += 1
+    try:
+        yield _build_memo
+    finally:
+        _build_depth -= 1
+        if _build_depth == 0:
+            used = _build_memo.get("restored_used", set())
+            if _build_memo.get("store"):
+                _restored_entries = {k: v for k, v in _restored_entries.items() if k in used}
+            _build_memo = None
+            _builds_done += 1
 
 
 def _cleanup_stale_ast_entries(ast_base: Path, current_dir: Path) -> None:
@@ -449,14 +490,76 @@ def file_hash(path: Path, root: Path = Path("."), cache_root: "Path | None" = No
     global _stat_index_dirty
     p = _normalize_path(Path(path))
     root = _normalize_path(Path(root))
-    if not p.is_file():
-        raise IsADirectoryError(f"file_hash requires a file, got: {p}")
+    # Local change (Verinoda): one stat serves the regular-file check and the signature check below
+    # (upstream stats twice). Anything but a regular file takes upstream's is_file() check as it was.
+    try:
+        st_first: "os.stat_result | None" = os.stat(p)
+    except (OSError, ValueError):
+        st_first = None
+    if st_first is None or not _stat_mod.S_ISREG(st_first.st_mode):
+        if not p.is_file():
+            raise IsADirectoryError(f"file_hash requires a file, got: {p}")
+        st_first = None  # a file after all (it changed in between): stat it again below
 
     # The stat index is a cache artifact, so it must follow the cache location
     # (cache_root), not the key-anchor root — otherwise it leaves a stray
     # graphify-out/cache/stat-index.json inside the analyzed source tree even when
     # the AST cache itself is redirected to CWD (#1774 completion).
     _ensure_stat_index(root, cache_root=cache_root)
+    # Local change (Verinoda): within a build the resolved key and the salt of a (path, root) pair
+    # are computed once (see build_memo); they depend only on the two spellings, the working
+    # directory and the tree, which does not move during a build.
+    memo = _build_memo
+    salt_key = ("file_hash", str(p), str(root), os.getcwd()) if memo is not None else None
+    known = memo.get(salt_key) if memo is not None else None
+    if known is not None:
+        abs_key, salt = known
+    else:
+        abs_key, salt = _file_hash_key_and_salt(p, root)
+        if memo is not None:
+            memo[salt_key] = (abs_key, salt)
+
+    st: "os.stat_result | None" = None
+    try:
+        st = st_first if st_first is not None else p.stat()
+        if _stat_sig_fresh(_stat_index.get(abs_key), st):
+            hashes = _stat_index[abs_key].get("hashes")
+            if isinstance(hashes, dict):
+                cached = hashes.get(salt)
+                if isinstance(cached, str):
+                    return cached
+            # Legacy single-digest entries ("hash") don't record which salt
+            # produced them, so they are never trusted (#1989) — recompute once.
+    except OSError:
+        pass
+
+    # Captured BEFORE the read so the stamp can never post-date content that
+    # changed while we were reading it (see _stat_sig_fresh).
+    observed_at_ns = time.time_ns()
+    raw = p.read_bytes()
+    content = _body_content(raw) if p.suffix.lower() == ".md" else raw
+    h = hashlib.sha256()
+    h.update(content)
+    h.update(b"\x00")
+    h.update(salt.encode())
+    digest = h.hexdigest()
+
+    if st is not None:
+        entry = _stat_entry_for(abs_key, st, observed_at_ns)
+        hashes = entry.get("hashes")
+        if not isinstance(hashes, dict):
+            hashes = {}
+            entry["hashes"] = hashes
+        hashes[salt] = digest       # preserve a co-located word_count / other salts
+        entry.pop("hash", None)     # retire the un-salted legacy digest
+        _stat_index_dirty = True
+
+    return digest
+
+
+def _file_hash_key_and_salt(p: Path, root: Path) -> tuple[str, str]:
+    """Local change (Verinoda): upstream file_hash's stat-index key and salt, moved out of it unchanged
+    so a build can memoise them. ``p`` and ``root`` are normalized (_normalize_path)."""
     resolved = p.resolve()
     abs_key = str(resolved)
     # The salt is the path component that enters the digest (relative to root, or
@@ -502,42 +605,7 @@ def file_hash(path: Path, root: Path = Path("."), cache_root: "Path | None" = No
 
         salt += f"\x00doctext-v{doctext.VERSION}"
 
-    st: "os.stat_result | None" = None
-    try:
-        st = p.stat()
-        if _stat_sig_fresh(_stat_index.get(abs_key), st):
-            hashes = _stat_index[abs_key].get("hashes")
-            if isinstance(hashes, dict):
-                cached = hashes.get(salt)
-                if isinstance(cached, str):
-                    return cached
-            # Legacy single-digest entries ("hash") don't record which salt
-            # produced them, so they are never trusted (#1989) — recompute once.
-    except OSError:
-        pass
-
-    # Captured BEFORE the read so the stamp can never post-date content that
-    # changed while we were reading it (see _stat_sig_fresh).
-    observed_at_ns = time.time_ns()
-    raw = p.read_bytes()
-    content = _body_content(raw) if p.suffix.lower() == ".md" else raw
-    h = hashlib.sha256()
-    h.update(content)
-    h.update(b"\x00")
-    h.update(salt.encode())
-    digest = h.hexdigest()
-
-    if st is not None:
-        entry = _stat_entry_for(abs_key, st, observed_at_ns)
-        hashes = entry.get("hashes")
-        if not isinstance(hashes, dict):
-            hashes = {}
-            entry["hashes"] = hashes
-        hashes[salt] = digest       # preserve a co-located word_count / other salts
-        entry.pop("hash", None)     # retire the un-salted legacy digest
-        _stat_index_dirty = True
-
-    return digest
+    return abs_key, salt
 
 
 def cached_word_count(path: Path, root: Path, compute, cache_root: "Path | None" = None) -> int:
@@ -755,27 +823,17 @@ def _portability_anchors(path: "str | Path", root: "str | Path") -> tuple[list[s
     and absolute-resolved-form ids for every path (#1529) and maps them to the
     same canonical id, so restoring either one canonicalizes identically.
     """
-    from verinoda.project_index.ids import normalize_id
-
-    try:
-        root_resolved = Path(root).resolve()
-    except OSError:
+    # Local change (Verinoda): the root's part is computed once per build (_root_anchor_forms) and a
+    # file's own part by _path_anchor_forms; together they are upstream's code, in upstream's order.
+    forms = _root_anchor_forms(root)
+    if forms is None:
         return [], "", [], ""
-    try:
-        path_resolved = Path(path).resolve()
-    except (OSError, RuntimeError):
-        path_resolved = Path(path)
-    try:
-        rel = os.path.relpath(path_resolved, root_resolved)
-    except (ValueError, OSError):
-        rel = ""
-
+    root_resolved, root_slug, root_id_forms, path_anchors = forms
+    from_given, from_resolved = _path_anchor_forms(path, root_resolved)
     # Ordered by preference for the restore form: the spelling the extractor was
     # actually handed first, then its resolved form, then the scan root.
-    from_given = _id_anchor(str(path), rel)
-    from_resolved = _id_anchor(str(path_resolved), rel)
     id_restore = next(
-        (a for a in (from_given, from_resolved, normalize_id(str(root_resolved))) if a), ""
+        (a for a in (from_given, from_resolved, root_slug) if a), ""
     )
     # Every strippable form must be one this same call would RESTORE, or an id
     # is re-anchored under a prefix it was never minted with. That rules out a
@@ -785,21 +843,93 @@ def _portability_anchors(path: "str | Path", root: "str | Path") -> tuple[list[s
     # The two path-derived forms are always safe — they ARE the restore
     # candidates — and cover a relative root on their own whenever the extractor
     # was handed a matching relative path.
-    root_id_forms = (normalize_id(str(root_resolved)),)
-    if Path(root).is_absolute():
-        root_id_forms += (normalize_id(str(root)),)
     id_anchors = sorted(
         {a for a in (from_given, from_resolved, *root_id_forms) if a},
         key=len, reverse=True,
     )
-    # Only absolute roots may anchor a PATH value: a relative one ("corpus")
-    # would also match a genuinely relative value that merely starts with the
-    # same segment, and there is no way to tell the two apart on read.
-    path_anchors = sorted(
-        {s for s in (str(root_resolved), str(root)) if Path(s).is_absolute()},
-        key=len, reverse=True,
-    )
-    return id_anchors, id_restore, path_anchors, str(root_resolved)
+    return id_anchors, id_restore, list(path_anchors), str(root_resolved)
+
+
+def _root_anchor_forms(root: "str | Path") -> "tuple[Path, str, tuple[str, ...], list[str]] | None":
+    """Local change (Verinoda): the root-only half of :func:`_portability_anchors` (upstream's code).
+
+    Returns ``(root_resolved, normalize_id(root_resolved), root_id_forms, path_anchors)``, or None
+    when the root does not resolve. Within a build (:func:`build_memo`) it is computed once per
+    spelling of the root and working directory.
+    """
+    memo = _build_memo
+    key = ("root_anchor_forms", str(root), os.getcwd()) if memo is not None else None
+    if memo is not None and key in memo:
+        return memo[key]
+    from verinoda.project_index.ids import normalize_id
+
+    try:
+        root_resolved = Path(root).resolve()
+    except OSError:
+        forms = None
+    else:
+        root_slug = normalize_id(str(root_resolved))
+        root_id_forms: tuple[str, ...] = (root_slug,)
+        if Path(root).is_absolute():
+            root_id_forms += (normalize_id(str(root)),)
+        # Only absolute roots may anchor a PATH value: a relative one ("corpus")
+        # would also match a genuinely relative value that merely starts with the
+        # same segment, and there is no way to tell the two apart on read.
+        path_anchors = sorted(
+            {s for s in (str(root_resolved), str(root)) if Path(s).is_absolute()},
+            key=len, reverse=True,
+        )
+        forms = (root_resolved, root_slug, root_id_forms, path_anchors)
+        if memo is not None:  # a root that does not resolve is tried again, as upstream does
+            memo[key] = forms
+    return forms
+
+
+def _path_anchor_forms(path: "str | Path", root_resolved: Path, *, need_resolved: bool = True) -> tuple[str, str]:
+    """Local change (Verinoda): the per-file half of :func:`_portability_anchors` (upstream's code):
+    ``(from_given, from_resolved)``. The relative path's slug is normalized once, not once per form.
+    With ``need_resolved=False`` the resolved form is only computed when the given one is empty
+    (all that :func:`_restore_anchors` reads)."""
+    from verinoda.project_index.ids import normalize_id
+
+    try:
+        path_resolved = Path(path).resolve()
+    except (OSError, RuntimeError):
+        path_resolved = Path(path)
+    try:
+        rel = os.path.relpath(path_resolved, root_resolved)
+    except (ValueError, OSError):
+        rel = ""
+    tail = normalize_id(rel)
+    from_given = _id_anchor_from_tail(str(path), tail)
+    if from_given and not need_resolved:
+        return from_given, ""
+    return from_given, _id_anchor_from_tail(str(path_resolved), tail)
+
+
+def _id_anchor_from_tail(path_str: str, tail: str) -> str:
+    """Local change (Verinoda): :func:`_id_anchor` given ``normalize_id(rel_str)`` already."""
+    from verinoda.project_index.ids import normalize_id
+
+    if not tail:
+        return ""
+    full = normalize_id(path_str)
+    if full == tail:
+        return ""
+    suffix = "_" + tail
+    return full[: -len(suffix)] if full.endswith(suffix) else ""
+
+
+def _restore_anchors(path: "str | Path", root: "str | Path") -> tuple[str, str]:
+    """Local change (Verinoda): ``(id_restore, path_restore)`` of :func:`_portability_anchors`, the
+    two values :func:`_absolutize_ids_in` reads, without computing the anchors it does not read."""
+    forms = _root_anchor_forms(root)
+    if forms is None:
+        return "", ""
+    root_resolved, root_slug, _, _ = forms
+    from_given, from_resolved = _path_anchor_forms(path, root_resolved, need_resolved=False)
+    id_restore = next((a for a in (from_given, from_resolved, root_slug) if a), "")
+    return id_restore, str(root_resolved)
 
 
 def _rewrite_id_keyed_table_keys(payload: object, fn) -> None:
@@ -840,6 +970,46 @@ def _rewrite_strings(obj: object, fn) -> None:
                 obj[key] = new  # type: ignore[index]
         else:
             _rewrite_strings(value, fn)
+
+
+def _rewrite_marked_strings(obj: object, fn) -> None:
+    """Local change (Verinoda): :func:`_rewrite_strings` for a pure ``fn`` that returns every string
+    not starting with :data:`_ROOT_MARKER` unchanged (the restore of :func:`_absolutize_ids_in`).
+
+    The same values change to the same strings: dict and list values only, never keys. It walks with
+    a stack instead of recursing, calls ``fn`` only on strings that start with the marker (``fn``
+    returns any other string as it is), and once per distinct such string: an id recurs about nine
+    times in an entry (as a node, then as edge endpoints).
+    """
+    marker = _ROOT_MARKER
+    done: dict[str, str] = {}
+    stack = [obj]
+    pop, push = stack.pop, stack.append
+    while stack:
+        o = pop()
+        t = type(o)
+        if t is dict or (t is not list and isinstance(o, dict)):
+            items: "Iterable" = o.items()
+        elif t is list or isinstance(o, list):
+            items = enumerate(o)
+        else:
+            continue
+        # Assigning to an existing key or index while iterating is allowed: no size changes.
+        for key, value in items:
+            tv = type(value)
+            if tv is str:
+                if value.startswith(marker):
+                    new = done.get(value)
+                    if new is None:
+                        new = done[value] = fn(value)
+                    if new != value:
+                        o[key] = new  # type: ignore[index]
+            elif tv is dict or tv is list or isinstance(value, (dict, list)):
+                push(value)
+            elif isinstance(value, str):  # a str subclass: upstream calls fn on every str
+                new = fn(value)
+                if new != value:
+                    o[key] = new  # type: ignore[index]
 
 
 def _relativize_ids_in(payload: dict, path: "str | Path", root: Path) -> None:
@@ -890,7 +1060,14 @@ def _absolutize_ids_in(payload: dict, path: "str | Path", root: Path) -> None:
     pass through untouched — they are swept anyway, since AST entries live under
     a per-version directory (:func:`cache_dir`).
     """
-    _, id_restore, _, path_restore = _portability_anchors(path, root)
+    # Local change (Verinoda): only the two restore anchors are computed (_restore_anchors), and the
+    # walk is _rewrite_marked_strings, which leaves the same strings alone (see there).
+    id_restore, path_restore = _restore_anchors(path, root)
+    _absolutize_ids_with(payload, id_restore, path_restore)
+
+
+def _absolutize_ids_with(payload: dict, id_restore: str, path_restore: str) -> None:
+    """Local change (Verinoda): the body of :func:`_absolutize_ids_in` given its two anchors."""
 
     def restore(value: str) -> str:
         if not value.startswith(_ROOT_MARKER):
@@ -905,7 +1082,7 @@ def _absolutize_ids_in(payload: dict, path: "str | Path", root: Path) -> None:
             return (id_restore + rest) if id_restore else rest[1:]
         return value
 
-    _rewrite_strings(payload, restore)
+    _rewrite_marked_strings(payload, restore)
     _rewrite_id_keyed_table_keys(payload, restore)
 
 
@@ -1013,6 +1190,9 @@ def load_cached(path: Path, root: Path = Path("."), kind: str = "ast",
     except OSError:
         return None
     prompt_fp = _resolve_prompt_fp(prompt, prompt_file)
+    # Local change (Verinoda): an AST lookup during a build (build_memo) takes _load_ast_in_build.
+    if _build_memo is not None and kind == "ast" and prompt_fp is None and not allow_partial:
+        return _load_ast_in_build(path, root, location, h)
     entry = cache_dir(location, kind, prompt_fp) / f"{h}.json"
     legacy_hit = False
     if prompt_fp and not entry.exists() and allow_legacy:
@@ -1075,6 +1255,65 @@ def load_cached(path: Path, root: Path = Path("."), kind: str = "ast",
             _absolutize_ids_in(result, path, root)
         return result
     return None
+
+
+def _load_ast_in_build(path: Path, root: Path, location: Path, h: str) -> dict | None:
+    """Local change (Verinoda): :func:`load_cached` for an AST entry during a build (:func:`build_memo`).
+
+    What it returns is what upstream's path returns; three things are saved:
+
+    - the cache directory comes from the build's memo: :func:`cache_dir` (its ``mkdir`` and the
+      once-per-process sweep of other versions) runs on the build's first lookup only. A miss makes
+      the directory again, as upstream makes it on every call, so a directory removed during the
+      build is there again afterwards as it would be;
+    - one ``stat`` of the entry file stands for upstream's ``exists()``, and its signature keys the
+      in-memory copy below;
+    - a process that has finished a build before keeps each restored entry (a pickle, after the
+      ``source_file`` and id re-anchoring) under the entry file, the entry's (size, mtime_ns, inode)
+      and the two restore anchors. A later build with the same entry, signature and anchors unpickles
+      it, a fresh object for each lookup, instead of reading, parsing and re-anchoring the file
+      again. An entry written less than the mtime granularity before it was read
+      (:func:`_mtime_granularity_ns`, the stat index's racily-clean rule) is not kept: a rewrite in
+      the same mtime tick could leave its signature unchanged.
+    """
+    global _corrupt_cache_entries
+    memo = _build_memo
+    dir_key = ("cache_dir", str(location), os.getcwd(), str(_GRAPHIFY_OUT), _EXTRACTOR_VERSION, _AST_CACHE_SCHEMA)
+    d = memo.get(dir_key)
+    if d is None:
+        d = memo[dir_key] = cache_dir(location, "ast")
+    entry = d / f"{h}.json"
+    try:
+        st = os.stat(entry)
+    except (OSError, ValueError):
+        d.mkdir(parents=True, exist_ok=True)
+        return None
+    id_restore, path_restore = _restore_anchors(path, root)
+    sig = (st.st_size, st.st_mtime_ns, st.st_ino)
+    rkey = (str(entry), id_restore, path_restore)
+    store = memo["store"] and memo["pid"] == os.getpid()  # not in a forked pool worker
+    if store:
+        kept = _restored_entries.get(rkey)
+        if kept is not None and kept[0] == sig:
+            memo["restored_used"].add(rkey)
+            return pickle.loads(kept[1])
+    observed_at_ns = time.time_ns()  # before the read, as file_hash stamps (see _stat_sig_fresh)
+    try:
+        result = json.loads(entry.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        _corrupt_cache_entries += 1  # see load_cached
+        return None
+    except OSError:
+        return None
+    if isinstance(result, dict) and result.get("partial"):
+        return None  # see load_cached
+    if isinstance(result, dict):
+        _absolutize_source_files_in(result, root)
+        _absolutize_ids_with(result, id_restore, path_restore)
+        if store and st.st_mtime_ns + _mtime_granularity_ns() <= observed_at_ns:
+            _restored_entries[rkey] = (sig, pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL))
+            memo["restored_used"].add(rkey)
+    return result
 
 
 def save_cached(path: Path, result: dict, root: Path = Path("."), kind: str = "ast",

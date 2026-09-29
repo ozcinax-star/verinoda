@@ -20,8 +20,9 @@ Build-time work is done once and not repeated at query time (docs/DESIGN.md D21)
 * The vendored rebuild's path-identity helpers are memoised by a monkeypatch
   applied from :func:`build` (see :func:`install_path_identity_memo`), and so,
   for the length of a build, are ``Path.resolve`` (:class:`_resolve_once`) and
-  the re-anchoring of cached source paths (:class:`_absolutize_once`); the
-  graph it writes is unchanged.
+  the re-anchoring of cached source paths (:class:`_absolutize_once`), with the
+  AST cache's own per-build memos (:class:`_cache_build_memo`); the graph it
+  writes is unchanged.
 """
 
 from __future__ import annotations
@@ -87,7 +88,7 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     empties = _known_empty_json(repo, replay=not force)
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
-    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _vendored_switch(repo), _resolve_once(), _absolutize_once(),             _distinct_case_ids(repo), python_facts_cache(index_dir(repo), fresh=fresh_caches), python_cross_cache(index_dir(repo), fresh=fresh_caches), empties, keep:
+    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _vendored_switch(repo), _resolve_once(), _absolutize_once(), _cache_build_memo(),             _distinct_case_ids(repo), python_facts_cache(index_dir(repo), fresh=fresh_caches), python_cross_cache(index_dir(repo), fresh=fresh_caches), empties, keep:
         ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
     if keep.failed:  # the full path would have failed making its report: so does this build
         ok = False
@@ -222,6 +223,31 @@ class _absolutize_once:
     def __exit__(self, *a):
         if self.mod is not None:
             self.mod._absolutize_source_files_in = self.real
+        return False
+
+
+class _cache_build_memo:
+    """The AST cache's per-build memos (``project_index.cache.build_memo``, a local change).
+
+    For the length of a build the cache computes a root's anchor forms, each file's hash salt and its
+    cache directory once, and a process that has built before serves unchanged entries from memory
+    (details in ``cache._load_ast_in_build``). What every lookup returns is unchanged.
+    """
+
+    def __enter__(self):
+        try:
+            from verinoda.project_index import cache as upstream_cache
+
+            self.ctx = upstream_cache.build_memo()
+        except Exception:  # noqa: BLE001 - nothing to enter
+            self.ctx = None
+            return self
+        self.ctx.__enter__()
+        return self
+
+    def __exit__(self, *a):
+        if self.ctx is not None:
+            self.ctx.__exit__(*a)
         return False
 
 
