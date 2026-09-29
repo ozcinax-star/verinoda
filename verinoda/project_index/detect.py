@@ -1678,11 +1678,12 @@ def ignored_predicate(
     # the explicit (.graphifyignore/--exclude) set: with no .gitignore in play,
     # nothing is dropped by gitignore and the tracked-file exemption is moot, so a
     # non-.gitignore corpus pays no `git ls-files` cost.
-    tracked_files, tracked_dirs = (
-        _git_tracked_path_keys(root)
-        if gitignore and len(patterns) > len(explicit_patterns)
-        else (set(), set())
-    )
+    # Local change (Verinoda): the condition is taken here, but the listing is made on the first path
+    # that reaches the tracked-file check (below), once. A rebuild builds this predicate on every
+    # update and usually asks it nothing; the listing (`git ls-files --cached` and a stat of every
+    # tracked file) cost about 0.7 s of an update of Verinoda's own repository.
+    list_tracked = gitignore and len(patterns) > len(explicit_patterns)
+    tracked: list[tuple[set[str], set[str]]] = []
     if extra_excludes:
         for pat in extra_excludes:
             line = _parse_gitignore_line(pat)
@@ -1734,6 +1735,9 @@ def ignored_predicate(
                 explicit_patterns.extend(
                     _load_dir_own_ignore(ancestor, gitignore=False)
                 )
+        if not tracked:  # Local change (Verinoda): listed on first use, see above
+            tracked.append(_git_tracked_path_keys(root) if list_tracked else (set(), set()))
+        tracked_files, tracked_dirs = tracked[0]
         if not _is_scan_ignored(
             path,
             root,

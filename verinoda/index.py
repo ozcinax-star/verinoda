@@ -19,9 +19,10 @@ Build-time work is done once and not repeated at query time (docs/DESIGN.md D21)
   incremental build re-parses only changed files.
 * The vendored rebuild's path-identity helpers are memoised by a monkeypatch
   applied from :func:`build` (see :func:`install_path_identity_memo`), and so,
-  for the length of a build, are ``Path.resolve`` (:class:`_resolve_once`) and
-  the re-anchoring of cached source paths (:class:`_absolutize_once`); the
-  graph it writes is unchanged.
+  for the length of a build, are ``Path.resolve`` (:class:`_resolve_once`),
+  the re-anchoring of cached source paths (:class:`_absolutize_once`) and the
+  making of extracted source paths project-relative (:class:`_relativize_once`);
+  the graph it writes is unchanged.
 """
 
 from __future__ import annotations
@@ -87,7 +88,7 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     empties = _known_empty_json(repo, replay=not force)
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
-    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _vendored_switch(repo), _resolve_once(), _absolutize_once(),             _distinct_case_ids(repo), python_facts_cache(index_dir(repo), fresh=fresh_caches), python_cross_cache(index_dir(repo), fresh=fresh_caches), empties, keep:
+    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _vendored_switch(repo), _resolve_once(), _absolutize_once(), _relativize_once(),             _distinct_case_ids(repo), python_facts_cache(index_dir(repo), fresh=fresh_caches), python_cross_cache(index_dir(repo), fresh=fresh_caches), empties, keep:
         ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
     if keep.failed:  # the full path would have failed making its report: so does this build
         ok = False
@@ -222,6 +223,71 @@ class _absolutize_once:
     def __exit__(self, *a):
         if self.mod is not None:
             self.mod._absolutize_source_files_in = self.real
+        return False
+
+
+class _relativize_once:
+    """Each extracted absolute ``source_file`` made project-relative once per build.
+
+    After extraction the rebuild makes every absolute ``source_file`` / ``definition_file`` of the
+    merged result relative to the project root (``watch._relativize_source_files``): a
+    ``Path.resolve``, a scope check and a ``relative_to`` per value, about 106,000 values in an update
+    of Verinoda's own repository, although the items of one file share a handful of values. For a
+    ``str`` value the answer depends only on the string, the root, the scope and ``Path.resolve``,
+    which :class:`_resolve_once` keeps for the build; so it is kept per value, root and scope until
+    the build ends. A value that is not a ``str`` takes the original code item by item, and what
+    raises is not kept (it raises where the original raises, with the items before it changed).
+    """
+
+    def __enter__(self):
+        try:
+            from verinoda.project_index import watch as upstream_watch
+
+            self.real = upstream_watch._relativize_source_files
+        except Exception:  # noqa: BLE001 - nothing to wrap
+            self.mod = None
+            return self
+        self.mod = upstream_watch
+        memo: dict = {}
+        unknown = object()
+
+        def relativized(source, root: Path, scope: Path | None):
+            """The original code for one value; None: the value stays as it is."""
+            source_path = Path(source)
+            if not source_path.is_absolute():
+                return None
+            try:
+                resolved = source_path.resolve()
+                if scope is not None and not upstream_watch._is_relative_to(resolved, scope):
+                    return None
+                return resolved.relative_to(root).as_posix()
+            except ValueError:
+                return None
+
+        def relativize(payload: dict, root: Path, *, scope: Path | None = None) -> None:
+            known = memo.setdefault(  # the spellings, not Path equality
+                (type(root), str(root), type(scope), None if scope is None else str(scope)), {})
+            for bucket in ("nodes", "edges", "hyperedges"):
+                for item in payload.get(bucket, []):
+                    for key in upstream_watch._PORTABLE_PATH_KEYS:
+                        source = item.get(key)
+                        if not source:
+                            continue
+                        if type(source) is str:
+                            new = known.get(source, unknown)
+                            if new is unknown:
+                                new = known[source] = relativized(source, root, scope)
+                        else:
+                            new = relativized(source, root, scope)
+                        if new is not None:
+                            item[key] = new
+
+        upstream_watch._relativize_source_files = relativize
+        return self
+
+    def __exit__(self, *a):
+        if self.mod is not None:
+            self.mod._relativize_source_files = self.real
         return False
 
 

@@ -99,6 +99,30 @@ therefore memoises them per instance.
   `built_at_commit`, because each measured copy was its own git repository.
   The memoised methods took about 60% of such an update before the patch.
 
+**Relativize memo.** After extraction the vendored rebuild makes every absolute
+`source_file` / `definition_file` of the merged result relative to the project
+root (`watch._relativize_source_files`): a `Path.resolve`, a scope check and a
+`relative_to` per value, about 106,000 values in an update of Verinoda's own
+repository, although the items of one file share a handful of values. For a
+string the answer depends only on the string, the root, the scope and
+`Path.resolve`, which the build already keeps per path (`_resolve_once`).
+
+- **Where:** `verinoda.index._relativize_once`, entered by
+  `verinoda.index.build()` for the length of the build (beside `_resolve_once`
+  and `_absolutize_once`); it replaces the module attribute and puts the
+  original back on exit. `watch.py` itself is unchanged by it.
+- **What it changes:** only speed. A value that is not a string takes the
+  original code item by item, and a value that raises is not kept, so it
+  raises at the same item.
+  `tests/test_update_memos.py::test_extracted_paths_are_made_relative_as_the_upstream_function_does`
+  replays the AST cache entries of a build (made absolute as extraction hands
+  them over) and odd values through both functions and requires equal results;
+  `test_an_update_writes_the_same_bytes_as_without_the_speed_ups` requires the
+  same graph.json, GRAPH_REPORT.md, labels and receiver-call sidecar from
+  updates with and without it (and the local changes below).
+- **Measured effect** (profile of an update of Verinoda's own repository, before
+  the change): about 3.4 s under the profiler over 106,080 values.
+
 ## Post-processing of graph.json from outside the vendored tree
 
 **Portable ids.** An id with no file of its own keeps what the upstream
@@ -223,12 +247,16 @@ installer list is a subset of the static list, and that ordinary commands
 | Version lookup | reports the `verinoda` distribution version |
 | Output directory | unchanged in the module (`GRAPHIFY_OUT`, default `graphify-out`); Verinoda entry points set `GRAPHIFY_OUT=.verinoda/index` before importing it |
 | `watch._StoredSourcePaths` (at run time only) | memoised by the path-identity monkeypatch; source file unchanged |
+| `watch._relativize_source_files` (at run time only) | memoised per value for a build by the relativize memo; source file unchanged |
 | `tests_upstream/conftest.py` | appended port-adjustment block (above) |
 | `extractors/csharp.py` `_resolve_csharp_type_references` (local change, D65) | a dangling type reference finds the first placeholder of its label through a dict built once, not a scan of all nodes per reference; the same graph, the pass 4.2 s -> 0.05 s on a 591-file C# repository |
 | `extractors/engine.py` call binding, `extractors/go.py`, `extractors/rust.py` (local change, D65) | a member call binds to a same-file definition only through the method's own receiver (`self`/`cls`, `this`, `$this`, Ruby `self`/`self.class`, the Go receiver, Rust `self`/`Self::`/`Type::`, also with a turbofish) or a receiver whose type the file states (Go: a parameter, a local or package variable of `&T{}` / `T{}` / a constructor `NewT()`, a struct field, a method promoted from an embedded struct; PHP: a typed parameter, `$x = new T()`, a typed or promoted property, `$this->p = new T()`); an untyped PHP receiver binds only to the one same-named method of another class of the file; Python `super().m()` binds to an in-file base's `m` in C3 order (past `object`) or not at all; `self.m()` prefers the own class; bare Go/Rust calls never bind to a method. `cache._AST_CACHE_SCHEMA` is 7 |
 | `extract.py` `extract`, new `vendored.py` (local change, D65) | vendored files (`vendor/` at the root, beside `go.mod`/`composer.json`/`Gemfile`/`Cargo.toml` or under a static-asset folder; `_vendor/`, `third_party/`, `third-party/`, `thirdparty/`; `deps/` beside `mix.exs`/`rebar.config`; a git submodule under `deps/` or `extern/`) and generated files (a generator's header comment) keep their definitions, marked `vendored`, but no edge other than their structure (`contains`, `method`, `defines`, `inherits` ...) leaves them; minified files (`.min.js`/`.bundle.js`, or a script mostly in lines of code over 1,000 bytes) keep their file node only; `VERINODA_GRAPH_VENDORED=1` (config `index.vendored`) keeps everything. `guards.is_generated` uses the same header rule |
 | `detect.py` `CODE_EXTENSIONS`, `extract.py` `_DISPATCH` and the C++ resolver's suffixes (local change, D65) | `.hh .hxx .ipp .inl .tpp` are C++ |
 | `detect.py` `_git_env`, `_git_ls`, `_git_rules`, `_git_rules_are_utf8`, `_git_listed_files`, `_git_kept_untracked`, `_git_enumerate`, the `enumeration` parameter of `detect()` (local change, D66, marked "Verinoda patch") | at the top of a git work tree the file list comes from `git ls-files` (git's own ignore semantics) instead of the walk; a re-sync with `tools/port_upstream.py` overwrites the file: re-apply and run `tests/test_detect_git.py` and `tests_upstream/test_detect.py` |
+| `watch.py` `_compare_list_counts`, `_list_counts_differ` and the three graph/topology gates of `_rebuild_code` (local change, backlog 1.1 stage A) | before the canonical compare, the node, link, edge and hyperedge counts of both sides are compared (dict items only where the topology compare keeps only dicts); the canonicalisers never add or merge items and arrays of different lengths never dump to the same text, so differing counts mean "changed" without the compare, and equal counts run the compare as before (about 6 s under the profiler of an update of Verinoda's own repository that adds a function) |
+| `watch.py` `_no_extractor_memo`, used by `_reconcile_existing_graph` (local change, backlog 1.1 stage A) | whether a stored source has no AST extractor is asked once per `source_file` string in a reconcile instead of once per node (about 30,000 calls, 1,200 files); the memo ends with the reconcile, a value that is not a string is asked every time |
+| `detect.py` `ignored_predicate` (local change, backlog 1.1 stage A) | the ignore files are still read when the predicate is built, but the tracked-file listing (`git ls-files --cached` and a stat of each tracked file, about 0.7 s on Verinoda's own repository) is made on the first path that reaches the tracked-file check, once; a rebuild builds the predicate on every update and usually asks it nothing |
 
 ### New in Verinoda (not in Graphify)
 

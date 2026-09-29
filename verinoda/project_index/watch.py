@@ -751,6 +751,29 @@ def _reconcile_markdown_links(
     return preserved_edges
 
 
+def _no_extractor_memo(get_extractor: Callable[[Path], object]) -> Callable[[object], bool]:
+    """``source_file -> get_extractor(Path(source_file)) is None``, asked once per string.
+
+    Local change (Verinoda): the reconcile below asks this for every existing node (about 30,000
+    nodes of about 1,200 files in Verinoda's own graph). The answer depends on the string (and the
+    working directory for a relative one, which does not change during a reconcile) and, for .h/.m
+    and extensionless files, on the file's first bytes, which a rebuild treats as stable. Each
+    reconcile makes its own memo, so nothing is kept past it. A value that is not a str is asked
+    every time, and what raises is not kept.
+    """
+    cache: dict[str, bool] = {}
+
+    def no_extractor(source_file) -> bool:
+        if type(source_file) is not str:
+            return get_extractor(Path(source_file)) is None
+        none = cache.get(source_file)
+        if none is None:
+            none = cache[source_file] = get_extractor(Path(source_file)) is None
+        return none
+
+    return no_extractor
+
+
 def _reconcile_existing_graph(
     existing_graph: Path,
     result: dict,
@@ -873,6 +896,10 @@ def _reconcile_existing_graph(
                 )
                 _ignored_cache[identity] = ignored
             return ignored
+
+        # Local change (Verinoda): asked once per source_file string in this reconcile (see
+        # _no_extractor_memo); the cache ends with the call.
+        _has_no_extractor = _no_extractor_memo(_get_extractor)
         for node in existing.get("nodes", []):
             source_file = node.get("source_file")
             if not source_file or _is_remote_source(source_file):
@@ -880,7 +907,7 @@ def _reconcile_existing_graph(
             identity = source_paths.identity(source_file)
             if not source_paths.in_watch_root(source_file):
                 continue
-            if _get_extractor(Path(source_file)) is None:
+            if _has_no_extractor(source_file):  # Local change (Verinoda): memoised, see above
                 # Non-AST source (semantic doc/paper/image — .txt/.pdf/.png/...):
                 # never present in current_sources (built from AST-extractable
                 # code_files), so corpus absence is meaningless. Deletion
@@ -1146,6 +1173,41 @@ def _canonical_topology_for_compare(graph_data: dict) -> dict:
         )
 
     return canonical
+
+
+# Local change (Verinoda): a count check before the canonical compares. Both canonicalisers above only
+# drop fields inside items, drop items that are not dicts (the topology one, for nodes/links/edges) and
+# sort; they never add, merge or drop any other item. Two JSON arrays of different lengths never dump
+# to the same text, so when both sides hold a list under one of these keys and the counts below differ,
+# the full compare is False. The gates then skip the canonicalising and the dumps (about 6 s of an
+# update of Verinoda's own repository that adds a function); with equal counts they compare as before.
+_COMPARE_LIST_KEYS = ("nodes", "links", "edges", "hyperedges")
+
+
+def _compare_list_counts(graph_data, *, dicts_only: bool) -> tuple | None:
+    """Per key of _COMPARE_LIST_KEYS the number of items its canonical form keeps (None: not a list);
+    ``dicts_only`` counts only dict nodes/links/edges, as _canonical_topology_for_compare keeps."""
+    if not isinstance(graph_data, dict):
+        return None
+    counts = []
+    for key in _COMPARE_LIST_KEYS:
+        items = graph_data.get(key)
+        if not isinstance(items, list):
+            counts.append(None)
+        elif dicts_only and key != "hyperedges":
+            counts.append(sum(1 for item in items if isinstance(item, dict)))
+        else:
+            counts.append(len(items))
+    return tuple(counts)
+
+
+def _list_counts_differ(a, b, *, dicts_only: bool) -> bool:
+    """True only where the canonical compare of ``a`` and ``b`` is certainly False."""
+    ca = _compare_list_counts(a, dicts_only=dicts_only)
+    cb = _compare_list_counts(b, dicts_only=dicts_only)
+    if ca is None or cb is None:
+        return False
+    return any(x is not None and y is not None and x != y for x, y in zip(ca, cb))
 
 
 def _topology_from_graph(G) -> dict:
@@ -1934,7 +1996,9 @@ def _rebuild_code(
                     return False
                 try:
                     same_graph = (
-                        json.dumps(_canonical_graph_for_compare(existing_payload), sort_keys=True, ensure_ascii=False)
+                        # Local change (Verinoda): differing counts decide it without the compare
+                        not _list_counts_differ(existing_payload, candidate_graph_data, dicts_only=False)
+                        and json.dumps(_canonical_graph_for_compare(existing_payload), sort_keys=True, ensure_ascii=False)
                         == json.dumps(_canonical_graph_for_compare(candidate_graph_data), sort_keys=True, ensure_ascii=False)
                     )
                 except Exception:
@@ -2007,7 +2071,9 @@ def _rebuild_code(
         if existing_graph_data:
             try:
                 same_topology = (
-                    json.dumps(_canonical_topology_for_compare(existing_graph_data), sort_keys=True, ensure_ascii=False)
+                    # Local change (Verinoda): differing counts decide it without the compare
+                    not _list_counts_differ(existing_graph_data, candidate_topology, dicts_only=True)
+                    and json.dumps(_canonical_topology_for_compare(existing_graph_data), sort_keys=True, ensure_ascii=False)
                     == json.dumps(_canonical_topology_for_compare(candidate_topology), sort_keys=True, ensure_ascii=False)
                 )
             except Exception:
@@ -2137,7 +2203,9 @@ def _rebuild_code(
                 return False
             try:
                 same_graph = (
-                    json.dumps(_canonical_graph_for_compare(existing_payload), sort_keys=True, ensure_ascii=False)
+                    # Local change (Verinoda): differing counts decide it without the compare
+                    not _list_counts_differ(existing_payload, candidate_graph_data, dicts_only=False)
+                    and json.dumps(_canonical_graph_for_compare(existing_payload), sort_keys=True, ensure_ascii=False)
                     == json.dumps(_canonical_graph_for_compare(candidate_graph_data), sort_keys=True, ensure_ascii=False)
                 )
             except Exception:
