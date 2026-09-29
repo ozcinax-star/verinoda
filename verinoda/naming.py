@@ -33,6 +33,7 @@ plain words are ``similar`` (the scorer's node, with a note) or ``unresolved``.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
@@ -279,6 +280,9 @@ def _same_file(g, pool: list[str]) -> list[str]:
     return sorted(keep) or pool
 
 
+_FUNCTION_ID = re.compile(r"[a-z0-9_.-]+:[a-z0-9_.-]+(?:/[a-z0-9_.-]+)+")
+
+
 def exact_nodes(g, text: str, *, fallback: bool = True) -> tuple[list[str], list[str]]:
     """``(best, set_aside)``: the exact nodes of ``text`` that stay after copies and reference trees,
     then test / example / fixture code, then a function's local definitions give way to the others,
@@ -290,6 +294,11 @@ def exact_nodes(g, text: str, *, fallback: bool = True) -> tuple[list[str], list
     text = (text or "").strip()
     if text in g.G:
         return [text], []
+    if _FUNCTION_ID.fullmatch(text):  # a datapack function id (`ns:dir/name`, D71): its `/` is not a file path
+        fns = [n for n, d in g.G.nodes(data=True)
+               if d.get("label") == text and str(d.get("source_file") or "").endswith(".mcfunction")]
+        if fns:
+            return sorted(fns)[:1], sorted(fns)[1:]
     exact = candidates(g, text)
     if not exact and fallback:
         nid = scored(g, text)[0]

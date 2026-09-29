@@ -49,7 +49,7 @@ CODE_RELATIONS = {"calls", "imports", "imports_from", "uses", "inherits", "metho
 FLOW_RELATIONS = {"calls"}
 RECEIVER_ORIGIN = "verinoda.receiver"
 JAVA_CALL_ORIGIN = "verinoda.java_calls"
-RECEIVER_SIDECAR_VERSION = 8   # 8: Java overloads bound by argument count; 3: a receiver's class is the one the calling file can see (_visible_class); 4: and JVM method references as `registers` edges; 6: lambdas too (D47); 7: and Mixin edges (D48)
+RECEIVER_SIDECAR_VERSION = 9   # 9: Java calls into datapack functions (D71); 8: Java overloads bound by argument count; 3: a receiver's class is the one the calling file can see (_visible_class); 4: and JVM method references as `registers` edges; 6: lambdas too (D47); 7: and Mixin edges (D48)
 HEURISTIC_SPAN_CAP = 80        # the next-symbol fallback never spans more lines than this
 PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc",
                   ".pdf", ".docx", ".xlsx", ".pptx")  # the last four: their text view (doctext.py)
@@ -2507,10 +2507,10 @@ def has_registers(g: Graph) -> bool:
 def augment_python_receiver_calls(g: Graph) -> int:
     """Compute and add the receiver-call (and Java call) edges in memory; returns the number added.
     The JVM ``registers`` edges (:func:`java_registers_edges`) are added too and not counted."""
-    from verinoda import jvm_mixins
+    from verinoda import datapack_java, jvm_mixins
 
     added = _apply_edges(g, receiver_call_edges(g) + java_call_edges(g))
-    _apply_edges(g, java_registers_edges(g) + jvm_mixins.mixin_edges(g))
+    _apply_edges(g, java_registers_edges(g) + jvm_mixins.mixin_edges(g) + datapack_java.graph_edges(g))
     return added
 
 
@@ -2565,16 +2565,18 @@ def refresh_receiver_sidecar(repo: Path, g: Graph | None = None) -> dict:
         return files[f]["facts"]
 
     edges = receiver_call_edges(g, facts_for) + java_call_edges(g)
-    from verinoda import jvm_mixins
+    from verinoda import datapack_java, jvm_mixins
 
     regs = java_registers_edges(g)  # kept apart: they are not calls
     mixins = jvm_mixins.mixin_edges(g)
+    functions = datapack_java.graph_edges(g)  # Java into datapack functions (D71)
     sidecar = {"version": RECEIVER_SIDECAR_VERSION, "graph": graph_identity(g.path),
                "files": files, "edges": [[u, v, d] for u, v, d in edges], "registers": [[u, v, d] for u, v, d in regs],
-               "mixins": [[u, v, d] for u, v, d in mixins]}
+               "mixins": [[u, v, d] for u, v, d in mixins], "datapack": [[u, v, d] for u, v, d in functions]}
     write_json_atomic(receiver_calls_path(repo), sidecar)
     return {"edges": len(edges), "files_parsed": parsed, "files_reused": len(files) - parsed,
-            **({"registers": len(regs)} if regs else {}), **({"mixins": len(mixins)} if mixins else {})}
+            **({"registers": len(regs)} if regs else {}), **({"mixins": len(mixins)} if mixins else {}),
+            **({"datapack": len(functions)} if functions else {})}
 
 
 def apply_receiver_calls(g: Graph) -> int:
@@ -2598,9 +2600,10 @@ def apply_receiver_calls(g: Graph) -> int:
 
 
 def _apply_sidecar(g: Graph, side: dict) -> int:
-    """Add a sidecar's call edges (counted), its ``registers`` and Mixin edges (not counted)."""
+    """Add a sidecar's call edges (counted), its ``registers``, Mixin and datapack edges (not counted)."""
     added = _apply_edges(g, [(u, v, d) for u, v, d in side.get("edges") or []])
-    _apply_edges(g, [(u, v, d) for u, v, d in (side.get("registers") or []) + (side.get("mixins") or [])])
+    _apply_edges(g, [(u, v, d) for u, v, d in (side.get("registers") or []) + (side.get("mixins") or [])
+                     + (side.get("datapack") or [])])
     return added
 
 

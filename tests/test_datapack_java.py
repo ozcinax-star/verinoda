@@ -635,3 +635,98 @@ def test_a_missing_function_lists_the_run_time_names_that_may_be_it(repo):
     res = datapack.lookup(repo, "function", "demo:give_axe")
     assert res["status"] == "not_found" and len(res["dynamic"]) == 2
     assert "may be this one" in datapack.render(res)
+
+
+# D71: the Java calls are graph edges, so `when`, `trace` and impact follow them from Java into the datapack.
+GRAPH_FILES = {
+    f"{DP}/alpha.mcfunction": "say alpha\n",
+    f"{DP}/later.mcfunction": "say later\n",
+    f"{J}/ExampleMod.java": FILES[f"{J}/ExampleMod.java"],
+    f"{J}/Weapon.java": """package com.example.demo;
+
+final class Weapon {
+    static void fire(ServerPlayer p) {
+        ExampleMod.runFunction(p, "alpha");
+    }
+
+    static void arm(MinecraftServer server, CommandSourceStack src) {
+        server.getCommands().performPrefixedCommand(src, "schedule function demo:later 2s");
+    }
+
+    static void onHit(ServerPlayer p) {
+        fire(p);
+    }
+
+    static boolean reset(MinecraftServer server, CommandSourceStack src) {
+        Identifier id = Identifier.parse("demo:tools/reset");
+        if (server.getFunctions().get(id).isEmpty()) {
+            return false;
+        }
+        server.getCommands().performPrefixedCommand(src, "function demo:tools/reset");
+        return true;
+    }
+}
+""",
+    f"{DP}/tools/reset.mcfunction": "say reset\n",
+}
+
+
+@pytest.fixture(scope="module")
+def graph_repo(tmp_path_factory) -> Path:
+    import os
+
+    os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
+    from verinoda import search_index, workflow
+    from verinoda.store import open_store
+
+    root = tmp_path_factory.mktemp("dpgraph") / "mod"
+    for rel, text in GRAPH_FILES.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(text.encode("utf-8"))
+    workflow.init(root)
+    st = open_store(root)
+    try:
+        workflow.scan(st, root)
+    finally:
+        st.close()
+    search_index._HANDLES.clear()
+    return root
+
+
+def test_java_calls_into_functions_are_graph_edges(graph_repo):
+    from verinoda import index
+
+    g = index.load(graph_repo)
+    fn = {g.label(n): n for n in g.G.nodes if (g.file(n) or "").endswith(".mcfunction")}
+    into = {(g.label(u), g.label(fn[f]), d["relation"], d.get("delay"))
+            for f in fn for u, _v, d in g.G.in_edges(fn[f], data=True)}
+    assert {(lab.strip(".()"), f, rel, delay) for lab, f, rel, delay in into} == {
+        ("fire", "demo:alpha", "calls", None), ("arm", "demo:later", "registers", "40"),
+        ("reset", "demo:tools/reset", "calls", None)}
+    d = next(d for u, _v, d in g.G.in_edges(fn["demo:alpha"], data=True))
+    assert d["source_file"].endswith("Weapon.java") and d["source_location"] == "L5"
+    assert "helper ExampleMod.runFunction" in d["context"]
+
+
+def test_when_follows_java_into_a_function(graph_repo):
+    from verinoda import index, when
+
+    g = index.load(graph_repo)
+    paths = when.run(g, "demo:alpha")["paths"]
+    labels = {g.label(h["from_id"]).strip(".()") for p in paths for h in p if h.get("from_id") in g.G}
+    assert {"fire", "onHit"} <= labels
+    later = when.run(g, "demo:later")["paths"]
+    assert any("40 ticks later" in (h.get("event") or "") for p in later for h in p)
+
+
+def test_a_function_in_a_subfolder_is_named_by_its_id_and_the_run_is_the_edge(graph_repo):
+    """`ns:dir/name` is a function id, not a file path; a method that checks the function exists and then runs it
+    is linked at the run (the check's condition is not the run's)."""
+    from verinoda import index, when
+
+    g = index.load(graph_repo)
+    res = when.run(g, "demo:tools/reset")
+    assert res["status"] == "found" and res["symbol"] == "demo:tools/reset"
+    hop = next(h for p in res["paths"] for h in p if h.get("to") == "demo:tools/reset" and h.get("from_id"))
+    assert hop["at"].endswith("Weapon.java:21") and "isEmpty" not in str(hop.get("condition") or "")

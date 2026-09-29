@@ -1001,3 +1001,74 @@ def _command_calls(f: _File, top) -> tuple[list[JavaCall], list[tuple[int, str]]
                                     None, f.tree, dynamic, f.line_text(line)))
         offset += len(cmd) + 1
     return out, params
+
+
+# -- the graph (D71) ---------------------------------------------------------------------------------------------
+
+def graph_edges(g, read=None) -> list[tuple[str, str, dict]]:
+    """Edges from the Java method that runs a datapack function to the function's node (not applied): ``calls``,
+    or ``registers`` with the delay in ticks for ``schedule function`` (the call happens later, as an mcfunction's
+    ``schedule`` edge says). Only calls bound to one function: a name built at run time is no edge, and neither is
+    a call in a reference tree (not the project's running code). Edges are ``INFERRED`` with
+    ``_origin=verinoda.datapack_java``; the method is the innermost callable whose lines hold the call, else the
+    class; no edge when neither is in the graph."""
+    from verinoda.index import JVM_SUFFIXES
+
+    functions: dict[str, str] = {}
+    for n, d in g.G.nodes(data=True):
+        f = d.get("source_file") or ""
+        if f.endswith(".mcfunction") and d.get("label"):
+            functions.setdefault(d["label"], n)
+    if not functions:
+        return []
+    callables: dict[str, list[str]] = {}
+    for n, d in g.G.nodes(data=True):
+        f = d.get("source_file") or ""
+        if f.endswith(".java") and (d.get("_callable") or d.get("_callable_class")):
+            callables.setdefault(f, []).append(n)
+    spans: dict[str, list[tuple[int, int, str]]] = {}
+
+    def spans_of(f: str) -> list[tuple[int, int, str]]:
+        """The lines of ``f``'s methods and classes (asked only for a file with a call: a span parses the file)."""
+        if f not in spans:
+            spans[f] = [(sp[0], sp[1], n) for n in callables.get(f, []) for sp in [g.span(n)] if sp]
+        return spans[f]
+
+    if read is None:
+        def read(f: str) -> str | None:
+            try:
+                return (g.root / f).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                return None
+    texts = {f: t for f in sorted(callables) if f.endswith(JVM_SUFFIXES) for t in [read(f)] if t is not None}
+    if not texts:
+        return []
+    from verinoda import datapack
+    from verinoda.project_index.extractors.mcfunction import _ticks
+
+    res = scan(g.root, texts, consts=datapack._Consts(texts).unique())
+    out: list[tuple[str, str, dict]] = []
+    seen: set[tuple[str, str, str]] = set()
+    # a method that looks the function up and then runs it (`if (get(id).isEmpty()) return; perform(...)`): the edge
+    # is the run, not the existence check
+    for c in sorted(res.calls, key=lambda c: (c.via == "identifier", c.file, c.line)):
+        v = functions.get(c.target)
+        if c.dynamic or c.tree or v is None:
+            continue
+        around = [(b - a, n) for a, b, n in spans_of(c.file) if a <= c.line <= b]
+        if not around:
+            continue
+        u = min(around, key=lambda x: (x[0], x[1]))[1]
+        rel = "registers" if c.how == "schedule" else "calls"
+        if (u, v, rel) in seen:
+            continue
+        seen.add((u, v, rel))
+        how = {"helper": f"helper {c.helper}", "identifier": "function lookup",
+               "command-string": f"command string ({c.how})"}.get(c.via, c.via)
+        d = {"relation": rel, "confidence": "INFERRED", "_origin": "verinoda.datapack_java", "weight": 1.0,
+             "source_file": c.file, "source_location": f"L{c.line}", "context": f"{how} {c.target}"}
+        if rel == "registers":
+            m = re.search(r"schedule\s+function\s+\S+\s+(\d+(?:\.\d+)?[tsd]?)", c.text or "")
+            d.update(registrar="schedule function", delay=_ticks(m.group(1)) if m else None)
+        out.append((u, v, d))
+    return out
