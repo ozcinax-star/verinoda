@@ -4665,6 +4665,55 @@ followed); a name built with `String.format` / `.formatted` / a `StringBuilder` 
 name is built (`contains(a.tag + "_at")`) is not a check of any tag; mcfunction macros (`tag @s add $(x)_at`) are
 still listed apart without a pattern; Kotlin.
 
+## 44. Java calls into datapack functions in the graph (D71, 2026-09-29)
+
+### 44.1 Why
+
+D69 made `verinoda datapack function` list a function's Java callers, but read them at query time only: the graph
+had no edge from Java into a function, so `when ns:x` (when does it run?), `trace`, impact, the MCP `analyze` and
+`node_inspect` still saw the mcfunction callers alone (42.4, first item). In a mod the answer to "when does this
+function run?" is usually a Java path: an event handler, a command, a weapon. On the forge example `when
+emberforge:debug/reset_forges` answered nothing useful, and for a second reason: a function id with a folder
+(`ns:dir/name`, the common layout) was read as a file path (`no file named ...; nearest: emberforge:debug/
+reset_forges`), so no function in a folder could be named at all.
+
+### 44.2 Decisions
+
+- **`datapack_java.graph_edges(g)`** runs D69's `scan` over the graph's Java files (only when the graph has an
+  `.mcfunction` node) and turns every call bound to one function into an edge from the innermost Java method (else
+  class) whose lines hold the call to the function's node: `calls`, or `registers` with the delay in ticks for a
+  `schedule function` command string (as an mcfunction `schedule` is, D52). `INFERRED`, `_origin =
+  verinoda.datapack_java`, `context` says how (`helper ExampleMod.runFunction demo:alpha`, `command string
+  (schedule) demo:later`, `function lookup ...`). A name built at run time is no edge (it names no one function),
+  and neither is a call in a reference tree (not the running project). One edge per method, function and relation;
+  when a method both looks the function up and runs it (`if (get(id).isEmpty()) return false; perform("function
+  ...")`), the edge is at the run, not at the existence check, so `when` does not show the check's condition as
+  the call's.
+- **Stored with the other derived JVM edges**: the receiver sidecar keeps them under `datapack` (version 9: an
+  older sidecar is recomputed once on the next load); `augment_python_receiver_calls` adds them when there is no
+  sidecar. A method's lines are asked only for the files that hold a bound call (a span parses the file).
+- **A function id names the function.** `naming.exact_nodes` reads `ns:a/b` (lowercase, a colon, at least one
+  `/`) as a datapack function id before any other lookup: the `.mcfunction` node labelled with it. An id without a
+  folder (`wings:fold`) was already found by its label.
+
+### 44.3 Measured
+
+- **forge example** (`examples/forge_mod`): before, `when emberforge:debug/reset_forges` was `not_found`; after,
+  one path: `ModEvents.onRegisterCommands` -> `ForgeCommands.register` (Kotlin) -> `ForgeFunctions.resetForges` ->
+  the function at `ForgeFunctions.java:23` (the `performPrefixedCommand`, not the `isEmpty()` check at line 19).
+- **Fixture** (`tests/test_datapack_java.py`): a helper call, a scheduled command string (`2s` -> 40 ticks) and a
+  check-then-run method give exactly three edges; `when demo:alpha` reaches `fire` and its caller `onHit`.
+- **Cost**, on a synthetic mod of 430 Java files (5.4 MB) with 20 functions and 43 calling files: 43 edges;
+  `graph_edges` 1.6 s cold (three fresh processes), paid when the sidecar is refreshed after an update, not on each
+  load. A first version asked every method's lines (every Java file parsed): 12.5 s under the profiler, 2.4 s
+  after asking only the calling files.
+
+### 44.4 Not done
+
+Kotlin callers (D69 reads Java only); a Java call to a function tag (`#ns:tag`) is not an edge to its members;
+advancement rewards and predicates that run a function are not callers; the edge is to the first node of a function
+a datapack copied into two places defines.
+
 ## Sources
 
 - **Retrieval:**
