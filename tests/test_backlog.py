@@ -119,5 +119,14 @@ def test_cli_and_query(repo, capsys):
     assert "backlog: 12 The guard follows the player (docs/BACKLOG.md:3)" in text
 
 
+def test_a_markdown_heading_is_not_a_comment_citing_an_item(tmp_path):
+    # a design doc's numbered section (``### 12.3 Why``) shares its number with a backlog item by chance
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs/BACKLOG.md").write_text(BACKLOG, encoding="utf-8")
+    (tmp_path / "docs/DESIGN.md").write_text("# Design\n\n### 12.3 Why\n\nText.\n", encoding="utf-8")
+    assert backlog.items_for(tmp_path, "docs/DESIGN.md", 3, 5) == []
+    assert backlog.lookup(tmp_path, "docs/DESIGN.md:3")["items"] == []
+
+
 def test_no_backlog(tmp_path):
     assert backlog.lookup(tmp_path, "1.2")["status"] == "no_backlog"

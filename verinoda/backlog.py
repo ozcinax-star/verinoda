@@ -136,7 +136,8 @@ def items_for(repo: Path, file: str, a: int, b: int | None = None, *, table: dic
     lines use."""
     repo = Path(repo)
     table = cached_items(repo) if table is None else table
-    if not table:
+    # only code has comments (as in :func:`sites`): a Markdown heading ``### 17.1 Why`` is not one citing item 17.1
+    if not table or Path(file).suffix.lower() not in _CODE_SUFFIXES:
         return []
     try:
         lines = (repo / file).read_text(encoding="utf-8", errors="replace").splitlines()
