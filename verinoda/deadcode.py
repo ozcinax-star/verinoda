@@ -7,19 +7,24 @@ entry module such as ``cli.py``, a ``package.json`` ``main`` / ``bin``) and the 
 declares. From them reachability follows every graph edge but containment (a file holding a function does not
 run it); a reached symbol reaches its module (importing it runs the module body) and the package
 ``__init__.py`` files above it, a reached method its class, a reached class its protocol members (dunders,
-constructors), and a reached method the same-named methods of the project's subclasses (dynamic dispatch).
+constructors), a reached method the same-named methods of the project's subclasses (dynamic dispatch), a
+function or method the functions its body defines, and a reached Python module the symbols of its own that its
+top-level code names (a module-level call, a decorator, a ``__main__`` guard).
 
 What stays unreached is a claim: a file none of whose code is reached (one claim, its symbols counted under
 it), else a class (its members counted under it), else a function or method, each ``zero callers`` or
 ``callers unreached`` with those callers' sites. Every claim names the roots searched and the dynamic uses
 that could keep it alive: the name outside its definition (a string, a config or data file, code the graph
 did not resolve), a decorator or annotation that may register it, an override of a type outside the
-project. Reachability over extracted edges is a heuristic: a claim is ``strong_inference`` at most, and
-``weak_inference`` when a dynamic use was found. Nothing is stored in the claim store.
+project; an unreached file's claim gathers those of its symbols, and code reached only from something a
+dynamic use could keep alive gets a ``via`` use. Reachability over extracted edges is a heuristic: a claim
+is ``strong_inference`` at most, and ``weak_inference`` when a dynamic use was found. Nothing is stored in the
+claim store.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from collections import Counter, deque
@@ -27,7 +32,7 @@ from pathlib import Path, PurePosixPath
 
 from verinoda import architecture_map as am
 from verinoda.claims import CODE_SUFFIXES
-from verinoda.index import Graph
+from verinoda.index import Graph, _py_ast
 from verinoda.testcode import is_test_code, is_test_or_support_file
 
 # containment and documentation: a file holding a function, a class holding a method, a comment about a
@@ -83,15 +88,31 @@ def _is_test(g: Graph, n: str) -> bool:
 
 # -- roots ---------------------------------------------------------------------------------------------
 
-def _declared_scripts(root: Path) -> list[tuple[str, str]]:
+def _manifest(root: Path, name: str, parse, problems: list[str]):
+    """``name`` at the project root parsed (a UTF-8 byte order mark allowed), or None; a file that exists but
+    cannot be read or parsed is noted in ``problems`` (its declared roots are then missing)."""
+    p = Path(root) / name
+    if not p.is_file():
+        return None
+    try:
+        return parse(p.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError, UnicodeDecodeError) as exc:
+        problems.append(f"{name} could not be read ({type(exc).__name__}): the entry points it declares are not "
+                        "roots, so code only they reach is reported")
+        return None
+
+
+def _declared_scripts(root: Path, problems: list[str]) -> list[tuple[str, str]]:
     """``(module:function, where)`` of the scripts and entry points ``pyproject.toml`` declares."""
     try:
         import tomllib
     except ImportError:  # Python 3.10: no reader, no declared scripts
+        if (Path(root) / "pyproject.toml").is_file():
+            problems.append("pyproject.toml was not read (no TOML reader before Python 3.11): the scripts it "
+                            "declares are not roots")
         return []
-    try:
-        data = tomllib.loads((Path(root) / "pyproject.toml").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    data = _manifest(root, "pyproject.toml", tomllib.loads, problems)
+    if not isinstance(data, dict):
         return []
     project = data.get("project") or {}
     tables = [("project.scripts", project.get("scripts")), ("project.gui-scripts", project.get("gui-scripts")),
@@ -105,12 +126,9 @@ def _declared_scripts(root: Path) -> list[tuple[str, str]]:
     return out
 
 
-def _package_json_files(root: Path, files: set[str]) -> dict[str, str]:
+def _package_json_files(root: Path, files: set[str], problems: list[str]) -> dict[str, str]:
     """Project files ``package.json`` names as ``main`` or ``bin``: ``{file: why}``."""
-    try:
-        data = json.loads((Path(root) / "package.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
+    data = _manifest(root, "package.json", json.loads, problems)
     if not isinstance(data, dict):
         return {}
     named = [("main", data.get("main"))]
@@ -125,7 +143,21 @@ def _package_json_files(root: Path, files: set[str]) -> dict[str, str]:
     return out
 
 
-def _roots(g: Graph, file_node: dict[str, str]) -> tuple[list[dict], dict[str, str], list[str]]:
+def _module_files(path: str, files) -> list[str]:
+    """The ``.py`` files a dotted module path (as ``a/b``) names: ``a/b.py`` or the package's ``a/b/__init__.py``,
+    at the project root or below a source folder."""
+    out = []
+    for f in files:
+        if not f.endswith(".py"):
+            continue
+        stem = f[:-len("/__init__.py")] if f.endswith("/__init__.py") else f[:-3]
+        if stem == path or stem.endswith("/" + path):
+            out.append(f)
+    return out
+
+
+def _roots(g: Graph, file_node: dict[str, str],
+           problems: list[str]) -> tuple[list[dict], dict[str, str], list[str]]:
     """``(entry points, entry modules {file: why}, test nodes)``."""
     entries = am._cached(g, "entries", am.entry_points)
     modules: dict[str, str] = {}
@@ -137,19 +169,17 @@ def _roots(g: Graph, file_node: dict[str, str]) -> tuple[list[dict], dict[str, s
             modules[f] = "entry-like module name (heuristic)"
         elif f.endswith(".py") and any(MAIN_GUARD_RE.search(t) for t in _lines(g, f)):
             modules[f] = "__main__ guard: run as a script"
-    modules.update(_package_json_files(g.root, set(file_node)))
+    modules.update(_package_json_files(g.root, set(file_node), problems))
     declared = []
-    for val, where in _declared_scripts(g.root):
+    for val, where in _declared_scripts(g.root, problems):
         mod, _, fn = val.partition(":")
-        path = mod.strip().replace(".", "/")
-        for f in file_node:
-            if f.endswith(".py") and f[:-3].endswith(path) and (len(f) == len(path) + 3 or f[-len(path) - 4] == "/"):
-                hit = next((n for n in g.symbols_in(f) if _bare(g, n) == fn.strip().split(".")[-1]), None)
-                if hit:
-                    declared.append({"id": hit, "symbol": g.label(hit), "at": am._loc(g, hit),
-                                     "why": [f"declared script {val} ({where})"], "basis": "declared"})
-                else:
-                    modules.setdefault(f, f"declared script {val} ({where})")
+        for f in _module_files(mod.strip().replace(".", "/"), file_node):
+            hit = next((n for n in g.symbols_in(f) if _bare(g, n) == fn.strip().split(".")[-1]), None)
+            if hit:
+                declared.append({"id": hit, "symbol": g.label(hit), "at": am._loc(g, hit),
+                                 "why": [f"declared script {val} ({where})"], "basis": "declared"})
+            else:
+                modules.setdefault(f, f"declared script {val} ({where})")
     ids = {d["id"] for d in declared}
     entries = declared + [e for e in entries if e["id"] not in ids]
     tests = [n for n in g.G.nodes if g.file(n) and _is_test(g, n)]
@@ -159,8 +189,9 @@ def _roots(g: Graph, file_node: dict[str, str]) -> tuple[list[dict], dict[str, s
 # -- reachability ---------------------------------------------------------------------------------------
 
 def _nested(g: Graph, owner: dict[str, str]) -> dict[str, str]:
-    """Symbol -> the function whose body defines it (a nested function or class: the graph holds no edge from
-    the enclosing function, which calls it by a local name)."""
+    """Symbol -> the function or method whose body defines it (a nested function or class: the graph holds no
+    edge from the enclosing function, which calls it by a local name). A class member's parent is its class
+    (``owner``), never this table."""
     out: dict[str, str] = {}
     files = set()
     for n in g.G.nodes:  # an indented definition that is no class member: only its file needs the spans
@@ -170,16 +201,71 @@ def _nested(g: Graph, owner: dict[str, str]) -> dict[str, str]:
             if 0 < line <= len(text) and text[line - 1][:1] in (" ", "\t"):
                 files.add(f)
     for f in files:
-        spans = [(sp, n) for n in g.symbols_in(f) if n not in owner and (sp := g.span(n))]
-        funcs = [(sp, n) for sp, n in spans if not g.G.nodes[n].get("_callable_class")]
+        spans = [(sp, n) for n in g.symbols_in(f) if (sp := g.span(n))]
+        funcs = [(sp, n) for sp, n in spans if not g.G.nodes[n].get("_callable_class")]  # methods included
         for (a, _b), n in spans:
+            if n in owner:
+                continue
             inside = [(sp, p) for sp, p in funcs if p != n and sp[0] < a <= sp[1]]
             if inside:
                 out[n] = max(inside, key=lambda x: x[0][0])[1]
     return out
 
 
-def _reacher(g: Graph, file_node: dict[str, str], owner: dict[str, str], nested: dict[str, str]):
+class _ModuleNames(ast.NodeVisitor):
+    """The names a Python module's own top-level code loads when it is imported: statements, decorators,
+    default values, class bases and class bodies; not the bodies of functions (they run when called)."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, ast.Load):
+            self.names.add(node.id)
+
+    def visit_FunctionDef(self, node) -> None:
+        for x in (*node.decorator_list, *node.args.defaults, *node.args.kw_defaults):
+            if x is not None:
+                self.visit(x)
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        for x in (*node.args.defaults, *node.args.kw_defaults):
+            if x is not None:
+                self.visit(x)
+
+
+def _module_level(g: Graph, file_node: dict[str, str]) -> dict[str, list[str]]:
+    """Python file node -> the symbols of that file its own module-level code names (``app = create_app()``, a
+    decorator, the body of a ``__main__`` guard): importing or running the module runs that code, and the graph
+    holds no edge for it."""
+    out: dict[str, list[str]] = {}
+    for f, fn in file_node.items():
+        if not f.endswith(".py"):
+            continue
+        lines = _lines(g, f)
+        top: dict[str, list[str]] = {}
+        for n in g.symbols_in(f):
+            line = g.line(n)
+            if line and 0 < line <= len(lines) and lines[line - 1][:1] not in (" ", "\t"):
+                top.setdefault(_bare(g, n), []).append(n)
+        if not top:
+            continue
+        try:
+            tree = _py_ast(Path(g.root) / f)
+        except (OSError, SyntaxError, ValueError):
+            continue
+        v = _ModuleNames()
+        v.visit(tree)
+        hit = [n for name in sorted(v.names & set(top)) for n in top[name]]
+        if hit:
+            out[fn] = hit
+    return out
+
+
+def _reacher(g: Graph, file_node: dict[str, str], owner: dict[str, str], nested: dict[str, str],
+             module_level: dict[str, list[str]]):
     """``reach(start, skip=())``: what ``start`` reaches (module docstring), never stepping into ``skip``; the
     tables it walks are built once."""
     members: dict[str, list[str]] = {}       # class -> its methods
@@ -230,6 +316,7 @@ def _reacher(g: Graph, file_node: dict[str, str], owner: dict[str, str], nested:
                 cname = _bare(g, n)
                 nxt += [m for m in members[n] if _protocol(_bare(g, m), cname)]
             nxt += inner.get(n, ())
+            nxt += module_level.get(n, ())
             q.extend(v for v in nxt if v not in seen and v not in skip)
         return seen
 
@@ -330,10 +417,11 @@ def _written_bases(g: Graph, cls: str) -> list[str]:
 
 def _dynamic_uses(g: Graph, n: str, name: str, mentions: dict, defs: dict[str, set[tuple[str, int]]],
                   external_bases: dict[str, list[str]], owner: dict[str, str], edge_sites: set[str],
-                  project_classes: set[str]) -> tuple[list[dict], int]:
+                  project_classes: set[str], skip_file: str | None = None) -> tuple[list[dict], int]:
     """The dynamic uses that could keep ``n`` alive (first :data:`MAX_MENTIONS` name mentions) and how many
     name mentions there are in all. The sites of the graph's own edges to ``n`` (``edge_sites``) are not
-    mentions: those callers are already known, and unreached."""
+    mentions: those callers are already known, and unreached; neither is ``skip_file`` (an unreached file
+    naming its own symbols)."""
     out: list[dict] = []
     f = g.file(n) or ""
     for dec, line in _decorators(g, n):
@@ -357,7 +445,7 @@ def _dynamic_uses(g: Graph, n: str, name: str, mentions: dict, defs: dict[str, s
     span = g.span(n) or (g.line(n) or 0, g.line(n) or 0)
     own_defs = defs.get(name, set())
     hits, total = _name_mentions(name, mentions, lambda mf, line: (mf == f and span[0] <= line <= span[1])
-                                 or (mf, line) in own_defs or f"{mf}:{line}" in edge_sites)
+                                 or mf == skip_file or (mf, line) in own_defs or f"{mf}:{line}" in edge_sites)
     return out + hits, total
 
 
@@ -390,11 +478,12 @@ def dead_code(g: Graph, limit: int = DEFAULT_LIMIT) -> dict:
         f = d.get("source_file")
         if f and d.get("file_type") == "code" and g.is_file_node(n):
             file_node.setdefault(f, n)
-    entries, modules, tests = _roots(g, file_node)
+    problems: list[str] = []
+    entries, modules, tests = _roots(g, file_node, problems)
     start = [e["id"] for e in entries] + [file_node[f] for f in modules] + tests
     owner = {v: u for u, v, _ in g.edges({"method"})}
     nested = _nested(g, owner)
-    reach = _reacher(g, file_node, owner, nested)
+    reach = _reacher(g, file_node, owner, nested, _module_level(g, file_node))
     reached = reach(start)
     external_bases: dict[str, list[str]] = {}   # class -> its bases outside the project, filled as needed
     project_classes = {_bare(g, n) for n in g.G.nodes if g.G.nodes[n].get("_callable_class") and g.file(n)}
@@ -429,7 +518,13 @@ def dead_code(g: Graph, limit: int = DEFAULT_LIMIT) -> dict:
             continue
         units.append(n)
 
-    names = {_bare(g, n) for n in units} | {PurePosixPath(f).stem for f in dead_files}
+    # an unreached file's own symbols can be kept alive by name too (a registering decorator, a plugin loaded
+    # by a computed name): their dynamic uses are the file's; protocol members are called by the language
+    file_syms = {f: [n for n in g.symbols_in(f) if candidate(n)] for f in dead_files}
+    file_search = {f: [n for n in syms if not (owner.get(n) and _protocol(_bare(g, n), _bare(g, owner[n])))]
+                   for f, syms in file_syms.items()}
+    names = ({_bare(g, n) for n in units} | {PurePosixPath(f).stem for f in dead_files}
+             | {_bare(g, n) for syms in file_search.values() for n in syms})
     names.discard("__init__")
     mentions = _mentions(g, names, aside)
     defs: dict[str, set[tuple[str, int]]] = {}
@@ -440,30 +535,54 @@ def dead_code(g: Graph, limit: int = DEFAULT_LIMIT) -> dict:
     searched_text = (f"{len(entries)} entry points, {len(tests)} test-code nodes and {len(modules)} entry "
                      "modules searched")
     by_basis = Counter(e.get("basis") or "heuristic" for e in entries)
-    found: dict[str, tuple[list[dict], list[dict], int]] = {}   # unit -> (callers, dynamic uses, mentions)
-    for n in units:
-        callers = []
+
+    def callers_of(n: str) -> list[dict]:
+        out = []
         for u, d in g.in_edges(n):
             if d.get("relation") in NOT_REACH or u == n or not g.file(u) or g.G.nodes[u].get("file_type") != "code":
                 continue
-            callers.append({"from": g.label(u), "from_at": am._loc(g, u), "relation": d.get("relation"),
-                            "at": am._edge_loc(d)})
-        uses, total = _dynamic_uses(g, n, _bare(g, n), mentions, defs, external_bases, owner,
-                                    {c["at"] for c in callers if c["at"]}, project_classes)
-        found[n] = (callers, uses, total)
-    # what a unit that a dynamic use could keep alive reaches could be kept alive with it
+            out.append({"from": g.label(u), "from_at": am._loc(g, u), "relation": d.get("relation"),
+                        "at": am._edge_loc(d)})
+        return out
+
+    def uses_of(n: str, callers: list[dict], skip_file: str | None = None) -> tuple[list[dict], int]:
+        return _dynamic_uses(g, n, _bare(g, n), mentions, defs, external_bases, owner,
+                             {c["at"] for c in callers if c["at"]}, project_classes, skip_file)
+
+    found: dict[str, tuple[list[dict], list[dict], int]] = {}   # unit -> (callers, dynamic uses, mentions)
+    for n in units:
+        callers = callers_of(n)
+        found[n] = (callers, *uses_of(n, callers))
+    file_found: dict[str, tuple[list[dict], int]] = {}          # orphan file -> (dynamic uses, mentions)
+    for f in dead_files:
+        stem = PurePosixPath(f).stem
+        uses, total = ([], 0) if stem == "__init__" else _name_mentions(stem, mentions, lambda mf, _l, f=f: mf == f)
+        for n in file_search[f]:
+            su, st = uses_of(n, callers_of(n), f)
+            uses += [{**u, "symbol": g.label(n)} for u in su]
+            total += st
+        order = ("decorator", "override", "convention", "string", "config", "name")
+        uses.sort(key=lambda u: order.index(u["kind"]) if u["kind"] in order else len(order))
+        file_found[f] = (uses[:2 * MAX_MENTIONS], total)
+    # what a unit or file that a dynamic use could keep alive reaches could be kept alive with it
     unit_set = set(units)
-    via: dict[str, str] = {}
-    for n in sorted((n for n in units if found[n][1]), key=lambda x: am._loc(g, x)):
-        for m in reach([n], reached) & unit_set:
-            if m != n and not found[m][1]:
-                via.setdefault(m, n)
+    node_file = {n: f for f in dead_files for n in (file_node[f], *g.symbols_in(f))}
+    via: dict[str, tuple[str, str]] = {}                        # unit or orphan file -> (at, name) of the source
+    sources = ([(am._loc(g, n), g.label(n), [n]) for n in units if found[n][1]]
+               + [(f"{f}:1", f, [file_node[f], *g.symbols_in(f)]) for f in dead_files if file_found[f][0]])
+    for at, name, start_nodes in sorted(sources):
+        for m in reach(start_nodes, reached):
+            if m in unit_set and m not in start_nodes and not found[m][1]:
+                via.setdefault(m, (at, name))
+            elif m in node_file and node_file[m] != name and not file_found[node_file[m]][0]:
+                via.setdefault(node_file[m], (at, name))
 
     claims: list[dict] = []
     for f in dead_files:
-        nsym = len([n for n in g.symbols_in(f) if candidate(n)])
-        stem = PurePosixPath(f).stem
-        uses, total = ([], 0) if stem == "__init__" else _name_mentions(stem, mentions, lambda mf, _l, f=f: mf == f)
+        nsym = len(file_syms[f])
+        uses, total = file_found[f]
+        if f in via:
+            uses = [_via_use(*via[f])]
         importers = sorted({g.file(u) for u, d in g.in_edges(file_node[f]) if d.get("relation") not in NOT_REACH
                             and g.file(u) and g.file(u) != f})
         text = (f"`{f}` is not reached: none of the {searched_text} imports it or reaches any of its {nsym} "
@@ -474,13 +593,12 @@ def dead_code(g: Graph, limit: int = DEFAULT_LIMIT) -> dict:
     for n in units:
         callers, uses, total = found[n]
         if n in via:
-            uses = [{"kind": "via", "at": am._loc(g, via[n]),
-                     "why": f"reached from `{g.label(via[n])}`, which a dynamic use could keep alive"}]
+            uses = [_via_use(*via[n])]
         at = am._loc(g, n)
         kind = "zero_callers" if not callers else "callers_unreached"
         what = "class" if g.G.nodes[n].get("_callable_class") else ("method" if n in owner else "function")
         text = (f"{what} `{g.label(n)}` ({at}) is not reached from any of the {searched_text}; "
-                + ("nothing in the project calls or uses it" if not callers else
+                + ("no graph edge calls or uses it" if not callers else
                    "its only callers are unreached: " + ", ".join(c["from"] for c in callers[:3])))
         if folded.get(n):
             text += f" (with the {folded[n]} unreached symbols defined in it)"
@@ -502,18 +620,21 @@ def dead_code(g: Graph, limit: int = DEFAULT_LIMIT) -> dict:
                 "makes the claim weak_inference",
                 "entry points are heuristics (entry_points of the dataflow view) plus test code, entry modules and "
                 "declared scripts; a library's public API that other projects call is not an entry point here",
-                "Python module-level calls are not graph edges: a name a reached module imports counts as used",
+                "Python module-level code is not graph edges: a name a reached module imports counts as used, "
+                "and a reached module's own top-level code (a module-level call, a decorator, a __main__ guard) "
+                "reaches the symbols of that module it names; a module-level call into another module is followed "
+                "only through the import",
                 "code reached only by tests counts as reached",
                 "a claim is strong_inference at most (reachability over extracted edges is a heuristic); claims "
                 "are not stored in the claim store",
             ] + ([f"detected copies and reference trees ({', '.join(aside[:3])}) are searched from but not "
-                  "reported"] if aside else []),
+                  "reported"] if aside else []) + problems,
         },
         "searched": {
-            "entry_points": [{k: e[k] for k in ("symbol", "at", "why", "basis") if k in e} for e in entries[:100]],
+            "entry_points": [{k: e[k] for k in ("symbol", "at", "why", "basis") if k in e} for e in entries],
             "entry_points_total": len(entries),
             "entry_points_by_basis": dict(sorted(by_basis.items())),
-            "entry_modules": [{"file": f, "why": w} for f, w in sorted(modules.items())][:100],
+            "entry_modules": [{"file": f, "why": w} for f, w in sorted(modules.items())],
             "entry_modules_total": len(modules),
             "test_code_nodes": len(tests),
             "relations_followed": "every relation but " + ", ".join(sorted(NOT_REACH)),
@@ -526,6 +647,10 @@ def dead_code(g: Graph, limit: int = DEFAULT_LIMIT) -> dict:
         "claims": claims[:limit],
         **({"truncated": True, "claims_not_shown": len(claims) - limit} if len(claims) > limit else {}),
     }
+
+
+def _via_use(at: str, name: str) -> dict:
+    return {"kind": "via", "at": at, "why": f"reached from `{name}`, which a dynamic use could keep alive"}
 
 
 def _claim(kind: str, subject: str, at: str, text: str, uses: list[dict], mentions_total: int, searched: str, *,

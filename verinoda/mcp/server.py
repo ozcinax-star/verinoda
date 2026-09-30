@@ -122,6 +122,7 @@ EDGE_CAP = 25
 LIST_CAP = 50
 CODE_CHECK_BUDGET_S = float(os.environ.get("VERINODA_MCP_CHECK_BUDGET_S", "90"))   # code_check holds the server
 VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact", "dead")
+DEAD_FIRST_CUT = ("searched.entry_points", "searched.entry_modules")
 VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
 RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
 NETWORK_MODES = ("off", "cache", "on")
@@ -1029,7 +1030,15 @@ class AtlasTools:
                 res["note"] = f"targets are only used by the impact view; ignored for {view}"
             res.update(freshness.summary(fresh))
             return res
-        return self._run("map_view", go, need="graph")
+        if view != "dead":
+            return self._run("map_view", go, need="graph")
+        # the dead view's claims are the answer: the lists of what was searched give way first
+        res = self._run("map_view", go, need="graph", first=DEAD_FIRST_CUT)
+        cut = ((res.get("truncation") or {}).get("cut") or {}).get("claims")
+        if cut:
+            res["claims_not_shown"] = res.get("claims_not_shown", 0) + cut["total"] - cut["kept"]
+            res["truncated"] = True
+        return res
 
     # -- question understanding -----------------------------------------------------
     def change_review(self, base: str | None = None, staged: bool = False, targets: list[str] | None = None,

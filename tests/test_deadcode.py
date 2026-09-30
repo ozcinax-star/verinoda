@@ -242,3 +242,168 @@ def test_orders_app_dead_view(tmp_path):
 
     res = AtlasTools(repo).map_view("dead")
     assert res["view"] == "dead" and res["claims"][0]["subject"] == "load_settings()"
+
+
+BOM = "\ufeff"
+PLUGINS = {
+    # a byte order mark (a file saved on Windows) still declares its scripts; `mypkg:launch_app` names a package
+    "pyproject.toml": BOM + '[project]\nname = "plugins"\nversion = "0.1"\n\n[project.scripts]\n'
+                            'p = "mypkg:launch_app"\n',
+    "package.json": BOM + '{"name": "web", "main": "src/index.js"}\n',
+    "src/index.js": "function boot() {\n  return 1;\n}\nmodule.exports = { boot };\n",
+    "mypkg/__init__.py": '"""Plugins."""\n\n\ndef launch_app():\n    return 1\n',
+    "mypkg/registry.py": '''"""Registry."""
+import importlib
+
+HOOKS = []
+
+
+def register(fn):
+    HOOKS.append(fn)
+    return fn
+
+
+def load(name):
+    return importlib.import_module("mypkg.plugins." + name)
+''',
+    "mypkg/plugins/__init__.py": "",
+    "mypkg/plugins/contrib_zzq.py": '''from mypkg.registry import register
+
+
+@register
+def zzq_plugin_hook():
+    return 1
+''',
+    "mypkg/core.py": '''"""Core."""
+
+
+def shared_zzq_util():
+    return 1
+
+
+def create_app():
+    return 2
+
+
+app = create_app()
+
+
+class Worker:
+    def __init__(self):
+        self.result = self.run()
+
+    def run(self):
+        def inner_step():
+            return 3
+        return inner_step()
+
+
+def never_named_qqx():
+    return 4
+''',
+    "mypkg/extra_zzq.py": '''from mypkg.core import shared_zzq_util
+
+
+def extra():
+    return shared_zzq_util()
+''',
+    "run.py": '''import importlib
+
+from mypkg.core import Worker
+from mypkg.registry import load
+
+
+def _go():
+    importlib.import_module("mypkg.extra_zzq")
+    load("contrib_" + "zzq")
+    return Worker().result
+
+
+if __name__ == "__main__":
+    _go()
+''',
+}
+
+
+@pytest.fixture(scope="module")
+def plugins(tmp_path_factory) -> Path:
+    r = tmp_path_factory.mktemp("dead") / "plugins"
+    for rel, text in PLUGINS.items():
+        (r / rel).parent.mkdir(parents=True, exist_ok=True)
+        (r / rel).write_text(text, encoding="utf-8")
+    _scan(r)
+    return r
+
+
+@pytest.fixture(scope="module")
+def pview(plugins) -> dict:
+    return deadcode.dead_code(index.load(plugins))
+
+
+def test_orphan_file_names_its_own_symbols_dynamic_uses(pview):
+    c = _claim(pview, "mypkg/plugins/contrib_zzq.py")
+    assert c["kind"] == "orphan_file" and c["status"] == "weak_inference"
+    dec = next(u for u in c["dynamic_uses"] if u["kind"] == "decorator")
+    assert "@register" in dec["why"] and dec["symbol"] == "zzq_plugin_hook()"
+    reg = _claim(pview, "register()")  # its only caller is in that file: kept alive with it
+    assert reg["status"] == "weak_inference" and reg["dynamic_uses"][0]["kind"] == "via"
+    assert reg["dynamic_uses"][0]["at"] == "mypkg/plugins/contrib_zzq.py:1"
+
+
+def test_code_a_weak_orphan_file_reaches_is_weak_too(pview):
+    f = _claim(pview, "mypkg/extra_zzq.py")
+    assert f["status"] == "weak_inference" and f["dynamic_uses"][0]["kind"] == "string"
+    util = _claim(pview, "shared_zzq_util()")
+    assert util["status"] == "weak_inference" and util["dynamic_uses"] == [
+        {"kind": "via", "at": "mypkg/extra_zzq.py:1",
+         "why": "reached from `mypkg/extra_zzq.py`, which a dynamic use could keep alive"}]
+
+
+def test_package_script_module_level_calls_guards_and_nested_in_methods_are_reached(pview):
+    subjects = {c["subject"] for c in pview["claims"]}
+    # a declared `pkg:func` in the package's __init__.py (pyproject.toml with a byte order mark), a module-level
+    # call, the body of a __main__ guard, a helper defined in a reached method, package.json main (with a BOM)
+    for name in ("launch_app()", "create_app()", "_go()", ".run()", "inner_step()", "src/index.js", "boot()"):
+        assert name not in subjects, name
+    assert any(e["symbol"] == "launch_app()" and e.get("basis") == "declared"
+               for e in pview["searched"]["entry_points"])
+    assert {"file": "src/index.js", "why": "package.json main"} in pview["searched"]["entry_modules"]
+    lone = _claim(pview, "never_named_qqx()")
+    assert lone["status"] == "strong_inference" and "no graph edge calls or uses it" in lone["claim"]
+    assert "nothing in the project" not in lone["claim"]
+
+
+def test_every_entry_point_searched_is_named(pview):
+    s = pview["searched"]
+    assert len(s["entry_points"]) == s["entry_points_total"] and len(s["entry_modules"]) == s["entry_modules_total"]
+
+
+def test_unreadable_manifest_is_a_stated_limit(tmp_path):
+    (tmp_path / "pyproject.toml").write_text("[project\nscripts = ", encoding="utf-8")
+    (tmp_path / "package.json").write_text("{not json", encoding="utf-8")
+    problems: list[str] = []
+    assert deadcode._declared_scripts(tmp_path, problems) == []
+    assert deadcode._package_json_files(tmp_path, {"a.js"}, problems) == {}
+    assert len(problems) == 2 and "pyproject.toml could not be read" in problems[0]
+    assert "package.json could not be read" in problems[1]
+    none: list[str] = []
+    assert deadcode._declared_scripts(tmp_path / "missing", none) == [] and none == []  # no manifest: no problem
+
+
+def test_default_map_leaves_the_dead_view_out(plugins):
+    g = index.load(plugins)
+    assert "dead" in am.VIEWS and "dead" not in am.DEFAULT_VIEWS
+    assert set(am.build_map(g)) == set(am.DEFAULT_VIEWS)
+    assert list(am.DEFAULT_VIEWS) == [v for v in am.VIEWS if v != "dead"]
+
+
+def test_mcp_dead_view_cuts_the_searched_lists_before_the_claims(plugins, pview):
+    from verinoda.mcp.server import AtlasTools
+
+    total = len(pview["claims"])
+    for budget in (5000, 3000):
+        res = AtlasTools(plugins, max_chars=budget).map_view("dead")
+        cut = res["truncation"]["cut"]
+        assert cut["searched.entry_points"]["kept"] == 1 and cut["searched.entry_modules"]["kept"] == 1
+        assert len(res["claims"]) + res.get("claims_not_shown", 0) == total  # the count stays right when cut
+        assert ("claims" in cut) == (len(res["claims"]) < total) and res["claims"]

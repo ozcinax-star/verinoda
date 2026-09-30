@@ -53,9 +53,10 @@ def full(g):
 
 
 def test_every_view_states_method_and_limits(g, full):
-    assert set(full) == set(am.VIEWS) == {"hierarchy", "dependencies", "dataflow", "config", "tests", "history",
-                                          "dead"}
-    views = dict(full, impact=am.impact(g, ["orders/pricing.py"]))
+    assert set(full) == set(am.DEFAULT_VIEWS) == {"hierarchy", "dependencies", "dataflow", "config", "tests",
+                                                  "history"}
+    assert set(am.VIEWS) == set(full) | {"dead"}  # asked for by name, not built by default
+    views = dict(full, impact=am.impact(g, ["orders/pricing.py"]), dead=am.VIEWS["dead"](g))
     for name, v in views.items():
         assert v["view"] == name
         assert isinstance(v["coverage"]["method"], str) and v["coverage"]["method"]

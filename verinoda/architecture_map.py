@@ -920,6 +920,10 @@ VIEWS = {
 }
 
 
+# the views `verinoda map` builds when none is named; dead is asked for by name (--view dead)
+DEFAULT_VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history")
+
+
 def build_map(g: Graph, views: list[str] | None = None) -> dict:
-    views = views or list(VIEWS)
+    views = views or list(DEFAULT_VIEWS)
     return {v: VIEWS[v](g) for v in views}
