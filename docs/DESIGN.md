@@ -5768,6 +5768,238 @@ tests/test_debug.py tests/test_docs.py -q -p no:cacheprovider`
 
 Run together with tests/test_docs.py and tests/test_cli.py: 130 passed (Windows 11, Python 3.12, 2026-09-30). tests/test_mcp.py is unchanged (the MCP wiring is held back).
 
+## 55. Declared vs used dependencies (D82, 2026-09-30)
+
+### 55.1 Why
+
+A project declares its packages in manifests and uses them through imports. The two drift: code imports a
+package nobody declared (it works because another package pulled it in, until that one drops it), a runtime
+dependency is imported by nothing, a test tool is imported by shipped code, or a shipped package is only
+imported by tests. deptry answers this for Python; Verinoda already reads the manifests (for the dependency
+guards) and the imports (for the name-existence check), so the check is a join of the two, with evidence.
+
+### 55.2 Decisions
+
+1. **A mode of `check`, not a new command.** `verinoda check --deps [--env ENV] [--json]`. It reuses
+   `check`'s exit codes: 0 nothing found, 3 something found, 4 nothing checked (no manifest or build file
+   read). PATHs, `--diff` and `--stdin` are refused with it (the check is whole-project).
+2. **MCP: a parameter of the existing core tool.** `code_check(deps=true, env=...)` - the core profile stays
+   at five tools and nothing new is registered (the core's slim `code_check` takes `deps` but not `env`; its
+   description says what `deps=true` does). The response keeps `findings`, `summary`, `exit`,
+   `exit_because`, `manifests` and `limits` when it is capped.
+3. **Manifests are the guards' reader** (`guards.declared_dependencies`: pyproject, requirements*,
+   setup.py/cfg, package.json plus workspace packages, the Gradle/Maven builds the root build includes,
+   version catalogs). The new module only adds what that reader does not return: PEP 735
+   `[dependency-groups]`, Poetry `group.X.dependencies` and `dev-dependencies`, as dev groups.
+4. **Four findings, each a claim** with `status`, `claim`, `evidence` (`file:line` of the declaration, up to
+   three import sites, the lock-file line) and a `next_step`:
+   - `missing`: imported, declared nowhere, and not installed as another package's dependency;
+   - `transitive_only`: imported, not declared, installed only because a declared package requires it
+     (Python: `Requires-Dist` of the installed metadata, walked from the declared roots, extras skipped;
+     npm: the lock file line or `node_modules/<pkg>`);
+   - `unused`: a runtime dependency no file imports (dev groups and extras are not judged: tools are run,
+     not imported);
+   - `wrong_group`: declared only in a dev group but imported by runtime code, or a runtime dependency
+     imported only by dev code.
+5. **Statuses follow the evidence, never above it.**
+   - Python with a project environment (`.venv`/`venv`/`env`, or `--env DIR`), read from its files, never
+     started: an import is tied to an installed distribution by the full dotted module path in each
+     distribution's `RECORD` (the longest installed prefix owned by one distribution; `from X import y`
+     tries `X.y` first). A namespace folder several distributions share (`google`, `azure`, `zope`) pins
+     nothing, so `google.cloud.storage` and `google.protobuf` go to their own distributions and a bare
+     `import google` falls back to the name. `top_level.txt` only stands in for a distribution whose
+     `RECORD` has no module. `missing` and `transitive_only` tied this way are `statically_verified` when
+     every manifest of the project was read.
+   - Python without one: by name (normalised, a table of well-known import/distribution differences,
+     dotted prefixes, build variants `-binary`/`-headless`, `python-X`/`pyX`): `strong_inference`, and a
+     limit says so. A plugin that extends a name (flask-sqlalchemy, pytest-cov) does not stand for the
+     host package: `import flask` is not tied to flask-sqlalchemy.
+   - npm: `transitive_only` and `missing` are `strong_inference`. A lock-file line or a
+     `node_modules/<pkg>` folder shows the package installed, not why: another package's dependency, or a
+     sibling workspace package that declares it (then the claim names that package.json and cites its
+     declaration). A lock entry nested under another package (`node_modules/a/node_modules/foo`) is not
+     one the root code resolves and does not count. Bundler aliases and tsconfig paths are resolved first
+     with the TS resolver; relative imports, node builtins, `node:` specifiers and the workspace's own
+     packages are skipped.
+   - Gradle/Maven: an import is tied to an artifact by group prefix, artifact name as a package segment,
+     or a table of well-known packages (Guava, Jackson, JUnit, Gson, ...): `strong_inference`. Without the
+     classpath an import matching nothing may be the JDK, the platform or a transitive jar, so JVM imports
+     are never `missing`/`transitive_only`; their count is a limit. Only compile configurations
+     (`implementation`, `api`, `compileOnly`, `test*`, Maven scopes) are judged; `runtimeOnly`,
+     annotation processors and `include`/bundling are not expected to be imported. An import that ties
+     with several artifacts (two artifacts of one group, say `spring-boot-starter-web` and
+     `spring-boot-starter-test` for `org.springframework.boot.SpringApplication`) counts as use of each but
+     decides no `wrong_group`; a starter or BOM artifact (it has no package of its own) is not judged
+     unused, and a limit names it. `spring-boot-starter-test` is in the table (JUnit, AssertJ, Mockito,
+     Spring test packages).
+   - `unused` and `wrong_group` are `strong_inference` everywhere (use without an import exists; the
+     dev/runtime split of files is a path rule).
+6. **Optional imports** (inside `try/except ImportError`, the body of `if TYPE_CHECKING:` or the `else` of
+   `if not TYPE_CHECKING:`; TS `import type`) are never `missing` and never make a dev dependency a runtime
+   one. The body of `if not TYPE_CHECKING:` runs, so its imports are hard.
+7. **Dynamic imports**: a declared Python package whose import name only appears as a string literal
+   (`importlib.import_module("tree_sitter_lua")`) is not reported unused; a limit names it.
+8. **What is dev code**: test files (`testcode.is_test_file`), `docs/`, `benchmarks/`, `e2e/`, stories,
+   `setup.py`, `noxfile.py`, `conftest.py`, JS/TS tool configs (`*.config.ts` except Angular's
+   `app.config.ts`, `.eslintrc.js`); a bare `config.ts` is runtime code. What is a
+   dev group: PEP 735 / Poetry groups, `devDependencies`, a `requirements-dev`-like file, an extra named like
+   dev/test/lint/docs/typing, a Gradle `test*` configuration, a Maven `test` scope.
+9. **Not the project's code**: node_modules, build outputs, vendor/third_party, examples/samples/fixtures,
+   benchmark `corpora/`, virtual environments, reference trees (`_excluded_roots`), and anything git-ignored.
+10. Nothing is run, installed or fetched; nothing leaves the machine.
+11. **The project's own Python modules**: the outermost package of each chain of `__init__.py` folders, and
+    the modules and namespace folders at the root or in `src/`, are first-party everywhere. A loose module
+    deeper down (`scripts/requests.py`) is first-party only for the files in its folder and below (a
+    script's folder is on sys.path), so a helper named like a package does not hide that package's
+    imports elsewhere. A loose module in a folder of tests (`tests/docfixtures.py`) is also first-party
+    for every dev file: pytest puts each test folder it collects on sys.path for the session.
+12. **Inputs that cannot be read are limits**: a Python file that does not parse (including one nested too
+    deep for the parser: RecursionError, MemoryError) and any file over the size cap (2 MB for source
+    files, 64 MB for lock files, which pass 2 MB in large projects) are named in `limits`.
+13. **JS/TS imports are scanned in linear time**: clause runs (`import a, { b } from`) are found once,
+    left to right, and the last `import`/`export` keyword before the closing `from` gives the line; a lazy
+    clause pattern tried from every `import` backtracked quadratically on long runs of words and spaces
+    (a 36 KB file took 12 s). Lock files are indexed in one pass.
+
+### 55.3 Not done
+
+- Python without an environment ties imports by name: a package installed some other way, or an import
+  name the alias table does not know, can be reported `missing`.
+- `unused` cannot see use without an import: entry points, plugins (pytest11), CLI tools declared as runtime
+  deps, strings passed to importers other than a literal module name.
+- JVM: no classpath, so no `missing`/`transitive_only`; the artifact matching is heuristic.
+- Only the root manifests, workspace packages and included builds are read; other manifests are listed as a
+  limit and make `missing` `strong_inference`.
+- A module the project writes at run time (a generated file, a temporary module a test creates) is not a
+  file of the project, so its import is reported `missing` (`strong_inference`).
+- Go, Cargo and other ecosystems the reader lists are not checked (a limit says so).
+- Lock files: package-lock.json, npm-shrinkwrap.json, yarn.lock, pnpm-lock.yaml are matched by line pattern,
+  not parsed.
+
+### 55.4 Tests
+
+`tests/test_depcheck.py`:
+
+- `test_python_by_name` - missing, unused, both wrong-group directions, try/except and examples/ skipped,
+  aliases (`yaml` -> PyYAML), stdlib and first-party skipped, exact evidence lines, summary and exit.
+- `test_python_with_environment_finds_transitive` - a hand-written `.venv`: transitive via `Requires-Dist`
+  (extras skipped) is `statically_verified`, `attr` tied to `attrs` by `top_level.txt`, `--env none` drops
+  to `strong_inference`, a bad `--env` raises; httpx is read as declared.
+- `test_npm` - missing, transitive from the lock file (lock line cited), unused, wrong group both ways,
+  type-only imports, node builtins, relative imports and `@types/*` not reported.
+- `test_gradle` - unused artifact, `testImplementation` used by main code, Guava by the alias table,
+  `runtimeOnly` not judged, unmatched imports as a limit.
+- `test_nothing_to_check_and_clean` - exit 4 without a manifest, exit 0 on a clean project.
+- `test_dev_files_and_dynamic_imports` - the dev-file rule, a string-literal import, `TYPE_CHECKING`.
+- `test_cli` - rendering, `--json`, PATH with `--deps` refused, a bad `--env` refused.
+- `test_mcp_code_check_deps` - `code_check(deps=True)` equals the core, `paths` with `deps` refused.
+- `test_mcp_core_profile_offers_deps` - the core profile still lists five tools and its slim `code_check`
+  takes `deps` (not `env`).
+
+- `test_namespace_packages_in_the_environment` - `google.cloud` and `google.protobuf` from three
+  distributions sharing `google/` are tied to their own; a bare `import google` falls back to the name.
+- `test_npm_workspace_sibling_and_nested_lock` - an import declared only by a sibling workspace package is
+  `transitive_only` `strong_inference` naming that package.json; a nested lock entry does not count.
+- `test_spring_boot_starters` - no `wrong_group` or `unused` for starter-web / starter-test.
+- `test_runtime_config_module_is_not_dev_code` - `src/config.ts` importing dotenv and zod.
+- `test_plugin_package_does_not_stand_for_its_host` - flask / flask-sqlalchemy, pytest / pytest-cov,
+  psycopg2 / psycopg2-binary still tied.
+- `test_not_type_checking_and_parser_limits` - `if not TYPE_CHECKING:` body is hard, its `else` optional;
+  a deeply nested file is a parse limit, not a crash.
+- `test_js_imports_linear_and_exact` - every import form with its line; pathological inputs under 2 s.
+- `test_helper_script_named_like_a_package` - `scripts/requests.py` and `scripts/yaml.py` hide nothing
+  outside `scripts/`.
+- `test_oversized_files_are_a_limit` - a file over the cap is named in `limits`.
+
+`tests/test_mcp.py`: `code_check`'s expected parameters include `deps`. Run together with
+`tests/test_docs.py`, `tests/test_research.py`, `tests/test_cli.py`, `tests/test_codecheck*.py` and
+`tests/test_guard*.py`: all pass.
+
+## 56. Complexity, code health and clones (D83, 2026-09-30)
+
+### 56.1 Decisions
+
+- **One module, two callers.** `verinoda/health.py` measures; `verinoda health` (new CLI command) reports on
+  the tree, and `review` gets a seventh concern, `health`, which measures both versions of each changed
+  function. No MCP tool is added: `change_review` (reached through `run_tool`) carries the new concern, so the
+  core profile stays at five tools.
+- **Counted vs judged.** The metrics are counts on the syntax tree, so `statically_verified`
+  (`metrics_status`). The health score and clone pairs are heuristics over thresholds and a similarity ratio,
+  so `strong_inference` (`health_status`, every review finding, every clone pair). Nothing is `verified`.
+- **Metrics.** Cyclomatic (McCabe: 1 + branches, loops, handlers, case arms except `default`/`else`/`_`,
+  conditional expressions, comprehension `for`/`if`, boolean operators). Cognitive after SonarSource
+  (+1 per branch or loop plus its nesting level, +1 per `elif`/`else`, +1 per run of one boolean operator,
+  lambdas nest without adding; no recursion or labelled-jump increments). Nesting: deepest level of branches,
+  loops, handlers and `match`/`switch`, with its line (cited as evidence). Lines and parameters (`self`/`cls`
+  and receivers not counted). A nested function or class is its own entry, named as `anchors.compute_facts`
+  names definitions so review's changed symbols match.
+- **Languages.** Python from `ast`; the tree-sitter languages `anchors` reads from their trees, with one table
+  of node types (if/else-if detection handles both the "clause holds its branch" and the "keyword then branch"
+  grammars). Checked grammar by grammar: JavaScript/TypeScript, Java, C#, Go, Rust, C/C++, Kotlin, Ruby (`if`,
+  `elsif`, `unless`, the `if`/`while` modifiers, `?:`), PHP (`else_if_clause`), Lua (`elseif_statement`,
+  `else_statement`, `repeat`), Swift (`switch_entry`; parameters are the definition's own `parameter`
+  children) and Scala (`case_clause`, `&&`/`||` as `infix_expression`). The same nested if / else-if / else
+  function gives the same counts in each. A construct a grammar names otherwise is not counted (stated in
+  `coverage.limits`).
+- **Health score.** 10 minus one point per threshold reached (`SMELLS`: cyclomatic 10/20/30, cognitive
+  15/25/40, nesting 4/5/6, lines 70/150/300, params 6/9/12), floor 1. Bands: healthy >= 9, problematic >= 5,
+  unhealthy below. Fixed thresholds, stated in `coverage.thresholds`; no configuration yet.
+- **Clones.** Tokens normalised (keywords and punctuation kept, names `N`, numbers `0`, strings `S`,
+  comments dropped); functions of at least 50 tokens; candidate pairs share at least half of the smaller one's
+  rare token 5-grams (a 5-gram in more than 25 functions is ignored); then `difflib.SequenceMatcher` ratio
+  >= 0.9. A pair where one contains the other is skipped. The search is bounded by what it costs, not only
+  by how many pairs it compares: a function of more than 1500 tokens is not compared (`too_long`, stated);
+  each comparison first checks the cheap upper bounds (`real_quick_ratio`, `quick_ratio`) and only then pays
+  for the ratio, charging its work (the pairs of equal tokens its matching scans, so a long run of one repeated
+  token costs its square) to a budget: at most 20000 comparisons and 50 million units for `verinoda health`,
+  2000 and 5 million for a review. Running out sets `truncated`. On this repository the whole-tree clone
+  search takes about 22 s and stays inside the budget (9219 comparisons).
+- **Review findings** (concern `health`, all `strong_inference`):
+  - `health-drop`: a changed function's health is lower than in the base; the text lists each metric that
+    moved (`nesting 1 -> 5`) and the smells now reached; `metrics.base` / `metrics.head`, `base_at`, and as
+    `evidence_at` the lines behind the metrics that reached a further threshold: the deepest branch (complexity,
+    nesting), the whole span (length), the `def` line (parameters). A rename (`renamed_from`) is compared with
+    its old definition. Definitions that share a name in one file (`load`, `load#2`: anchors numbers them by
+    position) are paired by aligning both versions' runs of that name on their tokens, so inserting a
+    same-name definition earlier does not make an unchanged one look added.
+  - `health-low-added`: an added function below 10.
+  - `clone-added`: a changed or added function is now a near-duplicate of another function of its file, and
+    the pair was not already alike in the base (checked only for the pairs found, not for the whole base
+    file); one finding per pair. The same shingle prefilter as `verinoda health` runs before any ratio. What
+    the review's clone budget left out is listed in `coverage.not_checked`.
+  - A planned change (`--target`) has no new version: `coverage.not_checked` says so.
+
+### 56.2 Not done
+
+- Syntax only: what a call does, recursion, early exits and data-dependent paths are not weighed.
+- The score is a heuristic over fixed thresholds, not a quality verdict; thresholds are not configurable.
+- Review compares clones only inside the changed file (the whole-tree search is `verinoda health`).
+- Normalised-token clones: two functions of the same shape doing different things can score high; a pair must
+  share token runs to be compared.
+- Tree-sitter languages: the node-type table was checked against each grammar shipped (see Languages), but a
+  construct under another node name (Swift `guard`, for one) is not counted.
+- Clones: a function of more than 1500 normalised tokens is not compared; the review's clone budget is small
+  (a few seconds), so a change touching many alike functions may leave some unchecked (`not_checked`).
+- On this repository `verinoda health verinoda` takes about 40 s (6133 functions, 207 files); pass paths to
+  narrow it.
+
+### 56.3 Tests
+
+- `tests/test_health.py` (23): Python metrics counted by hand (cyclomatic 9, cognitive 12, nesting 3 at its
+  line, nested definitions separate), JavaScript and Java through tree-sitter, unsupported and broken text,
+  the score and bands, clones ignoring names and literals, `report` ranking / test files left out / paths /
+  unmatched / bad similarity, CLI `--json` and exit 2, and review on a generated indexed git repository:
+  a health drop on a changed function (base and head metrics, deepest line as evidence), an added low-health
+  function and one clone finding per added pair, a harmless edit that is quiet, a planned change not measured.
+  After review: the same nested if / else-if / else counted alike in JavaScript, Ruby, PHP and Lua; Ruby
+  modifiers and `?:`, Swift arms and parameters, Scala `case _` and `&&`; Python `case _` not a branch; the
+  clone search bounded by length and by work, no division by zero on empty functions; `min_tokens` below 1
+  refused; unmatched paths named; the CLI reading backslash and working-folder paths; review of a rename and
+  of a pair already alike in the base (quiet), of same-name definitions after an insertion (quiet), the `def`
+  line cited for a parameter drop, and a JavaScript health drop.
+- Also run: `tests/test_review.py`, `tests/test_decide_review3.py`, `tests/test_mcp.py`, `tests/test_cli.py`,
+  `tests/test_docs.py`.
+
 ## Sources
 
 - **Retrieval:**

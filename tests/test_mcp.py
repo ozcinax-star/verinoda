@@ -65,7 +65,7 @@ EXPECTED_PARAMS = {
     "claim_verify": ({"claim_id", "run"}, {"claim_id"}),
     "claim_challenge": ({"claim_id"}, {"claim_id"}),
     "resolve_call": ({"path", "line", "target", "target_path", "target_line"}, {"path", "line", "target"}),
-    "code_check": ({"paths", "diff", "snippet", "as_path", "env", "include_exists"}, set()),
+    "code_check": ({"paths", "diff", "snippet", "as_path", "env", "include_exists", "deps"}, set()),
     "api_members": ({"target", "env", "private"}, {"target"}),
     "runtime_observe": ({"test_ids", "symbols", "terms", "timeout"}, set()),
     "reference_resolve": ({"text", "references", "network", "local_intent"}, {"text"}),

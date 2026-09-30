@@ -837,6 +837,32 @@ def cmd_review(args) -> int:
     return int(res["exit"])
 
 
+def cmd_health(args) -> int:
+    from verinoda import health as hl
+
+    repo = _repo(args)
+    if args.limit < 1 or args.min_tokens < 1:
+        print("error: --limit and --min-tokens must be positive numbers", file=sys.stderr)
+        return 2
+    cwd = Path.cwd().resolve()
+    paths = []
+    for p in args.paths or []:   # relative to the working folder when it lies in the repository, as a shell reads it
+        if not Path(p).is_absolute() and cwd != repo.resolve() and cwd.is_relative_to(repo.resolve()) \
+                and (cwd / p).exists():
+            p = str(cwd / p)
+        paths.append(_rel_in_repo(repo.resolve(), p, "path"))
+    try:
+        res = hl.report(repo, paths or None, limit=args.limit, min_similarity=args.min_similarity,
+                        min_tokens=args.min_tokens, with_clones=not args.no_clones)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: _write(hl.render_text(r)))
+    for w in res["unmatched"]:
+        print(f"error: no code file under {w}", file=sys.stderr)
+    return 2 if res["unmatched"] else 0
+
+
 def cmd_query(args) -> int:
     from verinoda import freshness, index, query_filters, retrieval
 
@@ -2355,6 +2381,18 @@ def cmd_check(args) -> int:
     from verinoda import codecheck
 
     repo = _repo(args)
+    if args.deps:
+        from verinoda import depcheck
+
+        if args.paths or args.diff is not None or args.stdin or args.as_path:
+            raise SystemExit("error: --deps checks the whole project's manifests; do not also give PATHs, --diff "
+                             "or --stdin")
+        try:
+            res = depcheck.check_deps(repo, env=args.env)
+        except ValueError as exc:
+            raise SystemExit(f"error: {exc}")
+        _emit(args, res, depcheck.render)
+        return int(res["exit"])
     snippet = None
     if args.stdin:
         if args.paths or args.diff is not None:
@@ -2756,12 +2794,19 @@ def build_parser() -> argparse.ArgumentParser:
                     help="a planned change, before editing (repeatable): what changing it would touch")
     sp.add_argument("--change", choices=["body", "signature", "remove"], help="with --target: the kind of change")
     sp.add_argument("--concerns", help="comma list of persistence,security,performance,public_api,config,"
-                                       "entry_points (default: all)")
+                                       "entry_points,health (default: all)")
     sp.add_argument("--run-tests", action="store_true",
                     help="run the pytest tests that reach the change (isolated copy, recorded experiment)")
     sp.add_argument("--observe", action="store_true",
                     help="run those tests under the call tracer: which of them reach the changed functions")
     sp.add_argument("--max-chars", type=int, default=6000, help="budget of the read_first list")
+    sp = add("health", cmd_health, "code health per function: cyclomatic and cognitive complexity, nesting, length, "
+                                   "parameters, and near-duplicate functions with a similarity score")
+    sp.add_argument("paths", nargs="*", help="files or folders (default: every code file that is not a test)")
+    sp.add_argument("--limit", type=int, default=20, help="functions and clone pairs shown (default 20)")
+    sp.add_argument("--min-similarity", type=float, default=0.9, help="clone threshold, 0-1 (default 0.9)")
+    sp.add_argument("--min-tokens", type=int, default=50, help="smallest function compared for clones (default 50)")
+    sp.add_argument("--no-clones", action="store_true", help="metrics only, no clone search")
     sp = add("query", cmd_query, "bounded, justified retrieval for a question (plain text; --json for programs)")
     sp.add_argument("question", help="text to rank; filters narrow it: path:GLOB lang:NAME symbol:NAME "
                                      "is:vendored /regex/, joined by AND, OR, NOT (or -filter) and parentheses")
@@ -3222,6 +3267,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="only sites on lines changed against REV (default HEAD), and new untracked files")
     sp.add_argument("--stdin", action="store_true", help="check the code on stdin before it is written")
     sp.add_argument("--as", dest="as_path", metavar="PATH", help="with --stdin: the file the code is meant for")
+    sp.add_argument("--deps", action="store_true",
+                    help="instead: the declared dependencies (pyproject, requirements, package.json, Gradle, Maven) "
+                         "against the imports - missing, transitive only, unused, in the wrong group (exit 3: "
+                         "something found; exit 4: no manifest read)")
     sp.add_argument("--env", default="auto", help=env_help)
     sp.add_argument("--all", action="store_true", help="also list the sites that exist and the LOW unknowns")
     sp.add_argument("--no-cache", action="store_true",

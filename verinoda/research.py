@@ -2098,7 +2098,7 @@ def dependencies(root: Path) -> dict:
 
     def py_req(s, rel, lines, scope):
         s = s.split("#")[0].strip()
-        if not s or s.startswith(("-", "git+", "http")):
+        if not s or s.startswith(("-", "git+", "http://", "https://")):   # not httpx or httpcore
             return
         m = req_rx.match(s)
         if m:
