@@ -1136,6 +1136,10 @@ class AtlasTools:
             if isinstance(ms, dict) and not any(ms.get(k) for k in ("claims", "notes", "decisions")):
                 # nothing made stale: the counts say what was compared; the limits stay in `review --json`
                 res["made_stale"] = {k: ms[k] for k in ("counts", "checked") if k in ms}
+            if isinstance(res.get("reviewers"), dict):
+                from verinoda import reviewers
+
+                res["reviewers"] = reviewers.compact(res["reviewers"])
             return res
         return self._run("change_review", go, need="graph",
                          # the findings come before the lists that lead to them: what to read first, the tests,
