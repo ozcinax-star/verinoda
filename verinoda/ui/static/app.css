@@ -243,4 +243,12 @@ kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; border: 1px solid
 .diagram h3 { font-size: 15px; margin: 18px 0 0; display: flex; align-items: center; gap: 8px; }
 .mermaid-src { padding: 10px 12px; font-size: 12px; white-space: pre; }
 .diagram details { margin: 0 0 12px; font-size: 13px; }
+ol.timeline { list-style: none; margin: 0 0 16px; padding: 0 0 0 14px; border-left: 2px solid var(--muted); }
+.tl-date { margin: 12px 0 4px -14px; padding-left: 10px; color: var(--muted); font-size: 12px; }
+.tl-item { padding: 4px 0 8px 8px; }
+.tl-item.st-superseded, .tl-item.st-deprecated, .tl-item.st-rejected { opacity: 0.65; }
+.tl-item .rels { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; margin: 2px 0; }
+.tl-item .rel { border: 1px solid var(--info); color: var(--info); border-radius: 8px; padding: 0 6px; }
+.tl-item .rel.one-sided { border-style: dashed; color: var(--warn); border-color: var(--warn); }
+.tl-item .warn { color: var(--warn); }
 @media (max-width: 900px) { #app { --right-w: 0px; } #right { display: none; } #note { padding: 16px; } }

@@ -197,6 +197,14 @@ class Atlas:
     def user_notes(self) -> dict:
         return {"notes": self.snapshot().user_notes()}
 
+    def decisions(self) -> dict:
+        """The decision records by date with their relations and a Mermaid graph (read from the files; the
+        index is not needed)."""
+        from verinoda import decisions as dm
+
+        tl = dm.timeline(self.repo)
+        return {**tl, "mermaid": dm.mermaid(tl) if tl["records"] else ""}
+
     def delete_user_note(self, subject: str) -> dict:
         """Remove the note on ``subject``, whatever became of its code (a note whose symbol is gone)."""
         from verinoda import usernotes

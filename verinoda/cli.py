@@ -1355,6 +1355,8 @@ def _r_decision(d: dict, indent: str = "") -> None:
         print(f"{indent}  " + "; ".join(x for x in (f"supersedes {d['supersedes']}" if d.get("supersedes") else "",
                                                      f"superseded by {d['superseded_by']}" if d.get("superseded_by")
                                                      else "") if x))
+    if d.get("links"):
+        print(f"{indent}  " + "; ".join(f"{x.get('kind')} {x.get('id')}" for x in d["links"]))
     for g in d.get("guards") or []:
         src = f"  <- {g['from_sentence']['at']}" if g.get("from_sentence") else ""
         print(f"{indent}  {g['id']} ({g.get('status')}): {g.get('spec')}{src}")
@@ -1388,12 +1390,29 @@ def _r_decide(res: dict) -> None:
     _r_decision(res)
     if res.get("superseded"):
         print(f"  {res['superseded']} is now superseded")
+    if res.get("linked"):
+        ln = res["linked"]
+        print(f"  {ln['from']} {ln['kind']} {ln['to']}; {ln['to']} {ln['reverse']} {ln['from']}")
+    for n in res.get("not_changed") or []:
+        print(f"  not changed: {n}")
     for s in res.get("not_turned_into_guards") or []:
         print(f"  not a guard ({s['why']}): {s['at']} {s['text'][:120]}")
     proposed = [g["id"] for g in res.get("guards") or [] if g.get("status") == "proposed"]
     if proposed:
         print(f"  next: read the proposed guard(s) against the document; only the user accepts them: "
               f"`verinoda decide accept {res['id']} {' '.join(proposed)}`")
+
+
+def _r_toc(tl: dict) -> None:
+    from verinoda import decisions as dm
+
+    if tl.get("written"):
+        print(f"wrote {tl['written']}: {len(tl['records'])} record(s), {len(tl['relations'])} relation(s)")
+    else:
+        print(dm.toc_markdown(tl))
+    for r in tl["records"]:
+        for w in (r.get("warnings") or []) + (r.get("problems") or []):
+            print(f"  {r['id']}: {w}", file=sys.stderr)
 
 
 def _r_decide_check(r: dict) -> None:
@@ -1550,6 +1569,17 @@ def cmd_decide(args) -> int:
                 print(json.dumps({"status": "error", "exit": 2, "error": msg[:600]}, ensure_ascii=False))
             print(f"error: {msg}", file=sys.stderr)
             return 2
+    if args.decide_cmd == "toc":  # reads the files only: no store needed
+        try:
+            res = dm.write_toc(repo, args.write, args.decisions_dir) if args.write else \
+                dm.timeline(repo, args.decisions_dir)
+        except dm.DecisionError as exc:
+            if getattr(args, "json", False):  # like decide check: JSON on stdout too
+                print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        _emit(args, res, _r_toc)
+        return 0
     if args.decide_cmd in ("brief", "answer"):
         from verinoda import decision_brief as dbr
 
@@ -1594,6 +1624,10 @@ def cmd_decide(args) -> int:
             res = dm.add_guards(st, repo, args.id, args.spec, user_statement=said)
         elif args.decide_cmd == "accept":
             res = dm.accept(st, repo, args.id, args.guard_ids, user_statement=said)
+        elif args.decide_cmd == "supersede":
+            res = dm.supersede(st, repo, args.id, args.by, user_statement=said)
+        elif args.decide_cmd == "link":
+            res = dm.link(st, repo, args.id, args.kind, args.target, user_statement=said)
         else:  # waive
             res = dm.waive(st, repo, args.id, args.guard_id, at=args.at, reason=args.reason, until=args.until,
                            user_statement=said)
@@ -3138,11 +3172,28 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--reason", required=True)
     c.add_argument("--until", metavar="YYYY-MM-DD")
     c.add_argument("--said", help=said_help)
+    c = add("supersede", cmd_decide, "an existing record replaces another: the old one's status becomes superseded "
+                                     "and both records name each other (the user's call)", parent=dsub)
+    c.add_argument("id", metavar="OLD", help="the record that is replaced (ADR-N)")
+    c.add_argument("--by", required=True, metavar="NEW", help="the accepted record that replaces it")
+    c.add_argument("--said", help=said_help)
+    c = add("link", cmd_decide, "link two records; the reverse link is written on the other one (amends / "
+                                "amended-by, clarifies, depends-on / required-by, relates-to)", parent=dsub)
+    c.add_argument("id", metavar="ADR-N")
+    c.add_argument("kind", metavar="KIND", help="amends, clarifies, depends-on, relates-to or a reverse "
+                                                "(amended-by, clarified-by, required-by)")
+    c.add_argument("target", metavar="ADR-M")
+    c.add_argument("--said", help=said_help)
     ddir_help = ("the folder of the decision records, relative to the repository (default: decisions.dir in "
                  ".verinoda/config.json, else [decisions] dir in verinoda.toml or [tool.verinoda.decisions] dir in "
                  "pyproject.toml, else .verinoda/decisions)")
     c = add("list", cmd_decide, "decision records, their guards and waivers, and ADRs without a record", parent=dsub)
     c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
+    c = add("toc", cmd_decide, "the records by date with their relations: a Markdown table of contents and a "
+                               "Mermaid graph (--json: the timeline)", parent=dsub)
+    c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
+    c.add_argument("--write", metavar="FILE.md", help="write it to this file in the repository (only a file "
+                                                      "`decide toc` wrote before is overwritten)")
     c = add("check", cmd_decide, "check the code against every accepted guard (exit 1 on VIOLATED; exit 3 when "
                                  "something could not be checked - no record while ADR-like files exist, a guard "
                                  "that checked no file, edge or manifest: usable in CI)", parent=dsub)

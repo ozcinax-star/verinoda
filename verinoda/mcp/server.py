@@ -129,9 +129,9 @@ VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
 RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
 NETWORK_MODES = ("off", "cache", "on")
 QUERY_FORMATS = ("text", "json")
-DECISION_ACTIONS = ("list", "record", "import", "guard", "accept", "waive", "answer")
+DECISION_ACTIONS = ("list", "record", "import", "guard", "accept", "waive", "supersede", "link", "answer")
 # what changes what is enforced, and the user's answers to a brief: the user's own words
-DECISION_NEEDS_USER = ("record", "guard", "accept", "waive", "answer")
+DECISION_NEEDS_USER = ("record", "guard", "accept", "waive", "supersede", "link", "answer")
 DEBUG_KINDS = ("fix", "probe", "rerun", "differential")
 DEBUG_STRATEGIES = ("differential", "bisect", "rerun", "observe")
 # analyze: what the agent reads first and what is cut last (the interpretation and the per-sub-question verdicts)
@@ -1579,6 +1579,7 @@ class AtlasTools:
                         rationale: str | None = None, title: str | None = None, brief_id: str | None = None,
                         guards: list[str] | None = None, governs: list[str] | None = None,
                         revisit_when: list[str] | None = None, supersedes: str | None = None,
+                        link: str | None = None,
                         guard_ids: list[str] | None = None, at: str | None = None, reason: str | None = None,
                         until: str | None = None, document: str | None = None,
                         user_statement: str | None = None, question_id: str | None = None) -> dict:
@@ -1622,6 +1623,14 @@ class AtlasTools:
                         return dm.add_guards(st, self.repo, did, _str_list(guards, "guards"), user_statement=said)
                     if act == "accept":
                         return dm.accept(st, self.repo, did, _str_list(guard_ids, "guard_ids"), user_statement=said)
+                    if act == "supersede":
+                        return dm.supersede(st, self.repo, _text(supersedes, "supersedes"), did, user_statement=said)
+                    if act == "link":
+                        kind, _, target = _text(link, "link").strip().rpartition(" ")  # a kind may be two words
+                        if not kind.strip() or not target.strip():
+                            raise ToolFailure("invalid_argument", "link is 'KIND ADR-N', e.g. 'amends ADR-0002'",
+                                              f"kinds: {', '.join(sorted(dm.REVERSE_LINK))}")
+                        return dm.link(st, self.repo, did, kind, target.strip(), user_statement=said)
                     ids = _str_list(guard_ids, "guard_ids")
                     if len(ids) != 1:
                         raise ToolFailure("invalid_argument", "waive takes exactly one guard id in guard_ids",
@@ -1937,8 +1946,8 @@ reference_id) inspects one at its pin; reference_compare compares a mechanism.
 - runtime_observe: selected tests under the call tracer. experiment_run: one allowlisted command in a copy.
 - feedback_submit / feedback_process / feedback_resolve: user critique as a hypothesis, verified, resolved.
 - decision_brief: the code's side of a should/which question; no recommendation - ask the user its questions and
-  record each answer (decision_record action='answer'). decision_record: never record, accept or waive without
-  the user's own words (user_statement).
+  record each answer (decision_record action='answer'). decision_record: never record, accept, waive, supersede
+  or link without the user's own words (user_statement).
 - debug_start before the first edit of a bug fix, debug_attempt after every edit; on stop=true stop editing, run
   strategies[0] with debug_strategy and show debug_status. Never say "fixed": the repro passed at tree T in run R.
 - grep_context: what the Grep hook adds (definition, callers, callees of a searched symbol).
@@ -2146,12 +2155,13 @@ DESCRIPTIONS: dict[str, str] = {
         "Decision records (Markdown with front matter in decisions.dir, logged append-only). action: list | "
         "record (chosen + rationale; optional brief_id, guards, governs, revisit_when, supersedes) | import (a "
         "record for a hand-written ADR, document=path; guards only proposed) | guard (add guards to decision_id) "
-        "| accept (guard_ids) | waive (one guard id, at='path[:line]', reason, until) | answer (the user's answer "
-        "to question_id of brief_id). Guards: 'only_in calls=sqlite3.connect allowed=orders/repository.py', "
-        "'no_edge from=src/main/** to=src/client/**', 'layers order=ui/**,core/**', 'allow_edges from=GLOB "
-        "allowed=GLOB,...', 'public module=GLOB api=GLOB,...', 'dependency absent=psycopg'; revisit_when: "
-        "'dependency_added=NAME' / 'file_appears=GLOB'. record, guard, accept, waive and answer need "
-        "user_statement, the user's own words verbatim: never decide for the user."),
+        "| accept (guard_ids) | waive (one guard id, at='path[:line]', reason, until) | supersede (decision_id "
+        "replaces supersedes; both records updated) | link (decision_id, link='amends ADR-N'; the reverse link "
+        "is written too) | answer (the user's answer to question_id of brief_id). Guards: 'only_in "
+        "calls=sqlite3.connect allowed=orders/repository.py', 'no_edge from=src/main/** to=src/client/**', "
+        "'layers order=ui/**,core/**', 'allow_edges from=GLOB allowed=GLOB,...', 'public module=GLOB "
+        "api=GLOB,...', 'dependency absent=psycopg'; revisit_when: 'dependency_added=NAME' / 'file_appears=GLOB'. "
+        "All but list and import need user_statement, the user's own words verbatim: never decide for the user."),
     "decision_brief": (
         "What a human needs to decide a should/which/scale question, from the code - never a recommendation: "
         "forces with re-checkable evidence, absences (searched, not found), existing decisions, options with "
@@ -2723,9 +2733,10 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
     @register("decision_record")
     def decision_record(
-        action: Annotated[Literal["list", "record", "import", "guard", "accept", "waive", "answer"],
-                          Field(description="What to do (see the tool description).")],
-        decision_id: Annotated[OptStr, Field(description="ADR-0001 (guard, accept, waive).")] = None,
+        action: Annotated[Literal["list", "record", "import", "guard", "accept", "waive", "supersede", "link",
+                                  "answer"], Field(description="What to do (see the tool description).")],
+        decision_id: Annotated[OptStr, Field(description="ADR-0001 (guard, accept, waive, link; supersede: the "
+                                                         "record that replaces).")] = None,
         chosen: Annotated[OptStr, Field(description="record: the option the user chose.")] = None,
         rationale: Annotated[OptStr, Field(description="record: why, in the user's words.")] = None,
         title: Annotated[OptStr, Field(description="record: a short title.")] = None,
@@ -2735,7 +2746,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
                                                       "review.")] = None,
         revisit_when: Annotated[StrList, Field(description="record: 'dependency_added=NAME' / "
                                                            "'file_appears=GLOB'.")] = None,
-        supersedes: Annotated[OptStr, Field(description="record: the decision this one replaces.")] = None,
+        supersedes: Annotated[OptStr, Field(description="record/supersede: the decision this one replaces.")] = None,
+        link: Annotated[OptStr, Field(description="link: 'KIND ADR-N', e.g. 'amends ADR-0002'.")] = None,
         guard_ids: Annotated[StrList, Field(description="accept: guard ids; waive: exactly one.")] = None,
         at: Annotated[OptStr, Field(description="waive: 'path' or 'path:line' of the excused site.")] = None,
         reason: Annotated[OptStr, Field(description="waive: why the user excuses it.")] = None,
@@ -2748,8 +2760,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     ) -> dict[str, Any]:
         return emit(t.decision_record(action, decision_id=decision_id, chosen=chosen, rationale=rationale, title=title,
                                       brief_id=brief_id, guards=guards, governs=governs, revisit_when=revisit_when,
-                                      supersedes=supersedes, guard_ids=guard_ids, at=at, reason=reason, until=until,
-                                      document=document, user_statement=user_statement,
+                                      supersedes=supersedes, link=link, guard_ids=guard_ids, at=at, reason=reason,
+                                      until=until, document=document, user_statement=user_statement,
                                       question_id=question_id))
 
     @register("decision_check")

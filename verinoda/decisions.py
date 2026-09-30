@@ -18,6 +18,7 @@ take precedence, see :func:`decisions_dir_source`) with a front matter::
     source: null
     supersedes: null
     superseded-by: null
+    links: [{"kind": "amends", "id": "ADR-0001"}]
     governs: [{"id": "v1", "symbol": "orders/repository.py::OrderRepository.__init__", ...}]
     guards: [{"id": "g1", "kind": "only_in", "calls": ["sqlite3.connect"], "allowed": [...], ...}]
     revisit-when: [{"id": "r1", "kind": "dependency_added", "value": "psycopg"}]
@@ -59,7 +60,9 @@ A glob of an edge guard may be ``tag:NAME``: the globs listed under that name in
 (``[tool.verinoda.architecture.tags]``), see :func:`architecture_tags`.
 
 ``--revisit-when dependency_added=NAME`` / ``file_appears=GLOB`` asks for a human review when it fires;
-``--governs SYMBOL`` asks for a review when that symbol's code changes. Guards from ``record`` and
+``--governs SYMBOL`` asks for a review when that symbol's code changes. ``decide supersede OLD --by NEW`` and
+``decide link A KIND B`` write both records of a relation (``supersedes`` / ``superseded-by``, a link and its
+reverse); ``decide toc`` lists the records by date with a Mermaid graph of those relations. Guards from ``record`` and
 ``guard`` are the human's own and start ``accepted``; guards proposed from a document's prose
 (``decide import``) start ``proposed`` and do nothing until ``decide accept``.
 """
@@ -96,7 +99,13 @@ GEN_START = "<!-- verinoda:generated (rewritten by verinoda on every change; edi
             "`verinoda decide`) -->"
 GEN_END = "<!-- /verinoda:generated -->"
 FRONT_ORDER = ("verinoda-decision", "id", "title", "status", "decided-by", "date", "chosen", "brief", "source",
-               "supersedes", "superseded-by", "governs", "guards", "revisit-when", "waivers")
+               "supersedes", "superseded-by", "links", "governs", "guards", "revisit-when", "waivers")
+# a link between two records and the reverse written on the other one (adr-tools' "Amends" / "Amended by");
+# superseding is not a link: it changes the old record's status (``decide supersede``)
+LINK_KINDS = {"amends": "amended-by", "clarifies": "clarified-by", "depends-on": "required-by",
+              "relates-to": "relates-to"}
+REVERSE_LINK = {**LINK_KINDS, **{v: k for k, v in LINK_KINDS.items()}}
+TOC_MARK = "<!-- verinoda:toc (written by `verinoda decide toc --write`; rewritten each time) -->"
 _ID_RX = re.compile(r"^\s*(?:adr[-_ ]?)?0*(\d{1,6})\s*$", re.I)
 _DATE_RX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -118,6 +127,7 @@ class Decision:
     source: str | None = None
     supersedes: str | None = None
     superseded_by: str | None = None
+    links: list[dict] = field(default_factory=list)
     governs: list[dict] = field(default_factory=list)
     guards: list[dict] = field(default_factory=list)
     revisit_when: list[dict] = field(default_factory=list)
@@ -135,7 +145,7 @@ class Decision:
         return {"verinoda-decision": FORMAT_VERSION, "id": self.id, "title": self.title, "status": self.status,
                 "decided-by": self.decided_by, "date": self.date, "chosen": self.chosen, "brief": self.brief,
                 "source": self.source, "supersedes": self.supersedes, "superseded-by": self.superseded_by,
-                "governs": self.governs, "guards": self.guards, "revisit-when": self.revisit_when,
+                "links": self.links, "governs": self.governs, "guards": self.guards, "revisit-when": self.revisit_when,
                 "waivers": self.waivers}
 
     @property
@@ -390,13 +400,13 @@ def _entry_problems(lists: dict[str, list[dict]]) -> list[str]:
 
     ids: dict[str, set] = {}
     for key, need in (("governs", ("id", "file", "qual", "symbol")), ("revisit-when", ("id", "kind", "value")),
-                      ("guards", ("id",)), ("waivers", ("guard", "at", "reason"))):
+                      ("guards", ("id",)), ("waivers", ("guard", "at", "reason")), ("links", ("kind", "id"))):
         for i, e in enumerate(lists.get(key) or [], 1):
             missing = [k for k in need if not text(e.get(k))]
             if missing:
                 out.append(f"{key} entry {e.get('id') or i}: {', '.join(missing)} missing or not text")
                 continue
-            if "id" in need:
+            if "id" in need and key != "links":  # a record may link another one in two ways
                 if e["id"] in ids.setdefault(key, set()):
                     out.append(f"{key} id {e['id']} is used twice")
                 ids[key].add(e["id"])
@@ -440,7 +450,7 @@ def parse(path: Path) -> Decision | None:
         return Decision(id=str(front.get("id")), number=0, title=str(front.get("title") or ""), path=path,
                         problems=[str(exc), *problems])
     lists = {}
-    for key in ("governs", "guards", "revisit-when", "waivers"):
+    for key in ("governs", "guards", "revisit-when", "waivers", "links"):
         v = front.get(key)
         if v is None:
             v = []
@@ -464,11 +474,13 @@ def parse(path: Path) -> Decision | None:
     warnings = [f"waiver of {w.get('guard')} at {w.get('at')}: until {w['until']!r} is not a date (YYYY-MM-DD), so "
                 "the waiver is not applied" for w in lists["waivers"]
                 if w.get("until") not in (None, "") and _date_or_none(w.get("until")) is None]
+    warnings += [f"link {x['kind']} {x['id']}: the kind is not one of {', '.join(sorted(REVERSE_LINK))}"
+                 for x in _readable_links(lists["links"]) if x["kind"] not in REVERSE_LINK]
     return Decision(id=did, number=int(did[4:]), title=str(front.get("title") or ""), status=status,
                     decided_by=by, date=str(front.get("date") or ""), chosen=front.get("chosen"),
                     brief=front.get("brief"), source=front.get("source"), supersedes=front.get("supersedes"),
-                    superseded_by=front.get("superseded-by"), governs=lists["governs"], guards=lists["guards"],
-                    revisit_when=lists["revisit-when"], waivers=lists["waivers"], body=body, path=path,
+                    superseded_by=front.get("superseded-by"), links=lists["links"], governs=lists["governs"],
+                    guards=lists["guards"], revisit_when=lists["revisit-when"], waivers=lists["waivers"], body=body, path=path,
                     problems=problems, warnings=warnings)
 
 
@@ -505,7 +517,50 @@ def load_all(repo: Path, directory: str | None = None) -> list[Decision]:
         for y in by_id.get(old) or []:
             if y is not x and y.status == "accepted":
                 y.inactive.append(f"{x.id} supersedes it (its own file still says status accepted)")
+    _one_sided(out, by_id)
     return sorted(out, key=lambda x: (x.number, str(x.path)))
+
+
+def _readable_links(links: list[dict]) -> list[dict]:
+    """The link entries whose ``kind`` and ``id`` are text (any other entry is already a problem of its record,
+    and a hand-edited kind that is a list or a number must not stop the other records being read)."""
+    return [x for x in links if isinstance(x.get("kind"), str) and isinstance(x.get("id"), str)]
+
+
+def _norm_or_none(value) -> str | None:
+    try:
+        return norm_id(value) if value else None
+    except DecisionError:
+        return None
+
+
+def _one_sided(out: list[Decision], by_id: dict[str, list[Decision]]) -> None:
+    """Warnings for a relation only one of its two records states (a hand edit, or a record from before
+    ``decide supersede``/``decide link`` wrote both): a named record that is missing, a ``supersedes`` the
+    other record's ``superseded-by`` does not answer (and the reverse), a link without its reverse. Nothing
+    here changes what is enforced."""
+    for x in out:
+        for key, back in (("supersedes", "superseded_by"), ("superseded_by", "supersedes")):
+            raw = getattr(x, key)
+            if not raw:
+                continue
+            other = _norm_or_none(raw)
+            ys = by_id.get(other or "") or []
+            label = key.replace("_", "-")
+            if not ys:
+                x.warnings.append(f"{label} {raw}: no record {other or raw} in the decisions folder")
+            elif _norm_or_none(getattr(ys[0], back)) != x.id:
+                x.warnings.append(f"{label} {other}, but {other} does not say {back.replace('_', '-')} {x.id} "
+                                  f"(`verinoda decide supersede` writes both records)")
+        for ln in _readable_links(x.links):
+            other, kind = _norm_or_none(ln["id"]), ln["kind"]
+            ys = by_id.get(other or "") or []
+            if not ys:
+                x.warnings.append(f"link {kind} {ln['id']}: no record {other or ln['id']} in the decisions folder")
+            elif kind in REVERSE_LINK and not any(r["kind"] == REVERSE_LINK[kind] and _norm_or_none(r["id"]) == x.id
+                                                  for r in _readable_links(ys[0].links)):
+                x.warnings.append(f"link {kind} {other}, but {other} has no link {REVERSE_LINK[kind]} {x.id} "
+                                  "(`verinoda decide link` writes both records)")
 
 
 def find(repo: Path, did: str) -> Decision | None:
@@ -716,6 +771,12 @@ def _guard_line(g: dict) -> str:
 def _generated(d: Decision) -> str:
     lines = [GEN_START, "## Enforced by `verinoda decide check`", ""]
     lines += [_guard_line(g) for g in d.guards] or ["- no guards"]
+    if d.supersedes:
+        lines.append(f"- supersedes {d.supersedes}")
+    if d.superseded_by:
+        lines.append(f"- superseded by {d.superseded_by} (its guards are no longer checked)")
+    for ln in d.links:
+        lines.append(f"- {ln.get('kind')} {ln.get('id')}")
     for v in d.governs:
         lines.append(f"- governs {v['id']}: `{v['symbol']}` (a change to its code asks for a review)")
     for r in d.revisit_when:
@@ -1033,7 +1094,7 @@ def import_doc(store, repo: Path, rel: str, *, graph=None, user_statement: str |
 def as_dict(repo: Path, d: Decision, *, store=None) -> dict:
     out = {"id": d.id, "title": d.title, "status": d.status, "decided_by": d.decided_by, "date": d.date,
            "chosen": d.chosen, "brief": d.brief, "source": d.source, "supersedes": d.supersedes,
-           "superseded_by": d.superseded_by, "guards": d.guards, "governs": d.governs,
+           "superseded_by": d.superseded_by, "links": d.links, "guards": d.guards, "governs": d.governs,
            "revisit_when": d.revisit_when, "waivers": d.waivers, "enforced": d.enforced,
            "file": d.path.resolve().relative_to(Path(repo).resolve()).as_posix() if d.path else None}
     if d.problems:
@@ -1070,9 +1131,229 @@ def listing(store, repo: Path, directory: str | None = None) -> dict:
         p = (repo / rel).resolve()
         if d_dir in p.parents or rel in sources or not DOC_DECISION_RE.search(rel):
             continue
-        if re.search(r"(^|/)(adr|adrs|decisions?)/", rel, re.I) and rel.lower().endswith(".md"):
+        if re.search(r"(^|/)(adr|adrs|decisions?)/", rel, re.I) and rel.lower().endswith(".md") \
+                and not _is_toc(p):
             docs.append(rel)
     return {"dir": str(d_dir), "dir_from": where, "decisions": [as_dict(repo, d, store=store) for d in recs],
             "unrecorded_docs": docs,
             "note": "records are checked by `verinoda decide check`; a hand-written ADR has no guards until "
                     "`verinoda decide import` proposes some and the human accepts them"}
+
+
+def _is_toc(p: Path) -> bool:
+    """A table of contents ``decide toc --write`` wrote (no decision of its own)."""
+    try:
+        with open(p, "rb") as fh:
+            return fh.read(len(TOC_MARK.encode("utf-8")) + 3).decode("utf-8-sig", errors="replace") \
+                .startswith(TOC_MARK)
+    except OSError:
+        return False
+
+
+# -- the lifecycle: superseding, links, the table of contents and the timeline ---------------------
+
+def supersede(store, repo: Path, old_id: str, new_id: str, *, user_statement: str | None = None) -> dict:
+    """``new_id`` replaces ``old_id``: the old record's status becomes ``superseded`` with ``superseded-by``
+    set, the new one's ``supersedes`` names it, and both files are written and logged (event ``supersede``).
+    Both records must exist already (``decide record --supersedes`` does it for a record being made).
+    A hand-written document an imported record points to is never edited."""
+    repo = Path(repo).resolve()
+    old, new = _require(repo, old_id), _require(repo, new_id)
+    if old.id == new.id:
+        raise DecisionError(f"{old.id} cannot supersede itself")
+    said_old, said_new = _norm_or_none(old.superseded_by) == new.id, _norm_or_none(new.supersedes) == old.id
+    if said_old and said_new and old.status == "superseded":
+        raise DecisionError(f"{new.id} supersedes {old.id} is already recorded on both records")
+    # a relation only one of the two records states (a hand edit) is completed, from either side
+    if (old.status == "superseded" or old.superseded_by) and not said_old:
+        raise DecisionError(f"{old.id} is already superseded" + (f" by {old.superseded_by}" if old.superseded_by
+                                                                  else ""))
+    if new.status != "accepted":
+        raise DecisionError(f"{new.id} has status {new.status}: only an accepted record replaces another (the "
+                            "status of a record is the human's to change)")
+    if new.supersedes and _norm_or_none(new.supersedes) != old.id:
+        raise DecisionError(f"{new.id} already supersedes {new.supersedes} (a record replaces one record)")
+    if _norm_or_none(old.supersedes) == new.id:
+        raise DecisionError(f"{old.id} supersedes {new.id}: the two would supersede each other")
+    new.supersedes = old.id
+    old.status, old.superseded_by = "superseded", new.id
+    out = _save(store, repo, new, "supersede", user_statement=user_statement)
+    out["superseded"] = old.id
+    out["superseded_record"] = _save(store, repo, old, "supersede", user_statement=user_statement)
+    if old.source:
+        out["not_changed"] = [f"{old.source}: the hand-written document is not edited; its own status line is "
+                              "the human's to change"]
+    return out
+
+
+def link(store, repo: Path, src_id: str, kind: str, dst_id: str, *, user_statement: str | None = None) -> dict:
+    """Link two records (``amends``, ``clarifies``, ``depends-on``, ``relates-to`` or a reverse such as
+    ``amended-by``): the link is written on ``src_id`` and its reverse on ``dst_id`` (event ``link``)."""
+    repo = Path(repo).resolve()
+    k = re.sub(r"[\s_]+", "-", str(kind or "").strip().lower())
+    if k in ("supersedes", "superseded-by"):
+        raise DecisionError("superseding changes a record's status: `verinoda decide supersede OLD --by NEW`")
+    if k not in REVERSE_LINK:
+        raise DecisionError(f"link kind {kind!r} is not one of {', '.join(sorted(REVERSE_LINK))}")
+    a, b = _require(repo, src_id), _require(repo, dst_id)
+    if a.id == b.id:
+        raise DecisionError(f"{a.id} cannot link to itself")
+    fwd, back = {"kind": k, "id": b.id}, {"kind": REVERSE_LINK[k], "id": a.id}
+
+    def has(d: Decision, entry: dict) -> bool:
+        return any(x.get("kind") == entry["kind"] and _norm_or_none(x.get("id")) == entry["id"] for x in d.links)
+
+    if has(a, fwd) and has(b, back):
+        raise DecisionError(f"{a.id} {k} {b.id} is already recorded on both records")
+    out = None
+    if not has(a, fwd):
+        a.links.append(fwd)
+        out = _save(store, repo, a, "link", user_statement=user_statement)
+    other = None
+    if not has(b, back):
+        b.links.append(back)
+        other = _save(store, repo, b, "link", user_statement=user_statement)
+    if out is None:
+        out = as_dict(repo, find(repo, a.id), store=store)
+    out["linked"] = {"from": a.id, "kind": k, "to": b.id, "reverse": back["kind"]}
+    if other is not None:
+        out["linked_record"] = other
+    return out
+
+
+def _relations(recs: list[Decision]) -> list[dict]:
+    """Each relation once, in its forward direction: ``supersedes`` (new -> old) and the kinds of
+    :data:`LINK_KINDS` (a reverse link such as ``amended-by`` is drawn as the forward one). ``one_sided``
+    when only one of the two records states it, ``missing`` the named records the folder does not hold."""
+    ids = {x.id for x in recs}
+    seen: dict[tuple, dict] = {}
+
+    def add(src: str | None, kind: str, dst: str | None, stated_by: str) -> None:
+        if not src or not dst or src == dst:
+            return
+        if kind == "relates-to" and dst < src:
+            src, dst = dst, src
+        e = seen.setdefault((src, kind, dst), {"from": src, "kind": kind, "to": dst, "stated_by": [],
+                                               "missing": sorted({x for x in (src, dst) if x not in ids})})
+        if stated_by not in e["stated_by"]:
+            e["stated_by"].append(stated_by)
+
+    for x in recs:
+        add(x.id, "supersedes", _norm_or_none(x.supersedes), x.id)
+        add(_norm_or_none(x.superseded_by), "supersedes", x.id, x.id)
+        for ln in _readable_links(x.links):
+            k, other = ln["kind"], _norm_or_none(ln["id"])
+            if k in LINK_KINDS:
+                add(x.id, k, other, x.id)
+            elif k in REVERSE_LINK:
+                add(other, REVERSE_LINK[k], x.id, x.id)
+    out = []
+    for e in seen.values():
+        present = {e["from"], e["to"]} - set(e["missing"])
+        e["one_sided"] = not present.issubset(set(e["stated_by"]))
+        out.append(e)
+    return sorted(out, key=lambda e: (e["from"], e["kind"], e["to"]))
+
+
+def timeline(repo: Path, directory: str | None = None) -> dict:
+    """The records by the date each states (then by number) with every relation between them, for
+    ``decide toc`` and the timeline of ``verinoda ui``. Read from the files only: nothing is written."""
+    repo = Path(repo).resolve()
+    recs = load_all(repo, directory)
+    d_dir, where = decisions_dir_source(repo, directory)
+    rows = []
+    for x in recs:
+        rows.append({"id": x.id, "title": x.title, "status": x.status, "date": _date_or_none(x.date),
+                     "enforced": x.enforced, "chosen": x.chosen, "source": x.source,
+                     "file": x.path.resolve().relative_to(repo).as_posix() if x.path else None,
+                     "supersedes": x.supersedes, "superseded_by": x.superseded_by, "links": x.links,
+                     **({"problems": x.problems} if x.problems else {}),
+                     **({"warnings": x.warnings} if x.warnings else {}),
+                     **({"not_enforced_because": x.inactive} if x.inactive else {})})
+    rows.sort(key=lambda r: (r["date"] is None, r["date"] or "", r["id"]))
+    return {"dir": d_dir.relative_to(repo).as_posix() if d_dir != repo else ".", "dir_from": where,
+            "records": rows, "relations": _relations(recs), "undated": [r["id"] for r in rows if r["date"] is None],
+            "note": "dates are the `date` each record states (the day it was recorded or imported, not a "
+                    "hand-written document's own date); a relation only one of its records states is one_sided"}
+
+
+def _link_text(text: str) -> str:
+    """Markdown link text: a bracket (or a backslash before one) in a title would end the link early."""
+    return text.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+
+
+def _cell(text) -> str:
+    return str(text or "").replace("|", "\\|").replace("\n", " ")
+
+
+def mermaid(tl: dict) -> str:
+    """A Mermaid graph of the records and their relations (a relation one record states: dashed; a record
+    no longer in force: a dashed border)."""
+    names: dict[str, str] = {}
+
+    def node(did: str) -> str:
+        """A Mermaid node id: ``ADR0001`` for a well-formed id; a record whose id could not be read (the raw
+        front-matter value or the file name) gets a safe id of its own."""
+        if did not in names:
+            odd = sum(v.startswith("rec") for v in names.values())
+            names[did] = did.replace("-", "") if re.fullmatch(r"ADR-\d+", did) else f"rec{odd + 1}"
+        return names[did]
+
+    out = ["graph LR"]
+    for i, r in enumerate(tl["records"]):
+        label = f"{r['id']}: {r['title']}"[:90].replace('"', "#quot;").replace("\n", " ")
+        nid = node(r["id"]) if r["id"] not in names else f"{node(r['id'])}_{i}"  # the same id twice: two nodes
+        out.append(f'  {nid}["{label} ({r["status"]})"]')
+    for e in tl["relations"]:
+        arrow = "-.->" if e["one_sided"] or e["missing"] else "-->"
+        out.append(f"  {node(e['from'])} {arrow}|{e['kind']}| {node(e['to'])}")
+    gone = [node(r["id"]) for r in tl["records"] if r["status"] in ("superseded", "deprecated", "rejected")]
+    if gone:
+        out += ["  classDef inactive stroke-dasharray: 4 3", f"  class {','.join(gone)} inactive"]
+    return "\n".join(out)
+
+
+def _reverse_label(kind: str) -> str:
+    return "superseded-by" if kind == "supersedes" else REVERSE_LINK.get(kind, kind)
+
+
+def toc_markdown(tl: dict, base: str = ".") -> str:
+    """The table of contents: one row per record by date (links relative to ``base``, the repository-relative
+    folder of the file it goes to), then the Mermaid graph."""
+    import posixpath
+    from urllib.parse import quote
+
+    lines = [TOC_MARK, "# Decision records", "",
+             f"{len(tl['records'])} record(s) in `{tl['dir']}`, by the date each states. A dashed arrow is a "
+             "relation only one of its records states.", "",
+             "| Date | Record | Status | Relations |", "|---|---|---|---|"]
+    for r in tl["records"]:
+        rel = [f"{e['kind']} {e['to']}" for e in tl["relations"] if e["from"] == r["id"]]
+        rel += [f"{_reverse_label(e['kind'])} {e['from']}" for e in tl["relations"] if e["to"] == r["id"]]
+        # the link text escapes brackets, and the target is percent-encoded (a folder name with a space or
+        # a parenthesis would otherwise end the link)
+        name = _cell(_link_text(f"{r['id']}: {r['title']}"))
+        target = quote(posixpath.relpath(r["file"], base or ".")) if r.get("file") else None
+        status = r["status"] + (" (not enforced)" if r["status"] == "accepted" and not r["enforced"] else "")
+        lines.append(f"| {r['date'] or '?'} | " + (f"[{name}]({target})" if target else name)
+                     + f" | {status} | {_cell('; '.join(rel))} |")
+    lines += ["", "## Graph", "", "```mermaid", mermaid(tl), "```", ""]
+    return "\n".join(lines)
+
+
+def write_toc(repo: Path, out: str, directory: str | None = None) -> dict:
+    """Write the table of contents to ``out`` (a ``.md`` file inside the repository). A file there that
+    ``decide toc`` did not write is never overwritten."""
+    repo = Path(repo).resolve()
+    rel = rel_path(repo, out, "--write")
+    if not rel.lower().endswith(".md"):
+        raise DecisionError(f"--write {out!r}: the table of contents is a Markdown file (.md)")
+    p = (repo / rel).resolve()
+    if repo not in p.parents:
+        raise DecisionError(f"--write {out!r} is outside the repository")
+    if p.exists() and not _is_toc(p):
+        raise DecisionError(f"{rel} exists and was not written by `verinoda decide toc`: it is not overwritten")
+    tl = timeline(repo, directory)
+    written = p.relative_to(repo).as_posix()
+    _atomic_write(p, toc_markdown(tl, PurePosixPath(written).parent.as_posix()))
+    return {**tl, "written": written}
