@@ -208,7 +208,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 17.7 | **Crash diagnosis rules and suspect scoring** | Known crash patterns (memory, watchdog, missing dependency, Mixin apply failure, wrong Java) and suspect mods scored from their frames | mclo.gs Codex, mc-crash-doctor, NotEnoughCrashes | `trace-log` names the rule and the suspect with its score |
 | 17.8 | **Shaderpack lint and include graph** | GLSL checked with Iris and OptiFine macros; `#include` edges | mcshader-lsp | `shader --check` reports a GLSL error with its line |
 | 17.9 | **Client and server separation** | Client-only code reachable from server code | Fabric Loom split source sets | a path from server code to a client-only class is reported |
-| 17.10 | **Translation keys** | Missing, duplicate and unused lang keys; placeholder mismatches with the default locale | MinecraftDev, validate-minecraft-lang | each key finding cites both files |
 
 ## 18 - Flow analysis
 
