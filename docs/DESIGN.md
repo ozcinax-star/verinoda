@@ -5915,6 +5915,91 @@ guards) and the imports (for the name-existence check), so the check is a join o
 `tests/test_docs.py`, `tests/test_research.py`, `tests/test_cli.py`, `tests/test_codecheck*.py` and
 `tests/test_guard*.py`: all pass.
 
+## 56. Complexity, code health and clones (D83, 2026-09-30)
+
+### 56.1 Decisions
+
+- **One module, two callers.** `verinoda/health.py` measures; `verinoda health` (new CLI command) reports on
+  the tree, and `review` gets a seventh concern, `health`, which measures both versions of each changed
+  function. No MCP tool is added: `change_review` (reached through `run_tool`) carries the new concern, so the
+  core profile stays at five tools.
+- **Counted vs judged.** The metrics are counts on the syntax tree, so `statically_verified`
+  (`metrics_status`). The health score and clone pairs are heuristics over thresholds and a similarity ratio,
+  so `strong_inference` (`health_status`, every review finding, every clone pair). Nothing is `verified`.
+- **Metrics.** Cyclomatic (McCabe: 1 + branches, loops, handlers, case arms except `default`/`else`/`_`,
+  conditional expressions, comprehension `for`/`if`, boolean operators). Cognitive after SonarSource
+  (+1 per branch or loop plus its nesting level, +1 per `elif`/`else`, +1 per run of one boolean operator,
+  lambdas nest without adding; no recursion or labelled-jump increments). Nesting: deepest level of branches,
+  loops, handlers and `match`/`switch`, with its line (cited as evidence). Lines and parameters (`self`/`cls`
+  and receivers not counted). A nested function or class is its own entry, named as `anchors.compute_facts`
+  names definitions so review's changed symbols match.
+- **Languages.** Python from `ast`; the tree-sitter languages `anchors` reads from their trees, with one table
+  of node types (if/else-if detection handles both the "clause holds its branch" and the "keyword then branch"
+  grammars). Checked grammar by grammar: JavaScript/TypeScript, Java, C#, Go, Rust, C/C++, Kotlin, Ruby (`if`,
+  `elsif`, `unless`, the `if`/`while` modifiers, `?:`), PHP (`else_if_clause`), Lua (`elseif_statement`,
+  `else_statement`, `repeat`), Swift (`switch_entry`; parameters are the definition's own `parameter`
+  children) and Scala (`case_clause`, `&&`/`||` as `infix_expression`). The same nested if / else-if / else
+  function gives the same counts in each. A construct a grammar names otherwise is not counted (stated in
+  `coverage.limits`).
+- **Health score.** 10 minus one point per threshold reached (`SMELLS`: cyclomatic 10/20/30, cognitive
+  15/25/40, nesting 4/5/6, lines 70/150/300, params 6/9/12), floor 1. Bands: healthy >= 9, problematic >= 5,
+  unhealthy below. Fixed thresholds, stated in `coverage.thresholds`; no configuration yet.
+- **Clones.** Tokens normalised (keywords and punctuation kept, names `N`, numbers `0`, strings `S`,
+  comments dropped); functions of at least 50 tokens; candidate pairs share at least half of the smaller one's
+  rare token 5-grams (a 5-gram in more than 25 functions is ignored); then `difflib.SequenceMatcher` ratio
+  >= 0.9. A pair where one contains the other is skipped. The search is bounded by what it costs, not only
+  by how many pairs it compares: a function of more than 1500 tokens is not compared (`too_long`, stated);
+  each comparison first checks the cheap upper bounds (`real_quick_ratio`, `quick_ratio`) and only then pays
+  for the ratio, charging its work (the pairs of equal tokens its matching scans, so a long run of one repeated
+  token costs its square) to a budget: at most 20000 comparisons and 50 million units for `verinoda health`,
+  2000 and 5 million for a review. Running out sets `truncated`. On this repository the whole-tree clone
+  search takes about 22 s and stays inside the budget (9219 comparisons).
+- **Review findings** (concern `health`, all `strong_inference`):
+  - `health-drop`: a changed function's health is lower than in the base; the text lists each metric that
+    moved (`nesting 1 -> 5`) and the smells now reached; `metrics.base` / `metrics.head`, `base_at`, and as
+    `evidence_at` the lines behind the metrics that reached a further threshold: the deepest branch (complexity,
+    nesting), the whole span (length), the `def` line (parameters). A rename (`renamed_from`) is compared with
+    its old definition. Definitions that share a name in one file (`load`, `load#2`: anchors numbers them by
+    position) are paired by aligning both versions' runs of that name on their tokens, so inserting a
+    same-name definition earlier does not make an unchanged one look added.
+  - `health-low-added`: an added function below 10.
+  - `clone-added`: a changed or added function is now a near-duplicate of another function of its file, and
+    the pair was not already alike in the base (checked only for the pairs found, not for the whole base
+    file); one finding per pair. The same shingle prefilter as `verinoda health` runs before any ratio. What
+    the review's clone budget left out is listed in `coverage.not_checked`.
+  - A planned change (`--target`) has no new version: `coverage.not_checked` says so.
+
+### 56.2 Not done
+
+- Syntax only: what a call does, recursion, early exits and data-dependent paths are not weighed.
+- The score is a heuristic over fixed thresholds, not a quality verdict; thresholds are not configurable.
+- Review compares clones only inside the changed file (the whole-tree search is `verinoda health`).
+- Normalised-token clones: two functions of the same shape doing different things can score high; a pair must
+  share token runs to be compared.
+- Tree-sitter languages: the node-type table was checked against each grammar shipped (see Languages), but a
+  construct under another node name (Swift `guard`, for one) is not counted.
+- Clones: a function of more than 1500 normalised tokens is not compared; the review's clone budget is small
+  (a few seconds), so a change touching many alike functions may leave some unchecked (`not_checked`).
+- On this repository `verinoda health verinoda` takes about 40 s (6133 functions, 207 files); pass paths to
+  narrow it.
+
+### 56.3 Tests
+
+- `tests/test_health.py` (23): Python metrics counted by hand (cyclomatic 9, cognitive 12, nesting 3 at its
+  line, nested definitions separate), JavaScript and Java through tree-sitter, unsupported and broken text,
+  the score and bands, clones ignoring names and literals, `report` ranking / test files left out / paths /
+  unmatched / bad similarity, CLI `--json` and exit 2, and review on a generated indexed git repository:
+  a health drop on a changed function (base and head metrics, deepest line as evidence), an added low-health
+  function and one clone finding per added pair, a harmless edit that is quiet, a planned change not measured.
+  After review: the same nested if / else-if / else counted alike in JavaScript, Ruby, PHP and Lua; Ruby
+  modifiers and `?:`, Swift arms and parameters, Scala `case _` and `&&`; Python `case _` not a branch; the
+  clone search bounded by length and by work, no division by zero on empty functions; `min_tokens` below 1
+  refused; unmatched paths named; the CLI reading backslash and working-folder paths; review of a rename and
+  of a pair already alike in the base (quiet), of same-name definitions after an insertion (quiet), the `def`
+  line cited for a parameter drop, and a JavaScript health drop.
+- Also run: `tests/test_review.py`, `tests/test_decide_review3.py`, `tests/test_mcp.py`, `tests/test_cli.py`,
+  `tests/test_docs.py`.
+
 ## Sources
 
 - **Retrieval:**

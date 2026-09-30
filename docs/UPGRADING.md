@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D82)
+## Upgrading from 0.3.2 (D60-D83)
 
 ### D63: Running a project's own tests safely
 
@@ -293,6 +293,13 @@ runtime), each with `file:line` evidence and a status. Exit 3 when something is 
 was read. The Python manifest reader now reads requirements whose names start with `http` (httpx,
 httpcore); before, they were skipped, so a dependency guard asking for httpx absent or present may change
 its verdict.
+
+### D83: Complexity, code health and clones
+
+`verinoda review` has a seventh concern, `health`, run by default: reviews of changes that make a function
+more complex, or that add a near-duplicate, now carry `strong_inference` findings under
+`concerns.health`. `--concerns` without `health` restores the previous output. New command `verinoda health`.
+No schema change; no new MCP tool.
 
 ### D60-D62
 
