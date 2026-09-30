@@ -1069,6 +1069,21 @@ def cmd_shader(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_access_check(args) -> int:
+    from verinoda import accesscheck
+
+    repo = _repo(args)
+    missing = [p for p in args.paths if not (Path(p).is_file() or (repo / p).is_file())]
+    if missing:
+        raise SystemExit(f"error: not a file: {', '.join(missing)}")
+    res = accesscheck.lookup(repo, [str(Path(p).resolve()) if Path(p).is_file() else p for p in args.paths])
+    _emit(args, res, lambda r: print(accesscheck.render(r)))
+    if res["status"] == "no_files":
+        return 2
+    c = res["counts"]
+    return 3 if c["absent"] or c["malformed"] else 4 if c["unknown"] else 0
+
+
 def cmd_lang(args) -> int:
     from verinoda import langkeys
 
@@ -2978,7 +2993,13 @@ def build_parser() -> argparse.ArgumentParser:
                                    "from; --check: blocks and writers that differ, mirrored constants that disagree")
     sp.add_argument("name", nargs="?", help="Field, Field.x or Block.Field")
     sp.add_argument("--check", action="store_true", help="list what disagrees between the shaders and Java (exit 3)")
-    sp = add("lang", cmd_lang, "Minecraft translation keys: keys missing from a locale or only in it, written twice, "
+    sp = add("access-check", cmd_access_check, "access wideners and access transformers checked against the class "
+                                               "files of the build's classpath: each entry exists, is absent (with "
+                                               "the nearest real names), malformed or unknown, with its line "
+                                               "(exit 3: absent or malformed; 4: something unknown)")
+    sp.add_argument("paths", nargs="*", help="files to check instead of the ones found (.accesswidener, "
+                                             ".classtweaker, accesstransformer.cfg)")
+    sp = add("lang", cmd_lang,"Minecraft translation keys: keys missing from a locale or only in it, written twice, "
                                "placeholders that differ from the default locale, keys the code asks for that no "
                                "lang file defines, keys nothing names (exit 3 when something is found)")
     sp.add_argument("--default", default="en_us", help="the locale the others are compared with (default en_us)")
