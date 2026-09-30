@@ -154,6 +154,15 @@ def _impact(v: dict, cap: int) -> list[str]:
     from verinoda import gametests
 
     out += gametests.render(v.get("gametests"))
+    coupled, hc = v.get("history_coupled") or [], v.get("history_coupling") or {}
+    if coupled:
+        out.append(f"changed together in git, no graph edge ({len(coupled)}"
+                   + (", more not shown" if hc.get("truncated") else "") + f"; last {hc.get('commits_read')} commits):")
+        n = max(3, cap // 4)
+        for c in coupled[:n]:
+            out.append(f"   [{c['status']}] {c['file']}: {c['commits']} of {c['target_commits']} commits of "
+                       f"{c['coupled_to']}")
+        out += _more(n, len(coupled), "coupled files")
     return out
 
 

@@ -822,24 +822,47 @@ def callback_dependents(g: Graph, dist: dict[str, int], rels: set[str], depth: i
     return added
 
 
-def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
+def _linked_files(g: Graph, files: set[str], rels: set[str]) -> dict[str, set[str]]:
+    """For each of ``files``, the other files an edge of ``rels`` joins it to, in either direction."""
+    out: dict[str, set[str]] = {f: set() for f in files}
+    for u, v, d in g.G.edges(data=True):
+        if d.get("relation") not in rels:
+            continue
+        fu, fv = g.file(u), g.file(v)
+        if fu and fv and fu != fv:
+            if fu in out:
+                out[fu].add(fv)
+            if fv in out:
+                out[fv].add(fu)
+    return out
+
+
+def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=(), co_change: bool = True) -> dict:
     """Reverse reachability: who depends (calls/imports/uses/inherits) on the targets.
 
     A target is a file of the graph (all its nodes) or a name resolved exactly
     (:func:`verinoda.naming.resolve`; a detected copy gives way to the project's own code). A target
     that names several symbols, that names nothing, or that only a file changed since the index
     (``stale``) spells is ``unresolved``, with its candidates in ``resolution``: impact is never
-    computed for a merely similar name."""
+    computed for a merely similar name.
+
+    With ``co_change``, the files that changed together with the targets' files in git and that no graph edge
+    links to them (nor the walk reached) are listed as ``history_coupled`` claims (``strong_inference``, with
+    their commit counts; :func:`verinoda.history.co_changes`). The files read are those of the resolved targets
+    and any target that is a file of the working tree the graph does not hold (a document, a config file)."""
     from verinoda import naming
 
     seeds: set[str] = set()
     unresolved = []
     resolution = []
+    plain_files: set[str] = set()  # targets that are files of the working tree without a graph node
     for t in targets:
         hit = [n for n in g.G.nodes if g.file(n) == t]
         if hit:
             seeds.update(hit)
             continue
+        if co_change and "::" not in t and (Path(g.root) / t).is_file():
+            plain_files.add(t.replace("\\", "/"))
         r = naming.resolve(g, t, stale=stale)
         if r.exact:
             f = g.file(r.node)
@@ -889,6 +912,17 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
     from verinoda import gametests
 
     gt = gametests.for_change(g, seeds) if seeds else None  # Minecraft GameTests: registered ones, nearest first
+    coupling: dict = {}
+    if co_change:
+        from verinoda import history as hist
+
+        target_files = {f for s in seeds if (f := g.file(s))} | plain_files
+        co = hist.co_changes(g.root, sorted(target_files),
+                             linked=_linked_files(g, target_files, rel | {"registers"}), skip=set(affected_files))
+        coupling = {"history_coupled": co["coupled"],
+                    "history_coupling": {k: co[k] for k in ("is_git", "commits_read", "bulk_skipped")}
+                    | {"method": co["coverage"]["method"], "limits": co["coverage"]["limits"]}
+                    | ({"truncated": True} if co.get("truncated") else {})}
     return {
         "view": "impact",
         "coverage": {
@@ -909,6 +943,7 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
         "tests_to_run": sorted(tests),
         **out_basis,
         **({"gametests": gt} if gt else {}),
+        **coupling,
     }
 
 

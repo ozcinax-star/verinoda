@@ -24,6 +24,10 @@ relative to it (``--relative``), as the index's paths are.
 ``A..B``, their merge base, the files changed with their line counts). Git is only read, never written; every
 argument that reaches it is one ``--option=value`` word or a path after ``--``, and a revision is checked to name
 a commit first.
+
+:func:`co_changes` reads which files changed in the same commits as a set of files (temporal coupling):
+``map --view impact`` lists those the graph does not link to the change as ``strong_inference`` claims with their
+commit counts and the shared commits as evidence.
 """
 from __future__ import annotations
 
@@ -476,6 +480,86 @@ def compare(repo: Path, base_rev: str, head_rev: str, *, path: str | None = None
                                     "binary files have no line counts (null)"]
                          + ([f"only the project's folder {project_prefix(repo)!r} of its git repository"]
                             if project_prefix(repo) else [])}}
+
+
+# -- files that change together ------------------------------------------------------------------------------
+
+COUPLING_COMMITS = 1000    # most recent commits read for co-change
+COUPLING_BULK = 30         # a commit changing more files than this (a reformat, a mass rename) is left out
+COUPLING_MIN_SHARED = 3    # commits a file must share with the target
+COUPLING_MIN_DEGREE = 0.3  # share of the target's commits that also changed the file
+COUPLING_SHOWN = 20        # coupled files listed
+COUPLING_EVIDENCE = 3      # shared commits quoted per coupled file (newest first)
+
+
+def co_changes(repo: Path, files: list[str], *, linked: dict[str, set[str]] | None = None,
+               skip: set[str] | frozenset[str] = frozenset(), max_commits: int = COUPLING_COMMITS) -> dict:
+    """Files that changed together with ``files`` in the recent history of HEAD: for each target, the files that
+    changed in at least :data:`COUPLING_MIN_SHARED` of the commits that changed it and in at least
+    :data:`COUPLING_MIN_DEGREE` of them. ``linked`` maps a target to the files a graph edge joins it to and
+    ``skip`` names files listed elsewhere already; both are left out, as are the targets themselves and files
+    missing from the working tree. Each coupled file is a ``temporal_coupling`` claim, ``strong_inference`` (a
+    pattern in the history, never a proven dependency), whose evidence is the newest commits it shares."""
+    repo = Path(repo)
+    targets = sorted({f.replace("\\", "/") for f in files if f})
+    limits = ["history reachable from HEAD only, merge commits left out",
+              f"commits changing more than {COUPLING_BULK} files are left out (reformats, mass renames)",
+              "no rename detection: a file's history before a move is not joined to it",
+              "file level only: functions that change together are not told apart",
+              "changing together is a pattern in the history, not a dependency"]
+    if project_prefix(repo):
+        limits.append(f"only the project's folder {project_prefix(repo)!r} of its git repository")
+    coverage = {"method": f"git log --name-only over the last {max_commits} commits of HEAD; a file is coupled to a "
+                          f"target when it changed in >= {COUPLING_MIN_SHARED} and >= "
+                          f"{round(COUPLING_MIN_DEGREE * 100)}% of the commits that changed the target"
+                          + (" and no graph edge links the two files" if linked is not None else ""),
+                "limits": limits}
+    is_git = _is_git(repo)
+    if not targets or not is_git:
+        return {"is_git": is_git, "commits_read": 0, "bulk_skipped": 0, "coupled": [], "coverage": coverage}
+    spec, rel = _scope(repo, None)
+    out = _git(repo, "log", f"-n{max_commits}", "--no-merges", _FMT, "--name-only", *_DIFF_SAFE, *rel, *spec)
+    commits: list[dict] = []
+    for line in (out or "").split("\n"):
+        if line.startswith(_HDR):
+            commits.append({**_header(line), "files": set()})
+        elif line.strip() and commits:
+            commits[-1]["files"].add(line.strip())
+    kept = [c for c in commits if len(c["files"]) <= COUPLING_BULK]
+    want = set(targets)
+    best: dict[str, tuple[int, float, str, int, list[dict]]] = {}  # file -> its strongest coupling
+    for t in targets:
+        mine = [c for c in kept if t in c["files"]]  # newest first
+        if len(mine) < COUPLING_MIN_SHARED:
+            continue
+        shared: dict[str, list[dict]] = {}
+        for c in mine:
+            for f in c["files"]:
+                if f != t:
+                    shared.setdefault(f, []).append(c)
+        near = (linked or {}).get(t, set())
+        for f, cs in shared.items():
+            degree = len(cs) / len(mine)
+            if (len(cs) < COUPLING_MIN_SHARED or degree < COUPLING_MIN_DEGREE or f in want or f in near
+                    or f in skip or not (repo / f).is_file()):
+                continue
+            row = (len(cs), degree, t, len(mine), cs)
+            if f not in best or row[:2] > best[f][:2]:
+                best[f] = row
+    order = sorted(best.items(), key=lambda kv: (-kv[1][0], -kv[1][1], kv[0]))
+    coupled = []
+    for f, (n, degree, t, n_t, cs) in order[:COUPLING_SHOWN]:
+        coupled.append({
+            "kind": "temporal_coupling", "status": "strong_inference", "file": f, "coupled_to": t, "commits": n,
+            "target_commits": n_t, "degree": round(degree, 2),
+            "text": f"{f} changed in {n} of the {n_t} commits that changed {t} (last {len(commits)} commits read)"
+                    + ("; no graph edge links the two files" if linked is not None else ""),
+            "evidence": [_ev(c, path=f) for c in cs[:COUPLING_EVIDENCE]],
+            "uncertainties": ["changing together is a pattern in the history, not a proven dependency"],
+            "subjects": [f, t]})
+    return {"is_git": True, "commits_read": len(commits), "bulk_skipped": len(commits) - len(kept),
+            "coupled": coupled, **({"truncated": True} if len(order) > COUPLING_SHOWN else {}),
+            "coverage": coverage}
 
 
 # -- rendering -----------------------------------------------------------------------------------------------
