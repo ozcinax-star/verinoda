@@ -24,7 +24,11 @@ the staged changes, or a planned change (``targets`` + ``change``):
    run of the selected tests (``run_tests``) through :mod:`verinoda.experiments`, and the changed lines a
    coverage report (lcov, Cobertura, JaCoCo, coverage.py JSON: :mod:`verinoda.coverage_import`) shows no test
    ran, in any language.
-5. **Unknowns** with a next step, and a **read_first** list packed to ``max_chars``: changed code, call
+5. **Differential findings**: the risk rules (security operations and words, IO in loops on changed lines)
+   run on the base version too, the diff reversed; each finding is ``introduced`` or ``preexisting``
+   (the base had the same rule, symbol and pattern), a base finding the head lost is ``fixed``. By default
+   ``concerns`` lists only what the change introduced; the rest is under ``differential``.
+6. **Unknowns** with a next step, and a **read_first** list packed to ``max_chars``: changed code, call
    sites, then concern lines, each kind hottest first (:func:`verinoda.hotspots.rank`).
 
 Honesty rules: a dependent is "possibly affected"; a finding never says "safe" or "no impact" - an empty
@@ -1776,7 +1780,8 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                                 else "; the base version had this kind of operation on its changed lines, in another "
                                      "call" if prev is not None else ""),
                              derived_by=by, for_symbol=_sym_for(ctx, rel, line),
-                             evidence_at=[flow["entry"]] if flow and flow.get("entry") else (), param_flow=flow)
+                             evidence_at=[flow["entry"]] if flow and flow.get("entry") else (), param_flow=flow,
+                             base_had="call" if same is not None else "kind" if prev is not None else None)
                 group = (kind, call_at) if call_at is not None else None
                 i = by_call.get(group) if group is not None else None
                 if i is not None and rr.rank(status) != rr.rank(out[i]["status"]):
@@ -1819,7 +1824,9 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                                             "weak_inference" if same_t is not None else "strong_inference",
                                             f"{rel}:{line}", basis="text rule over the code of the line (comments "
                                             "removed); the base version's changed lines compared as text",
-                                            derived_by="review.TEXT_SECURITY_OPS", for_symbol=_sym_for(ctx, rel, line)))
+                                            derived_by="review.TEXT_SECURITY_OPS", for_symbol=_sym_for(ctx, rel, line),
+                                            base_had="call" if same_t is not None else "kind" if prev_t is not None
+                                            else None))
                         break
     out += _guard_diff(ctx, changes)
     out += _check_calls_removed(ctx, changes)
@@ -3870,6 +3877,112 @@ def _dedupe(findings: list[dict]) -> list[dict]:
     return list(best.values())
 
 
+# -- differential findings: introduced, preexisting and fixed ---------------------------------------------
+
+FINDINGS_SHOWN = ("introduced", "all")
+# rules that find a risk in the code under review, which the base version's changed code can hold as well (a risky
+# operation, IO in a loop); every other rule says what the change touches or does (a write or a config read whose
+# value it changes, a guard removed, a signature that breaks call sites, health that fell): introduced
+STATE_RULES = frozenset({"op-on-changed-line", "security-words", "io-in-loop"})
+STATE_CONCERNS = ("security", "performance")
+DELTA_METHOD = ("the risk rules (security operations and words on changed lines, IO in loops) run a second time with "
+                "the two versions swapped (the base version as the code under review, the head as its base); a head "
+                "finding with a base finding of the same concern, rule, symbol and pattern is preexisting (pairs "
+                "chosen by text similarity), a base finding left unpaired is fixed; every other rule says what the "
+                "change touches or does (writes, config, guards, signatures, health, entries): introduced")
+
+
+def _stateful(f: dict) -> bool:
+    # an operation whose call changed ("changes X: `a` is now `b`") is a change of the operation, not the old one
+    return f["rule"] in STATE_RULES and f.get("base_had") != "kind"
+
+
+def _delta_key(f: dict) -> tuple:
+    where = f.get("for") or (f.get("at") or "").rpartition(":")[0]
+    return f["concern"], f["rule"], where, f.get("derived_by") or ""
+
+
+def _bare(text: str) -> str:
+    """A finding's text without its numbers: the same finding on other lines reads the same."""
+    return re.sub(r"\d+", "#", text)
+
+
+def _base_findings(ctx: _Ctx, diffs: list[FileDiff], want: list[str]) -> list[dict]:
+    """The state rules on the base version: the diff reversed, so the base's changed code is the code under
+    review. Its ``at`` lines are base lines (``side: base``)."""
+    rdiffs = [FileDiff(fd.rel, fd.new, fd.old, fd.tracked) for fd in diffs]
+    rctx = _Ctx(ctx.repo, ctx.g, ctx.store, {fd.rel: fd.old for fd in rdiffs})
+    rctx.overrides, rctx.index_files = ctx.overrides, ctx.index_files
+    for fd in rdiffs:
+        rctx._text[fd.rel] = fd.new
+    changes: list[Change] = []
+    for fd in rdiffs:
+        changes += _classify(rctx, fd)[0]
+    for c in changes:
+        if c.qual and c.kind not in ("config_key", "file_only") and not c.qual.startswith("<module>"):
+            c.node = rctx.node_of(c.file, c.qual)
+    out: list[dict] = []
+    if "security" in want:
+        out += _security(rctx, changes)
+    if "performance" in want:
+        out += _performance(rctx, changes, {}, [])
+    return [{**f, "side": "base"} for f in _dedupe(out) if _stateful(f)]
+
+
+def _split_delta(found: dict[str, list[dict]], base: list[dict]) -> list[dict]:
+    """Label each head finding ``delta`` introduced or preexisting (``base_at``: its base finding); return the
+    base findings no head finding paired with (fixed)."""
+    pool: dict[tuple, list[dict]] = {}
+    for f in base:
+        pool.setdefault(_delta_key(f), []).append(f)
+    for fs in found.values():
+        for f in fs:
+            cands = pool.get(_delta_key(f)) if _stateful(f) else None
+            if not cands:
+                f["delta"] = "introduced"
+                continue
+            me = _bare(f["finding"])
+            best = max(cands, key=lambda b: difflib.SequenceMatcher(None, me, _bare(b["finding"])).ratio())
+            cands.remove(best)
+            f["delta"], f["base_at"] = "preexisting", best["at"]
+    return [{**f, "delta": "fixed"} for fs in pool.values() for f in fs]
+
+
+def _differential(ctx: _Ctx, diffs: list[FileDiff], want: list[str], found: dict[str, list[dict]],
+                  shown: str) -> dict:
+    """Split the findings into introduced, preexisting and fixed; with ``shown`` introduced the preexisting ones
+    leave ``found`` for this block."""
+    state = [k for k in STATE_CONCERNS if k in want]
+    fixed = _split_delta(found, _base_findings(ctx, diffs, state) if state and diffs else [])
+    fixed.sort(key=lambda f: (CONCERNS.index(f["concern"]), rr.rank(f["status"]), f["at"] or ""))
+    pre = [f for k in CONCERNS for f in found.get(k) or [] if f["delta"] == "preexisting"]
+    if shown == "introduced":
+        for k in found:
+            found[k] = [f for f in found[k] if f["delta"] != "preexisting"]
+    d = {"shown": shown, "status": "strong_inference", "method": DELTA_METHOD,
+         "introduced": sum(1 for fs in found.values() for f in fs if f["delta"] == "introduced"),
+         "preexisting": len(pre), "fixed": len(fixed),
+         "preexisting_by_concern": {k: n for k in CONCERNS
+                                    for n in [sum(1 for f in pre if f["concern"] == k)] if n}}
+    if shown == "introduced":
+        d["preexisting_findings"] = pre[:MAX_PER_CONCERN]
+    d["fixed_findings"] = fixed[:MAX_PER_CONCERN]
+    d["truncated"] = len(pre) > MAX_PER_CONCERN and shown == "introduced" or len(fixed) > MAX_PER_CONCERN
+    return d
+
+
+def _checked(k: str, fs: list[dict], differential: dict) -> str:
+    """What the rules of concern ``k`` gave; preexisting findings left out are named, never read as none."""
+    hidden = (differential.get("preexisting_by_concern") or {}).get(k, 0) \
+        if differential.get("shown") == "introduced" else 0
+    more = f"; {hidden} preexisting finding(s) not listed (differential)" if hidden else ""
+    if fs:
+        return f"{len(fs)} finding(s){more}"
+    if hidden:
+        return f"no finding the change introduced{more}"
+    return "no finding from rules: " + "; ".join(RULES[k])
+
+
 # package.json scripts that npm runs by itself (install, publish) or that start the program
 _NPM_LIFECYCLE = ("start", "prestart", "poststart", "restart", "serve", "preinstall", "install", "postinstall",
                   "prepare", "prepublish", "prepublishOnly", "prepack", "postpack")
@@ -4709,10 +4822,13 @@ def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concer
 def review(repo: Path, *, store=None, graph=None, base: str | None = None, staged: bool = False,
            targets: list[str] | None = None, change: str | None = None, concerns: list[str] | None = None,
            run_tests: bool = False, observe: bool = False, max_chars: int = DEFAULT_MAX_CHARS,
-           record: bool = True, coverage_reports: list[str] | None = None) -> dict:
+           record: bool = True, coverage_reports: list[str] | None = None, findings: str = "introduced") -> dict:
     """Review the working tree against ``base`` (default HEAD), the staged changes, or a planned change
     (``targets`` as ``file`` or ``file::Qual.name`` with ``change`` body | signature | remove).
-    ``coverage_reports``: the coverage reports to read (default: the ones found at the usual paths)."""
+    ``coverage_reports``: the coverage reports to read (default: the ones found at the usual paths).
+    ``findings``: ``introduced`` (default) lists under ``concerns`` only what the change introduced, the
+    preexisting and fixed findings under ``differential``; ``all`` lists the preexisting ones under ``concerns``
+    too (each finding carries ``delta``)."""
     from verinoda import index, treestate
 
     t0 = time.perf_counter()
@@ -4727,6 +4843,8 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         raise ValueError("change needs targets (file or file::Qual.name)")
     if change and change not in PLANNED_KINDS:
         raise ValueError(f"change must be one of {', '.join(PLANNED_KINDS)}")
+    if findings not in FINDINGS_SHOWN:
+        raise ValueError(f"findings must be one of {', '.join(FINDINGS_SHOWN)}")
     g = graph if graph is not None else index.load(repo)
     skipped: list[dict] = []
     base_info = None
@@ -4807,6 +4925,8 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     for k in found:
         found[k] = _dedupe(found[k])
         found[k].sort(key=lambda f: (rr.rank(f["status"]), f["at"] or ""))
+    differential = (_differential(ctx, diffs, want, found, findings) if not targets
+                    else {"skipped": "a planned change has no base version to compare findings with"})
     api = _api_changes(ctx, changes, found["public_api"]) if "public_api" in want else []
     truncated_concerns = {k: len(v) for k, v in found.items() if len(v) > MAX_PER_CONCERN}
     shown = {k: v[:MAX_PER_CONCERN] for k, v in found.items()}
@@ -4846,9 +4966,8 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         "binding_readers": readers,
         "concerns": {k: shown[k] for k in CONCERNS if k in want},
         "api_changes": api,
-        "concerns_checked": {k: (f"{len(found[k])} finding(s)" if found[k] else
-                                 "no finding from rules: " + "; ".join(RULES[k]))
-                             for k in CONCERNS if k in want},
+        "concerns_checked": {k: _checked(k, found[k], differential) for k in CONCERNS if k in want},
+        "differential": differential,
         "concerns_truncated": truncated_concerns,
         "tests": tests,
         "unknown": unknown,
@@ -4865,6 +4984,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
                      + (["health (a planned change has no new version to measure)"]
                         if targets and "health" in want else []) + health_notes},
         "counts": {"changes": len(changes), "findings": sum(len(v) for v in found.values()),
+                   "preexisting": differential.get("preexisting", 0), "fixed": differential.get("fixed", 0),
                    "strong_or_verified": n_strong, "unknown": len(unknown),
                    "uncovered_changed_lines": (line_cov or {}).get("uncovered_lines", 0),
                    "api_breaking": sum(1 for a in api if a["verdict"] == "breaking")},
@@ -5415,10 +5535,17 @@ def _summary(res: dict) -> str:
     for c in ch:
         kinds[c["kind"]] = kinds.get(c["kind"], 0) + 1
     counts = ", ".join(f"{k}: {len(v)}" for k, v in res["concerns"].items() if v)
-    quiet = [k for k, v in res["concerns"].items() if not v]
+    dif = res.get("differential") or {}
+    hidden = dif.get("preexisting_by_concern") or {} if dif.get("shown") == "introduced" else {}
+    quiet = [k for k, v in res["concerns"].items() if not v and k not in hidden]
     parts = [f"Review of {where}: {len(ch)} change(s) (" + ", ".join(f"{n} {k}" for k, n in kinds.items()) + ")."]
-    parts.append(("Findings - " + counts + "." if counts else "No finding from the rules.")
+    what = "Findings the change introduced" if hidden else "Findings"
+    parts.append((f"{what} - " + counts + "." if counts else
+                  "No finding the change introduced." if hidden else "No finding from the rules.")
                  + (f" No finding from the rules for: {', '.join(quiet)}." if quiet and counts else ""))
+    if dif.get("preexisting") or dif.get("fixed"):
+        parts.append(f"Against the base: {dif['introduced']} introduced, {dif['preexisting']} preexisting"
+                     + (" (not listed; findings=all lists them)" if hidden else "") + f", {dif['fixed']} fixed.")
     api = res.get("api_changes") or []
     if api:
         by = {v: sum(1 for a in api if a["verdict"] == v) for v in ("breaking", "unknown", "compatible")}
@@ -5450,7 +5577,7 @@ def _record(store, repo: Path, res: dict) -> str | None:
             "budget": {"max_chars": res["budget"]["max_chars"]},
             "usage": {"seconds": res.get("seconds")},
             "result": {"kind": "review", "summary": res["summary"], "changes": res["changes"],
-                       "findings": [{k: f.get(k) for k in ("concern", "rule", "status", "at", "finding")}
+                       "findings": [{k: f.get(k) for k in ("concern", "rule", "status", "at", "finding", "delta")}
                                     for fs in res["concerns"].values() for f in fs],
                        "api_changes": [{k: a.get(k) for k in ("symbol", "verdict", "status", "at", "base_at")}
                                        for a in res.get("api_changes") or []],
@@ -5481,7 +5608,8 @@ def render_text(res: dict) -> str:
         out.append("")
         out.append(f"{k.replace('_', ' ')}:")
         for f in fs[:8]:
-            out.append(f"  [{f['status']}] {f['finding']}")
+            out.append(f"  [{f['status']}" + (", preexisting" if f.get("delta") == "preexisting" else "")
+                       + f"] {f['finding']}")
             out.append(f"      at {f['at']}" + (f"; see {', '.join(f['evidence_at'][:3])}" if f.get("evidence_at")
                                                 else "") + (f"  ({f['derived_by']})" if f.get("derived_by") else ""))
         if len(fs) > 8:
@@ -5501,11 +5629,22 @@ def render_text(res: dict) -> str:
         total = res.get("api_changes_total") or len(res["api_changes"])
         if total > 12:
             out.append(f"  ... {total - 12} more (--json)")
-    quiet = [k for k, v in res["concerns"].items() if not v]
+    dif = res.get("differential") or {}
+    hidden = dif.get("preexisting_by_concern") or {} if dif.get("shown") == "introduced" else {}
+    quiet = [k for k, v in res["concerns"].items() if not v and k not in hidden]
     if quiet:
         out.append("")
         out.append("No finding from the rules (not a guarantee) for: " + ", ".join(quiet)
                    + " - see concerns_checked in --json for the rules that ran.")
+    if dif.get("preexisting") or dif.get("fixed"):
+        out.append("")
+        out.append(f"Against the base ({dif['status']}): {dif['introduced']} introduced, {dif['preexisting']} "
+                   f"preexisting, {dif['fixed']} fixed"
+                   + (" - preexisting findings are not listed above (--findings all lists them)" if hidden else ""))
+        for f in (dif.get("preexisting_findings") or [])[:4]:
+            out.append(f"  preexisting [{f['status']}] {f['finding']}  at {f['at']} (base {f['base_at']})")
+        for f in (dif.get("fixed_findings") or [])[:4]:
+            out.append(f"  fixed [{f['status']}] {f['finding']}  at base {f['at']}")
     t = res.get("tests") or {}
     out.append("")
     st = t.get("static") or []

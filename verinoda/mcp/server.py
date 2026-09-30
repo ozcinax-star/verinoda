@@ -1092,10 +1092,11 @@ class AtlasTools:
     # -- question understanding -----------------------------------------------------
     def change_review(self, base: str | None = None, staged: bool = False, targets: list[str] | None = None,
                       change: str | None = None, concerns: list[str] | None = None, run_tests: bool = False,
-                      observe: bool = False, max_chars: int = 6000) -> dict:
+                      observe: bool = False, max_chars: int = 6000, findings: str = "introduced") -> dict:
         def go():
             from verinoda import review as rv
 
+            fs = _choice(findings, rv.FINDINGS_SHOWN, "findings")
             b = _opt_text(base)
             tg = _str_list(targets, "targets")
             ch = _choice(change, rv.PLANNED_KINDS, "change") if change is not None else None
@@ -1115,7 +1116,7 @@ class AtlasTools:
                     res = rv.review(self.repo, store=st, graph=self._graph(), base=b, staged=bool(staged),
                                     targets=tg or None, change=ch or ("body" if tg else None), concerns=cs,
                                     run_tests=bool(run_tests), observe=bool(observe),
-                                    max_chars=_clamp(max_chars, 500, 50_000, "max_chars"))
+                                    max_chars=_clamp(max_chars, 500, 50_000, "max_chars"), findings=fs)
                 except ValueError as exc:
                     raise ToolFailure("invalid_argument", str(exc)[:600], "base is a git revision such as HEAD~1; "
                                       "targets are 'path/file.py' or 'path/file.py::Qual.name'") from None
@@ -1123,7 +1124,7 @@ class AtlasTools:
             return res
         return self._run("change_review", go, need="graph",
                          keep=("summary", "exit", "counts", "concerns", "unknown", "read_first", "tests",
-                               "concerns_checked", "changes", "api_changes", "decisions"),
+                               "concerns_checked", "changes", "api_changes", "decisions", "differential"),
                          first=("dependents", "binding_readers", "skipped"))
 
     def question_plan_draft(self, question: str) -> dict:
@@ -2458,9 +2459,12 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         = False,
         observe: Annotated[bool, Field(description="Run them under the call tracer.")] = False,
         max_chars: Annotated[int, Field(description="Budget of read_first in characters (500-50000).")] = 6000,
+        findings: Annotated[Literal["introduced", "all"],
+                            Field(description="introduced: only what the change introduced (preexisting and fixed "
+                                              "under differential); all: preexisting too.")] = "introduced",
     ) -> dict[str, Any]:
         return emit(t.change_review(base=base, staged=staged, targets=targets, change=change, concerns=concerns,
-                                    run_tests=run_tests, observe=observe, max_chars=max_chars))
+                                    run_tests=run_tests, observe=observe, max_chars=max_chars, findings=findings))
 
     @register("question_plan_draft")
     def question_plan_draft(
