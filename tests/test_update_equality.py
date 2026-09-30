@@ -49,6 +49,7 @@ def test_replace_spans_refuses_overlaps():
 
 
 T0 = 1_790_000_000.0  # a run window used below: [T0, T0 + 10]
+ISO = "dddd-dd-ddTdd:dd:dd+dd:dd"  # the shape of an ISO clock written with timespec="seconds" in UTC
 
 
 def _ctx(name="B", **kw):
@@ -62,11 +63,11 @@ def _iso(t: float) -> str:
 
 
 def test_mask_changes_only_the_volatile_value_and_keeps_the_bytes_around_it():
-    text = ('{\n  "graph_seconds": 0.7,\n  "files":null, "at": ' + str(T0 + 5) +
+    text = ('{\n  "graph_seconds": 0.7,\n  "files":null, "at": ' + str(T0 + 5.25) +
             ',\n  "extraction": "s8-a"\n}\n')
     sb = _ctx(stamps={"extraction": "s8-a"})
     out, fired = eq.mask_text("index/build_stats.json", text, sb)
-    assert out == ('{\n  "graph_seconds": "<DURATION>",\n  "files":null, "at": "<CLOCK run scan>",\n'
+    assert out == ('{\n  "graph_seconds": "<DURATION>",\n  "files":null, "at": "<CLOCK run scan float>",\n'
                    '  "extraction": "<EXTRACTION_STAMP>"\n}\n')
     assert fired == ["build_stats_clock", "build_stats_duration", "extraction_stamp"]
     # a clock that is not a number is not a clock: kept, so the comparison sees it
@@ -85,15 +86,15 @@ def test_clocks_are_accepted_only_inside_a_run_of_this_side_and_named_by_it():
     assert eq.clock_run(T0 - 0.005, s) == "scan"                     # rounding slack
     # a value truncated to the second may lie before the window's start (ISO text has whole seconds)
     s2 = eq.SideCtx("B", windows=[("scan", T0 + 0.7, T0 + 3)])
-    assert eq._clock_text(_iso(T0), s2) == "<CLOCK run scan>"
+    assert eq._clock_text(_iso(T0), s2) == "<CLOCK run scan dddd-dd-ddTdd:dd:dd+dd:dd>"
     assert eq._clock_number(T0, s2) is None
-    # numbers, nanoseconds, ISO text and numbers written as text
-    assert eq._clock_number(T0 + 1, s) == "<CLOCK run scan>"
-    assert eq._clock_ns(int((T0 + 21) * 1e9), s) == "<CLOCK run add_function>"
+    # numbers, nanoseconds, ISO text and numbers written as text; the token keeps the kind of value
+    assert eq._clock_number(T0 + 1.5, s) == "<CLOCK run scan float>"
+    assert eq._clock_ns(int((T0 + 21.5) * 1e9), s) == "<CLOCK run add_function ns>"
     assert eq._clock_ns(int((T0 + 86_421) * 1e9), s) is None
-    assert eq._clock_text(_iso(T0 + 22), s) == "<CLOCK run add_function>"
+    assert eq._clock_text(_iso(T0 + 22), s) == "<CLOCK run add_function dddd-dd-ddTdd:dd:dd+dd:dd>"
     assert eq._clock_text("2026-09-30", s) is None and eq._clock_text(5, s) is None
-    assert eq._clock_numeric_text(str(T0 + 2), s) == "<CLOCK run scan>"
+    assert eq._clock_numeric_text(str(T0 + 2.5), s) == "<CLOCK run scan text-float>"
     assert eq._clock_numeric_text("nan", s) is None and eq._clock_numeric_text(T0, s) is None
     # the other side's windows do not count
     other = eq.SideCtx("C", windows=[("scan", T0 + 100, T0 + 110)])
@@ -106,17 +107,37 @@ def test_clocks_are_accepted_only_inside_a_run_of_this_side_and_named_by_it():
 def test_manifest_seen_names_the_run_so_a_stale_or_future_one_is_a_difference():
     man = '{"a.py": {"mtime": 1.5, "seen": %s, "ast_hash": "h"}}'
     sb, sc = _ctx("B"), _ctx("C")
-    b = eq.mask_text("index/manifest.json", man % (T0 + 25), sb)[0]
-    assert b == man % '"<CLOCK run add_function>"'
+    b = eq.mask_text("index/manifest.json", man % (T0 + 25.386277), sb)[0]
+    assert b == man % '"<CLOCK run add_function float>"'
     # the candidate kept the scan's `seen` (mutant g): named by another run, so it differs
-    assert eq.mask_text("index/manifest.json", man % (T0 + 5), sc)[0] == man % '"<CLOCK run scan>"'
-    assert eq.mask_text("index/manifest.json", man % (T0 + 86_400), sc)[0] == man % (T0 + 86_400)
+    assert eq.mask_text("index/manifest.json", man % (T0 + 5.5), sc)[0] == man % '"<CLOCK run scan float>"'
+    assert eq.mask_text("index/manifest.json", man % (T0 + 86_400.5), sc)[0] == man % (T0 + 86_400.5)
+    # the candidate writes whole seconds (an int: mutant m1, or a float without fraction): another kind of value
+    assert eq.mask_text("index/manifest.json", man % int(T0 + 25), sc)[0] == man % '"<CLOCK run add_function int>"'
+    assert eq.mask_text("index/manifest.json", man % float(int(T0 + 25)), sc)[0] == \
+        man % '"<CLOCK run add_function float-whole>"'
+
+
+def test_clock_shape_keeps_the_kind_of_value_but_not_the_digit_count():
+    assert eq.clock_shape(1790730897.386277) == eq.clock_shape(1790730897.38627) == "float"
+    assert eq.clock_shape(1790730900) == "int" and eq.clock_shape(1790730900.0) == "float-whole"
+    assert eq.clock_shape(1790730897_386277700, ns=True) == "ns"
+    assert eq.clock_shape(1790730897_000000000, ns=True) == "ns-whole-second"
+    assert eq.clock_shape(1790730897.5e9, ns=True) == "float-ns"
+    assert eq.clock_shape("2026-09-30T01:27:13+00:00") == "dddd-dd-ddTdd:dd:dd+dd:dd"
+    assert eq.clock_shape("2026-09-30T01:27:13.123456Z") == "dddd-dd-ddTdd:dd:dd.ddddddZ"
+    assert eq.clock_shape(True) == "bool"
+    s = _ctx()
+    assert eq._clock_numeric_text("1790000002", s) == "<CLOCK run scan text-int>"
+    assert eq._clock_numeric_text("1790000002.25", s) == "<CLOCK run scan text-float>"
+    assert eq._clock_numeric_text("1_790_000_002.25", s) == "<CLOCK run scan text-other>"  # float() only
+    assert eq._clock_ns(int(T0 + 1) * 10**9, s) == "<CLOCK run scan ns-whole-second>"
 
 
 def test_replace_clock_texts_and_durations():
     s = _ctx()
     text = f"created {_iso(T0 + 3)} and {_iso(T0 - 3600)}"
-    assert eq.replace_clock_texts(text, s) == (f"created <CLOCK run scan> and {_iso(T0 - 3600)}", 1)
+    assert eq.replace_clock_texts(text, s) == (f"created <CLOCK run scan {ISO}> and {_iso(T0 - 3600)}", 1)
     assert eq.replace_durations("took 1.5s, 30 ms and 2 seconds; v1.2s3 x2s") == \
         ("took <DURATION>s, <DURATION> ms and <DURATION> seconds; v1.2s3 x2s", 3)
 
@@ -177,7 +198,8 @@ def test_update_result_rules():
             '"stale": [{"id": "clm_00000000000c", "text": "t"}], "background": {"started": true, "pid": 4242}, '
             '"index_seconds": 0.6, "derived": {"lexicon": {"seconds": 2, "units": 4}, "anchors": {"ms": 2.4}}}')
     out, fired = eq.mask_text(eq.JSON_OUT, text, sb)
-    assert json.loads(out) == {"snapshot": {"id": "<snp#2>", "file_count": 3, "created_at": "<CLOCK run add_function>"},
+    assert json.loads(out) == {"snapshot": {"id": "<snp#2>", "file_count": 3,
+                                            "created_at": "<CLOCK run add_function dddd-dd-ddTdd:dd:dd+dd:dd>"},
                                "stale": [{"id": "<clm#1>", "text": "t"}],
                                "background": {"started": True, "pid": "<PID>"},
                                "index_seconds": "<DURATION>",
@@ -201,9 +223,10 @@ def test_text_output_and_stderr_rules():
 def test_manifest_and_lexicon_and_report_rules():
     s = _ctx()
     man = '{\n  "a.py": {\n    "mtime": 1.5,\n    "seen": %s,\n    "ast_hash": "h"\n  }\n}' % (T0 + 1.25)
-    assert eq.mask_text("index/manifest.json", man, s)[0] == man.replace(str(T0 + 1.25), '"<CLOCK run scan>"')
+    assert eq.mask_text("index/manifest.json", man, s)[0] == man.replace(str(T0 + 1.25), '"<CLOCK run scan float>"')
     lex = '{"version":1,"built_at":"' + _iso(T0 + 2) + '","units":21}'
-    assert eq.mask_text("index/lexicon.json", lex, s)[0] == '{"version":1,"built_at":"<CLOCK run scan>","units":21}'
+    assert eq.mask_text("index/lexicon.json", lex, s)[0] == \
+        '{"version":1,"built_at":"<CLOCK run scan dddd-dd-ddTdd:dd:dd+dd:dd>","units":21}'
     day = time.strftime("%Y-%m-%d", time.localtime(T0))
     rep = f"# Graph Report - orders  ({day})\n\nBuilt {day}\n"
     assert eq.mask_text("index/GRAPH_REPORT.md", rep, s) == \
@@ -293,7 +316,8 @@ def test_sqlite_dump_reads_rowid_order_through_the_rules(tmp_path):
     assert sb.ids == {"snp_00000000000a": "<snp#1>", "snp_00000000000b": "<snp#2>"}
     assert db["pragmas"]["journal_mode"] == "wal"  # read from a copy that holds the WAL
     assert db["snapshots"]["columns"] == ["<rowid>", "id", "created_at", "n"]
-    assert db["snapshots"]["rows"] == [[1, "<snp#1>", "<CLOCK run scan>", 0], [2, "<snp#2>", "<CLOCK run scan>", 1]]
+    clock = "<CLOCK run scan dddd-dd-ddTdd:dd:dd+dd:dd>"
+    assert db["snapshots"]["rows"] == [[1, "<snp#1>", clock, 0], [2, "<snp#2>", clock, 1]]
     assert db["snapshot_files"]["rows"][0] == [1, "<snp#1>", "a.py"]
     assert db["sqlite_sequence"]["rows"] == [[1, "log", 2]]
     assert db["terms"] == {"columns": ["term", "n"], "rows": [["alpha", 2], ["zeta", 1]]}  # WITHOUT ROWID: key order
@@ -347,15 +371,19 @@ def _claims_db(p: Path, ids: list[str], recorded_ns: int):
 
 def test_claim_ids_are_numbered_in_rowid_order_and_clock_columns_must_fall_in_a_run(tmp_path):
     rules = eq._RULES_BY_ARTIFACT["atlas.db"]
-    _claims_db(tmp_path / "b.db", ["clm_00000000000a", "clm_00000000000b"], int((T0 + 25) * 1e9))
-    _claims_db(tmp_path / "c.db", ["clm_ffffffffffff", "clm_111111111111"], int((T0 + 25) * 1e9))
+    _claims_db(tmp_path / "b.db", ["clm_00000000000a", "clm_00000000000b"], int((T0 + 25.5) * 1e9))
+    _claims_db(tmp_path / "c.db", ["clm_ffffffffffff", "clm_111111111111"], int((T0 + 25.25) * 1e9))
     db, fired = eq.sqlite_dump(tmp_path / "b.db", rules, _ctx("B"), tmp_path / "t")
     dc, _ = eq.sqlite_dump(tmp_path / "c.db", rules, _ctx("C"), tmp_path / "t")
     assert db == dc and set(fired) == {"atlas_clock_columns", "atlas_random_ids"}
-    assert db["claims"]["rows"][1] == [2, "<clm#2>", "stale", "<CLOCK run scan>", "<clm#1>"]
+    assert db["claims"]["rows"][1] == [2, "<clm#2>", "stale", "<CLOCK run scan dddd-dd-ddTdd:dd:dd+dd:dd>", "<clm#1>"]
     assert db["claim_history"]["rows"][0][3:] == [
-        json.dumps({"claim": "<clm#1>", "at": "<CLOCK run add_function>"}), "<CLOCK run add_function>"]
-    assert db["file_stat"]["rows"][0][3] == "<CLOCK run add_function>"
+        json.dumps({"claim": "<clm#1>", "at": f"<CLOCK run add_function {ISO}>"}), f"<CLOCK run add_function {ISO}>"]
+    assert db["file_stat"]["rows"][0][3] == "<CLOCK run add_function ns>"
+    # recorded_at_ns written as whole seconds: another kind of value, so it differs
+    _claims_db(tmp_path / "w.db", ["clm_ffffffffffff", "clm_111111111111"], int(T0 + 25) * 10**9)
+    dw, _ = eq.sqlite_dump(tmp_path / "w.db", rules, _ctx("C"), tmp_path / "t")
+    assert eq.first_json_diff(db, dw)[0] == "$.file_stat.rows[0][3]"
     # recorded_at_ns a day ahead (mutant h) is outside every run: kept, so it differs
     _claims_db(tmp_path / "h.db", ["clm_ffffffffffff", "clm_111111111111"], int((T0 + 86_425) * 1e9))
     dh, _ = eq.sqlite_dump(tmp_path / "h.db", rules, _ctx("C"), tmp_path / "t")
@@ -372,7 +400,7 @@ def test_search_meta_rules(tmp_path):
     rules = eq._RULES_BY_ARTIFACT["index/search.db"]
     d, fired = eq.sqlite_dump(tmp_path / "search.db", rules, _ctx("B", graph_mtimes={123: "scan"}), tmp_path / "t")
     assert d["meta"]["rows"] == [[1, "graph", '{"mtime_ns": "<GRAPH_MTIME after scan>", "sha256": "h", "size": 9}'],
-                                 [2, "built_at", "<CLOCK run scan>"], [3, "n", "4"]]
+                                 [2, "built_at", "<CLOCK run scan text-float>"], [3, "n", "4"]]
     assert set(fired) == {"search_meta_built_at", "search_meta_graph_mtime"}
     d, _ = eq.sqlite_dump(tmp_path / "search.db", rules, eq.SideCtx("C", graph_mtimes={5: "scan"}), tmp_path / "t")
     assert d["meta"]["rows"][0][2].startswith('{"mtime_ns": 123')
@@ -383,19 +411,34 @@ def test_search_meta_rules(tmp_path):
 
 def test_the_exclusions_are_few_and_named():
     assert eq.excluded("index/cache/ast/x.json") and eq.excluded("build.lock")
+    assert eq.excluded("index/.rebuild.lock")
     assert eq.excluded("atlas.db-wal") and eq.excluded("index/search.db-shm")
     for rel in ("atlas.db", "index/graph.json", "config.json", ".gitignore", "background_update.log",
-                "index/x.tmp", "atlas.db-journal", "index/cachefile.json"):
+                "index/x.tmp", "atlas.db-journal", "index/cachefile.json", "index/build.lock", "other.lock",
+                "index/eq.lock", "decisions/.rebuild.lock"):
         assert not eq.excluded(rel)
 
 
+def _noon(day: str) -> float:
+    return time.mktime(time.strptime(day + " 12:00:00", "%Y-%m-%d %H:%M:%S"))  # local noon of that day
+
+
 def test_artifact_names_of_dated_backups():
+    s = eq.SideCtx("B", windows=[("scan", _noon("2026-09-30"), _noon("2026-09-30") + 5),
+                                 ("add_function", _noon("2026-10-01"), _noon("2026-10-01") + 5)])
     names = eq.artifact_names(["index/graph.json", "index/2026-09-30/graph.json", "index/2026-10-01/GRAPH_REPORT.md",
-                               "index/2026-9-30/x", "atlas.db"])
+                               "index/2026-9-30/x", "atlas.db", "index/2026-09-29/graph.json"], s)
     assert names["index/graph.json"] == ("index/graph.json", "index/graph.json")
     assert names["index/2026-09-30/graph.json"] == ("index/<DATE>/graph.json", "index/graph.json")
     assert names["index/2026-10-01/GRAPH_REPORT.md"] == ("index/<DATE+1>/GRAPH_REPORT.md", "index/GRAPH_REPORT.md")
     assert names["index/2026-9-30/x"] == ("index/2026-9-30/x", "index/2026-9-30/x")
+    # a date on which no run of this side ran (mutant m2: yesterday) keeps its name, so it is compared; its
+    # files still take the rules of the files they copy
+    assert names["index/2026-09-29/graph.json"] == ("index/2026-09-29/graph.json", "index/graph.json")
+    # the other side's dates do not count
+    other = eq.SideCtx("C", windows=[("scan", _noon("2026-09-29"), _noon("2026-09-29") + 5)])
+    assert eq.artifact_names(["index/2026-09-30/graph.json"], other)["index/2026-09-30/graph.json"][0] == \
+        "index/2026-09-30/graph.json"
 
 
 def test_tree_state_and_changes(tmp_path):
@@ -426,13 +469,15 @@ def test_tree_state_skips_git_and_verinoda_only_at_the_root(tmp_path):
 def test_git_files_leave_out_only_objects_index_logs_and_leftovers(tmp_path):
     g = tmp_path / ".git"
     for rel in ("HEAD", "config", "index", "ORIG_HEAD", "FETCH_HEAD", "COMMIT_EDITMSG", "info/exclude",
-                "hooks/pre-commit", "objects/pack/p.pack", "logs/HEAD", "refs/heads/main", "verinoda-eq",
+                "hooks/pre-commit", "objects/pack/p.pack", "objects/pack/p.idx", "objects/pack/p.rev",
+                "objects/info/packs", "objects/ab/cdef0123", "logs/HEAD", "refs/heads/main", "verinoda-eq",
                 "packed-refs"):
         (g / rel).parent.mkdir(parents=True, exist_ok=True)
         (g / rel).write_bytes(b"x")
+    # the object store is compared (loose objects and packs); only objects/info and the packs' .idx are not
     assert list(eq.tree_state(g, skip=eq.git_uncompared)) == [
-        "COMMIT_EDITMSG", "HEAD", "config", "hooks/pre-commit", "info/exclude", "packed-refs", "refs/heads/main",
-        "verinoda-eq"]
+        "COMMIT_EDITMSG", "HEAD", "config", "hooks/pre-commit", "info/exclude", "objects/ab/cdef0123",
+        "objects/pack/p.pack", "objects/pack/p.rev", "packed-refs", "refs/heads/main", "verinoda-eq"]
 
 
 # -- edit plans --------------------------------------------------------------------------------------------------------
@@ -471,7 +516,7 @@ def test_one_plan_applied_to_both_copies_gives_the_same_trees(tmp_path):
         for r in (b, c):
             eq.apply_plan(r, ops, when, git=lambda repo, *a: commits.append((repo.name, a)))
         assert eq.tree_state(b) == eq.tree_state(c), name
-    assert skipped == ["edit_objc_pair", "edit_go", "edit_go_mod", "edit_java", "edit_rust"]
+    assert skipped == ["retarget_call", "edit_objc_pair", "edit_go", "edit_go_mod", "edit_java", "edit_rust"]
     assert [n for n, _a in commits] == ["b", "b", "c", "c"]  # add -A and commit, on each side
     assert not (b / "docs").exists() and not (b / "orders" / "config.py").exists()
     assert (b / "orders" / "api_renamed.py").read_text(encoding="utf-8").endswith("# eq: a comment and nothing else\n")
@@ -483,6 +528,63 @@ def test_one_plan_applied_to_both_copies_gives_the_same_trees(tmp_path):
     assert json.loads((b / "eq_config" / "package.json").read_text())["name"] == "eq-config"
     assert "eqTotal" in (b / "eq_web" / "helpers.ts").read_text()
     assert "def eq_fast_added():" in (b / "orders" / "service.py").read_text()
+
+
+def test_retarget_call_moves_one_edge_and_keeps_the_line_length():
+    src = "def alpha():\n    return 1\n\n\ndef bravo():\n    return 2\n\n\ndef caller():\n    return alpha()\n"
+    new, caller, old, target = eq.retarget_call(src)
+    assert (caller, old, target) == ("caller", "alpha", "bravo")
+    assert new == src.replace("return alpha()", "return bravo()")
+    # a shorter name is padded before the line end (CRLF kept); a method may be the caller
+    src = ("def compute_score(d):\r\n    return sum(d)\r\n\r\ndef norm(v):\r\n    return v\r\n\r\n"
+           "def run_analysis(d):\r\n    return d\r\n\r\nclass A:\r\n    def process(self, d):\r\n"
+           "        return run_analysis(d)\r\n")
+    new, caller, old, target = eq.retarget_call(src)
+    assert (caller, old, target) == ("process", "run_analysis", "norm")  # compute_score is longer
+    assert "        return norm(d)        \r\n" in new and len(new) == len(src)
+    # the caller already names every other function (the edge would merge), a call named twice, one function
+    assert eq.retarget_call("def a():\n    return b()\n\n\ndef b():\n    return a()\n") is None
+    assert eq.retarget_call("def a():\n    return 1\n\n\ndef b():\n    return c(a) + a()\n\n\n"
+                            "def c(x):\n    return x\n") is None
+    assert eq.retarget_call("def a():\n    return a()\n") is None
+    assert eq.retarget_call("def (:") is None
+    # no other name fits in length: a longer one is used, the line grows
+    src = "def ab():\n    return 1\n\n\ndef longer_name():\n    return 2\n\n\ndef c():\n    return ab()\n"
+    assert eq.retarget_call(src)[0].endswith("def c():\n    return longer_name()\n")
+
+
+def test_retarget_plan_picks_a_file_of_the_corpus(tmp_path):
+    _orders(tmp_path)
+    assert eq.plan_retarget_call(tmp_path) is None  # no file there has two functions and a call between them
+    (tmp_path / "orders" / "service.py").write_bytes(
+        b"def validate(x):\n    return x\n\n\ndef place(x):\n    validate(x)\n    return x\n\n\n"
+        b"def fetch(x):\n    return x\n")
+    ops = eq.plan_retarget_call(tmp_path)
+    assert [o.rel for o in ops] == ["orders/service.py"]
+    assert b"    fetch(x)   \n" in ops[0].data
+
+
+def test_listing_names_files_and_folders_without_times(tmp_path):
+    (tmp_path / "config").mkdir()
+    (tmp_path / "tmp" / "empty").mkdir(parents=True)
+    (tmp_path / "config" / "trust.json").write_bytes(b"{}")
+    got = eq.listing(tmp_path)
+    assert list(got) == ["config/", "config/trust.json", "tmp/", "tmp/empty/"]
+    assert got["config/trust.json"][0] == 2 and got["tmp/empty/"] == "dir"
+    os.utime(tmp_path / "config" / "trust.json", (1, 1))
+    assert eq.listing(tmp_path) == got
+    assert eq.listing(tmp_path / "missing") == {}
+
+
+def test_c0_accepts_the_baseline_stamps_besides_its_own():
+    s = eq.SideCtx("C0", stamps={"extraction": "s8-cand", "server_version": "v+c"},
+                   also={"extraction": "s8-base", "server_version": "v+b"})
+    for v in ("s8-cand", "s8-base"):
+        assert eq.mask_text("index/build_stats.json", '{"extraction": "%s"}' % v, s)[0] == \
+            '{"extraction": "<EXTRACTION_STAMP>"}'
+    assert eq.mask_text("index/build_stats.json", '{"extraction": "s8-old"}', s)[0] == '{"extraction": "s8-old"}'
+    row = {"key": "schema_written_by", "value": "v+b"}
+    assert eq._db_written_by("meta", row, s) == 1 and row["value"] == "<SERVER_VERSION>"
 
 
 def test_same_size_edit_puts_the_old_mtime_back(tmp_path):
