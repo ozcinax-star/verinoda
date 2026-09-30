@@ -7,8 +7,8 @@ front matter line it matched (``evidence_at``) and a status:
 * ``governs``: a changed, added or removed definition is the governed symbol or lies inside it
   (``statically_verified``: the symbol's file and qualified name are compared as text); a changed line inside
   the governed symbol's span that no definition change counts, such as a docstring or comment edit
-  (``statically_verified``: the diff's lines against the parsed span); a changed file of the governed symbol
-  whose definitions could not be read (``strong_inference``);
+  (``statically_verified``: the diff's lines against the parsed span; ``text_only`` is set); a changed file of
+  the governed symbol whose definitions could not be read (``strong_inference``);
 * ``only_in``: a changed file is one the guard allows the call in (``statically_verified``, a glob match); a
   changed line's code (comments and strings blanked), in a file ``decide check`` would search for the guard,
   holds the guard's dotted call or matches its pattern (``strong_inference``: text, names are not bound), or
@@ -202,10 +202,10 @@ def _governs_lines(d, v: dict, files: _Files, ev: str | None) -> list[dict]:
         inside = sorted(ln for ln in lines or () if span and span[0] <= ln <= span[1])
         if inside:
             base = " (base)" if side == "base" else ""
-            return [_reach("governs", v.get("id"), f"{vf}:{inside[0]}{base}",
-                           f"a changed line inside {vf}::{vq} (lines {span[0]}-{span[1]}{base}) that no definition "
-                           f"change counts (a docstring, comment or whitespace edit); {d.id} governs "
-                           f"{v.get('symbol')}", "statically_verified", ev)]
+            return [{**_reach("governs", v.get("id"), f"{vf}:{inside[0]}{base}",
+                              f"a changed line inside {vf}::{vq} (lines {span[0]}-{span[1]}{base}) that no "
+                              f"definition change counts (a docstring, comment or whitespace edit); {d.id} governs "
+                              f"{v.get('symbol')}", "statically_verified", ev), "text_only": True}]
     return []
 
 

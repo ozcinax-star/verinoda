@@ -20,8 +20,13 @@ statement "the change alters what this item rests on", never for "the item is no
 * a decision record: a change reaches the symbol it governs, or the record's own file changed (the reaches of
   :mod:`verinoda.decision_reach`, with their status).
 
-A dependency the base version already did not match (the claim or note was stale before this change) is
-counted, not listed.
+A dependency or note that matches the new version is not reached (the item was made, or is fresh, on the new
+version). One the base version already did not match, and the new one does not match either (the claim or
+note was stale before this change), is counted, not listed.
+
+Both versions are read as the review's diff read them (LF line ends, a byte-order mark kept), so fingerprints
+compare with those recorded from the files on disk; a whole-file fingerprint also matches the file with CRLF
+line ends.
 """
 
 from __future__ import annotations
@@ -37,6 +42,9 @@ LIMITS = [
     "a decision record is listed when the change reaches the symbol it governs or its own file; guards are "
     "`decide check`'s answer",
     "a planned change (--target) has no new version: nothing is listed",
+    "a claim that watches the tests is left out when it matches the tests of the last scan; one already stale "
+    "on the base is listed, not counted",
+    "a decision record is not listed for a comment, docstring or whitespace edit inside the symbol it governs",
 ]
 _RANK = {"statically_verified": 0, "strong_inference": 1}
 
@@ -49,22 +57,50 @@ class _Versions:
 
         self.old = {fd.rel: fd.old for fd in diffs}
         self.new = {fd.rel: fd.new for fd in diffs}
+        self._raw = {("old", fd.rel): getattr(fd, "old_raw", None) for fd in diffs}
+        self._raw.update({("new", fd.rel): getattr(fd, "new_raw", None) for fd in diffs})
         self.lines = {fd.rel: _changed_lines(fd.old, fd.new) for fd in diffs}
         self._facts: dict[tuple[str, str], dict | None] = {}
+        self.head_testset: str | None = None   # the tests' fingerprint in the new version, when known
 
     def changed(self, rel: str) -> bool:
         return rel in self.old and self.old[rel] != self.new[rel]
+
+    def data(self, rel: str, side: str) -> bytes | None:
+        """The bytes of one version (None: not there): as the diff read them, else the decoded text."""
+        raw = self._raw.get((side, rel))
+        if raw is not None:
+            return raw
+        text = (self.old if side == "old" else self.new).get(rel)
+        return None if text is None else text.encode("utf-8", "surrogatepass")
+
+    def text(self, rel: str, side: str) -> str | None:
+        """One version's text as a file on disk is read for its anchors (a byte-order mark kept)."""
+        from verinoda import anchors
+
+        data = self.data(rel, side)
+        return None if data is None else anchors.text_of(rel, data)
+
+    def matches(self, rel: str, side: str, sha: str) -> bool:
+        """Whether a recorded file sha256 is one version's (with LF or with CRLF line ends)."""
+        import hashlib
+
+        data = self.data(rel, side)
+        if data is None:
+            return False
+        crlf = data.replace(b"\n", b"\r\n")
+        return sha in {hashlib.sha256(data).hexdigest(), hashlib.sha256(crlf).hexdigest()}
 
     def facts(self, rel: str, side: str) -> dict | None:
         from verinoda import anchors
 
         key = (rel, side)
         if key not in self._facts:
-            text = (self.old if side == "old" else self.new).get(rel)
+            data = self.data(rel, side)
             f = None
-            if text is not None:
+            if data is not None:
                 try:
-                    f = anchors.compute_facts(rel, text.encode("utf-8"))
+                    f = anchors.compute_facts(rel, data)
                 except Exception:  # noqa: BLE001 - a version that cannot be parsed has no facts
                     f = None
             self._facts[key] = f if anchors.usable(f) else None
@@ -105,12 +141,20 @@ def _dep_reach(d: dict, v: _Versions) -> tuple[dict | None, bool]:
                         + (", ..." if len(code) > 1 else "") + ")"} if code else None), False
     if kind == "testset":
         tests = sorted(p for p in v.old if v.changed(p) and is_test_file(p))
+        if tests and d.get("fp") is not None and d["fp"] == v.head_testset:
+            return None, False   # made on (or fresh against) the new version's tests
         return ({"at": v.first(tests[0]), "status": "strong_inference",
                  "why": f"the claim watches the tests; {len(tests)} test file(s) changed ({tests[0]}"
                         + (", ..." if len(tests) > 1 else "") + ")"} if tests else None), False
     if kind == "commit" or not v.changed(path):
         return None, False
     if kind == "file":
+        fp = d.get("fp")
+        if fp not in (None, anchors.ABSENT):
+            if v.matches(path, "new", fp):
+                return None, False   # made on (or fresh against) the new version
+            if not v.matches(path, "old", fp):
+                return None, True
         what = "removes" if v.new[path] is None else "adds" if v.old[path] is None else "edits"
         return {"at": v.first(path), "status": "statically_verified",
                 "why": f"the change {what} {path}, which the claim depends on as a whole file"}, False
@@ -123,6 +167,8 @@ def _dep_reach(d: dict, v: _Versions) -> tuple[dict | None, bool]:
     after = anchors.facet_fp(fn, d["dep_key"], d["facet"]) if fn is not None else anchors.ABSENT
     if before == after:
         return None, False
+    if fn is not None and d.get("scheme") == fn.get("scheme") and d.get("fp") == after:
+        return None, False   # made on (or fresh against) the new version
     if fo is not None and d.get("scheme") == fo.get("scheme") and d.get("fp") != before:
         return None, True
     label = {"sym": "symbol", "bind": "name", "mod": "module statement", "sec": "section"}.get(kind, kind)
@@ -147,6 +193,23 @@ def _evidence_at(store, cid: str) -> list[str]:
     return out
 
 
+def _head_testset(store, v: _Versions) -> str | None:
+    """The tests' fingerprint (``claims.testset_fp``) in the last scan, when that scan holds the new version
+    of every changed test file; else None."""
+    from verinoda.claims import testset_fp
+    from verinoda.testcode import is_test_file
+
+    snap = store.latest_snapshot()
+    if not snap:
+        return None
+    files = store.snapshot_files(snap["id"])
+    for p in v.old:
+        if v.changed(p) and is_test_file(p):
+            if (p in files) if v.new[p] is None else not v.matches(p, "new", files.get(p, "")):
+                return None
+    return testset_fp(files)
+
+
 def _claims(store, v: _Versions) -> tuple[list[dict], int, int]:
     """(claims the change reaches, how many were checked, how many the base already did not match)."""
     from verinoda.claims import ACTIVE, claim_files
@@ -155,6 +218,7 @@ def _claims(store, v: _Versions) -> tuple[list[dict], int, int]:
                      "AND superseded_by IS NULL", ACTIVE)
     if not rows:
         return [], 0, 0
+    v.head_testset = _head_testset(store, v)
     deps: dict[str, list[dict]] = {}
     for d in store.all("SELECT claim_id, dep_key, facet, fp, scheme FROM claim_deps"):
         deps.setdefault(d["claim_id"], []).append(d)
@@ -198,12 +262,12 @@ def _notes(repo: Path, v: _Versions) -> tuple[list[dict], int, int]:
     for n in notes:
         if not v.changed(n.file):
             continue
-        was = usernotes.check_text(n, v.old[n.file], v.facts(n.file, "old"))
+        was = usernotes.check_text(n, v.text(n.file, "old"), v.facts(n.file, "old"))
+        now = usernotes.check_text(n, v.text(n.file, "new"), v.facts(n.file, "new"))
+        if now["status"] == "fresh":
+            continue   # fresh against the new version, whichever version it was saved on
         if was["status"] != "fresh":
             before += 1
-            continue
-        now = usernotes.check_text(n, v.new[n.file], v.facts(n.file, "new"))
-        if now["status"] == "fresh":
             continue
         span = (was["start"], was["end"])
         at = v.first(n.file, span, "old") if now["status"] == "gone" else \
@@ -221,7 +285,8 @@ def _notes(repo: Path, v: _Versions) -> tuple[list[dict], int, int]:
 def _decisions(decisions: dict) -> list[dict]:
     out = []
     for r in (decisions or {}).get("records") or []:
-        hits = [h for h in r.get("reached_by") or [] if h.get("kind") in ("governs", "record")]
+        hits = [h for h in r.get("reached_by") or [] if h.get("kind") in ("governs", "record")
+                and not h.get("text_only")]   # a comment or docstring edit leaves what the record rests on
         if not hits:
             continue
         h = hits[0]

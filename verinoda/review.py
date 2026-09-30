@@ -126,6 +126,9 @@ class FileDiff:
     old: str | None
     new: str | None
     tracked: bool = True
+    # the bytes each version was decoded from (LF line ends, a byte-order mark kept), when the diff read them
+    old_raw: bytes | None = field(default=None, repr=False, compare=False)
+    new_raw: bytes | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass
@@ -839,7 +842,7 @@ def _diff_worktree(repo: Path, base_sha: str) -> tuple[list[FileDiff], list[dict
         if (old_b is not None and treestate.is_binary(old_b)) or (new_b is not None and treestate.is_binary(new_b)):
             skipped.append({"file": rel, "why": "binary"})
             continue
-        diffs.append(FileDiff(rel, _decode(old_b), _decode(new_b), in_git))
+        diffs.append(FileDiff(rel, _decode(old_b), _decode(new_b), in_git, old_b, new_b))
     return diffs, skipped
 
 
@@ -899,7 +902,7 @@ def _diff_staged(repo: Path, base_sha: str) -> tuple[list[FileDiff], list[dict]]
         old_t, new_t = _decode(old_b), _decode(new_b)
         if old_t == new_t:
             continue
-        diffs.append(FileDiff(p, old_t, new_t, True))
+        diffs.append(FileDiff(p, old_t, new_t, True, old_b, new_b))
     return diffs, skipped
 
 
