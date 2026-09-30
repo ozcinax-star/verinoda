@@ -662,22 +662,41 @@ def _java_summary(java) -> dict:
             "unresolved_lookups": java.unresolved}
 
 
-def lookup(repo: Path, what: str | None = None, name: str | None = None) -> dict:
-    """``verinoda datapack``: no argument -> the functions, tags and objectives counted and the mismatches;
-    ``tag NAME`` / ``score NAME`` -> every site; ``function ID`` -> what it calls and what calls it."""
+def lookup(repo: Path, what: str | None = None, name: str | None = None,
+           with_paths: list[str] | None = None) -> dict:
+    """``verinoda datapack``: no argument -> the functions, tags and objectives counted and the mismatches, with the
+    resource collisions and unmet mod dependencies of the packs (:mod:`verinoda.packset`; ``with_paths`` adds mods
+    and packs loaded beside the repository's); ``tag NAME`` / ``score NAME`` -> every site; ``function ID`` -> what
+    it calls and what calls it; ``packs`` -> the packs and mods, their collisions and dependencies."""
+    from verinoda import packset
+
+    if what == "packs":
+        res = packset.check(repo, with_paths)
+        return {"status": "found" if res["sources"] else "no_datapack", "kind": "packs", **res,
+                "note": "a collision's files are both read; which one the game uses is its load order. Dependencies "
+                        "are read from the manifests; the game, Java and the loaders are not checked"}
     ix = index(repo, java_calls=what in (None, "", "function"))
     base = {"functions": len(ix["functions"]), "tags": len([t for t in ix["tags"] if t != "*"]),
             "objectives": len(ix["objectives"])}
     if ix.get("java") is not None:
         base["java_calls"] = len([c for c in ix["java"].calls if not c.dynamic])
     if not what:
-        if not ix["functions"] and not ix["tags"]:
+        packs = packset.check(repo, with_paths)
+        dep = packs["dependencies"]
+        if not ix["functions"] and not ix["tags"] and not packs["collisions"] and not dep["problems"]:
             return {**base, "status": "no_datapack", "note": "no data/<namespace>/function[s]/*.mcfunction and no "
                                                             "entity tags in Java"}
-        return {**base, "status": "found", "kind": "summary", "problems": problems(ix),
+        pr = problems(ix)
+        pr["pack_collisions"] = packs["collisions"]
+        pr["mod_dependencies"] = dep["problems"]
+        if dep["external"]:  # the repository alone is not the set the game loads: said, not called missing
+            pr["dependencies_not_checked"] = dep["external"]
+        return {**base, "status": "found", "kind": "summary", "problems": pr,
+                "packs": len(packs["sources"]), **({"with": packs["with"]} if packs["with"] else {}),
                 **({"java": _java_summary(ix["java"])} if ix.get("java") is not None else {}),
                 "note": "read from the text: a name built at run time is not a name (a function's is listed as "
-                        "dynamic, a Java tag's matched as a pattern); a mismatch is a lead"}
+                        "dynamic, a Java tag's matched as a pattern); a mismatch is a lead; which file of a "
+                        "collision the game uses is its load order"}
     if what in ("tag", "score", "objective"):
         table = ix["tags"] if what == "tag" else ix["objectives"]
         sites = table.get(name or "")
@@ -707,7 +726,7 @@ def lookup(repo: Path, what: str | None = None, name: str | None = None) -> dict
                                "how": how, **({"delay": d} if d else {})}
                               for f, ln, how, d in _called_by(ix["functions"], fn.id)] + java_calls,
                 "dynamic": maybe, "dynamic_any": bare}
-    raise ValueError(f"datapack: unknown lookup {what!r} (tag, score, function)")
+    raise ValueError(f"datapack: unknown lookup {what!r} (tag, score, function, packs)")
 
 
 def _java_line(c: dict) -> str:
@@ -727,6 +746,12 @@ def _dynamic_line(c: dict) -> str:
 
 
 def render(res: dict) -> str:
+    if res.get("kind") == "packs":
+        from verinoda import packset
+
+        if res["status"] == "no_datapack":
+            return "no pack or mod found: no data/<ns>/<kind> or assets/<ns>/<kind> files and no mod manifest"
+        return "\n".join(packset.render(res) + [f"note: {res['note']}"])
     head = f"{res['functions']} function(s), {res['tags']} entity tag(s), {res['objectives']} objective(s)"
     if "java_calls" in res:
         head += f", {res['java_calls']} Java call(s) into the functions"
@@ -761,6 +786,18 @@ def render(res: dict) -> str:
                 out.append(f"  {r['name']}  {where}{java}{tree}{_maybe_note(r.get('maybe_added_by'))}")
             if len(rows) > 15:
                 out.append(f"  (+{len(rows) - 15} more: --json)")
+        from verinoda import packset
+
+        rows = pr.get("pack_collisions") or []
+        out.append(f"resource collisions across packs and mods ({len(rows)}):")
+        out += ["  " + packset.collision_line(r) for r in rows[:15]]
+        if len(rows) > 15:
+            out.append(f"  (+{len(rows) - 15} more: datapack packs)")
+        rows = pr.get("mod_dependencies") or []
+        out.append(f"mod dependencies not met ({len(rows)}):")
+        out += ["  " + packset.dependency_line(r) for r in rows[:15]]
+        if pr.get("dependencies_not_checked"):
+            out.append(packset.external_line(pr["dependencies_not_checked"]))
         if pr.get("tags_added_by_macros"):
             out.append("tags a macro fills in (not matched): " + ", ".join(pr["tags_added_by_macros"][:3]))
         built = pr.get("tags_added_dynamically") or []
