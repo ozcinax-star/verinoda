@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D73)
+## Upgrading from 0.3.2 (D60-D74)
 
 ### D63: Running a project's own tests safely
 
@@ -218,6 +218,12 @@ file of the `--default` locale). Nothing else changes.
   location, or around each location of a compiler's, linter's or test run's output. Reads the file as it is now;
   needs no index; nothing changes on disk. `--json` gives each definition as a claim with its lines as evidence.
   Exit 2 when a location is not found. No change to the store, the index or the MCP tools.
+
+### D74: Dependency cycles and a minimal break set
+
+`verinoda map` (all views) and `map --json` now include a `cycles` view; programs that iterate the views of the
+all-views map see one more key. `map --view cycles` and the MCP `map_view {view: "cycles"}` are new. Nothing else
+changes; the index is not rebuilt.
 
 ### D60-D62
 
