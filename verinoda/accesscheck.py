@@ -13,14 +13,16 @@ Verdicts: ``exists`` (the class, and the member with that descriptor, are in a c
 class is on none of the jars of a complete classpath), ``malformed`` (the line does not parse: an unknown access,
 a missing name, a dotted class name in a widener, a descriptor that is not one), ``unknown`` (no class file to
 compare with: an incomplete or missing classpath, a JDK class, a class of the project's own sources, a widener in
-another namespace than ``named``, an SRG name a transformer keeps for the production jar). A member missing from
-a class file that was read is ``statically_verified``; a class missing from every jar is ``strong_inference``
-(the classpath is what the last build resolved, and may be older than the build file).
+another namespace than ``named``, an SRG name a transformer keeps for the production jar). ``exists`` is
+``statically_verified``: the jar read holds the name. ``absent`` is ``strong_inference``, for a member as for a
+class: the classpath is what the last build resolved, and may be older than the build file (a game version
+bumped without a rebuild), so a name missing from it is not proven wrong for the version the build names.
 """
 from __future__ import annotations
 
 import difflib
 import io
+import posixpath
 import re
 import zipfile
 from dataclasses import dataclass, field
@@ -40,6 +42,8 @@ _METHOD_RE = re.compile(r"\((?:" + _FIELD_DESC + r")*\)(?:V|" + _FIELD_DESC + r"
 _SRG = re.compile(r"^(?:[fm]_\d+_|field_\d+_\w*|func_\d+_\w*)$")
 _JDK_PREFIXES = ("java/", "javax/", "jdk/", "sun/", "com/sun/")
 _NESTED = ("META-INF/jars/", "META-INF/jarjar/")
+# the header words and the versions the loaders read
+_AW_VERSIONS = {"accessWidener": ("v1", "v2"), "classTweaker": ("v1",)}
 
 
 @dataclass
@@ -69,12 +73,16 @@ class AccessFile:
 
 # -- finding and reading the files -----------------------------------------------------------------------
 
-def _named_by_manifests(repo: Path, listed: list[str]) -> set[str]:
+def _named_by_manifests(repo: Path, listed: list[str]) -> tuple[set[str], list[str]]:
     """Files a ``fabric.mod.json`` / ``quilt.mod.json`` (``accessWidener``, ``access_widener``) or a
-    ``neoforge.mods.toml`` (``[[accessTransformers]] file = ...``) names, when they exist beside it."""
+    ``neoforge.mods.toml`` (``[[accessTransformers]] file = ...``) names, when they exist beside it with that
+    exact spelling, and a note for a name that matches a file only in another case (a jar is case-sensitive)."""
     import json
 
     out: set[str] = set()
+    notes: list[str] = []
+    exact = set(listed)
+    folded: dict[str, str] = {r.casefold(): r for r in listed}
     for rel in listed:
         base = rel.rsplit("/", 1)[-1]
         if base not in ("fabric.mod.json", "quilt.mod.json", "neoforge.mods.toml", "mods.toml"):
@@ -99,14 +107,21 @@ def _named_by_manifests(repo: Path, listed: list[str]) -> set[str]:
             names = re.findall(r"\[\[\s*accessTransformers\s*\]\]\s*file\s*=\s*[\"']([^\"']+)[\"']", text)
             root = rel.rsplit("/", 2)[0] if rel.count("/") >= 2 else ""   # beside META-INF/
         for n in names:
-            cand = f"{root}/{n}" if root else n
-            if (repo / cand).is_file():
+            cand = posixpath.normpath(f"{root}/{n}" if root else n)
+            if cand in exact:
                 out.add(cand)
-    return out
+            elif cand.casefold() in folded:
+                notes.append(f"{rel} names {n}, but the file is {folded[cand.casefold()]}: a jar's names are "
+                             f"case-sensitive, so the loader does not find it")
+    return out, notes
 
 
 def access_files(repo: Path) -> list[tuple[str, str]]:
     """``(path, format)`` of every access widener and access transformer file of the project."""
+    return _find(repo)[0]
+
+
+def _find(repo: Path) -> tuple[list[tuple[str, str]], list[str]]:
     from verinoda.snapshot import listed_files
 
     repo = Path(repo)
@@ -118,9 +133,10 @@ def access_files(repo: Path) -> list[tuple[str, str]]:
             out[rel] = "accesswidener"
         elif _AT_NAME.search(rel):
             out[rel] = "accesstransformer"
-    for rel in _named_by_manifests(repo, listed):
+    named, notes = _named_by_manifests(repo, listed)
+    for rel in named:
         out.setdefault(rel, "accesstransformer" if rel.lower().endswith(".cfg") else "accesswidener")
-    return sorted(out.items())
+    return sorted(out.items()), notes
 
 
 def _strip(line: str) -> str:
@@ -130,29 +146,38 @@ def _strip(line: str) -> str:
 def parse_widener(path: str, text: str) -> AccessFile:
     """An access widener or class tweaker: its header's namespace and one entry per rule line."""
     af = AccessFile(path, "accesswidener")
-    header_seen = False
-    for no, raw in enumerate(text.splitlines(), 1):
+    lines = text.splitlines()
+    head = _strip(lines[0]).split() if lines else []
+    # the loader reads the header from the first line and refuses the whole file when it is wrong: the rules
+    # of such a file are not checked one by one
+    bad = None
+    if not head or head[0] not in _AW_VERSIONS:
+        later = next((no for no, raw in enumerate(lines[1:], 2)
+                      if _strip(raw).split()[:1] in (["accessWidener"], ["classTweaker"])), None)
+        bad = (f"the header must be the first line; it is at line {later}" if later else
+               "no 'accessWidener v2 named' header on the first line")
+    elif len(head) != 3:
+        bad = f"the header is '{head[0]} v<N> <namespace>'"
+    elif head[1] not in _AW_VERSIONS[head[0]]:
+        bad = f"{head[0]} {head[1]} is not a supported version ({', '.join(_AW_VERSIONS[head[0]])})"
+    if bad:
+        af.entries.append(Entry(path, 1, lines[0].strip() if lines else "", af.fmt, error=bad))
+        return af
+    af.namespace = head[2]
+    v1 = head[:2] == ["accessWidener", "v1"]
+    for no, raw in enumerate(lines[1:], 2):
         line = _strip(raw)
         if not line:
             continue
         tokens = line.split()
-        if not header_seen:
-            header_seen = True
-            if tokens[0] in ("accessWidener", "classTweaker"):
-                if len(tokens) != 3 or not re.fullmatch(r"v\d+", tokens[1]):
-                    af.entries.append(Entry(path, no, raw.strip(), af.fmt, error="the header is "
-                                            "'accessWidener v<N> <namespace>'"))
-                af.namespace = tokens[2] if len(tokens) == 3 else None
-                continue
-            # the loader refuses the whole file: its rules are not checked one by one
-            af.entries.append(Entry(path, no, raw.strip(), af.fmt,
-                                    error="no 'accessWidener v2 named' header before the first rule"))
-            break
-        e =Entry(path, no, raw.strip(), af.fmt)
+        e = Entry(path, no, raw.strip(), af.fmt)
         af.entries.append(e)
         access = tokens[0].removeprefix("transitive-")
         if access not in AW_ACCESS:
             e.error = f"unknown access '{tokens[0]}' (accessible, extendable, mutable)"
+            continue
+        if v1 and tokens[0].startswith("transitive-"):
+            e.error = "transitive- needs 'accessWidener v2' (this file is v1)"
             continue
         if len(tokens) < 2 or tokens[1] not in ("class", "method", "field"):
             e.error = "the second word is class, method or field"
@@ -209,6 +234,9 @@ def parse_transformer(path: str, text: str) -> AccessFile:
                 e.desc = "(" + rest
                 if not _METHOD_RE.match(e.desc):
                     e.error = f"'{e.desc}' is not a method descriptor"
+            elif member in ("<init>", "<clinit>"):
+                e.kind, e.name = "method", member
+                e.error = f"{member} is a method: it is written with its descriptor, {member}(...)V"
             else:
                 e.kind, e.name = "field", member
             if not e.error and not re.fullmatch(r"[\w$<>]+", e.name or ""):
@@ -229,13 +257,17 @@ def read_file(repo: Path, path: str, fmt: str) -> AccessFile:
 # -- the class files -------------------------------------------------------------------------------------
 
 class ClassFiles:
-    """The class files of a classpath by binary name, read only for the classes an entry names."""
+    """The class files of a classpath by binary name. Every jar's directory is read up front, and each nested
+    jar is read once to list its classes (its bytes are not kept); a class file is read only when an entry names
+    it, through one open archive per jar. :meth:`close` releases the archives."""
 
     def __init__(self, jars: list[Path]):
         self.where: dict[str, tuple[Path, str | None]] = {}   # class -> (jar, nested jar entry or None)
         self.unreadable: list[str] = []
-        self._nested: dict[tuple[Path, str], bytes] = {}
         self._members: dict[str, dict | None] = {}
+        self._open: dict[tuple[Path, str | None], zipfile.ZipFile] = {}
+        self._packages: dict[str, list[str]] | None = None
+        self._simple: dict[str, list[str]] | None = None
         for jar in jars:
             try:
                 with zipfile.ZipFile(jar) as z:
@@ -243,10 +275,8 @@ class ClassFiles:
                         if n.endswith(".class") and not n.startswith("META-INF/"):
                             self.where.setdefault(n[:-6], (jar, None))
                         elif n.endswith(".jar") and n.startswith(_NESTED):
-                            data = z.read(n)
-                            self._nested[(jar, n)] = data
                             try:
-                                with zipfile.ZipFile(io.BytesIO(data)) as inner:
+                                with zipfile.ZipFile(io.BytesIO(z.read(n))) as inner:
                                     for m in inner.namelist():
                                         if m.endswith(".class") and not m.startswith("META-INF/"):
                                             self.where.setdefault(m[:-6], (jar, n))
@@ -254,6 +284,18 @@ class ClassFiles:
                                 pass
             except (OSError, zipfile.BadZipFile):
                 self.unreadable.append(jar.name)
+
+    def close(self) -> None:
+        for z in self._open.values():
+            z.close()
+        self._open.clear()
+
+    def _zip(self, jar: Path, nested: str | None) -> zipfile.ZipFile:
+        key = (jar, nested)
+        if key not in self._open:
+            self._open[key] = (zipfile.ZipFile(io.BytesIO(self._zip(jar, None).read(nested))) if nested
+                               else zipfile.ZipFile(jar))
+        return self._open[key]
 
     def evidence(self, cls: str) -> str:
         jar, nested = self.where[cls]
@@ -265,21 +307,38 @@ class ClassFiles:
             if cls in self.where:
                 jar, nested = self.where[cls]
                 try:
-                    if nested:
-                        with zipfile.ZipFile(io.BytesIO(self._nested[(jar, nested)])) as z:
-                            got = jvmclass.class_members(z.read(cls + ".class"))
-                    else:
-                        with zipfile.ZipFile(jar) as z:
-                            got = jvmclass.class_members(z.read(cls + ".class"))
+                    got = jvmclass.class_members(self._zip(jar, nested).read(cls + ".class"))
                 except (OSError, KeyError, zipfile.BadZipFile):
                     got = None
             self._members[cls] = got
         return self._members[cls]
 
+    def _index(self) -> None:
+        if self._packages is None:
+            self._packages, self._simple = {}, {}
+            for c in self.where:
+                pkg, _, simple = c.rpartition("/")
+                self._packages.setdefault(pkg, []).append(c)
+                self._simple.setdefault(simple, []).append(c)
+
+    def has_root_package(self, cls: str) -> bool:
+        """Whether any class shares the first two package names of ``cls`` (``net/minecraft``)."""
+        parts = cls.split("/")
+        if len(parts) < 3:
+            return bool(self.where)
+        self._index()
+        prefix = "/".join(parts[:2])
+        return any(p == prefix or p.startswith(prefix + "/") for p in self._packages or {})
+
     def nearest_classes(self, cls: str, limit: int = 3) -> list[str]:
-        pkg = cls.rpartition("/")[0]
-        same = [c for c in self.where if c.rpartition("/")[0] == pkg]
-        return difflib.get_close_matches(cls, same or list(self.where), n=limit, cutoff=0.6)
+        """The closest names of the same package; else the classes of the same simple name elsewhere (a class
+        moved, or a name from other mappings). The whole classpath is never compared name by name."""
+        self._index()
+        pkg, _, simple = cls.rpartition("/")
+        same = (self._packages or {}).get(pkg)
+        if same:
+            return difflib.get_close_matches(cls, same, n=limit, cutoff=0.6)
+        return sorted((self._simple or {}).get(simple, []))[:limit]
 
 
 def _project_class(cls: str, java_paths: set[str]) -> bool:
@@ -311,6 +370,10 @@ def _check_entry(e: Entry, ns: str | None, cf: ClassFiles, complete: bool, sourc
         if not complete:
             why = "the classpath is not complete" + (f" ({source})" if source else "")
             return done("unknown", "unknown", f"{cls} is on no jar read; {why}")
+        if not cf.has_root_package(cls):
+            top = "/".join(cls.split("/")[:2])
+            return done("unknown", "unknown", f"no class of {top}/ is on the classpath: the jar that would hold "
+                                              f"{cls} is not on it")
         near = cf.nearest_classes(cls)
         return done("absent", "strong_inference", f"no class {cls} on any jar of the classpath",
                     nearest=near)
@@ -328,7 +391,7 @@ def _check_entry(e: Entry, ns: str | None, cf: ClassFiles, complete: bool, sourc
                                                       f"{shown} is in {evidence}", evidence=evidence)
     if same_name:
         near = [f"{e.name}{'' if e.kind == 'method' else ' '}{d}" for d in same_name][:5]
-        return done("absent", "statically_verified",
+        return done("absent", "strong_inference",
                     f"{cls} has no {e.kind} {e.name} with the descriptor {e.desc}; its {e.name} has "
                     + ", ".join(same_name[:5]), evidence=evidence, nearest=near)
     names = sorted({n for n, _d, _a in table})
@@ -337,8 +400,20 @@ def _check_entry(e: Entry, ns: str | None, cf: ClassFiles, complete: bool, sourc
     if e.fmt == "accesstransformer" and _SRG.match(e.name or ""):
         return done("unknown", "unknown", f"{e.name} is an SRG name (the production jar's); the classpath read "
                                           f"here carries other names", evidence=evidence)
-    return done("absent", "statically_verified", f"{cls} has no {e.kind} named {e.name}", evidence=evidence,
+    if e.fmt == "accesstransformer" and e.kind == "field":
+        methods = [f"{n}{d}" for n, d, _a in members["methods"] if n == e.name][:5]
+        if methods:
+            return done("absent", "strong_inference", f"{cls} has no field named {e.name}; its method {e.name} "
+                                                      f"is written with its descriptor: {', '.join(methods)}",
+                        evidence=evidence, nearest=methods)
+    return done("absent", "strong_inference", f"{cls} has no {e.kind} named {e.name}", evidence=evidence,
                 nearest=near)
+
+
+def _configured(config: dict | None) -> bool:
+    """Whether ``code_check.classpath`` lists jars in the project's configuration."""
+    conf = (config or {}).get("code_check") if isinstance(config, dict) else None
+    return isinstance(conf, dict) and isinstance(conf.get("classpath"), list) and bool(conf["classpath"])
 
 
 def check(repo: Path, paths: list[str] | None = None, config: dict | None = None,
@@ -361,27 +436,42 @@ def check(repo: Path, paths: list[str] | None = None, config: dict | None = None
                 rel = ap.as_posix()
             fmt = "accesstransformer" if rel.lower().endswith(".cfg") else "accesswidener"
             targets.append((rel, fmt))
+        notes: list[str] = []
     else:
-        targets = access_files(repo)
+        targets, notes = _find(repo)
     java_paths = {Path(r).as_posix() for r in listed_files(repo) if r.endswith((".java", ".kt"))}
     by_root: dict[Path, list[AccessFile]] = {}
     for rel, fmt in targets:
         af = read_file(repo, rel, fmt)
         by_root.setdefault(jvmclass.build_root(repo, repo / rel), []).append(af)
-    files, entries, builds, notes = [], [], [], []
+    files, entries, builds = [], [], []
     for root, group in sorted(by_root.items()):
+        try:
+            where = root.relative_to(repo).as_posix() or "."
+        except ValueError:                       # a file given from outside the repository
+            where = root.as_posix()
         cp = jvmclass.discover(root, config if root == repo else None)
+        if cp.source == "none" and root != repo and _configured(config):
+            # a build of its own with nothing resolved: the project's configured classpath is the one there is
+            cp = jvmclass.discover(repo, config)
+            cp.notes.append(f"{where} has no classpath of its own: the configured code_check.classpath is read")
         cf = ClassFiles(cp.jars)
         complete = cp.complete and not cf.unreadable
         notes += cp.notes + [f"unreadable jar: {n}" for n in cf.unreadable]
-        where = root.relative_to(repo).as_posix() if root != repo else "."
+        if complete and not cf.where:
+            complete = False
+            notes.append(f"the classpath of {where} ({cp.source}) holds no class: its patterns match no jar, or "
+                         f"the build output was cleaned; library classes are unknown until it does")
         builds.append({"build": where, "classpath": cp.source, "complete": complete, "jars": len(cp.jars),
                        "classes": len(cf.where)})
-        for af in group:
-            rows = [_check_entry(e, af.namespace, cf, complete, cp.source, java_paths) for e in af.entries]
-            entries += rows
-            files.append({"path": af.path, "format": af.fmt, "namespace": af.namespace, "build": where,
-                          "entries": len(rows)})
+        try:
+            for af in group:
+                rows = [_check_entry(e, af.namespace, cf, complete, cp.source, java_paths) for e in af.entries]
+                entries += rows
+                files.append({"path": af.path, "format": af.fmt, "namespace": af.namespace, "build": where,
+                              "entries": len(rows)})
+        finally:
+            cf.close()
     counts = {v: sum(1 for r in entries if r["verdict"] == v) for v in ("exists", "absent", "malformed", "unknown")}
     return {"files": files, "builds": builds, "entries": entries, "counts": counts,
             "notes": list(dict.fromkeys(notes)), "seconds": round(time.perf_counter() - t0, 3)}

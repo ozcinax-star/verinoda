@@ -116,7 +116,8 @@ def test_widener_entries_against_the_bytecode(tmp_path):
     assert aw[3]["verdict"] == "exists" and aw[3]["evidence"] == "mc.jar!net/minecraft/entity/Mob$Brain.class"
     assert aw[4]["verdict"] == "exists" and aw[4]["status"] == "statically_verified"
     # a misspelt method: absent, with its line and the nearest real one
-    assert aw[5]["verdict"] == "absent" and aw[5]["status"] == "statically_verified"
+    # (strong_inference: the classpath is what the last build resolved, maybe older than the build file)
+    assert aw[5]["verdict"] == "absent" and aw[5]["status"] == "strong_inference"
     assert aw[5]["nearest"] == ["checkSpawnRules(Lnet/minecraft/world/Level;I)Z"]
     # the right name with another descriptor: the real descriptor is named
     assert aw[6]["verdict"] == "absent" and "(Lnet/minecraft/world/Level;I)Z" in aw[6]["why"]
@@ -172,11 +173,49 @@ def test_another_namespace_and_a_missing_header(tmp_path):
     assert other[1]["verdict"] == "malformed" and "header" in other[1]["why"]
 
 
+def test_header_rules_and_transformer_member_mistakes(tmp_path):
+    repo = _repo(tmp_path)
+    res_dir = repo / "src" / "main" / "resources"
+    (res_dir / "gem.accesswidener").write_text(
+        "# the header is not first\naccessWidener v2 named\naccessible class net/minecraft/entity/Mob\n",
+        encoding="utf-8")
+    (res_dir / "old.accesswidener").write_text(
+        "accessWidener v1 named\ntransitive-accessible class net/minecraft/entity/Mob\n"
+        "accessible class org/other/Thing\n", encoding="utf-8")
+    (res_dir / "META-INF" / "accesstransformer.cfg").write_text(
+        "public net.minecraft.entity.Mob <init>\npublic net.minecraft.entity.Mob tick\n", encoding="utf-8")
+    from verinoda import snapshot
+
+    snapshot._LISTED.clear()
+    res = accesscheck.lookup(repo)
+    aw = _by_line(res, AW_PATH)
+    # the loader reads the header from the first line only: one malformed entry, the rules are not checked
+    assert list(aw) == [1] and aw[1]["verdict"] == "malformed" and "line 2" in aw[1]["why"]
+    old = _by_line(res, "src/main/resources/old.accesswidener")
+    assert old[2]["verdict"] == "malformed" and "v2" in old[2]["why"]
+    # a package no jar of the classpath has: the jar is missing, not the name wrong
+    assert old[3]["verdict"] == "unknown" and "org/other/" in old[3]["why"]
+    at = _by_line(res, AT_PATH)
+    assert at[1]["verdict"] == "malformed" and "<init>(...)V" in at[1]["why"]
+    assert at[2]["verdict"] == "absent" and at[2]["nearest"] == ["tick()V"]
+
+
+def test_a_manifest_name_in_another_case_is_noted(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / "src" / "main" / "resources" / "fabric.mod.json").write_text(
+        json.dumps({"id": "gem", "accessWidener": "Gem.accesswidener"}), encoding="utf-8")
+    from verinoda import snapshot
+
+    snapshot._LISTED.clear()
+    res = accesscheck.lookup(repo)
+    assert any("Gem.accesswidener" in n and "case-sensitive" in n for n in res["notes"])
+
+
 def test_cli(tmp_path, capsys):
     repo = _repo(tmp_path)
     assert cli.main(["access-check", "--repo", str(repo)]) == 3
     out = capsys.readouterr().out
-    assert f"absent [statically_verified] {AW_PATH}:5" in out
+    assert f"absent [strong_inference] {AW_PATH}:5" in out
     assert "nearest: checkSpawnRules(Lnet/minecraft/world/Level;I)Z" in out
     assert "classpath of .: config, complete, 1 jar(s)" in out
     assert cli.main(["access-check", "--repo", str(repo), "--json", AT_PATH]) == 3
