@@ -1,4 +1,4 @@
-"""Architecture rules as decision guards (docs/DESIGN.md D93): layers, allowed dependencies, public interfaces
+"""Architecture rules as decision guards (docs/DESIGN.md D95): layers, allowed dependencies, public interfaces
 and tags, checked by ``decide check`` over the graph's edges, each violation at its call site."""
 
 from __future__ import annotations

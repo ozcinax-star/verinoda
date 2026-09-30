@@ -382,7 +382,7 @@ map working-tree lines to HEAD's before asking git; their claim text is unchange
 
 ### D95: Architecture rules as code
 
-`decide record --guard` and `decide guard` accept three new guard kinds for architecture rules (D93):
+`decide record --guard` and `decide guard` accept three new guard kinds for architecture rules (D95):
 `layers order=src/ui/**,src/core/**,src/db/**` (top first; no edge from a lower layer up), `allow_edges
 from=GLOB allowed=GLOB,...` (those files use only each other and the allowed ones) and `public module=GLOB
 api=GLOB,...` (outside code reaches the module only through its api files); the last two leave test code

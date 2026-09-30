@@ -46,7 +46,7 @@ is quoted; a backslash is kept as written (``allowed=orders\\repository.py``, ``
 * ``no_edge from=GLOB to=GLOB [relations=imports,calls,uses]``: no graph edge from one set of files to
   the other;
 * ``layers order=GLOB,GLOB[,...] [relations=...]``: the layers, top first; no graph edge from a file of a
-  lower layer to a file of a higher one (docs/DESIGN.md D93);
+  lower layer to a file of a higher one (docs/DESIGN.md D95);
 * ``allow_edges from=GLOB allowed=GLOB[,...] [relations=...] [scope=product|all]``: the files ``from``
   matches depend only on each other and on the allowed files (an edge to any other file of the index
   breaks it); test files among them are left out unless ``scope=all``;
@@ -193,7 +193,7 @@ def _inside(glob: str) -> bool:
 
 
 def architecture_tags(repo: Path) -> tuple[dict[str, list[str]], list[str], list[str]]:
-    """``(tags, where, problems)``: the named file sets an edge guard names as ``tag:NAME`` (D93), from the
+    """``(tags, where, problems)``: the named file sets an edge guard names as ``tag:NAME`` (D95), from the
     committed ``[architecture.tags]`` of ``verinoda.toml`` and ``[tool.verinoda.architecture.tags]`` of
     ``pyproject.toml`` (a name in both: verinoda.toml's). A value is a glob or a list of globs relative to the
     project root; a value that is not, or a file that does not parse, is a problem, never an empty set."""

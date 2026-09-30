@@ -49,7 +49,7 @@ whose cited line still names the target in code is VIOLATED; an INFERRED edge, o
 changed since the index was built, is POSSIBLE. A side that matches no indexed file (an external
 package is no node) is ``unknown``.
 
-Architecture rules (D93) read the same edges, judged the same way (VIOLATED / POSSIBLE, the edge's cited
+Architecture rules (D95) read the same edges, judged the same way (VIOLATED / POSSIBLE, the edge's cited
 line as the site): ``layers order=TOP,...,BOTTOM`` - an edge from a lower layer's file to a higher layer's
 (a file two layers match is in the higher one); ``allow_edges from=GLOB allowed=...`` - an edge from the
 ``from`` files to any indexed file outside them and the allowed ones; ``public module=GLOB api=...`` - an

@@ -15,7 +15,7 @@ front matter line it matched (``evidence_at``) and a status:
   holds only the call's last name (``weak_inference``);
 * ``no_edge``: a changed file matches the guard's ``from`` or ``to`` glob (``statically_verified``); the same
   for the globs of ``layers`` (``order``), ``allow_edges`` (``from``, ``allowed``) and ``public`` (``module``,
-  ``api``), a ``tag:NAME`` read as its committed globs (D93); a change to the definition of a tag the guard
+  ``api``), a ``tag:NAME`` read as its committed globs (D95); a change to the definition of a tag the guard
   uses (``verinoda.toml`` or ``pyproject.toml``, the tag's globs parsed on both sides and compared)
   (``statically_verified``);
 * ``dependency`` and ``revisit-when dependency_added``: a changed line of a manifest ``decide check`` reads
