@@ -6604,6 +6604,143 @@ and SonarQube show changed lines no test covers (patch coverage) and coverage ch
 `tests/test_coverage_import.py`; also run: `tests/test_docs.py`, `tests/test_line_endings.py`,
 `tests/test_mcp.py`, `tests/test_cli.py`, `tests/test_architecture_map.py`, `tests/test_review.py`.
 
+## 63. Ownership and knowledge map (D90, 2026-09-30)
+
+### 63.1 Why
+
+"Who knows this code?" had no answer. `map --view history` lists recent commits and `history commits --author`
+finds one author's commits, but nothing said who wrote the lines that are there now, whether that person is
+still around, or who the repository declares as the owner. CodeScene (main authors, knowledge loss, bus factor),
+Sourcegraph Own and Glean answer it from blame and CODEOWNERS; both are local, exact sources Verinoda can read
+without inference beyond the reading of blame itself.
+
+### 63.2 Decisions
+
+- **One module, `verinoda/ownership.py`, one CLI command, `verinoda owners [TARGET] [--days N] [--max-files N]
+  [--json]`, read only.** TARGET is a file, a folder, `path:A-B` or `path#Symbol` (`path::Symbol`), default the
+  whole project. A symbol's span comes from `extract.extract_one` (the file as it is on disk, the same parser
+  `verinoda extract` uses). Exit 0 found, 2 nothing found or not a git work tree, 1 a bad target (no such file
+  or symbol, outside the project, a line range outside the file; a reversed range is put in order). `--days` is
+  capped at 100,000 and the cutoff never goes before 1970.
+- **Two answers, kept apart: declared owners and knowledge.**
+  - **CODEOWNERS.** The first of `.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS`, `.gitlab/CODEOWNERS` at
+    the top of the git work tree (GitHub's order; another one present is named in `coverage.limits`). Patterns
+    are GitHub's documented gitignore-like syntax: `/x` and a pattern with an inner `/` anchored at the top,
+    others at any depth; `*` and `?` inside one folder, `**` across; a trailing `/` only what is under the
+    folder; `docs/*` the files of `docs` but not of its subfolders; `\ ` and `\#` escapes; an unescaped `#`
+    that starts a word starts a comment (`* @a #note @b` owns by `@a` only), as in GitHub's own example.
+    Patterns are matched folder by folder (a `**` folder is zero or more folders, `*` and `?` stay within one
+    folder name, any other `**` is a `*`), as git's wildmatch does, never as a regular expression: CODEOWNERS
+    comes from the repository being read, and stacked `**` or `*` turned into a regex backtracked for minutes;
+    the cost is now at most the pattern's length times the path's. The last matching rule wins; a rule without owners leaves the file unowned. `!` and `[ ]` (which
+    GitHub does not support) are listed in `skipped`, not matched. One claim per rule that owns files of the
+    target (at most 10), citing the rule's line as `source_code` evidence and quoting it (`... contains:
+    <rule>`), so `entail` grades it `full`: `statically_verified`. A file with GitLab sections (`[Name]`,
+    `^[Name]`) makes those claims `strong_inference`: each section's last match applies in GitLab, which this
+    reading does not combine. A line range or a symbol is owned with its file (CODEOWNERS owns files).
+    Unowned files are counted and listed (50), not claimed. No CODEOWNERS file is an `unknown` with the places
+    searched.
+  - **Blame.** `git blame --porcelain -w --no-textconv [-L a,b] -- file` per text file (git's `i/-text` from
+    `ls-files --eol` leaves binary files out), on the file as it is on disk, so a line range and a symbol's
+    span are the lines the user sees. The claims say "at HEAD <sha>" only when no blamed file differs from HEAD
+    (`git diff --name-only HEAD`, one call); otherwise they say "in the work tree on HEAD <sha> (N file(s) with
+    changes not committed)", list the files in `modified_files` and add an uncertainty, since lines inserted
+    above a range move it off HEAD's lines. Lines not committed yet (the zero commit) are counted as
+    `uncommitted_lines` and credited to nobody. Authors are told apart by e-mail (git applies `.mailmap`;
+    tested). From the tally:
+    - `authors`: name, e-mail, lines, share, files, last commit, active (at most 20);
+    - `main_author` and a claim naming their lines and share (a tie goes to the smaller e-mail, the same order
+      as `per_file`'s main author);
+    - `bus_factor`: the fewest authors, most lines first, who together hold more than half of the credited
+      lines (CodeScene's and the truck-factor literature's usual threshold), and a claim;
+    - `knowledge_loss`: the lines credited to authors with no commit, anywhere in the history of HEAD, in the
+      `--days` (default 365) before HEAD's commit date, and a claim naming them with their last commit. The
+      reference time is HEAD's commit date, not the clock, so the answer is the same on every run.
+  - A folder: `per_file` (largest 50: lines, main author and share, author count).
+- **Status.** Blame is exact about which commit last changed a line, but "the author knows it" is a reading of
+  it (a reformat, a move or a copy credits whoever made it; `-w` keeps whitespace-only changes from taking
+  credit): the main author, bus factor and knowledge loss are `strong_inference`, never verified. Their
+  evidence is `git_history`: `locator` a runnable command, `git blame -w [-La,b] <HEAD sha> -- <file>`
+  (without the sha, and with `meta.work_tree`, when blamed files differ from HEAD; a folder's file is `<each text
+  file git tracks under X>`), `commit_sha` HEAD, the tally as
+  the excerpt; the claim text names HEAD's commit, so `entail` grades it `partial` (attribution), which
+  `strong_inference` needs. In a shallow clone, lines credited to the boundary commit are named in the claims'
+  `uncertainties`. A test runs every claim through `claims.check_status`.
+- **A project in a folder of its git repository**: paths are relative to the project; CODEOWNERS is read at the
+  repository's top and its patterns matched against `prefix + path`; the rule's evidence carries
+  `meta.root` (the repository's top), as reference-repository evidence does.
+- **CODEOWNERS is read from the work tree**; when it differs from HEAD (changed or never committed, one `git
+  status`), its evidence carries no commit, `codeowners.committed` is false and `coverage.limits` says so.
+- **Counts.** A folder's claims name its file count once (``1 of the 2 file(s) of `src` are owned by ...``), and a
+  cut folder says so in the claim (``the first 200 of the 350 file(s) of `src` (in path order)``).
+- **Bounded work.** At most `--max-files` files (default 200, in path order; `truncated`), blamed on up to 8
+  threads (git does the work; the threads only wait). One `rev-parse` for top, shallow and HEAD; one `git log`
+  for every author's last commit and HEAD's date.
+- **No MCP tool.** The core menu is near its 4,500-character limit and a new tool behind `run_tool` would grow
+  it; the CLI and the skills cover it for now. Both skills name the question ("Who knows / owns this code?")
+  and the Claude skill allows `Bash/PowerShell(verinoda owners *)`.
+- Nothing is stored (no `--store`), like `history`.
+
+### 63.3 Measured
+
+On Verinoda's own repository (433 commits, one author, no CODEOWNERS), this machine (a git call costs about
+0.2 s here):
+
+- `owners verinoda/cli.py` (3,432 lines): 2.4 s, 1.4 s of it blame;
+- `owners verinoda --max-files 1000` (372 files, 207,839 lines): 28 s, 26.6 s blame;
+- `owners` (the project, the first 200 files, `truncated`): 17.7 s, 13.3 s blame.
+
+The answers there are trivial (bus factor 1, one author); the multi-author paths are covered by the tests.
+
+### 63.4 Not done
+
+- Blame measures who last changed the lines, not who understands them; no `-M`/`-C` move or copy detection
+  (cost), so moved code is credited to whoever moved it. A repository's `blame.ignoreRevsFile` setting is
+  honoured by git; a `.git-blame-ignore-revs` file that is not configured is not passed.
+- Only history reachable from HEAD; the working tree's uncommitted lines are counted but not credited.
+- "Inactive" is by commits to this repository only; a person may still be reachable, or commit under an e-mail
+  `.mailmap` does not join.
+- GitLab CODEOWNERS sections are not combined (claims drop to `strong_inference`); GitLab's `docs/` and
+  `.gitlab/` order differs from GitHub's and GitHub's is used; owners are not checked to exist or to have
+  write access (that needs the network).
+- A folder over 200 files is cut in path order (`--max-files`); a large folder takes tens of seconds.
+- `analyze` does not route "who knows / owns X" to it yet, and `review` does not use it (4.5, suggested
+  reviewers, can build on `owners` per changed file); no MCP tool (see above).
+
+### 63.5 Tests
+
+`tests/test_ownership.py` (20 tests; a three-author repository built in the test, and small ones):
+
+- a file: authors (a tie ordered by e-mail), main author, bus factor 2, claims with the blame evidence and HEAD's
+  sha, the CODEOWNERS claim `statically_verified` citing `.github/CODEOWNERS:3` and quoting the rule;
+- knowledge loss: the inactive author's lines, share and last commit, relative to HEAD's date; none with a wider
+  `days`;
+- a folder: binary file left out, `per_file`, a rule with no owners leaves a file unowned, a `!` rule skipped,
+  `max_files` cuts (`truncated`);
+- the whole project by default, two rules owning files;
+- a line range and a symbol (`path#run`, span from the parser);
+- uncommitted lines credited to nobody;
+- a shallow clone names the boundary in the uncertainties;
+- `.mailmap` joins two addresses of one author;
+- CODEOWNERS patterns against GitHub's documented examples; the last matching rule wins; escapes and inline
+  comments (`#note @notowner` is a comment); patterns that made a backtracking regex take 96 s and 9 s match in
+  well under a second;
+- a work tree that differs from HEAD: the claims do not say "at HEAD", the locator blames the work tree, a
+  changed CODEOWNERS is cited without a commit; a clean one: `git blame -w -L7,8 <sha> -- src/svc.py`;
+- a 50/50 tie: the same main author alone and in `per_file`;
+- a folder's count once, and a cut folder or project named as cut in the claims;
+- `--days 100000` and larger: no crash, the cutoff 1970-01-01;
+- GitLab sections lower the owner claim to `strong_inference`;
+- a project in a folder (with a space) of its repository: the pattern is matched with the repository path, the
+  evidence carries `meta.root`;
+- no CODEOWNERS: an `unknown`; not a git work tree: `not_git`; bad targets (and a line range outside the
+  file, `:0-1`, `:13-20`): `ValueError`; a reversed range put in order; a binary file: `not_found`;
+- every claim passes `claims.check_status` for its own evidence;
+- the CLI: `--json`, text, exit codes 0, 2, 1 (1 for a range outside the file), a large `--days`.
+
+Run: `PYTHONPATH=. python -m pytest tests/test_ownership.py tests/test_cli.py tests/test_docs.py
+tests/test_agents.py tests/test_line_endings.py`.
+
 ## Sources
 
 - **Retrieval:**
