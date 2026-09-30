@@ -232,3 +232,65 @@ def test_cli_json_from_a_file_and_exit_codes(repo, tmp_path, capsys):
     capsys.readouterr()
     with pytest.raises(SystemExit):
         cli.main(["extract", "--repo", str(repo)])
+
+
+def test_a_call_in_the_message_does_not_hide_the_location():
+    text = "src/m.py:7: in b\nsrc/m.py:2: assert v.get(3) == 4\nweb/a.ts(3,1): error TS1: x.y(2)\n"
+    got = [(x["path"], x["line"]) for x in extract.locations(text)]
+    assert got == [("src/m.py", 7), ("src/m.py", 2), ("web/a.ts", 3), ("x.y", 2)]
+
+
+def test_a_long_line_without_spaces_is_scanned_in_linear_time():
+    import time
+
+    t = time.perf_counter()
+    assert extract.locations("a=b.c;d.e=f.g;" * 4000) == []
+    assert extract.locations("a." * 8000) == []
+    assert time.perf_counter() - t < 2.0
+
+
+def test_an_absolute_path_with_a_space(tmp_path):
+    root = tmp_path / "my proj"
+    (root / "src").mkdir(parents=True)
+    (root / "src" / "orders.py").write_text(ORDERS, encoding="utf-8", newline="\n")
+    p = str(root / "src" / "orders.py")
+    text = f"{p}:24:5: error: x\n  1>{p}(15,5): error CS1: y\n"
+    res = extract.run(root, [], output=text, cwd=root)
+    assert [r["definition"]["name"] for r in res["results"]] == ["Service.cancel", "Service.place"]
+    assert res["results"][0]["input"] == f"{p}:24" and "not_in_project" not in res
+
+
+def test_frames_outside_the_project_list_the_files_once(repo, monkeypatch):
+    from verinoda import snapshot
+
+    calls = []
+    real = snapshot.listed_files
+    monkeypatch.setattr(snapshot, "listed_files", lambda r: calls.append(r) or real(r))
+    text = "\n".join(f"\tat java.lang.Thread{i}.run(Thread{i}.java:{i + 1})" for i in range(30))
+    res = extract.run(repo, [], output=text, cwd=repo, limit=5)
+    assert res["not_in_project"] == 30 and len(calls) == 1
+
+
+def test_negative_max_lines_is_refused_and_a_reversed_range_is_kept(repo, capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["extract", "src/orders.py:13", "--repo", str(repo), "--max-lines", "-1"])
+    whole = _one(repo, "src/orders.py:13", max_lines=-1)
+    assert not whole["truncated"] and whole["text"].count("\n") == 9
+    assert extract.parse_target("a/b.py:7-2") == {"path": "a/b.py", "line": 2, "end": 7}
+    assert _one(repo, "src/orders.py:23-14")["definition"]["name"] == "Service"
+
+
+def test_a_form_feed_does_not_shift_the_printed_lines(tmp_path):
+    (tmp_path / "ff.py").write_text("x = 1\n\n# page\x0cbreak\n\n\n\ndef g():\n    return 2\n", encoding="utf-8",
+                                    newline="\n")
+    r = _one(tmp_path, "ff.py:7")
+    assert (r["definition"]["start"], r["definition"]["end"]) == (7, 8)
+    assert r["text"] == "def g():\n    return 2"
+
+
+def test_a_pytest_node_id(tmp_path):
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_x.py").write_text(
+        "class TestA:\n    def test_b(self):\n        pass\n\n\ndef test_p(a):\n    pass\n", encoding="utf-8")
+    assert _one(tmp_path, "tests/test_x.py::TestA::test_b")["definition"]["name"] == "TestA.test_b"
+    assert _one(tmp_path, "tests/test_x.py::test_p[1-2]")["definition"]["name"] == "test_p"

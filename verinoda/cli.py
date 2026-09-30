@@ -935,6 +935,8 @@ def cmd_extract(args) -> int:
 
     if not args.target and args.from_file is None:
         raise SystemExit("error: give a location (path:LINE, path#Symbol) or --from FILE")
+    if args.max_lines < 0:
+        raise SystemExit("error: --max-lines is a number of lines (0: all)")
     output = None
     if args.from_file == "-":
         output = sys.stdin.read()
@@ -2655,7 +2657,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--from", dest="from_file", metavar="FILE",
                     help="read the locations from a compiler's, linter's or test run's output ('-': stdin)")
     sp.add_argument("--max-lines", type=int, default=0, help="print at most N lines of each definition (0: all)")
-    sp.add_argument("--limit", type=int, default=20, help="at most N locations (default 20)")
+    sp.add_argument("--limit", type=int, default=20, help="at most N locations of the project (default 20); "
+                                                          "the others are only counted")
     sp.add_argument("--no-numbers", action="store_true", help="the source as it is, without line numbers")
     sp = add("analyze", cmd_analyze, "answer a question as claims with evidence, critique and unknowns")
     sp.add_argument("question", nargs="?", help="the question (optional with --plan: the plan's user_message)")

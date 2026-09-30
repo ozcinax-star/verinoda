@@ -1,9 +1,10 @@
 """The whole definition around a location: ``verinoda extract src/a.py:40``.
 
 A location comes in as ``path:LINE`` (``path:LINE-LINE``, ``path:LINE:COL``), ``path#Symbol`` (or
-``path::Symbol``; ``m`` finds ``C.m``), or as the text of a compiler, linter or test run (``--from FILE``): Python
-traceback lines, ``path:LINE[:COL]`` (gcc, javac, rustc, pytest, eslint), ``path(LINE,COL)`` (tsc, MSBuild),
-``path:[LINE,COL]`` (Maven) and JVM stack frames (``at a.b.C.m(C.java:40)``, found by their package path). What
+``path::Symbol``, a pytest node id ``path::C::m[1-2]`` too; ``m`` finds ``C.m``), or as the text of a
+compiler, linter or test run (``--from FILE``): Python traceback lines, ``path:LINE[:COL]`` (gcc, javac,
+rustc, pytest, eslint), ``path(LINE,COL)`` (tsc, MSBuild), ``path:[LINE,COL]`` (Maven) and JVM stack frames
+(``at a.b.C.m(C.java:40)``, found by their package path). What
 comes out is the innermost function or class that contains the line, whole, with its lines: the definitions of
 :mod:`verinoda.anchors` (Python's own parser; tree-sitter for the other languages it has a grammar for), a
 top-level statement when the line is in no definition, a Markdown section for a document.
@@ -22,16 +23,26 @@ MAX_LOCATIONS = 20
 # explicit targets
 _AT_LINE = re.compile(r"^(?P<path>.+?):(?P<a>\d+)(?:-(?P<b>\d+)|:\d+)?:?$")
 _AT_SYMBOL = re.compile(r"^(?P<path>.+?\.\w+)(?:#|::)(?P<sym>[^\s#:][^\s]*)$")
-# locations in a tool's output, tried in this order on each line (the first pattern that matches a line wins)
+# locations in a tool's output. On each line the pattern whose first match starts leftmost wins (ties: this
+# order), so the message after a location (`src/a.py:2: assert v.get(3) == 4`) is not read as one. Maven's and
+# MSBuild's paths start only after a separator and are bounded: tried from every character of a long line without
+# spaces (minified code), they backtracked in quadratic time.
 _OUTPUT = (
     ("py", re.compile(r"File \"(?P<path>[^\"]+)\", line (?P<line>\d+)")),
     ("jvm", re.compile(r"\bat\s+(?:[\w.$@-]+/{1,2})*(?P<cls>[\w$.]+)\.[\w$<>]+\((?P<file>[\w$-]+\.\w+):"
                        r"(?P<line>\d+)\)")),
-    ("maven", re.compile(r"(?P<path>(?:[A-Za-z]:)?[^\s\"'()\[\]:]*\.\w+):\[(?P<line>\d+),\d+\]")),
-    ("msbuild", re.compile(r"(?P<path>(?:[A-Za-z]:)?[^\s\"'()\[\]:]*\.\w+)\((?P<line>\d+)(?:,\d+)*\)")),
+    ("maven", re.compile(r"(?<![^\s\"'()\[\]:>])(?P<path>(?:[A-Za-z]:)?[^\s\"'()\[\]:]{0,255}\.\w+)"
+                         r":\[(?P<line>\d+),\d+\]")),
+    ("msbuild", re.compile(r"(?<![^\s\"'()\[\]:>])(?P<path>(?:[A-Za-z]:)?[^\s\"'()\[\]:]{0,255}\.\w+)"
+                           r"\((?P<line>\d+)(?:,\d+)*\)")),
     ("unix", re.compile(r"(?<![\w/\\.~-])(?P<path>(?:[A-Za-z]:)?[\w./\\~-]*\w\.[A-Za-z]\w{0,9}):(?P<line>\d+)"
                         r"(?![\d.])")),
 )
+# where an absolute path can start: a drive, a root or a UNC share, at the start of the line or after a space, a
+# quote, a bracket or MSBuild's `1>`. The patterns above stop at a space, so `C:\Users\A B\src\a.py:3` is read as
+# `B\src\a.py`; the absolute paths that start earlier on the line are tried first.
+_ABS_START = re.compile(r"(?:^|(?<=[\s\"'(\[>]))(?:[A-Za-z]:[\\/]|[\\/])")
+_PYTEST_PARAM = re.compile(r"\[[^\]]*\]$")
 
 
 def parse_target(target: str) -> dict | None:
@@ -40,10 +51,13 @@ def parse_target(target: str) -> dict | None:
     m = _AT_LINE.match(t)
     if m:
         a = int(m.group("a"))
-        return {"path": m.group("path"), "line": a, "end": max(a, int(m.group("b"))) if m.group("b") else a}
+        b = int(m.group("b")) if m.group("b") else a
+        return {"path": m.group("path"), "line": min(a, b), "end": max(a, b)}
     m = _AT_SYMBOL.match(t)
     if m:
-        return {"path": m.group("path"), "symbol": m.group("sym")}
+        # a pytest node id: `C::m` is `C.m`, and a parametrised test's `[1-2]` is not part of its name
+        sym = _PYTEST_PARAM.sub("", m.group("sym")).replace("::", ".")
+        return {"path": m.group("path"), "symbol": sym} if sym else None
     return None
 
 
@@ -52,10 +66,13 @@ def locations(text: str) -> list[dict]:
     out: list[dict] = []
     seen: set[tuple] = set()
     for raw in text.splitlines():
+        best: tuple | None = None
         for kind, rx in _OUTPUT:
             hits = list(rx.finditer(raw))
-            if not hits:
-                continue
+            if hits and (best is None or hits[0].start() < best[1][0].start()):
+                best = (kind, hits)
+        if best is not None:
+            kind, hits = best
             for m in hits:
                 ln = int(m.group("line"))
                 if kind == "jvm":
@@ -68,12 +85,24 @@ def locations(text: str) -> list[dict]:
                     loc = {"path": "/".join([*pkg, m.group("file")]), "line": ln, "end": ln, "suffix": True}
                 else:
                     loc = {"path": m.group("path"), "line": ln, "end": ln}
+                    wider = _wider(raw, m)
+                    if wider:
+                        loc["wider"] = wider
                 key = (loc["path"], ln)
                 if ln > 0 and key not in seen:
                     seen.add(key)
                     out.append({**loc, "input": m.group(0).strip()})
-            break
     return out
+
+
+def _wider(raw: str, m: re.Match) -> list[tuple[str, str]]:
+    """``(path, input)`` for each absolute path that starts earlier on the line and ends where ``m``'s path
+    ends (a path with spaces), longest first; none when ``m``'s path does not follow a space."""
+    start = m.start("path")
+    if start == 0 or not raw[start - 1].isspace():
+        return []
+    return [(raw[k.start():m.end("path")], raw[k.start():m.end()].strip())
+            for k in _ABS_START.finditer(raw, 0, start)][:4]
 
 
 def resolve_path(repo: Path, path: str, *, cwd: Path | None = None, suffix: bool = False,
@@ -108,6 +137,8 @@ def resolve_path(repo: Path, path: str, *, cwd: Path | None = None, suffix: bool
         from verinoda.snapshot import listed_files
 
         files = listed_files(repo)
+    elif callable(files):  # listed once for all the locations of a run, when the first one needs it
+        files = files()
     hits = [f for f in files if f == want or f.endswith("/" + want)]
     if len(hits) == 1:
         return hits[0], []
@@ -182,7 +213,14 @@ def extract_one(repo: Path, loc: dict, *, cwd: Path | None = None, commit: str |
                                  f"{loc['path']}:{loc['line']}" + (f"-{loc['end']}" if loc["end"] != loc["line"]
                                                                    else ""))
     base = {"input": shown}
-    rel, cands = resolve_path(repo, loc["path"], cwd=cwd, suffix=bool(loc.get("suffix")), files=files)
+    rel, cands = None, []
+    for wide, wide_shown in loc.get("wider") or ():
+        rel, _ = resolve_path(repo, wide, cwd=cwd)
+        if rel is not None:
+            base["input"] = wide_shown
+            break
+    else:
+        rel, cands = resolve_path(repo, loc["path"], cwd=cwd, suffix=bool(loc.get("suffix")), files=files)
     if rel is None:
         if cands:
             return {**base, "status": "ambiguous", "note": f"{len(cands)} files end with {loc['path']}",
@@ -192,7 +230,8 @@ def extract_one(repo: Path, loc: dict, *, cwd: Path | None = None, commit: str |
     base["file"] = rel
     if text is None:
         return {**base, "status": "not_found", "note": f"{rel} cannot be read"}
-    lines = text.splitlines()
+    # the lines as the parsers count them (`splitlines` would also end a line at a form feed)
+    lines = re.split(r"\r\n|\r|\n", text[:-1] if text.endswith("\n") else text)
     if facts is None:
         why = ("it does not parse" if anchors.scheme_for(rel) else
                f"no parser for {Path(rel).suffix or 'files without an extension'}")
@@ -217,7 +256,7 @@ def extract_one(repo: Path, loc: dict, *, cwd: Path | None = None, commit: str |
                     "note": f"{rel}:{a}" + (f"-{b}" if b != a else "") + " is in no definition, top-level "
                             "statement or section"}
     start, end = d["start"], d["end"]
-    cut = end if not max_lines or end - start + 1 <= max_lines else start + max_lines - 1
+    cut = end if not max_lines or max_lines < 1 or end - start + 1 <= max_lines else start + max_lines - 1
     recovered = _parse_errors(repo / rel, rel)
     what = {"def": "function", "class": "class", "statement": "top-level statement", "section": "section"}[d["kind"]]
     span = f"{rel}:{start}-{end}"
@@ -241,6 +280,15 @@ def run(repo: Path, targets: list[str] | None = None, *, output: str | None = No
     ``output`` that are not the project's files (library frames); they are left out of ``results``."""
     repo = Path(repo).resolve()
     commit = _commit(repo)
+    listed: list = []
+
+    def files() -> list[str]:
+        if not listed:
+            from verinoda.snapshot import listed_files
+
+            listed.append(listed_files(repo))
+        return listed[0]
+
     locs: list[dict] = []
     for t in targets or []:
         one = parse_target(t)
@@ -263,7 +311,7 @@ def run(repo: Path, targets: list[str] | None = None, *, output: str | None = No
             results.append({"input": loc["input"], "status": "not_found",
                             "note": "expected path:LINE, path:LINE-LINE, path#Symbol or a compiler's error line"})
             continue
-        r = extract_one(repo, loc, cwd=cwd, commit=commit, max_lines=max_lines)
+        r = extract_one(repo, loc, cwd=cwd, commit=commit, max_lines=max_lines, files=files)
         if loc.get("from_output") and r["status"] == "not_found" and "file" not in r:
             outside.append(loc["input"])
             continue
