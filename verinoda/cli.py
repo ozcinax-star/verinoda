@@ -918,9 +918,9 @@ def cmd_lang(args) -> int:
 
     res = langkeys.lookup(_repo(args), args.default, unused=not args.no_unused)
     _emit(args, res, lambda r: print(langkeys.render(r)))
-    if res["status"] != "found":
-        return 2
-    return 3 if res["findings"] else 0
+    if res["findings"]:
+        return 3
+    return 0 if res["status"] == "found" else 2   # no lang file, or no file of the default locale: nothing compared
 
 
 def cmd_when(args) -> int:
