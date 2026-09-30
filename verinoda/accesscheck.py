@@ -13,10 +13,11 @@ Verdicts: ``exists`` (the class, and the member with that descriptor, are in a c
 class is on none of the jars of a complete classpath), ``malformed`` (the line does not parse: an unknown access,
 a missing name, a dotted class name in a widener, a descriptor that is not one), ``unknown`` (no class file to
 compare with: an incomplete or missing classpath, a JDK class, a class of the project's own sources, a widener in
-another namespace than ``named``, an SRG name a transformer keeps for the production jar). ``exists`` is
-``statically_verified``: the jar read holds the name. ``absent`` is ``strong_inference``, for a member as for a
-class: the classpath is what the last build resolved, and may be older than the build file (a game version
-bumped without a rebuild), so a name missing from it is not proven wrong for the version the build names.
+another namespace than ``named``, an SRG name a transformer keeps for the production jar, a class tweaker rule
+that is neither an access rule nor an interface injection). ``exists`` is ``statically_verified``: the jar read
+holds the name. ``absent`` is ``strong_inference``, for a member as for a class: the classpath is what the last
+build resolved, and may be older than the build file (a game version bumped without a rebuild), so a name
+missing from it is not proven wrong for the version the build names.
 """
 from __future__ import annotations
 
@@ -25,6 +26,7 @@ import io
 import posixpath
 import re
 import zipfile
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,6 +44,9 @@ _METHOD_RE = re.compile(r"\((?:" + _FIELD_DESC + r")*\)(?:V|" + _FIELD_DESC + r"
 _SRG = re.compile(r"^(?:[fm]_\d+_|field_\d+_\w*|func_\d+_\w*)$")
 _JDK_PREFIXES = ("java/", "javax/", "jdk/", "sun/", "com/sun/")
 _NESTED = ("META-INF/jars/", "META-INF/jarjar/")
+# what reading a damaged archive entry raises besides OSError: a bad CRC or header, corrupt deflate data, a
+# truncated stream, an unsupported compression or an encrypted entry
+_ZIP_ERRORS = (OSError, KeyError, EOFError, zipfile.BadZipFile, zlib.error, NotImplementedError, RuntimeError)
 # the header words and the versions the loaders read
 _AW_VERSIONS = {"accessWidener": ("v1", "v2"), "classTweaker": ("v1",)}
 
@@ -57,6 +62,8 @@ class Entry:
     name: str | None = None
     desc: str | None = None
     error: str | None = None         # why the line does not parse
+    skip: str | None = None          # why a well-formed line is not looked up
+    iface: str | None = None         # the interface a class tweaker injects
 
     @property
     def at(self) -> str:
@@ -73,13 +80,14 @@ class AccessFile:
 
 # -- finding and reading the files -----------------------------------------------------------------------
 
-def _named_by_manifests(repo: Path, listed: list[str]) -> tuple[set[str], list[str]]:
-    """Files a ``fabric.mod.json`` / ``quilt.mod.json`` (``accessWidener``, ``access_widener``) or a
-    ``neoforge.mods.toml`` (``[[accessTransformers]] file = ...``) names, when they exist beside it with that
-    exact spelling, and a note for a name that matches a file only in another case (a jar is case-sensitive)."""
+def _named_by_manifests(repo: Path, listed: list[str]) -> tuple[dict[str, str], list[str]]:
+    """Files a ``fabric.mod.json`` / ``quilt.mod.json`` (``accessWidener``, ``access_widener``: wideners) or a
+    ``neoforge.mods.toml`` (``[[accessTransformers]] file = ...``: transformers) names, with the format the
+    manifest gives them, when they exist beside it with that exact spelling; a note for a name that matches a file
+    only in another case (a jar is case-sensitive) and for a name that matches no file (the loader stops)."""
     import json
 
-    out: set[str] = set()
+    out: dict[str, str] = {}
     notes: list[str] = []
     exact = set(listed)
     folded: dict[str, str] = {r.casefold(): r for r in listed}
@@ -103,16 +111,20 @@ def _named_by_manifests(repo: Path, listed: list[str]) -> tuple[set[str], list[s
                     names += [v] if isinstance(v, str) else [x for x in v if isinstance(x, str)] \
                         if isinstance(v, list) else []
             root = rel.rsplit("/", 1)[0] if "/" in rel else ""
+            fmt = "accesswidener"
         else:
             names = re.findall(r"\[\[\s*accessTransformers\s*\]\]\s*file\s*=\s*[\"']([^\"']+)[\"']", text)
             root = rel.rsplit("/", 2)[0] if rel.count("/") >= 2 else ""   # beside META-INF/
+            fmt = "accesstransformer"
         for n in names:
             cand = posixpath.normpath(f"{root}/{n}" if root else n)
             if cand in exact:
-                out.add(cand)
+                out.setdefault(cand, fmt)
             elif cand.casefold() in folded:
                 notes.append(f"{rel} names {n}, but the file is {folded[cand.casefold()]}: a jar's names are "
                              f"case-sensitive, so the loader does not find it")
+            else:
+                notes.append(f"{rel} names {n}, but there is no such file ({cand}): the loader does not find it")
     return out, notes
 
 
@@ -134,8 +146,8 @@ def _find(repo: Path) -> tuple[list[tuple[str, str]], list[str]]:
         elif _AT_NAME.search(rel):
             out[rel] = "accesstransformer"
     named, notes = _named_by_manifests(repo, listed)
-    for rel in named:
-        out.setdefault(rel, "accesstransformer" if rel.lower().endswith(".cfg") else "accesswidener")
+    for rel, fmt in named.items():
+        out[rel] = fmt                           # the manifest that names a file says what it is
     return sorted(out.items()), notes
 
 
@@ -143,10 +155,17 @@ def _strip(line: str) -> str:
     return line.split("#", 1)[0].strip()
 
 
+def _lines(text: str) -> list[str]:
+    """The lines as the loaders count them: split at a line feed or carriage return only (``str.splitlines``
+    also splits at a form feed, a vertical tab, U+2028 and others, which shifts every later line)."""
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    return lines[:-1] if lines and lines[-1] == "" else lines
+
+
 def parse_widener(path: str, text: str) -> AccessFile:
     """An access widener or class tweaker: its header's namespace and one entry per rule line."""
     af = AccessFile(path, "accesswidener")
-    lines = text.splitlines()
+    lines = _lines(text)
     head = _strip(lines[0]).split() if lines else []
     # the loader reads the header from the first line and refuses the whole file when it is wrong: the rules
     # of such a file are not checked one by one
@@ -165,6 +184,7 @@ def parse_widener(path: str, text: str) -> AccessFile:
         return af
     af.namespace = head[2]
     v1 = head[:2] == ["accessWidener", "v1"]
+    tweaker = head[0] == "classTweaker"
     for no, raw in enumerate(lines[1:], 2):
         line = _strip(raw)
         if not line:
@@ -173,8 +193,23 @@ def parse_widener(path: str, text: str) -> AccessFile:
         e = Entry(path, no, raw.strip(), af.fmt)
         af.entries.append(e)
         access = tokens[0].removeprefix("transitive-")
+        if tweaker and access == "inject-interface":
+            # '<class> <interface>': the target class is looked up; the interface is most often the mod's own
+            if len(tokens) != 3:
+                e.error = (f"an inject-interface rule is '{tokens[0]} <class> <interface>'; this one has "
+                           f"{len(tokens)} words")
+                continue
+            e.cls, e.iface = tokens[1], tokens[2]
+            if "." in e.cls:
+                e.error = f"class names are written with '/' (a/b/C), not '.': {e.cls}"
+            continue
         if access not in AW_ACCESS:
-            e.error = f"unknown access '{tokens[0]}' (accessible, extendable, mutable)"
+            if tweaker:
+                # a class tweaker has more rule kinds than an access widener; the ones not read here are not
+                # called wrong
+                e.skip = f"'{tokens[0]}' is not an access rule: this class tweaker rule is not read here"
+            else:
+                e.error = f"unknown access '{tokens[0]}' (accessible, extendable, mutable)"
             continue
         if v1 and tokens[0].startswith("transitive-"):
             e.error = "transitive- needs 'accessWidener v2' (this file is v1)"
@@ -208,7 +243,7 @@ def parse_transformer(path: str, text: str) -> AccessFile:
     """A Forge / NeoForge access transformer: ``<access>[-f|+f] <class> [<field> | <method>(<descriptor>) | * |
     *()]`` per line."""
     af = AccessFile(path, "accesstransformer")
-    for no, raw in enumerate(text.splitlines(), 1):
+    for no, raw in enumerate(_lines(text), 1):
         line = _strip(raw)
         if not line:
             continue
@@ -280,9 +315,9 @@ class ClassFiles:
                                     for m in inner.namelist():
                                         if m.endswith(".class") and not m.startswith("META-INF/"):
                                             self.where.setdefault(m[:-6], (jar, n))
-                            except zipfile.BadZipFile:
-                                pass
-            except (OSError, zipfile.BadZipFile):
+                            except _ZIP_ERRORS:
+                                self.unreadable.append(f"{jar.name}!{n}")
+            except _ZIP_ERRORS:
                 self.unreadable.append(jar.name)
 
     def close(self) -> None:
@@ -308,7 +343,7 @@ class ClassFiles:
                 jar, nested = self.where[cls]
                 try:
                     got = jvmclass.class_members(self._zip(jar, nested).read(cls + ".class"))
-                except (OSError, KeyError, zipfile.BadZipFile):
+                except _ZIP_ERRORS:
                     got = None
             self._members[cls] = got
         return self._members[cls]
@@ -357,6 +392,8 @@ def _check_entry(e: Entry, ns: str | None, cf: ClassFiles, complete: bool, sourc
 
     if e.error:
         return done("malformed", "statically_verified", e.error)
+    if e.skip:
+        return done("unknown", "unknown", e.skip)
     if e.fmt == "accesswidener" and ns not in (None, "named"):
         return done("unknown", "unknown", f"the file is written in '{ns}' names; the classpath is read in the "
                                           f"names the build compiles against (named)")
@@ -378,7 +415,11 @@ def _check_entry(e: Entry, ns: str | None, cf: ClassFiles, complete: bool, sourc
         return done("absent", "strong_inference", f"no class {cls} on any jar of the classpath",
                     nearest=near)
     evidence = cf.evidence(cls)
-    if e.kind == "class" or e.name in ("*", "*()"):
+    if e.iface:
+        return done("exists", "statically_verified", f"{cls} is in {evidence}; the injected interface {e.iface} "
+                                                      f"is not looked up", evidence=evidence)
+    # only a transformer has the wildcards; in a widener '*' is a member name like any other
+    if e.kind == "class" or (e.fmt == "accesstransformer" and e.name in ("*", "*()")):
         return done("exists", "statically_verified", f"{cls} is in {evidence}", evidence=evidence)
     members = cf.members(cls)
     if members is None:
@@ -416,8 +457,7 @@ def _configured(config: dict | None) -> bool:
     return isinstance(conf, dict) and isinstance(conf.get("classpath"), list) and bool(conf["classpath"])
 
 
-def check(repo: Path, paths: list[str] | None = None, config: dict | None = None,
-          cache_dir: Path | None = None) -> dict:
+def check(repo: Path, paths: list[str] | None = None, config: dict | None = None) -> dict:
     """Every entry of the project's access widener and transformer files (or of ``paths``) against the
     classpath of the build each file belongs to."""
     import time
@@ -479,13 +519,13 @@ def check(repo: Path, paths: list[str] | None = None, config: dict | None = None
 
 def lookup(repo: Path, paths: list[str] | None = None) -> dict:
     """``verinoda access-check``: the check; ``no_files`` when the project has no widener or transformer."""
-    from verinoda.paths import atlas_dir, load_config
+    from verinoda.paths import load_config
 
     try:
         config = load_config(repo)
     except Exception:  # noqa: BLE001 - no readable config: the build's own classpath is looked for
         config = None
-    res = check(repo, paths, config, atlas_dir(repo) / "cache" / "jvm")
+    res = check(repo, paths, config)
     if not res["files"]:
         return {"status": "no_files", **res,
                 "note": "no .accesswidener, .classtweaker or access transformer (.cfg) file in the project"}

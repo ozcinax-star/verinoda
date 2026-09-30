@@ -2999,7 +2999,7 @@ def build_parser() -> argparse.ArgumentParser:
                                                "(exit 3: absent or malformed; 4: something unknown)")
     sp.add_argument("paths", nargs="*", help="files to check instead of the ones found (.accesswidener, "
                                              ".classtweaker, accesstransformer.cfg)")
-    sp = add("lang", cmd_lang,"Minecraft translation keys: keys missing from a locale or only in it, written twice, "
+    sp = add("lang", cmd_lang, "Minecraft translation keys: keys missing from a locale or only in it, written twice, "
                                "placeholders that differ from the default locale, keys the code asks for that no "
                                "lang file defines, keys nothing names (exit 3 when something is found)")
     sp.add_argument("--default", default="en_us", help="the locale the others are compared with (default en_us)")

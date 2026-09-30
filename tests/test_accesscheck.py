@@ -234,3 +234,123 @@ def test_no_files(tmp_path, capsys):
     (tmp_path / "p").mkdir()
     assert cli.main(["access-check", "--repo", str(tmp_path / "p")]) == 2
     assert "no .accesswidener" in capsys.readouterr().out
+
+
+def test_a_star_in_a_widener_is_a_member_name_not_a_wildcard(tmp_path):
+    repo = _repo(tmp_path)
+    star = repo / "star.accesswidener"
+    star.write_text("accessWidener v2 named\naccessible method net/minecraft/entity/Mob * ()V\n"
+                    "accessible field net/minecraft/entity/Mob * I\n", encoding="utf-8")
+    rows = _by_line(accesscheck.lookup(repo, [str(star)]), "star.accesswidener")
+    # only a transformer has the wildcards: the class has no member named '*'
+    assert rows[2]["verdict"] == "absent" and rows[3]["verdict"] == "absent"
+
+
+def test_class_tweaker_interface_injection_and_other_rules(tmp_path):
+    repo = _repo(tmp_path)
+    ct = repo / "src" / "main" / "resources" / "gem.classtweaker"
+    ct.write_text("classTweaker v1 named\ninject-interface net/minecraft/entity/Mob com/example/Iface\n"
+                  "transitive-inject-interface net/minecraft/entity/Mobb com/example/Iface\n"
+                  "transitive-accessible class net/minecraft/entity/Mob\n"
+                  "extend-enum net/minecraft/entity/Kind SOME (I)V\n"
+                  "inject-interface net/minecraft/entity/Mob\n", encoding="utf-8")
+    from verinoda import snapshot
+
+    snapshot._LISTED.clear()
+    rows = _by_line(accesscheck.lookup(repo), "src/main/resources/gem.classtweaker")
+    assert rows[2]["verdict"] == "exists" and "com/example/Iface" in rows[2]["why"]
+    assert rows[3]["verdict"] == "absent" and rows[3]["nearest"][0] == "net/minecraft/entity/Mob"
+    assert rows[4]["verdict"] == "exists"
+    # a class tweaker rule this check does not read is not called wrong
+    assert rows[5]["verdict"] == "unknown" and rows[5]["status"] == "unknown"
+    assert rows[6]["verdict"] == "malformed" and "has 2 words" in rows[6]["why"]
+    # in an access widener the same word is an unknown access
+    aw = repo / "inj.accesswidener"
+    aw.write_text("accessWidener v2 named\ninject-interface net/minecraft/entity/Mob com/example/Iface\n",
+                  encoding="utf-8")
+    assert _by_line(accesscheck.lookup(repo, [str(aw)]), "inj.accesswidener")[2]["verdict"] == "malformed"
+
+
+def test_manifests_give_the_format_and_a_missing_file_is_noted(tmp_path):
+    repo = _repo(tmp_path)
+    meta = repo / "src" / "main" / "resources" / "META-INF"
+    (meta / "neoforge.mods.toml").write_text('[[accessTransformers]]\nfile="META-INF/mymod.at"\n'
+                                             '[[accessTransformers]]\nfile="META-INF/gone.cfg"\n', encoding="utf-8")
+    (meta / "mymod.at").write_text("public net.minecraft.entity.Mob tick()V\n", encoding="utf-8")
+    (repo / "src" / "main" / "resources" / "fabric.mod.json").write_text(
+        json.dumps({"id": "gem", "accessWidener": "missing.accesswidener"}), encoding="utf-8")
+    from verinoda import snapshot
+
+    snapshot._LISTED.clear()
+    assert ("src/main/resources/META-INF/mymod.at", "accesstransformer") in accesscheck.access_files(repo)
+    res = accesscheck.lookup(repo)
+    at = _by_line(res, "src/main/resources/META-INF/mymod.at")
+    assert at[1]["verdict"] == "exists" and at[1]["format"] == "accesstransformer"
+    assert any("missing.accesswidener" in n and "no such file" in n for n in res["notes"])
+    assert any("gone.cfg" in n and "no such file" in n for n in res["notes"])
+
+
+def test_only_line_feeds_and_carriage_returns_end_a_line(tmp_path):
+    repo = _repo(tmp_path)
+    aw = repo / "ff.accesswidener"
+    aw.write_bytes("accessWidener v2 named\r\n# note\x0c more\u2028 and\x85 more\r\naccessible class "
+                   "net/minecraft/entity/Mobb\raccessible class net/minecraft/entity/Mob\n".encode("utf-8"))
+    at = repo / "ff_at.cfg"
+    at.write_text("# a\x0bb\npublic net.minecraft.entity.Mob goalSelectr\n", encoding="utf-8")
+    res = accesscheck.lookup(repo, [str(aw), str(at)])
+    rows = _by_line(res, "ff.accesswidener")
+    assert sorted(rows) == [3, 4] and rows[3]["verdict"] == "absent" and rows[4]["verdict"] == "exists"
+    assert list(_by_line(res, "ff_at.cfg")) == [2]
+
+
+def _nested(outer: Path, inner_classes: dict[str, bytes], outer_classes: dict[str, bytes]) -> Path:
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, data in inner_classes.items():
+            z.writestr(name + ".class", data)
+    outer.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(outer, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, data in outer_classes.items():
+            z.writestr(name + ".class", data)
+        z.writestr("META-INF/jars/in.jar", buf.getvalue())
+    return outer
+
+
+def _corrupt(jar: Path, entry: str) -> None:
+    """Overwrite the start of an entry's deflate data (its CRC is not reached: zlib fails first)."""
+    import zipfile
+
+    with zipfile.ZipFile(jar) as z:
+        info = z.getinfo(entry)
+    data = bytearray(jar.read_bytes())
+    start = info.header_offset + 30 + int.from_bytes(data[info.header_offset + 26:info.header_offset + 28], "little") \
+        + int.from_bytes(data[info.header_offset + 28:info.header_offset + 30], "little")
+    data[start:start + 8] = b"\xff" * 8
+    jar.write_bytes(bytes(data))
+
+
+def test_nested_jars_are_read_and_damaged_data_is_not_a_crash(tmp_path):
+    lib = tmp_path / "lib"
+    outer = _nested(lib / "outer.jar", {"net/minecraft/entity/Mob": LIB["net/minecraft/entity/Mob"]},
+                    {"net/minecraft/world/Level": LIB["net/minecraft/world/Level"]})
+    cf = accesscheck.ClassFiles([outer])
+    try:
+        assert cf.evidence("net/minecraft/entity/Mob") == \
+            "outer.jar!META-INF/jars/in.jar!net/minecraft/entity/Mob.class"
+        assert any(m[0] == "tick" for m in cf.members("net/minecraft/entity/Mob")["methods"])
+    finally:
+        cf.close()
+    # corrupt deflate data in a class file: that class cannot be read (unknown), the run goes on
+    _corrupt(outer, "net/minecraft/world/Level.class")
+    cf = accesscheck.ClassFiles([outer])
+    try:
+        assert cf.members("net/minecraft/world/Level") is None and not cf.unreadable
+    finally:
+        cf.close()
+    # a nested jar with corrupt data: it is unreadable, which makes the classpath not complete
+    _corrupt(outer, "META-INF/jars/in.jar")
+    cf = accesscheck.ClassFiles([outer])
+    assert cf.unreadable == ["outer.jar!META-INF/jars/in.jar"] and "net/minecraft/entity/Mob" not in cf.where
