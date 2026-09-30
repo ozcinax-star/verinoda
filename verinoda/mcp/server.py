@@ -1614,8 +1614,8 @@ class AtlasTools:
                     if act == "supersede":
                         return dm.supersede(st, self.repo, _text(supersedes, "supersedes"), did, user_statement=said)
                     if act == "link":
-                        kind, _, target = _text(link, "link").partition(" ")
-                        if not target.strip():
+                        kind, _, target = _text(link, "link").strip().rpartition(" ")  # a kind may be two words
+                        if not kind.strip() or not target.strip():
                             raise ToolFailure("invalid_argument", "link is 'KIND ADR-N', e.g. 'amends ADR-0002'",
                                               f"kinds: {', '.join(sorted(dm.REVERSE_LINK))}")
                         return dm.link(st, self.repo, did, kind, target.strip(), user_statement=said)

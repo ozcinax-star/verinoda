@@ -1563,6 +1563,8 @@ def cmd_decide(args) -> int:
             res = dm.write_toc(repo, args.write, args.decisions_dir) if args.write else \
                 dm.timeline(repo, args.decisions_dir)
         except dm.DecisionError as exc:
+            if getattr(args, "json", False):  # like decide check: JSON on stdout too
+                print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
             print(f"error: {exc}", file=sys.stderr)
             return 2
         _emit(args, res, _r_toc)

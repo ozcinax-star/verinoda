@@ -238,7 +238,7 @@ def test_cli_supersede_link_and_toc(repo, st, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out["superseded"] == a["id"] and out["superseded_record"]["superseded_by"] == b["id"]
     assert cli.main(["decide", "supersede", a["id"], "--by", b["id"], "--repo", str(repo)]) == 2
-    assert "already superseded" in capsys.readouterr().err
+    assert "already recorded on both records" in capsys.readouterr().err
     assert cli.main(["decide", "link", "8", "clarifies", "9", "--repo", str(repo)]) == 0
     assert f"{b['id']} clarified-by {a['id']}" in capsys.readouterr().out
     assert cli.main(["decide", "toc", "--repo", str(repo)]) == 0
@@ -252,6 +252,10 @@ def test_cli_supersede_link_and_toc(repo, st, capsys):
     assert "(../.verinoda/decisions/ADR-0008-" in (repo / "docs" / "decisions.md").read_text(encoding="utf-8")
     assert cli.main(["decide", "list", "--repo", str(repo)]) == 0
     assert f"clarifies {b['id']}" in capsys.readouterr().out
+    # an error of toc --json is JSON on stdout too, as for decide check
+    assert cli.main(["decide", "toc", "--json", "--write", "../../outside.md", "--repo", str(repo)]) == 2
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["status"] == "error" and "outside" in captured.err
 
 
 def test_mcp_supersede_and_link_need_the_users_words(repo, st):
@@ -282,3 +286,68 @@ def test_the_ui_timeline_reads_the_records_without_an_index(repo, st):
     assert "ADR0009 -->|supersedes| ADR0008" in res["mermaid"]
     js = resources.files("verinoda.ui").joinpath("static", "app.js").read_text(encoding="utf-8")
     assert 'h === "#/d") renderDecisions()' in js and 'case "/api/decisions"' in js
+
+
+def test_supersede_completes_a_relation_only_the_old_record_states(repo, st):
+    a = dm.record(st, repo, chosen="A", rationale="r")
+    b = dm.record(st, repo, chosen="B", rationale="r")
+    p = repo / a["file"]
+    p.write_bytes(p.read_bytes().replace(b"status: accepted", b"status: superseded")
+                  .replace(b"superseded-by: null", f"superseded-by: {b['id']}".encode()))
+    assert any("does not say supersedes" in w for w in dm.find(repo, a["id"]).warnings)
+    dm.supersede(st, repo, a["id"], b["id"], user_statement="as the file says")
+    assert _front(repo, b)["supersedes"] == a["id"]
+    assert not dm.find(repo, a["id"]).warnings and not dm.find(repo, b["id"]).warnings
+    with pytest.raises(dm.DecisionError, match="already recorded on both records"):
+        dm.supersede(st, repo, a["id"], b["id"])
+    c = dm.record(st, repo, chosen="C", rationale="r")
+    with pytest.raises(dm.DecisionError, match="already superseded by"):
+        dm.supersede(st, repo, a["id"], c["id"])  # superseded by another record: still refused
+
+
+def test_a_malformed_link_entry_is_a_problem_of_its_record_only(repo, st, capsys):
+    from verinoda import cli
+
+    a = dm.record(st, repo, chosen="A", rationale="r")
+    b = dm.record(st, repo, chosen="B", rationale="r")
+    c = dm.record(st, repo, chosen="C", rationale="r")
+    dm.link(st, repo, a["id"], "amends", b["id"])
+    p = repo / c["file"]
+    clean = p.read_bytes()
+    for bad in (f'[{{"id": "{a["id"]}"}}]', f'[{{"kind": ["x"], "id": "{a["id"]}"}}]',
+                '[{"kind": "amends", "id": 7}]'):
+        p.write_bytes(clean.replace(b"links: []", f"links: {bad}".encode()))
+        recs = {d.id: d for d in dm.load_all(repo)}
+        assert any("links entry" in x for x in recs[c["id"]].problems)
+        assert not recs[a["id"]].problems and not recs[a["id"]].warnings
+        assert dm.timeline(repo)["relations"]
+        capsys.readouterr()
+        assert cli.main(["decide", "check", "--json", "--repo", str(repo)]) != 2
+        assert cli.main(["decide", "list", "--repo", str(repo)]) == 0
+        assert cli.main(["decide", "toc", "--repo", str(repo)]) == 0
+
+
+def test_mcp_link_reads_a_kind_of_two_words(repo, st):
+    from verinoda.mcp.server import AtlasTools
+
+    a = dm.record(st, repo, chosen="A", rationale="r")
+    b = dm.record(st, repo, chosen="B", rationale="r")
+    t = AtlasTools(repo)
+    ok = t.decision_record("link", decision_id=b["id"], link=f"amended by {a['id']}", user_statement="y")
+    assert ok["linked"] == {"from": b["id"], "kind": "amended-by", "to": a["id"], "reverse": "amends"}
+    ok = t.decision_record("link", decision_id=b["id"], link=f"relates to {a['id']}", user_statement="y")
+    assert ok["linked"]["kind"] == "relates-to"
+
+
+def test_toc_links_survive_brackets_and_spaces_and_mermaid_odd_ids(repo, st):
+    tl = {"dir": "docs/my decisions", "relations": [],
+          "records": [{"id": "ADR-0001", "title": "Use A [draft", "status": "accepted", "enforced": True,
+                       "date": "2026-10-01", "file": "docs/my decisions/ADR-0001-use-a-draft.md"}]}
+    row = next(ln for ln in dm.toc_markdown(tl, "docs").split("\n") if ln.startswith("| 2026-10-01"))
+    assert r"[ADR-0001: Use A \[draft](my%20decisions/ADR-0001-use-a-draft.md)" in row
+    dm.record(st, repo, chosen="A", rationale="r")
+    (repo / ".verinoda" / "decisions" / "weird.md").write_bytes(
+        b"---\nverinoda-decision: 1\nid: my id; x\ntitle: T\n---\n")
+    mm = dm.mermaid(dm.timeline(repo))
+    assert '  rec1["my id; x: T' in mm and "\n  my id" not in mm
+    assert "  ADR0008[" in mm

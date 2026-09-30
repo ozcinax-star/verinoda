@@ -419,7 +419,7 @@ def parse(path: Path) -> Decision | None:
                 "the waiver is not applied" for w in lists["waivers"]
                 if w.get("until") not in (None, "") and _date_or_none(w.get("until")) is None]
     warnings += [f"link {x['kind']} {x['id']}: the kind is not one of {', '.join(sorted(REVERSE_LINK))}"
-                 for x in lists["links"] if x.get("kind") not in REVERSE_LINK]
+                 for x in _readable_links(lists["links"]) if x["kind"] not in REVERSE_LINK]
     return Decision(id=did, number=int(did[4:]), title=str(front.get("title") or ""), status=status,
                     decided_by=by, date=str(front.get("date") or ""), chosen=front.get("chosen"),
                     brief=front.get("brief"), source=front.get("source"), supersedes=front.get("supersedes"),
@@ -465,6 +465,12 @@ def load_all(repo: Path, directory: str | None = None) -> list[Decision]:
     return sorted(out, key=lambda x: (x.number, str(x.path)))
 
 
+def _readable_links(links: list[dict]) -> list[dict]:
+    """The link entries whose ``kind`` and ``id`` are text (any other entry is already a problem of its record,
+    and a hand-edited kind that is a list or a number must not stop the other records being read)."""
+    return [x for x in links if isinstance(x.get("kind"), str) and isinstance(x.get("id"), str)]
+
+
 def _norm_or_none(value) -> str | None:
     try:
         return norm_id(value) if value else None
@@ -490,14 +496,13 @@ def _one_sided(out: list[Decision], by_id: dict[str, list[Decision]]) -> None:
             elif _norm_or_none(getattr(ys[0], back)) != x.id:
                 x.warnings.append(f"{label} {other}, but {other} does not say {back.replace('_', '-')} {x.id} "
                                   f"(`verinoda decide supersede` writes both records)")
-        for ln in x.links:
-            other, kind = _norm_or_none(ln.get("id")), ln.get("kind")
+        for ln in _readable_links(x.links):
+            other, kind = _norm_or_none(ln["id"]), ln["kind"]
             ys = by_id.get(other or "") or []
             if not ys:
-                x.warnings.append(f"link {kind} {ln.get('id')}: no record {other or ln.get('id')} in the decisions "
-                                  "folder")
-            elif kind in REVERSE_LINK and not any(r.get("kind") == REVERSE_LINK[kind] and _norm_or_none(r.get("id"))
-                                                  == x.id for r in ys[0].links):
+                x.warnings.append(f"link {kind} {ln['id']}: no record {other or ln['id']} in the decisions folder")
+            elif kind in REVERSE_LINK and not any(r["kind"] == REVERSE_LINK[kind] and _norm_or_none(r["id"]) == x.id
+                                                  for r in _readable_links(ys[0].links)):
                 x.warnings.append(f"link {kind} {other}, but {other} has no link {REVERSE_LINK[kind]} {x.id} "
                                   "(`verinoda decide link` writes both records)")
 
@@ -1081,7 +1086,11 @@ def supersede(store, repo: Path, old_id: str, new_id: str, *, user_statement: st
     old, new = _require(repo, old_id), _require(repo, new_id)
     if old.id == new.id:
         raise DecisionError(f"{old.id} cannot supersede itself")
-    if old.status == "superseded" or old.superseded_by:
+    said_old, said_new = _norm_or_none(old.superseded_by) == new.id, _norm_or_none(new.supersedes) == old.id
+    if said_old and said_new and old.status == "superseded":
+        raise DecisionError(f"{new.id} supersedes {old.id} is already recorded on both records")
+    # a relation only one of the two records states (a hand edit) is completed, from either side
+    if (old.status == "superseded" or old.superseded_by) and not said_old:
         raise DecisionError(f"{old.id} is already superseded" + (f" by {old.superseded_by}" if old.superseded_by
                                                                   else ""))
     if new.status != "accepted":
@@ -1157,8 +1166,8 @@ def _relations(recs: list[Decision]) -> list[dict]:
     for x in recs:
         add(x.id, "supersedes", _norm_or_none(x.supersedes), x.id)
         add(_norm_or_none(x.superseded_by), "supersedes", x.id, x.id)
-        for ln in x.links:
-            k, other = ln.get("kind"), _norm_or_none(ln.get("id"))
+        for ln in _readable_links(x.links):
+            k, other = ln["kind"], _norm_or_none(ln["id"])
             if k in LINK_KINDS:
                 add(x.id, k, other, x.id)
             elif k in REVERSE_LINK:
@@ -1193,6 +1202,11 @@ def timeline(repo: Path, directory: str | None = None) -> dict:
                     "hand-written document's own date); a relation only one of its records states is one_sided"}
 
 
+def _link_text(text: str) -> str:
+    """Markdown link text: a bracket (or a backslash before one) in a title would end the link early."""
+    return text.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+
+
 def _cell(text) -> str:
     return str(text or "").replace("|", "\\|").replace("\n", " ")
 
@@ -1200,13 +1214,21 @@ def _cell(text) -> str:
 def mermaid(tl: dict) -> str:
     """A Mermaid graph of the records and their relations (a relation one record states: dashed; a record
     no longer in force: a dashed border)."""
+    names: dict[str, str] = {}
+
     def node(did: str) -> str:
-        return did.replace("-", "")
+        """A Mermaid node id: ``ADR0001`` for a well-formed id; a record whose id could not be read (the raw
+        front-matter value or the file name) gets a safe id of its own."""
+        if did not in names:
+            odd = sum(v.startswith("rec") for v in names.values())
+            names[did] = did.replace("-", "") if re.fullmatch(r"ADR-\d+", did) else f"rec{odd + 1}"
+        return names[did]
 
     out = ["graph LR"]
-    for r in tl["records"]:
-        label = f"{r['id']}: {r['title']}"[:90].replace('"', "#quot;")
-        out.append(f'  {node(r["id"])}["{label} ({r["status"]})"]')
+    for i, r in enumerate(tl["records"]):
+        label = f"{r['id']}: {r['title']}"[:90].replace('"', "#quot;").replace("\n", " ")
+        nid = node(r["id"]) if r["id"] not in names else f"{node(r['id'])}_{i}"  # the same id twice: two nodes
+        out.append(f'  {nid}["{label} ({r["status"]})"]')
     for e in tl["relations"]:
         arrow = "-.->" if e["one_sided"] or e["missing"] else "-->"
         out.append(f"  {node(e['from'])} {arrow}|{e['kind']}| {node(e['to'])}")
@@ -1224,6 +1246,7 @@ def toc_markdown(tl: dict, base: str = ".") -> str:
     """The table of contents: one row per record by date (links relative to ``base``, the repository-relative
     folder of the file it goes to), then the Mermaid graph."""
     import posixpath
+    from urllib.parse import quote
 
     lines = [TOC_MARK, "# Decision records", "",
              f"{len(tl['records'])} record(s) in `{tl['dir']}`, by the date each states. A dashed arrow is a "
@@ -1232,8 +1255,10 @@ def toc_markdown(tl: dict, base: str = ".") -> str:
     for r in tl["records"]:
         rel = [f"{e['kind']} {e['to']}" for e in tl["relations"] if e["from"] == r["id"]]
         rel += [f"{_reverse_label(e['kind'])} {e['from']}" for e in tl["relations"] if e["to"] == r["id"]]
-        name = _cell(f"{r['id']}: {r['title']}")
-        target = posixpath.relpath(r["file"], base or ".") if r.get("file") else None
+        # the link text escapes brackets, and the target is percent-encoded (a folder name with a space or
+        # a parenthesis would otherwise end the link)
+        name = _cell(_link_text(f"{r['id']}: {r['title']}"))
+        target = quote(posixpath.relpath(r["file"], base or ".")) if r.get("file") else None
         status = r["status"] + (" (not enforced)" if r["status"] == "accepted" and not r["enforced"] else "")
         lines.append(f"| {r['date'] or '?'} | " + (f"[{name}]({target})" if target else name)
                      + f" | {status} | {_cell('; '.join(rel))} |")
