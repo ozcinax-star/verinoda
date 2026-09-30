@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D86)
+## Upgrading from 0.3.2 (D60-D87)
 
 ### D63: Running a project's own tests safely
 
@@ -317,6 +317,14 @@ are unchanged, so the tool count in UPGRADING needs no change.
 `review --json` and MCP `change_review` have a new key `api_changes` (a list of verdicts) and `counts` a new key
 `api_breaking` (and `api_changes_total` when the list was cut); the review summary gains a "Public API" sentence when there are public changes. Exit codes are
 unchanged. No tool was added: UPGRADING's tool count does not change.
+
+### D87: Decisions a diff touches
+
+`verinoda review` (and MCP `change_review`) now returns `decisions`: the decision records the change
+reaches, each with `reached_by` entries (`kind`, `entry`, `at`, `why`, `status`, `evidence_at`), and prints
+them under "Decisions to read". A record the change deletes is listed with `status: deleted`; a record that
+could not be read adds `error` and an `unknown` entry of kind `decision_records`. Exit codes and the MCP
+tool count are unchanged (UPGRADING's tool count needs no change).
 
 ### D60-D62
 
