@@ -335,12 +335,27 @@ def to_json(G: nx.Graph, communities: dict[int, list[str]], output_path: str, *,
     def _json_sort_key(item: dict) -> str:
         return json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
+    # Local change (Verinoda): the folded label is kept per label string for this call (a pure
+    # function of the string), and an ASCII label is only lowered (NFKD leaves ASCII unchanged and
+    # no ASCII character is combining); a label that is not a str is folded as before, every time.
+    norm_of: dict[str, str] = {}
+
+    def _norm_label(label: object) -> str:
+        if type(label) is not str:
+            return _strip_diacritics(label).lower()
+        if label.isascii():
+            return label.lower()
+        norm = norm_of.get(label)
+        if norm is None:
+            norm = norm_of[label] = _strip_diacritics(label).lower()
+        return norm
+
     for node in data["nodes"]:
         cid = node_community.get(node["id"])
         node["community"] = cid
         if cid is not None and _labels:
             node["community_name"] = _labels.get(cid, f"Community {cid}")
-        node["norm_label"] = _strip_diacritics(node.get("label", "")).lower()
+        node["norm_label"] = _norm_label(node.get("label", ""))
     for link in data["links"]:
         if "confidence_score" not in link:
             conf = link.get("confidence", "EXTRACTED")

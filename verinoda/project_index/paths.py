@@ -210,9 +210,16 @@ def _is_test_path(path: str) -> bool:
     """
     if not path:
         return False
+    # Local change (Verinoda): the answer is kept per str(path), all the rest of the test reads.
+    return _is_test_path_str(str(path))
+
+
+@functools.lru_cache(maxsize=65536)
+def _is_test_path_str(path: str) -> bool:
+    """The body of ``_is_test_path`` for a non-empty path string (Local change (Verinoda))."""
     # Accept both POSIX and Windows separators regardless of host OS so the
     # classifier is stable across the mixed paths that flow through extraction.
-    norm = str(path).replace("\\", "/")
+    norm = path.replace("\\", "/")
     pure = PurePosixPath(norm)
     segments = list(pure.parts)
     # Strip a leading drive/anchor segment (e.g. "C:/") that PureWindowsPath

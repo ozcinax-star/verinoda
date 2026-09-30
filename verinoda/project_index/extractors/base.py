@@ -76,9 +76,23 @@ def _file_stem(path: Path) -> str:
     the scan root, so it has no per-file stem). Guarding here keeps
     ``path.with_suffix("")`` from raising ``ValueError: '.' has an empty name`` and
     protects every caller, not just ``_semantic_id_remap`` (#1618)."""
-    if not path.name:
-        return ""
-    return path.with_suffix("").as_posix()
+    # Local change (Verinoda): the stem is kept per (path type, path string), which is all it
+    # depends on (the resolution passes ask for the same few thousand files once per node).
+    key = (type(path), str(path))
+    stem = _FILE_STEM_MEMO.get(key)
+    if stem is None:
+        if not path.name:
+            stem = ""
+        else:
+            stem = path.with_suffix("").as_posix()
+        if len(_FILE_STEM_MEMO) >= 65536:
+            _FILE_STEM_MEMO.clear()
+        _FILE_STEM_MEMO[key] = stem
+    return stem
+
+
+# Local change (Verinoda): the memo of _file_stem, a lexical function of its key.
+_FILE_STEM_MEMO: dict[tuple[type, str], str] = {}
 
 
 def _read_text(node, source: bytes) -> str:

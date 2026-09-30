@@ -210,9 +210,11 @@ def resolve_markdown_mentions(
             if callee in _LANGUAGE_BUILTIN_GLOBALS:
                 continue
             qualifiers = set(names[:-1])
+            # Local change (Verinoda): a bare mention has no qualifier, and the empty set is a
+            # subset of any evidence, so the evidence walk is skipped for it; the same candidates.
             candidates = [
                 c for c in by_label.get(callee, [])
-                if qualifiers <= _evidence(c, nodes_by_id, parents)
+                if not qualifiers or qualifiers <= _evidence(c, nodes_by_id, parents)
             ]
             target = candidates[0] if len(candidates) == 1 else None
             confidence, score = "INFERRED", 0.95

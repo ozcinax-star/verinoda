@@ -84,6 +84,7 @@ from verinoda.project_index.extractors.resolution import (  # noqa: E402,F401
     _augment_symbol_resolution_edges,
     _cached_realpath,
     _cached_source_key,
+    _JS_SOURCE_PATH_MEMO,  # Local change (Verinoda): cleared with _cached_realpath in extract()
     _collect_js_symbol_resolution_facts,
     _collect_python_symbol_resolution_facts,
     _contained_in_package,
@@ -2733,11 +2734,27 @@ _CASE_INSENSITIVE_EXTS = frozenset({
 })
 
 
+# Local change (Verinoda): _lang_is_case_insensitive and _lang_family keep their answer per
+# str(source_file), the only input they read besides the two constant tables (a build asks them
+# about the same few thousand files some 30,000 and 200,000 times). Bounded like the lru caches
+# of the resolution module.
+_LANG_MEMO_MAX = 65536
+_LANG_MEMO_MISS = object()
+_LANG_CASE_INSENSITIVE_MEMO: dict[str, bool] = {}
+_LANG_FAMILY_MEMO: dict[str, str | None] = {}
+
+
 def _lang_is_case_insensitive(source_file: object) -> bool:
     """True when the file's language resolves identifiers case-insensitively (#1581)."""
     if not source_file:
         return False
-    return Path(str(source_file)).suffix.lower() in _CASE_INSENSITIVE_EXTS
+    key = str(source_file)
+    answer = _LANG_CASE_INSENSITIVE_MEMO.get(key, _LANG_MEMO_MISS)
+    if answer is _LANG_MEMO_MISS:
+        if len(_LANG_CASE_INSENSITIVE_MEMO) >= _LANG_MEMO_MAX:
+            _LANG_CASE_INSENSITIVE_MEMO.clear()
+        answer = _LANG_CASE_INSENSITIVE_MEMO[key] = Path(key).suffix.lower() in _CASE_INSENSITIVE_EXTS
+    return answer
 
 
 # Language interop families for cross-file call resolution. A call in one language
@@ -2784,7 +2801,13 @@ def _lang_family(source_file: object) -> str | None:
     """Interop family of the file's language, or None when unknown/not code."""
     if not source_file:
         return None
-    return _LANG_FAMILY_BY_EXT.get(Path(str(source_file)).suffix.lower())
+    key = str(source_file)  # Local change (Verinoda): memoised per string, see _LANG_FAMILY_MEMO
+    answer = _LANG_FAMILY_MEMO.get(key, _LANG_MEMO_MISS)
+    if answer is _LANG_MEMO_MISS:
+        if len(_LANG_FAMILY_MEMO) >= _LANG_MEMO_MAX:
+            _LANG_FAMILY_MEMO.clear()
+        answer = _LANG_FAMILY_MEMO[key] = _LANG_FAMILY_BY_EXT.get(Path(key).suffix.lower())
+    return answer
 
 
 # A language's own built-in throwable hierarchy, keyed by the interop family of
@@ -3547,8 +3570,16 @@ def _resolve_python_member_calls(
 
     Must run after id-disambiguation so node ids and caller_nids are final.
     """
+    # Local change (Verinoda): _key keeps its answer per str(label) for this call (a pure function of
+    # that string).
+    key_of: dict[str, str] = {}
+
     def _key(label: str) -> str:
-        return re.sub(r"[^a-zA-Z0-9]+", "", str(label)).lower()
+        text = str(label)
+        key = key_of.get(text)
+        if key is None:
+            key = key_of[text] = re.sub(r"[^a-zA-Z0-9]+", "", text).lower()
+        return key
 
     node_by_id: dict[str, dict] = {n.get("id"): n for n in all_nodes}
 
@@ -6927,6 +6958,7 @@ def extract(
     # watch` / MCP process would otherwise replay a stale result. Clear per run.
     _cached_realpath.cache_clear()
     _cached_source_key.cache_clear()
+    _JS_SOURCE_PATH_MEMO.clear()  # Local change (Verinoda): stands on _cached_realpath, cleared with it
 
     # Infer a common root for cache keys (use first diverging segment, not sum of all matches)
     try:
@@ -7520,7 +7552,12 @@ def extract(
                     {k: v for k, v in edge.items() if k != "target_file"},
                     sort_keys=True, separators=(",", ":"), default=str,
                 )
-            edge_key_counts = Counter(_edge_key(edge) for edge in all_edges)
+            # Local change (Verinoda): only `imports` edges are counted. A twin key below is built
+            # from an `imports` edge and keeps its "relation":"imports", so no other edge's key can
+            # equal it; the counts it reads are the same.
+            edge_key_counts = Counter(
+                _edge_key(edge) for edge in all_edges if edge.get("relation") == "imports"
+            )
             owned_node_ids = {node.get("id") for node in all_nodes}
             deduped_edges: list[dict] = []
             for edge in all_edges:
@@ -8199,12 +8236,28 @@ def extract(
         _sf_forms[sf] = entry
         return entry
 
+    # Local change (Verinoda): whether a source_file / definition_file string is absolute is kept per
+    # string for this loop (a pure function of the string; about 100,000 items share a few thousand
+    # files). A non-string value takes the unmemoised path. The per-item work below is unchanged.
+    _abs_forms: dict[str, tuple[str, str, tuple[str, ...]] | None] = {}
+
+    def _abs_entry(value: object) -> tuple[str, str, tuple[str, ...]] | None:
+        if type(value) is str:
+            if value in _abs_forms:
+                return _abs_forms[value]
+            value_path = Path(value)
+            entry = _sf_entry(value, value_path) if value_path.is_absolute() else None
+            _abs_forms[value] = entry
+            return entry
+        value_path = Path(value)
+        return _sf_entry(str(value), value_path) if value_path.is_absolute() else None
+
     for item in all_nodes + all_edges:
         sf = item.get("source_file")
         if sf:
-            sf_path = Path(sf)
-            if sf_path.is_absolute():
-                new_sf, canonical_id, keys = _sf_entry(str(sf), sf_path)
+            sf_forms = _abs_entry(sf)
+            if sf_forms is not None:
+                new_sf, canonical_id, keys = sf_forms
                 if "id" in item:
                     for key in keys:
                         if key == canonical_id or key in ext_id_remap:
@@ -8219,10 +8272,9 @@ def extract(
                 item["source_file"] = new_sf
         df = item.get("definition_file")
         if df:
-            df_path = Path(df)
-            if df_path.is_absolute():
-                new_df, _, _ = _sf_entry(str(df), df_path)
-                item["definition_file"] = new_df
+            df_forms = _abs_entry(df)
+            if df_forms is not None:
+                item["definition_file"] = df_forms[0]
 
     if ext_id_remap:
         # Bash entrypoint ids are the file-level id + "__entry"

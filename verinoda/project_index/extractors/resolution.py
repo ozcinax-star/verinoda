@@ -1100,16 +1100,31 @@ def _resolve_cached(path: "Path | str") -> Path:
     return _cached_realpath(str(path), os.getcwd())
 
 
+# Local change (Verinoda): _js_source_path keeps a resolved answer per (source_file, root, cwd), the
+# key _resolve_cached itself uses (the symbol-resolution facts ask for the same few hundred files once
+# per node and per edge). extract() clears it with _cached_realpath, so it lives exactly as long as the
+# resolve memo it stands on; a path whose resolve raised is not kept, as there.
+_JS_SOURCE_PATH_MEMO: dict[tuple[str, type, str, str], Path] = {}
+
+
 def _js_source_path(source_file: str, root: Path) -> Path | None:
     if not source_file:
         return None
+    key = (str(source_file), type(root), str(root), os.getcwd())
+    hit = _JS_SOURCE_PATH_MEMO.get(key)
+    if hit is not None:
+        return hit
     path = Path(source_file)
     if not path.is_absolute():
         path = root / path
     try:
-        return _resolve_cached(path)
+        resolved = _resolve_cached(path)
     except Exception:
         return path
+    if len(_JS_SOURCE_PATH_MEMO) >= 65536:
+        _JS_SOURCE_PATH_MEMO.clear()
+    _JS_SOURCE_PATH_MEMO[key] = resolved
+    return resolved
 
 def _apply_symbol_resolution_facts(
     paths: list[Path],
@@ -2964,6 +2979,11 @@ def _resolve_cross_file_java_imports(
     return new_edges
 
 
+# Local change (Verinoda): the value _go_import_path_for_file keeps in its module_cache for a directory
+# that has no go.mod file (the walk goes on to its parent).
+_GO_NO_MODULE_FILE: Any = object()
+
+
 def _go_import_path_for_file(
     source_file: str | Path,
     root: Path,
@@ -2984,11 +3004,18 @@ def _go_import_path_for_file(
     for candidate in (directory, *directory.parents):
         if candidate in cache:
             cached = cache[candidate]
+            if cached is _GO_NO_MODULE_FILE:
+                continue
             if cached:
                 module_dir, module_path = candidate, cached
             break
         go_mod = candidate / "go.mod"
         if not go_mod.is_file():
+            # Local change (Verinoda): a directory without go.mod is remembered in the caller's
+            # cache too, so the next file of the corpus does not stat every ancestor again (with no
+            # go.mod above the repository, every call walked to the drive root).
+            if module_cache is not None:
+                cache[candidate] = _GO_NO_MODULE_FILE
             continue
         try:
             match = re.search(
