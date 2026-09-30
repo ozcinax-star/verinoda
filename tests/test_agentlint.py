@@ -237,3 +237,113 @@ def test_cli(repo, home, capsys, monkeypatch):
         (repo / f).unlink()
     assert cli.main(["agent-lint", "--repo", str(repo), "--no-memory", "--file", "extra.md"]) == 0
     assert cli.main(["agent-lint", "--repo", str(repo), "--no-memory"]) == 2
+
+
+def _project(tmp_path, files: dict[str, str]) -> Path:
+    root = tmp_path / "p"
+    for rel, text in files.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(text.encode("utf-8"))
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    return root
+
+
+WEB = {"package.json": '{"scripts": {"lint": "eslint ."}}\n',
+       "web/package.json": '{"scripts": {"test": "vitest", "build": "vite build"}}\n'}
+
+
+def test_cd_carries_through_a_shell_block(tmp_path):
+    root = _project(tmp_path, {**WEB, "AGENTS.md": "# A\n\n```bash\ncd web\nnpm run build\nnpm test\n```\n\n"
+                                                    "```bash\nnpm run lint\ncd $APP_DIR\nnpm run build\n```\n"})
+    res = agentlint.lint(root, home=tmp_path / "h", memory=False, include_ok=True)
+    got = {(c["name"], c["at"]): (c["verdict"], c["evidence"]) for c in res["checks"] if c["kind"] == "script"}
+    assert got[("npm build", "AGENTS.md:5")] == ("ok", ["AGENTS.md:5", "web/package.json:1"])
+    assert got[("npm test", "AGENTS.md:6")][0] == "ok"
+    assert got[("npm lint", "AGENTS.md:10")][0] == "ok"   # a new block starts at the file's folder again
+    assert got[("npm build", "AGENTS.md:12")][0] == "unknown"   # after a cd that cannot be followed
+
+
+def test_package_manager_builtins_and_workspace_flags(tmp_path):
+    root = _project(tmp_path, {**WEB, "AGENTS.md": "```bash\npnpm -r test\nnpm --workspaces run build\n"
+                                                    "bun test\nbun build ./src/index.ts\npnpm -r nope\n```\n"})
+    res = agentlint.lint(root, home=tmp_path / "h", memory=False, include_ok=True)
+    v = {c["name"]: c["verdict"] for c in res["checks"] if c["kind"] == "script"}
+    assert v == {"pnpm test": "ok", "npm build": "ok", "pnpm nope": "wrong"}   # bun test / build: bun's own
+
+
+def test_a_double_star_glob_matches_no_folder_too(tmp_path):
+    root = _project(tmp_path, {"src/a.ts": "", "AGENTS.md": "Sources: `src/**/*.ts`, `src/*/x.ts`.\n"})
+    res = agentlint.lint(root, home=tmp_path / "h", memory=False, include_ok=True)
+    v = {c["name"]: c["verdict"] for c in res["checks"]}
+    assert v["src/**/*.ts"] == "ok" and v["src/*/x.ts"] == "wrong"
+
+
+def test_a_nested_file_governs_its_own_folder(tmp_path):
+    root = _project(tmp_path, {**WEB, "pyproject.toml": PYPROJECT,
+                               "AGENTS.md": "Run the Python tests with `pytest`.\n",
+                               "CLAUDE.md": "Tests: `python -m pytest`.\n",
+                               "web/AGENTS.md": "Run the tests with `npm test` from this folder.\n"})
+    res = agentlint.lint(root, home=tmp_path / "h", memory=False, include_ok=True)
+    pairs = {c["name"]: c["verdict"] for c in res["checks"] if c["kind"] == "agreement"}
+    assert pairs == {"test: AGENTS.md / CLAUDE.md": "ok"}
+
+
+def test_a_dependency_is_evidenced_by_its_declaration(tmp_path):
+    pp = ('[project]\nname = "d"\n# we used to run black here\n[tool.pytest.ini_options]\naddopts = "-q"\n'
+          '[dependency-groups]\ndev = ["pytest>=8", "black"]\n')
+    root = _project(tmp_path, {"pyproject.toml": pp, "CLAUDE.md": "Run `pytest` and `black .`\n"})
+    res = agentlint.lint(root, home=tmp_path / "h", memory=False, include_ok=True)
+    ev = {c["name"]: c["evidence"][1] for c in res["checks"] if c["kind"] == "tool"}
+    assert ev == {"pytest": "pyproject.toml:7", "black": "pyproject.toml:7"}
+
+
+def test_paths_outside_the_repository_are_unknown(tmp_path):
+    root = _project(tmp_path, {"docs/exists.md": "", "AGENTS.md": (
+        "Configure `~/.config/demo/config.toml`.\n"
+        "See [guide](/docs/exists.md) and [gone](/docs/gone.md), `/docs/gone2.md` and `/etc/demo/x.conf`.\n")})
+    res = agentlint.lint(root, home=tmp_path / "h", memory=False, include_ok=True)
+    v = {(c["kind"], c["name"]): c["verdict"] for c in res["checks"]}
+    assert v[("path", "~/.config/demo/config.toml")] == "unknown"
+    assert v[("link", "/docs/exists.md")] == "ok" and v[("link", "/docs/gone.md")] == "wrong"
+    assert v[("path", "/docs/gone2.md")] == "wrong"          # its first folder is the repository's
+    assert v[("path", "/etc/demo/x.conf")] == "unknown"
+
+
+def test_uv_run_options_with_a_value(tmp_path):
+    root = _project(tmp_path, {"pyproject.toml": PYPROJECT, "AGENTS.md": "```bash\nuv run --extra dev ruff check .\n"
+                                                                         "uv run --extra=nope pytest\n```\n"})
+    res = agentlint.lint(root, home=tmp_path / "h", memory=False, include_ok=True)
+    v = {(c["kind"], c["name"]): c["verdict"] for c in res["checks"]}
+    assert v[("extra", "dev")] == "ok" and v[("extra", "nope")] == "wrong"
+    assert v[("tool", "ruff")] == "ok" and v[("tool", "pytest")] == "ok"
+
+
+def test_a_just_alias_is_a_recipe(tmp_path):
+    root = _project(tmp_path, {"justfile": "alias t := test\n\ntest:\n    pytest\n",
+                               "AGENTS.md": "```bash\njust t\njust nope\n```\n"})
+    res = agentlint.lint(root, home=tmp_path / "h", memory=False, include_ok=True)
+    got = {c["name"]: (c["verdict"], c["evidence"]) for c in res["checks"] if c["kind"] == "target"}
+    assert got["just t"] == ("ok", ["AGENTS.md:2", "justfile:1"]) and got["just nope"][0] == "wrong"
+
+
+def test_a_path_with_a_space(tmp_path):
+    root = _project(tmp_path, {"docs/My File.md": "", "AGENTS.md": "# A\n\n[b](<docs/My File.md>)\n`docs/My File.md`\n"
+                                                                   "[c](docs/My%20File.md)\n"})
+    res = agentlint.lint(root, home=tmp_path / "h", memory=False, include_ok=True)
+    assert res["status"] == "ok"
+    assert {(c["kind"], c["name"]) for c in res["checks"]} == {("link", "docs/My File.md"),
+                                                               ("path", "docs/My File.md")}
+
+
+def test_many_missing_paths_are_settled_quickly_and_the_list_is_capped(tmp_path):
+    import time
+
+    body = "".join(f"see src/pkg/missing{i}.py\n" for i in range(1500))
+    root = _project(tmp_path, {"src/pkg/a.py": "", "AGENTS.md": body})
+    t0 = time.perf_counter()
+    res = agentlint.lint(root, home=tmp_path / "h", memory=False)
+    assert time.perf_counter() - t0 < 20
+    assert res["summary"]["wrong"] == 1500 and len(res["checks"]) == agentlint.MAX_CHECKS
+    assert res["truncated"] and res["checks_not_listed"] == 500

@@ -24,7 +24,6 @@ create it, is ``unknown``, never ``wrong``.
 from __future__ import annotations
 
 import difflib
-import fnmatch
 import json
 import os
 import re
@@ -37,6 +36,8 @@ from pathlib import Path, PurePosixPath
 VERIFIED = "statically_verified"
 INFERRED = "strong_inference"
 MAX_TEXT = 200
+MAX_CHECKS = 1000   # records listed (wrong first); the summary counts them all
+MAX_FUZZY = 50      # missing paths given close file names (a fuzzy match over every file name is slow)
 # instruction files by name, at any depth of the project (a nested AGENTS.md governs its folder)
 NAMED = {"AGENTS.md": "agents", "AGENT.md": "agents", "CLAUDE.md": "claude", "CLAUDE.local.md": "claude",
          "GEMINI.md": "gemini", ".cursorrules": "cursor", ".windsurfrules": "windsurf", ".clinerules": "cline"}
@@ -54,7 +55,8 @@ KNOWN_NAMES = frozenset({"Makefile", "GNUmakefile", "makefile", "Dockerfile", "j
 _DOMAIN = re.compile(r"^[\w-]+(\.[\w-]+)*\.(com|org|net|io|dev|ai|app|co|tr|gov|edu|me|sh|so)$", re.I)
 _FENCE = re.compile(r"^\s*(`{3,}|~{3,})\s*([\w+-]*)")
 _SPAN = re.compile(r"(`+)(.+?)\1")
-_LINK = re.compile(r"!?\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+[\"'][^\"']*[\"'])?\s*\)")
+# the target in angle brackets may hold spaces (CommonMark): [x](<docs/My File.md>)
+_LINK = re.compile(r"!?\[[^\]\n]*\]\(\s*(?:<([^>\n]+)>|([^)\s]+))(?:\s+[\"'][^\"']*[\"'])?\s*\)")
 _IMPORT = re.compile(r"(?<![\w`/@.\\])@((?:~/|\.{1,2}/|/)?[\w.-]+(?:/[\w.-]+)*)")
 # the whole token or nothing: ``docs/drafts/<id>.md`` is a placeholder, not the folder docs/drafts/
 _PROSE_PATH = re.compile(r"(?<![\w@/.:\\-])((?:~/|\.{1,2}/)?[\w.-]+(?:/[\w.-]+)+/?(?::\d+(?:-\d+)?)?)"
@@ -75,6 +77,13 @@ unlink publish pack audit why list ls info view config set global store cache im
 workspace workspaces recursive version versions login logout help bin root licenses dedupe dedup fetch deploy setup
 self-update node plugin constraints explain search tag team ci run run-script test t tst start stop restart""".split())
 _PM_VALUE_FLAGS = ("--prefix", "-C", "--dir", "-w", "--workspace", "--filter", "-F", "--cwd")
+_PM_ALL_FLAGS = ("-r", "--recursive", "-ws", "--workspaces")   # every package of the workspace
+# bun's own commands where yarn and pnpm would run a script: `bun test` is bun's test runner
+_BUN_BUILTINS = frozenset("test build pm repl x upgrade init create link outdated publish patch".split())
+# `uv run` / `poetry run` options that take a value (the value is not the command)
+_RUN_VALUE_FLAGS = ("--extra", "--group", "--only-group", "--no-group", "--no-extra", "--with", "--with-editable",
+                    "--with-requirements", "--package", "--python", "-p", "--directory", "--project", "--env-file",
+                    "--index", "--from", "--config-file", "--cache-dir")
 # tools an instruction file runs by name, and the package that provides each (any of them declared will do)
 PY_TOOLS = {"pytest": ("pytest",), "ruff": ("ruff",), "mypy": ("mypy",), "black": ("black",), "flake8": ("flake8",),
             "isort": ("isort",), "pylint": ("pylint",), "coverage": ("coverage", "pytest-cov"),
@@ -105,6 +114,7 @@ class Doc:
     bases: list[Path]   # folders a relative path is read from, in order
     link_base: Path     # the folder a Markdown link is relative to (its own)
     lines: list[str] = field(default_factory=list)
+    scope: str = ""     # the folder it governs, repository-relative ("" the whole project)
 
 
 @dataclass
@@ -154,6 +164,35 @@ def _dep_key(name: str) -> str:
     return re.sub(r"[-_.]+", "-", str(name or "")).lower()
 
 
+def _dep_line(p: Path, name: str) -> int | None:
+    """The line that declares ``name`` in a manifest: a requirement string (``"pytest>=8"``, a requirements
+    line) or a TOML key (``pytest = "^8"``), not a comment or a ``[tool.pytest]`` table that mentions it."""
+    nm = r"[-_.]+".join(re.escape(x) for x in re.split(r"[-_.]+", name) if x)
+    rx = re.compile(r"(?:^\s*|[\"'])" + nm + r"\s*(?:\[|[<>=!~;@\"',]|$)", re.I)
+    for i, ln in enumerate((_read(p) or "").splitlines(), 1):
+        if not ln.lstrip().startswith("#") and rx.search(ln.split(" #")[0]):
+            return i
+    return None
+
+
+def _glob_rx(pat: str) -> re.Pattern:
+    """A glob as git and most tools read it: ``*`` and ``?`` stay within a folder, ``**/`` is any number of
+    folders (none too), a trailing ``**`` is everything below."""
+    out, i = "", 0
+    while i < len(pat):
+        if pat.startswith("**/", i):
+            out, i = out + "(?:[^/]+/)*", i + 3
+        elif pat.startswith("**", i):
+            out, i = out + ".*", i + 2
+        elif pat[i] == "*":
+            out, i = out + "[^/]*", i + 1
+        elif pat[i] == "?":
+            out, i = out + "[^/]", i + 1
+        else:
+            out, i = out + re.escape(pat[i]), i + 1
+    return re.compile(out + r"\Z")
+
+
 def _toml(p: Path) -> dict:
     try:
         import tomllib  # type: ignore[import-not-found]
@@ -192,6 +231,17 @@ def _kind(rel: str) -> str | None:
     return None
 
 
+def _scope(rel: str) -> str:
+    """The folder an instruction file governs: a named file's own folder, a rules folder's parent
+    (``web/.cursor/rules/x.mdc`` governs ``web``); ``.github`` files govern the whole project."""
+    parts = PurePosixPath(rel).parts[:-1]
+    for marker in (".cursor", ".windsurf", ".clinerules", ".github"):
+        if marker in parts:
+            parts = parts[:parts.index(marker)]
+            break
+    return "/".join(parts)
+
+
 def _main_worktree(repo: Path) -> Path | None:
     try:
         r = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=repo,
@@ -224,7 +274,8 @@ def _shown(p: Path, repo: Path, home: Path) -> str:
     except ValueError:
         pass
     try:
-        return "~/" + p.resolve().relative_to(home.resolve()).as_posix()
+        under = p.resolve().relative_to(home.resolve()).as_posix()
+        return "~" if under == "." else "~/" + under
     except ValueError:
         return p.as_posix()
 
@@ -244,7 +295,7 @@ def instruction_files(repo: Path, files: list[str], *, extra: list[str] | None =
     for rel in sorted(rels):
         p = repo / rel
         d = p.parent
-        docs.append(Doc(rel, p, _kind(rel) or "file", list(dict.fromkeys([d, repo])), d))
+        docs.append(Doc(rel, p, _kind(rel) or "file", list(dict.fromkeys([d, repo])), d, scope=_scope(rel)))
     for md in memory_dirs(repo, home) if memory else []:
         for p in sorted(md.glob("*.md")):
             docs.append(Doc(_shown(p, repo, home), p, "memory", [repo, md], md))
@@ -272,11 +323,26 @@ class Tree:
         self.files = files
         self._dirs: dict[Path, dict[str, str] | None] = {}
         self._memo: dict[str, object] = {}
+        self._real: dict[Path, str] = {}
+        self._root = os.path.normcase(str(self.repo.resolve()))
 
     def memo(self, key: str, make):
         if key not in self._memo:
             self._memo[key] = make()
         return self._memo[key]
+
+    def rel_of(self, base: Path, v: str = "") -> str | None:
+        """``base / v`` relative to the repository (posix; "" the root), or None outside it. A folder is
+        resolved once (resolving is slow on a synced drive), the rest joined as text."""
+        if base not in self._real:
+            self._real[base] = str(base.resolve())
+        full = os.path.normpath(os.path.join(self._real[base], v)) if v else self._real[base]
+        root, low = self._root, os.path.normcase(full)
+        if low == root:
+            return ""
+        if not low.startswith(root.rstrip(os.sep) + os.sep):
+            return None
+        return full[len(root.rstrip(os.sep)) + 1:].replace(os.sep, "/")
 
     # paths
     def entries(self, d: Path) -> dict[str, str] | None:
@@ -335,6 +401,14 @@ class Tree:
             return out
         return self.memo("dirs", make)
 
+    def dir_names(self) -> dict[str, list[str]]:
+        def make():
+            out: dict[str, list[str]] = {}
+            for d in sorted(self.dirs()):
+                out.setdefault(PurePosixPath(d).name, []).append(d)
+            return out
+        return self.memo("dir_names", make)
+
     def ignored(self, rels: list[str]) -> set[str]:
         """The repository-relative paths git ignores (made by a build, or kept locally)."""
         if not rels:
@@ -356,8 +430,9 @@ class Tree:
             f for f in self.files if PurePosixPath(f).name == "package.json" and "node_modules" not in f.split("/")))
 
     def has_python_manifest(self) -> bool:
-        return any((self.repo / n).is_file() for n in ("pyproject.toml", "setup.py", "setup.cfg", "Pipfile")) or \
-            any(self.repo.glob("requirements*.txt"))
+        return self.memo("has_python_manifest", lambda: any(
+            (self.repo / n).is_file() for n in ("pyproject.toml", "setup.py", "setup.cfg", "Pipfile")) or
+            any(self.repo.glob("requirements*.txt")))
 
     def python_deps(self) -> dict[str, str]:
         """Declared Python distributions (normalised) -> where: the project's dependencies, extras, dependency
@@ -372,7 +447,8 @@ class Tree:
                 items = []
             for it in items:
                 if it.get("ecosystem") == "python":
-                    out.setdefault(_dep_key(it["name"]), it["at"])
+                    ln = _dep_line(self.repo / it["path"], it["name"]) if it.get("path") else None
+                    out.setdefault(_dep_key(it["name"]), f"{it['path']}:{ln}" if ln else it["at"])
             data = self.pyproject()
             pp = self.repo / "pyproject.toml"
             reqs: list[str] = []
@@ -389,7 +465,7 @@ class Tree:
             names += [m.group(1) for s in reqs if (m := re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", s))]
             for n in names:
                 if n.lower() != "python":
-                    out.setdefault(_dep_key(n), f"pyproject.toml:{_line_of(pp, n)}")
+                    out.setdefault(_dep_key(n), f"pyproject.toml:{_dep_line(pp, n) or 1}")
             return out
         return self.memo("python_deps", make)
 
@@ -481,6 +557,10 @@ class Tree:
             for i, ln in enumerate((_read(self.repo / rel) or "").splitlines(), 1):
                 if re.match(r"^(import|mod)\b", ln):
                     open_ended = True
+                a = re.match(r"^alias\s+([A-Za-z_][\w-]*)\s*:=", ln)
+                if a:   # `alias t := test`: just runs the recipe by either name
+                    out.setdefault(a.group(1), i)
+                    continue
                 m = re.match(r"^@?([A-Za-z_][\w-]*)(?:\s+[^:=]*)?:(?!=)", ln)
                 if m and not ln.startswith((" ", "\t")):
                     out.setdefault(m.group(1), i)
@@ -510,12 +590,14 @@ class Mention:
     how: str        # code | prose | link | import | command | fence
     value: str
     shell: bool = True   # a command from a shell block or a code span (its arguments are read for paths)
+    block: int = 0       # the line a fence opens on (its lines share a working folder: `cd` carries)
 
 
 def mentions(doc: Doc) -> list[Mention]:
     """What each line names: links, ``@imports`` (CLAUDE.md), code spans, commands in shell blocks, prose paths."""
     out: list[Mention] = []
     fence: tuple[str, str] | None = None
+    block = 0
     front = bool(doc.lines) and doc.lines[0].strip() == "---"
     for i, raw in enumerate(doc.lines, 1):
         if front:   # YAML front matter (memory files, Cursor rules): metadata, not instructions
@@ -525,6 +607,7 @@ def mentions(doc: Doc) -> list[Mention]:
         m = _FENCE.match(raw)
         if m and fence is None:
             fence = (m.group(1)[0] * 3, m.group(2).lower())
+            block = i
             continue
         if fence is not None:
             if raw.strip().startswith(fence[0]):
@@ -534,13 +617,13 @@ def mentions(doc: Doc) -> list[Mention]:
             if lang in SHELL_LANGS or lang in PLAIN_LANGS:
                 s = _PROMPT.sub("", raw).strip()
                 if s and not s.startswith(("#", "//", "REM ", "::")):
-                    out.append(Mention(i, "fence", s, shell=lang in SHELL_LANGS))
+                    out.append(Mention(i, "fence", s, shell=lang in SHELL_LANGS, block=block))
             continue
         line = raw
         if line.lstrip().startswith("<!--"):
             continue
         for lm in _LINK.finditer(line):
-            out.append(Mention(i, "link", lm.group(1)))
+            out.append(Mention(i, "link", (lm.group(1) or lm.group(2)).strip()))
         line = _LINK.sub(" ", line)
         if doc.kind == "memory":
             for wm in _WIKI.finditer(line):
@@ -609,6 +692,13 @@ class Linter:
             return True
         return parts[0] in self.t.dirs() or (self.t.repo / parts[0]).exists()
 
+    def names_existing_path(self, doc: Doc, v: str) -> bool:
+        """Is a code span with a space in it a path that exists (``docs/My File.md``), not a command?"""
+        v = _LINE_SUFFIX.sub("", v.replace("\\", "/"))
+        if "/" not in v or re.search(r"[|&;<>$`]|\s-", v):
+            return False
+        return any(self.t.locate(b, v.rstrip("/"))[0] is not None for b in doc.bases)
+
     def check_path(self, doc: Doc, m: Mention, v: str, kind: str = "path", bases: list[Path] | None = None) -> None:
         raw = v
         v = v.replace("\\", "/")
@@ -621,13 +711,32 @@ class Linter:
         v = v.split("#")[0].split("::")[0]
         if not v:
             return
-        bases = bases or doc.bases
+        bases = doc.bases if bases is None else bases
+        outside = None
         if v.startswith("~/"):
-            bases, v = [self.t.home], v[2:]
-        elif re.match(r"^[A-Za-z]:/", v) or v.startswith("/"):
-            if (os.name == "nt") != bool(re.match(r"^[A-Za-z]:/", v)):
-                return   # another system's absolute path: not this machine's to check
-            bases, v = [Path(v[:3] if re.match(r"^[A-Za-z]:/", v) else "/")], v[3:] if v[1] == ":" else v[1:]
+            if doc.kind == "memory":   # this user's own notes: their home is the one that counts
+                bases, v = [self.t.home], v[2:]
+            else:
+                outside = "a path in the home folder of whoever reads the file, not in the repository"
+        elif v.startswith("/") and not v.startswith("//"):
+            top = v[1:].split("/")[0]
+            if kind == "link" or (self.t.entries(self.t.repo) or {}).get(top) == top:
+                bases, v = [self.t.repo], v[1:]   # root-relative, as GitHub reads a link: from the repository root
+            else:
+                outside = "an absolute path outside the repository"
+        elif re.match(r"^[A-Za-z]:/", v):
+            rel = self.t.rel_of(Path(v[:3]), v[3:]) if os.name == "nt" else None
+            if rel is not None:
+                bases, v = [self.t.repo], rel
+            elif os.name == "nt" and doc.kind == "memory":
+                bases, v = [Path(v[:3])], v[3:]
+            else:
+                outside = "an absolute path outside the repository"
+        elif not bases:
+            outside = "relative to a folder an earlier `cd` moved to, which is not followed"
+        if outside:
+            self.add(Check(kind, raw, doc, m.line, "unknown", "unknown", f"not checked: {outside}"))
+            return
         if "*" in v or "?" in v:
             self._check_glob(doc, m, raw, v, kind, bases)
             return
@@ -662,14 +771,11 @@ class Linter:
 
     def _check_glob(self, doc, m, raw, v, kind, bases) -> None:
         for b in bases:
-            try:
-                pre = b.resolve().relative_to(self.t.repo.resolve()).as_posix()
-            except ValueError:
+            pre = self.t.rel_of(b)
+            if pre is None:
                 continue
-            pat = v if pre in ("", ".") else f"{pre}/{v}"
-            pat = pat.rstrip("/")
-            hit = next((f for f in self.t.files if fnmatch.fnmatch(f, pat)), None) or \
-                next((d for d in self.t.dirs() if fnmatch.fnmatch(d, pat)), None)
+            rx = _glob_rx((f"{pre}/{v}" if pre else v).rstrip("/"))
+            hit = next((f for f in self.t.files if rx.match(f)), None) or                 next((d for d in sorted(self.t.dirs()) if rx.match(d)), None)
             if hit:
                 self.add(Check(kind, raw, doc, m.line, "ok", VERIFIED, f"matches {hit}", [f"{hit}:1"]))
                 return
@@ -678,23 +784,13 @@ class Linter:
     def settle_missing(self) -> None:
         """The paths not found: git-ignored ones and those on a line about creating them are unknown, the rest
         wrong, with the nearest file names."""
-        rels = []
+        rel_of: list[str | None] = []
         for _doc, _m, _raw, v, _k, bases in self._missing:
-            for b in bases:
-                try:
-                    rels.append((b / v).resolve().relative_to(self.t.repo.resolve()).as_posix())
-                    break
-                except ValueError:
-                    continue
-        ignored = self.t.ignored(sorted(set(rels)))
-        for doc, m, raw, v, kind, bases in self._missing:
-            rel = None
-            for b in bases:
-                try:
-                    rel = (b / v).resolve().relative_to(self.t.repo.resolve()).as_posix()
-                    break
-                except ValueError:
-                    continue
+            rel_of.append(next((r for b in bases if (r := self.t.rel_of(b, v)) is not None), None))
+        ignored = self.t.ignored(sorted({r for r in rel_of if r}))
+        near_memo: dict[tuple[str, str], list[str]] = {}
+        shown: dict[Path, str] = {}
+        for (doc, m, raw, v, kind, bases), rel in zip(self._missing, rel_of):
             text = doc.lines[m.line - 1] if 0 < m.line <= len(doc.lines) else ""
             if rel is not None and (rel in ignored or any(rel.startswith(i.rstrip("/") + "/") for i in ignored)):
                 self.add(Check(kind, raw, doc, m.line, "unknown", "unknown",
@@ -706,17 +802,25 @@ class Linter:
                 continue
             name = PurePosixPath(v.rstrip("/")).name
             tail = "/" + v.strip("/").lstrip("./")
-            moved = [f for f in [*self.t.files, *sorted(self.t.dirs())] if ("/" + f).endswith(tail)][:3]
-            near = difflib.get_close_matches(name, list(self.t.basenames()), n=3, cutoff=0.75)
+            if (name, tail) not in near_memo:
+                same = [*self.t.basenames().get(name, []), *self.t.dir_names().get(name, [])]
+                moved = [f for f in same if ("/" + f).endswith(tail)][:3]
+                near = [] if moved or len(near_memo) >= MAX_FUZZY else \
+                    difflib.get_close_matches(name, list(self.t.basenames()), n=3, cutoff=0.75)
+                near_memo[(name, tail)] = moved or [h for n in near for h in self.t.basenames()[n][:2]][:3]
+            if bases and bases[0] != self.t.repo and bases[0] not in shown:
+                shown[bases[0]] = _shown(bases[0], self.t.repo, self.t.home)
             self.add(Check(kind, raw, doc, m.line, "wrong", VERIFIED,
-                           "no such file or folder" + (f" (from {_shown(bases[0], self.t.repo, self.t.home)})"
+                           "no such file or folder" + (f" (from {shown[bases[0]]})"
                                                        if bases and bases[0] != self.t.repo else ""),
-                           nearest=moved or [h for n in near for h in self.t.basenames()[n][:2]][:3]))
+                           nearest=near_memo[(name, tail)]))
 
     # commands
-    def command(self, doc: Doc, m: Mention) -> None:
-        """One command line: split on ``&&``, ``||``, ``;`` and ``|``; ``cd`` moves where the rest is read."""
-        cwd: list[Path] = doc.bases
+    def command(self, doc: Doc, m: Mention, cwd: list[Path] | None = None) -> list[Path]:
+        """One command line: split on ``&&``, ``||``, ``;`` and ``|``; ``cd`` moves where the rest is read.
+        Returns the folder it ends in (the next line of the same shell block starts there); an empty list is a
+        folder that cannot be followed (``cd -``, ``cd $DIR``, a missing folder, one outside the repository)."""
+        cwd = doc.bases if cwd is None else cwd
         for part in re.split(r"\s*(?:&&|\|\||;|\|)\s*", _PROMPT.sub("", m.value)):
             part = re.sub(r"\s+#.*$", "", part).strip()
             if not part:
@@ -729,13 +833,34 @@ class Linter:
                 toks = toks[1:]
             if not toks:
                 continue
-            if toks[0] == "cd" and len(toks) > 1:
-                if self.path_like(toks[1], "arg") or (toks[1] in self.t.dirs()):
-                    self.check_path(doc, m, toks[1], bases=cwd)
-                d = toks[1].replace("\\", "/")
-                cwd = [b / d for b in cwd]
+            if toks[0] in ("cd", "pushd", "Set-Location", "sl", "chdir"):
+                cwd = self.cd(doc, m, toks[1:], cwd)
+                continue
+            if toks[0] == "popd":
+                cwd = []
                 continue
             self.simple(doc, m, toks, cwd)
+        return cwd
+
+    def cd(self, doc: Doc, m: Mention, args: list[str], cwd: list[Path]) -> list[Path]:
+        args = [a for a in args if not a.startswith("-") or a == "-"]
+        if not args or not cwd:
+            return []
+        d = args[0].replace("\\", "/")
+        if self.path_like(d, "arg") or d in self.t.dirs():
+            self.check_path(doc, m, d, bases=cwd)
+        if d.startswith(("~", "$", "%")) or d == "-" or re.match(r"^[A-Za-z]:/", d) or d.startswith("/"):
+            rel = self.t.rel_of(Path(d)) if (re.match(r"^[A-Za-z]:/", d) and os.name == "nt") else None
+            return [self.t.repo / rel] if rel is not None and (self.t.repo / rel).is_dir() else []
+        for b in cwd:
+            p, _case = self.t.locate(b, d.rstrip("/"))
+            if p is not None and p.is_dir() and self.t.rel_of(p) is not None:
+                return [p]
+        return []
+
+    def unfollowed(self, doc: Doc, m: Mention, kind: str, name: str) -> None:
+        self.add(Check(kind, name, doc, m.line, "unknown", "unknown",
+                       "not checked: it runs in a folder an earlier `cd` moved to, which is not followed"))
 
     def simple(self, doc: Doc, m: Mention, toks: list[str], cwd: list[Path]) -> None:
         w = toks[0].replace("\\", "/")
@@ -745,9 +870,21 @@ class Linter:
         if base in ("uv", "poetry", "pdm", "hatch", "pipenv", "rye") and rest[:1] == ["run"]:
             if base in PY_MANAGERS:
                 self.managers.append((base, doc, m.line))
-            args = rest[1:]
-            while args and args[0].startswith("-"):
-                args = args[1:]
+            args, skip = rest[1:], None
+            while args and (skip or args[0].startswith("-")):
+                a, args = args[0], args[1:]
+                if skip:
+                    if skip == "--extra":
+                        self.extra(doc, m, a)
+                    elif skip in ("--group", "--only-group"):
+                        self.group(doc, m, a)
+                    elif skip in ("--directory", "--project") and cwd:
+                        cwd = [b / a.replace("\\", "/") for b in cwd]
+                    skip = None
+                elif a.split("=")[0] in _RUN_VALUE_FLAGS:
+                    if "=" in a:
+                        args.insert(0, a.split("=", 1)[1])
+                    skip = a.split("=")[0]
             if args:
                 self.simple(doc, m, args, cwd)
             return
@@ -817,12 +954,19 @@ class Linter:
                 anywhere = True
                 skip = "=" not in a
                 continue
+            if a in _PM_ALL_FLAGS:
+                anywhere = True
+                continue
             if a.startswith("-"):
                 continue
             args.append(a)
         if not args:
             return   # a bare `yarn` / `pnpm`: install
         sub = args[0]
+        if mgr == "bun" and sub in _BUN_BUILTINS:
+            if sub in ("test", "build"):   # bun's own test runner and bundler, not a package.json script
+                self.roles.append((sub, f"bun {sub}", doc, m.line))
+            return
         if sub in ("run", "run-script", "rr"):
             if len(args) > 1:
                 if mgr == "bun" and self.path_like(args[1], "arg"):
@@ -844,14 +988,16 @@ class Linter:
         rels: list[str] = []
         if anywhere:
             rels = self.t.package_jsons()
+        elif not cwd:
+            self.unfollowed(doc, m, "script", f"{mgr} {name}")
+            return
         else:
             for b in cwd:
-                try:
-                    d = b.resolve().relative_to(self.t.repo.resolve()).as_posix()
-                except ValueError:
+                d = self.t.rel_of(b)
+                if d is None:
                     continue
-                rel = "package.json" if d in ("", ".") else f"{d}/package.json"
-                if (self.t.repo / rel).is_file():
+                rel = "package.json" if d == "" else f"{d}/package.json"
+                if self.t.memo(f"isfile:{rel}", (self.t.repo / rel).is_file):
                     rels = [rel]
                     break
         if not rels:
@@ -895,6 +1041,9 @@ class Linter:
             else:
                 targets.append(a)
         bases = [b / d for b in cwd] if d else cwd
+        if not bases:
+            self.unfollowed(doc, m, "target", "make " + " ".join(targets) if targets else "make")
+            return
         rel = None
         for b in bases:
             for n in ([mk] if mk else ["GNUmakefile", "makefile", "Makefile"]):
@@ -931,6 +1080,9 @@ class Linter:
 
     def just(self, doc: Doc, m: Mention, rest: list[str], cwd: list[Path]) -> None:
         args = [a for a in rest if not a.startswith("-")]
+        if not cwd:
+            self.unfollowed(doc, m, "target", ("just " + (args[0] if args else "")).strip())
+            return
         rel = None
         for b in cwd:
             for n in ("justfile", "Justfile", ".justfile"):
@@ -1148,6 +1300,8 @@ class Linter:
             names = sorted(per)
             for i, a in enumerate(names):
                 for b in names[i + 1:]:
+                    if docs[a].scope != docs[b].scope:
+                        continue   # a nested file governs its own folder: another stack may run other commands
                     ka, kb = self._keys(per[a]), self._keys(per[b])
                     la, lb = per[a][0][1], per[b][0][1]
                     shown_a = ", ".join(dict.fromkeys(k for k, _ in per[a]))
@@ -1179,7 +1333,7 @@ class Linter:
                 rels = sorted(only)
                 for i, a in enumerate(rels):
                     for b in rels[i + 1:]:
-                        if only[a] != only[b]:
+                        if only[a] != only[b] and docs[a].scope == docs[b].scope:
                             self.add(Check("agreement", f"package manager: {a} / {b}", docs[a], used[a][only[a]],
                                            "wrong", INFERRED, f"{a} uses {only[a]}; {b} uses {only[b]} (no lock file "
                                                               f"says which)", [f"{b}:{used[b][only[b]]}"]))
@@ -1208,8 +1362,13 @@ def _name_role(name: str) -> str | None:
 def _run(tree: Tree, docs: list[Doc]) -> Linter:
     lt = Linter(tree)
     for doc in docs:
+        block_cwd: dict[int, list[Path]] = {}
         for m in mentions(doc):
-            if m.how in ("fence", "command"):
+            if m.how == "fence":
+                block_cwd[m.block] = lt.command(doc, m, block_cwd.get(m.block))
+            elif m.how == "command" and lt.names_existing_path(doc, m.value):
+                lt.check_path(doc, m, m.value)   # a path with a space in it, not a command
+            elif m.how == "command":
                 lt.command(doc, m)
             elif m.how == "link":
                 v = m.value.split("#")[0]
@@ -1238,7 +1397,7 @@ ORDER = {"wrong": 0, "unknown": 1, "ok": 2}
 
 
 def lint(repo: Path, *, extra: list[str] | None = None, memory: bool = True, include_ok: bool = False,
-         home: Path | None = None, files: list[str] | None = None) -> dict:
+         home: Path | None = None, files: list[str] | None = None, max_checks: int = MAX_CHECKS) -> dict:
     """``verinoda agent-lint``: every line of the agent instruction files that names something, checked."""
     from verinoda.snapshot import list_files
 
@@ -1255,7 +1414,11 @@ def lint(repo: Path, *, extra: list[str] | None = None, memory: bool = True, inc
         "checked",
         "which package provides a tool, and whether two commands for one role disagree, are strong_inference: a "
         "script or target that runs the other file's tool counts as agreeing",
-        "another system's absolute path (/usr/... on Windows, C:/... elsewhere) is not checked",
+        "a path outside the repository (an absolute path, ~/... outside a memory file) is unknown; /x in a link, or "
+        "whose first folder the repository has, is read from the repository root",
+        "`cd` carries to the next lines of the same shell block; a folder it cannot follow (cd -, cd $DIR, a "
+        "missing one) makes what runs there unknown",
+        "a nested instruction file governs its folder: its commands are compared only with files of the same folder",
     ]
     if not docs:
         return {"status": "no_files", "files": [], "summary": {"checks": 0, "ok": 0, "wrong": 0, "unknown": 0},
@@ -1274,8 +1437,10 @@ def lint(repo: Path, *, extra: list[str] | None = None, memory: bool = True, inc
                     "wrong": sum(1 for c in mine if c.verdict == "wrong"),
                     "unknown": sum(1 for c in mine if c.verdict == "unknown")})
     shown = recs if include_ok else [r for r in recs if r["verdict"] != "ok"]
+    cut = len(shown) > max_checks
     return {"status": "wrong" if counts["wrong"] else "ok", "files": per,
-            "summary": {"checks": len(recs), **counts}, "checks": shown,
+            "summary": {"checks": len(recs), **counts}, "checks": shown[:max_checks],
+            **({"truncated": True, "checks_not_listed": len(shown) - max_checks} if cut else {}),
             **({"ok_not_listed": counts["ok"]} if not include_ok and counts["ok"] else {}),
             "limits": limits}
 
@@ -1300,6 +1465,8 @@ def render(res: dict) -> str:
                        (f" [{r['status']}]" if r["status"] not in (VERIFIED, "unknown") else ""))
             if verdict != "ok":
                 out.append(f"      > {r['text']}")
+    if res.get("truncated"):
+        out.append(f"({res['checks_not_listed']} more not listed)")
     if res.get("ok_not_listed"):
         out.append(f"({res['ok_not_listed']} ok not listed: --all)")
     return "\n".join(out)
