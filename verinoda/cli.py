@@ -2355,6 +2355,18 @@ def cmd_check(args) -> int:
     from verinoda import codecheck
 
     repo = _repo(args)
+    if args.deps:
+        from verinoda import depcheck
+
+        if args.paths or args.diff is not None or args.stdin or args.as_path:
+            raise SystemExit("error: --deps checks the whole project's manifests; do not also give PATHs, --diff "
+                             "or --stdin")
+        try:
+            res = depcheck.check_deps(repo, env=args.env)
+        except ValueError as exc:
+            raise SystemExit(f"error: {exc}")
+        _emit(args, res, depcheck.render)
+        return int(res["exit"])
     snippet = None
     if args.stdin:
         if args.paths or args.diff is not None:
@@ -3221,6 +3233,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="only sites on lines changed against REV (default HEAD), and new untracked files")
     sp.add_argument("--stdin", action="store_true", help="check the code on stdin before it is written")
     sp.add_argument("--as", dest="as_path", metavar="PATH", help="with --stdin: the file the code is meant for")
+    sp.add_argument("--deps", action="store_true",
+                    help="instead: the declared dependencies (pyproject, requirements, package.json, Gradle, Maven) "
+                         "against the imports - missing, transitive only, unused, in the wrong group (exit 3: "
+                         "something found; exit 4: no manifest read)")
     sp.add_argument("--env", default="auto", help=env_help)
     sp.add_argument("--all", action="store_true", help="also list the sites that exist and the LOW unknowns")
     sp.add_argument("--no-cache", action="store_true",
