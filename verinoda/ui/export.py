@@ -24,7 +24,7 @@ from importlib import resources
 from pathlib import Path
 
 from verinoda import usernotes
-from verinoda.scrub import redact
+from verinoda.scrub import redactor
 from verinoda.ui.data import HIDDEN_KINDS, MAX_GLOBAL_NODES, MAX_SECTION_ITEMS, Atlas
 
 FORMAT = "verinoda-export"
@@ -171,6 +171,7 @@ def build(repo: Path | str) -> dict:
             "notes": notes, "user_notes": mine}
     # the file is made to be passed on: no path of this machine, no secret or e-mail address in its text
     paths = _scrubber(Path(repo).resolve())
+    redact = redactor()  # the environment's secret values, read once for all the texts
     data = _scrub(data, lambda text: redact(paths(text)))
     return {"format": FORMAT, "version": VERSION,
             "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), **data}

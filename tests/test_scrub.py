@@ -93,9 +93,70 @@ def test_the_value_of_a_secret_variable_of_this_environment_goes_wherever_it_is(
     "task-scheduler-configuration-and-more",
     "-----BEGIN CERTIFICATE-----",
     "AKIA is a prefix, AKIAshort is not a key",
+    "passwordEncoder: BCryptPasswordEncoder@1a2b3c4d",
+    "token_count=abc123def456",
+    "secret_hash: 9f86d081884c7d65",
+    "tokens_used=1234abcd, password_file=/run/secrets/db1",
+    '"C:\\\\new\\\\token\\\\x1"',
 ])
 def test_ordinary_code_placeholders_and_non_addresses_stay(text):
     assert scrub.redact(text, env=NO_ENV) == text
+
+
+def test_only_a_variable_named_for_a_secret_counts():
+    env = {"GIT_AUTHOR_NAME": "CINAR1311", "GIT_AUTHOR_EMAIL": "ci1311x@corp.io", "CERT_AUTHORITY": "rootca2026",
+           "KEYBOARD_LAYOUT": "trq-2026", "API_KEY": "q9w8e7r6t5y4", "GH_TOKEN": "z1x2c3v4b5n6",
+           "npm_config__authtoken": "m1n2b3v4c5x6", "AUTH": "p0o9i8u7y6t5", "DbPassword": "h4j5k6l7z8x9"}
+    assert [n for n, _ in scrub._env_secrets(env)] == ["API_KEY", "GH_TOKEN", "npm_config__authtoken", "AUTH",
+                                                        "DbPassword"]
+    assert scrub.redact("build by CINAR1311 ok", env=env) == "build by CINAR1311 ok"
+
+
+@pytest.mark.parametrize("text", [
+    "config\n" + GH,
+    "x\n" + AWS,
+    f"Author <{MAIL}>",
+    f"a\n{MAIL}",
+    'password = "s3cretV4lue9"',
+    PEM,
+])
+def test_a_secret_in_text_escaped_as_json_is_found_and_redacted(text):
+    from verinoda.ui.export import _json_for_html
+
+    for escaped in (_json_for_html({"t": text}), json.dumps({"t": text})):
+        assert len(scrub.scan(escaped, env=NO_ENV)) == 1, escaped
+        out = scrub.redact(escaped, env=NO_ENV)
+        assert "<redacted:" in out and scrub.scan(out, env=NO_ENV) == []
+        assert json.loads(out)["t"].count("<redacted:") == 1  # the redacted text is still the same JSON
+
+
+@pytest.mark.parametrize("unit,times", [
+    ("@", 200_000),
+    ("sk-", 33_333),
+    ("-sk-x1", 20_000),
+    ("glpat-", 16_666),
+    ("xoxb-", 20_000),
+    ("eyJ-", 25_000),
+    ("a@b ", 50_000),
+    ("password=", 11_000),
+    ("Bearer ", 15_000),
+    ("\\n", 50_000),
+])
+def test_text_dense_with_anchors_takes_time_in_proportion_to_its_length(unit, times):
+    import time
+
+    text = ("sk" if unit == "-sk-x1" else "") + unit * times  # 100 to 200 KB of one anchor
+    t0 = time.monotonic()
+    scrub.redact(text, env=NO_ENV)
+    assert time.monotonic() - t0 < 2
+
+
+def test_a_cut_does_not_leave_the_first_part_of_a_token():
+    data = b"x " + GH.encode()
+    assert scrub.redact(data[:30].decode(), env=NO_ENV) == data[:30].decode()  # a cut token no longer has its shape
+    assert scrub.cut(data, 30) == b"x "
+    assert scrub.cut(data, 2) == b"x " and scrub.cut(data, len(data)) == data
+    assert scrub.cut(b"one two", 4) == b"one "  # at a space nothing more goes
 
 
 def test_the_ui_page_itself_passes_the_scan():
@@ -173,6 +234,32 @@ def test_secret_scan_of_named_files(tmp_path, capsys, monkeypatch):
         cli.main(["secret-scan", str(tmp_path / "missing.txt"), "--repo", str(tmp_path)])
 
 
+def test_fix_keeps_the_bytes_that_are_not_utf8(tmp_path):
+    p = tmp_path / "latin.log"
+    p.write_bytes(b"caf\xe9 d\xe9j\xe0\r\nmail " + MAIL.encode() + b"\r\n\xff\xfe end\r\n")
+    res = scrub.scan_files(tmp_path, [p], fix=True, env=NO_ENV)
+    assert res["fixed"] == ["latin.log"] and res["clean"]
+    assert p.read_bytes() == b"caf\xe9 d\xe9j\xe0\r\nmail <redacted:email>\r\n\xff\xfe end\r\n"
+
+
+def test_a_file_not_scanned_or_not_fixed_is_not_clean(tmp_path, capsys, monkeypatch):
+    import stat
+
+    monkeypatch.setattr(scrub, "_env_secrets", lambda env: [])
+    ro = tmp_path / "ro.log"
+    ro.write_text(f"token {GH}\n", encoding="utf-8")
+    ro.chmod(stat.S_IREAD)
+    try:
+        assert cli.main(["secret-scan", str(ro), "--repo", str(tmp_path), "--fix", "--json"]) == 1  # no traceback
+        res = json.loads(capsys.readouterr().out)
+        assert res["fixed"] == [] and res["skipped"][0]["why"].startswith("cannot write") and not res["clean"]
+    finally:
+        ro.chmod(stat.S_IREAD | stat.S_IWRITE)
+    monkeypatch.setattr(scrub, "MAX_FILE_BYTES", 10)
+    assert cli.main(["secret-scan", str(ro), "--repo", str(tmp_path)]) == 1  # too large to scan: not a pass
+    assert "not clean" in capsys.readouterr().out
+
+
 # -- stored logs: written redacted -----------------------------------------------------------------------------------
 
 def test_a_log_copied_for_trace_log_is_kept_redacted_with_its_lines(tmp_path):
@@ -190,6 +277,12 @@ def test_a_log_copied_for_trace_log_is_kept_redacted_with_its_lines(tmp_path):
     assert kept.read_text(encoding="utf-8").splitlines() == lines
     assert scrub.scan_files(repo, env=NO_ENV)["findings"] == []
     assert GH in log.read_text(encoding="utf-8")  # the user's own file is read, never changed
+    # a copy keeps the bytes that are not UTF-8 (a cp1252 latest.log)
+    log2 = tmp_path / "elsewhere" / "cp1252.log"
+    log2.write_bytes(b"Caf\xe9 started\r\npassword = hunter2abc9\r\n")
+    rel2, lines2 = trace_log._log_in_repo(repo, log2)
+    assert (repo / rel2).read_bytes() == b"Caf\xe9 started\r\npassword = <redacted:assigned-secret>\r\n"
+    assert lines2 == ["Caf\ufffd started", "password = <redacted:assigned-secret>"]
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -283,12 +376,16 @@ def glow(tmp_path_factory):
 def test_the_html_export_passes_a_secret_scan(glow, tmp_path, monkeypatch):
     from verinoda.ui import export
 
-    monkeypatch.setattr(scrub, "_env_secrets", lambda env: [])
-    with monkeypatch.context() as m:  # without the redaction the export would carry them
-        m.setattr(export, "redact", lambda text: text)
-        raw = json.dumps(export.build(glow), ensure_ascii=False)
-    assert GH in raw and MAIL in raw
+    reads = []
+    monkeypatch.setattr(scrub, "_env_secrets", lambda env: reads.append(env) or [])
+    with monkeypatch.context() as m:  # without the redaction the export would carry them, and the scan finds them
+        m.setattr(export, "redactor", lambda: (lambda text: text))
+        raw = export.write(glow, tmp_path / "raw.html")
+    found = scrub.scan_files(glow, [Path(raw["path"])], env=NO_ENV)
+    assert {"github-token", "email"} <= {f["rule"] for f in found["findings"]} and not found["clean"]
+    reads.clear()
     out = export.write(glow, tmp_path / "graph.html")
+    assert len(reads) == 1  # the environment is read once for the whole export, not once per text
     html = Path(out["path"]).read_text(encoding="utf-8")
     assert GH not in html and MAIL not in html and "<redacted:github-token>" in html.replace("\\u003c", "<").replace(
         "\\u003e", ">")
