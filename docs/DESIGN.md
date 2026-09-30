@@ -6097,6 +6097,513 @@ reached method; the `zero_callers` wording; every entry point named; unreadable 
 default map without `dead`; the MCP cap cutting the searched lists first with a correct `claims_not_shown`.
 `tests/test_docs.py` covers the README and ARCHITECTURE rows.
 
+## 58. MCP prompts (D85, 2026-09-30)
+
+### 58.1 Why
+
+An agent connected to Verinoda has to work out, each session, which tools to call for a routine task and in
+what order: reviewing a change, getting to know a project, debugging a failure, checking a branch before a
+merge. code-review-graph ships such workflows as MCP prompts. MCP clients show prompts to the user
+(Claude Code as `/mcp__verinoda__review` and so on), so one pick starts the right sequence of calls with the
+reporting rules that go with it.
+
+### 58.2 Decisions
+
+- Four prompts, served by `verinoda mcp serve` over `prompts/list` and `prompts/get`: `review` [base],
+  `onboarding` [topic], `debug` symptom [repro], `pre_merge` [base, default main]. Code:
+  `verinoda/mcp/prompts.py` (steps and text), `server._add_prompts` (registration).
+- A prompt is a fixed sequence of tool calls plus reporting rules. It states nothing about the code, so it
+  carries no claims; the tools it names return the claims and evidence. Every prompt ends with the rule
+  that every statement about the code comes from a tool result (claim, status, file:line) and that missing
+  evidence is 'unknown' plus a next step.
+- Prompts are not tools: the core profile still lists five tools, and the core tool menu is unchanged
+  (`tools/list`, core, on examples/orders_app: 4,478 characters before and after).
+- The text is worded for the served profile, so it only names calls the agent can make: a listed tool is
+  named directly (`code_check {"diff": "HEAD"}`), a tool behind `run_tool` as a `run_tool` call
+  (`run_tool {"name": "change_review", "arguments": {}}`), a tool the profile does not serve as its CLI
+  command (the debug ledger in core: `verinoda debug start "..." -- <repro>`, `verinoda debug try
+  --hypothesis ...`), and a step with neither is left out (decision_check in core when the project has no
+  decision records).
+- Every prompt starts with `index_update`. The steps reuse the existing tools only: review = change_review,
+  code_check on the diff, decision_check; onboarding = map_view hierarchy / dependencies / tests, then
+  analyze; debug = project_query, analyze, debug_start, debug_attempt, code_check; pre_merge =
+  history_search {base}, change_review {base}, code_check {diff: base}, code_check {deps}, decision_check
+  {base}, map_view cycles.
+- The rules the tools already state are repeated where they matter: "'No finding' is not 'safe'" (review),
+  "never say the branch is safe to merge" (pre_merge), "never say 'fixed'" (debug), map views are
+  extractions and heuristics, so what they suggest is inference (onboarding).
+- `verinoda mcp prompts [NAME] [--arg NAME=VALUE] [--profile core|full] [--json]` prints the list or one
+  prompt filled in, with the same text the server sends (for users without a prompt-capable client, and to
+  see what a prompt will do). Exit 2 on an unknown prompt, an unknown or malformed `--arg`, or a missing
+  required argument.
+- The debug `repro` is one string (MCP prompt arguments are strings); it is split into the argument list
+  `debug_start` takes at whitespace, with `'` and `"` grouping, and a backslash kept as it is (no shell
+  escapes), so a Windows path such as `tests\test_x.py` or `"C:\Program Files\py.exe"` survives. In the
+  core profile's CLI fallback each argument is re-quoted with double quotes when it has a space or a shell
+  character, and the symptom is always double-quoted.
+- The server and the CLI check the arguments the same way (`prompts.argument_problems`): a blank required
+  argument or a repro with an unbalanced quote is refused. The CLI exits 2; `prompts/get` answers with a
+  JSON-RPC invalid-params error that carries the reason (not the SDK's generic "Error rendering prompt").
+
+### 58.3 Measured
+
+On examples/orders_app (mcp 2.2.0):
+
+| | core | full |
+|---|---|---|
+| `prompts/list`, compact JSON | 1,253 chars | 1,253 chars |
+| `tools/list`, compact JSON | 4,478 (unchanged) | 43,436 (unchanged) |
+| review / onboarding / debug / pre_merge text | 728 / 1,038 / 1,054 / 997 | 782 / 933 / 930 / 977 |
+
+`prompts/list` is read when the client asks for it, not sent with every request like the tool menu.
+
+### 58.4 Not done
+
+- The steps are fixed; a prompt does not look at the project first (other than which tools the profile
+  serves). An agent that finds a step useless still has to skip it itself.
+- The core tool menu is at 4,478 of its 4,500-character budget before this change; nothing here adds to
+  it, but the margin is small for the next item that touches a core tool.
+- Clients decide how prompts are shown; some list them only on request, some not at all.
+- The CLI command the core debug prompt suggests quotes with double quotes (an inner `"` as `\"`); it
+  keeps a path with spaces together in bash, cmd and PowerShell, but a symptom or argument with `$`, `%`
+  or `"` may still need editing for a particular shell. An unquoted repro path with a space is two
+  arguments, as in a shell.
+- Because backslashes are literal, a repro cannot escape a quote or a space with `\`; quote the argument
+  instead.
+
+### 58.5 Tests
+
+- tests/test_mcp_prompts.py: every step names a real tool with arguments its schema accepts; the full
+  profile names every tool directly; the core profile routes through `run_tool` and the CLI and leaves out
+  decision_check in a project without records; the debug repro becomes an argument list and `symptom` is
+  required; a Windows repro keeps its backslashes and the core CLI fallback quotes each argument; the
+  server refuses a blank symptom and an unbalanced repro quote with the reason, in both profiles, as the
+  CLI does (exit 2); the in-process server lists and fills in the prompts with their descriptions and
+  arguments and its tool menu is unchanged; `verinoda mcp prompts` lists (`--json`), prints and refuses bad
+  arguments (exit 2).
+- tests/test_mcp.py `test_stdio_prompts_list_and_get`: over stdio, initialize announces the prompts
+  capability, `prompts/list` lists the four with their arguments and `prompts/get` fills one in.
+
+## 59. Breaking vs compatible API change (D86, 2026-09-30)
+
+### 59.1 Why
+
+`review` already found call sites that no longer fit a changed signature and removed names still used (the
+`public_api` concern), but only as findings per call site. A reviewer asking "is this change breaking?" had to
+infer the answer from the absence or presence of findings, and a public function removed or re-signed with no
+caller in the repository read as "no finding" - although every caller outside the repository breaks. Each public
+change now gets one verdict, with the call sites it breaks.
+
+### 59.2 Decisions
+
+- **Part of `review`, not a new command.** `review --json` (and MCP `change_review`, reached through `run_tool`)
+  carries `api_changes`: one entry per public definition that was added, removed or had its signature changed.
+  No new tool, no new argument, no menu text: the core menu is unchanged.
+- **Entry shape** (a claim): `symbol`, `kind`, `verdict` (`breaking` | `compatible` | `unknown`), `status`, `at`
+  (the definition's line in the tree; None for a removal), `base_at` (its line in the base version), `basis`,
+  `breaks` (the call sites it breaks: `at`, `status`, `finding`, taken from the `public_api` findings for that
+  symbol with rules `arity-break`, `positional-order-changed`, `removed-still-used`), and when present `reasons`,
+  `call_sites_not_checked` (the weak `call-site-of-changed-signature` sites), `renamed_from`, `breaks_total`.
+  A removed definition is cited by `base_at` only: its base line in the working tree holds other code. The list
+  holds at most 100 entries (breaking first); a longer one gets `api_changes_total`, and the summary and
+  `counts.api_breaking` count the whole list.
+- **Verdict rules.**
+  - added: `compatible` (a new public name).
+  - removed: `breaking`; with no call site in the tree the reason says callers outside it break. A Python method
+    a project base class still defines is `compatible`.
+  - visibility: public in the base version and not public now (a Java method made `private`) is `breaking`;
+    the other way round is `compatible`. Whether a change is listed at all is decided by either version, so a
+    narrowed definition is not left out.
+  - signature, Python: the parameter shapes of both syntax trees are compared (`_py_shape_breaks`): a positional
+    parameter removed (also when the new signature has `*args`: its keyword callers break and a positional
+    argument for it lands in `*args`) or made keyword-only, renamed or moved (a positional-only parameter may be
+    renamed: no caller names it; moving another one into its place still counts), a required positional or
+    keyword parameter added, a default value removed, a parameter added before `*args`, `*args` / `**kwargs`
+    removed, parameters made positional-only, a keyword parameter removed. None of these: `compatible`.
+    `self` / `cls` is left out for methods (not for `@staticmethod`).
+  - signature, Java/Kotlin: parameter counts of both versions (`ts_param_count`): more required, fewer in total
+    (without varargs) or varargs removed is `breaking`; more in total with no more required (Kotlin defaults) is
+    `compatible`; the same counts (a type, modifier or return type changed) is `unknown`.
+  - signature, other languages and planned changes (`--change signature`: no new signature yet): `unknown`.
+  - any broken call site makes the verdict `breaking`, whatever the shape comparison said.
+- **Status.** With broken call sites: the strongest status among them (a Python arity break bound through imports
+  is `statically_verified`). Otherwise `strong_inference` for breaking / compatible - public is a convention
+  and callers outside the tree are not seen - in the languages whose visibility rule is read (below);
+  `weak_inference` in the others, where public only means "no private-like keyword on the line"; `unknown` for an
+  unknown verdict.
+- **Public** (`_is_public`, per version). Python: no component of the module path or of the qualified name
+  starts with `_` (dunders are public, so `Cls.__init__` counts), no enclosing definition is a function, and the
+  file is not a script or tool configuration (`setup.py`, `conftest.py`, `noxfile.py`, `manage.py`, `fabfile.py`,
+  `__main__.py`, or a file under a `scripts/` or `examples/` directory). Go: a capitalised (exported) name. Rust:
+  `pub` on the definition's line (`pub(crate)`, `pub(super)`, `pub(in ...)` are not public) or a method of a trait
+  or trait impl, and every enclosing `mod` is `pub`. JS/TS: the top-level definition is exported (`export` on its
+  line, an `export { ... }` list, `export default`, `exports.x`, `module.exports`), no enclosing definition is a
+  function, and a member is not `private` / `#`. Java/Kotlin: no `private` / `internal` on the definition's line
+  or an enclosing class's line. C#: `public` / `protected` on its line (a member of an interface needs none) and
+  on every enclosing type's line. C: not `static`. Other languages: no `private` / `fileprivate` / `internal` on
+  its line (weak_inference, see Status).
+- Computed only when the `public_api` concern is requested; `counts.api_breaking`, a sentence in `summary`
+  ("Public API: N change(s) - x breaking, y unknown, z compatible."), a "Public API changes" block in the text
+  output (breaking first), and the verdicts in the stored review record.
+
+### 59.3 Measured
+
+In-sample fixtures only (tests below): the generated `pkg` project (four call-site shapes of one function) and the
+generated Java project of the review tests. No held-out set, no timing change worth noting (the verdicts reuse the
+concern's call-site search; the shape comparison is two syntax-tree lookups per changed signature).
+
+### 59.4 Not done
+
+- Types, return types, default values, exceptions and behaviour are not compared: `compatible` means "every call
+  that bound to the old parameters binds to the new ones", not "same behaviour".
+- Java package-private members count as public; Python `__all__` is not read; a Go name in an `internal/`
+  package or in `package main`, and a Rust `pub` item of a private type, still count as public. A JS/TS name
+  exported through a re-export in another file (`export * from`) is not seen as exported.
+- Visibility sections (C++ `private:`, Ruby `private`) are not read: those languages get weak_inference.
+- The Python script test is by file and directory name only: a module imported from a `scripts/` directory is
+  left out, a script elsewhere counts as public.
+- Kotlin "compatible" is source compatibility: adding a parameter with a default breaks binary callers.
+- Module-level names removed through an assignment or an import (the `module_statement` changes the concern
+  checks) get findings but no verdict; only definitions (functions, classes, methods) do.
+- A Java overload set changed together is compared per declaration line only.
+
+### 59.5 Tests
+
+`tests/test_review.py`: `test_a_required_parameter_is_a_breaking_change_with_the_call_sites_it_breaks`,
+`test_a_parameter_with_a_default_is_a_compatible_change`,
+`test_a_renamed_parameter_breaks_keyword_callers_outside_the_tree`,
+`test_removed_and_added_public_names_and_private_ones_left_out`, `test_python_parameter_shapes_compared`,
+`test_java_verdicts_from_parameter_counts`, `test_the_api_verdicts_follow_the_public_api_concern`,
+`test_a_positional_parameter_folded_into_args_breaks_keyword_callers`,
+`test_narrowed_visibility_is_a_breaking_change`, `test_a_member_of_a_private_java_class_is_not_public`,
+`test_visibility_rules_of_go_rust_and_typescript`, `test_python_scripts_are_not_public_api`,
+`test_the_api_verdict_list_is_capped_breaking_first`.
+
+## 60. Decisions a diff touches (D87, 2026-09-30)
+
+### 60.1 Why
+
+A decision record names the code it governs and the guards that keep it, but a reviewer of a diff had to run
+`verinoda decide check` and read its whole output to learn which records a change is about. ADRian and
+ADR-Toolkit ask a model to find the ADRs a change touches; the record's front matter already says what each
+record is about, so the match needs no model. Done when: `review` lists the records to read.
+
+### 60.2 Decisions
+
+- A new module, `verinoda/decision_reach.py`, called by `review.review` after the concerns. Its result is the
+  review's `decisions` key (`records`, `read`, `dir`, `limits`, `not_listed`); the text output gets a
+  "Decisions to read" section and the summary names the records. No new command, no new MCP tool, no menu
+  text: MCP `change_review` returns the key and keeps it when the response is cut.
+- A record is listed when the change meets its front matter, each reach with the changed line (`at`), the
+  front matter line it matched (`evidence_at`) and a status:
+  - `governs`: a changed, added or removed definition is the governed symbol or lies inside it (file and
+    qualified name compared: `statically_verified`); a changed line, either side, inside the governed
+    symbol's parsed span that no definition change counts, such as a docstring or comment edit
+    (`statically_verified`: `decide check` compares the symbol's whole text, docstring included, so it asks
+    for a review of such an edit); a changed file of the symbol whose definitions could not be compared
+    (`strong_inference`);
+  - `only_in`: a changed file the guard allows the call in (glob match: `statically_verified`); a changed
+    line whose code, comments and strings blanked, holds the dotted call or matches the pattern
+    (`strong_inference`, text only), or holds only the call's last name followed by `(`
+    (`weak_inference`). Only the files `decide check` searches for the guard are searched
+    (`guards.scope_files`): code files, and for `scope=product` no tests, reference trees, copies or
+    example, sample, demo, fixture and vendor folders; a doc naming the call reaches nothing;
+  - `no_edge`: a changed file matches `from` or `to` (`statically_verified`);
+  - `dependency` and `revisit-when dependency_added`: a changed line of a manifest `decide check` reads (not
+    under test, sample, fixture, vendor or output folders, nor a manifest it lists as unread) names the
+    package, compared as `decide check` compares names: a run of `-`, `_` and `.` is one separator, and a
+    `group:artifact` name also matches its artifact (`strong_inference`);
+  - `revisit-when file_appears`: an added file matches the glob (`statically_verified`);
+  - the record file, or the hand-written document it was imported from, is in the diff
+    (`statically_verified`); when the record's status changed, the reach says the base and the new status.
+    A record the diff deletes is read from its base version and listed with status `deleted`.
+- Accepted and proposed records are listed, and records with problems (they are the ones a reader must fix);
+  superseded, rejected and deprecated ones, and accepted ones another enforced record supersedes
+  (`inactive`), are counted in `not_listed` unless the diff edits their file. `enforced` says whether
+  `decide check` checks the record (`not_enforced_because` gives the reason for an inactive one); enforced
+  records come first, then by the strongest reach.
+- A guard `decide check` does not run (a proposed guard, a guard of a record that is not enforced) still
+  reaches, and each of its reaches ends with that reason. Its own `pattern` regex is not run: only the
+  patterns `decide check` runs are run, so a record a pull request adds cannot make the review of that
+  pull request run an unvetted regex.
+- A hand-edited record whose entries have the wrong type (a number in `relations`, `pattern: 5`, `calls` as
+  a string) is read as far as its types allow: non-string list items and non-list values count as none.
+  A record that still fails to match is left out and named in `error`; the review never stops for it.
+- A reach is never a verdict: whether the change keeps the decision is `decide check`'s answer, and the
+  review's exit code does not change.
+- A planned change (`--target`) has no diff: the targeted definitions' lines stand for the changed lines, so
+  `governs` and the file globs still match; a call found there is on "a line of the targeted definition",
+  never "a changed line".
+- The records' folder is the configured one (`decisions_dir_source`); a setting that cannot be read gives
+  an `error` entry (the repository's path shown as `<repo>`), an `unknown` entry of kind `decision_records`,
+  and a "Decisions:" line in the text; the review goes on.
+
+### 60.3 Measured
+
+- `tests/test_decision_reach.py`, 18 tests on a generated project with four records (one superseded, one
+  with a proposed guard) in a committed `docs/decisions` folder: each reach kind found at the right line
+  with the expected status, the superseded record and records of untouched symbols not listed, a planned
+  change reaching a governed symbol, and no section when nothing is reached. After review: a
+  `psycopg-binary` line reaching `absent=psycopg_binary`; a fixture manifest, a README and an `examples/`
+  file reaching nothing; a docstring edit reaching the governed symbol; a proposed guard labelled and its
+  pattern not run; planned-change wording; wrong-typed `relations`, `pattern`, `calls` and `allowed` not
+  stopping the review; a deleted and a demoted record listed; an inactive record not listed; an unreadable
+  folder setting reported. The 12 new tests fail on the first version of the module. In-sample; no
+  benchmark set of ADR-linked diffs yet.
+- Cost: one read of the records' folder, a line diff per changed file (as the review already does), and one
+  blanking of each changed code file when an `only_in` guard has calls or a pattern; a parse of both
+  versions of a governed symbol's file when no definition change counts it; one `declared_dependencies`
+  read when a changed manifest meets a dependency entry.
+
+### 60.4 Not done
+
+- Calls are matched as text on the new side's changed lines: a call through an import alias, `sink=`
+  guards, and a removed call outside the allowed files are not seen; an edge a change adds from an
+  unchanged file into a `no_edge` glob is seen only when one side's file changed.
+- A guard's `pattern` that `decide check` runs is run here too, with no time bound, on changed code lines:
+  a catastrophically backtracking pattern accepted by the human hangs both. Proposed guards' patterns are
+  not run.
+- The governs span check reads each version's definitions in-process; a file whose version does not parse
+  gives no span there, so a docstring-only edit of it is not seen.
+- Hand-written ADRs without a record have no front matter to match (`decide import` first).
+- A deleted record is found only in the configured folder as it is now; a record in a folder the change
+  moves away from is not read.
+- The review has no `--decisions-dir`; it reads the configured folder.
+
+### 60.5 Tests
+
+- `tests/test_decision_reach.py` (new).
+- Run with it: `tests/test_review.py`, `tests/test_decide.py`, `tests/test_decide_review3.py`,
+  `tests/test_mcp.py`, `tests/test_docs.py`, `tests/test_line_endings.py`.
+
+## 61. Missing mod dependencies and pack collisions (D88, 2026-09-30)
+
+### 61.1 Why
+
+Two mods (or a mod and a datapack) that ship the same file, such as `data/<ns>/recipe/x.json` or
+`assets/<ns>/textures/item/x.png`, collide. The game uses one and hides the other according to load order, and
+neither source shows the problem on its own. A mod that declares a dependency the installed set lacks, or a
+version outside the declared range, fails at launch. The same happens when the set holds a mod that another one
+declares it `breaks`. `verinoda datapack` already reads the datapacks for tags, objectives and function calls.
+This item adds the files and manifests of the packs themselves.
+
+### 61.2 Decisions
+
+- **Part of `datapack`, not a new command or MCP tool.** The plain summary gains two sections:
+  `resource collisions across packs and mods (N)` and `mod dependencies not met (N)`. In `--json` they are
+  `problems.pack_collisions`, `problems.mod_dependencies` and, when there are any,
+  `problems.dependencies_not_checked`, `problems.dependencies_unchecked` (a version or range that could not be
+  read) and `problems.pack_copies`, the same rows `datapack packs` shows. A `--with` source that could not be read
+  is listed (`unreadable`) in both. `datapack packs` lists the packs and mods found, with the same checks and
+  the identical copies. `--with PATH` (repeatable) adds a mod jar or zip, a datapack folder or a mods folder to
+  the set; in a folder, each jar or zip is its own source. `--with` on `datapack tag|score|function` is refused
+  with an error, since those lookups do not read it. No MCP change: the core profile and its menu are
+  unchanged. The work is in a new module, `verinoda/packset.py`, and `datapack.lookup()` calls it.
+- **A source** is a pack root: the folder that holds `data/<ns>/<registry>` or `assets/<ns>/<kind>` files
+  (with the registry and kind lists of `resources.py`, so `data/processed/train/...` does not count), or a mod
+  manifest (`fabric.mod.json`, `quilt.mod.json`, `META-INF/mods.toml`, `META-INF/neoforge.mods.toml`). The
+  folders skipped are the same as in `datapack.py` (`build`, `run`, `.gradle` and so on). An archive is one
+  source rooted at the archive root. The manifests of jars nested one level deep (`META-INF/jars/`,
+  `META-INF/jarjar/`) count as mods that source provides, because fabric-api is a bundle of modules.
+- **Collision**: the same resource path in two sources with different bytes (SHA-1). Every source that takes
+  part is listed, each with its file as evidence: a repository path, or `x.jar!/data/...`. The same bytes in
+  several places are counted separately as `copies` and are not a collision. Files the game merges are left out:
+  tags, unless one of the copies has `"replace": true`, language files, `sounds.json`, atlases, font definitions
+  (`assets/<ns>/font/*.json`: the game joins every pack's providers), `pack.mcmeta` and `pack.png`. A tag
+  collision names the copy with `replace`, and the line says that the other copies are dropped only when they
+  load below it; otherwise they merge. Two sources that never load together are not compared: builds of the same mod id (a Fabric and a
+  Forge subproject, or a copy of the project) and mods of different loader families (Fabric/Quilt against Forge
+  against NeoForge). A source without a manifest, such as a plain datapack, is compared with everything. Status
+  `verified`: both files are read and differ. Which file wins is left to load order, and the note says so.
+- **Dependencies.** The required entries are read: Fabric `depends`/`breaks`; Quilt `depends`/`breaks`,
+  skipping `optional`; Forge `mandatory=true`; NeoForge `type="required"`/`"incompatible"`. Each entry's
+  evidence is the manifest line that names it. They are checked against the ids and `provides` of every mod in
+  the set of the same loader family (Fabric/Quilt, Forge, NeoForge), nested ones included: a Fabric jar never
+  meets a Forge build's dependency, and the reverse. The game, Java and the loaders (`minecraft`, `java`, `fabricloader`, `forge`,
+  `neoforge`, `javafml`, and so on) are the platform and are not checked. Without `--with` the set is only the
+  repository, which is never what the game loads, so a dependency found nowhere is listed as external
+  ("not checked; give --with the mods folder") and not as missing. The same holds with `--with` when no source
+  read from it holds a mod of that loader family (a mistyped path, a corrupt jar, a Fabric folder against the
+  Forge build): the line then says "no forge mod was read from --with". Otherwise the rows are `missing`,
+  `version` (every provider's version is readable and none fits) and `breaks` (the set holds the mod in the
+  declared range). The status is `strong_inference`: the version rules are this module's reading of the
+  loaders' rules. A `breaks` row where the other mod's version cannot be read is `weak_inference`.
+- **Versions.** Fabric/Quilt predicates: `*`, `=`, `>=`, `>`, `<=`, `<`, `^` (same major, 0.x included, as
+  Fabric Loader reads it, not npm's same-minor rule for 0.x), `~` (same minor), `1.20.x`, space-separated terms
+  ANDed, a list ORed; build metadata after `+` is ignored; anything after `-` is a pre-release that sorts below
+  its release, and its dot-separated identifiers compare numerically when both are numbers (`beta.10` above
+  `beta.9`). Forge/NeoForge use Maven ranges (`[1.0,2.0)`, `[47,)`, `(,1.0],[2.0,)`); a bare version is a
+  recommendation and does not bound anything. In a Maven version only the qualifiers `alpha`, `beta`,
+  `milestone`, `rc`/`cr`, `snapshot` (and `a`, `b`, `m`) are pre-releases; any other suffix (`1.20.1-47.2.0`,
+  `1.2.3-forge`) sorts above the release, as Maven's ComparableVersion does. A version or range that cannot be read, such as `${version}` or
+  `dev`, is never called a mismatch. It is listed as `unchecked` in `datapack packs`.
+- **Malformed manifests.** A `depends`, `breaks`, `provides`, `mods` or `[dependencies]` field of the wrong JSON
+  or TOML type (an old schema, a list where Fabric wants an object) declares nothing; it never stops the
+  `datapack` summary.
+- **Summary status.** A repository with no datapack function or entity tag, but with a collision or a dependency
+  problem, now gets the summary and not `no_datapack`.
+
+### 61.3 Measured
+
+- This repository (2,621 listed files): 4 sources found (`examples/forge_mod`, the glow mod and its separate
+  datapack folder, a test fixture mod), 0 collisions, 1 identical copy
+  (`data/glowmod/function/wisp_death.mcfunction` in the mod and in its datapack folder), 2 external
+  dependencies (`fabric-api`, `kotlinforforge`). `packset.check`: median of three runs 0.030 s (Windows, file
+  list cached), so the `datapack` summary costs about the same as before.
+- Fixture (`tests/test_packset.py`): a Fabric mod, a datapack beside it and the Forge build of the same mod.
+  Found: 2 collisions (a recipe with different bytes, a tag with `replace`) with both files. Not reported: an
+  identical loot table (a copy), a lang file (merged), a tag without `replace`, and a recipe the Forge and
+  Fabric builds both ship. With a mods folder of Fabric jars: a texture collision with
+  `optifabric.jar!/assets/...`, `fabric-api >=0.100` against 0.90.0, `trinkets` missing, `optifabric` declared
+  broken. `curios`, a dependency of the Forge build, is not checked (the folder holds no Forge mod).
+  `fabric-api-base` is met through the jar fabric-api bundles.
+- This repository with a `--with` path that does not exist: the path is listed as unreadable, and `fabric-api`
+  and `kotlinforforge` stay "not checked (no fabric, neoforge mod was read from --with)" with 0 problems
+  (before the review fix: 2 `missing` rows).
+
+### 61.4 Not done
+
+- Language files, `sounds.json`, font definitions and tags merge. A key two lang files set differently, and a sound event
+  replaced by one pack, are not reported.
+- Only nested jars one level deep are read, and only for their manifests. Their resources, and their own
+  dependencies, are not checked.
+- Whether two sources really load together is read from the manifests only. Two datapack folders kept for
+  different worlds are compared, and so is a stale copy of a datapack. This is why the output says the game
+  decides by load order.
+- Mod `version` values written as build placeholders (`${version}`) in the repository are unknown, so a range
+  on the project's own mod is unchecked.
+- The game version, the Java version and the loader version are not checked (the platform ids).
+- Forge's older `mcmod.info` and Bukkit/Paper plugin manifests are not read.
+- A jar mod's `mods.toml` whose `modId` is a placeholder keeps the placeholder as its id.
+- Maven ordering is approximated: known qualifiers below the release, any other suffix above it, suffixes
+  compared identifier by identifier. Maven's full ComparableVersion rules (`sp`, mixed letter-digit tokens) are
+  not reproduced.
+- Loader families are read from the manifest file (`fabric.mod.json`/`quilt.mod.json`, `mods.toml`,
+  `neoforge.mods.toml` or a `mods.toml` that depends on `neoforge`). A jar with manifests for several loaders
+  counts for each.
+
+### 61.5 Tests
+
+`tests/test_packset.py` (41): sources and their manifests (Fabric with a placeholder version, Forge TOML), the
+repository collisions with both files and the mod id, the merged and apart cases left out, the identical copy;
+dependencies without `--with` are external, with manifest lines (JSON and TOML); a mods folder of jars adds a
+jar-to-repository collision, a version mismatch, missing mods, a `breaks` and a dependency met by a nested jar;
+23 version cases (Fabric and Maven, placeholders unchecked, `^0.x`, numeric pre-release identifiers, Maven
+suffixes above and below the release); the Forge build's dependency not checked against a Fabric folder, and a
+Forge jar that does not meet a Fabric dependency; a `--with` path that does not exist (external, not missing,
+listed as unreadable in `datapack packs` and the summary, text and JSON, with `pack_copies`); malformed
+Fabric, Quilt and Forge manifests (7 cases) and the `datapack` summary over one; font definitions merged while
+a `.ttf` collides; the tag collision naming its `replace` copy; `--with` refused on a tag lookup; the `datapack` summary and `datapack packs`
+through the CLI, text and `--json`; a repository with no pack. Also run: `tests/test_datapack.py`,
+`tests/test_datapack_java.py`, `tests/test_resources.py`, `tests/test_docs.py`, `tests/test_line_endings.py`.
+
+## 62. Coverage import (D89, 2026-09-30)
+
+### 62.1 Why
+
+`review` said which tests reach a change through the static graph (and, for pytest, through the call
+tracer), but its limits read "which changed lines the tests execute is not measured". The coverage report a
+project's own test runner already writes answers that line by line, in every language Verinoda reads. Codecov
+and SonarQube show changed lines no test covers (patch coverage) and coverage changes outside the diff
+(indirect changes); this brings both to the local, no-network tool, as claims with evidence.
+
+### 62.2 Decisions
+
+- One reader module, `verinoda/coverage_import.py`, for four formats: lcov (`TN:`/`SF:`/`DA:`), Cobertura XML
+  (coverage.py's `coverage.xml`, istanbul's cobertura, gcovr), JaCoCo XML (Gradle `jacocoTestReport.xml`, Maven
+  `jacoco.xml`) and coverage.py JSON. The format is read from the content, not the name. Branch data
+  (`BRDA`, `mb`/`cb`, `branch-rate`) is not read.
+- Reports are found at the paths the tools write to by default (`REPORT_PATHS`; the Gradle/Maven/lcov paths
+  also one folder down for sub-projects) or given: `review --coverage REPORT`, `coverage --report FILE`. Every
+  report found is read and merged by line (a line run in any report ran). The MCP `change_review` gets the
+  same result through discovery: no new tool and no new argument, so the core menu is unchanged.
+- Sub-projects: a report at a sub-project's usual path (`web/coverage/lcov.info`,
+  `mod-a/build/reports/jacoco/test/jacocoTestReport.xml`) names its files relative to that folder (istanbul's
+  `SF:src/index.ts`, JaCoCo's `com/ex/Foo.java`). Its entries are kept under the folder (`web/src/index.ts`)
+  and fit only files inside it, so two sub-projects' `src/index.ts` (or two modules' `com/ex/Foo.java`) are not
+  merged, and a root file with the same relative path does not take them. A name that is a repository file
+  from the root stays as it is. A report given by path at another location tries its own folder only for
+  files that exist there. When both a sub-project's report and a root report fit a file, the sub-project's
+  wins.
+- A report that cannot be read, whatever its content (a JSON of an unexpected shape, `inf` hits, a nesting
+  too deep to parse), is an error entry of the reports list, never a traceback; a line with `inf` hits is
+  skipped.
+- `review` counts each changed line once, for the innermost changed definition around it: an outer
+  definition's changed lines hold the ones of the definitions nested in it (a class and its method), so
+  without this a method's line was counted and reported twice.
+- File matching: exact, an absolute path under the root, a Cobertura `<source>` root joined with the file name,
+  else the longest shared path suffix whose shorter side matches whole (`com/ex/Foo.java` fits
+  `src/main/java/com/ex/Foo.java`, `a/Foo.java` does not fit `b/Foo.java`). Two report entries that fit one
+  file equally leave it `ambiguous` rather than guessed.
+- Line to symbol: the innermost definition (`treestate.symbol_at` over `anchors.compute_facts`), the same
+  naming `review` and `health` use.
+- Status: the report is another tool's measurement of the tree it ran on. While every report that measured
+  the file is newer than it, a claim is `strong_inference`; when the file changed after one of them was written
+  its lines may have moved, and the claim is `weak_inference` and says so (lines are merged across reports, so
+  an old report's hits can mark a line run: the oldest report sets the status). Never `statically_verified`: nothing ties the report to
+  the exact text reviewed.
+- `review`: `tests.coverage` holds the reports read, the patch coverage (changed lines a report measured, how
+  many ran) and `uncovered`: per changed definition (not test code, not data or config keys), the changed lines
+  that ran under no test, with `at`, `status`, `finding`, `evidence_at` (the line and the report) and
+  `derived_by`. `covered_by` names the tests that ran changed lines where the report names them. A changed
+  symbol a fresh report shows run leaves `no_test_reaches` and `reach_unknown` (as `observe` does).
+  Changed lines are the ones `review`'s changed definitions hold (`Change.new_changed`), so an edit that
+  changes no definition (comments, whitespace, docstrings) brings no line. The text output prints
+  `changed lines no test covers: FILE:LINES (SYMBOL)`; the limit line about unmeasured lines is replaced by
+  one naming the report.
+- Exit code: changed lines a fresh report shows no test ran make `review` exit 3 ("findings or unknowns to
+  report"), like a strong finding; a stale report's rows do not. `counts.uncovered_changed_lines` is new.
+  A report named with `--coverage` that cannot be read is an unknown (`coverage_report`); a discovered one
+  that cannot be read is listed with its error only.
+- A planned change (`--target`) has no changed lines: no coverage section.
+- `verinoda coverage [PATH ...] [--report] [--base-report [--base REF]] [--limit N] [--json]`: per definition of
+  the measured files, lines measured / ran / not run and the test names, least covered first, each a claim;
+  the report entries that fit no repository file and the ambiguous files are listed. `--base-report`: the lines
+  whose run/not-run state differs between the two reports, split into `indirect` (files the working tree did
+  not change against `--base`, default HEAD) and `in_changed_files`; when the base cannot be named (no git, no
+  commit yet, a bad ref) `changes` is an error entry and the head coverage is still given. Exit 4 only when no
+  report was read (as `check --deps` without a manifest). `.` and `./` mean the whole repository, `./a.py` is
+  `a.py`, and a PATH no report measured is listed (`paths_not_measured`). `--report`, `--base-report` and
+  `review --coverage` take paths relative to the repository or, failing that, to the working directory.
+
+### 62.3 Measured
+
+- Tests: 26 in `tests/test_coverage_import.py` (parsing of the four formats, path matching and ambiguity, the
+  command's claims and statuses, indirect changes, the CLI, and `review` on a Java project with a JaCoCo
+  report, a TypeScript project with lcov and a Python project with a stale `coverage.xml`; after review: a
+  class and its method both changed, an added Java class, two lcov sub-projects and two JaCoCo modules with the
+  same relative paths, a stale report merged with a fresh one, reports of unexpected shape, `.`/`./a.py`/an
+  unmeasured PATH, a base that cannot be named, a report path relative to the working directory).
+- Not yet measured on a real project's report; no timing measured. Parsing is one pass over the report with
+  `xml.etree` / line splitting.
+
+### 62.4 Not done
+
+- A report is matched by line number; after an edit the numbers can move (`weak_inference`). Nothing checks
+  that the report was made from the reviewed tree beyond modification times.
+- Lines a report does not list are neither covered nor uncovered (not executable to that tool, or not
+  measured); a changed file absent from every report is listed as `not_in_report`, not as an unknown.
+- Branch coverage is not read: a covered line may hold a branch no test took.
+- Which test ran a line is known only from lcov test names and coverage.py contexts
+  (`dynamic_context = test_function`); Cobertura and JaCoCo XML say only that some test ran it. So "which tests
+  reach this" per test is available for those two sources; the persistent test-to-code map is 9.2.
+- One report entry of a root report can fit two repository files by suffix (two copies of
+  `com/ex/Util.java` under different roots); each is given the entry's lines. A tie between two report entries
+  is refused, not the reverse. Sub-projects are told apart only when each report lies at its sub-project's
+  usual path (or names files that exist under its own folder); a single root report that lists two
+  sub-projects' files by the same relative path cannot be split.
+- A stale report next to a fresh one makes every file both measured `weak_inference`, even where the fresh
+  report alone would do; the reports' lines are not kept apart.
+- The indirect comparison assumes the base report measured the base commit and the head report the working
+  tree; only files unchanged in between compare the same lines.
+- The report size limit is 200 MB; XML is read with the standard library parser (no external entities are
+  fetched).
+
+### 62.5 Tests
+
+`tests/test_coverage_import.py`; also run: `tests/test_docs.py`, `tests/test_line_endings.py`,
+`tests/test_mcp.py`, `tests/test_cli.py`, `tests/test_architecture_map.py`, `tests/test_review.py`.
+
 ## Sources
 
 - **Retrieval:**

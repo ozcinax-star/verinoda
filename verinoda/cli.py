@@ -171,6 +171,20 @@ def _rel_in_repo(repo: Path, path: str, what: str) -> str:
     return path.replace("\\", "/")
 
 
+def _report_args(repo: Path, paths: list[str] | None) -> list[str] | None:
+    """Report files given on the command line: repository-relative, else relative to the working directory
+    (made absolute), else as given."""
+    if not paths:
+        return paths
+    out = []
+    for path in paths:
+        p = Path(path)
+        if not p.is_absolute() and not (repo / p).exists() and (Path.cwd() / p).exists():
+            path = str((Path.cwd() / p).resolve())
+        out.append(path)
+    return out
+
+
 def _path_line(repo: Path, spec: str, what: str) -> tuple[str, int]:
     path, sep, line = spec.rpartition(":")
     if not sep or not path or not line.isdigit() or int(line) < 1:
@@ -830,11 +844,30 @@ def cmd_review(args) -> int:
     try:
         res = rv.review(repo, store=st, base=args.base, staged=args.staged, targets=args.target,
                         change=args.change or ("body" if args.target else None), concerns=concerns,
-                        run_tests=args.run_tests, observe=args.observe, max_chars=args.max_chars)
+                        run_tests=args.run_tests, observe=args.observe, max_chars=args.max_chars,
+                        coverage_reports=_report_args(repo, args.coverage))
     finally:
         st.close()
     _emit(args, res, lambda r: _write(rv.render_text(r)))
     return int(res["exit"])
+
+
+def cmd_coverage(args) -> int:
+    from verinoda import coverage_import as ci
+
+    repo = _repo(args)
+    if args.limit < 1:
+        print("error: --limit must be a positive number", file=sys.stderr)
+        return 2
+    paths = [_rel_in_repo(repo.resolve(), p, "path") for p in args.paths or []]
+    try:
+        res = ci.report(repo, paths or None, reports=_report_args(repo, args.report),
+                        base_reports=_report_args(repo, args.base_report), base=args.base, limit=args.limit)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 4
+    _emit(args, res, lambda r: _write(ci.render_text(r)))
+    return 0
 
 
 def cmd_health(args) -> int:
@@ -980,7 +1013,10 @@ def cmd_agent_lint(args) -> int:
 def cmd_datapack(args) -> int:
     from verinoda import datapack
 
-    res = datapack.lookup(_repo(args), args.what, args.name)
+    if args.with_paths and args.what not in (None, "packs"):
+        raise SystemExit("error: --with applies to the summary and `datapack packs`, not to a tag, score or "
+                         "function lookup")
+    res = datapack.lookup(_repo(args), args.what, args.name, with_paths=args.with_paths)
     _emit(args, res, lambda r: print(datapack.render(r)))
     return 0 if res["status"] == "found" else 2
 
@@ -2497,6 +2533,52 @@ def cmd_mcp(args) -> int:
     return 0
 
 
+def cmd_mcp_prompts(args) -> int:
+    """``verinoda mcp prompts [NAME] [--arg K=V]``: the MCP server's ready workflows, listed or filled in."""
+    from verinoda.mcp import prompts as P
+    from verinoda.mcp.server import GATEWAY, listed_tools, resolve_profile, served_tools
+
+    repo = _repo(args)
+    try:
+        profile = resolve_profile(repo, args.profile)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    listed, served = listed_tools(repo, profile), served_tools(repo, profile)
+    if not args.name:
+        cat = P.catalog(listed=listed, served=served, gateway=GATEWAY)
+        if args.json:
+            _write(_dump({"profile": profile, "prompts": cat}))
+        else:
+            for c in cat:
+                params = " ".join(f"{a['name']}={'<required>' if a['required'] else '?'}" for a in c["arguments"])
+                _write(f"{c['name']} {params}\n  {c['description']}\n  tools: {', '.join(c['tools'])}")
+        return 0
+    if args.name not in P.PROMPT_NAMES:
+        print(f"error: unknown prompt {args.name!r}; one of {', '.join(P.PROMPT_NAMES)}", file=sys.stderr)
+        return 2
+    known = {a for a, _, _ in P.ARGUMENTS[args.name]}
+    given: dict[str, str] = {}
+    for item in args.arg or []:
+        key, sep, value = item.partition("=")
+        if not sep or key not in known:
+            print(f"error: --arg takes NAME=VALUE with NAME one of {', '.join(sorted(known))} (got {item!r})",
+                  file=sys.stderr)
+            return 2
+        given[key] = value
+    missing = P.missing_required(args.name, given)
+    if missing:
+        print(f"error: {args.name} needs --arg {missing[0]}=...", file=sys.stderr)
+        return 2
+    problems = P.argument_problems(args.name, given)
+    if problems:
+        print(f"error: {problems[0]}", file=sys.stderr)
+        return 2
+    text = P.render(args.name, given, listed=listed, served=served, gateway=GATEWAY)
+    _write(_dump({"name": args.name, "profile": profile, "arguments": given, "text": text}) if args.json else text)
+    return 0
+
+
 # Upstream subcommands that write Graphify-branded skills, hooks, merge drivers or
 # agent configs into the user's home or project (CLAUDE.md, AGENTS.md, .claude/,
 # .codex/, git hooks, .gitattributes, ...). Run through `verinoda index` they would
@@ -2801,6 +2883,19 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--observe", action="store_true",
                     help="run those tests under the call tracer: which of them reach the changed functions")
     sp.add_argument("--max-chars", type=int, default=6000, help="budget of the read_first list")
+    sp.add_argument("--coverage", action="append", metavar="REPORT",
+                    help="a coverage report (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON; repeatable): the "
+                         "changed lines no test ran (default: the reports found at the usual paths)")
+    sp = add("coverage", cmd_coverage, "coverage reports (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON) read "
+                                       "into lines and symbols: what ran, what did not, which tests ran it; with "
+                                       "--base-report the indirect coverage changes")
+    sp.add_argument("paths", nargs="*", help="files or folders (default: every file a report measured)")
+    sp.add_argument("--report", action="append", metavar="FILE",
+                    help="a report to read (repeatable; default: the reports found at the usual paths)")
+    sp.add_argument("--base-report", action="append", metavar="FILE",
+                    help="the base version's report (repeatable): lines whose coverage changed")
+    sp.add_argument("--base", help="with --base-report: the commit the working tree is compared with (default HEAD)")
+    sp.add_argument("--limit", type=int, default=40, help="symbols shown (default 40)")
     sp = add("health", cmd_health, "code health per function: cyclomatic and cognitive complexity, nesting, length, "
                                    "parameters, and near-duplicate functions with a similarity score")
     sp.add_argument("paths", nargs="*", help="files or folders (default: every code file that is not a test)")
@@ -2849,11 +2944,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="leave out Claude Code's memory files for the project (~/.claude/projects/.../memory)")
     sp.add_argument("--all", action="store_true", help="list the checks that passed too")
     sp = add("datapack", cmd_datapack, "Minecraft datapacks: entity tags checked but never added, objectives written "
-                                       "but never read, calls to missing functions (from mcfunction or Java); or "
+                                       "but never read, calls to missing functions (from mcfunction or Java), "
+                                       "resource collisions across packs and mods, unmet mod dependencies; or "
                                        "one tag, score or function across mcfunction and Java (a function's Java "
                                        "callers: command strings, identifier lookups, the project's helpers)")
-    sp.add_argument("what", nargs="?", choices=["tag", "score", "function"], help="look one up (default: the summary)")
+    sp.add_argument("what", nargs="?", choices=["tag", "score", "function", "packs"],
+                    help="look one up, or packs: the packs and mods, resource collisions, mod dependencies "
+                         "(default: the summary)")
     sp.add_argument("name", nargs="?", help="the tag, objective or function id (ns:path)")
+    sp.add_argument("--with", dest="with_paths", action="append", metavar="PATH",
+                    help="a mod jar, a datapack or a mods folder loaded beside the project: its resources are "
+                         "checked for collisions and its mods meet dependencies; repeatable")
     sp = add("trace-log", cmd_trace_log, "the stack traces and GameTest results of a log mapped onto the code: project "
                                          "frames with their callers, the rest folded, a trace through a test's "
                                          "succeed/fail tied to that test; stored as claims with the log as evidence")
@@ -3326,6 +3427,14 @@ def build_parser() -> argparse.ArgumentParser:
                        help="serve the nearest folder at or above the start folder whose FILE (a relative path "
                             "such as .mcp.json) registers this server; what project-scope configs use, so "
                             "moving the project keeps them working")
+
+    c = add("prompts", cmd_mcp_prompts, "the ready workflows the server offers as MCP prompts (review, "
+                                        "onboarding, debug, pre_merge): list them, or print one filled in",
+            parent=msub)
+    c.add_argument("name", nargs="?", help="the prompt to print (default: list them all)")
+    c.add_argument("--arg", action="append", metavar="NAME=VALUE", help="a prompt argument (repeatable)")
+    c.add_argument("--profile", choices=("core", "full"), default=None,
+                   help="word the steps for this profile's menu (default: as `mcp serve` would)")
 
     sp = sub.add_parser("index", help="pass-through to the Graphify-derived indexer CLI (advanced; "
                                        "installer/hook commands and commands writing under ~/.graphify are "
