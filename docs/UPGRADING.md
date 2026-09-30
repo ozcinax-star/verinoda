@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D98)
+## Upgrading from 0.3.2 (D60-D99)
 
 ### D63: Running a project's own tests safely
 
@@ -421,6 +421,13 @@ drops the line when it rewrites the record. A record whose `supersedes` or `supe
 the other record now shows a warning in `decide list` (nothing changes in what is enforced). MCP
 `decision_record` has two more actions (`supersede`, `link`) and one more argument (`link`); the tool count is
 unchanged, so UPGRADING's tool count needs no change.
+
+### D99: Butterfly view
+
+`verinoda butterfly NAME` prints a symbol's callers and callees, or a class's inheritance tree, with the
+line of each link; in `verinoda ui` a *Butterfly* button on a function, method or class note shows the
+same around the note. No re-scan needed. The MCP tool count is unchanged (no UPGRADING tool-count
+change).
 
 ### D60-D62
 
