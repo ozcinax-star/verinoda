@@ -8,7 +8,8 @@ Views: hierarchy, dependencies (calls/imports), dataflow (entry -> persistence),
 config (env vars and config files), tests (test -> behaviour), history (git +
 decision records), impact (reverse dependencies of a change), cycles (dependency
 cycles between files and the fewest dependencies to cut), dead (code no entry point
-reaches, :mod:`verinoda.deadcode`).
+reaches, :mod:`verinoda.deadcode`), hotspots (change frequency times complexity,
+:mod:`verinoda.hotspots`).
 """
 
 from __future__ import annotations
@@ -957,6 +958,12 @@ def dead(g: Graph) -> dict:
     return deadcode.dead_code(g)
 
 
+def hotspots(g: Graph) -> dict:
+    from verinoda import hotspots as hs
+
+    return hs.hotspots(g)
+
+
 # -- 8. cycles ------------------------------------------------------------------------------
 
 CYCLE_RELATIONS = {"calls", "imports", "imports_from", "uses", "inherits"}   # the dependencies view's edges
@@ -1344,10 +1351,11 @@ def cycles(g: Graph) -> dict:
 VIEWS = {
     "hierarchy": hierarchy, "dependencies": dependencies, "dataflow": dataflow,
     "config": config, "tests": tests_view, "history": history, "cycles": cycles, "dead": dead,
+    "hotspots": hotspots,
 }
 
 
-# the views `verinoda map` builds when none is named; dead is asked for by name (--view dead)
+# the views `verinoda map` builds when none is named; dead and hotspots are asked for by name (--view dead)
 DEFAULT_VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "cycles")
 
 

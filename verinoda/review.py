@@ -18,10 +18,14 @@ the staged changes, or a planned change (``targets`` + ``change``):
    checks removed or changed, a check made constant), performance (IO or queries inside loops, loops
    added to hot paths), public API (call sites whose arity no longer fits, removed names still used),
    config (environment and config values read on changed lines, changed config keys) and entry points
-   (entries that reach the change).
-4. **Tests**: static reach, observed reach from the runtime tracer's latest run or ``observe``, and a
-   run of the selected tests (``run_tests``) through :mod:`verinoda.experiments`.
-5. **Unknowns** with a next step, and a **read_first** list packed to ``max_chars``.
+   (entries that reach the change). Each public definition added, removed or with a changed signature
+   gets an ``api_changes`` verdict - breaking (with the call sites it breaks), compatible or unknown.
+4. **Tests**: static reach, observed reach from the runtime tracer's latest run or ``observe``, a
+   run of the selected tests (``run_tests``) through :mod:`verinoda.experiments`, and the changed lines a
+   coverage report (lcov, Cobertura, JaCoCo, coverage.py JSON: :mod:`verinoda.coverage_import`) shows no test
+   ran, in any language.
+5. **Unknowns** with a next step, and a **read_first** list packed to ``max_chars``: changed code, call
+   sites, then concern lines, each kind hottest first (:func:`verinoda.hotspots.rank`).
 
 Honesty rules: a dependent is "possibly affected"; a finding never says "safe" or "no impact" - an empty
 concern reads "no finding from rules R"; mechanical facts (a call bound through imports on a changed
@@ -45,7 +49,7 @@ from collections import deque
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
-from verinoda import anchors, testcode
+from verinoda import anchors, hotspots, testcode
 from verinoda import review_rules as rr
 from verinoda.architecture_map import CONFIG_FILE_RE, ENV_PATTERNS, entry_reasons
 from verinoda.testcode import is_test_or_support_file as _is_test
@@ -55,6 +59,7 @@ PLANNED_KINDS = ("body", "signature", "remove")
 DEPTH = 3
 MAX_DEPENDENTS = 40
 MAX_PER_CONCERN = 25
+MAX_API_CHANGES = 100
 HEALTH_CLONE_WORK = 5_000_000   # the review's near-duplicate search: pairs of equal tokens its ratios scan (a few s)
 HEALTH_CLONE_COMPARISONS = 2000
 DEFAULT_MAX_CHARS = 6000
@@ -83,7 +88,9 @@ RULES = {
                     "a loop added or its condition changed in a hot path (tick/render registrations, tick-like "
                     "overrides, request handlers)"],
     "public_api": ["call sites whose arguments no longer fit a changed signature (Python: bound by imports; "
-                   "Java/Kotlin: argument counts)", "removed names still imported or used"],
+                   "Java/Kotlin: argument counts)", "removed names still imported or used",
+                   "api_changes: a verdict per public definition added, removed or re-signed (parameter shapes of "
+                   "both versions, the call sites above)"],
     "config": ["environment reads on changed lines", "names bound from environment/config modules read on "
                "changed lines", "config values and keys (config classes, key literals) on changed lines",
                "changed keys of config files, with their readers found by literal key search"],
@@ -93,6 +100,8 @@ RULES = {
                "against thresholds) lower than in the base", "an added function below full health",
                "a changed function now a near-duplicate of another function of its file (similarity >= 0.9)"],
 }
+NO_LINE_COVERAGE = ("which changed lines the tests execute is not measured (the call tracer records calls, not lines; "
+                    "no coverage report was read)")
 LIMITS = [
     "static analysis: dynamic dispatch, reflection, dependency injection and callbacks are not resolved; "
     "a dependent is possibly affected, not proven broken",
@@ -101,8 +110,11 @@ LIMITS = [
     "registrations by method reference (Owner::name) and hot-path/entry tables are text rules: inference",
     "the graph is the last snapshot's: the changed files are re-read from the working tree; a new caller in an "
     "unchanged file appears only after `verinoda update`",
-    "which changed lines the tests execute is not measured (the call tracer records calls, not lines)",
+    NO_LINE_COVERAGE,
     "findings are not stored as claims; the review record is stored in the analyses table",
+    "read_first ranks each kind by the hotspot score of the function holding a range's changed definition, call "
+    "or finding line (its changes in the last "
+    f"{hotspots.REVIEW_COMMITS} commits touching the file x cyclomatic complexity): a heuristic order",
 ]
 
 
@@ -2868,6 +2880,266 @@ def _public_api(ctx: _Ctx, changes: list[Change], unknown: list[dict]) -> list[d
     return out
 
 
+# -- API verdicts: each public change breaking, compatible or unknown -------------------------------------------
+
+_BREAK_RULES = ("arity-break", "positional-order-changed", "removed-still-used")
+_JVM_SUFFIXES = (".java", ".kt", ".kts")
+_JS_SUFFIXES = (".js", ".jsx", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".tsx")
+# languages whose visibility rule is read (Python naming, Go capitals, Rust `pub`, JS/TS `export`, JVM and C#
+# modifiers); elsewhere public means only "no private-like keyword on the line", a weaker test
+_VISIBILITY_READ = frozenset({".py", ".pyi", ".go", ".rs", ".cs", *_JVM_SUFFIXES, *_JS_SUFFIXES})
+_NOT_PUBLIC_JVM = re.compile(r"\b(?:private|internal)\b")
+_NOT_PUBLIC_OTHER = re.compile(r"\b(?:private|fileprivate|internal)\b")
+_RUST_PUB = re.compile(r"(?:^|[\s(])pub\b(?!\s*\()")
+_CS_PUBLIC = re.compile(r"\b(?:public|protected)\b")
+# a Python file that runs as a script or configures a tool, not a module other code imports
+_PY_SCRIPT_NAMES = frozenset({"setup.py", "conftest.py", "noxfile.py", "manage.py", "fabfile.py", "__main__.py"})
+_PY_SCRIPT_DIRS = frozenset({"scripts", "examples"})
+
+
+def _enclosing(ctx: _Ctx, c: Change, side: str) -> list[tuple[dict, str]]:
+    """``(symbol, definition line text)`` of the definitions around ``c`` in one version, outermost first."""
+    line = c.old_def_line if side == "old" else c.def_line
+    if not line:
+        return []
+    syms = (ctx.facts(c.file, side) or {}).get("symbols") or {}
+    lines = ctx.lines(c.file, side)
+    around = sorted((s for s in syms.values() if s.get("def", s["start"]) < line <= s["end"]),
+                    key=lambda s: s["start"])
+    return [(s, lines[s.get("def", s["start"]) - 1] if s.get("def", s["start"]) <= len(lines) else "")
+            for s in around]
+
+
+def _js_exported(text: str, name: str) -> bool:
+    """Whether a JS/TS module exports ``name`` other than on its definition line: an ``export { ... }`` list,
+    ``export default name``, ``exports.name`` or ``module.exports``."""
+    n = re.escape(name)
+    return any(re.search(p, text) for p in (
+        rf"\bexport\s+(?:type\s+)?\{{[^}}]*\b{n}\b", rf"\bexport\s+default\s+{n}\b", rf"\bexports\.{n}\b",
+        rf"\bmodule\.exports\s*=\s*{n}\b", rf"\bmodule\.exports\s*=\s*\{{[^}}]*\b{n}\b"))
+
+
+def _is_public(ctx: _Ctx, c: Change, side: str) -> bool:
+    """Public in one version, by each language's rule: Python - no part of the module path or of the qualified
+    name starts with ``_`` (dunders excepted), no enclosing definition is a function, and the file is not a script
+    (``setup.py``, ``conftest.py``, a ``scripts/`` or ``examples/`` directory); Go - an exported (capitalised)
+    name; Rust - ``pub`` (not ``pub(crate)``), or a method of a trait or trait impl, inside ``pub`` modules;
+    JS/TS - the top-level definition is exported and a member is not ``private`` / ``#``; Java/Kotlin - no
+    ``private`` / ``internal`` on its line or an enclosing class's; C# - ``public`` / ``protected`` on its line
+    and every enclosing type's (interface members excepted); other languages - no private-like keyword on its
+    line."""
+    sfx = _suffix(c.file)
+    if sfx in (".py", ".pyi"):
+        parts = c.qual.split("#")[0].split(".")
+
+        def private(p: str) -> bool:
+            return p.startswith("_") and not (p.startswith("__") and p.endswith("__"))
+
+        path = PurePosixPath(c.file)
+        if path.name in _PY_SCRIPT_NAMES or any(p in _PY_SCRIPT_DIRS for p in path.parts[:-1]):
+            return False
+        if any(private(p) for p in path.parts[:-1]) or private(path.stem):
+            return False
+        if any(private(p) for p in parts):
+            return False
+        return all((ctx.sym(c.file, ".".join(parts[:i]), side) or {}).get("kind") in ("class", None)
+                   for i in range(1, len(parts)))
+    line = c.old_def_line if side == "old" else c.def_line
+    lines = ctx.lines(c.file, side)
+    if not line or line > len(lines):
+        return False
+    own = lines[line - 1]
+    outer = _enclosing(ctx, c, side)
+    if sfx == ".go":
+        return c.name[:1].isupper()
+    if sfx == ".rs":
+        via_trait = any(re.match(r"\s*(?:unsafe\s+)?(?:impl\b.*\bfor\b|(?:pub\s+)?trait\b)", t) for _, t in outer)
+        mods_pub = all(_RUST_PUB.search(t) for _, t in outer if re.match(r"\s*(?:pub\S*\s+)?mod\b", t))
+        return mods_pub and (via_trait or bool(_RUST_PUB.search(own)))
+    if sfx in _JS_SUFFIXES:
+        if any(s["kind"] != "class" for s, _ in outer) or re.search(r"\bprivate\b|^\s*(?:static\s+)?#", own):
+            return False
+        top = outer[0][1] if outer else own
+        top_name = c.qual.split("#")[0].split(".")[0] if outer else c.name
+        return bool(re.search(r"\bexport\b", top)) or _js_exported(ctx.text(c.file, side) or "", top_name)
+    if sfx in _JVM_SUFFIXES:
+        return not any(_NOT_PUBLIC_JVM.search(t) for t in [own] + [t for _, t in outer])
+    if sfx == ".cs":
+        types = [t for _, t in outer if not re.match(r"\s*namespace\b", t)]
+        in_interface = bool(types) and re.search(r"\binterface\b", types[-1]) is not None
+        return all(_CS_PUBLIC.search(t) for t in types) and (in_interface or bool(_CS_PUBLIC.search(own)))
+    if sfx in (".c", ".h") and re.match(r"\s*(?:\w+\s+)*?static\b", own):
+        return False
+    return not _NOT_PUBLIC_OTHER.search(own)
+
+
+def _py_shape_breaks(old: dict, new: dict, bound: bool) -> list[str]:
+    """How a Python signature stops accepting calls the old one accepted (parameter shapes of both syntax trees):
+    empty when every call that bound to the old parameters binds to the same parameters of the new one."""
+    op_, np_ = list(old["pos"]), list(new["pos"])
+    o_req, n_req, o_po, n_po = old["required"], new["required"], old["posonly"], new["posonly"]
+    if bound and op_ and op_[0] in ("self", "cls") and np_ and np_[0] == op_[0]:
+        op_, np_, o_req, n_req = op_[1:], np_[1:], o_req - 1, n_req - 1
+        o_po, n_po = max(0, o_po - 1), max(0, n_po - 1)
+
+    def was_required(name: str) -> bool:
+        return name in old["kw_required"] or (name in op_ and op_.index(name) < o_req)
+
+    out = []
+    no_default: list[str] = []
+    for i, name in enumerate(op_):
+        if i >= len(np_):
+            if name in new["kwonly"]:
+                out.append(f"parameter {name} is now keyword-only")
+            elif new["varargs"]:
+                out.append(f"positional parameter {name} removed (an argument passed for it now goes into *args)")
+            else:
+                out.append(f"positional parameter {name} removed")
+            continue
+        # a positional-only parameter is never passed by name: renaming it breaks no call, moving another
+        # parameter of the old signature into its place does
+        if np_[i] != name and (i >= o_po or np_[i] in op_):
+            out.append(f"parameter {i + 1} was {name}, is now {np_[i]}")
+        if o_req <= i < n_req:
+            no_default.append(np_[i])
+    added = []
+    for name in np_[len(op_):max(n_req, 0)]:
+        if was_required(name):
+            continue
+        (no_default if name in old["kwonly"] or name in op_ else added).append(name)
+    if added:
+        out.append("required parameter(s) added: " + ", ".join(added))
+    if old["varargs"] and len(np_) > len(op_):
+        out.append("parameter(s) added before *args: " + ", ".join(np_[len(op_):]))
+    if old["varargs"] and not new["varargs"]:
+        out.append("*args removed")
+    if old["varkw"] and not new["varkw"]:
+        out.append("**kwargs removed")
+    if n_po > o_po:
+        out.append("parameter(s) made positional-only: " + ", ".join(np_[o_po:n_po]))
+    keywordable = set(np_[n_po:]) | set(new["kwonly"])
+    for k in old["kwonly"]:
+        if k not in keywordable and not new["varkw"]:
+            out.append(f"keyword parameter {k} removed")
+    added_kw = []
+    for k in new["kw_required"]:
+        if not was_required(k):
+            (no_default if k in old["kwonly"] or k in op_ else added_kw).append(k)
+    if added_kw:
+        out.append("required keyword parameter(s) added: " + ", ".join(added_kw))
+    if no_default:
+        out.append("default value removed: " + ", ".join(dict.fromkeys(no_default)))
+    return list(dict.fromkeys(out))
+
+
+def _shape_verdict(ctx: _Ctx, c: Change) -> tuple[str, list[str], str]:
+    """``(verdict, reasons, basis)`` of a changed signature from its parameters alone: breaking, compatible or
+    unknown."""
+    if c.file in ctx.base_texts and ctx.base_texts.get(c.file) == ctx.text(c.file):
+        return "unknown", ["a planned signature change has no new signature to compare"], "planned change"
+    if _suffix(c.file) in (".py", ".pyi"):
+        ofn = rr.py_def_at(ctx.pytree(c.file, "old"), c.old_def_line) if c.old_def_line else None
+        nfn = rr.py_def_at(ctx.pytree(c.file), c.def_line) if c.def_line else None
+        if ofn is None or nfn is None or isinstance(ofn, ast.ClassDef) or isinstance(nfn, ast.ClassDef):
+            return "unknown", ["a class header, or a definition without parameters to compare"], "syntax trees"
+        owner = c.qual.rpartition(".")[0]
+        bound = bool(owner) and (ctx.sym(c.file, owner) or {}).get("kind") == "class" and not any(
+            rr.dotted(d) == "staticmethod" for d in nfn.decorator_list)
+        why = _py_shape_breaks(rr.py_params(ofn), rr.py_params(nfn), bound)
+        return ("breaking" if why else "compatible"), why, \
+            "parameter names, order, defaults, *args and **kwargs of both versions (syntax trees)"
+    if _suffix(c.file) in _JVM_SUFFIXES and c.old_def_line and c.def_line:
+        o = rr.ts_param_count(ctx.tstree(c.file, "old"), c.old_def_line)
+        n = rr.ts_param_count(ctx.tstree(c.file), c.def_line)
+        if o and n:
+            (o_req, o_tot, o_va), (n_req, n_tot, n_va) = o, n
+            why = []
+            if n_req > o_req:
+                why.append(f"required parameters {o_req} -> {n_req}")
+            if n_tot < o_tot and not n_va:
+                why.append(f"parameters {o_tot} -> {n_tot}")
+            if o_va and not n_va:
+                why.append("varargs removed")
+            if why:
+                return "breaking", why, "parameter counts of both versions (syntax trees)"
+            if n_tot > o_tot:
+                return "compatible", [], "parameters added with default values (syntax trees; source compatibility)"
+            return "unknown", ["the parameter count is unchanged: a parameter type, modifier or the return type "
+                               "changed, which is not compared"], "parameter counts of both versions (syntax trees)"
+    return "unknown", ["signatures of this language are not compared"], "no parameter comparison"
+
+
+def _api_changes(ctx: _Ctx, changes: list[Change], findings: list[dict]) -> list[dict]:
+    """One verdict per public definition added, removed or with a changed signature: ``breaking`` (with the call
+    sites in the tree it breaks - the public_api findings for that symbol - and, when none, the reasons from its
+    parameters), ``compatible`` or ``unknown``. A verdict is at most strong_inference unless a broken call site
+    is statically_verified: public is a naming convention and callers outside the tree are not seen; weak_inference
+    in a language whose visibility rule is not read. ``at`` is the definition's line in the tree (None for a
+    removal), ``base_at`` its line in the base version."""
+    out = []
+    for c in changes:
+        if not c.qual or c.test or c.kind not in ("added", "removed", "signature") or \
+                _suffix(c.file) not in CODE_SUFFIXES:
+            continue
+        was_public = c.kind != "added" and _is_public(ctx, c, "old")
+        is_public = c.kind != "removed" and _is_public(ctx, c, "new")
+        if not (was_public or is_public):
+            continue
+        mine = [f for f in findings if f.get("for") == c.symbol]
+        breaks = [{"at": f["at"], "status": f["status"], "finding": f["finding"]}
+                  for f in mine if f["rule"] in _BREAK_RULES]
+        unchecked = [f["at"] for f in mine if f["rule"] == "call-site-of-changed-signature"]
+        at = f"{c.file}:{c.def_line}" if c.def_line else None
+        base_at = f"{c.file}:{c.old_def_line}" if c.old_def_line else None
+        reasons: list[str] = []
+        if c.kind == "added":
+            verdict, basis = "compatible", "a new public name (nothing called it before)"
+        elif not is_public:
+            verdict, basis = "breaking", "the definition is no longer public (its visibility was narrowed)"
+            if not breaks:
+                reasons.append("no call site in the tree under review reaches it; callers outside it break")
+        elif not was_public:
+            verdict, basis = "compatible", "a name made public (nothing outside could call it before)"
+        elif c.kind == "removed":
+            owner = c.qual.split("#")[0].rpartition(".")[0]
+            inherited = bool(owner) and _suffix(c.file) in (".py", ".pyi") and \
+                (ctx.sym(c.file, owner) or {}).get("kind") == "class" and \
+                _py_bases_provide(ctx, c.file, owner, c.name)[0] is True
+            if inherited and not breaks:
+                verdict, basis = "compatible", "a base class in the project still defines it"
+            else:
+                verdict, basis = "breaking", "the public name no longer exists"
+                if not breaks:
+                    reasons.append("no call site in the tree under review uses it; callers outside it break")
+        else:
+            verdict, reasons, basis = _shape_verdict(ctx, c)
+            if breaks:
+                verdict = "breaking"
+            elif verdict == "breaking":
+                reasons.append("no call site in the tree under review breaks; callers outside it do")
+        if breaks:
+            status = min((b["status"] for b in breaks), key=rr.rank)
+        elif verdict == "unknown":
+            status = "unknown"
+        elif _suffix(c.file) in _VISIBILITY_READ:
+            status = "strong_inference"
+        else:
+            status = "weak_inference"
+        d = {"symbol": c.symbol, "kind": c.kind, "verdict": verdict, "status": status, "at": at,
+             "base_at": base_at, "basis": basis, "breaks": breaks[:MAX_PER_CONCERN]}
+        if len(breaks) > MAX_PER_CONCERN:
+            d["breaks_total"] = len(breaks)
+        if c.renamed_from:
+            d["renamed_from"] = c.renamed_from
+        if reasons:
+            d["reasons"] = reasons
+        if unchecked:
+            d["call_sites_not_checked"] = unchecked[:MAX_PER_CONCERN]
+        out.append(d)
+    out.sort(key=lambda d: ({"breaking": 0, "unknown": 1, "compatible": 2}[d["verdict"]], d["symbol"]))
+    return out
+
+
 def _py_call_sites(ctx: _Ctx, c: Change, files: list[str] | None = None) -> list[tuple[str, ast.Call, str, str]]:
     """``(file, call, how, status)`` of the calls that bind to ``c`` (Python): names imported from its module or
     defined in its file (not where a local of that name hides it), module attributes (``import pkg.m``, ``from pkg
@@ -4339,33 +4611,56 @@ def _observed_tests(ctx: _Ctx, changes: list[Change]) -> dict | None:
 
 # -- read_first ----------------------------------------------------------------------------------------
 
+def _hotspots_of(ctx: _Ctx, ranges: list[list]) -> list[dict | None] | None:
+    """The hotspot (:func:`verinoda.hotspots.rank`) of the function holding each new-side range's line of interest
+    (a changed definition's first line, the call, the finding's line); None when the history could not be read."""
+    new = [i for i, r in enumerate(ranges) if r[3] == "new"]
+    texts = {}
+    for i in new:
+        rel = ranges[i][0]
+        if rel not in texts and (t := ctx.text(rel, "new")) is not None:
+            texts[rel] = t
+    out: list[dict | None] = [None] * len(ranges)
+    if not texts:
+        return out
+    got = hotspots.rank(ctx.repo, [(ranges[i][0], ranges[i][6]) for i in new], texts)
+    if got is None:
+        return None
+    for i, h in zip(new, got):
+        out[i] = h
+    return out
+
+
 def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concerns: dict[str, list[dict]],
                 max_chars: int) -> tuple[list[dict], dict]:
-    items: list[tuple[str, int, int, str, str]] = []   # (file, start, end, side, why)
+    # (file, start, end, side, why, kind rank, the line whose function ranks the range)
+    items: list[tuple[str, int, int, str, str, int, int]] = []
     renamed = {(c.file, c.renamed_from) for c in changes if c.renamed_from}
     for c in changes:
         if c.renamed_from and c.lines:   # a rename: the new header, not the unchanged body twice
             d = c.def_line or c.lines[0]
             items.append((c.file, max(c.lines[0], d - 1), d + 1, "new", f"renamed from {_last(c.renamed_from)} "
-                          "(same body)"))
+                          "(same body)", 0, d))
             continue
         if c.kind == "removed" and (c.file, c.qual) in renamed:
             continue
         if c.kind in ("added", "body", "signature", "module_statement", "config_key", "file_only") and c.lines:
             a, b = c.lines
+            focus = c.def_line or a
             if b - a > 60 and c.new_changed:   # a long definition: the changed lines with context
                 a, b = max(a, min(c.new_changed) - 3), min(b, max(c.new_changed) + 3)
             why = f"changed ({c.kind})"
             if b - a > 80:
                 b, why = a + 80, why + ", first 80 lines"
-            items.append((c.file, a, b, "new", why))
+            items.append((c.file, a, b, "new", why, 0, focus))
         elif c.kind == "removed" and c.old_lines:
-            items.append((c.file, c.old_lines[0], c.old_lines[1], "old", "removed (base version)"))
+            items.append((c.file, c.old_lines[0], c.old_lines[1], "old", "removed (base version)", 0,
+                          c.old_lines[0]))
     for d in dependents:
         if d.get("distance") == 1 and d.get("call_at"):
             f, _, ln = d["call_at"].rpartition(":")
             if ln.isdigit():
-                items.append((f, max(1, int(ln) - 3), int(ln) + 3, "new", f"call site of {d['to']}"))
+                items.append((f, max(1, int(ln) - 3), int(ln) + 3, "new", f"call site of {d['to']}", 1, int(ln)))
     order = sorted((f for fs in concerns.values() for f in fs), key=lambda f: rr.rank(f["status"]))
     for f in order:
         for at in [f["at"], *f.get("evidence_at", [])[:2]]:
@@ -4373,18 +4668,24 @@ def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concer
                 continue
             rel, ln = at.rsplit(":", 1)[0], int(at.rsplit(":", 1)[1])
             side = "old" if f.get("side") == "base" and at == f["at"] else "new"
-            items.append((rel, max(1, ln - 1), ln + 1, side, f"{f['concern']}: {f['rule']}"))
+            items.append((rel, max(1, ln - 1), ln + 1, side, f"{f['concern']}: {f['rule']}", 2, ln))
     # merge overlapping ranges of one file and side, keep the first reason
     merged: list[list] = []
-    for rel, a, b, side, why in items:
+    for rel, a, b, side, why, tier, focus in items:
         for m in merged:
             if m[0] == rel and m[3] == side and a <= m[2] + 1 and b >= m[1] - 1:
                 m[1], m[2] = min(m[1], a), max(m[2], b)
                 break
         else:
-            merged.append([rel, a, b, side, why])
+            merged.append([rel, a, b, side, why, tier, focus])
+    # changed code, then call sites, then concern lines; within each, the hotter function first
+    hot = _hotspots_of(ctx, merged)
+    unranked = hot is None
+    hot = hot or [None] * len(merged)
+    order = sorted(range(len(merged)), key=lambda i: (merged[i][5], -(hot[i]["score"] if hot[i] else 0), i))
     out, more, used = [], [], 0
-    for rel, a, b, side, why in merged:
+    for i in order:
+        rel, a, b, side, why, _tier, _focus = merged[i]
         lines = ctx.lines(rel, side)
         b = min(b, len(lines))
         if a > b:
@@ -4392,13 +4693,15 @@ def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concer
         chars = sum(len(x) + 1 for x in lines[a - 1:b])
         at = f"{rel}:{a}-{b}" if b > a else f"{rel}:{a}"
         rec = {"at": at + (" (base)" if side == "old" else ""), "why": why, "chars": chars}
+        if hot[i]:
+            rec["hotspot"] = hot[i]
         if used + chars <= max_chars:
             out.append(rec)
             used += chars
         else:
             more.append(rec)
     return out, {"max_chars": max_chars, "used_chars": used, "truncated": bool(more),
-                 "more": more[:20], "more_total": len(more)}
+                 "more": more[:20], "more_total": len(more), **({"unranked": True} if unranked else {})}
 
 
 # -- the review --------------------------------------------------------------------------------------------
@@ -4406,9 +4709,10 @@ def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concer
 def review(repo: Path, *, store=None, graph=None, base: str | None = None, staged: bool = False,
            targets: list[str] | None = None, change: str | None = None, concerns: list[str] | None = None,
            run_tests: bool = False, observe: bool = False, max_chars: int = DEFAULT_MAX_CHARS,
-           record: bool = True) -> dict:
+           record: bool = True, coverage_reports: list[str] | None = None) -> dict:
     """Review the working tree against ``base`` (default HEAD), the staged changes, or a planned change
-    (``targets`` as ``file`` or ``file::Qual.name`` with ``change`` body | signature | remove)."""
+    (``targets`` as ``file`` or ``file::Qual.name`` with ``change`` body | signature | remove).
+    ``coverage_reports``: the coverage reports to read (default: the ones found at the usual paths)."""
     from verinoda import index, treestate
 
     t0 = time.perf_counter()
@@ -4432,6 +4736,10 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         base_sha = treestate.resolve_commit(repo, base or "HEAD")
         base_info = {"ref": treestate.check_ref(base or "HEAD"), "commit": base_sha}
         diffs, skipped = (_diff_staged if staged else _diff_worktree)(repo, base_sha)
+        # a coverage report is the test runner's output about the change, not a part of it
+        reports = _report_paths(repo, coverage_reports)
+        skipped += [{"file": fd.rel, "why": "a coverage report"} for fd in diffs if fd.rel in reports]
+        diffs = [fd for fd in diffs if fd.rel not in reports]
     base_texts = {fd.rel: fd.old for fd in diffs}
     ctx = _Ctx(repo, g, store, base_texts)
     if staged and not targets:
@@ -4499,10 +4807,12 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     for k in found:
         found[k] = _dedupe(found[k])
         found[k].sort(key=lambda f: (rr.rank(f["status"]), f["at"] or ""))
+    api = _api_changes(ctx, changes, found["public_api"]) if "public_api" in want else []
     truncated_concerns = {k: len(v) for k, v in found.items() if len(v) > MAX_PER_CONCERN}
     shown = {k: v[:MAX_PER_CONCERN] for k, v in found.items()}
     # tests
     tests = _tests(ctx, changes, run_tests=run_tests, observe=observe, unknown=unknown)
+    line_cov = None if targets else _line_coverage(ctx, changes, tests, coverage_reports, unknown)
     unknown += _callers_unknown(ctx, changes)
     cited = {c.file for c in changes} | {d["at"].rsplit(":", 1)[0] for d in dependents} | \
         {a.rsplit(":", 1)[0] for fs in shown.values() for f in fs for a in [f["at"], *f["evidence_at"]]
@@ -4510,6 +4820,16 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     note = _graph_note(ctx, cited, changes)
     unknown += _graph_unknown(note)
     read_first, budget = _read_first(ctx, changes, dependents, shown, max_chars)
+    if budget.pop("unranked", False):
+        health_notes = [*health_notes, "read_first hotspot order (the change history could not be read: no git "
+                        "history, or the git log failed or timed out): the ranges keep the order they were found in"]
+    from verinoda import decision_reach
+
+    reach = decision_reach.reached(repo, changes, diffs)
+    if reach.get("error"):
+        unknown.append({"kind": "decision_records", "at": None, "what": "which decision records the change reaches",
+                        "why": reach["error"], "next_step": "fix the decisions folder setting or the record, then "
+                                                            "run `verinoda decide check`"})
     n_strong = sum(1 for v in found.values() for f in v if rr.at_least_strong(f["status"]))
     res = {
         "review_id": None,
@@ -4525,6 +4845,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         "dependents_truncated": dep_total > len(dependents),
         "binding_readers": readers,
         "concerns": {k: shown[k] for k in CONCERNS if k in want},
+        "api_changes": api,
         "concerns_checked": {k: (f"{len(found[k])} finding(s)" if found[k] else
                                  "no finding from rules: " + "; ".join(RULES[k]))
                              for k in CONCERNS if k in want},
@@ -4533,19 +4854,29 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         "unknown": unknown,
         "read_first": read_first,
         "budget": budget,
+        "decisions": reach,
         "coverage": {"method": "changed definitions from symbol facts of both versions; dependents over the last "
                                "snapshot's graph (depth 3) by change kind; concern rule tables "
-                               "(verinoda/review_rules.py)", "limits": list(LIMITS),
+                               "(verinoda/review_rules.py)",
+                     "limits": [x for x in LIMITS if not (line_cov and x == NO_LINE_COVERAGE)]
+                     + (line_cov or {}).get("limits", []),
                      "not_checked": ([] if "security" in want and not targets else
                                      ["security (a planned change has no diff to compare)"] if targets else [])
                      + (["health (a planned change has no new version to measure)"]
                         if targets and "health" in want else []) + health_notes},
         "counts": {"changes": len(changes), "findings": sum(len(v) for v in found.values()),
-                   "strong_or_verified": n_strong, "unknown": len(unknown)},
+                   "strong_or_verified": n_strong, "unknown": len(unknown),
+                   "uncovered_changed_lines": (line_cov or {}).get("uncovered_lines", 0),
+                   "api_breaking": sum(1 for a in api if a["verdict"] == "breaking")},
     }
     res["summary"] = _summary(res)
+    if len(api) > MAX_API_CHANGES:   # breaking first: what is cut is the tail of compatible and unknown ones
+        res["api_changes"], res["api_changes_total"] = api[:MAX_API_CHANGES], len(api)
     res["seconds"] = round(time.perf_counter() - t0, 3)
-    res["exit"] = 3 if (n_strong or unknown) else 0
+    # changed lines a fresh coverage report shows no test ran are something to report, like a finding
+    uncovered_strong = any(u["status"] == "strong_inference" for u in (tests.get("coverage") or {}).get("uncovered")
+                           or [])
+    res["exit"] = 3 if (n_strong or unknown or uncovered_strong) else 0
     if record and store is not None:
         res["review_id"] = _record(store, repo, res)
     return res
@@ -4842,6 +5173,97 @@ def _tests(ctx: _Ctx, changes: list[Change], *, run_tests: bool, observe: bool, 
 MAX_RUN_TESTS = 50
 
 
+def _report_paths(repo: Path, given: list[str] | None) -> set[str]:
+    """Repository-relative paths of the coverage reports the review reads."""
+    from verinoda import coverage_import as ci
+
+    paths = [Path(p) if Path(p).is_absolute() else repo / p for p in given] if given else ci.find_reports(repo)
+    out = set()
+    for p in paths:
+        try:
+            out.add(p.resolve().relative_to(repo).as_posix())
+        except (OSError, ValueError):
+            continue
+    return out
+
+
+def _line_coverage(ctx: _Ctx, changes: list[Change], tests: dict, reports: list[str] | None,
+                   unknown: list[dict]) -> dict | None:
+    """The changed lines of code (not tests) a coverage report measured, and the ones no test ran, as
+    ``tests["coverage"]``. A changed symbol a fresh report shows run leaves ``no_test_reaches`` and
+    ``reach_unknown``. None when no report was read."""
+    from verinoda import coverage_import as ci
+
+    cov = ci.load(ctx.repo, reports)
+    errors = [r for r in cov.reports if r.get("error")]
+    if reports and errors:
+        unknown.append({"kind": "coverage_report", "what": "which changed lines the tests ran",
+                        "why": "; ".join(f"{r['file']}: {r['error']}" for r in errors)[:400],
+                        "next_step": "pass a readable lcov, Cobertura XML, JaCoCo XML or coverage.py JSON report"})
+    if not cov.read:
+        return None
+    code = [c for c in changes if not c.test and c.new_changed and c.kind != "config_key"
+            and _suffix(c.file) not in DATA_SUFFIXES]
+    measured = covered = n_uncovered = 0
+    uncovered: list[dict] = []
+    covered_by: dict[str, list[str]] = {}
+    ran_symbols: set[str] = set()
+    not_in, ambiguous = set(), set()
+    # an outer definition's changed lines hold its nested definitions' too: each line counts once, for the
+    # innermost change around it
+    owner: dict[tuple[str, int], tuple[int, int, int]] = {}
+    for i, c in enumerate(code):
+        span = (c.lines[1] - c.lines[0], -c.lines[0]) if c.lines else (1 << 30, 0)
+        for ln in c.new_changed:
+            if (c.file, ln) not in owner or (*span, i) < owner[(c.file, ln)]:
+                owner[(c.file, ln)] = (*span, i)
+    for i, c in enumerate(code):
+        fc = cov.lines_of(c.file)
+        if fc is None:
+            (ambiguous if cov.resolve(c.file)[1] == "ambiguous" else not_in).add(c.file)
+            continue
+        lines = {ln for ln in c.new_changed if ln in fc.lines and owner[(c.file, ln)][2] == i}
+        ran = {ln for ln in lines if fc.lines[ln] > 0}
+        measured += len(lines)
+        covered += len(ran)
+        status = ci.status_for(cov, c.file)
+        if ran:
+            names = ci.tests_of(fc, ran)
+            if names:
+                covered_by[c.symbol] = names[:ci.MAX_TESTS_PER_LINE]
+            if status == "strong_inference":
+                ran_symbols.add(c.symbol)
+        miss = lines - ran
+        if miss:
+            n_uncovered += len(miss)
+            at = f"{c.file}:{min(miss)}"
+            uncovered.append({
+                "symbol": c.symbol, "file": c.file, "lines": ci.ranges(miss), "at": at, "status": status,
+                "finding": f"changed line(s) {ci.ranges(miss)} of {c.symbol} ran under no test in "
+                           f"{', '.join(sorted(fc.reports))}" + ("" if status == "strong_inference" else
+                                                                  " (the file changed after the report was written: "
+                                                                  "lines may have moved)"),
+                "evidence_at": [at, *sorted(fc.reports)],
+                "derived_by": "verinoda.coverage_import (a coverage report read by line)"})
+    if ran_symbols:
+        tests["no_test_reaches"] = [s for s in tests.get("no_test_reaches") or [] if s not in ran_symbols]
+        tests["reach_unknown"] = [r for r in tests.get("reach_unknown") or [] if r["symbol"] not in ran_symbols]
+    out = {"reports": [{k: r[k] for k in ("file", "format", "error") if k in r} for r in cov.reports],
+           "patch": {"measured_changed_lines": measured, "covered": covered,
+                     "percent": round(100.0 * covered / measured, 1) if measured else None},
+           "uncovered": uncovered}
+    if covered_by:
+        out["covered_by"] = covered_by
+    if not_in:
+        out["not_in_report"] = sorted(not_in)
+    if ambiguous:
+        out["ambiguous"] = sorted(ambiguous)
+    tests["coverage"] = out
+    return {"uncovered_lines": n_uncovered, "limits": [
+        "changed lines no test ran are read from a coverage report (" + ", ".join(r["file"] for r in cov.read)
+        + "): " + ci.LIMITS[0], ci.LIMITS[1]]}
+
+
 def _has_static_caller(ctx: _Ctx, c: Change) -> bool:
     """Does anything call or reference ``c`` in the static view: the graph's edges into it (or into the function
     it is nested in), or calls in the changed files (a definition the snapshot does not know yet)?"""
@@ -4982,10 +5404,13 @@ def _summary(res: dict) -> str:
              f"{res['base']['ref']} ({res['base']['commit'][:10]})")
     others = [f["file"] for f in res.get("files") or [] if f.get("kind") in ("data", "doc")]
     named = f" ({', '.join(others[:3])}{', ...' if len(others) > 3 else ''})" if others else ""
+    recs = (res.get("decisions") or {}).get("records") or []
+    to_read = (f" {len(recs)} decision record(s) to read: " + ", ".join(r["decision"] for r in recs[:5])
+               + (" ..." if len(recs) > 5 else "") + ".") if recs else ""
     if not ch:
         return (f"Review of {where}: no changed definition (comments, whitespace and docstrings are not changes)."
                 + (f" {len(others)} data or documentation file(s) changed{named}, not reviewed by concern."
-                   if others else ""))
+                   if others else "") + to_read)
     kinds: dict[str, int] = {}
     for c in ch:
         kinds[c["kind"]] = kinds.get(c["kind"], 0) + 1
@@ -4994,10 +5419,20 @@ def _summary(res: dict) -> str:
     parts = [f"Review of {where}: {len(ch)} change(s) (" + ", ".join(f"{n} {k}" for k, n in kinds.items()) + ")."]
     parts.append(("Findings - " + counts + "." if counts else "No finding from the rules.")
                  + (f" No finding from the rules for: {', '.join(quiet)}." if quiet and counts else ""))
+    api = res.get("api_changes") or []
+    if api:
+        by = {v: sum(1 for a in api if a["verdict"] == v) for v in ("breaking", "unknown", "compatible")}
+        parts.append(f"Public API: {len(api)} change(s) - " + ", ".join(f"{n} {v}" for v, n in by.items() if n) + ".")
+    uncov = (res.get("tests") or {}).get("coverage", {}).get("uncovered") or []
+    if uncov:
+        parts.append(f"{res['counts']['uncovered_changed_lines']} changed line(s) in {len(uncov)} change(s) ran "
+                     "under no test in the coverage report.")
     if res["unknown"]:
         parts.append(f"{len(res['unknown'])} unknown(s) to report.")
     if others:
         parts.append(f"{len(others)} data or documentation file(s) changed too{named}, not reviewed by concern.")
+    if to_read:
+        parts.append(to_read.strip())
     return " ".join(parts)
 
 
@@ -5017,6 +5452,8 @@ def _record(store, repo: Path, res: dict) -> str | None:
             "result": {"kind": "review", "summary": res["summary"], "changes": res["changes"],
                        "findings": [{k: f.get(k) for k in ("concern", "rule", "status", "at", "finding")}
                                     for fs in res["concerns"].values() for f in fs],
+                       "api_changes": [{k: a.get(k) for k in ("symbol", "verdict", "status", "at", "base_at")}
+                                       for a in res.get("api_changes") or []],
                        "unknown": res["unknown"], "tests": {"static": [t["test"] for t in res["tests"]["static"]]}},
             "created_at": now()})
     except Exception:  # noqa: BLE001 - a read-only or busy store: the review is still returned
@@ -5049,6 +5486,21 @@ def render_text(res: dict) -> str:
                                                 else "") + (f"  ({f['derived_by']})" if f.get("derived_by") else ""))
         if len(fs) > 8:
             out.append(f"  ... {len(fs) - 8} more (--json)")
+    if res.get("api_changes"):
+        out.append("")
+        out.append("Public API changes:")
+        for a in res["api_changes"][:12]:
+            out.append(f"  [{a['verdict']}, {a['status']}] {a['symbol']}  {a['kind']}  "
+                       + (f"at {a['at']}" if a.get("at") else f"at base {a['base_at']}"))
+            for b in a["breaks"][:4]:
+                out.append(f"      breaks {b['at']} [{b['status']}]")
+            if len(a["breaks"]) > 4:
+                out.append(f"      ... {a.get('breaks_total', len(a['breaks'])) - 4} more call site(s) (--json)")
+            for r in (a.get("reasons") or [])[:2]:
+                out.append(f"      {r}")
+        total = res.get("api_changes_total") or len(res["api_changes"])
+        if total > 12:
+            out.append(f"  ... {total - 12} more (--json)")
     quiet = [k for k, v in res["concerns"].items() if not v]
     if quiet:
         out.append("")
@@ -5084,6 +5536,18 @@ def render_text(res: dict) -> str:
         from verinoda import gametests
 
         out += ["  " + ln.strip() for ln in gametests.render(t["gametests"])]
+    if t.get("coverage"):
+        cv = t["coverage"]
+        p = cv["patch"]
+        out.append(f"  coverage ({', '.join(r['file'] for r in cv['reports'] if not r.get('error'))}): "
+                   f"{p['covered']} of {p['measured_changed_lines']} measured changed line(s) ran"
+                   + (f" ({p['percent']}%)" if p["percent"] is not None else ""))
+        for u in cv["uncovered"][:8]:
+            out.append(f"  [{u['status']}] changed lines no test covers: {u['file']}:{u['lines']} ({u['symbol']})")
+        if len(cv["uncovered"]) > 8:
+            out.append(f"  ... {len(cv['uncovered']) - 8} more (--json)")
+        if cv.get("not_in_report"):
+            out.append("  not in the coverage report: " + ", ".join(cv["not_in_report"][:6]))
     if t.get("no_test_reaches"):
         out.append("  no test reaches it in the static graph: " + ", ".join(t["no_test_reaches"][:6]))
     if t.get("reach_unknown"):
@@ -5099,6 +5563,9 @@ def render_text(res: dict) -> str:
         out.append(f"Dependents (possibly affected): {res['dependents_total']}"
                    + (f", {len(res['dependents'])} listed" if res.get("dependents_truncated") else "") + ": "
                    + ", ".join(f"{d['symbol'].split('::')[-1]} ({d['distance']})" for d in res["dependents"][:8]))
+    from verinoda import decision_reach
+
+    out += decision_reach.render_lines(res.get("decisions") or {})
     if res.get("read_first"):
         b = res["budget"]
         out.append("")
