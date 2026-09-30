@@ -1929,10 +1929,10 @@ GATEWAY_CATALOG: dict[str, str] = {
                 "targets?}",
     "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: earlier claims, "
                   "their evidence re-checked",
-    "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {} after: what the "
-                     "change touches",
-    "decision_check": "decision_check {changed_only?: true}: the tree against accepted decision records",
-    "dependency_ask": "dependency_ask {source, target}: before an import, may source use target (file, module, package)",
+    "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {} after: what it "
+                     "touches",
+    "decision_check": "decision_check {changed_only?: true}: tree vs accepted decisions",
+    "dependency_ask": "dependency_ask {source, target}: may source import it",
     "history_search": "history_search {text, regex?, path?}: when text appeared/disappeared; {symbol}: its "
                       "commits; {message?, author?, since?, until?, diff?, path?}: commits; {base, head?}: two "
                       "revisions",
@@ -2046,7 +2046,7 @@ def gateway_description(behind: list[str]) -> str:
         if key in GATEWAY_CATALOG and key not in said:
             said.add(key)
             parts.append(GATEWAY_CATALOG[key])
-    return ("Run one more Verinoda tool: name and its arguments as an object. " + "; ".join(parts) + ".")
+    return ("Run one more Verinoda tool (name, arguments). " + "; ".join(parts) + ".")
 
 
 INSTRUCTIONS = instructions("full")
@@ -2129,10 +2129,9 @@ DESCRIPTIONS: dict[str, str] = {
         "a verdict: confirms | refutes | undetermined (definitive answers only). Read-only."),
     "code_check": (
         "Python, Java, Kotlin, TS/JS imports; other languages: not_checked (exit 4). For code you wrote or "
-        "edited, not for reading code: do the modules, names, methods, arguments and keys it uses exist in "
-        "the project and its environment? Input: paths, diff (a revision; nothing: changes against HEAD), or "
-        "snippet + as_path. Each site: exists | absent (nearest names) | unknown | not_installed | guarded; "
-        "exit 3 = absent. Read-only."),
+        "edited: do the modules, names, methods, arguments and keys it uses exist in the project and its "
+        "environment? Input: paths, diff (a revision; nothing: changes against HEAD), or snippet + as_path. "
+        "Each site: exists | absent (nearest names) | unknown | not_installed | guarded; exit 3 = absent."),
     "api_members": (
         "The real members of a Python module, class or function (dotted target) in the project's environment, "
         "or of a Java class on the build's classpath (access included): name, kind, signature, file:line, "

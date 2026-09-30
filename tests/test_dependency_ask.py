@@ -159,3 +159,111 @@ def test_cli_and_mcp(repo, capsys):
     m = t.dependency_ask("app/ui/views.py", "orders/_impl.py")
     assert m["verdict"] == "forbidden" and m["rules"][0]["kind"] == "public"
     assert t.dependency_ask("/etc/passwd", "x")["error"] == "invalid_argument"
+
+
+# -- review round: how a target is named, scopes and shapes ----------------------------------------------------
+
+MORE = {
+    "app/api/logging.py": "X = 1\n",
+    "scripts/psycopg.py": "X = 1\n",
+    "web/ui/utils.ts": "export const u = 1;\n",
+    "web/db/q.ts": "export const q = 1;\n",
+    "src/main/java/com/acme/db/Store.java": "package com.acme.db;\nclass Store {}\n",
+    "samples/demo.py": "X = 1\n",
+    "README.md": "# x\n",
+}
+
+
+@pytest.fixture(scope="module")
+def repo2(tmp_path_factory):
+    r = tmp_path_factory.mktemp("ask2") / "proj"
+    for rel, text in {**FILES, **MORE}.items():
+        if rel != "app/__init__.py":  # app/ui stays a namespace package
+            _write(r, rel, text)
+    _git(r, "init", "-q")
+    _git(r, "add", "-A")
+    _git(r, "commit", "-q", "-m", "init")
+    return r
+
+
+def _one(repo: Path, *specs: str) -> list:
+    return [_rec(repo, *specs)]
+
+
+def test_a_bare_name_is_not_a_same_named_file_deeper_in_the_project(repo2):
+    recs = _one(repo2, "layers order=app/api/**,app/core/**", "dependency absent=psycopg")
+    res = da.ask(repo2, "app/core/x.py", "logging", records=recs)
+    assert res["target_kind"] == "package" and res["verdict"] == "allowed"
+    res = da.ask(repo2, "app/db/new.py", "psycopg", records=recs)
+    assert res["target_kind"] == "package" and res["verdict"] == "forbidden"
+
+
+def test_package_paths_are_packages(repo2):
+    recs = _one(repo2, "dependency absent=lodash")
+    res = da.ask(repo2, "web/ui/a.ts", "lodash/fp", records=recs)
+    assert res["target_kind"] == "package" and res["verdict"] == "forbidden"
+    for target in ("@angular/core", "github.com/pkg/errors"):
+        assert da.ask(repo2, "web/ui/a.ts", target, records=recs)["target_kind"] == "package", target
+
+
+def test_namespace_packages_symbols_and_jvm_classes_resolve_to_project_paths(repo2):
+    recs = _one(repo2, "layers order=app/ui/**,app/core/**,app/db/**", "no_edge from=app/** to=src/main/java/**")
+    for target in ("app.ui", "app.ui.views.show", "app/ui"):
+        res = da.ask(repo2, "app/db/new.py", target, records=recs)
+        assert res["target_kind"] == "file" and res["verdict"] == "forbidden", target
+    res = da.ask(repo2, "app/db/new.py", "app.ui.later", records=recs)
+    assert res["target_path"] == "app/ui/later" and res["verdict"] == "forbidden"
+    assert _by(res)["layers"]["status"] == "strong_inference"  # a new module read from a dotted name
+    res = da.ask(repo2, "app/db/new.py", "com.acme.db.Store", records=recs)
+    assert res["target_path"] == "src/main/java/com/acme/db/Store.java" and res["verdict"] == "forbidden"
+
+
+def test_relative_targets_are_read_from_the_source_folder_and_case_is_the_files(repo2):
+    recs = _one(repo2, "layers order=web/ui/**,web/db/**")
+    assert da.ask(repo2, "web/db/q.ts", "../ui/utils", records=recs)["target_path"] == "web/ui/utils.ts"
+    assert da.ask(repo2, "web/db/q.ts", "../ui/utils", records=recs)["verdict"] == "forbidden"
+    assert da.ask(repo2, "web/db/q.ts", "./x", records=recs)["target_path"] == "web/db/x"
+    with pytest.raises(da.AskError, match="outside"):
+        da.ask(repo2, "web/db/q.ts", "../../../x", records=recs)
+    recs = _one(repo2, "layers order=app/ui/**,app/core/**,app/db/**")
+    assert da.ask(repo2, "APP/db/new.py", "app/ui/views.py", records=recs)["verdict"] == "forbidden"
+    res = da.ask(repo2, "app/db/store.py", "App/UI/views.py", records=recs)
+    assert res["verdict"] == "forbidden" and res["target_path"] == "app/ui/views.py"
+
+
+def test_a_folder_is_no_source(repo2):
+    for source in ("./", ".", "app/core/", "app/db"):
+        with pytest.raises(da.AskError, match="folder"):
+            da.ask(repo2, source, "psycopg", records=[])
+
+
+def test_only_in_patterns_and_scope(repo2):
+    res = da.ask(repo2, "app/a.py", "sqlite3", records=_one(repo2, r"only_in pattern=sqlite3\.connect\( "
+                                                                 "allowed=app/db/store.py"))
+    assert res["verdict"] == "restricted"
+    res = da.ask(repo2, "app/a.py", "sqlite3", records=_one(repo2, r"only_in pattern=sqlite3\.(connect|open) "
+                                                                 "allowed=app/db/store.py"))
+    assert res["verdict"] == "unknown" and _by(res)["only_in"]["verdict"] == "unknown"
+    guard = _one(repo2, "only_in calls=sqlite3.connect allowed=app/db/store.py")
+    assert da.ask(repo2, "README.md", "sqlite3", records=guard)["verdict"] == "allowed"  # no code: out of scope
+    assert da.ask(repo2, "samples/demo.py", "sqlite3", records=guard)["verdict"] == "allowed"
+
+
+def test_import_names_of_other_distributions(repo2):
+    recs = _one(repo2, "dependency absent=PyYAML", "dependency absent=beautifulsoup4")
+    assert da.ask(repo2, "app/a.py", "yaml", records=recs)["verdict"] == "forbidden"
+    assert da.ask(repo2, "app/a.py", "bs4.element", records=recs)["verdict"] == "forbidden"
+    res = da.ask(repo2, "app/a.py", "ruamel.yaml", records=recs)
+    assert res["verdict"] == "allowed" and any("manifest name" in x for x in res["limits"])
+
+
+def test_overlapping_layers_are_unknown_as_in_check(repo2):
+    res = da.ask(repo2, "app/core/x.py", "app/ui/views.py", records=_one(repo2, "layers order=app/**,app/core/**"))
+    assert res["verdict"] == "unknown" and "has no file of its own" in _by(res)["layers"]["why"]
+
+
+def test_a_missing_decisions_folder_is_named_and_json_carries_the_exit(repo2, capsys):
+    res = da.ask(repo2, "app/a.py", "psycopg", decisions_dir="nothere")
+    assert res["verdict"] == "unknown" and "does not exist" in res["unknown"][0] and res["exit"] == 3
+    assert cli.main(["decide", "ask", "app/a.py", "psycopg", "--repo", str(repo2), "--json"]) == 3
+    assert json.loads(capsys.readouterr().out)["exit"] == 3

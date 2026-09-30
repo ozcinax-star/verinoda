@@ -359,8 +359,11 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
     shutil.copytree(repo, rec)
     (rec / ".verinoda" / "decisions").mkdir(parents=True, exist_ok=True)
     (rec / ".verinoda" / "decisions" / "0001-x.md").write_text("---\nverinoda-decision: 1\n---\n", encoding="utf-8")
-    gate = next(t for t in listing(mcp_server.build_server(rec)) if t["name"] == GATEWAY)
+    with_records = listing(mcp_server.build_server(rec))
+    gate = next(t for t in with_records if t["name"] == GATEWAY)
     assert {"decision_check", "dependency_ask"} <= set(gate["inputSchema"]["properties"]["name"]["enum"])
+    # decision_check's line already took this menu to 4,598 characters; dependency_ask's line did not add to it
+    assert len(json.dumps(with_records, separators=(",", ":"))) < 4600
     assert "dependency_ask {source, target}" in gate["description"]
     full = mcp_server.build_server(repo, profile="full")
     assert full.verinoda_profile == "full" and len(listing(full)) == len(TOOL_NAMES)
