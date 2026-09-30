@@ -105,7 +105,10 @@ def test_impact_lists_history_coupled_files_without_a_static_edge_as_strong_infe
     assert "no graph edge links the two files" in c["text"] and c["uncertainties"]
     ev = c["evidence"]
     assert len(ev) == 3 and all(e["source_type"] == "git_history" for e in ev)
-    assert ev[0]["commit_sha"] == shas["together3"] and ev[0]["locator"] == f"commit {shas['together3']} c.py"
+    assert ev[0]["commit_sha"] == shas["together3"]
+    # the evidence names both files the commit changed, not only the coupled one
+    assert ev[0]["locator"] == f"commit {shas['together3']} a.py and c.py"
+    assert ev[0]["meta"]["files"] == ["a.py", "c.py"]
     hc = imp["history_coupling"]
     assert hc["is_git"] and hc["commits_read"] == 10 and hc["bulk_skipped"] == 3
     assert "not a dependency" in " ".join(hc["limits"]) and "git log" in hc["method"]
@@ -144,3 +147,76 @@ def test_without_git_nothing_is_coupled(tmp_path):
     (repo / "app.py").write_text("def run():\n    return 1\n", encoding="utf-8")
     imp = am.impact(_scan(repo), ["app.py"])
     assert imp["history_coupled"] == [] and imp["history_coupling"]["is_git"] is False
+
+
+def test_a_plain_file_target_is_read_in_git_and_is_not_an_unresolved_name(proj, capsys):
+    r, _ = proj
+    imp = am.impact(index.load(r), ["cfg.toml"])
+    assert imp["unresolved"] == [] and imp["history_only_targets"] == ["cfg.toml"]
+    assert "resolution" not in imp
+    assert cli.main(["map", str(r), "--view", "impact", "--target", "cfg.toml"]) == 0
+    out = capsys.readouterr()
+    assert "read in git history only: cfg.toml" in out.out and "a.py: 4 of" in out.out
+    assert "not used" not in out.out and "error" not in out.err
+    # without the co-change reading, a file the graph does not hold is an unresolved target, as before
+    assert am.impact(index.load(r), ["cfg.toml"], co_change=False)["unresolved"] == ["cfg.toml"]
+
+
+def test_a_file_joined_by_any_graph_edge_is_not_listed(tmp_path):
+    """index.ts re-exports helpers.ts (a relation the impact walk does not follow); they always change together."""
+    r = tmp_path / "ts"
+    r.mkdir()
+    _git(r, "init", "-q")
+    for i in range(4):
+        _commit(r, {"helpers.ts": f"export function fmtA(v: number) {{ return v + {i}; }}\n",
+                    "index.ts": f"export * from './helpers';\nexport const VERSION = {i};\n",
+                    "notes.md": f"version {i}\n"}, f"Release {i}")
+    g = _scan(r)
+    assert any(d.get("relation") == "re_exports" and {g.file(u), g.file(v)} == {"index.ts", "helpers.ts"}
+               for u, v, d in g.G.edges(data=True))
+    imp = am.impact(g, ["helpers.ts"])
+    assert "index.ts" not in imp["affected_files"]  # the walk does not follow re_exports ...
+    got = {c["file"] for c in imp["history_coupled"]}
+    assert "index.ts" not in got and "notes.md" in got  # ... and still the edge keeps it off the list
+
+
+def test_a_shallow_clone_says_its_history_is_cut(proj, tmp_path):
+    r, _ = proj
+    clone = tmp_path / "shallow ç"
+    subprocess.run(["git", "clone", "-q", "--depth", "2", r.resolve().as_uri(), str(clone)], check=True,
+                   capture_output=True, stdin=subprocess.DEVNULL)
+    res = history.co_changes(clone, ["a.py"])
+    assert res["commits_read"] == 2 and res["coupled"] == [] and res["shallow"] is True
+    assert any("shallow clone" in x for x in res["coverage"]["limits"])
+    assert "shallow" not in history.co_changes(r, ["a.py"])
+    imp = am.impact(index.load(r), ["a.py"])
+    imp["history_coupling"] = {"shallow": True, "commits_read": 2}
+    text = map_text.render({"impact": imp}, 40)
+    assert "a shallow clone, only 2 commits to read" in text
+
+
+def test_a_failed_git_log_is_an_error_not_an_empty_finding(proj, monkeypatch):
+    r, _ = proj
+    real = history._git
+    monkeypatch.setattr(history, "_git", lambda repo, *a: None if a[0] == "log" else real(repo, *a))
+    res = history.co_changes(r, ["a.py"])
+    assert res["coupled"] == [] and "git log failed" in res["error"]
+    imp = am.impact(index.load(r), ["a.py"])
+    assert "git log failed" in imp["history_coupling"]["error"]
+    assert "not read (git log failed" in map_text.render({"impact": imp}, 40)
+
+
+def test_analyze_impact_does_not_read_co_change(proj, monkeypatch):
+    from verinoda import analysis
+
+    r, _ = proj
+    index.load(r)
+    seen = []
+    real = am.impact
+    monkeypatch.setattr(am, "impact", lambda *a, **k: seen.append(k.get("co_change", True)) or real(*a, **k))
+    st = open_store(r)
+    try:
+        analysis.analyze(st, r, "What breaks if the run function changes?")
+    finally:
+        st.close()
+    assert seen and not any(seen)

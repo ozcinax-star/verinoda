@@ -822,12 +822,10 @@ def callback_dependents(g: Graph, dist: dict[str, int], rels: set[str], depth: i
     return added
 
 
-def _linked_files(g: Graph, files: set[str], rels: set[str]) -> dict[str, set[str]]:
-    """For each of ``files``, the other files an edge of ``rels`` joins it to, in either direction."""
+def _linked_files(g: Graph, files: set[str]) -> dict[str, set[str]]:
+    """For each of ``files``, the other files a graph edge of any relation joins it to, in either direction."""
     out: dict[str, set[str]] = {f: set() for f in files}
-    for u, v, d in g.G.edges(data=True):
-        if d.get("relation") not in rels:
-            continue
+    for u, v in g.G.edges():
         fu, fv = g.file(u), g.file(v)
         if fu and fv and fu != fv:
             if fu in out:
@@ -849,21 +847,26 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=(), co_change:
     With ``co_change``, the files that changed together with the targets' files in git and that no graph edge
     links to them (nor the walk reached) are listed as ``history_coupled`` claims (``strong_inference``, with
     their commit counts; :func:`verinoda.history.co_changes`). The files read are those of the resolved targets
-    and any target that is a file of the working tree the graph does not hold (a document, a config file)."""
+    and any target that is a file of the working tree the graph does not hold (a document, a config file): such a
+    target is listed in ``history_only_targets``, not in ``unresolved``, since it names a file, not a symbol."""
     from verinoda import naming
 
     seeds: set[str] = set()
     unresolved = []
     resolution = []
     plain_files: set[str] = set()  # targets that are files of the working tree without a graph node
+    stale = list(stale or ())
+    changed = {str(f).replace("\\", "/") for f in stale}
     for t in targets:
         hit = [n for n in g.G.nodes if g.file(n) == t]
         if hit:
             seeds.update(hit)
             continue
-        if co_change and "::" not in t and (Path(g.root) / t).is_file():
-            plain_files.add(t.replace("\\", "/"))
         r = naming.resolve(g, t, stale=stale)
+        if not r.exact and co_change and "::" not in t and (Path(g.root) / t).is_file():
+            plain_files.add(t.replace("\\", "/"))  # read in git; a file, not a symbol, so not unresolved ...
+            if t.replace("\\", "/") not in changed:
+                continue  # ... unless it changed since the index, whose graph may just lack it
         if r.exact:
             f = g.file(r.node)
             seeds.add(r.node)
@@ -918,11 +921,12 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=(), co_change:
 
         target_files = {f for s in seeds if (f := g.file(s))} | plain_files
         co = hist.co_changes(g.root, sorted(target_files),
-                             linked=_linked_files(g, target_files, rel | {"registers"}), skip=set(affected_files))
+                             linked=_linked_files(g, target_files), skip=set(affected_files))
         coupling = {"history_coupled": co["coupled"],
                     "history_coupling": {k: co[k] for k in ("is_git", "commits_read", "bulk_skipped")}
                     | {"method": co["coverage"]["method"], "limits": co["coverage"]["limits"]}
-                    | ({"truncated": True} if co.get("truncated") else {})}
+                    | {k: co[k] for k in ("truncated", "shallow", "error") if co.get(k)},
+                    **({"history_only_targets": sorted(plain_files)} if plain_files else {})}
     return {
         "view": "impact",
         "coverage": {

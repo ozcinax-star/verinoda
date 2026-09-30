@@ -519,8 +519,15 @@ def co_changes(repo: Path, files: list[str], *, linked: dict[str, set[str]] | No
         return {"is_git": is_git, "commits_read": 0, "bulk_skipped": 0, "coupled": [], "coverage": coverage}
     spec, rel = _scope(repo, None)
     out = _git(repo, "log", f"-n{max_commits}", "--no-merges", _FMT, "--name-only", *_DIFF_SAFE, *rel, *spec)
+    if out is None:  # a timeout or an unreadable object store: no reading, which is not "nothing coupled"
+        return {"is_git": True, "commits_read": 0, "bulk_skipped": 0, "coupled": [], "coverage": coverage,
+                "error": f"git log failed (it took over {_GIT_TIMEOUT} s, or the repository could not be read): "
+                         "co-change was not read"}
+    shallow = _shallow(repo)
+    if shallow:
+        limits.append("a shallow clone: the commits before its boundary are missing (git fetch --unshallow)")
     commits: list[dict] = []
-    for line in (out or "").split("\n"):
+    for line in out.split("\n"):
         if line.startswith(_HDR):
             commits.append({**_header(line), "files": set()})
         elif line.strip() and commits:
@@ -554,12 +561,20 @@ def co_changes(repo: Path, files: list[str], *, linked: dict[str, set[str]] | No
             "target_commits": n_t, "degree": round(degree, 2),
             "text": f"{f} changed in {n} of the {n_t} commits that changed {t} (last {len(commits)} commits read)"
                     + ("; no graph edge links the two files" if linked is not None else ""),
-            "evidence": [_ev(c, path=f) for c in cs[:COUPLING_EVIDENCE]],
+            "evidence": [_pair_ev(c, t, f) for c in cs[:COUPLING_EVIDENCE]],
             "uncertainties": ["changing together is a pattern in the history, not a proven dependency"],
             "subjects": [f, t]})
     return {"is_git": True, "commits_read": len(commits), "bulk_skipped": len(commits) - len(kept),
             "coupled": coupled, **({"truncated": True} if len(order) > COUPLING_SHOWN else {}),
-            "coverage": coverage}
+            **({"shallow": True} if shallow else {}), "coverage": coverage}
+
+
+def _pair_ev(c: dict, target: str, other: str) -> dict:
+    """``git_history`` evidence that commit ``c`` changed both ``target`` and ``other``."""
+    ev = _ev(c, path=other)
+    ev["locator"] = f"commit {c['commit']} {target} and {other}"
+    ev["meta"]["files"] = [target, other]
+    return ev
 
 
 # -- rendering -----------------------------------------------------------------------------------------------

@@ -1938,7 +1938,7 @@ def _h_impact(ctx: _Ctx, sub: _Sub) -> None:
                       kind="impact", status="strong_inference", evidence=evs, subjects=[g.file(t) or ""],
                       uncertainties=["callers come from the call graph: reflective, dynamic and external callers "
                                      "are not in it"])
-    iv = am.impact(g, targets)
+    iv = am.impact(g, targets, co_change=False)  # the answer does not use the git co-change reading
     ctx.step("impact_view", f"{len(iv['affected_files'])} files")
     if iv["affected_files"]:
         dep_edges = [(u, v, d) for u, v, d in g.edges({"calls", "imports_from", "uses"})
