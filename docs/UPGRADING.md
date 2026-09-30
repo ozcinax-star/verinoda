@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D77)
+## Upgrading from 0.3.2 (D60-D78)
 
 ### D63: Running a project's own tests safely
 
@@ -248,6 +248,14 @@ edge's location matter.
 - `verinoda ui --export` files now carry a `wiki` field and are larger by the size of the diagrams; the
   export's summary line names the pages and diagrams.
 - An optional `.verinoda-wiki.json` at the repository root steers the outline; commit it with the code.
+
+### D78: Agent instruction file lint
+
+- New command `verinoda agent-lint`: AGENTS.md, CLAUDE.md, GEMINI.md, Copilot/Cursor/Windsurf/Cline rules and
+  Claude Code's memory checked against the tree (paths, scripts, targets, modules, packages, extras, tools, and
+  whether the files agree). Read-only, no index needed, no schema change. Exit 3 when something is wrong: a CI
+  step that runs it fails on a stale instruction file.
+- If the MCP tool below is added: the server has one more tool (full profile only); update the tool counts.
 
 ### D60-D62
 

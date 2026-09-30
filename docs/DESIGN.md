@@ -5385,6 +5385,57 @@ Existing suites run against the change: `tests/test_mcp.py` (the `map_view` enum
 profile counts), `tests/test_ui.py` (the export's policy, scripts and links), `tests/test_cli.py`,
 `tests/test_architecture_map.py`, `tests/test_docs.py` (README commands table, ARCHITECTURE module table).
 
+## 51. Agent instruction file lint (D78, 2026-09-30)
+
+### 51.1 Decisions
+
+- **Statuses**: what the tree or a manifest shows is `statically_verified`; name-to-package mapping, a module
+  from a declared package, and command disagreement are `strong_inference` at most (a heuristic). A path that is
+  missing but git-ignored (a build output, a local file), or on a line that says to create or write it, is
+  `unknown`, never wrong. Gradle tasks and Maven goals are `unknown` (the build script defines them in code).
+- **What counts as a path in prose**: only a token with a folder in it and either a known extension or a first
+  folder that exists; placeholders (`<id>`, `{x}`, `$VAR`), URLs, domains, `ns:id`, options, slash commands and
+  `origin/main`-style refs are not paths. A bare file name counts only in a code span or link, and is ok if the
+  project has a file of that name anywhere.
+- **Case**: a path found only in another case is wrong (it works on Windows/macOS disks, not on Linux or in
+  git), with the spelling on disk.
+- **CLI only, no MCP tool yet**: the full profile could take it (it would not touch the five core tools), but
+  `tests/test_docs.py` requires README, ARCHITECTURE and UPGRADING to state the same MCP tool count, and
+  UPGRADING.md is not edited on this branch; with other items in flight the count would also conflict. The
+  adapter was written and tested, then taken out; it is below for the merge.
+- **Outside the repository**: a per-user path (`~/.config/...`) or an absolute path outside the checkout is
+  `unknown` (a record, not skipped): whether it exists depends on the machine that runs the lint, and a CI
+  run must not fail on it. A memory file is this user's own notes, so its `~/...` is checked against their
+  home. `/docs/x.md` is root-relative the same on every OS.
+- **`cd` in a shell block** carries to the block's next lines (a block is read as one shell session); a folder
+  it cannot follow makes the rest unknown rather than checked against the wrong package.json.
+
+### 51.2 Not done
+
+- A name in plain words ("run the tests with pytest") is not read; only code spans, links, imports, fences and
+  prose paths with a folder.
+- Subcommands of the project's own console script are not checked.
+- The tool-to-package table is fixed (Python and JS tools listed in `PY_TOOLS` / `JS_TOOLS`); any other `npx X`
+  looks for a package named X.
+- Makefile parsing is line-based: targets from `include`d files or `$(eval)` are unknown, not found.
+- Memory files are found by Claude Code's folder naming; other agents' memory is not read.
+
+### 51.3 Tests
+
+`tests/test_agentlint.py` (8): every kind of check on a fixture project (prose, code-span and link paths,
+`file:LINE` past the end, a git-ignored path, placeholders and URLs skipped, npm scripts, make targets, modules,
+extras, packages, tools, a tree diagram not read, CLAUDE.md imports, a case mismatch); every reported record has
+its line, text and a status; agreement on test commands and the package manager against the lock file; memory
+files and their links (`--no-memory`); a moved file's new place; what is not a path; no instruction files; the
+CLI (text, `--json`, `--file`, exit codes 3 / 0 / 2). Also run: `tests/test_docs.py`, `tests/test_cli.py`.
+
+After review (10 more tests, one per fix): `cd` carrying through a shell block and a `cd $DIR` making the rest
+unknown; `pnpm -r`, `npm --workspaces`, `bun test` / `bun build`; `src/**/*.ts` matching `src/a.ts`; a nested
+AGENTS.md not compared with the root one; a dependency's evidence on its declaration, not a comment or a
+`[tool.pytest]` table; `~/...`, `/etc/...` unknown and `/docs/x.md` read from the root; `uv run --extra dev
+ruff`; `just` aliases; a path with a space in a link and a code span; 1,500 missing paths settled quickly and
+the listed records capped.
+
 ## Sources
 
 - **Retrieval:**
