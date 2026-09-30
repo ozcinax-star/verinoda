@@ -130,6 +130,9 @@ class FileDiff:
     old: str | None
     new: str | None
     tracked: bool = True
+    # the bytes each version was decoded from (LF line ends, a byte-order mark kept), when the diff read them
+    old_raw: bytes | None = field(default=None, repr=False, compare=False)
+    new_raw: bytes | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass
@@ -843,7 +846,7 @@ def _diff_worktree(repo: Path, base_sha: str) -> tuple[list[FileDiff], list[dict
         if (old_b is not None and treestate.is_binary(old_b)) or (new_b is not None and treestate.is_binary(new_b)):
             skipped.append({"file": rel, "why": "binary"})
             continue
-        diffs.append(FileDiff(rel, _decode(old_b), _decode(new_b), in_git))
+        diffs.append(FileDiff(rel, _decode(old_b), _decode(new_b), in_git, old_b, new_b))
     return diffs, skipped
 
 
@@ -903,7 +906,7 @@ def _diff_staged(repo: Path, base_sha: str) -> tuple[list[FileDiff], list[dict]]
         old_t, new_t = _decode(old_b), _decode(new_b)
         if old_t == new_t:
             continue
-        diffs.append(FileDiff(p, old_t, new_t, True))
+        diffs.append(FileDiff(p, old_t, new_t, True, old_b, new_b))
     return diffs, skipped
 
 
@@ -4964,6 +4967,12 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         unknown.append({"kind": "decision_records", "at": None, "what": "which decision records the change reaches",
                         "why": reach["error"], "next_step": "fix the decisions folder setting or the record, then "
                                                             "run `verinoda decide check`"})
+    from verinoda import stale_reach
+
+    stale = stale_reach.reached(repo, store, diffs, reach)
+    if stale.get("error"):
+        unknown.append({"kind": "made_stale", "at": None, "what": "which claims and notes the change makes stale",
+                        "why": stale["error"], "next_step": "run `verinoda update`, then `verinoda notes`"})
     n_strong = sum(1 for v in found.values() for f in v if rr.at_least_strong(f["status"]))
     res = {
         "review_id": None,
@@ -4988,6 +4997,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         "read_first": read_first,
         "budget": budget,
         "decisions": reach,
+        "made_stale": stale,
         "coverage": {"method": "changed definitions from symbol facts of both versions; dependents over the last "
                                "snapshot's graph (depth 3) by change kind; concern rule tables "
                                "(verinoda/review_rules.py)",
@@ -5532,6 +5542,8 @@ def _graph_note(ctx: _Ctx, cited: set[str], changes: list[Change] | None = None)
 
 
 def _summary(res: dict) -> str:
+    from verinoda import stale_reach
+
     ch = res["changes"]
     where = ("the planned change" if res["mode"] == "planned" else
              f"the {'staged changes' if res['mode'] == 'staged' else 'working tree'} against "
@@ -5542,9 +5554,10 @@ def _summary(res: dict) -> str:
     to_read = (f" {len(recs)} decision record(s) to read: " + ", ".join(r["decision"] for r in recs[:5])
                + (" ..." if len(recs) > 5 else "") + ".") if recs else ""
     if not ch:
+        stale = stale_reach.summary_part(res.get("made_stale") or {})
         return (f"Review of {where}: no changed definition (comments, whitespace and docstrings are not changes)."
                 + (f" {len(others)} data or documentation file(s) changed{named}, not reviewed by concern."
-                   if others else "") + to_read)
+                   if others else "") + to_read + (f" {stale}" if stale else ""))
     kinds: dict[str, int] = {}
     for c in ch:
         kinds[c["kind"]] = kinds.get(c["kind"], 0) + 1
@@ -5574,6 +5587,9 @@ def _summary(res: dict) -> str:
         parts.append(f"{len(others)} data or documentation file(s) changed too{named}, not reviewed by concern.")
     if to_read:
         parts.append(to_read.strip())
+    stale = stale_reach.summary_part(res.get("made_stale") or {})
+    if stale:
+        parts.append(stale)
     return " ".join(parts)
 
 
@@ -5719,6 +5735,9 @@ def render_text(res: dict) -> str:
     from verinoda import decision_reach
 
     out += decision_reach.render_lines(res.get("decisions") or {})
+    from verinoda import stale_reach
+
+    out += stale_reach.render_lines(res.get("made_stale") or {})
     if res.get("read_first"):
         b = res["budget"]
         out.append("")
