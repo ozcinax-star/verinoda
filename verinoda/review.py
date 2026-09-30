@@ -4513,6 +4513,10 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     from verinoda import decision_reach
 
     reach = decision_reach.reached(repo, changes, diffs)
+    if reach.get("error"):
+        unknown.append({"kind": "decision_records", "at": None, "what": "which decision records the change reaches",
+                        "why": reach["error"], "next_step": "fix the decisions folder setting or the record, then "
+                                                            "run `verinoda decide check`"})
     n_strong = sum(1 for v in found.values() for f in v if rr.at_least_strong(f["status"]))
     res = {
         "review_id": None,
