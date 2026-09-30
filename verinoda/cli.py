@@ -653,7 +653,8 @@ def cmd_ui(args) -> int:
             return 2
         uri = Path(out["path"]).as_uri()
         print(f"wrote {out['path']} ({out['bytes'] / 1e6:.1f} MB: {out['graph_files']} files in the graph, "
-              f"{out['notes']} file notes, no code); open it in a browser, no server needed:\n  {uri}")
+              f"{out['notes']} file notes, {out['wiki_pages']} wiki pages with {out['diagrams']} Mermaid diagrams, no "
+              f"code); open it in a browser, no server needed:\n  {uri}")
         if args.open:
             import webbrowser
 
@@ -845,6 +846,52 @@ def cmd_query(args) -> int:
         _write(_dump(res))
     else:  # the skeleton-first plain text a model reads (docs/DESIGN.md D20)
         _write(retrieval.render_text(res, budget_chars=chars))
+    return 0
+
+
+def cmd_diagram(args) -> int:
+    from verinoda import diagrams, freshness, index
+
+    repo = _repo(args)
+    _need_graph(repo)
+    fresh = freshness.check(repo)
+    try:
+        res = diagrams.diagram(index.load(repo), args.kind, args.source, args.target, mode=args.mode,
+                               stale=fresh["files"])
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}") from None
+    res.update(freshness.summary(fresh))
+    if args.json:
+        _write(_dump(res))
+    elif res.get("mermaid"):
+        _write(diagrams.as_text(res))  # a Mermaid file: the stale files are a %% comment in it
+    else:
+        print(f"no diagram: {res.get('status')}" + "".join(f"\n  {side}: {note}" for k in ("not_found", "not_indexed",
+              "ambiguous", "not_a_symbol") for side, note in (res.get(k) or {}).items()))
+        if res.get("next_step"):
+            print(f"next step: {res['next_step']}")
+    return 0 if res.get("status") == "found" else 2
+
+
+def cmd_wiki(args) -> int:
+    from verinoda import diagrams, freshness, index
+
+    repo = _repo(args)
+    _need_graph(repo)
+    fresh = freshness.check(repo)
+    full = args.json or args.markdown or bool(args.page)
+    res = diagrams.outline(index.load(repo), repo, pages=args.page, diagrams=full, stale=fresh["files"])
+    res.update(freshness.summary(fresh))
+    if args.json:
+        _write(_dump(res))
+        return 0
+    if full:
+        _write(diagrams.as_markdown(res))
+    else:
+        _write(diagrams.render(res))
+        print(f"the pages with their Mermaid diagrams: --markdown (some pages: --page ID); steer them with "
+              f"{diagrams.STEERING_FILE}")
+    _stale_note(res)
     return 0
 
 
@@ -2606,6 +2653,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("source")
     sp.add_argument("target")
     sp.add_argument("--mode", choices=["flow", "any"], default="flow")
+    sp = add("diagram", cmd_diagram, "a Mermaid diagram with its evidence as %% comments: architecture (the parts "
+                                     "of the project and their edges), flow (the call paths from SOURCE to TARGET, "
+                                     "or what SOURCE calls), sequence (the first call path as messages)")
+    sp.add_argument("kind", choices=["architecture", "flow", "sequence"])
+    sp.add_argument("source", nargs="?")
+    sp.add_argument("target", nargs="?")
+    sp.add_argument("--mode", choices=["flow", "any"], default="flow", help="flow with a target: as for trace")
+    sp = add("wiki", cmd_wiki, "the wiki outline: an overview page and a page per part (or the pages "
+                               ".verinoda-wiki.json names), each with its Mermaid diagrams")
+    sp.add_argument("--markdown", action="store_true", help="every page as Markdown with its diagrams")
+    sp.add_argument("--page", action="append", metavar="ID", help="only this page, as Markdown; repeatable")
     sp = add("backlog", cmd_backlog, "a backlog item and the code comments that cite it, or the items that explain "
                                      "a line or symbol (docs/BACKLOG.md rows and headings)")
     sp.add_argument("target", help="an item id (69.3), path/File.java:LINE[-LINE], or a symbol")

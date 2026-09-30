@@ -240,4 +240,7 @@ kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; border: 1px solid
 #keys h3 { grid-column: 1 / -1; margin: 10px 0 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 #tooltip { position: fixed; z-index: 60; pointer-events: none; background: var(--panel); border: 1px solid var(--border);
   border-radius: 6px; padding: 4px 8px; font-size: 12px; box-shadow: var(--shadow); max-width: 420px; }
+.diagram h3 { font-size: 15px; margin: 18px 0 0; display: flex; align-items: center; gap: 8px; }
+.mermaid-src { padding: 10px 12px; font-size: 12px; white-space: pre; }
+.diagram details { margin: 0 0 12px; font-size: 13px; }
 @media (max-width: 900px) { #app { --right-w: 0px; } #right { display: none; } #note { padding: 16px; } }

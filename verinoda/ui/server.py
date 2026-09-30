@@ -297,6 +297,12 @@ def make_handler(atlas: Atlas, port: list[int], token: str = "", watcher: Watche
                     obj = atlas.changes()
                 elif route == "answer":
                     obj = atlas.answer((qs.get("q") or [""])[0])
+                elif route == "wiki":
+                    from verinoda import diagrams
+
+                    page = (qs.get("page") or [""])[0]  # the outline alone, or one page with its diagrams
+                    obj = diagrams.outline(atlas.snapshot().g, atlas.repo, pages=[page] if page else None,
+                                           diagrams=bool(page))
                 elif route == "path":
                     obj = atlas.path((qs.get("from") or [""])[0], (qs.get("to") or [""])[0])
                 elif route == "global":

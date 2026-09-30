@@ -1,8 +1,9 @@
 """`verinoda ui --export`: the graph view and the file notes as one HTML file that opens without a server.
 
 The file is the same page as `verinoda ui` (``static/``) with its data embedded: the file-level
-graph, the file tree, and a note per source file, document and data file (its links, outline and
-claims, the claims on its symbols included, without the code). Symbol links lead to the note of
+graph, the file tree, a note per source file, document and data file (its links, outline and
+claims, the claims on its symbols included, without the code), and the wiki outline with its
+Mermaid diagrams (:mod:`verinoda.diagrams`; shown as Mermaid text with the evidence of each arrow). Symbol links lead to the note of
 their file. Nothing is fetched: the page's Content-Security-Policy allows only its own script and
 style (by hash) and no connections. The machine's own paths (the repository's location and the
 home folder, also as the index folds them into names) are taken out of the text, so the file can
@@ -164,8 +165,12 @@ def build(repo: Path | str) -> dict:
             else:
                 notes[home].setdefault("user_notes", []).append(item)
         mine.append({**item, "id": home if home in notes else None})
+    # the wiki outline with every page's Mermaid diagrams (as text: the file loads no renderer)
+    from verinoda import diagrams
+
+    wiki = diagrams.outline(snap.g, Path(repo))
     data = {"stats": stats, "tree": _prune_tree(tree, ids) or {**tree, "children": []}, "global": graph,
-            "notes": notes, "user_notes": mine}
+            "notes": notes, "user_notes": mine, "wiki": wiki}
     # the file is made to be passed on: no path of this machine in its text
     data = _scrub(data, _scrubber(Path(repo).resolve()))
     return {"format": FORMAT, "version": VERSION,
@@ -298,4 +303,5 @@ def write(repo: Path | str, out: Path | str | None = None) -> dict:
         raise
     return {"path": str(path.resolve()), "bytes": len(html.encode("utf-8")), "notes": len(data["notes"]),
             "graph_files": min(len(data["global"]["nodes"]), MAX_GLOBAL_NODES),
-            "graph_links": len(data["global"]["edges"])}
+            "graph_links": len(data["global"]["edges"]), "wiki_pages": len(data["wiki"]["pages"]),
+            "diagrams": sum(len(p.get("diagrams") or []) for p in data["wiki"]["pages"])}
