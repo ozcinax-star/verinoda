@@ -49,6 +49,15 @@ whose cited line still names the target in code is VIOLATED; an INFERRED edge, o
 changed since the index was built, is POSSIBLE. A side that matches no indexed file (an external
 package is no node) is ``unknown``.
 
+Architecture rules (D93) read the same edges, judged the same way (VIOLATED / POSSIBLE, the edge's cited
+line as the site): ``layers order=TOP,...,BOTTOM`` - an edge from a lower layer's file to a higher layer's
+(a file two layers match is in the higher one); ``allow_edges from=GLOB allowed=...`` - an edge from the
+``from`` files to any indexed file outside them and the allowed ones; ``public module=GLOB api=...`` - an
+edge from outside the module to a module file that is not one of its api files. A glob may be ``tag:NAME``
+(:func:`verinoda.decisions.architecture_tags`); a tag not defined, or a ``from`` / layer / module / api glob
+that matches no indexed file, is ``unknown`` (the rule would look at nothing); an ``allowed`` glob that
+matches none is a limit.
+
 ``dependency`` - ``absent=NAME``: declared in a manifest is VIOLATED (the manifest line that names it is
 cited); ``present=NAME``: missing from every manifest read is VIOLATED. Manifests are the root ones, the
 package.json of the workspace packages the root declares, plus the root Gradle/Maven build and the
@@ -1344,6 +1353,15 @@ class _Ctx:
         self._py: _PyIndex | None = None
         self._deps: dict | None = None
         self._code: dict[str, list[str]] = {}
+        self._tags: tuple[dict[str, list[str]], list[str], list[str]] | None = None
+
+    def tags(self) -> tuple[dict[str, list[str]], list[str], list[str]]:
+        """The committed ``tag:NAME`` file sets (:func:`verinoda.decisions.architecture_tags`), read once."""
+        if self._tags is None:
+            from verinoda.decisions import architecture_tags
+
+            self._tags = architecture_tags(self.repo)
+        return self._tags
 
     def code_lines(self, rel: str) -> list[str]:
         """The file's lines with comments and strings removed, masked once per check."""
@@ -1480,32 +1498,59 @@ def _named_in_code(ctx: _Ctx, rel: str, line: int, name: str) -> bool:
     return 0 < line <= len(code) and bool(re.search(rf"(?<![\w$]){re.escape(name)}(?![\w$])", code[line - 1]))
 
 
-def check_no_edge(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
+def _side_files(ctx: _Ctx, indexed: set[str], side: str, pattern: str, scan: Scan, *,
+                required: bool = True) -> set[str]:
+    """The indexed files ``pattern`` matches; ``tag:NAME`` stands for the globs of that committed tag
+    (:func:`verinoda.decisions.architecture_tags`). A tag that is not defined is unknown; a pattern that
+    matches no file is unknown when ``required`` (the guard would look at nothing), else a limit."""
+    from verinoda.decisions import TAG_PREFIX
+
+    globs = [pattern]
+    if pattern.startswith(TAG_PREFIX):
+        tags, where, problems = ctx.tags()
+        name = pattern[len(TAG_PREFIX):]
+        if name not in tags:
+            scan.unknown.append(f"{side}={pattern}: no tag {name!r} in "
+                                + (", ".join(where) if where else "verinoda.toml [architecture.tags] or "
+                                   "pyproject.toml [tool.verinoda.architecture.tags]")
+                                + (f" ({'; '.join(problems)})" if problems else "") + ", so no edge was checked")
+            return set()
+        globs = tags[name]
+    files = {f for f in indexed if any(glob_match(f, x) for x in globs)}
+    if not files:
+        shown = pattern + (f" ({', '.join(globs)})" if globs != [pattern] else "")
+        if not required:
+            scan.limit(f"{side}={shown} matches no file in the index")
+            return files
+        dotted = re.fullmatch(r"[A-Za-z_][\w]*(?:\.[\w*]+)+", pattern) is not None
+        scan.unknown.append(f"{side}={shown} matches no file in the index, so no edge was checked"
+                            + (": edge guards compare the project's own files (a path glob such as src/client/**); "
+                               "a package outside the project is not a node - for calls into it use `only_in "
+                               "calls=Cls.method allowed=...`" if dotted else
+                               " (a path or glob relative to the project root, such as src/client/**)"))
+    return files
+
+
+def _edge_scan(ctx: _Ctx, kind: str) -> tuple[Scan, set[str] | None]:
+    """A new scan and the indexed files, or ``None`` when there is no graph to read."""
     scan = Scan()
-    what = f"{g['from']} -> {g['to']} ({', '.join(g.get('relations') or [])})"
     if ctx.graph is None:
-        scan.unknown.append("no index: run `verinoda scan` (no_edge reads the graph's edges)")
-        return [], scan, what
+        scan.unknown.append(f"no index: run `verinoda scan` ({kind} reads the graph's edges)")
+        return scan, None
     if ctx.graph_stale:  # the edges read below describe an older tree: nothing found there is not "ok"
         scan.unknown.append(f"{ctx.graph_stale}; an edge a recent edit added is not seen (run `verinoda update`, "
                             "then check again)")
-    rels = set(g.get("relations") or [])
-    # what the guard looks at: the indexed files each side matches, and the edges out of the `from` files
-    indexed = {f for _n, f in ctx.graph.G.nodes(data="source_file") if f}
-    from_files = {f for f in indexed if glob_match(f, g["from"])}
-    to_files = {f for f in indexed if glob_match(f, g["to"])}
-    scan.files.update({"from_files": len(from_files), "to_files": len(to_files), "edges_checked": 0})
     scan.limit(*EDGE_LIMITS)
-    for side, files in (("from", from_files), ("to", to_files)):
-        if not files:
-            dotted = re.fullmatch(r"[A-Za-z_][\w]*(?:\.[\w*]+)+", g[side]) is not None
-            scan.unknown.append(f"{side}={g[side]} matches no file in the index, so no edge was checked"
-                                + (": no_edge compares the project's own files (a path glob such as src/client/**); "
-                                   "a package outside the project is not a node - for calls into it use `only_in "
-                                   "calls=Cls.method allowed=...`" if dotted else
-                                   " (a path or glob relative to the project root, such as src/client/**)"))
-    if scan.unknown:
-        return [], scan, what
+    return scan, {f for _n, f in ctx.graph.G.nodes(data="source_file") if f}
+
+
+def _edge_hits(ctx: _Ctx, g: dict, scan: Scan, from_files: set[str],
+               judge) -> list[tuple[str, str, int, str]]:
+    """Every graph edge of the guard's relations out of ``from_files`` whose target file ``judge(from, to)``
+    forbids (it returns the rule broken, ``""`` for no text, or ``None`` when the edge is allowed): VIOLATED
+    when the edge is EXTRACTED and its cited line still names the target in code, else POSSIBLE."""
+    rels = set(g.get("relations") or [])
+    scan.files["edges_checked"] = 0
     out = []
     n = 0
     for u, v, d in ctx.graph.edges(rels or None):
@@ -1513,9 +1558,13 @@ def check_no_edge(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
         if not fu or fu not in from_files:
             continue
         scan.files["edges_checked"] += 1
-        if not fv or fv not in to_files:
+        if not fv:
+            continue
+        rule = judge(fu, fv)
+        if rule is None:
             continue
         n += 1
+        rule = f": {rule}" if rule else ""
         loc = str(d.get("source_location") or "")
         src = d.get("source_file") or fu
         line = int(loc[1:]) if loc.startswith("L") and loc[1:].isdigit() else None
@@ -1526,14 +1575,15 @@ def check_no_edge(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
         rel_name = d.get("relation")
         scan.via.setdefault((src, line or 0), set()).add(fv)  # a changed target file makes the edge new
         if line is None:
-            out.append((POSSIBLE, src, 0, f"{rel_name} edge to {fv} ({conf}) without a cited line"))
+            out.append((POSSIBLE, src, 0, f"{rel_name} edge to {fv} ({conf}) without a cited line{rule}"))
         elif conf == "EXTRACTED" and _named_in_code(ctx, src, line, target):
-            out.append((VIOLATED, src, line, f"{rel_name} {target} in {fv} (EXTRACTED edge; the line names it)"))
+            out.append((VIOLATED, src, line, f"{rel_name} {target} in {fv} (EXTRACTED edge; the line names it)"
+                                             f"{rule}"))
         elif conf == "EXTRACTED":
             out.append((POSSIBLE, src, line, f"{rel_name} {target} in {fv}: EXTRACTED edge, but the line no "
-                                             "longer names it (the index may be older than the file)"))
+                                             f"longer names it (the index may be older than the file){rule}"))
         else:
-            out.append((POSSIBLE, src, line, f"{rel_name} {target} in {fv} ({conf} edge: a resolver's guess)"))
+            out.append((POSSIBLE, src, line, f"{rel_name} {target} in {fv} ({conf} edge: a resolver's guess){rule}"))
     scan.files["edges_matched"] = n
     if not scan.files["edges_checked"]:
         # A from file with no such edge was looked at only when its language's extractor emits these relations:
@@ -1545,7 +1595,7 @@ def check_no_edge(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
         seen = sorted(f for f in from_files if PurePosixPath(f).suffix.lower() in langs)
         if not seen:
             scan.unknown.append(f"the index has no {kinds} edge out of the {len(from_files)} file(s) "
-                                f"from={g['from']} matches, and none out of any other file of their language, so "
+                                f"the guard checks, and none out of any other file of their language, so "
                                 "no edge was checked (the index may not extract these relations for it)")
         else:
             scan.files["from_files_looked_at"] = len(seen)
@@ -1556,7 +1606,129 @@ def check_no_edge(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
             if rest:
                 scan.limit(f"{len(rest)} from file(s) are in a language with no {kinds} edge anywhere in the index, "
                            f"so nothing was checked for them: {', '.join(rest[:5])}{' ...' if len(rest) > 5 else ''}")
-    return _strongest(out), scan, what
+    return _strongest(out)
+
+
+def _rels(g: dict) -> str:
+    return ", ".join(g.get("relations") or [])
+
+
+def check_no_edge(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
+    what = f"{g['from']} -> {g['to']} ({_rels(g)})"
+    scan, indexed = _edge_scan(ctx, "no_edge")
+    if indexed is None:
+        return [], scan, what
+    # what the guard looks at: the indexed files each side matches, and the edges out of the `from` files
+    from_files = _side_files(ctx, indexed, "from", g["from"], scan)
+    to_files = _side_files(ctx, indexed, "to", g["to"], scan)
+    scan.files.update({"from_files": len(from_files), "to_files": len(to_files), "edges_checked": 0})
+    if scan.unknown:
+        return [], scan, what
+    return _edge_hits(ctx, g, scan, from_files, lambda _fu, fv: "" if fv in to_files else None), scan, what
+
+
+def _tests_out(g: dict, files: set[str], side: str, scan: Scan) -> set[str]:
+    """The test files among ``files`` a guard leaves out of its sources (none with ``scope=all``), named in the
+    limits; when they are all of them, the guard would look at nothing: unknown."""
+    if g.get("scope") == "all":
+        return set()
+    tests = {f for f in files if is_test_file(f)}
+    if tests and tests == files:
+        scan.unknown.append(f"the {len(tests)} file(s) {side} are all test code, out of scope (scope=all "
+                            "includes them), so no edge was checked")
+    elif tests:
+        scan.limit(f"{len(tests)} test file(s) {side} are out of scope (scope=all includes them)")
+    return tests
+
+
+def check_layers(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
+    """``layers order=TOP,...,BOTTOM``: an edge from a file of a lower layer to a file of a higher one breaks
+    it; a layer may use itself and every layer below it. A file two layers match is in the higher one; a
+    layer left with no file of its own (a higher layer's glob covers all of its files) is unknown."""
+    order = list(g["order"])
+    what = f"{' > '.join(order)} ({_rels(g)})"
+    scan, indexed = _edge_scan(ctx, "layers")
+    if indexed is None:
+        return [], scan, what
+    layer: dict[str, int] = {}
+    both = 0
+    for i, pat in enumerate(order):
+        files = _side_files(ctx, indexed, f"layer {i + 1}", pat, scan)
+        both += len(files & layer.keys())
+        own = files - layer.keys()
+        for f in own:
+            layer[f] = i
+        # the files the layer holds once each file is in the highest layer it matches
+        scan.files[f"layer_{i + 1}_files"] = len(own)
+        if files and not own:
+            scan.unknown.append(f"layer {i + 1}={pat} has no file of its own: each of the {len(files)} file(s) it "
+                                "matches is in a higher layer, so no edge could break the order at it")
+    if both:
+        scan.limit(f"{both} file(s) match more than one layer; each counts in the highest one it matches")
+    if scan.unknown:
+        return [], scan, what
+
+    def judge(fu: str, fv: str) -> str | None:
+        i, j = layer[fu], layer.get(fv)
+        if j is None or j >= i:
+            return None
+        return f"layer {i + 1} ({order[i]}) may not depend on layer {j + 1} ({order[j]}) above it"
+    return _edge_hits(ctx, g, scan, set(layer), judge), scan, what
+
+
+def check_allow_edges(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
+    """``allow_edges from=GLOB allowed=...``: the from files may use each other and the allowed files; an
+    edge to any other file of the index breaks it (a package outside the project is no node: not seen). Test
+    files among the from files are left out unless ``scope=all``, as for ``only_in``."""
+    allowed = list(g["allowed"])
+    what = f"{g['from']} uses only {', '.join(allowed)} ({_rels(g)})"
+    scan, indexed = _edge_scan(ctx, "allow_edges")
+    if indexed is None:
+        return [], scan, what
+    from_files = _side_files(ctx, indexed, "from", g["from"], scan)
+    ok_files = set(from_files)
+    from_files -= _tests_out(g, from_files, "from", scan)
+    for pat in allowed:
+        ok_files |= _side_files(ctx, indexed, "allowed", pat, scan, required=False)
+    scan.files.update({"from_files": len(from_files), "allowed_files": len(ok_files - from_files)})
+    scan.limit("edges to packages outside the project are not judged (they are no nodes of the index)")
+    if scan.unknown:
+        return [], scan, what
+    rule = f"{g['from']} may use only itself and {', '.join(allowed)}"
+    return _edge_hits(ctx, g, scan, from_files, lambda _fu, fv: None if fv in ok_files else rule), scan, what
+
+
+def check_public(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
+    """``public module=GLOB api=...``: an edge from a file outside the module to a file inside it that is not
+    one of its public (api) files breaks it; the module's own files use each other freely. Test files outside
+    the module are left out unless ``scope=all``, as for ``only_in``. Api globs that match no file inside the
+    module leave nothing public: unknown, like a glob that matches nothing."""
+    api = list(g["api"])
+    what = f"{g['module']} only through {', '.join(api)} ({_rels(g)})"
+    scan, indexed = _edge_scan(ctx, "public")
+    if indexed is None:
+        return [], scan, what
+    module = _side_files(ctx, indexed, "module", g["module"], scan)
+    api_files: set[str] = set()
+    for pat in api:
+        api_files |= _side_files(ctx, indexed, "api", pat, scan)
+    stray = api_files - module
+    if stray and module:
+        shown = ", ".join(sorted(stray)[:3])
+        if api_files & module:
+            scan.limit(f"{len(stray)} api file(s) lie outside module={g['module']}: {shown}")
+        else:
+            scan.unknown.append(f"api={', '.join(api)} matches no file inside module={g['module']} (only {shown}), "
+                                "so the module would have no public file; no edge was checked")
+    outside = indexed - module
+    outside -= _tests_out(g, outside, "outside the module", scan)
+    scan.files.update({"module_files": len(module), "api_files": len(api_files & module),
+                       "outside_files": len(outside)})
+    if scan.unknown:
+        return [], scan, what
+    rule = f"{g['module']} is reached only through {', '.join(api)}"
+    return _edge_hits(ctx, g, scan, outside,
+                      lambda _fu, fv: rule if fv in module and fv not in api_files else None), scan, what
 
 
 # -- dependencies (manifests, with Gradle and Maven) -------------------------------------------------
@@ -2002,6 +2174,10 @@ def check_dependency(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]
 
 # -- governs and revisit ------------------------------------------------------------------------------
 
+CHECKS = {"only_in": check_only_in, "no_edge": check_no_edge, "layers": check_layers,
+          "allow_edges": check_allow_edges, "public": check_public, "dependency": check_dependency}
+
+
 def check_governs(repo: Path, v: dict) -> tuple[str, str]:
     """(``ok`` | ``REVIEW``, why) for a governed symbol."""
     from verinoda import anchors
@@ -2096,9 +2272,9 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
     ``decisions_dir``: the records' folder (``--decisions-dir``) instead of the configured one.
 
     ``graph_stale``: why ``graph`` may be older than the working tree (its refresh failed, or another build
-    was still running): every no_edge guard is then ``unknown`` (a violation it still finds stands, as its
-    line is re-read), and without a violation ``exit`` is 2, as for an error: a gate never passes on edges
-    it could not read.
+    was still running): every edge guard (no_edge, layers, allow_edges, public) is then ``unknown`` (a
+    violation it still finds stands, as its line is re-read), and without a violation ``exit`` is 2, as for
+    an error: a gate never passes on edges it could not read.
     """
     from verinoda import decisions as dm
     from verinoda.snapshot import list_files
@@ -2152,11 +2328,10 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
                 res["not_enforced"].append({"decision": d.id, "guard": g["id"], "status": g.get("status"),
                                             "why": "proposed guard: inactive until the user accepts it"})
                 continue
-            fn = {"only_in": check_only_in, "no_edge": check_no_edge, "dependency": check_dependency}.get(
-                g.get("kind"))
+            fn = CHECKS.get(g.get("kind"))
             try:
                 if fn is None:
-                    raise ValueError(f"guard kind {g.get('kind')!r} is not only_in, no_edge or dependency")
+                    raise ValueError(f"guard kind {g.get('kind')!r} is not one of {', '.join(CHECKS)}")
                 hits, scan, what = fn(ctx, g)
             except Exception as exc:  # noqa: BLE001 - one broken guard must not hide the others
                 res["unknown"].append({"decision": d.id, "guard": g["id"], "kind": g["kind"],
@@ -2239,7 +2414,7 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
                                   "what": f"{r['kind']}={r['value']}", "scope": scope, "limits": [note]})
     res["elapsed_s"] = round(time.monotonic() - t0, 3)
     broken = [n for n in res["not_enforced"] if n.get("problem")]
-    stale_unchecked = bool(graph_stale) and any(u["kind"] == "no_edge" for u in res["unknown"])
+    stale_unchecked = bool(graph_stale) and any(u["kind"] in dm.EDGE_KINDS for u in res["unknown"])
     # 1: something is violated; 2: edges could not be read (a stale graph); 3: nothing violated, but something was
     # not checked (unknown); 0 otherwise
     res["exit"] = 1 if res["violations"] else 2 if stale_unchecked else 3 if res["unknown"] or broken else 0

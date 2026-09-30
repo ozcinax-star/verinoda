@@ -13,7 +13,11 @@ front matter line it matched (``evidence_at``) and a status:
   changed line's code (comments and strings blanked), in a file ``decide check`` would search for the guard,
   holds the guard's dotted call or matches its pattern (``strong_inference``: text, names are not bound), or
   holds only the call's last name (``weak_inference``);
-* ``no_edge``: a changed file matches the guard's ``from`` or ``to`` glob (``statically_verified``);
+* ``no_edge``: a changed file matches the guard's ``from`` or ``to`` glob (``statically_verified``); the same
+  for the globs of ``layers`` (``order``), ``allow_edges`` (``from``, ``allowed``) and ``public`` (``module``,
+  ``api``), a ``tag:NAME`` read as its committed globs (D93); a change to the definition of a tag the guard
+  uses (``verinoda.toml`` or ``pyproject.toml``, the tag's globs parsed on both sides and compared)
+  (``statically_verified``);
 * ``dependency`` and ``revisit-when dependency_added``: a changed line of a manifest ``decide check`` reads
   names the package, compared as ``decide check`` compares names (runs of ``-``, ``_`` and ``.`` alike)
   (``strong_inference``);
@@ -276,19 +280,77 @@ def _only_in(d, g: dict, files: _Files, repo: Path, ddir: Path, ev: str | None) 
     return out
 
 
-def _no_edge(d, g: dict, files: _Files, ev: str | None) -> list[dict]:
+# the globs of each edge guard kind: (key, holds a list)
+_EDGE_SIDES = {"no_edge": (("from", False), ("to", False)), "layers": (("order", True),),
+               "allow_edges": (("from", False), ("allowed", True)), "public": (("module", False), ("api", True))}
+
+
+def _edge_guard(d, g: dict, files: _Files, ev: str | None, tags: dict[str, list[str]]) -> list[dict]:
+    from verinoda.decisions import TAG_PREFIX
+
+    kind = g.get("kind")
     out = []
     rels = "/".join(_strs(g.get("relations"))[:3]) or "edge"
     note = _not_run(d, g)
+    sides = []
+    for key, many in _EDGE_SIDES[kind]:
+        for pat in (_strs(g.get(key)) if many else [g.get(key)] if isinstance(g.get(key), str) else []):
+            globs = tags.get(pat[len(TAG_PREFIX):], []) if pat.startswith(TAG_PREFIX) else [pat]
+            sides.append((key, pat, globs))
+    what = f"no {rels} from {g.get('from')} to {g.get('to')}" if kind == "no_edge" else f"{kind}, {rels}"
+    used = {pat[len(TAG_PREFIX):] for _key, pat, _globs in sides if pat and pat.startswith(TAG_PREFIX)}
+    for rel, name, line in _tag_edits(files, used):
+        out.append(_reach("guard", g.get("id"), line, f"{rel} changes tag:{name}, which {d.id}'s guard "
+                          f"`{g.get('spec') or kind}` uses ({what}): the files the rule checks change with it"
+                          f"{note}", "statically_verified", ev))
     for rel in files.names:
-        for side in ("from", "to"):
-            pat = g.get(side)
-            if isinstance(pat, str) and pat and _glob(rel, pat):
+        for key, pat, globs in sides:
+            if pat and any(_glob(rel, x) for x in globs):
                 out.append(_reach("guard", g.get("id"), files.first_line(rel),
-                                  f"{rel} matches {side}={pat} of {d.id}'s guard `{g.get('spec') or 'no_edge'}` "
-                                  f"(no {rels} from {g.get('from')} to {g.get('to')}){note}",
-                                  "statically_verified", ev))
+                                  f"{rel} matches {key}={pat} of {d.id}'s guard `{g.get('spec') or kind}` "
+                                  f"({what}){note}", "statically_verified", ev))
                 break
+    return out
+
+
+# the committed tag tables (decisions.architecture_tags): file -> the keys down to the table
+_TAG_TABLES = {"verinoda.toml": ("architecture", "tags"),
+               "pyproject.toml": ("tool", "verinoda", "architecture", "tags")}
+
+
+def _tag_table(text: str | None, keys: tuple[str, ...]) -> dict | None:
+    """The tag table of one side of a committed file; ``None`` when that side cannot be parsed."""
+    try:
+        import tomllib  # type: ignore[import-not-found]
+    except ImportError:  # pragma: no cover - py3.10
+        import tomli as tomllib  # type: ignore[no-redef]
+
+    if text is None:
+        return {}
+    try:
+        data = tomllib.loads(text.lstrip("﻿"))
+    except ValueError:
+        return None
+    for key in keys:
+        data = data.get(key) if isinstance(data, dict) else None
+    return data if isinstance(data, dict) else {}
+
+
+def _tag_edits(files: _Files, names: set[str]) -> list[tuple[str, str, str]]:
+    """``(file, tag, at)`` for each tag of ``names`` whose value differs between the base and the new side
+    of a changed tag file (a side that does not parse differs from any other)."""
+    out = []
+    for rel, keys in _TAG_TABLES.items() if names else ():
+        if rel not in files.text or rel in files.planned:
+            continue
+        old, new = _tag_table(files.old_text.get(rel), keys), _tag_table(files.text.get(rel), keys)
+        for name in sorted(names):
+            if old is not None and new is not None and old.get(name) == new.get(name):
+                continue
+            rows = (files.text.get(rel) or "").split("\n")
+            ln = next((i for i, r in enumerate(rows, 1) if re.match(rf"\s*[\"']?{re.escape(name)}[\"']?\s*=", r)),
+                      None)
+            out.append((rel, name, f"{rel}:{ln}" if ln else files.first_line(rel)))
     return out
 
 
@@ -407,8 +469,10 @@ def _hits(d, repo: Path, ddir: Path, changes, files: _Files, manifests: _Manifes
         kind = g.get("kind")
         if kind == "only_in":
             hits += _only_in(d, g, files, repo, ddir, at("guards"))
-        elif kind == "no_edge":
-            hits += _no_edge(d, g, files, at("guards"))
+        elif kind in _EDGE_SIDES:
+            from verinoda.decisions import architecture_tags
+
+            hits += _edge_guard(d, g, files, at("guards"), architecture_tags(repo)[0])
         elif kind == "dependency":
             for k in ("absent", "present"):
                 if isinstance(g.get(k), str) and g[k].strip():
