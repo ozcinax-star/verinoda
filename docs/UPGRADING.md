@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D79)
+## Upgrading from 0.3.2 (D60-D80)
 
 ### D63: Running a project's own tests safely
 
@@ -266,6 +266,16 @@ question with no `key:value` filter and no `/regex/` token ranks exactly as befo
 segment between slashes, and an `is:` value that is not a filter are words). JSON results with filters
 carry a new `filters` block. An unreadable filter is an error: exit code 1 on the CLI, `invalid_argument` on
 MCP. No re-index is needed.
+
+### D80: Secret scrubbing
+
+- Experiment logs, agent-reported outputs and logs copied by `trace-log` are now stored with secrets and e-mail
+  addresses replaced by `<redacted:RULE>` markers (line numbers unchanged); the evidence excerpts and summaries made
+  from them are redacted too. An experiment's evidence `content_hash` (and an agent-reported run's
+  `output_sha256` when something was redacted) is now the hash of the kept, redacted text.
+- `verinoda ui --export` also replaces secrets and e-mail addresses in the embedded text.
+- New command `verinoda secret-scan [FILE ...] [--fix] [--json]`. Logs stored by an earlier version may still hold
+  secrets: run `verinoda secret-scan` and, if it reports findings, `verinoda secret-scan --fix`.
 
 ### D60-D62
 

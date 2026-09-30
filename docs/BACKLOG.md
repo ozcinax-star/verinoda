@@ -174,7 +174,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 15.1 | **Runtime flaws from traces** | N+1 queries, repeated SQL and slow paths found in recorded test runs | AppMap, Digma | `observe` reports an N+1 with its call path |
 | 15.2 | **Error and trace import** | Sentry events and OpenTelemetry spans read from a file as observed evidence (the general form of `trace-log`) | Sentry Seer, Bito | a stack trace from an exported event maps onto the code |
-| 15.3 | **Secret scrubbing** | Secrets and personal data removed from traces, logs and exports before they are stored or shared | AppMap sanitize, Repomix Secretlint, mclo.gs | the HTML export and stored logs pass a secret scan |
 
 ## 16 - Minecraft: vanilla source and mappings
 

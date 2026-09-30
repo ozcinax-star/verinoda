@@ -5564,6 +5564,124 @@ the listed records capped.
 - `test_cli_query_reads_filters_and_reports_a_bad_one`
 - `test_mcp_project_query_reads_filters`
 
+## 53. Secret scrubbing (D80, 2026-09-30)
+
+### 53.1 Decisions
+
+1. **One module, applied where text is written.** `verinoda/scrub.py` holds the rules and `redact(text)`. It is
+   called at the four places where Verinoda keeps text it did not write itself, and nowhere else:
+   - `experiments.run`: stdout and stderr right after decoding, so the files under `.verinoda/runs/<id>/`, the
+     summary lines, the `experiments.summary` column and the evidence excerpt all come from redacted text. The
+     evidence `content_hash` is now the hash of the kept (redacted) logs.
+   - `debug` agent-reported runs (`observed_output`): the kept `observed_output.txt` and the excerpt. When nothing
+     matches, the bytes are kept exactly as given (and `output_sha256` is unchanged); when something matches, the
+     file and `output_sha256` are the redacted text's.
+   - `trace-log`: a log outside the repository is copied to `.verinoda/logs/` redacted; the cited lines (the
+     evidence excerpt) and the claim text (a trace's header or marker) are redacted too. A log inside the
+     repository is the user's file and is never changed; only what Verinoda stores from it is redacted.
+   - `ui --export`: every text of the embedded data, after the existing machine-path scrub, with the same key
+     exemption (note ids are never rewritten).
+   The live `verinoda ui` server is not changed: it shows the user's own files on 127.0.0.1 and nothing leaves.
+2. **Line structure is kept.** A match is replaced by `<redacted:RULE>` plus the line breaks it spanned (a private
+   key block becomes one marker and empty lines). Line numbers a claim cites in a kept log stay right, and `--fix`
+   on an old log does not move later lines.
+   An output longer than what is kept (5 MB) is cut before it is redacted, and `scrub.cut` moves the cut back to
+   the start of the word it falls in (at most 4 KB): a token cut in two no longer has its rule's shape, and its
+   first part would otherwise be kept.
+3. **Only the secret part goes.** For a URL only the password (`postgres://app:<redacted:url-password>@db/x`), for an
+   Authorization header only its value, for `password = "..."` only the value. The marker names the rule, never
+   the value.
+4. **Rules (patterns, no network, no model).** Private key blocks; AWS access key ids; GitHub, GitLab, Slack, npm
+   and PyPI tokens; Slack webhooks; `sk-...` API keys (Anthropic/OpenAI shape); Stripe keys; Google API keys; JWTs;
+   URL passwords; Authorization header values; a value assigned to a password/secret/token/api_key/access_key/
+   private_key/credential name (quoted, or unquoted with letters and digits; placeholders such as `${X}`,
+   `<your-token>`, `changeme`, `NEO4J_PASSWORD` and calls such as `getpass()` stay; so does a name whose last word
+   says the value is something else: `token_count`, `tokens_used`, `secret_hash`, `password_file`, `secret_name`,
+   `passwordEncoder`, and a Java `toString` such as `Encoder@1a2b3c4d`); e-mail addresses (personal
+   data; not `git@host:`, Kotlin `this@Outer`, `icon@2x.png`, `example.com`, `\n@pytest.fixture` in escaped text,
+   or the user/host part of a URL); and the value of every secret-looking variable of the current environment
+   (a name with a word such as `KEY`/`API_KEY`, `*TOKEN`, `*SECRET`, `PASSW*`, `PASSPHRASE`, `CREDENTIAL(S)`,
+   `AUTH` or `PAT`, split at `_`, `-` and case changes, so `GIT_AUTHOR_NAME`, `CERT_AUTHORITY` and `KEYBOARD_*`
+   are not; value of 8+ characters that is not a path), wherever it occurs.
+   Text escaped as a JSON string (the export's embedded data, JSON log lines) is also read unescaped: a token after
+   `\n`, an address in `\u003c...\u003e` or a value in `\"...\"` is found, and the span is mapped back to the
+   escaped text, so `--fix` also cleans an export an earlier version wrote.
+5. **Findings are `strong_inference`.** A match is a pattern, not a check of the value (the backlog rule for
+   heuristics). Each finding of `secret-scan` carries `file:line` as its evidence plus column, rule and length.
+6. **Speed.** Each rule has literal anchors (`AKIA`, `ghp_`, `://`, `@`, `password`, ...) found with `str.find`,
+   and its pattern is matched only there, once per anchor. A 7 MB ordinary log redacts in about 0.45 s, a 6 MB log
+   of JSON lines (read twice: as it is and unescaped) in about 1 s (first version, one regex pass per rule over the
+   text: 8 s). Text dense with one anchor stays linear: a token rule's left boundary excludes the token's own
+   characters (`-` included), so in `sk-sk-sk-...`, `glpat-glpat-...` or `eyJ-eyJ-...` only the run's first anchor
+   is matched to its end; an address starts where the run of `[\w.%+-]` before its `@` starts (one attempt per
+   `@`, none for an `@` after a space or another `@`); the other patterns are bounded. 100 to 200 KB of one anchor
+   (`@`, `sk-`, `xoxb-`, `a@b `, `Bearer `, `\n` ...) redacts in well under 2 s (before: 5 to 100 s); the densest
+   remaining case, `password=` repeated, costs about 3 s per MB.
+   The export reads the environment once per build (`scrub.redactor()`), not once per text (on a large repo that
+   was 2.3 times the build time).
+7. **CLI, no new MCP tool.** `verinoda secret-scan [FILE ...] [--fix] [--json]`: with no files it scans what
+   Verinoda stored (`.verinoda/runs/**` and `.verinoda/logs/**` text files: `.txt .log .out .err`) and the export at
+   its default place; exit 1 on a finding (0 after `--fix`), and also when a file was skipped (over 64 MB, not
+   readable, or with `--fix` not writable, e.g. read-only or locked): a file that was not checked does not pass.
+   `--fix` keeps every other byte of the file, bytes that are not UTF-8 included (a cp1252 log is read with
+   `surrogateescape` and written back the same way); `trace-log` and an agent-reported output keep the bytes the
+   same way. The debug ledger's `change.patch` and `runs/blobs/` are code the ledger re-applies, not logs, and are
+   left out. Redaction is automatic at write time, so an agent
+   has nothing to call; the scan is the user's check before sharing (or for data an earlier version stored).
+   It could be put behind `run_tool` later if agents need it; kept out to keep the tool tables unchanged.
+
+### 53.2 Not done
+
+- Pattern-based: a secret with no recognisable shape (a bare random password in prose, a custom token format) is
+  not found; a pattern can also hit a harmless value (then it is redacted in the kept log or export only).
+- Personal data covered: e-mail addresses only. Names, phone numbers, IP addresses and street addresses are not.
+- Not redacted: claim texts and evidence excerpts written by other paths (for example a claim an agent adds with a
+  secret in its text), source-code evidence excerpts in `atlas.db`, and rows an earlier version stored in
+  `atlas.db` (`secret-scan --fix` rewrites files, not the database).
+- No user configuration of extra patterns or an allowlist yet.
+- The assigned-secret rule's list of "not the secret" name endings (`_count`, `_hash`, `Encoder`, `_file` ...) is
+  fixed; another harmless `name: value` pair with letters and digits in its value is still redacted.
+- Only JSON string escapes are read (`\n`, `\"`, `\uXXXX` ...); HTML entities (`&lt;`), URL encoding (`%40`) and
+  base64 are not decoded.
+- Text dense with the `password`/`token` anchors (the same `password=` repeated) costs about 3 s per MB: linear,
+  but the slowest shape.
+- The cut of an over-long output drops at most the last 4 KB word; a token longer than that and cut in two keeps
+  its first part.
+- The export redacts e-mail addresses in the project's own docs too (an author line in a README becomes
+  `<redacted:email>`); there is no opt-out.
+
+### 53.3 Tests
+
+`tests/test_scrub.py` (66 tests):
+- every rule redacts its shape, names itself, and its marker is never a finding; findings carry no value;
+- only the secret part goes; LF and CRLF line structure and line numbers kept; a key block keeps its lines;
+- secret environment values redacted wherever they occur; paths, short values and `PWD`/`SSH_AUTH_SOCK` are not;
+  only a variable named for a secret counts (`GIT_AUTHOR_NAME`, `CERT_AUTHORITY`, `KEYBOARD_LAYOUT` do not);
+- 22 negatives (placeholders, env lookups, calls, constant names, git remotes, Kotlin labels, `@2x.png`,
+  `example.com`, escaped decorators, `Object@hash`, placeholder URL passwords, certificates, `passwordEncoder:
+  X@1a2b3c4d`, `token_count=`, `secret_hash:`, `tokens_used=`/`password_file=`, an escaped Windows path);
+- a token after `\n`, an AWS key after `\n`, an address in `<...>` and after `\n`, a quoted password and a key
+  block, each in `json.dumps` and in the export's HTML-safe JSON: found once, redacted, still the same JSON;
+- ten texts of 100 to 200 KB made of one anchor (`@`, `sk-`, `-sk-x1`, `glpat-`, `xoxb-`, `eyJ-`, `a@b `,
+  `password=`, `Bearer `, `\n`) each redact in under 2 s;
+- `cut` drops the part of a token at the cut;
+- the ui page's own static files pass the scan; a 5 MB log redacts in under 5 s;
+- `secret-scan`: default files (runs, copied logs; `change.patch` skipped), JSON findings with `file:line` and
+  `strong_inference`, text output, exit 1, `--fix` keeps line endings and then exits 0; named files; a missing file;
+  `--fix` keeps bytes that are not UTF-8; a read-only file under `--fix` is reported as skipped (no traceback) and
+  exits 1; a file too large to scan exits 1;
+- `trace-log` copy of an outside log kept redacted with its lines, the user's file untouched; a cp1252 log's copy
+  keeps its bytes;
+- an experiment printing a token and an address: logs, evidence and experiments rows carry neither;
+- an agent-reported output kept redacted; one with nothing to redact kept byte for byte;
+- the HTML export of `examples/glow_mod` plus a doc and a claim with secrets: written without redaction, the scan
+  finds the token and the address in the HTML file (the positive control); written with it, the file passes
+  `scan_files`, the environment is read once for the whole build, and the default export is among the files
+  `secret-scan` checks.
+
+Run: `python -m pytest tests/test_scrub.py tests/test_ui.py tests/test_trace_log.py tests/test_experiments.py
+tests/test_debug.py tests/test_docs.py -q -p no:cacheprovider`
+
 ## Sources
 
 - **Retrieval:**
