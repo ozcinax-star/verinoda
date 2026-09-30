@@ -56,7 +56,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 3.3 | **Derived facts** | A verified claim or query result stored as a fact other queries use, recomputed when its evidence goes stale | Glean derived predicates, jQAssistant concepts | a derived fact goes stale with the code it rests on |
 | 3.4 | **Filter syntax in `query`** | `symbol:`, `path:` globs, `lang:`, `is:vendored`, boolean AND/OR/NOT, `/regex/` | GitHub code search, Sourcegraph | filters combine with ranked text search |
 | 3.5 | **Scripted aggregation over results** | A sandboxed script counts and cross-references search hits (inventories computed, not estimated) | Sourcegraph MCP evaluator | an inventory question answered by a count with its sites |
-| 3.6 | **Extract by location** | `file:line`, `file#symbol` or compiler output in, the whole enclosing function or class out | Probe | `verinoda extract src/a.py:40` prints the enclosing definition |
 
 ## 4 - Git history mining
 
