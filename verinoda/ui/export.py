@@ -6,7 +6,9 @@ claims, the claims on its symbols included, without the code). Symbol links lead
 their file. Nothing is fetched: the page's Content-Security-Policy allows only its own script and
 style (by hash) and no connections. The machine's own paths (the repository's location and the
 home folder, also as the index folds them into names) are taken out of the text, so the file can
-be passed on; what it does contain is the project's names, relative paths, doc text and claims.
+be passed on; what it does contain is the project's names, relative paths, doc text and claims. Secrets and
+e-mail addresses in that text (a token in a doc, an address in a claim) are replaced by a marker
+(:mod:`verinoda.scrub`), so ``verinoda secret-scan`` finds none in the file.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from importlib import resources
 from pathlib import Path
 
 from verinoda import usernotes
+from verinoda.scrub import redact
 from verinoda.ui.data import HIDDEN_KINDS, MAX_GLOBAL_NODES, MAX_SECTION_ITEMS, Atlas
 
 FORMAT = "verinoda-export"
@@ -166,8 +169,9 @@ def build(repo: Path | str) -> dict:
         mine.append({**item, "id": home if home in notes else None})
     data = {"stats": stats, "tree": _prune_tree(tree, ids) or {**tree, "children": []}, "global": graph,
             "notes": notes, "user_notes": mine}
-    # the file is made to be passed on: no path of this machine in its text
-    data = _scrub(data, _scrubber(Path(repo).resolve()))
+    # the file is made to be passed on: no path of this machine, no secret or e-mail address in its text
+    paths = _scrubber(Path(repo).resolve())
+    data = _scrub(data, lambda text: redact(paths(text)))
     return {"format": FORMAT, "version": VERSION,
             "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), **data}
 

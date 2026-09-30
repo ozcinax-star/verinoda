@@ -903,6 +903,19 @@ def cmd_trace_log(args) -> int:
     return 0 if res["traces"] or res["results"] else 2
 
 
+def cmd_secret_scan(args) -> int:
+    from verinoda import scrub
+
+    repo = _repo(args)
+    paths = [Path(p) for p in args.paths]
+    missing = [str(p) for p in paths if not p.is_file()]
+    if missing:
+        raise SystemExit(f"error: not a file: {', '.join(missing)}")
+    res = scrub.scan_files(repo, paths or None, fix=args.fix)
+    _emit(args, res, lambda r: print(scrub.render(r)))
+    return 0 if res["clean"] else 1
+
+
 def cmd_shader(args) -> int:
     from verinoda import shaders
 
@@ -2620,6 +2633,11 @@ def build_parser() -> argparse.ArgumentParser:
                                          "succeed/fail tied to that test; stored as claims with the log as evidence")
     sp.add_argument("file", help="the log (latest.log, a GameTest run's output, a pasted trace)")
     sp.add_argument("--no-store", action="store_true", help="report only; record no claim")
+    sp = add("secret-scan", cmd_secret_scan, "secrets and e-mail addresses left in files (default: the run logs and "
+                                             "copied logs under .verinoda/ and the `ui --export` file): exit 1 on a "
+                                             "finding; values are never printed")
+    sp.add_argument("paths", nargs="*", help="files to scan instead of the stored ones")
+    sp.add_argument("--fix", action="store_true", help="redact the findings in place (line numbers are kept)")
     sp = add("shader", cmd_shader, "GLSL uniform blocks and the Java that fills them: where a field (Weather.y) comes "
                                    "from; --check: blocks and writers that differ, mirrored constants that disagree")
     sp.add_argument("name", nargs="?", help="Field, Field.x or Block.Field")
