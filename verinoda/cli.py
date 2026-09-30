@@ -1010,6 +1010,14 @@ def cmd_agent_lint(args) -> int:
     return {"wrong": 3, "no_files": 2}.get(res["status"], 0)
 
 
+def cmd_brief(args) -> int:
+    from verinoda import project_brief
+
+    res = project_brief.brief(_repo(args), max_chars=args.max_chars)
+    _emit(args, res, lambda r: _write(project_brief.render(r)))
+    return 2 if res["status"] == "empty" else 0
+
+
 def cmd_datapack(args) -> int:
     from verinoda import datapack
 
@@ -3179,6 +3187,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-memory", action="store_true",
                     help="leave out Claude Code's memory files for the project (~/.claude/projects/.../memory)")
     sp.add_argument("--all", action="store_true", help="list the checks that passed too")
+    sp = add("brief", cmd_brief, "the project brief: name, build, test and check commands, CI commands, layout and "
+                                 "conventions, read from the files now, each line with file:line, under a character "
+                                 "budget (exit 2 = nothing found). Not the decision brief: that is `decide brief`")
+    sp.add_argument("--max-chars", type=int, default=2000, metavar="N",
+                    help="the character budget of the text (200-20000; default 2000)")
     sp = add("datapack", cmd_datapack, "Minecraft datapacks: entity tags checked but never added, objectives written "
                                        "but never read, objectives, teams and boss bars used but never declared, "
                                        "calls to missing functions (from mcfunction or Java), names that break "
