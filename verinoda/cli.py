@@ -836,16 +836,25 @@ def cmd_health(args) -> int:
     from verinoda import health as hl
 
     repo = _repo(args)
-    if args.limit < 1:
-        print("error: --limit must be a positive number", file=sys.stderr)
+    if args.limit < 1 or args.min_tokens < 1:
+        print("error: --limit and --min-tokens must be positive numbers", file=sys.stderr)
         return 2
+    cwd = Path.cwd().resolve()
+    paths = []
+    for p in args.paths or []:   # relative to the working folder when it lies in the repository, as a shell reads it
+        if not Path(p).is_absolute() and cwd != repo.resolve() and cwd.is_relative_to(repo.resolve()) \
+                and (cwd / p).exists():
+            p = str(cwd / p)
+        paths.append(_rel_in_repo(repo.resolve(), p, "path"))
     try:
-        res = hl.report(repo, args.paths, limit=args.limit, min_similarity=args.min_similarity,
+        res = hl.report(repo, paths or None, limit=args.limit, min_similarity=args.min_similarity,
                         min_tokens=args.min_tokens, with_clones=not args.no_clones)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     _emit(args, res, lambda r: _write(hl.render_text(r)))
+    for w in res["unmatched"]:
+        print(f"error: no code file under {w}", file=sys.stderr)
     return 2 if res["unmatched"] else 0
 
 

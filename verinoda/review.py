@@ -55,6 +55,8 @@ PLANNED_KINDS = ("body", "signature", "remove")
 DEPTH = 3
 MAX_DEPENDENTS = 40
 MAX_PER_CONCERN = 25
+HEALTH_CLONE_WORK = 5_000_000   # the review's near-duplicate search: pairs of equal tokens its ratios scan (a few s)
+HEALTH_CLONE_COMPARISONS = 2000
 DEFAULT_MAX_CHARS = 6000
 CODE_SUFFIXES = tuple(sorted({".py", ".pyi", *anchors.TS_LANGS}))
 REVIEWABLE_SUFFIXES = tuple(sorted({*CODE_SUFFIXES, *rr.CONFIG_SUFFIXES, *anchors.MD_SUFFIXES, ".gradle", ".xml",
@@ -3459,14 +3461,42 @@ def _removed_refs_js(ctx: _Ctx, c: Change) -> list[dict]:
     return out
 
 
-def _health(ctx: _Ctx, changes: list[Change]) -> list[dict]:
+def _same_name_pairs(old: dict, new: dict) -> dict[str, str | None]:
+    """For definitions that share a name within a file (``f``, ``f#2``, ... numbered by position): the base
+    definition each head one continues, by aligning both versions' runs of that name on their normalised tokens;
+    None for one that has no counterpart (inserted). A definition whose name is unique in both is left out."""
+    def base(q: str) -> str:
+        return re.sub(r"#\d+$", "", q)
+
+    groups: dict[str, tuple[list, list]] = {}
+    for side, ms in ((0, old), (1, new)):
+        for q, m in ms.items():
+            groups.setdefault(base(q), ([], []))[side].append(m)
+    out: dict[str, str | None] = {}
+    for olds, news in groups.values():
+        if len(olds) < 2 and len(news) < 2:
+            continue
+        olds.sort(key=lambda m: m.start)
+        news.sort(key=lambda m: m.start)
+        sm = difflib.SequenceMatcher(None, [tuple(m.toks or ()) for m in olds], [tuple(m.toks or ()) for m in news],
+                                     autojunk=False)
+        for tag, i1, i2, j1, j2 in sm.get_opcodes():
+            for k, n in enumerate(news[j1:j2]):
+                out[n.qual] = olds[i1 + k].qual if tag in ("equal", "replace") and i1 + k < i2 else None
+    return out
+
+
+def _health(ctx: _Ctx, changes: list[Change], notes: list[str]) -> list[dict]:
     """A changed function whose code health fell (a smell threshold of :data:`verinoda.health.SMELLS` reached), an
     added one below full health, and a near-duplicate of another function of its file that the change made. The
     metrics are counted on both versions' syntax trees; the score and the similarity are heuristics, so every
-    finding is ``strong_inference``."""
+    finding is ``strong_inference``. The clone search has one budget for the whole review
+    (:data:`HEALTH_CLONE_WORK`); what it left out is added to ``notes``."""
     from verinoda import health as hl
 
     per: dict[tuple[str, str], dict | None] = {}
+    pairs: dict[str, dict[str, str | None]] = {}
+    budget = hl.new_budget(HEALTH_CLONE_WORK, HEALTH_CLONE_COMPARISONS)
 
     def metrics(rel: str, side: str) -> dict:
         if (rel, side) not in per:
@@ -3474,8 +3504,29 @@ def _health(ctx: _Ctx, changes: list[Change]) -> list[dict]:
             per[(rel, side)] = hl.file_metrics(rel, t, with_tokens=True) if t is not None else None
         return per[(rel, side)] or {}
 
+    def base_of(c: Change, q: str) -> str | None:
+        """The base version's name of the head definition ``q`` of ``c.file``."""
+        if c.file not in pairs:
+            pairs[c.file] = _same_name_pairs(metrics(c.file, "old"), metrics(c.file, "new"))
+        if q in pairs[c.file]:
+            return pairs[c.file][q]
+        if q == c.qual and c.kind == "added":
+            return c.renamed_from
+        return q
+
     def shown(m) -> dict:
         return {**m.values(), "health": m.health}
+
+    def evidence(c: Change, m, moved) -> list[str]:
+        """The lines behind the metrics in ``moved``: the deepest nesting, the whole span, the parameter list."""
+        ev = []
+        if moved & {"cyclomatic", "cognitive", "nesting"} and m.nesting and m.deepest:
+            ev.append(f"{c.file}:{m.deepest}")
+        if "lines" in moved:
+            ev.append(f"{c.file}:{m.start}-{m.end}")
+        if "params" in moved:
+            ev.append(f"{c.file}:{c.def_line or m.start}")
+        return ev
 
     out: list[dict] = []
     seen: set[frozenset] = set()
@@ -3484,31 +3535,41 @@ def _health(ctx: _Ctx, changes: list[Change]) -> list[dict]:
         new = metrics(c.file, "new").get(c.qual)
         if new is None:
             continue
-        old_q = c.renamed_from if c.kind == "added" else c.qual
+        old_q = base_of(c, c.qual)
         old = metrics(c.file, "old").get(old_q) if old_q else None
         at = f"{c.file}:{new.start}"
-        deep = [f"{c.file}:{new.deepest}"] if new.nesting and new.deepest else []
         smells = ", ".join(s["smell"].replace("_", " ") for s in new.smells)
         if old is not None and new.health < old.health:
             was = old.values()
-            moved = "; ".join(f"{k} {was[k]} -> {v}" for k, v in new.values().items() if v != was[k])
+            now = new.values()
+            text = "; ".join(f"{k} {was[k]} -> {v}" for k, v in now.items() if v != was[k])
+            # the metrics that reached a further threshold: the cause of the drop
+            moved = {k for k, steps in hl.SMELLS.values()
+                     if sum(now[k] >= t for t in steps) > sum(was[k] >= t for t in steps)}
             out.append(_finding("health", "health-drop", f"code health of {c.name} fell from {old.health} to "
-                                f"{new.health} ({moved}); now: {smells}", "strong_inference", at, evidence_at=deep,
-                                basis=basis, derived_by="verinoda.health", for_symbol=c.symbol,
-                                base_at=f"{c.file}:{old.start}-{old.end}",
+                                f"{new.health} ({text}); now: {smells}", "strong_inference", at,
+                                evidence_at=evidence(c, new, moved), basis=basis, derived_by="verinoda.health",
+                                for_symbol=c.symbol, base_at=f"{c.file}:{old.start}-{old.end}",
                                 metrics={"base": shown(old), "head": shown(new)}))
-        elif old is None and c.kind == "added" and new.health < 10:
+        elif old is None and old_q is None and new.health < 10:
             vals = ", ".join(f"{k} {v}" for k, v in new.values().items())
+            hit = {s["metric"] for s in new.smells}
             out.append(_finding("health", "health-low-added", f"added {c.name} starts at code health {new.health} "
-                                f"of 10 ({vals}); smells: {smells}", "strong_inference", at, evidence_at=deep,
-                                basis=basis, derived_by="verinoda.health", for_symbol=c.symbol,
-                                metrics={"head": shown(new)}))
-        before = ({o.qual for o, _r in hl.near_duplicates(metrics(c.file, "old"), old.qual)} if old is not None
-                  else set())
-        for other, r in hl.near_duplicates(metrics(c.file, "new"), c.qual):
+                                f"of 10 ({vals}); smells: {smells}", "strong_inference", at,
+                                evidence_at=evidence(c, new, hit), basis=basis, derived_by="verinoda.health",
+                                for_symbol=c.symbol, metrics={"head": shown(new)}))
+        for other, r in hl.near_duplicates(metrics(c.file, "new"), c.qual, budget):
             key = frozenset((c.qual, other.qual))
-            if other.qual in before or (c.file, key) in seen:   # as alike in the base: not this change's
+            if (c.file, key) in seen:
                 continue
+            other_old = base_of(c, other.qual)
+            other_was = metrics(c.file, "old").get(other_old) if other_old else None
+            if old is not None and other_was is not None:
+                was_alike = hl.alike(old, other_was, budget)
+                if budget["truncated"]:
+                    break
+                if was_alike is not None:   # as alike in the base: not this change's
+                    continue
             seen.add((c.file, key))
             n = min(len(new.toks or ()), len(other.toks or ()))
             out.append(_finding("health", "clone-added", f"{c.name} is a near-duplicate of {other.qual} "
@@ -3517,6 +3578,12 @@ def _health(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                                 basis="similarity ratio of the normalised token sequences (names and literals "
                                       "replaced); the pair was less alike in the base", derived_by="verinoda.health",
                                 for_symbol=c.symbol, similarity=round(r, 3)))
+    if budget["truncated"]:
+        notes.append(f"health: the near-duplicate search stopped after {budget['compared']} comparison(s) "
+                     "(verinoda/review.py HEALTH_CLONE_WORK); later changed functions were not checked for clones")
+    if budget["too_long"]:
+        notes.append(f"health: {budget['too_long']} changed function(s) of more than {hl.MAX_CLONE_TOKENS} normalised tokens "
+                     "not compared for clones")
     return out
 
 
@@ -4426,8 +4493,9 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         found["config"] = _config(ctx, changes)
     if "entry_points" in want:
         found["entry_points"] = _entries(ctx, changes, walk) + _manifest_findings(ctx, changes)
+    health_notes: list[str] = []
     if "health" in want and not targets:
-        found["health"] = _health(ctx, changes)
+        found["health"] = _health(ctx, changes, health_notes)
     for k in found:
         found[k] = _dedupe(found[k])
         found[k].sort(key=lambda f: (rr.rank(f["status"]), f["at"] or ""))
@@ -4471,7 +4539,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
                      "not_checked": ([] if "security" in want and not targets else
                                      ["security (a planned change has no diff to compare)"] if targets else [])
                      + (["health (a planned change has no new version to measure)"]
-                        if targets and "health" in want else [])},
+                        if targets and "health" in want else []) + health_notes},
         "counts": {"changes": len(changes), "findings": sum(len(v) for v in found.values()),
                    "strong_or_verified": n_strong, "unknown": len(unknown)},
     }

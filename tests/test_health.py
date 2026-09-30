@@ -260,3 +260,160 @@ def test_review_of_an_unchanged_health_is_quiet_and_a_plan_is_not_measured(index
     plan = _review(indexed, targets=["app/core.py::handle"], change="body")
     assert plan["concerns"]["health"] == []
     assert any(s.startswith("health") for s in plan["coverage"]["not_checked"])
+
+
+# -- review: renames, pairs already alike, same-name definitions, evidence, other languages ------------------------
+
+def _commit_all(repo: Path) -> None:
+    from verinoda import workflow
+    from verinoda.store import open_store
+
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "next")
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+    finally:
+        st.close()
+
+
+def test_review_of_a_rename_and_of_a_pair_already_alike_is_quiet(indexed):
+    # the base gets two alike functions; renaming one of them adds neither a clone nor a low-health finding
+    (indexed / "app/core.py").write_text(TANGLED + "\n\n" + _body("collect", "out") + "\n\n" + _body("gather", "acc"),
+                                         encoding="utf-8", newline="\n")
+    _commit_all(indexed)
+    text = (indexed / "app/core.py").read_text(encoding="utf-8")
+    (indexed / "app/core.py").write_text(text.replace("def handle(", "def process(")
+                                         .replace("def gather(", "def gather_all("), encoding="utf-8", newline="\n")
+    res = _review(indexed)
+    assert {c.get("renamed_from") for c in res["changes"] if c.get("renamed_from")} == {"handle", "gather"}
+    assert res["concerns"]["health"] == []
+
+
+def test_review_pairs_same_name_definitions_by_content(indexed):
+    tangled = TANGLED.split("\n\ndef other")[0].replace("def handle(order, limit)", "    def load(order, limit)")
+    tangled = "\n".join(("    " + ln if ln.strip() and not ln.startswith("    def") else ln)
+                        for ln in tangled.strip("\n").split("\n"))
+    base = f"import sys\n\nif sys.platform == 'win32':\n    def load(order, limit):\n        return order\nelse:\n{tangled}\n"
+    (indexed / "app/core.py").write_text(base, encoding="utf-8", newline="\n")
+    _commit_all(indexed)
+    head = base.replace("else:\n", "elif sys.platform == 'linux':\n    def load(order, limit):\n"
+                                   "        return order + 1\nelse:\n", 1)
+    (indexed / "app/core.py").write_text(head, encoding="utf-8", newline="\n")
+    res = _review(indexed)
+    # the tangled load is now load#3, but it is the base's load#2 unchanged: no finding about it
+    assert res["concerns"]["health"] == []
+
+
+def test_review_cites_the_line_behind_the_metric_that_dropped(indexed):
+    (indexed / "app/core.py").write_text(SIMPLE.replace("def handle(order, limit):",
+                                                        "def handle(order, limit, a, b, c):"),
+                                         encoding="utf-8", newline="\n")
+    _commit_all(indexed)
+    (indexed / "app/core.py").write_text(SIMPLE.replace("def handle(order, limit):",
+                                                        "@staticmethod\ndef handle(order, limit, a, b, c, d):"),
+                                         encoding="utf-8", newline="\n")
+    [f] = _review(indexed)["concerns"]["health"]
+    assert f["rule"] == "health-drop" and "params 5 -> 6" in f["finding"]
+    assert f["at"] == "app/core.py:2" and f["evidence_at"] == ["app/core.py:3"]   # the def line, not a branch
+
+
+def test_review_measures_a_tree_sitter_language(indexed):
+    if hl.file_metrics("a.js", "function f() {}\n") is None:
+        pytest.skip("no tree-sitter grammar for JavaScript")
+    simple = "function handle(a, b) {\n  return a;\n}\n"
+    (indexed / "app/web.js").write_text(simple, encoding="utf-8", newline="\n")
+    _commit_all(indexed)
+    tangled = ("function handle(a, b) {\n  if (a) {\n    for (const x of b) {\n      if (x) {\n"
+               "        while (x > a) {\n          if (a && b) { a -= 1; }\n        }\n      }\n    }\n  }\n"
+               "  return a;\n}\n")
+    (indexed / "app/web.js").write_text(tangled, encoding="utf-8", newline="\n")
+    [f] = _review(indexed)["concerns"]["health"]
+    assert f["rule"] == "health-drop" and f["metrics"]["head"]["nesting"] == 5
+    assert f["evidence_at"] == ["app/web.js:6"]
+
+
+# -- more grammars, the default arm, budgets, paths ---------------------------------------------------------------
+
+NESTED = {
+    "a.js": "function f(a, b) {\n if (a) { if (b) { x(); } } else if (b) { y(); } else { z(); }\n}\n",
+    "a.rb": "def f(a, b)\n  if a\n    if b\n      x\n    end\n  elsif b\n    y\n  else\n    z\n  end\nend\n",
+    "a.php": "<?php\nfunction f($a, $b) {\n if ($a) { if ($b) { x(); } } elseif ($b) { y(); } else { z(); }\n}\n",
+    "a.lua": "function f(a, b)\n if a then if b then x() end elseif b then y() else z() end\nend\n",
+}
+
+
+@pytest.mark.parametrize("rel", sorted(NESTED))
+def test_if_else_if_else_is_counted_alike_across_grammars(rel):
+    [m] = _ts_or_skip(rel, NESTED[rel]).values()
+    # 1 + if + nested if + else-if; cognitive: if 1, nested if 2, else-if 1, else 1
+    assert (m.cyclomatic, m.cognitive, m.nesting, m.params) == (4, 5, 2, 2)
+
+
+def test_ruby_modifiers_swift_arms_and_parameters_scala_matches():
+    rb = _ts_or_skip("a.rb", "def f(a)\n  x = 1 if a\n  a -= 1 while a > 0\n  a ? 1 : 2\nend\n")["f"]
+    assert rb.cyclomatic == 4
+    swift = ("func f(a: Int, b: Int) -> Int {\n switch a {\n case 1: return 1\n case 2: return 2\n"
+             " default: return 0\n }\n}\n")
+    sw = _ts_or_skip("a.swift", swift)["f"]
+    assert (sw.cyclomatic, sw.params) == (3, 2)   # two case arms; `default` is no branch
+    scala = ("object O {\n def f(a: Int, b: Int): Int = {\n  if (a > 1 && b > 2) 1 else 2\n  a match {\n"
+             "   case 1 => 1\n   case _ => 0\n  }\n }\n}\n")
+    sc = _ts_or_skip("a.scala", scala)["O.f"]
+    assert (sc.cyclomatic, sc.params) == (4, 2)   # if, &&, `case 1`; `case _` is the default
+
+
+def test_python_wildcard_case_is_the_default_arm():
+    f = hl.file_metrics("a.py", "def f(a):\n    match a:\n        case 1:\n            pass\n"
+                                "        case x if x > 2:\n            pass\n        case _:\n            pass\n")["f"]
+    assert f.cyclomatic == 3   # `case 1` and the guarded case; `case _` is not a branch
+
+
+def test_clone_search_is_bounded_by_length_and_work():
+    big = ", ".join(["1"] * (hl.MAX_CLONE_TOKENS // 2 + 10))
+    text = f"def a():\n    return [{big}]\n\n\ndef b():\n    return [{big}]\n"
+    ms = hl.file_metrics("big.py", text, with_tokens=True)
+    pairs, stats = hl.clones(list(ms.values()))
+    assert pairs == [] and stats == {"compared": 0, "truncated": False, "too_long": 2}
+    budget = hl.new_budget()
+    assert hl.near_duplicates(ms, "a", budget) == [] and budget["too_long"] == 1
+    # a budget too small for one ratio stops the search and says so
+    text = _body("one", "out") + "\n\n" + _body("two", "acc")
+    ms = hl.file_metrics("c.py", text, with_tokens=True)
+    budget = hl.new_budget(work=10)
+    assert hl.near_duplicates(ms, "one", budget, min_tokens=30) == [] and budget["truncated"] is True
+    pairs, stats = hl.clones(list(ms.values()), min_tokens=30, max_work=10)
+    assert pairs == [] and stats["truncated"] is True
+    # functions without tokens: nothing to compare, no division by zero
+    empty = {q: hl.FnMetrics("z.py", q, i, i, toks=[]) for i, q in enumerate(("x", "y"), 1)}
+    assert hl.near_duplicates(empty, "x", min_tokens=0) == [] and hl.clones(list(empty.values()), min_tokens=0)[0] == []
+
+
+def test_report_rejects_a_non_positive_min_tokens_and_names_unmatched_paths(tmp_path):
+    repo = _repo(tmp_path, {"pkg/m.py": PY})
+    with pytest.raises(ValueError):
+        hl.report(repo, min_tokens=0)
+    res = hl.report(repo, ["pkg\\m.py", "nope"])
+    assert res["functions"] == 3 and res["unmatched"] == ["nope"]
+    assert "No code file under: nope" in hl.render_text(res)
+
+
+def test_cli_health_reads_paths_from_the_working_folder(tmp_path):
+    repo = _repo(tmp_path, {"pkg/m.py": PY, "other/o.py": "def o():\n    return 1\n"})
+    env = {**os.environ, "PYTHONPATH": str(ROOT)}
+
+    def run(*args, cwd):
+        out = subprocess.run([sys.executable, "-m", "verinoda", "health", *args, "--repo", str(repo), "--json",
+                              "--no-clones"], capture_output=True, text=True, env=env, cwd=cwd)
+        return out.returncode, (json.loads(out.stdout) if out.stdout.strip() else None), out.stderr
+
+    code, res, _err = run("pkg\\m.py", cwd=repo)
+    assert code == 0 and res["functions"] == 3
+    code, res, _err = run("m.py", cwd=repo / "pkg")
+    assert code == 0 and res["functions"] == 3
+    code, res, _err = run(".", cwd=repo / "pkg")   # the working folder, not the whole repository
+    assert code == 0 and res["functions"] == 3
+    code, res, err = run("missing", cwd=repo)
+    assert code == 2 and "no code file under missing" in err
+    code, _res, err = run("--min-tokens", "0", cwd=repo)
+    assert code == 2 and "--min-tokens" in err

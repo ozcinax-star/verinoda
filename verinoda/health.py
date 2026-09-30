@@ -11,8 +11,8 @@
 * **lines** of the definition and **params** (``self``/``cls`` not counted).
 
 Python is read with :mod:`ast`; every language :mod:`verinoda.anchors` has a tree-sitter grammar for is read from
-its tree with one table of node types. A nested function or class is its own entry, not part of its parent's
-counts. The metrics are counted, so ``statically_verified``; the **health** score (10 = no smell, 1 = worst) is a
+its tree with one table of node types (a construct a grammar names otherwise is not counted). A nested function
+or class is its own entry, not part of its parent's counts. The metrics are counted, so ``statically_verified``; the **health** score (10 = no smell, 1 = worst) is a
 heuristic over thresholds (:data:`SMELLS`), so ``strong_inference`` at most, and so is a clone: two functions
 whose token sequences, names and literals normalised, have a similarity ratio (:class:`difflib.SequenceMatcher`)
 of at least ``min_similarity``. Nothing here runs the project's code.
@@ -42,6 +42,8 @@ BANDS = (("healthy", 9), ("problematic", 5), ("unhealthy", 1))
 MIN_SIMILARITY = 0.9
 MIN_TOKENS = 50
 MAX_COMPARISONS = 20000
+MAX_WORK = 50_000_000      # pairs of equal tokens the similarity ratios scan (a few seconds per 10 million)
+MAX_CLONE_TOKENS = 1500    # a longer function is not compared (one ratio could take seconds)
 DEFAULT_LIMIT = 20
 _SHINGLE = 5
 _COMMON_SHINGLE = 25   # a shingle in more functions than this says nothing about which two are alike
@@ -51,6 +53,9 @@ LIMITS = [
     "the health score is a heuristic over fixed thresholds (verinoda/health.py SMELLS), not a quality verdict",
     "clones are compared on normalised tokens (names and literals replaced): two functions of the same shape "
     "that do different things can score high; a pair must share token runs to be compared at all",
+    f"a function of more than {MAX_CLONE_TOKENS} normalised tokens is not compared for clones",
+    "tree-sitter languages are counted from one table of node types (verinoda/health.py _TS_*): a construct a "
+    "grammar names otherwise is not counted",
 ]
 
 
@@ -68,6 +73,7 @@ class FnMetrics:
     smells: list[dict] = field(default_factory=list)
     health: int = 10
     toks: list[str] | None = field(default=None, repr=False)   # normalised, for clones
+    shingles: set[int] | None = field(default=None, repr=False, compare=False)
 
     @property
     def lines(self) -> int:
@@ -178,7 +184,9 @@ def _py_metrics(fn: ast.AST, m: FnMetrics, lines: list[str]) -> None:
             enter(depth + 1, n.lineno)
             visit(n.subject, nest, depth, n)
             for case in n.cases:
-                m.cyclomatic += 1
+                p = case.pattern
+                if case.guard is not None or not (isinstance(p, ast.MatchAs) and p.pattern is None and p.name is None):
+                    m.cyclomatic += 1   # `case _:` is the default arm
                 if case.guard is not None:
                     visit(case.guard, nest + 1, depth + 1, n)
                 block(case.body, nest + 1, depth + 1)
@@ -214,19 +222,23 @@ def _py_metrics(fn: ast.AST, m: FnMetrics, lines: list[str]) -> None:
 
 # -- tree-sitter languages ------------------------------------------------------------------------------------
 
-_TS_IF = {"if_statement", "if_expression", "elsif", "unless"}
-_TS_ELSE = {"else_clause", "else"}
+# Ruby names its if node `if` (the keyword shares the name but is not a named node)
+_TS_IF = {"if_statement", "if_expression", "if", "elsif", "unless", "if_modifier", "unless_modifier",
+          "else_if_clause", "elseif_statement"}
+_TS_ELSE_IF = {"elsif", "else_if_clause", "elseif_statement"}   # always the else-if of the node holding it
+_TS_ELSE = {"else_clause", "else", "else_statement"}
 _TS_WRAP = {"else_clause", "else", "control_structure_body"}
 _TS_LOOPS = {"for_statement", "enhanced_for_statement", "while_statement", "do_statement", "do_while_statement",
              "for_in_statement", "for_of_statement", "for_expression", "while_expression", "loop_expression",
-             "for_range_loop", "range_based_for_statement", "foreach_statement", "while", "until", "for"}
+             "for_range_loop", "range_based_for_statement", "foreach_statement", "while", "until", "for",
+             "while_modifier", "until_modifier", "repeat_statement"}
 _TS_SWITCH = {"switch_statement", "switch_expression", "match_expression", "when_expression",
               "expression_switch_statement", "type_switch_statement", "select_statement", "match_statement", "case"}
 # one per arm (Java's `case A -> x` is a switch_rule holding a switch_label: the label is what counts)
 _TS_ARMS = {"switch_case", "switch_label", "when_entry", "match_arm", "expression_case", "type_case",
-            "communication_case", "case_statement", "switch_section", "when"}
+            "communication_case", "case_statement", "switch_section", "when", "switch_entry", "case_clause"}
 _TS_CATCH = {"catch_clause", "rescue", "catch_block"}
-_TS_TERNARY = {"conditional_expression", "ternary_expression"}
+_TS_TERNARY = {"conditional_expression", "ternary_expression", "conditional"}
 _TS_LAMBDA = {"arrow_function", "lambda_expression", "lambda_literal", "closure_expression", "anonymous_function",
               "function_expression", "func_literal", "lambda"}
 _TS_BOOL_NODES = {"conjunction_expression": "&&", "disjunction_expression": "||"}
@@ -242,21 +254,25 @@ def _ts_named(n) -> list:
 def _ts_bool_op(n) -> str | None:
     if n.type in _TS_BOOL_NODES:
         return _TS_BOOL_NODES[n.type]
-    if n.type in ("binary_expression", "binary", "boolean_operator"):
+    if n.type in ("binary_expression", "binary", "boolean_operator", "infix_expression"):
         op = n.child_by_field_name("operator")
         if op is None:
             op = next((c for c in n.children if not c.is_named), None)
-        t = op.type if op is not None else ""
+        if op is None:
+            return None
+        t = op.type if not op.is_named else op.text.decode("utf-8", "replace")   # Scala: an operator_identifier
         return t if t in _TS_BOOL_OPS else None
     return None
 
 
 def _ts_chained(n) -> bool:
     """Is the if-like node ``n`` the ``else if`` of an enclosing one (not nested in one of its branches)?"""
-    if n.type == "elsif":
+    if n.type in _TS_ELSE_IF:
         return True
     cur, p = n, n.parent
     while p is not None and p.type in _TS_WRAP:
+        if len(_ts_named(p)) != 1:
+            return False   # an else branch with more in it than the if (Ruby's `else` holds statements)
         cur, p = p, p.parent
     if p is None or p.type not in _TS_IF:
         return False
@@ -315,8 +331,10 @@ def _ts_metrics(fn, m: FnMetrics, def_ids: set[int]) -> None:
             inner_nest, inner_depth = nest + 1, depth + 1
             enter(inner_depth, n)
         elif t in _TS_ARMS:
-            head = n.text[:12].lstrip().lower()
-            if not head.startswith((b"default", b"else", b"_ ", b"_=")):
+            head = n.text[:16].lstrip().lower()
+            if head.startswith(b"case") and head[4:5] in (b" ", b"\t", b"\n", b"\r"):
+                head = head[4:].lstrip()   # Scala's `case _ =>`
+            if not head.startswith((b"default", b"else", b"_ ", b"_=", b"_:")):
                 m.cyclomatic += 1
         elif t in _TS_TERNARY:
             m.cyclomatic += 1
@@ -339,6 +357,8 @@ def _ts_metrics(fn, m: FnMetrics, def_ids: set[int]) -> None:
         plist = decl.child_by_field_name("parameters") if decl is not None else None
     if plist is not None:
         m.params = sum(1 for c in _ts_named(plist) if c.type not in ("self_parameter", "this", "receiver_parameter"))
+    else:   # no list node: the parameters are the definition's own children (Swift)
+        m.params = sum(1 for c in fn.children if c.type == "parameter")
 
 
 # -- one file --------------------------------------------------------------------------------------------------
@@ -523,24 +543,79 @@ def _contains(a: FnMetrics, b: FnMetrics) -> bool:
 def _may_reach(a: list[str], b: list[str], min_similarity: float) -> bool:
     """Can the ratio of ``a`` and ``b`` reach ``min_similarity`` at all (it is at most 2*shorter/(sum))?"""
     shorter, longer = sorted((len(a), len(b)))
-    return 2 * shorter / (shorter + longer) >= min_similarity
+    return shorter > 0 and 2 * shorter / (shorter + longer) >= min_similarity
+
+
+def _shingles(m: FnMetrics) -> set[int]:
+    if m.shingles is None:
+        t = m.toks or []
+        m.shingles = {hash(tuple(t[i:i + _SHINGLE])) for i in range(len(t) - _SHINGLE + 1)}
+    return m.shingles
+
+
+def new_budget(work: int = MAX_WORK, comparisons: int = MAX_COMPARISONS) -> dict:
+    """What a clone search may still spend: ``comparisons`` and ``work`` (see :func:`_ratio`); ``truncated`` once
+    either ran out, and ``too_long``: the functions left out for having more than :data:`MAX_CLONE_TOKENS`
+    tokens."""
+    return {"compared": 0, "comparisons_left": comparisons, "work_left": work, "truncated": False, "too_long": 0}
+
+
+def _ratio(a: list[str], b: list[str], min_similarity: float, budget: dict) -> float | None:
+    """The similarity ratio of ``a`` and ``b``, or an upper bound of it below ``min_similarity`` (the multisets of
+    tokens already differ too much); None when ``budget`` ran out. The ratio's work, charged to the budget, is
+    what its matching scans: every pair of equal tokens (a long run of one repeated token costs its square)."""
+    if budget["comparisons_left"] <= 0:
+        budget["truncated"] = True
+        return None
+    budget["comparisons_left"] -= 1
+    budget["compared"] += 1
+    sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
+    bound = sm.real_quick_ratio()
+    if bound >= min_similarity:
+        bound = sm.quick_ratio()
+    if bound < min_similarity:
+        return bound
+    cb = Counter(b)
+    cost = sum(n * cb[t] for t, n in Counter(a).items())
+    if budget["work_left"] < cost:
+        budget["truncated"] = True
+        return None
+    budget["work_left"] -= cost
+    return sm.ratio()
+
+
+def _stats(budget: dict) -> dict:
+    return {"compared": budget["compared"], "truncated": budget["truncated"], "too_long": budget["too_long"]}
+
+
+def _comparable(fns, min_tokens: int, budget: dict) -> list[FnMetrics]:
+    out = []
+    for m in fns:
+        if m.toks is None or len(m.toks) < max(1, min_tokens):
+            continue
+        if len(m.toks) > MAX_CLONE_TOKENS:
+            budget["too_long"] += 1
+            continue
+        out.append(m)
+    return out
 
 
 def clones(fns: list[FnMetrics], *, min_similarity: float = MIN_SIMILARITY, min_tokens: int = MIN_TOKENS,
-           max_comparisons: int = MAX_COMPARISONS) -> tuple[list[dict], dict]:
-    """Near-duplicate pairs among ``fns`` (with their tokens) of at least ``min_tokens`` tokens: candidates share
-    at least half of the smaller one's token 5-grams that are rare (in at most :data:`_COMMON_SHINGLE`
-    functions), then the similarity ratio decides. Returns ``(pairs, stats)``; ``stats["truncated"]`` when
-    ``max_comparisons`` stopped the search."""
-    units = [m for m in fns if m.toks is not None and len(m.toks) >= min_tokens]
-    shingles = [{hash(tuple(u.toks[i:i + _SHINGLE])) for i in range(len(u.toks) - _SHINGLE + 1)} for u in units]
+           max_comparisons: int = MAX_COMPARISONS, max_work: int = MAX_WORK) -> tuple[list[dict], dict]:
+    """Near-duplicate pairs among ``fns`` (with their tokens) of at least ``min_tokens`` and at most
+    :data:`MAX_CLONE_TOKENS` tokens: candidates share at least half of the smaller one's token 5-grams that are
+    rare (in at most :data:`_COMMON_SHINGLE` functions), then the similarity ratio decides. Returns
+    ``(pairs, stats)``; ``stats["truncated"]`` when ``max_comparisons`` or ``max_work`` (:func:`new_budget`)
+    stopped the search, ``stats["too_long"]`` the functions not compared for their length."""
+    budget = new_budget(max_work, max_comparisons)
+    units = _comparable(fns, min_tokens, budget)
+    shingles = [_shingles(u) for u in units]
     index: dict[int, list[int]] = {}
     for i, sh in enumerate(shingles):
         for h in sh:
             index.setdefault(h, []).append(i)   # ascending ids
     rare = [[h for h in sh if len(index[h]) <= _COMMON_SHINGLE] for sh in shingles]
     pairs: list[dict] = []
-    compared, truncated = 0, False
     for i, hs in enumerate(rare):
         shared: Counter = Counter()
         for h in hs:
@@ -551,17 +626,15 @@ def clones(fns: list[FnMetrics], *, min_similarity: float = MIN_SIMILARITY, min_
             if k < 0.5 * min(len(hs), len(rare[j])) or _contains(a, b) \
                     or not _may_reach(a.toks, b.toks, min_similarity):
                 continue
-            if compared >= max_comparisons:
-                truncated = True
+            r = _ratio(a.toks, b.toks, min_similarity, budget)
+            if r is None:
                 break
-            compared += 1
-            r = similarity(a.toks, b.toks)
             if r >= min_similarity:
                 pairs.append(clone_pair(a, b, r))
-        if truncated:
+        if budget["truncated"]:
             break
     pairs.sort(key=lambda p: (-p["similarity"], -p["tokens"], p["a"]["at"]))
-    return pairs, {"compared": compared, "truncated": truncated}
+    return pairs, _stats(budget)
 
 
 def clone_pair(a: FnMetrics, b: FnMetrics, ratio: float) -> dict:
@@ -572,20 +645,44 @@ def clone_pair(a: FnMetrics, b: FnMetrics, ratio: float) -> dict:
             "basis": "similarity ratio of the normalised token sequences (names and literals replaced)"}
 
 
-def near_duplicates(fns: dict[str, FnMetrics], qual: str, *, min_similarity: float = MIN_SIMILARITY,
-                    min_tokens: int = MIN_TOKENS) -> list[tuple[FnMetrics, float]]:
-    """The functions of one file version (``fns``, with their tokens) that are near-duplicates of ``qual``."""
+def alike(a: FnMetrics, b: FnMetrics, budget: dict, *, min_similarity: float = MIN_SIMILARITY,
+          min_tokens: int = MIN_TOKENS) -> float | None:
+    """The similarity ratio of two functions (with their tokens) when it reaches ``min_similarity``; None when
+    it does not, when either is too short or too long to compare, or when ``budget`` ran out."""
+    if a.toks is None or b.toks is None or _contains(a, b):
+        return None
+    n = max(1, min_tokens)
+    if not (n <= len(a.toks) <= MAX_CLONE_TOKENS and n <= len(b.toks) <= MAX_CLONE_TOKENS) \
+            or not _may_reach(a.toks, b.toks, min_similarity):
+        return None
+    sa, sb = _shingles(a), _shingles(b)
+    if len(sa & sb) < 0.5 * min(len(sa), len(sb)):   # the prefilter of clones(), over all 5-grams
+        return None
+    r = _ratio(a.toks, b.toks, min_similarity, budget)
+    return r if r is not None and r >= min_similarity else None
+
+
+def near_duplicates(fns: dict[str, FnMetrics], qual: str, budget: dict | None = None, *,
+                    min_similarity: float = MIN_SIMILARITY, min_tokens: int = MIN_TOKENS
+                    ) -> list[tuple[FnMetrics, float]]:
+    """The functions of one file version (``fns``, with their tokens) that are near-duplicates of ``qual``, as far
+    as ``budget`` (:func:`new_budget`, shared across calls) reaches."""
+    budget = new_budget() if budget is None else budget
     u = fns.get(qual)
-    if u is None or u.toks is None or len(u.toks) < min_tokens:
+    if u is None or u.toks is None or len(u.toks) < max(1, min_tokens):
+        return []
+    if len(u.toks) > MAX_CLONE_TOKENS:
+        budget["too_long"] += 1
         return []
     out = []
     for v in fns.values():
-        if v is u or v.toks is None or len(v.toks) < min_tokens or _contains(u, v) \
-                or not _may_reach(u.toks, v.toks, min_similarity):
+        if v is u:
             continue
-        r = similarity(u.toks, v.toks)
-        if r >= min_similarity:
+        r = alike(u, v, budget, min_similarity=min_similarity, min_tokens=min_tokens)
+        if r is not None:
             out.append((v, r))
+        if budget["truncated"]:
+            break
     return out
 
 # -- the report ------------------------------------------------------------------------------------------------
@@ -610,7 +707,7 @@ def _select(repo: Path, paths: list[str] | None) -> tuple[list[str], list[str]]:
     for p in paths:
         q = Path(p)
         try:
-            rel = q.resolve().relative_to(repo).as_posix() if q.is_absolute() else PurePosixPath(p).as_posix()
+            rel = q.resolve().relative_to(repo).as_posix() if q.is_absolute() else p.replace("\\", "/")
         except ValueError:
             raise ValueError(f"{p} is outside the repository {repo}") from None
         want.append("" if rel in (".", "./") else rel.strip("/").removeprefix("./"))
@@ -625,6 +722,8 @@ def report(repo: Path, paths: list[str] | None = None, *, limit: int = DEFAULT_L
     repo = Path(repo).resolve()
     if not 0 < min_similarity <= 1:
         raise ValueError("min_similarity must be in (0, 1]")
+    if min_tokens < 1:
+        raise ValueError("min_tokens must be a positive number")
     files, unmatched = _select(repo, paths)
     fns: list[FnMetrics] = []
     unread: list[str] = []
@@ -685,7 +784,11 @@ def render_text(res: dict) -> str:
         stats = res["coverage"].get("clone_comparisons") or {}
         if stats.get("truncated"):
             out.append(f"  comparisons stopped after {stats['compared']}: pass paths to narrow the search")
+        if stats.get("too_long"):
+            out.append(f"  {stats['too_long']} function(s) of more than {MAX_CLONE_TOKENS} tokens not compared")
     if res.get("unsupported_total"):
         out += ["", f"Not measured ({res['unsupported_total']} file(s): no grammar or a parse error): "
                 + ", ".join(res["unsupported"][:5]) + (" ..." if res["unsupported_total"] > 5 else "")]
+    if res.get("unmatched"):
+        out += ["", "No code file under: " + ", ".join(res["unmatched"])]
     return "\n".join(out)
