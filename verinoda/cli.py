@@ -833,13 +833,17 @@ def cmd_review(args) -> int:
 
 
 def cmd_query(args) -> int:
-    from verinoda import freshness, index, retrieval
+    from verinoda import freshness, index, query_filters, retrieval
 
     repo = _repo(args)
     _need_graph(repo)
     g = index.load(repo)
     chars = args.max_chars or retrieval.question_chars(args.question, repo)
-    res = retrieval.retrieve(g, args.question, retrieval.Budget(max_items=args.max_items, max_chars=chars))
+    try:
+        res = retrieval.retrieve(g, args.question, retrieval.Budget(max_items=args.max_items, max_chars=chars),
+                                 filters=True)
+    except query_filters.FilterError as exc:
+        raise SystemExit(f"error: {exc}") from None
     retrieval.attach_freshness(res, g, freshness.check(repo))  # never silently answer from an older tree
     if args.json:
         _write(_dump(res))
@@ -2597,7 +2601,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="run those tests under the call tracer: which of them reach the changed functions")
     sp.add_argument("--max-chars", type=int, default=6000, help="budget of the read_first list")
     sp = add("query", cmd_query, "bounded, justified retrieval for a question (plain text; --json for programs)")
-    sp.add_argument("question")
+    sp.add_argument("question", help="text to rank; filters narrow it: path:GLOB lang:NAME symbol:NAME "
+                                     "is:vendored /regex/, joined by AND, OR, NOT (or -filter) and parentheses")
     sp.add_argument("--max-items", type=int, default=10)
     sp.add_argument("--max-chars", type=int, default=None,
                     help="character budget (default 6000; with query.shape_budget on, 4800 for a single-clause "

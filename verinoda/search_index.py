@@ -1841,6 +1841,7 @@ class Hit:
     name_terms: list[str]
     body_terms: list[str]
     reasons: list[str] = field(default_factory=list)
+    match_line: int | None = None     # the line a query filter's regex or word matched
 
     @property
     def key(self) -> str:
@@ -2257,8 +2258,11 @@ def _tests_yield(h: Handle, score: dict[int, float], matched, word_weight: dict[
 
 def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] | None = None,
          expansions: dict[str, list[str]] | None = None, limit: int = 60, handle: Handle | None = None,
-         ppr: bool = True) -> Ranking:
-    """Rank the index's units for ``question`` (lexical BM25F, then the graph prior)."""
+         ppr: bool = True, where=None) -> Ranking:
+    """Rank the index's units for ``question`` (lexical BM25F, then the graph prior).
+
+    ``where(handle, conn, uids)``: a query's filters (:class:`verinoda.query_filters.Selector`); it returns the
+    units kept, each with reasons and the line that matched, and only those are ranked."""
     t0 = time.perf_counter()
     h = handle or open_for(g)
     conn = h.connect()
@@ -2464,6 +2468,17 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
         for uid in score:
             if ref_factor(uid) < 1.0:
                 reasons[uid].append(REFERENCE_REASON)
+        match_line: dict[int, int] = {}
+        if where is not None:
+            # a query's filters keep a subset of the ranked units; with nothing ranked (a question of
+            # filters only) every unit is a candidate, at score 0, so the order is by path and line
+            pool = list(score) or [u for u in h.units if include_tests or not is_test_file(h.units[u][0])]
+            kept = where(h, conn, pool)
+            score = {u: score.get(u, 0.0) for u in kept}
+            for u, (why, line) in kept.items():
+                reasons[u].extend(why)
+                if line is not None:
+                    match_line[u] = line
         order = sorted(score, key=lambda u: (-round(score[u], 9), h.units[u][0], h.units[u][4], h.units[u][2],
                                              h.units[u][3], u))
         chosen = order[:limit]
@@ -2483,7 +2498,8 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
             hits.append(Hit(uid, file, nid, kind, name, qual, a, b, own, sig, doc,
                             [tuple(c) for c in json.loads(consts or "[]")], score[uid], lex.get(uid, 0.0),
                             ppr_mass.get(uid, 0.0), ps, sorted(name_tf.get(uid, {})),
-                            sorted(acc.get(best_pid, {})) if best_pid is not None else [], reasons.get(uid, [])))
+                            sorted(acc.get(best_pid, {})) if best_pid is not None else [], reasons.get(uid, []),
+                            match_line.get(uid)))
         return Ranking(hits, q, len(score), pushes, time.perf_counter() - t0, list(h.notes))
     finally:
         h.release(conn)
