@@ -8,5 +8,7 @@ build/
 graphify-out/
 .verinoda/
 .hypothesis/
+# git worktrees made by coding agents
+.claude/worktrees/
 # written by the release workflow before the build (verinoda/buildinfo.py)
 verinoda/data/build_stamp.json

@@ -1,0 +1,1813 @@
+{
+ "maps": [
+  {
+   "subsystem": "Per-file AST cache (verinoda/project_index/cache.py) and how per-file extraction results reach the cross-file passes (extract.py Phase 1/2, index.py build wrappers)",
+   "summary": "A full `update` sends every code file through extract(). workflow.update calls index.build (verinoda/workflow.py:396), which calls watch._rebuild_code; with changed_paths None, extract_targets is every code file (verinoda/project_index/watch.py:1663), and extract() gets cache_root=watch_root and no root (watch.py:1790-1795), so cache_root also becomes the id/salt anchor (verinoda/project_index/extract.py:6952-6956).\n\nThe Phase 1 loop (extract.py:6971-6981) calls load_cached for every file that has an extractor and is not JS/TS (JS/TS bypass the cache: verinoda/project_index/extractors/models.py:11). In the profile that is 1,492 calls: 1,237 hits and 255 misses. The misses are mostly data JSON replayed from empty_json.json (verinoda/index.py:334-348, 241 digests) and zero-node results, which are never cached (extract.py:6671, 6846).\n\nEach hit costs:\n- **file_hash:** a stat-index fast path keyed by absolute path and relative-path salt (verinoda/project_index/cache.py:449-517), with a two-stat racily-clean check (cache.py:243-268).\n- **cache_dir:** rebuilds the v{version}-s{schema} path and runs mkdir on every call (cache.py:962-970).\n- **Read:** entry.exists() plus read_text plus json.loads (cache.py:1022-1024).\n- **Two re-anchoring passes:** _absolutize_source_files_in, which index.py replaces with a per-build memo (index.py:162-225), and _absolutize_ids_in (cache.py:883-909). The second calls _portability_anchors (two resolves, relpath, normalize_id; cache.py:742-802), then walks every string recursively (cache.py:822-842): 1,049,211 restore calls in the profile.\n\nOn disk there is one version directory, .verinoda/index/cache/ast/v0.3.2-s8, holding 1,244 entries: 52.6 MB, 1,056,078 strings, 244,566 root markers (243,266 id-form, 1,300 path-form).\n\nThe profile's 24.9 s for load_cached was mostly _io.open: read_text took 16.47 s for 1,237 entries (~13 ms per open). Re-measured warm and read-only on this machine, reading all 1,244 entries takes 0.9 s (open 0.18, read 0.21, parse 0.51). The real load_cached over all 1,244 files, with writes disabled, takes 4.4 s wall: file_hash 1.05, cache_dir 0.53, _absolutize_ids_in 1.48, memoized source-file absolutize 0.23, and ~1.1 s for exists, read and parse. The cause of the profiled stall is unproven: every entry's mtime falls between 00:25:22 and 00:41:30, and the profile was written at 00:37, so the profiled run most likely read files that had just been written (OneDrive/AV).\n\nAfter Phase 2, where only 33 files were extracted and 3 saved (index.py:377 → extract.py:6819), per_file dicts are concatenated (extract.py:7208-7211) and mutated in place by the id and prefix remaps (extract.py:7412-7445, 7492-7513). Then the cross-file passes run (_augment_symbol_resolution_edges at extract.py:7218; run_language_resolvers at extract.py:8136/8140). The absolutize-then-remap round trip is therefore load-bearing: the stored $graphify-root$ ids are restored to absolute-root slugs, which the remap then turns into canonical ids.\n\nInvalidation: the directory is keyed by package version and _AST_CACHE_SCHEMA (cache.py:31-39, 966). Other version directories are swept once per process (cache.py:48-72). An entry's key is sha256 over the content plus the lowercased relative path salt (cache.py:521-528). This is not the extractor-source hash that buildlock.extraction_stamp uses (verinoda/buildlock.py:234-241).",
+   "steps": [
+    {
+     "name": "index.build wraps the pipeline with per-build memos (_resolve_once, _absolutize_once, _known_empty_json, _distinct_case_ids)",
+     "location": "verinoda/index.py:90",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 160.8,
+     "inputs": "repo path, force/changed flags",
+     "outputs_consumed_by": "watch._rebuild_code (index.py:91)"
+    },
+    {
+     "name": "_rebuild_code picks extract_targets = all code files on a full update and calls extract(cache_root=watch_root)",
+     "location": "verinoda/project_index/watch.py:1790",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 151.2,
+     "inputs": "code_files from detect (watch.py:1663)",
+     "outputs_consumed_by": "reconcile/build_from_json later in _rebuild_code"
+    },
+    {
+     "name": "index.py extract wrapper (runs split_case_collisions on the result)",
+     "location": "verinoda/index.py:499",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 77.2,
+     "inputs": "same args as upstream extract",
+     "outputs_consumed_by": "watch._rebuild_code result (watch.py:1799)"
+    },
+    {
+     "name": "extract(): clear per-run caches, infer/force root, cache_location",
+     "location": "verinoda/project_index/extract.py:6907",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 74.4,
+     "inputs": "paths, cache_root; root=None so root=cache_root (extract.py:6952-6956)",
+     "outputs_consumed_by": "Phase 1 loop"
+    },
+    {
+     "name": "Phase 1: per-file cache lookup loop (skips JS/TS bypass suffixes)",
+     "location": "verinoda/project_index/extract.py:6971",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 24.9,
+     "inputs": "each path; _get_extractor; _JS_CACHE_BYPASS_SUFFIXES (extractors/models.py:11)",
+     "outputs_consumed_by": "per_file list; misses go to uncached_work"
+    },
+    {
+     "name": "load_cached (1492 calls, 1237 hits)",
+     "location": "verinoda/project_index/cache.py:974",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 24.9,
+     "inputs": "path, root, cache_root",
+     "outputs_consumed_by": "per_file[i] in extract.py:6979"
+    },
+    {
+     "name": "file_hash stat-index fast path (two stats, two relative_to, salt)",
+     "location": "verinoda/project_index/cache.py:432",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 1.37,
+     "inputs": "path stat, in-memory _stat_index loaded once (cache.py:332-363)",
+     "outputs_consumed_by": "cache entry filename in load_cached (cache.py:1016)"
+    },
+    {
+     "name": "cache_dir: builds v{version}-s{schema} path, mkdir(exist_ok) on every call, stale sweep once per process",
+     "location": "verinoda/project_index/cache.py:942",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 0.92,
+     "inputs": "location, kind",
+     "outputs_consumed_by": "load_cached/save_cached entry path"
+    },
+    {
+     "name": "entry.exists() + read_text + json.loads",
+     "location": "verinoda/project_index/cache.py:1022",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 17.48,
+     "inputs": "52.6 MB across 1244 json files",
+     "outputs_consumed_by": "re-anchoring passes"
+    },
+    {
+     "name": "_absolutize_source_files_in (replaced during build by index._absolutize_once memo)",
+     "location": "verinoda/index.py:183",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 0.74,
+     "inputs": "parsed entry, root",
+     "outputs_consumed_by": "extract remaps keyed by source_file (extract.py:7460)"
+    },
+    {
+     "name": "_absolutize_ids_in = _portability_anchors + recursive _rewrite_strings over every string",
+     "location": "verinoda/project_index/cache.py:883",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 4.3,
+     "inputs": "parsed entry, path spelling, root",
+     "outputs_consumed_by": "id_remap/prefix_remap in extract.py:7364-7513"
+    },
+    {
+     "name": "Phase 2 wrappers: parallel->prefill empty JSON (241 digests)->_small_batch->sequential; 33 files extracted, 3 saved",
+     "location": "verinoda/index.py:366",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 1.6,
+     "inputs": "uncached_work (misses + JS)",
+     "outputs_consumed_by": "per_file; save_cached (extract.py:6847)"
+    },
+    {
+     "name": "Merge per_file into all_nodes/all_edges/all_raw_calls",
+     "location": "verinoda/project_index/extract.py:7208",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": -1,
+     "inputs": "per_file",
+     "outputs_consumed_by": "cross-file passes"
+    },
+    {
+     "name": "Id remap / prefix remap mutating node, edge, raw_call and per_file dicts in place",
+     "location": "verinoda/project_index/extract.py:7411",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": -1,
+     "inputs": "all_nodes, all_edges, per_file",
+     "outputs_consumed_by": "resolvers and graph build"
+    },
+    {
+     "name": "Cross-file passes: _augment_symbol_resolution_edges, run_language_resolvers",
+     "location": "verinoda/project_index/extract.py:7218",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 18.9,
+     "inputs": "paths, per_file, all_nodes, all_edges",
+     "outputs_consumed_by": "extract result"
+    },
+    {
+     "name": "Stat index flushed at process exit (atexit) when dirty",
+     "location": "verinoda/project_index/cache.py:366",
+     "reads_whole_corpus": "no",
+     "profile_seconds": -1,
+     "inputs": "_stat_index (595,696-byte stat-index.json on disk)",
+     "outputs_consumed_by": "next process's file_hash fast path"
+    }
+   ],
+   "opportunities": [
+    {
+     "title": "In-memory memo of restored cache entries in a long-lived process (MCP index_update)",
+     "description": "The MCP server's index_update calls workflow.update, which runs index.build in the same process (verinoda/workflow.py:396; verinoda/mcp/server.py:1629). Keep a per-process dict mapping (content digest h, str(path), str(root), id_restore, path_restore, AST cache dir, entry file size/mtime_ns) to pickle.dumps of the fully restored entry (after _absolutize_source_files_in and _absolutize_ids_in). On a hit, return pickle.loads(blob): a fresh object graph, which is required because extract mutates node, edge and per_file dicts in place (extract.py:7412-7445, 7492-7513). Measured read-only on the 1,244 real entries: pickle.loads of all takes 0.57 s. The current warm path takes ~2.6 s (read+parse ~0.9, _absolutize_ids_in 1.48, memoized source absolutize 0.23), and the whole warm load_cached takes 4.4 s. copy.deepcopy is not an option: 0.35 s for 300 entries, about 1.45 s for all.",
+     "locations": [
+      "verinoda/project_index/cache.py:1022",
+      "verinoda/project_index/cache.py:1068",
+      "verinoda/workflow.py:396",
+      "verinoda/project_index/extract.py:7412"
+     ],
+     "est_saving_seconds_under_profile": 22,
+     "graph_identical": "yes",
+     "why_identical": "The restored entry is a pure function of the entry bytes (named by the content+relpath digest, cache.py:521-528), the path/root spelling and the anchors computed from them (cache.py:775-802, 893-906). Keying on all of these plus the entry file's stat reproduces exactly what load_cached returns. pickle round-trips JSON types exactly and keeps dict insertion order.",
+     "risks": "Memory: ~60 MB of pickled bytes (measured 60,267,411). The anchors depend on Path.resolve, and index._resolve_once memoizes that only per build (index.py:146-152), so the key must hold anchors recomputed each build, which limits the gain. An entry deleted or rewritten on disk (clear_cache cache.py:1170, another version's sweep) must invalidate the memo, hence the stat in the key. Saving under the profile assumes the 16.5 s open stall recurs; the warm steady-state saving is about 2-3 s.",
+     "effort": "medium",
+     "applies_to": "long_lived_process"
+    },
+    {
+     "title": "Keep the AST cache outside the OneDrive-synced tree",
+     "description": "All 1,244 entries (54 MB) live under .verinoda/index/cache/ast/v0.3.2-s8 inside the OneDrive folder. Their mtimes (00:25-00:41) bracket the profile's write time (00:37), and in that run opens averaged ~13 ms, against 0.15 ms measured warm now. extract() already separates cache location from anchor (cache.py:1010, extract.py:6964). The watch call site must then pass root=watch_root explicitly, because with root=None extract anchors on cache_root (extract.py:6952-6955).",
+     "locations": [
+      "verinoda/project_index/watch.py:1790",
+      "verinoda/project_index/extract.py:6952",
+      "verinoda/project_index/cache.py:942",
+      "verinoda/project_index/cache.py:343"
+     ],
+     "est_saving_seconds_under_profile": 16,
+     "graph_identical": "yes",
+     "why_identical": "Cache keys salt on the path relative to root, not the cache location (cache.py:469-497). Stored ids and paths are root-anchored with $graphify-root$ and restored against root (cache.py:862-909). Moving only the location, with root passed explicitly, yields the same entries.",
+     "risks": "Unsure how often the post-write stall happens in steady state: warm, it saves ~0. The stat-index location follows cache_root (cache.py:343), and other code may expect the cache under .verinoda/index. A per-user cache directory needs its own cleanup and a per-repo namespace. This is a layout and behaviour change, so it needs a decision record.",
+     "effort": "medium",
+     "applies_to": "both"
+    },
+    {
+     "title": "Packed (append-only) AST cache instead of 1,244 small JSON files",
+     "description": "Replace per-file {hash}.json with one or a few segment files plus an index (hash to offset/length), read with a single open. Warm measurement: open 0.18 s, read 0.21 s, exists 0.08 s over 1,244 files, so the warm gain is ≤0.4 s. The large gain exists only if per-file open stalls, like the profiled 16.47 s, recur.",
+     "locations": [
+      "verinoda/project_index/cache.py:1016",
+      "verinoda/project_index/cache.py:1080",
+      "verinoda/project_index/extract.py:6672"
+     ],
+     "est_saving_seconds_under_profile": 16,
+     "graph_identical": "yes",
+     "why_identical": "If each record stores the same bytes that json.dumps(on_disk) writes today (cache.py:1137), load_cached parses and re-anchors identical input.",
+     "risks": "Parallel workers call save_cached in subprocesses (extract.py:6672), so the pack needs a single writer or per-worker segments. Rewriting a 54 MB pack on every update would re-upload it through OneDrive, so it must be append-only with compaction. Crash safety and the version sweep (cache.py:48-72) must be reimplemented. Effort is large for an unproven gain.",
+     "effort": "large",
+     "applies_to": "both"
+    },
+    {
+     "title": "Cheaper _absolutize_ids_in: per-build root anchors plus a faster walk",
+     "description": "_portability_anchors recomputes the root-only parts on every call: Path(root).resolve(), normalize_id(str(root_resolved)), is_absolute checks, and path_anchors (cache.py:760-801). Caching those per (str(root)) for the build leaves only the per-file from_given/from_resolved. _rewrite_strings recurses through 1,056,078 strings with isinstance checks, 2,120,576 isinstance calls in the profile (cache.py:822-842). An iterative walk using type(v) is str, with a restore fast-reject (value[:1] != '$'), should cut it. Measured: _absolutize_ids_in = 1.48 s wall for 1,244 entries. Also measured and rejected: a text-level JSON restore before parsing gave equal dicts on all 1,244 entries but was slower (2.15 s against 1.62 s).",
+     "locations": [
+      "verinoda/project_index/cache.py:742",
+      "verinoda/project_index/cache.py:822",
+      "verinoda/project_index/cache.py:883"
+     ],
+     "est_saving_seconds_under_profile": 2,
+     "graph_identical": "yes",
+     "why_identical": "Same function semantics: only string values that start with _ROOT_MARKER change (cache.py:895-906), keys are untouched except the objc tables (cache.py:805-819), and the root-derived anchors are deterministic within a build (resolve is memoized per build at index.py:146-152).",
+     "risks": "Must keep 'values only, never keys' and the objc table key rewrite. The root-anchor memo must be scoped per build, like _resolve_once, to stay correct in a long-lived process.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Create the cache directory once per process instead of mkdir on every lookup",
+     "description": "cache_dir builds the path and calls d.mkdir(parents=True, exist_ok=True) for every load_cached/save_cached call (cache.py:962-970): 1,495 mkdir calls, 0.60 s of its 0.92 s under the profile, 0.53 s wall measured. Memoize (location, kind, prompt_fp) to the Path after the first successful mkdir.",
+     "locations": [
+      "verinoda/project_index/cache.py:942",
+      "verinoda/project_index/cache.py:1016"
+     ],
+     "est_saving_seconds_under_profile": 0.9,
+     "graph_identical": "yes",
+     "why_identical": "The returned Path is identical, and mkdir(exist_ok=True) on an existing directory has no effect. The stale sweep is already once per process (cache.py:55-58).",
+     "risks": "A directory deleted mid-process (clear_cache, cache.py:1170) would make save_cached's mkstemp fail; retry mkdir on FileNotFoundError. In a long-lived process the memo must not survive a version change (it cannot within one process, since _EXTRACTOR_VERSION is fixed at import, cache.py:34).",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Trim file_hash hit path (one stat, per-build salt memo)",
+     "description": "On a fast-path hit, file_hash does p.is_file() (a stat), p.resolve() (memoized), two relative_to calls plus abspath to build the salt, then p.stat() again (cache.py:452-513). Profile: 1.37 s, relative_to 0.56 s, is_file 0.25, stat 0.16. Wall measured: 1.05 s for 1,244 files. Use a single os.stat for both the is-file check and the signature, and memoize the salt per (str(path), str(root)) for the build.",
+     "locations": [
+      "verinoda/project_index/cache.py:452",
+      "verinoda/project_index/cache.py:469",
+      "verinoda/project_index/cache.py:507"
+     ],
+     "est_saving_seconds_under_profile": 0.7,
+     "graph_identical": "yes",
+     "why_identical": "The digest and the lookup key (abs_key and salt) are computed from the same inputs; only redundant syscalls and path arithmetic are removed. The racily-clean check (cache.py:243-268) is unchanged.",
+     "risks": "Symlink/path-spelling edge cases around the salt (#1989 comment at cache.py:462-468) must be preserved exactly; the salt memo must be per build.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "One open instead of exists() + read_text, and skip lookups for known-empty JSON",
+     "description": "load_cached calls entry.exists() then read_text (cache.py:1022-1024; exists costs 0.38 s under the profile). Use open() in try/except FileNotFoundError. Separately, the 255 misses each pay file_hash, cache_dir and exists before index._known_empty_json.prefill replays 241 of them (index.py:334-348). A file whose blake2b digest and extractor stamp match a recorded skipped result can never have an AST entry, since empty results are never saved (extract.py:6671). The empty-JSON check could run first.",
+     "locations": [
+      "verinoda/project_index/cache.py:1022",
+      "verinoda/index.py:334",
+      "verinoda/project_index/extract.py:6977"
+     ],
+     "est_saving_seconds_under_profile": 0.6,
+     "graph_identical": "yes",
+     "why_identical": "Same entry bytes are read. For known-empty JSON, the replayed result is what prefill already produces (index.py:346), and load_cached would have missed anyway because zero-node results are never cached (extract.py:6671, 6846).",
+     "risks": "Reordering must keep force builds replaying nothing (index.py:344 self.replay) and must not change which files count as failed (extract.py:7066-7085). The prompt_fp legacy branch (cache.py:1018-1021) is semantic-only but must keep working.",
+     "effort": "small",
+     "applies_to": "both"
+    }
+   ],
+   "equality_hazards": [
+    "The AST cache namespace is package version + _AST_CACHE_SCHEMA (verinoda/project_index/cache.py:966), not the extractor-source hash that buildlock.extraction_stamp uses (verinoda/buildlock.py:234-241). An extractor edit without a version or schema bump replays old per-file results in both scan and update. extract() has no force switch for cache reads (extract.py:6976-6980), and the watch call passes none (watch.py:1790-1795).",
+    "Downstream passes mutate per-file result dicts in place (extract.py:7412-7419, 7428-7445, 7492-7513). Any memo must hand out a fresh copy per build.",
+    "Restored ids depend on the path and root spelling handed to load_cached (cache.py:775-779) and on Path.resolve results. index._resolve_once memoizes those only per build (index.py:146-152), so a cross-build memo must key on those spellings and anchors.",
+    "Entries are keyed by content + relative path only (cache.py:521-528), yet some extraction depends on other files: JS/TS bypass the cache for this reason (extractors/models.py:11); Markdown's vault-link fallback reads a corpus-wide link index (extractors/markdown.py:171-188); XAML uses the active root (extract.py:6619-6626). Upstream re-extracts 352 Markdown files per build in watch._reconcile_markdown_links (profile). Whether every such dependency is covered is unsure.",
+    "The stat-index fast path trusts (size, mtime_ns) only when racily clean, with 2 s granularity (cache.py:243-268; GRAPHIFY_MTIME_GRANULARITY_MS). _stat_index is module-level: it is loaded once per process (cache.py:334) and flushed only at exit (cache.py:363), so a long-lived process carries it across builds.",
+    "extract() anchors ids on cache_root when root is None (extract.py:6952-6955). Changing the cache location at watch.py:1792 without passing root changes every id.",
+    "Zero-node and error results are never cached (extract.py:6671, 6846) and data JSON is replayed from index._known_empty_json (index.py:271-396), so the miss path runs through different code than the hit path. Its equality depends on that replay's stamp (index.py:301-314).",
+    "The profile's 16.47 s open stall probably came from files written minutes earlier (all 1,244 entry mtimes fall in 00:25:22-00:41:30; the profile was written at 00:37:07). Wall-clock baselines taken right after a scan that rewrites the cache are not comparable to steady-state updates.",
+    "json.loads keeps key order and pickle keeps it too. A text-level restore was measured equal on all 1,244 entries but slower, and it would also rewrite dict keys that start with the marker, which the walk never does (cache.py:822-829)."
+   ],
+   "covering_tests": [
+    "tests/test_index.py::test_cached_paths_are_re_anchored_as_the_upstream_function_does (line 335; uses cache.cache_dir at line 344)",
+    "tests/test_index.py::test_path_identity_memo_keeps_the_graph_byte_identical (line 386)",
+    "tests/test_index.py::test_skipped_data_json_is_remembered_and_small_batches_stay_in_this_process (line 436)",
+    "tests/test_index.py::test_remembered_empty_json_is_dropped_when_the_extractor_changes (line 474)",
+    "tests/test_index.py::test_a_json_file_rewritten_while_it_is_extracted_is_not_remembered (line 495)",
+    "tests/test_index.py::test_a_forced_build_replays_no_remembered_json (line 523)",
+    "tests/test_index.py::test_json_past_the_extractor_limit_is_not_read_whole (line 544)",
+    "tests/test_update_fast.py::test_mcp_index_update_is_fast_after_a_slow_build (line 109)",
+    "tests/test_portable_ids.py (portable id post-processing of the built graph)",
+    "Gap: no test under tests/ directly exercises cache.load_cached, _absolutize_ids_in/_relativize_ids_in, file_hash or the stat index (grep found only test_index.py:344 touching cache_dir). An update-vs-scan graph equality test over a real corpus is needed before changing this path."
+   ]
+  },
+  {
+   "subsystem": "Cross-file passes of verinoda/project_index/extract.py extract() (extract.py:7201-8353), including the Verinoda runtime wrappers python_facts.collect and python_cross.cross and the tail resolver registry.",
+   "summary": "`verinoda update` calls _rebuild_code with changed_paths=None (index.py:95). That takes the full-rebuild branch (watch.py:1656-1663), so extract() runs over every code file and gets its per-file results from the AST cache (profile: load_cached, 1492 calls, 24.9 s). resolution_context_nodes is None, so the tail resolvers take the plain branch (extract.py:8139-8140). After the per-file results are gathered (extract.py:7205-7211), a fixed chain of more than 25 cross-file passes mutates all_nodes, all_edges and all_raw_calls in place. The order is load-bearing, and the comments at extract.py:7643-7645 and 7659-7664 require it. Several passes are not pure functions of the per-file results. Some read the disk again: JS and Python symbol facts (resolution.py:2397-2406), PHP and Java re-parsing (resolution.py:3158-3164), go.mod lookup (resolution.py:2967-3012), and `__init__.py` and module-file probes (extract.py:237, 319-327; resolution.py:2193-2246). Others depend on corpus-wide uniqueness of labels or ids (extract.py:2868-3003, resolution.py:929-1068, extract.py:8008-8045). The language gates already exist: suffix-gated blocks (extract.py:7651, 7666, 7677, 7691, 7703, 7716, 7762) and the registry gate (resolver_registry.py:78-81). They cannot help this repository, because tests_upstream/fixtures holds at least one file of almost every language (.go, .swift, .php, .java, .kt, .rb, .pas, .cs and more). Each language pass then costs 0.3-1.7 s mainly because it builds indexes over the whole corpus, not because of its own few files. Skipping or narrowing a pass by language is also unsafe. The Swift member-call resolver reads every language's raw_calls once any swift_type_table exists (extract.py:3462-3509), so a per-language shortcut would change edges. The time goes mostly to repeated per-item pathlib work: ntpath.isabs is 11.45 s cumulative under the profile, with 2.74 s of it called directly from extract at extract.py:8202-8225. Other costs are repeated filesystem probes (go.mod walk, 9387 is_file calls; Python module probes, 10510 is_file calls), repeated suffix parsing in _lang_family/_lang_is_case_insensitive (extract.py:2736-2787, 202k plus 31k calls), a JSON-dumps Counter over all 67,470 edges (extract.py:7523, 1.18 s), and uncached _file_stem, _js_source_path and markdown _evidence calls. Each of these can be memoised or restricted with provably identical output. Measured under cProfile, the identical-output opportunities below add up to about 15-17 s of the ~50 s that extract spends outside load_cached. At the measured profile/wall ratio (181.8/78, about 2.3) that is roughly 6-7 s of wall clock, so stage A in this subsystem helps but is not decisive. Verinoda's own convention for such speedups is a build-scoped runtime patch applied from index.build (index.py:84-86, 132-236, 902-966) or a marked `Local change (Verinoda)` recorded in docs/UPSTREAM.md:31-35 and 218-230, of which D65 already has a performance precedent. Some memos need the body of extract() itself (extract.py:7523, 8202-8225) and so must be local changes.",
+   "steps": [
+    {
+     "name": "0. Terraform prepare (per file)",
+     "location": "verinoda/project_index/extract.py:7201",
+     "reads_whole_corpus": "no",
+     "profile_seconds": -1,
+     "inputs": "each .tf/.tfvars/.hcl per-file result + path + root",
+     "outputs_consumed_by": "per_file results -> aggregation. Stage B: per-file only."
+    },
+    {
+     "name": "1. Aggregate per-file nodes/edges/raw_calls",
+     "location": "verinoda/project_index/extract.py:7205",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": -1,
+     "inputs": "per_file (cached or fresh), in `paths` order",
+     "outputs_consumed_by": "every pass below mutates these lists in place. Stage B: the list order sets the 'first writer wins' results in later passes."
+    },
+    {
+     "name": "2. _augment_symbol_resolution_edges (JS facts by re-parsing, Python facts via the python_facts cache, _apply_symbol_resolution_facts)",
+     "location": "verinoda/project_index/extractors/resolution.py:2397 (called extract.py:7218); python_facts.py:154; resolution.py:1114",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 8.63,
+     "inputs": "paths (re-reads JS/TS sources from disk: resolution.py:1904-1920; Python facts kept by blake2b of the bytes, python_facts.py:160-178), filesystem probes in _resolve_python_module_path/_resolve_python_namespace_dir (resolution.py:2210-2290; 2.91 s + 1.01 s), all_nodes (per-node _js_source_path, resolution.py:1143-1158)",
+     "outputs_consumed_by": "adds imports/re_exports/calls/contains edges and symbol nodes stamped with target_file/local_alias (resolution.py:1186-1214). These are read by id-remap (extract.py:7293), disambiguation (resolution.py:1039), the import-evidence index (extract.py:7851-7855) and python member calls (extract.py:3601-3606). Not a pure function of per-file results: it depends on disk (which module files exist). Stage B: a change to one file can alter edges from every file that imports it (named, star or namespace exports, alias chains resolution.py:1231-1242), and adding or removing a module file changes resolution for all importers."
+    },
+    {
+     "name": "3. _merge_decl_def_classes (C/C++/ObjC header+impl collapse)",
+     "location": "verinoda/project_index/extractors/resolution.py:2685 (called extract.py:7226)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 0.47,
+     "inputs": "all_nodes, all_edges",
+     "outputs_consumed_by": "drops impl duplicates. When anything is dropped, it de-duplicates ALL edges by (src,tgt,relation,context) across the whole corpus (resolution.py:2823-2835). Pure on the aggregated lists. Stage B: a header/impl change can toggle global de-duplication of unrelated edges (hazard)."
+    },
+    {
+     "name": "4. id_remap: canonical file ids, target_file registration, out-of-root ext_ ids",
+     "location": "verinoda/project_index/extract.py:7233-7445",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": -1,
+     "inputs": "paths, target_file stamps on all_edges, filesystem (_tp.is_file(), resolve), root",
+     "outputs_consumed_by": "rewrites node ids, edge endpoints, raw_calls caller_nid, swift_extensions nid and objc field tables (extract.py:7411-7445). Stage B: per-file, but edges pointing into a changed file are keyed through its stamped path."
+    },
+    {
+     "name": "5. prefix_remap / sym_remap / edge_alias_candidates dedup (Counter of json.dumps edge keys)",
+     "location": "verinoda/project_index/extract.py:7446-7549",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 1.18,
+     "inputs": "all_nodes (per node Path(sf).resolve(), extract.py:7460), all_edges",
+     "outputs_consumed_by": "canonical symbol ids. The Counter at extract.py:7523 (1.18 s, 67,470 _edge_key calls) only feeds the imports twin-drop at 7533-7547. Stage B: per-file prefixes, but the twin drop compares edges across files."
+    },
+    {
+     "name": "6. Barrel repoint via stem_forms (re_exports chains, up to 8 hops)",
+     "location": "verinoda/project_index/extract.py:7561-7632",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 0,
+     "inputs": "re_exports/imports edges with target_file",
+     "outputs_consumed_by": "edge targets. Stage B: a barrel change affects every importer through the chain."
+    },
+    {
+     "name": "7. _repoint_python_package_imports",
+     "location": "verinoda/project_index/extract.py:202 (called 7637)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 0.47,
+     "inputs": "python paths, filesystem __init__.py walk (extract.py:237), node ids",
+     "outputs_consumed_by": "imports/imports_from edge targets from .py files. Stage B: the global alias map drops aliases claimed by 2+ files (extract.py:252-256), so adding a file can un-resolve imports elsewhere."
+    },
+    {
+     "name": "8. _repoint_python_sibling_imports",
+     "location": "verinoda/project_index/extract.py:274 (called 7638)",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 0.99,
+     "inputs": "python paths, filesystem __init__ probes (319, 327), per-edge Path(sf).resolve (357-362)",
+     "outputs_consumed_by": "import edge targets. Stage B: limited to the importer's directory (docstring 286-290)."
+    },
+    {
+     "name": "9. _merge_swift_extensions",
+     "location": "verinoda/project_index/extract.py:3041 (called 7639)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 1.28,
+     "inputs": "per_file swift_extensions, all_nodes (label index over the native family), contains edges",
+     "outputs_consumed_by": "removes extension nodes, rewrites edges. Stage B: label-global among native-family types, so a new same-label type anywhere makes the merge ambiguous. 0.75 s of its time is _lang_family called on all 31,000 nodes (extract.py:3085)."
+    },
+    {
+     "name": "10. _merge_csharp_partial_class_nodes",
+     "location": "verinoda/project_index/extract.py:3142 (called 7640)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 0.07,
+     "inputs": "per_file, all_nodes, all_edges, paths, root",
+     "outputs_consumed_by": "merged C# nodes. Stage B: all partial halves of a class, across files."
+    },
+    {
+     "name": "11. _disambiguate_colliding_node_ids (pops target_file)",
+     "location": "verinoda/project_index/extractors/resolution.py:929 (called extract.py:7641)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 1.51,
+     "inputs": "all_nodes, all_edges, all_raw_calls, root (memoised _cached_source_key, resolution.py:895-921)",
+     "outputs_consumed_by": "final node ids for every later pass. Stage B: a new file whose id collides with an existing one renames the other file's nodes too (salted ids, resolution.py:953-988)."
+    },
+    {
+     "name": "12. _canonicalize_csharp_namespace_nodes",
+     "location": "verinoda/project_index/extract.py:2683 (called 7642)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 0.1,
+     "inputs": "all_nodes, all_edges",
+     "outputs_consumed_by": "namespace node collapse by label. Stage B: label-global."
+    },
+    {
+     "name": "13. _resolve_php_type_references (re-parses PHP files)",
+     "location": "verinoda/project_index/extractors/resolution.py:3399 (gate extract.py:7646-7658)",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 0.34,
+     "inputs": "PHP per_file + path.read_bytes() (resolution.py:3434-3440), all_nodes, all_edges",
+     "outputs_consumed_by": "PHP type edges before the stub rewire. Stage B: namespace-global FQN map."
+    },
+    {
+     "name": "14. _resolve_java_type_references (re-parses Java files)",
+     "location": "verinoda/project_index/extractors/resolution.py:3118 (gate extract.py:7665-7673)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 0.69,
+     "inputs": "Java per_file + source bytes (3158-3189), all_nodes, all_edges (full edge scans at 3199, 3287, 3336, 3361)",
+     "outputs_consumed_by": "repointed type edges and FQN external stubs. These create the dotted sourceless stubs that make the Go pass's qualified_stubs non-empty. Stage B: a package's FQN map spans files; the same-package lookup (3322-3323) depends on other files."
+    },
+    {
+     "name": "15. _resolve_go_type_references",
+     "location": "verinoda/project_index/extractors/resolution.py:3015 (gate extract.py:7676-7688)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 1.74,
+     "inputs": "Go per_file go_imports; fqn_to_ids built for ALL contained type-like nodes of every language (3044-3054) through _go_import_path_for_file. That function walks every ancestor directory for go.mod and caches only when it finds one (2984-3003): 938 calls, 9387 is_file, 1.42 s. Only one .go file (tests_upstream/fixtures/sample.go) is in the corpus.",
+     "outputs_consumed_by": "references/embeds edge targets and go type stubs. Stage B: depends on go.mod on disk and on every type in the same Go package."
+    },
+    {
+     "name": "16. _resolve_cross_file_imports (python_cross.cross wrapper: kept pruned trees, typed-edge subset)",
+     "location": "verinoda/python_cross.py:326 -> verinoda/project_index/extractors/resolution.py:2408 (called extract.py:7690-7698)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 4.24,
+     "inputs": "py per_file (stem_to_entities pass 1 calls _file_stem(Path(src)) per node: 25,438 calls, 0.94 s, resolution.py:2441-2462), parsed trees by blake2b of the bytes (python_cross.py:331-367), typed edges (python_cross.py:242-257)",
+     "outputs_consumed_by": "adds `uses` edges (resolution.py:2610-2628) and repoints typed stub edges (2632-2646). Stage B: absolute imports resolve by bare stem first-writer-wins (2461-2462, 2554-2555) and by suffix uniqueness (2547-2552), so adding a same-named module anywhere can move edges."
+    },
+    {
+     "name": "17. _rewire_unique_stub_nodes",
+     "location": "verinoda/project_index/extract.py:2868 (called 7699)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 1.15,
+     "inputs": "all_nodes (label keys, re.sub per node), all_edges",
+     "outputs_consumed_by": "stub -> unique real definition. Stage B: corpus-wide label uniqueness (2921-2938), so any file defining a same-label type or function can un-wire stubs in every file."
+    },
+    {
+     "name": "18. _resolve_cross_file_java_imports",
+     "location": "verinoda/project_index/extractors/resolution.py:2837 (called extract.py:7702-7709)",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 0.07,
+     "inputs": "Java per_file + paths",
+     "outputs_consumed_by": "import edges"
+    },
+    {
+     "name": "19. C# type references + cross-file C# imports",
+     "location": "verinoda/project_index/extractors/csharp.py:329 and :77 (called extract.py:7714-7727)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 0.65,
+     "inputs": "C#/Razor per_file, all_nodes, all_edges",
+     "outputs_consumed_by": "repointed type edges"
+    },
+    {
+     "name": "20. Bash source-backed calls",
+     "location": "verinoda/project_index/symbol_resolution.py:406 (called extract.py:7744-7771)",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 0.29,
+     "inputs": "bash per_file, paths resolved, existing edges",
+     "outputs_consumed_by": "calls edges scoped to sourced files. Stage B: sourced-file relation."
+    },
+    {
+     "name": "21. Global label index + callable sets",
+     "location": "verinoda/project_index/extract.py:7782-7830",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": -1,
+     "inputs": "resolution_nodes (= all_nodes on update); _lang_is_case_insensitive per node (7816; 30,603 calls, 0.78 s)",
+     "outputs_consumed_by": "the direct-call loop (step 24)"
+    },
+    {
+     "name": "22. Kotlin import targets (early registry run)",
+     "location": "verinoda/project_index/extract.py:7838-7841 (resolver 5160-5162)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": -1,
+     "inputs": "paths, per_file, all_nodes, all_edges",
+     "outputs_consumed_by": "imports edges read by the import-evidence index"
+    },
+    {
+     "name": "23. Import-evidence index, sf_to_file_nid, nid_to_file_nid",
+     "location": "verinoda/project_index/extract.py:7849-7892",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": -1,
+     "inputs": "all_edges imports/imports_from, resolution_nodes (fallback relative_to at 7887-7892)",
+     "outputs_consumed_by": "the direct-call loop"
+    },
+    {
+     "name": "24. Shared direct/indirect cross-file call loop",
+     "location": "verinoda/project_index/extract.py:7907-8116",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": -1,
+     "inputs": "all_raw_calls, global label index, _lang_family per caller and per candidate (7961-7967; most of 166k _lang_family calls, 1.07 s), disambiguate_ambiguous_candidates (paths.py:304; 2530 calls, 1.11 s, _is_test_path 136k calls)",
+     "outputs_consumed_by": "calls/indirect_call edges. existing_pairs dedup means the first emitter wins. Stage B: corpus-wide name uniqueness (8008-8045): a new same-named function anywhere can remove an INFERRED edge elsewhere, and proximity tie-breaks depend on other files."
+    },
+    {
+     "name": "25. Tail language resolvers (registry order): terraform, swift, python, ruby, ts, cpp, objc, csharp, java, rust, elixir, pascal, kotlin qualified, kotlin member, csharp qualified, csharp dispatch, markdown mentions",
+     "location": "verinoda/project_index/resolver_registry.py:59 (called extract.py:8139-8140; registrations extract.py:5169-5277)",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 10.31,
+     "inputs": "per_file raw_calls (Swift reads ALL languages' member calls, extract.py:3462-3509), all_nodes, all_edges. Each resolver rebuilds node_by_id/contained/method_index/existing_pairs over the whole corpus. Largest: python member 2.21 s (re.sub _key 92,895 calls, extract.py:3550), markdown mentions 1.96 s (_evidence 13,657 calls, markdown_resolution.py:101), ts 0.81, ruby 0.80, csharp 0.71, cpp 0.66, swift 0.65, objc 0.62, java 0.50",
+     "outputs_consumed_by": "member-call and reference edges. Stage B: single-definition guards are corpus-wide; registration order plus shared existing_pairs make earlier resolvers pre-empt later ones."
+    },
+    {
+     "name": "26. Relativize source_file + ext_id_remap backstop",
+     "location": "verinoda/project_index/extract.py:8146-8262",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 3.56,
+     "inputs": "every node and edge: Path(sf) and is_absolute() per item (8205-8206, 8222-8223; 106,099 is_absolute calls, 2.74 s), _sf_entry memoised per sf string (8164-8200; 0.67 s), _canon (0.15 s)",
+     "outputs_consumed_by": "portable source_file/ids for build_from_json"
+    },
+    {
+     "name": "27. Vendored edge filter, pop origin_file/local_alias, _origin tag, POSIX source_file",
+     "location": "verinoda/project_index/extract.py:8264-8338",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": -1,
+     "inputs": "all_nodes, all_edges",
+     "outputs_consumed_by": "return value; then index._distinct_case_ids wraps extract with split_case_collisions (index.py:498-502; 5.3 s in the task's profile, outside this subsystem)"
+    }
+   ],
+   "opportunities": [
+    {
+     "title": "Memoise the per-item is_absolute/_sf_entry decision in the final relativization loop",
+     "description": "In extract.py:8202-8225 every node and edge builds Path(sf) and calls is_absolute(): 106,099 calls, 2.74 s of ntpath.isabs, plus Path construction. Keep a dict sf_string -> (is_abs, entry) so each distinct source_file string is parsed once (the corpus has about 1.5k files). Keep the per-item id-key registration (8208-8218) exactly as it is.",
+     "locations": [
+      "verinoda/project_index/extract.py:8202-8225",
+      "verinoda/project_index/extract.py:8164-8200"
+     ],
+     "est_saving_seconds_under_profile": 3,
+     "graph_identical": "yes",
+     "why_identical": "Path(sf).is_absolute() is a pure function of the string, and _sf_entry is already memoised by str(sf) (extract.py:8166-8169). Only the Path parsing is removed; the order of items and the ext_id_remap/owned_ids checks stay per item.",
+     "risks": "Inside extract()'s body, so it must be a marked Local change (docs/UPSTREAM.md:31-35). sf may be a non-str (the code calls str(sf)), so key on str(sf).",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Memoise _lang_family / _lang_is_case_insensitive by source_file string",
+     "description": "202k _lang_family calls (1.97 s) and 31.6k _lang_is_case_insensitive calls (0.81 s) each build Path(str(sf)).suffix. Replace them with dict-memoised versions keyed on str(sf) (falsy -> None/False, as today). This can be a build-scoped runtime patch of extract._lang_family / extract._lang_is_case_insensitive (module globals looked up at call time), in the style of index._resolve_once (index.py:132-160). Optionally also precompute nid -> family once for the direct-call loop at extract.py:7961-7967.",
+     "locations": [
+      "verinoda/project_index/extract.py:2736-2740",
+      "verinoda/project_index/extract.py:2783-2787",
+      "verinoda/project_index/extract.py:7816",
+      "verinoda/project_index/extract.py:7949",
+      "verinoda/project_index/extract.py:7961-7967",
+      "verinoda/project_index/extract.py:3085",
+      "verinoda/project_index/extract.py:2908"
+     ],
+     "est_saving_seconds_under_profile": 2.3,
+     "graph_identical": "yes",
+     "why_identical": "Both functions return a value that depends only on the suffix of str(source_file) once the falsy check passes (extract.py:2738-2740, 2785-2787); the dict maps are constant.",
+     "risks": "Unbounded dict in a long-lived process: scope it to the build (context manager) or use lru_cache with a bound. If code captures a reference to the functions instead of looking up the module global, it would bypass the patch; grep shows only module-level calls in extract.py.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "_merge_swift_extensions: test `id in contained` before _lang_family",
+     "description": "The candidate filter calls _lang_family on all 31,000 nodes (0.75 s) before the cheap checks. Reorder the conjunction so that `n.get('source_file') and n.get('id') in contained` runs first, then the family check, the builtin check and _is_type_like_definition.",
+     "locations": [
+      "verinoda/project_index/extract.py:3073-3091"
+     ],
+     "est_saving_seconds_under_profile": 0.7,
+     "graph_identical": "yes",
+     "why_identical": "All the conditions at 3085-3090 are side-effect-free filters that each `continue`; a conjunction of pure predicates gives the same set in any order, and label_to_canonical is appended in the same node order.",
+     "risks": "Local change in a vendored function. Mostly redundant if the _lang_family memo above lands.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Go type pass: build fqn_to_ids lazily and memoise go.mod lookup per directory",
+     "description": "_resolve_go_type_references builds fqn_to_ids for every contained type-like node of every language (938 _go_import_path_for_file calls). With no go.mod above the repository, each call walks all ancestors doing is_file (9387 calls) because only hits are cached (resolution.py:2984-3003). Build the map on first need, when an edge passes 3088-3099. Memoise _go_import_path_for_file per directory within the build: a build-scoped runtime patch of resolution._go_import_path_for_file and of extract._go_import_path_for_file, which is imported by name and used at extract.py:7977.",
+     "locations": [
+      "verinoda/project_index/extractors/resolution.py:2967-3012",
+      "verinoda/project_index/extractors/resolution.py:3038-3063",
+      "verinoda/project_index/extractors/resolution.py:3087-3103",
+      "verinoda/project_index/extract.py:7970-7983"
+     ],
+     "est_saving_seconds_under_profile": 1.4,
+     "graph_identical": "yes",
+     "why_identical": "fqn_to_ids is read only at resolution.py:3101, for edges that already passed the relation, qualified-stub and import-alias checks. The same nodes are indexed in the same order whenever it is built. The go.mod answer is a pure function of the directory while the tree does not change during the build, which is the same assumption as index._resolve_once (index.py:132-160) and resolution._cached_realpath (resolution.py:1082-1100).",
+     "risks": "A go.mod created mid-build would be missed, the same risk class as the existing resolve memo. The memo must be cleared per build for watch/MCP. Lazy building needs a Local change; the directory memo alone (runtime patch) gets most of the 0.92 s is_file cost.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "edge_alias twin-drop: count only `imports` edges in the Counter",
+     "description": "edge_key_counts = Counter(_edge_key(e) for e in all_edges) json-dumps all 67,470 edges (1.18 s). It is consulted only with twin_key built from an `imports` edge (extract.py:7533-7547). Count only edges whose relation is 'imports', and skip the Counter entirely when no imports edge has a unique candidate.",
+     "locations": [
+      "verinoda/project_index/extract.py:7514-7549"
+     ],
+     "est_saving_seconds_under_profile": 1.1,
+     "graph_identical": "yes",
+     "why_identical": "_edge_key serialises every field except target_file, including relation, so any twin_key has relation 'imports' and can only equal the key of an 'imports' edge. Counts for those keys are unchanged, as is the decrement at 7546.",
+     "risks": "Local change inside extract(). Must keep json.dumps(sort_keys, separators, default=str) identical.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Memoise _js_source_path by (source_file, cwd)",
+     "description": "_apply_symbol_resolution_facts calls _js_source_path once per node (31,019 calls, 1.14 s: 0.80 s is_absolute, Path construction). Replace it with a dict keyed by (source_file, os.getcwd()) during the build: a runtime patch of resolution._js_source_path, a module global looked up at resolution.py:1144.",
+     "locations": [
+      "verinoda/project_index/extractors/resolution.py:1103-1112",
+      "verinoda/project_index/extractors/resolution.py:1143-1158"
+     ],
+     "est_saving_seconds_under_profile": 1,
+     "graph_identical": "yes",
+     "why_identical": "The result depends only on the source_file string, root (constant per call) and cwd. _resolve_cached is already memoised per (path, cwd) (resolution.py:1082-1100), so the value returned is the same Path object value.",
+     "risks": "root must be part of the key if the patch outlives one extract; exceptions fall back to `path`, which is deterministic.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Python module-path probes: build-scoped memo of _probe_python_module_candidate / _resolve_python_module_path",
+     "description": "python_facts.collect resolves 4514 imports through _resolve_python_module_path (2.91 s) and _resolve_python_namespace_dir (1.01 s). Most of that time is is_dir/is_file probes (10,510 is_file and 5823 is_dir calls in _probe_python_module_candidate) of the same candidates, because many files import the same modules. Memoise _probe_python_module_candidate by (type, str(candidate), cwd-if-relative), and optionally the whole resolver keyed by (module_name, str(current_path.parent), str(root), level), for the length of one build.",
+     "locations": [
+      "verinoda/project_index/extractors/resolution.py:2193-2246",
+      "verinoda/project_index/extractors/resolution.py:2248-2290",
+      "verinoda/python_facts.py:188-194"
+     ],
+     "est_saving_seconds_under_profile": 2,
+     "graph_identical": "yes",
+     "why_identical": "While the file tree does not change during extraction, both functions are pure functions of their arguments: level>0 uses only current_path.parent, and level 0 only current_path.parents and root. This is the assumption the upstream memos already make (resolution.py:1087-1100). python_facts calls res._resolve_python_module_path through the module attribute, so a runtime patch reaches it.",
+     "risks": "A file created or deleted during the build would be seen stale. The memo must be discarded at build end (watch/MCP are long-lived). Identity of the returned Path: return the same value, not a different spelling.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "_resolve_cross_file_imports: memoise _file_stem per src string and suffix matches per dotted name",
+     "description": "Pass 1 calls _file_stem(Path(src)) for every node of every .py file (25,438 calls, 0.94 s) for about 740 distinct strings. resolve_import rescans all of stem_to_entities for each absolute import that is not found directly (resolution.py:2547-2550; resolve_import self time 0.69 s). Memoise both per call.",
+     "locations": [
+      "verinoda/project_index/extractors/resolution.py:2440-2462",
+      "verinoda/project_index/extractors/resolution.py:2541-2555",
+      "verinoda/python_cross.py:48"
+     ],
+     "est_saving_seconds_under_profile": 1.2,
+     "graph_identical": "yes",
+     "why_identical": "_file_stem is a pure function of the path (extractors/base.py:58). stem_to_entities and bare_to_qualified are frozen after pass 1 and only read in pass 2, so suffix_matches for a given dotted_as_path is constant.",
+     "risks": "Editing the function changes its source digest, so python_cross.PINNED (python_cross.py:48) must be re-checked and updated; otherwise python_cross falls back to the slower upstream walk (python_cross.py:315-317) and tests/test_python_cross.py fails. An alternative that needs no edit: a runtime patch of resolution._file_stem with a (type, str) memo, which also helps build_from_json (1.29 s of _file_stem there).",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Markdown mentions: skip _evidence when there are no qualifiers and memoise it per candidate",
+     "description": "_evidence walks the owner chain and path segments for every candidate of every unqualified mention (13,657 calls, 1.08 s). When `qualifiers` is empty, `set() <= X` is always True, so the call can be skipped. Otherwise memoise _evidence(c) per node id within one resolve_markdown_mentions call.",
+     "locations": [
+      "verinoda/project_index/markdown_resolution.py:101-127",
+      "verinoda/project_index/markdown_resolution.py:209-217"
+     ],
+     "est_saving_seconds_under_profile": 1,
+     "graph_identical": "yes",
+     "why_identical": "parents is built only from contains/method edges (markdown_resolution.py:54, 170-172). The loop appends only 'references' edges, and nodes_by_id is not mutated, so _evidence(c) is constant during the loop. The empty-set subset test is trivially True.",
+     "risks": "File is under project_index, so it needs a Local change entry.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Python member-call resolver: memoise _key(label)",
+     "description": "_key runs re.sub on a label 92,895 times (0.47 s) for far fewer distinct labels. Use a dict memo inside the resolver.",
+     "locations": [
+      "verinoda/project_index/extract.py:3550-3551",
+      "verinoda/project_index/extract.py:3560-3593"
+     ],
+     "est_saving_seconds_under_profile": 0.4,
+     "graph_identical": "yes",
+     "why_identical": "_key is a pure function of str(label).",
+     "risks": "Local change in a vendored function; small gain.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "lru_cache _is_test_path",
+     "description": "_is_test_path is called 136k times from disambiguate_ambiguous_candidates (0.37 s) on a few thousand distinct paths. Wrap it in functools.lru_cache, as _parent_parts already is (paths.py:237-241).",
+     "locations": [
+      "verinoda/project_index/paths.py:199-234",
+      "verinoda/project_index/paths.py:330-331"
+     ],
+     "est_saving_seconds_under_profile": 0.3,
+     "graph_identical": "yes",
+     "why_identical": "Pure function of str(path) (paths.py:213-234). It uses no filesystem.",
+     "risks": "Non-str/unhashable arguments: key on str(path).",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Prefix-remap and sibling-import passes: memoise Path(sf).resolve() per string",
+     "description": "The prefix pass resolves every node's source_file (extract.py:7460). Through the patched resolve that costs 0.92 s for 37,424 calls from extract, including __str__ and is_absolute. _repoint_python_sibling_imports resolves every Python import edge's source_file (extract.py:357-362) and probes __init__.py per file. Memoise per sf string, and __init__ probes per directory.",
+     "locations": [
+      "verinoda/project_index/extract.py:7449-7464",
+      "verinoda/project_index/extract.py:354-366",
+      "verinoda/project_index/extract.py:319-327",
+      "verinoda/project_index/extract.py:237"
+     ],
+     "est_saving_seconds_under_profile": 0.9,
+     "graph_identical": "yes",
+     "why_identical": "resolve() of the same string with the same cwd returns the same path during a build (the premise of index._resolve_once, index.py:132-160), and __init__.py existence per directory is constant while the tree is unchanged.",
+     "risks": "Needs Local changes (inside extract() and a vendored helper). Same file-tree-stability assumption as the existing memo.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Cache JS/TS symbol-resolution facts by content hash (like python_facts)",
+     "description": "_collect_js_symbol_resolution_facts re-parses and walks every JS/TS file on every build (0.93 s, 294k _walk_js_tree calls, only 19 files here). Keep the per-file facts keyed by blake2b of the bytes and a stamp of the upstream code, mirroring python_facts.py:110-226. Target resolution (depends on other files and tsconfig/package.json) stays live on every build.",
+     "locations": [
+      "verinoda/project_index/extractors/resolution.py:1904-1920",
+      "verinoda/python_facts.py:110-226"
+     ],
+     "est_saving_seconds_under_profile": 0.8,
+     "graph_identical": "yes",
+     "why_identical": "The same argument as python_facts.py:1-10: what the walk finds depends only on the file's bytes and path. Where imports point is still computed every build.",
+     "risks": "The JS facts may mix per-file facts with resolution done during the walk (tsconfig aliases, workspace packages, resolution.py:282-812). Only purely syntactic parts may be kept, so check which facts embed resolved target paths before caching (unsure). Needs a stamp/pin and a comparison test.",
+     "effort": "medium",
+     "applies_to": "both"
+    },
+    {
+     "title": "_disambiguate_colliding_node_ids: compute source keys once per node and per edge source_file",
+     "description": "_node_disambiguation_source_key is computed twice for every node of a colliding group (resolution.py:954, 978), and _source_key calls os.getcwd() plus the lru lookup for every edge and raw_call (175k _source_key calls, 0.32 s).",
+     "locations": [
+      "verinoda/project_index/extractors/resolution.py:918-927",
+      "verinoda/project_index/extractors/resolution.py:953-988",
+      "verinoda/project_index/extractors/resolution.py:1028-1068"
+     ],
+     "est_saving_seconds_under_profile": 0.4,
+     "graph_identical": "yes",
+     "why_identical": "The source key is a pure function of (source_file, root, cwd), which is already memoised by _cached_source_key; hoisting os.getcwd() once per call keeps the same key.",
+     "risks": "Small gain; Local change; tests_upstream/test_source_key_memoization.py checks cwd sensitivity (test_cache_is_cwd_sensitive).",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "(Not recommended for stage A) Share corpus indexes across the tail resolvers",
+     "description": "Each of about 15 tail resolvers rebuilds node_by_id, contains/method indexes, existing_pairs and all_raw_calls over the whole corpus (for example extract.py:3391-3410, 3466, 3553-3606, 3623). Together they cost most of the 10.3 s. A shared, incrementally maintained index could remove most of that.",
+     "locations": [
+      "verinoda/project_index/resolver_registry.py:59-85",
+      "verinoda/project_index/extract.py:3356-3527",
+      "verinoda/project_index/extract.py:3530-3677"
+     ],
+     "est_saving_seconds_under_profile": 4,
+     "graph_identical": "unsure",
+     "why_identical": "Only identical if every shared structure is updated exactly when a resolver appends edges or nodes. Resolvers pre-empt each other through existing_pairs, and some (Go/Java/Python repoint) drop nodes, so a stale shared index changes output.",
+     "risks": "Invasive change across many vendored functions and hard to re-sync with upstream. The saving is an estimate, not measured.",
+     "effort": "large",
+     "applies_to": "both"
+    }
+   ],
+   "equality_hazards": [
+    "Order of `paths` (and so of all_nodes/all_edges/raw_calls) decides first-writer-wins maps: bare_to_qualified (resolution.py:2461-2462), stem_to_entities[..][label] last-writer (2460), name_to_nid (2492), fqn_to_id.setdefault (resolution.py:3225), sf_to_file_nid.setdefault (extract.py:7870), and the Java/Go stub creation order.",
+    "existing_pairs dedup: the first pass or resolver that emits a (caller,target) pair wins, so pass order and resolver registration order (extract.py:5169-5277) decide relation/confidence. The Swift resolver pre-empts the Python one for `Class.method()` calls of ANY language whenever a swift_type_table exists (extract.py:3462-3509), and can emit `references` instead of `calls` (3508-3509).",
+    "Language gates are corpus-level: one .swift/.go/.php file present switches a pass on for the whole corpus (resolver_registry.py:78-81, extract.py:7651/7666/7677). Skipping by 'mostly absent' language changes the graph.",
+    "Filesystem-dependent passes: go.mod lookup (resolution.py:2967-3012), __init__.py probes (extract.py:237, 319-327), module-file probes (resolution.py:2193-2290), JS/PHP/Java re-parsing from disk (resolution.py:1904-1920, 3158-3164, 3434-3440), target_file is_file checks (extract.py:7325, 7345). Any memo must be build-scoped.",
+    "Corpus-wide uniqueness guards: _rewire_unique_stub_nodes (extract.py:2921-2938), direct-call ambiguity and tie-breakers (extract.py:8008-8045, paths.py:304-373), Swift extension merge (extract.py:3094-3100), alias maps dropping names claimed twice (extract.py:252-256). Any new file can flip another file's edges.",
+    "Id collisions are salted by path (resolution.py:953-988), so one file's node ids depend on whether another file collides with it.",
+    "_merge_decl_def_classes de-duplicates ALL edges by (src,tgt,relation,context) whenever it drops at least one node (resolution.py:2813-2835). A C/C++/ObjC header/impl pair toggles a global de-duplication.",
+    "Set iteration is used only where len==1 (edge_alias_candidates extract.py:7529-7539, chain extract.py:7587-7589, next(iter(fs)) extract.py:253/336), so it is deterministic; keep that property in any rewrite.",
+    "json.dumps(sort_keys=True, default=str) edge keys (extract.py:7519-7522) define twin identity; a changed serialisation changes which edges are dropped.",
+    "python_cross/python_facts on-disk caches are stamped by upstream source digests (python_cross.py:48, 63-75; python_facts.py:25-44). Editing _resolve_cross_file_imports or resolution.py silently disables or invalidates them unless re-pinned.",
+    "Module-level caches cleared per run (extract.py:6912-6929) and Verinoda build-scoped patches (index.py:84-86): a new memo must follow the same clear-per-build rule, or watch/MCP processes replay stale answers.",
+    "split_case_collisions runs on extract's output (index.py:498-502) and again on build_from_json's input; ids after extract are not final until then."
+   ],
+   "covering_tests": [
+    "tests/test_index.py::test_path_identity_memo_keeps_the_graph_byte_identical (tests/test_index.py:386; pattern for a patched-vs-unpatched byte-identical update test, helper _update_once at tests/test_index.py:315)",
+    "tests/test_python_cross.py",
+    "tests/test_python_facts.py",
+    "tests_upstream/test_source_key_memoization.py (test_matches_unmemoized_semantics, test_resolution_happens_once_per_distinct_path, test_cache_is_cwd_sensitive)",
+    "tests_upstream/test_language_resolvers.py (run_language_resolvers)",
+    "tests_upstream/test_extract.py (_disambiguate_colliding_node_ids, _rewire_unique_stub_nodes)",
+    "tests_upstream/test_multilang.py",
+    "tests_upstream/test_swift_cross_file_calls.py",
+    "tests_upstream/test_go_qualified_resolution.py (chosen by name only; not opened)",
+    "tests_upstream/test_java_type_resolution.py",
+    "tests_upstream/test_python_import_resolution.py",
+    "tests_upstream/test_loose_sibling_import_resolution.py (_repoint_python_sibling_imports)",
+    "tests_upstream/test_markdown_code_spans.py",
+    "tests_upstream/test_symbol_resolution.py",
+    "tests_upstream/test_cross_language_call_resolution.py",
+    "tests_upstream/test_phantom_cross_package_call.py",
+    "tests_upstream/test_cpp_objc_cross_file_calls.py",
+    "tests_upstream/test_cross_extension_reexport_self_cycle.py",
+    "tests_upstream/test_elixir_import_resolution.py (only file matching edge_alias_candidates)",
+    "tests_upstream/test_paths.py (_is_test_path)",
+    "tests_upstream/test_incremental.py",
+    "GAP: no test found that compares a `verinoda update` graph against a full `scan` graph on a polyglot corpus; stage A should add one, using a copy of tests_upstream/fixtures plus examples/orders_app, with and without the memos."
+   ]
+  },
+  {
+   "subsystem": "Rebuild orchestration: verinoda/index.py build() wrappers -> project_index/watch.py _rebuild_code (full-corpus path used by `verinoda update`), with detect/save_manifest, reconcile, old-vs-new compares, cluster/report/to_json",
+   "summary": "`verinoda update` never takes the upstream incremental path. When a file of the graph changed, workflow._update calls index.build(repo, prune_missing=True) with no `changed` list (verinoda/workflow.py:396). The inline comment at verinoda/workflow.py:386-391 gives the reason: the incremental pass loses cross-file edges. So _rebuild_code runs with changed_paths=None (verinoda/index.py:91), re-detects the whole corpus (verinoda/project_index/watch.py:1472) and hands every code and document file to extract() (watch.py:1663, 1790). Before extraction it parses the ~36 MB graph.json once, only to find documents that already have semantic nodes (watch.py:1540-1587). _reconcile_existing_graph then parses graph.json twice more: once to validate it (watch.py:792) and once to use it (watch.py:799). On a full rebuild it also re-runs the Markdown extractor over every Markdown file (watch.py:582, 608). In this profile that function costs 9.56 s cumulative; of that, _reconcile_markdown_links is 5.31 s, and 2.76 s of those are un-memoised _StoredSourcePaths.normalize calls (watch.py:468). Three whole-graph old-vs-new comparisons only decide what happens next. `same_topology` (watch.py:2009) decides whether to skip clustering and writing. `same_graph` plus `same_report` (watch.py:2139, 2147-2148) decide whether outputs are rewritten. _check_shrink (watch.py:2153) decides whether the write is refused. The first two sort about 100k items per side by a json.dumps key (watch.py:1075-1148): 3.46 s + 2.88 s, plus top-level dumps (6 json.dumps calls from _rebuild_code, 2.15 s in total, not all of it from these compares). They still run when the node counts already differ, as in the measured one-function edit. GRAPH_REPORT.md comes from score_all, god_nodes, surprising_connections and report.generate (watch.py:2047-2049, 2109), about 5.3 s together, plus the detect word counts (detect.py:2267-2271, 2.2 s), which feed only the report's words line (report.py:137). Outside project_index, the only Verinoda code that uses GRAPH_REPORT.md is index.py's own kept-graph path, which writes it (index.py:788); index.py:452 says \"Verinoda never reads the report\". Verinoda never reads manifest.json outside project_index either. Both files are still reachable through the upstream passthrough (verinoda/cli.py:2355) and callflow_html. Three per-item path computations are pure functions of a string but are recomputed per node or edge: case_ids._file_key (4.52 s of split_case_collisions' 5.35 s, verinoda/case_ids.py:75, 104), watch._relativize_source_files (3.37 s, watch.py:332; the profile shows it never reaches its resolve step), and normalize. These are the cheapest graph-identical savings. After _rebuild_code, index.build parses graph.json again in _post_process (index.py:2699) and in refresh_receiver_sidecar (index.py:125). _new_record re-runs remap_communities_to_previous (index.py:830, 1.28 s) only to decide whether rebuild_record.json is written.",
+   "steps": [
+    {
+     "name": "workflow._update decides on a full rebuild",
+     "location": "verinoda/workflow.py:385",
+     "reads_whole_corpus": "no",
+     "profile_seconds": -1,
+     "inputs": "snapshot diff from current_state (workflow.py:366; list_files+hash_files already ran)",
+     "outputs_consumed_by": "index.build(repo, prune_missing=True) at workflow.py:396 (changed=None -> full _rebuild_code)"
+    },
+    {
+     "name": "index.build wrappers (resolve/absolutize memo, empty-json replay, case-id split, keep-unchanged-graph, no upstream html, no report questions)",
+     "location": "verinoda/index.py:60",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 160.78,
+     "inputs": "repo; wrappers entered at index.py:86-90",
+     "outputs_consumed_by": "_rebuild_code (index.py:91), then _post_process, keep.finish, refresh_receiver_sidecar"
+    },
+    {
+     "name": "detect (git enumeration + classify + paper sniff + word counts)",
+     "location": "verinoda/project_index/watch.py:1472 -> verinoda/project_index/detect.py:1961",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 5.72,
+     "inputs": "watch root, persisted excludes, own-file patterns (watch.py:1464-1471)",
+     "outputs_consumed_by": "code_files (watch.py:1477), document/paper lists (watch.py:1523-1528), total_words -> report only, save_manifest scan_corpus, _keep_unchanged_graph.detected"
+    },
+    {
+     "name": "ignored_predicate x2 (eager git ls-files)",
+     "location": "verinoda/project_index/watch.py:1502-1507 -> detect.py:1650 (git at detect.py:1682)",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 1.2,
+     "inputs": "root, excludes",
+     "outputs_consumed_by": "_reconcile_existing_graph._ignored_now, called only for alive, corpus-absent sources (watch.py:836-853)"
+    },
+    {
+     "name": "semantic-doc pre-pass (parse graph.json)",
+     "location": "verinoda/project_index/watch.py:1540-1587",
+     "reads_whole_corpus": "no",
+     "profile_seconds": -1,
+     "inputs": "graph.json (full json.loads at watch.py:1543)",
+     "outputs_consumed_by": "semantic_doc_files -> extract_targets filter (watch.py:1663)"
+    },
+    {
+     "name": "extract (all code+doc files, AST cache)",
+     "location": "verinoda/project_index/watch.py:1790",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 77.17,
+     "inputs": "extract_targets = every detected code/doc file",
+     "outputs_consumed_by": "_reconcile_existing_graph"
+    },
+    {
+     "name": "_reconcile_existing_graph (+ _reconcile_markdown_links)",
+     "location": "verinoda/project_index/watch.py:754 (called at 1845)",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 9.56,
+     "inputs": "graph.json parsed twice (watch.py:792 validate, 799 use), extraction result, code_files; re-extracts every Markdown file on a full rebuild (watch.py:582, 608)",
+     "outputs_consumed_by": "result (merged nodes/edges) -> build_from_json; existing_graph_data -> directed flag, community remap, compares, _check_shrink"
+    },
+    {
+     "name": "_relativize_source_files",
+     "location": "verinoda/project_index/watch.py:1870 (def 332)",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 3.37,
+     "inputs": "merged result (106,080 source_file/definition_file values checked)",
+     "outputs_consumed_by": "build_from_json"
+    },
+    {
+     "name": "build_from_json (with case-id split wrapper)",
+     "location": "verinoda/project_index/watch.py:2005; wrapper verinoda/index.py:505",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 19.03,
+     "inputs": "result",
+     "outputs_consumed_by": "G for topology compare, cluster, report, to_json"
+    },
+    {
+     "name": "topology wrapper (_graph_key) + same_topology compare",
+     "location": "verinoda/project_index/watch.py:2006-2041; verinoda/index.py:684, 850",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 4.63,
+     "inputs": "G, existing_graph_data",
+     "outputs_consumed_by": "decision: unchanged-topology fast path (skip cluster/report/write) or full path; _keep_unchanged_graph pending state"
+    },
+    {
+     "name": "cluster + remap_communities_to_previous",
+     "location": "verinoda/project_index/watch.py:2043-2046",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 9.71,
+     "inputs": "G, previous node->community map from existing graph",
+     "outputs_consumed_by": "communities -> to_json (graph.json community fields), labels, report"
+    },
+    {
+     "name": "report inputs: score_all, god_nodes, surprising_connections, labels, suggest_questions (stubbed)",
+     "location": "verinoda/project_index/watch.py:2047-2107",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 2.94,
+     "inputs": "G, communities",
+     "outputs_consumed_by": "report.generate only (labels also go to to_json)"
+    },
+    {
+     "name": "report.generate (GRAPH_REPORT.md text)",
+     "location": "verinoda/project_index/watch.py:2109 -> verinoda/project_index/report.py:96",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 2.33,
+     "inputs": "G, communities, cohesion, labels, gods, surprises, detection (total_words)",
+     "outputs_consumed_by": "same_report compare (watch.py:2147) and GRAPH_REPORT.md write; nothing else in Verinoda reads it (index.py:452)"
+    },
+    {
+     "name": "to_json to .graph.tmp.json + reparse",
+     "location": "verinoda/project_index/watch.py:2115-2118 -> export.py:271",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 4.38,
+     "inputs": "G, communities, labels, commit",
+     "outputs_consumed_by": "candidate_graph_data -> same_graph compare, _check_shrink, html reconcile; tmp file replaces graph.json"
+    },
+    {
+     "name": "same_graph compare (reparse existing + canonical sort)",
+     "location": "verinoda/project_index/watch.py:2121-2148",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 3.2,
+     "inputs": "graph.json reparsed (watch.py:2124), candidate_graph_data",
+     "outputs_consumed_by": "no_change decision: skip or perform graph/report/labels/sig writes"
+    },
+    {
+     "name": "_check_shrink",
+     "location": "verinoda/project_index/watch.py:2153 (def 1161)",
+     "reads_whole_corpus": "no",
+     "profile_seconds": -1,
+     "inputs": "existing_graph_data, candidate_graph_data, rebuilt_sources",
+     "outputs_consumed_by": "refuse/allow the write"
+    },
+    {
+     "name": "save_manifest (+ _ast_manifest_files)",
+     "location": "verinoda/project_index/watch.py:2188 -> detect.py:2454",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 3.18,
+     "inputs": "detected files; hashes every file in a thread pool (detect.py:2612), not visible to cProfile",
+     "outputs_consumed_by": "manifest.json, read only by upstream detect_incremental (project_index/cli.py:3452) and a root-inference existence check (build.py:526); also the hook where _keep_unchanged_graph runs its kept path (index.py:715)"
+    },
+    {
+     "name": "_post_process (portable ids, prune missing/own files, rewrite)",
+     "location": "verinoda/index.py:100 (def 2688)",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 2.96,
+     "inputs": "graph.json parsed again",
+     "outputs_consumed_by": "graph.json final bytes, stats, keep.finish"
+    },
+    {
+     "name": "keep.finish/_new_record (second remap to validate a record)",
+     "location": "verinoda/index.py:113, 816-847",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 1.68,
+     "inputs": "clustered, written communities, data",
+     "outputs_consumed_by": "rebuild_record.json (future fast path only)"
+    },
+    {
+     "name": "refresh_receiver_sidecar",
+     "location": "verinoda/index.py:125 (def 2535)",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 4.43,
+     "inputs": "graph.json loaded again via load()",
+     "outputs_consumed_by": "receiver_calls.json"
+    }
+   ],
+   "opportunities": [
+    {
+     "title": "Memoise case_ids._file_key per (source_file string, root)",
+     "description": "_plans calls _file_key for every node: setdefault evaluates it eagerly even when the id is already present (case_ids.py:104). That is 59,574 calls costing 4.52 s of split_case_collisions' 5.35 s, and there are only about 1,259 distinct source files. Memoise it with a per-call dict or lru_cache keyed by (str(source_file), str(root)). Optionally, compute owner only when the id is new.",
+     "locations": [
+      "verinoda/case_ids.py:75",
+      "verinoda/case_ids.py:104",
+      "verinoda/case_ids.py:110",
+      "verinoda/index.py:499",
+      "verinoda/index.py:505"
+     ],
+     "est_saving_seconds_under_profile": 4.3,
+     "graph_identical": "yes",
+     "why_identical": "_file_key (case_ids.py:75-79) depends only on its two arguments (Path join, normpath, normcase), with no filesystem access, so a memo returns the same strings.",
+     "risks": "None beyond keeping the memo local to one call (root can differ between calls). The file is Verinoda-owned, so no vendored edit is needed.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Memoise watch._relativize_source_files per distinct path string",
+     "description": "On this repository the function checks 106,080 values (2.41 s in Path.is_absolute) and changes none of them: the profile shows no resolve call. Replace watch._relativize_source_files from index.build, the same way _absolutize_once is installed (index.py:162-225), with a version that caches the answer per (value, root, scope). The answer is either 'leave unchanged' or the new relative string.",
+     "locations": [
+      "verinoda/project_index/watch.py:332-348",
+      "verinoda/project_index/watch.py:1870",
+      "verinoda/index.py:162"
+     ],
+     "est_saving_seconds_under_profile": 3.1,
+     "graph_identical": "yes",
+     "why_identical": "The result for one value depends only on the string, root and scope, and on Path.resolve. _resolve_once already memoises resolve for the whole build (index.py:131-159), so a per-string memo reproduces every assignment and every skip.",
+     "risks": "Non-str values must go through the original code, as _absolutize_once already does. _rebuild_code looks up the module global at call time, so the patch must be installed for the build and removed afterwards.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Add normalize to the _StoredSourcePaths memo",
+     "description": "install_path_identity_memo already memoises identity, in_watch_root and rebase_preserved (index.py:902-968), but not normalize (watch.py:468). _reconcile_markdown_links calls normalize 59,951 times, 2.76 s under the profile (watch.py:560, 594, 632 and inside _keep_edge).",
+     "locations": [
+      "verinoda/project_index/watch.py:468-470",
+      "verinoda/project_index/watch.py:560",
+      "verinoda/index.py:902"
+     ],
+     "est_saving_seconds_under_profile": 2.6,
+     "graph_identical": "yes",
+     "why_identical": "normalize returns posixpath.normpath(_norm_source_file(s, str(project_root))). _norm_source_file (build.py:374-398) is lexical, except for a resolve fallback that _resolve_once memoises, and project_root is fixed in __init__. This is the same argument the existing memo's docstring makes for identity (index.py:906-910).",
+     "risks": "Handle unhashable input as the existing memo does. tests/test_index.py:386 compares a build with the memo against one without; extend it so uninstall also restores normalize.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Short-circuit the same_topology compare on differing item counts",
+     "description": "Before building the two canonical forms at watch.py:2009-2012, compare three things: the top-level key sets, the counts of dict items in nodes and in links/edges, and the hyperedges length. If any differ, the topology differs. In the measured edit (one function added) the node count differs, so the 3.46 s of canonicalisation and two large json.dumps calls are skipped.",
+     "locations": [
+      "verinoda/project_index/watch.py:2007-2016",
+      "verinoda/project_index/watch.py:1094-1148"
+     ],
+     "est_saving_seconds_under_profile": 4,
+     "graph_identical": "yes",
+     "why_identical": "_canonical_topology_for_compare only removes keys inside items, keeps one entry per dict item and sorts; it never merges items. Two lists of different lengths therefore give different JSON, and the equality at watch.py:2010-2012 is False either way. Equal counts fall through to the unchanged full compare.",
+     "risks": "The compare is inline in vendored code, so this is either a marked 'Local change (Verinoda)' (docs/UPSTREAM.md) or a wrapper around _canonical_topology_for_compare. Under _keep_unchanged_graph the candidate is _as_written's pruned topology (index.py:696); the precheck must use the same dict that is compared.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Short-circuit the same_graph compare and skip the existing-graph reparse on differing counts",
+     "description": "At watch.py:2121-2145 graph.json is parsed again (2124) and both sides are canonicalised and dumped (2.88 s plus dumps). If the node, link or hyperedge counts of existing_graph_data (already in memory; reconcile's _origin backfill does not change list lengths) differ from candidate_graph_data, same_graph is False. The reparse and the canonical sort can then be skipped, while keeping the fail-closed read error path for the equal-count case.",
+     "locations": [
+      "verinoda/project_index/watch.py:2118-2148",
+      "verinoda/project_index/watch.py:1075-1091"
+     ],
+     "est_saving_seconds_under_profile": 3.6,
+     "graph_identical": "yes",
+     "why_identical": "_canonical_graph_for_compare only sorts lists; it never adds or removes items. Different lengths mean different dumps, so same_graph=False and no_change=False, the same decision and the same writes as today.",
+     "risks": "Today an unreadable graph.json at this point returns False with an error (watch.py:2125-2136). Skipping the reparse after a count mismatch changes behaviour only if the file became unreadable after reconcile read it (a race), and the replace would then proceed. Keep a cheap check of the size cap and that the file exists. This is a vendored edit or wrapper.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Build the gitignore ignored_predicate lazily (defer git ls-files)",
+     "description": "_rebuild_code builds _ignored_full with gitignore=True, which runs _git_tracked_path_keys (a `git ls-files` subprocess, 1.2 s) straight away (detect.py:1680-1684). The predicate is only consulted for graph sources that are corpus-absent and still on disk (watch.py:836-853, 865-870), which is normally none. Replace detect.ignored_predicate during index.build with a wrapper that builds the real predicate on its first call.",
+     "locations": [
+      "verinoda/project_index/watch.py:1501-1507",
+      "verinoda/project_index/detect.py:1650-1690",
+      "verinoda/project_index/watch.py:836"
+     ],
+     "est_saving_seconds_under_profile": 1.2,
+     "graph_identical": "yes",
+     "why_identical": "When the predicate is called it is the same function over the same ignore files and git index. The build holds the build lock (index.py:91, block_on_lock) and the tree does not change during it, which _resolve_once already assumes. When it is never called, it cannot affect the graph.",
+     "risks": "If an ignore file or the git index changes mid-build, the lazy version sees the newer state (the same class of assumption as _resolve_once). _rebuild_code imports ignored_predicate by name at call time (watch.py:1501), so patching the module attribute works.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Cache the paper sniff (_looks_like_paper) in the existing stat index",
+     "description": "classify_file reads each of the 1,383 document files in full (read_text, then [:3000]) to test paper signals, 1.76 s (detect.py:319-327, 539). Store the boolean in the upstream stat index next to word_count, under the same (size, mtime_ns) signature and freshness check cached_word_count uses (cache.py:543-579). Separately, reading at most enough bytes for 3000 decoded characters would help large files.",
+     "locations": [
+      "verinoda/project_index/detect.py:319-327",
+      "verinoda/project_index/detect.py:539",
+      "verinoda/project_index/cache.py:543"
+     ],
+     "est_saving_seconds_under_profile": 1.5,
+     "graph_identical": "yes",
+     "why_identical": "The result depends only on the file bytes; it decides code/document/paper membership and so the graph input. A stat-signature cache is exactly as trustworthy as the word-count and file_hash caches the build already relies on (_stat_sig_fresh guards writes made in the same tick).",
+     "risks": "Where file access is slow (this repo is under OneDrive), the gain comes from not opening the files; the cache key must include the regex set (the _PAPER_SIGNALS version). The bounded-read variant must handle errors='ignore' and newline translation at the cut; unsure unless it falls back to a full read whenever the decoded prefix is shorter than 3000 characters plus a margin.",
+     "effort": "medium",
+     "applies_to": "both"
+    },
+    {
+     "title": "Stop producing GRAPH_REPORT.md (and its word counts) in Verinoda builds",
+     "description": "score_all, god_nodes, surprising_connections and report.generate (watch.py:2047-2049, 2109) exist only for GRAPH_REPORT.md; to_json does not take cohesion or surprises (watch.py:2115). detect's word counts (detect.py:2267-2271, 2.2 s, part of it first-time resolve calls that would move elsewhere) feed only the report's words line (report.py:137). Following _without_report_questions (index.py:449-469), stub these during index.build. Alternatively, make generate return the existing report text so same_report stays True and the file is left as it is.",
+     "locations": [
+      "verinoda/project_index/watch.py:2047-2049",
+      "verinoda/project_index/watch.py:2109-2112",
+      "verinoda/project_index/watch.py:2146-2148",
+      "verinoda/project_index/detect.py:2004-2010",
+      "verinoda/index.py:449-469",
+      "verinoda/index.py:778-788"
+     ],
+     "est_saving_seconds_under_profile": 6.3,
+     "graph_identical": "yes",
+     "why_identical": "None of these values reach G, communities, labels or to_json. The graph and community ids come from cluster, remap and to_json only (watch.py:2043-2046, 2115).",
+     "risks": "no_change = same_graph and same_report (watch.py:2148). A stub changes when graph.json, labels and sig are rewritten: identical content, but different mtime and backups. That affects _keep_unchanged_graph's before/after file-state check (index.py:825) and the tests that compare GRAPH_REPORT.md bytes (tests/test_workflow_index.py:369, 515-522). The upstream passthrough (cli.py:2355) and callflow_html read GRAPH_REPORT.md. docs/DESIGN.md:3862 records the decision to keep word counts for the report. This needs a product decision and a D-record.",
+     "effort": "medium",
+     "applies_to": "both"
+    },
+    {
+     "title": "Skip writing manifest.json in Verinoda builds (keep the hook call)",
+     "description": "save_manifest re-hashes every detected file in a thread pool, which cProfile does not see, and rewrites manifest.json (2.56 s main-thread, plus _ast_manifest_files 0.62 s). Outside project_index Verinoda never reads it; only upstream detect_incremental (project_index/cli.py:3452) and a root-inference existence check (build.py:526) do. _keep_unchanged_graph's save_manifest wrapper must still run, because it is where the kept path runs (index.py:715-726).",
+     "locations": [
+      "verinoda/project_index/watch.py:2185-2197",
+      "verinoda/project_index/watch.py:1808-1838",
+      "verinoda/project_index/detect.py:2454",
+      "verinoda/index.py:715"
+     ],
+     "est_saving_seconds_under_profile": 3,
+     "graph_identical": "yes",
+     "why_identical": "manifest.json is written after the graph is final and is never read by _rebuild_code, index.build or workflow, so the graph cannot depend on it.",
+     "risks": "`verinoda index update|extract` via the passthrough would see a stale manifest. Stale rows only cause extra re-extraction there, which I believe is safe but have not verified. build.py:526 needs the file to exist (it would, from earlier). BENCHMARKS.md:1721 compares manifest.json between paths. This needs a decision.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Parse graph.json once for the semantic-doc pre-pass and reconcile",
+     "description": "Before the build, graph.json (36 MB) is parsed three times: the pre-pass (watch.py:1543), the fail-closed validation _load_existing_graph (watch.py:792, 0.76 s) and the load reconcile uses (watch.py:799, 0.46 s). The pre-pass only reads, so its dict could be handed to reconcile. _load_existing_graph's cap and parse check could reuse the same parse.",
+     "locations": [
+      "verinoda/project_index/watch.py:1540-1587",
+      "verinoda/project_index/watch.py:792-800",
+      "verinoda/project_index/build.py:1616"
+     ],
+     "est_saving_seconds_under_profile": 1,
+     "graph_identical": "yes",
+     "why_identical": "The pre-pass never mutates prior. Reconcile's _origin backfill (watch.py:806-809) happens after the pre-pass is done. The later same_graph compare must keep its own fresh parse (watch.py:2124), because the backfill changes items: 6 nodes in the current graph have no _origin.",
+     "risks": "Needs a vendored edit. Fail-closed semantics (#2251) must hold: a parse error must still raise out of reconcile.",
+     "effort": "medium",
+     "applies_to": "both"
+    },
+    {
+     "title": "Cache _reconcile_markdown_links' re-extraction of every Markdown file",
+     "description": "On a full rebuild every Markdown file is re-parsed with extract_markdown (watch.py:582, 608-610; 352 calls, 1.79 s), apart from the cached extract() that already processed them. The output depends on the file bytes and on whether link targets exist (markdown.py:245, 441), so a cache would have to be keyed by (bytes hash, set of existing target paths), or reuse edges from extract() if they still carry target_file.",
+     "locations": [
+      "verinoda/project_index/watch.py:582-647",
+      "verinoda/project_index/extractors/markdown.py:441"
+     ],
+     "est_saving_seconds_under_profile": 1.5,
+     "graph_identical": "unsure",
+     "why_identical": "extract_markdown's result depends on other files' existence (is_file checks), so a cache is exact only if its key captures that. I did not verify whether extract()'s cached edges keep target_file.",
+     "risks": "Subtle staleness when a link target appears or disappears. It touches the vendored reconcile that owns authored-link edges.",
+     "effort": "medium",
+     "applies_to": "both"
+    }
+   ],
+   "equality_hazards": [
+    "Community ids are remapped to the previous graph's (watch.py:2044-2046 remap_communities_to_previous with _node_community_map of existing graph.json). An update equals a scan only when both start from the same previous graph.json.",
+    "community_name values in graph.json come from .graphify_labels.json and its .sig (watch.py:2050-2106) and depend on history. Stale labels are renamed by hub (label_communities_by_hub), so labels carry over between builds.",
+    "Reconcile keeps nodes from the old graph that this run did not re-extract: 255 semantic-tier external stubs and 6 nodes with no _origin in the current graph.json (watch.py:975-993). The full rebuild is therefore not a pure function of the tree.",
+    "graph.json carries built_at_commit (to_json at watch.py:2115). The compares drop it (watch.py:1077, 1096), but byte comparisons do not.",
+    "GRAPH_REPORT.md carries the date, the word count and the commit (index.py:644-646; _report_for_compare strips only the commit line, watch.py:1234-1235). This drives no_change and therefore whether graph.json, labels and sig are rewritten (their mtime).",
+    "_keep_unchanged_graph can keep the previous graph.json bytes when rebuild_record.json matches (index.py:615-847). The file's (ino, size, mtime) before/after decides whether a record is written (index.py:825), so rewrite timing matters.",
+    "_post_process prunes nodes of files missing on disk and Verinoda's own files (index.py:2688-2709). The final graph depends on filesystem state at the end of the build.",
+    "Leiden clustering input order: G's node order follows result order plus preserved order from reconcile (watch.py:1022-1024), and cluster/_split_community may depend on insertion order.",
+    "_resolve_once and _absolutize_once memoise path answers for a build, assuming the tree does not move during it (index.py:131-225). Any new memo inherits the same assumption.",
+    "manifest.json 'seen' uses time.time() (detect.py:2640), which is history-dependent, but it is not a graph input.",
+    "The compare helpers sort by json.dumps(default=str) keys (watch.py:1088-1090, 1112-1147); dict key order inside items does not matter there, but it does for byte-level comparisons."
+   ],
+   "covering_tests": [
+    "tests/test_workflow_index.py::test_an_update_that_rebuilds_the_same_graph_keeps_it_and_writes_what_the_full_path_writes",
+    "tests/test_workflow_index.py::test_the_full_path_runs_when_the_graph_or_a_file_the_record_fingerprints_changed",
+    "tests/test_workflow_index.py::test_a_graph_json_the_pipeline_wrote_itself_is_left_to_the_vendored_comparison",
+    "tests/test_workflow_index.py::test_a_record_of_a_graph_json_nothing_rewrote_is_not_used",
+    "tests/test_workflow_index.py::test_a_process_whose_code_changed_on_disk_neither_uses_nor_writes_a_record",
+    "tests/test_workflow_index.py::test_update_reindexes_only_what_changed",
+    "tests/test_workflow_index.py::test_an_update_keeps_the_cross_file_edges_of_the_files_it_re_extracts",
+    "tests/test_workflow_index.py::test_an_update_that_touches_no_file_of_the_graph_keeps_the_graph",
+    "tests/test_workflow_index.py::test_a_refused_incremental_update_after_deletions_is_retried_in_full",
+    "tests/test_index.py::test_path_identity_memo_keeps_the_graph_byte_identical",
+    "tests/test_index.py::test_prune_missing_files_drops_their_nodes_and_edges",
+    "tests/test_index.py::test_skipped_data_json_is_remembered_and_small_batches_stay_in_this_process",
+    "tests/test_case_ids.py::test_a_class_and_a_camelcase_const_of_one_file_are_two_nodes_after_a_build",
+    "tests/test_case_ids.py::test_only_case_variants_in_one_file_of_a_case_sensitive_language_are_split",
+    "tests/test_detect_git.py",
+    "tests/test_update_fast.py",
+    "tests_upstream/test_watch.py",
+    "tests_upstream/test_detect.py",
+    "tests_upstream/test_report.py",
+    "tests_upstream/test_watch_manifest_location.py"
+   ]
+  },
+  {
+   "subsystem": "Graph assembly and post-processing: index.build wrappers, project_index/build.py build_from_json, clustering (cluster.py + watch.py remap/labels), same-topology/same-graph gates, _post_process, the rebuild record and the receiver sidecar",
+   "summary": "Scan and update both call index.build with changed=None (workflow.py:180, workflow.py:396). So both re-extract the whole corpus through watch._rebuild_code (index.py:91), and neither applies a real delta at graph-assembly time. During the build, index.py:505-509 wraps upstream build_from_json so that case_ids.split_case_collisions runs first. It already ran once on the extraction (index.py:499-503). Both calls spend nearly all their time in _file_key (case_ids.py:75-79, 4.52 s over 59,574 calls), which does pure pathlib and normcase work and is called once per node at case_ids.py:104. build_from_json (build.py:872-1484, 16.35 s) is dominated by the pre-migration alias loop (build.py:1228-1251). For each of 29,744 nodes it recomputes _is_abs, _file_stem, make_id and _old_file_stems (build.py:671-685), all pure functions of source_file, and it normalizes the node id twice (build.py:1241-1242). The loop at build.py:1359-1360 also takes Path(...).suffix for every edge. Next, watch.py:2006-2012 compares the whole canonical topology to the existing graph (3.46 s plus the JSON dumps), even when the node count already differs. Clustering follows: cluster.py:237 is 8.45 s. Of the 6.77 s in _partition, the native Leiden call is only 0.57 s (cluster.py:78). The rest is sorted() over networkx subgraph views, including a 2.11 s __len__ on EdgeDataView (cluster.py:142), plus cohesion_score's number_of_edges on views (cluster.py:365-373). Communities are then remapped to the previous graph.json (watch.py:2044-2046) with an O(old x new) set-intersection loop (cluster.py:399-405). That loop runs twice: again in _new_record (index.py:830), 2.53 s in all. Labels are reused from .graphify_labels.json when the membership signature still matches (watch.py:2050-2098). to_json sorts nodes and links (export.py:373-374), and the whole graph is compared again (watch.py:2119-2144, 2.88 s plus dumps). Post-processing (index.py:2688-2709) makes ids portable and prunes missing files. _missing_in_nodes resolves every source file (index.py:2615-2637). Workflow then runs the same scan again through prune_missing_files (workflow.py:88, index.py:2723). refresh_receiver_sidecar reloads graph.json from disk (index.py:114, index.py:2538). On communities: Leiden is seeded (seed=42, trials=1, iterations=1 at cluster.py:78-87; random_seed=42 at cluster.py:155; Louvain seed=42 at cluster.py:176), and its input is canonicalized (cluster.py:118-144). Membership is therefore a pure function of the node set, the edge set and the weights. Community ids and labels, by contrast, depend on the previous graph.json and the saved labels files.",
+   "steps": [
+    {
+     "name": "index.build orchestration (context managers, _rebuild_code, post-process, sidecar)",
+     "location": "verinoda/index.py:60",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 160.78,
+     "inputs": "repo, changed=None for both scan and update (workflow.py:180, workflow.py:396)",
+     "outputs_consumed_by": "workflow._update / _scan stats; graph.json, receiver_calls.json"
+    },
+    {
+     "name": "split_case_collisions on the fresh extraction (extract wrapper)",
+     "location": "verinoda/index.py:499",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 2.68,
+     "inputs": "extract() result nodes/edges (all files, cache hits included)",
+     "outputs_consumed_by": "watch._reconcile_existing_graph (ids it keeps or drops by)"
+    },
+    {
+     "name": "_reconcile_existing_graph (merge with preserved graph items; neighbouring subsystem)",
+     "location": "verinoda/project_index/watch.py:1845",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 9.56,
+     "inputs": "fresh extraction + existing graph.json",
+     "outputs_consumed_by": "build_from_json (result), existing_graph_data (topology compare, remap, shrink check)"
+    },
+    {
+     "name": "split_case_collisions again, on the merged extraction (build_from_json wrapper)",
+     "location": "verinoda/index.py:505",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 2.67,
+     "inputs": "merged nodes/edges including items kept from the last graph",
+     "outputs_consumed_by": "upstream build_from_json"
+    },
+    {
+     "name": "upstream build_from_json (schema folds, semantic rekey, ghost merge, alias index, edge insertion, hyperedges, label disambiguation)",
+     "location": "verinoda/project_index/build.py:872",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 16.35,
+     "inputs": "merged extraction dict",
+     "outputs_consumed_by": "G for topology compare, cluster, report, to_json"
+    },
+    {
+     "name": "topology wrapper: _topology_from_graph + _graph_key (+ _as_written when a record matches)",
+     "location": "verinoda/index.py:684",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 1.17,
+     "inputs": "G",
+     "outputs_consumed_by": "watch same_topology compare; keep._new_record (key)"
+    },
+    {
+     "name": "same_topology compare against existing graph",
+     "location": "verinoda/project_index/watch.py:2007",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 3.46,
+     "inputs": "existing_graph_data, candidate_topology (canonicalised by _canonical_topology_for_compare, watch.py:1094)",
+     "outputs_consumed_by": "fast return at watch.py:2041 or fall-through to cluster"
+    },
+    {
+     "name": "cluster (wrapper) -> project_index cluster: _partition (Leiden) + oversized/low-cohesion splits",
+     "location": "verinoda/project_index/cluster.py:237",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 8.45,
+     "inputs": "G (undirected), resolution 1.0",
+     "outputs_consumed_by": "remap_communities_to_previous, keep.clustered (index.py:704)"
+    },
+    {
+     "name": "_partition (canonical stable graph + native Leiden), 50 calls",
+     "location": "verinoda/project_index/cluster.py:105",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 6.77,
+     "inputs": "connected subgraph view / community subgraph views",
+     "outputs_consumed_by": "cluster, _split_community"
+    },
+    {
+     "name": "_split_community (49 calls)",
+     "location": "verinoda/project_index/cluster.py:342",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 3.59,
+     "inputs": "G + an oversized/low-cohesion community",
+     "outputs_consumed_by": "cluster final_communities"
+    },
+    {
+     "name": "remap_communities_to_previous (build path)",
+     "location": "verinoda/project_index/watch.py:2046",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 1.25,
+     "inputs": "fresh communities + previous graph.json node->community map (watch.py:1056)",
+     "outputs_consumed_by": "score_all, labels, report, to_json (community ids in graph.json)"
+    },
+    {
+     "name": "score_all (cohesion per community)",
+     "location": "verinoda/project_index/cluster.py:378",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 0.88,
+     "inputs": "G, communities",
+     "outputs_consumed_by": "report.generate only (GRAPH_REPORT.md)"
+    },
+    {
+     "name": "labels reuse / hub labels / member signatures",
+     "location": "verinoda/project_index/watch.py:2050",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 0.16,
+     "inputs": ".graphify_labels.json, .graphify_labels.json.sig, communities",
+     "outputs_consumed_by": "to_json community_name, labels files"
+    },
+    {
+     "name": "to_json (community + community_name + norm_label stamped, nodes/links sorted)",
+     "location": "verinoda/project_index/export.py:271",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 4.34,
+     "inputs": "G, communities, labels",
+     "outputs_consumed_by": "graph_tmp -> same_graph compare -> graph.json"
+    },
+    {
+     "name": "same_graph compare of candidate vs existing graph.json",
+     "location": "verinoda/project_index/watch.py:2119",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 2.88,
+     "inputs": "existing graph.json re-read, graph_tmp re-read",
+     "outputs_consumed_by": "no_change decision, os_replace of graph.json"
+    },
+    {
+     "name": "_post_process (portable ids, prune missing and own files)",
+     "location": "verinoda/index.py:2688",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 2.96,
+     "inputs": "graph.json as written",
+     "outputs_consumed_by": "build stats, keep.finish(data), graph.json rewrite"
+    },
+    {
+     "name": "keep.finish -> _new_record (second remap + labels check + graph sha)",
+     "location": "verinoda/index.py:796",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 1.68,
+     "inputs": "post-processed data, keep.clustered, keep.written",
+     "outputs_consumed_by": "rebuild_record.json (next build's fast path)"
+    },
+    {
+     "name": "refresh_receiver_sidecar (reloads graph.json via load(augment=False))",
+     "location": "verinoda/index.py:2535",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 4.43,
+     "inputs": "graph.json on disk, old sidecar",
+     "outputs_consumed_by": "receiver_calls.json, applied by load()"
+    },
+    {
+     "name": "workflow prune_missing_files (second missing-file scan over graph.json)",
+     "location": "verinoda/workflow.py:88",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 1.52,
+     "inputs": "graph.json re-read",
+     "outputs_consumed_by": "stats/pruned lists of the update"
+    }
+   ],
+   "opportunities": [
+    {
+     "title": "Memoise case_ids._file_key per (source_file, root)",
+     "description": "_plans calls _file_key once per node, eagerly inside owner.setdefault (case_ids.py:104), and again per group (case_ids.py:110). There are 59,574 calls over the 2 split_case_collisions runs, 4.52 s of the 5.33 s total. A dict memo keyed by (str(source_file), root) inside _plans or split_case_collisions, or a module-level memo cleared per call, removes almost all of it. The second fix is to evaluate the setdefault value only when the id is new. case_ids.py is Verinoda's own module, not vendored, so it can be edited directly.",
+     "locations": [
+      "verinoda/case_ids.py:75",
+      "verinoda/case_ids.py:104",
+      "verinoda/case_ids.py:110",
+      "verinoda/case_ids.py:158"
+     ],
+     "est_saving_seconds_under_profile": 4.2,
+     "graph_identical": "yes",
+     "why_identical": "_file_key (case_ids.py:75-79) uses only Path construction, is_absolute, root / p, os.path.normpath and os.path.normcase. All are lexical and never touch the file system, so the result is a pure function of (source_file string, root). A memo returns the same strings, so plans, ids and edge routing are unchanged.",
+     "risks": "The memo key must include root, and the memo must not outlive one call if root can differ. Non-str source_file values go through str() as they do now.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Memoise the per-source_file work of build_from_json's alias loop (and normalize_id)",
+     "description": "For every node, the alias-candidate loop at build.py:1228-1251 recomputes Path(sf), _is_abs(sf) (29,744 calls, 1.44 s), make_id(_fs(rel)) (1.29 s + 0.74 s) and _old_file_stems(rel) (2.25 s). All of these depend only on the source_file string. It also calls _normalize_id(nid) twice per node (build.py:1241-1242). normalize_id is called 129,660 times directly from build_from_json (2.21 s) and 114,939 times through make_id. Two ways to do this without editing vendored code: (a) during index.build, patch build._is_abs, build._old_file_stems, build.make_id, build._normalize_id and extractors.base._file_stem with per-build dict memos, in the style of _absolutize_once (index.py:162-225); or (b) make it a marked 'Local change (Verinoda)' in build.py that precomputes a per-sf tuple (is_abs, rel.name, new_stem, old_stems).",
+     "locations": [
+      "verinoda/project_index/build.py:1228",
+      "verinoda/project_index/build.py:1241",
+      "verinoda/project_index/build.py:671",
+      "verinoda/project_index/ids.py:50",
+      "verinoda/project_index/ids.py:86",
+      "verinoda/project_index/paths.py:387"
+     ],
+     "est_saving_seconds_under_profile": 6,
+     "graph_identical": "yes",
+     "why_identical": "normalize_id (ids.py:50-58) uses only casefold, NFKC and re.sub. make_id (ids.py:86-93) is normalize_id of a join. _old_file_stems (build.py:671-685) uses only Path.parent.name and Path.stem plus make_id. is_absolute_any_platform and _file_stem are string and path lexical operations. None of them reads the file system or global state, so memoised values equal recomputed ones.",
+     "risks": "_semantic_id_remap mutates the list that _old_file_stems returns (old_forms.insert at build.py:752), so a memo must return a fresh list or copy. The memo must be scoped to one build (memory: about 250k distinct strings). Patching module globals affects other callers during the build (extract's _make_id through base), which is harmless because the functions are pure. Vendored-code policy (docs/UPSTREAM.md): prefer the outside patch or a marked local change.",
+     "effort": "medium",
+     "applies_to": "both"
+    },
+    {
+     "title": "Skip EdgeDataView.__len__ and subgraph-view filtering in _partition",
+     "description": "sorted(G.edges(data=True), key=...) at cluster.py:142 runs on networkx subgraph views: the connected subgraph at cluster.py:280 and the community subgraphs at cluster.py:344. sorted() first calls len() on the view: reportviews.py:1041 __len__, 2.11 s over 50 calls, which sums the degrees through filtered views. It then iterates the view through filters (2.15 s). Wrapping the view in iter(...) removes the len cost outright. A further step: build edge_rows from the parent graph's adjacency restricted to a node set (for u in nodes: for v, d in G._adj[u].items(): if v in S and key(u) <= key(v) ...), or materialise one G.subgraph(nodes).copy(). Either avoids the per-edge filter calls (new_node_ok: 1.5M calls, 1.98 s).",
+     "locations": [
+      "verinoda/project_index/cluster.py:142",
+      "verinoda/project_index/cluster.py:280",
+      "verinoda/project_index/cluster.py:344"
+     ],
+     "est_saving_seconds_under_profile": 3.5,
+     "graph_identical": "yes",
+     "why_identical": "edge_rows is sorted on the canonical endpoint pair (cluster.py:142). A simple Graph holds one edge per pair, so the order is total and does not depend on the iteration order or orientation of the source view. The same edge set with the same attribute dicts gives the same stable graph and the same Leiden input with the same seed (cluster.py:78-87). iter() only removes the list-size hint. tests_upstream/test_cluster.py:204 already checks invariance to orientation.",
+     "risks": "The adjacency-based rewrite must keep self-loops once, and it must keep the multigraph branch (cluster.py:133-140) unchanged. It must yield exactly the same set of edges as the subgraph view would, including edges whose endpoints are both in the node set.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Count intra-community edges without subgraph views in cohesion_score",
+     "description": "cohesion_score calls G.subgraph(nodes).number_of_edges() and nx.number_of_selfloops on a view (cluster.py:365-373). That comes to 1,106 calls and 1.64 s in total: 0.77 s inside cluster() and 0.87 s in score_all (cluster.py:378), which feeds only the report. Counting from G's adjacency with a set lookup gives the same integers directly.",
+     "locations": [
+      "verinoda/project_index/cluster.py:360",
+      "verinoda/project_index/cluster.py:378",
+      "verinoda/project_index/cluster.py:325",
+      "verinoda/project_index/cluster.py:345"
+     ],
+     "est_saving_seconds_under_profile": 1.3,
+     "graph_identical": "yes",
+     "why_identical": "actual = (edges with both ends in S) minus self-loops (cluster.py:373), and possible = n(n-1)/2. The same integer counts give the same float, so the <0.05 split decision (cluster.py:325) and the cohesion values in the report stay the same.",
+     "risks": "For a directed G, cluster() converts to undirected first (cluster.py:260-261). score_all is called with the build's G, which comes from build_from_json and may be directed if the existing graph was directed (watch.py:2005). The count must follow Graph vs DiGraph number_of_edges semantics. The same check applies to _split_community's subgraph.number_of_edges() == 0 test (cluster.py:345).",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Replace the O(old x new) overlap loop in remap_communities_to_previous with a node-to-community count",
+     "description": "cluster.py:399-405 intersects every old community set with every new one (about 1,113 x 1,113 pairs; 2.4M len calls; 2.09 s tottime over 2 calls). The function is called once in the build (watch.py:2046) and once in _new_record (index.py:830). Instead, map each node to its new cid once, walk previous_node_community once and count (old_cid, new_cid) pairs. That gives the same overlap tuples at O(N) cost.",
+     "locations": [
+      "verinoda/project_index/cluster.py:382",
+      "verinoda/project_index/watch.py:2046",
+      "verinoda/index.py:830"
+     ],
+     "est_saving_seconds_under_profile": 2.4,
+     "graph_identical": "yes",
+     "why_identical": "The overlap for (old, new) is |old_nodes & new_nodes|, which equals the number of previous-map entries with that old cid whose node is in the new community. cluster() returns a partition, so each node maps to one new cid. The resulting (overlap, old, new) triples are identical, and they are sorted by the total key (-overlap, old, new) (cluster.py:405), so the greedy matching and fresh-id assignment are unchanged. tests_upstream/test_cluster.py:107 and :119 cover this.",
+     "risks": "If a caller ever passes overlapping communities, set semantics differ from last-writer-wins in a node map. cluster() never does (cluster.py:339), but an assertion or fallback would be prudent. The file is vendored (a marked local change, or a replacement patched from index.py).",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Cheap length pre-check before the canonical same_topology / same_graph compares",
+     "description": "Both gates canonicalise both sides, which json.dumps every node and edge for the sort keys (watch.py:1089, :1111, :1138). They then json.dumps the whole canonical dicts (watch.py:2010-2011, 2140-2141). Together that is 3.46 s + 2.88 s + about 2.15 s of outer dumps. Adding a function changes the node count, so both compares are certain to fail. Compare the per-key list lengths first: dict nodes after the filter, links/edges, hyperedges. If they differ, answer False without canonicalising.",
+     "locations": [
+      "verinoda/project_index/watch.py:2007",
+      "verinoda/project_index/watch.py:2139",
+      "verinoda/project_index/watch.py:1075",
+      "verinoda/project_index/watch.py:1094"
+     ],
+     "est_saving_seconds_under_profile": 7.5,
+     "graph_identical": "yes",
+     "why_identical": "The gates only decide whether to take the fast path or skip the write. Two JSON arrays of different lengths can never serialise equal, and neither can dicts whose key sets differ. So the pre-check returns False exactly when the full compare would, and falls through to the full compare otherwise. Graph content is untouched.",
+     "risks": "The count must match what each canonicaliser keeps: _canonical_topology_for_compare drops non-dict nodes and edges (watch.py:1102, 1120), while _canonical_graph_for_compare keeps everything (watch.py:1085-1090). The existing side at 2009 is existing_graph_data after reconcile's _origin backfill (watch.py:807-810), which does not change counts. This is vendored code (a marked local change).",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "_missing_in_nodes: stat first, resolve only for files that do not exist",
+     "description": "_local_source resolves every distinct source_file (Path.resolve plus relative_to; 1.51 s + 0.70 s over 3,779 calls) before checking exists() (index.py:2615-2637). _post_process runs outside _resolve_once (the context ends at index.py:91), so each resolve is a real file-system call. It runs once in _post_process (1.02 s) and again through prune_missing_files (1.00 s). A file that exists is never 'gone', whatever resolve says. So test (repo / sf).exists() first, and call _local_source only for paths that do not exist.",
+     "locations": [
+      "verinoda/index.py:2629",
+      "verinoda/index.py:2615",
+      "verinoda/index.py:2702",
+      "verinoda/index.py:2732"
+     ],
+     "est_saving_seconds_under_profile": 1.5,
+     "graph_identical": "yes",
+     "why_identical": "seen[sf] = p is not None and not p.exists() (index.py:2636). _local_source returns the unresolved join (index.py:2619-2621, 2626), the same path the pre-check stats. If that path exists the answer is False either way. If it does not, _local_source runs as before. The URL and non-str cases return None or are skipped as before.",
+     "risks": "exists() on a URL-like string on Windows returns False, then falls through to _local_source, which returns None: same result. The helper _local_source is also used by search_index._graph_files (0.81 s), which can stay unchanged.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Hand the post-processed graph data to refresh_receiver_sidecar instead of re-reading graph.json",
+     "description": "index.build deletes data (index.py:114), and refresh_receiver_sidecar then calls load(repo, augment=False) (index.py:2538). That re-reads graph.json and parses the JSON again (0.43 s) before rebuilding the MultiDiGraph. load's graph construction (index.py:1522-1528) could be factored into a from-data helper and fed the in-memory data from _post_process.",
+     "locations": [
+      "verinoda/index.py:114",
+      "verinoda/index.py:2538",
+      "verinoda/index.py:1516"
+     ],
+     "est_saving_seconds_under_profile": 0.5,
+     "graph_identical": "yes",
+     "why_identical": "data is either the parsed graph.json that was not rewritten (index.py:2699) or the exact object then written with json.dumps (index.py:2681, portable_ids.py:115). JSON round-trips of json.loads output are identity, so the Graph built from data equals the Graph load() builds. graph_identity still hashes the file (index.py:2573).",
+     "risks": "keep.finish must not mutate data (it only reads: index.py:829). The error path (portable contains 'error') re-reads the file at index.py:104, which is also fine. Saves only the parse, not the MultiDiGraph build.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Skip workflow's second prune_missing_files when this build just pruned",
+     "description": "_no_missing_files calls index.prune_missing_files (workflow.py:88), which re-reads graph.json (0.45 s) and runs _missing_in_nodes again (1.00 s). This happens right after index.build ran the same check with prune=True (index.py:2702). The comment there says 'normally nothing is left to prune'.",
+     "locations": [
+      "verinoda/workflow.py:88",
+      "verinoda/index.py:2723",
+      "verinoda/index.py:2702"
+     ],
+     "est_saving_seconds_under_profile": 1.5,
+     "graph_identical": "unsure",
+     "why_identical": "The graph is identical unless a source file is deleted in the seconds between _post_process and this call. Today that race is caught and pruned; skipping would leave the node until the next update. The workflow comment (workflow.py:85-86) says the graph is 'still checked here' on purpose.",
+     "risks": "It weakens a deliberate safety net. A safer variant keeps the check but reuses a data object and existence results passed out of build, and re-stats only the files that existed then.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Memoise _strip_diacritics per label in to_json",
+     "description": "to_json computes norm_label for 30,980 nodes (export.py:343; _strip_diacritics 0.91 s). Labels repeat often (method names). A per-call dict memo keyed by label string removes most of this.",
+     "locations": [
+      "verinoda/project_index/export.py:343",
+      "verinoda/project_index/export.py:123"
+     ],
+     "est_saving_seconds_under_profile": 0.6,
+     "graph_identical": "yes",
+     "why_identical": "_strip_diacritics(label).lower() is a pure string function, so memoised results are equal.",
+     "risks": "Vendored file: needs a marked local change or a patch from outside. Small gain.",
+     "effort": "small",
+     "applies_to": "both"
+    }
+   ],
+   "equality_hazards": [
+    "Community ids depend on the previous graph. _rebuild_code remaps fresh communities onto the community ids in the existing graph.json (watch.py:2044-2046, cluster.py:382-430). A scan with no graph.json skips the remap and numbers communities by size (cluster.py:338). Update == full scan therefore holds for community ids only when both start from the same graph.json, and each graph's ids chain back through every earlier build.",
+    "Membership is history-independent given the same graph. Leiden is seeded (seed=42, trials=1, iterations=1, randomness=0.001 at cluster.py:78-87; random_seed=42 at cluster.py:155; Louvain seed=42 at cluster.py:176), and its input is canonicalised by sorted nodes and sorted endpoint pairs (cluster.py:118-144). Isolates and hub reattachment end in a total sort (cluster.py:338). So a stage-A change that leaves G's node set, edge set and weights unchanged gives identical membership. Skipping clustering is safe only when G is identical: that is what _keep_unchanged_graph's key check does (index.py:684-700, index.py:821-832).",
+    "Community labels depend on history. Saved labels are reused whenever the membership signature still matches (watch.py:2050-2092). New ones are hub names computed on the current G (cluster.py:189-213). A community whose members are unchanged but whose hub degree changed keeps its old label on update, while a fresh scan would name it by the current hub. to_json writes this as the node attribute community_name (export.py:341-342).",
+    "Which clustering backend runs depends on the environment: graspologic_native, then graspologic, then networkx Louvain (cluster.py:42-45, 146-180). Different installs can partition differently. _code_stamp records the versions (index.py:589-593).",
+    "Edge collapse in build_from_json is order-dependent. Edges are sorted only by (source, target, relation) (build.py:1256-1263), so ties keep input order (stable sort). The first-seen reverse-duplicate rule (build.py:1398-1403) and last-write-wins attrs of G.add_edge (build.py:1423) then make the surviving edge's attributes (source_file, line, confidence) depend on extraction and reconcile order. An update whose merged list orders items differently from a scan could produce different edge attributes.",
+    "Reconcile keeps graph items that the new extraction does not produce (watch.py:1836-1843, watch.py:822). A scan without a prior graph.json has no such items. This belongs to the reconcile subsystem but affects graph equality.",
+    "case_ids: ids of case-split symbols can depend on the kept graph. _new_id lengthens the hash when the owner map already holds the candidate id (case_ids.py:86-94), and the owner map includes nodes kept from the last graph. Splits that kept nodes already show are re-planned (case_ids.py:134-146; docstring case_ids.py:25-28).",
+    "_graph_key hashes node_link_data and adjacency in G's insertion order (index.py:850-859). A different extraction or merge order changes the key, so the rebuild-record fast path misses, even though graph.json bytes are order-independent after to_json's sort (export.py:373-374).",
+    "Python hash seed: build_from_json iterates the set node_set in the alias loop (build.py:1228), but it commits only single-candidate aliases through setdefault (build.py:1249-1251), so the result is order-free. Pass 1, Pass 2 and Pass 2b iterate sorted(node_set) (build.py:1082, 1134, 1168)."
+   ],
+   "covering_tests": [
+    "tests_upstream/test_cluster.py:107 test_remap_communities_to_previous_reuses_old_ids",
+    "tests_upstream/test_cluster.py:119 test_remap_communities_to_previous_assigns_deterministic_new_ids",
+    "tests_upstream/test_cluster.py:141 test_native_leiden_matches_graspologic_wrapper",
+    "tests_upstream/test_cluster.py:168 test_native_leiden_returns_complete_partition",
+    "tests_upstream/test_cluster.py:204 test_partition_is_invariant_to_edge_endpoint_orientation",
+    "tests_upstream/test_cluster.py:24-77 cohesion_score / score_all tests (self-loop handling at :49, :58, :67)",
+    "tests/test_case_ids.py:71, :129, :156, :171 (case split ids and edge routing)",
+    "tests/test_index.py:386 test_path_identity_memo_keeps_the_graph_byte_identical (template for memo-equality tests)",
+    "tests/test_index.py:275 test_stale_sidecar_is_recomputed_and_matches_the_in_memory_pass",
+    "tests/test_workflow_index.py:430 test_an_update_that_rebuilds_the_same_graph_keeps_it_and_writes_what_the_full_path_writes",
+    "tests/test_workflow_index.py:454 test_the_full_path_runs_when_the_graph_or_a_file_the_record_fingerprints_changed",
+    "tests/test_workflow_index.py:528 and :547 (rebuild record use and stamp)",
+    "tests/test_workflow_index.py:285 and :322 (update keeps cross-file edges / keeps the graph)",
+    "tests/test_portable_ids.py (post-process id rewriting)",
+    "tests_upstream/test_build.py, tests_upstream/test_semantic_id_remap_root.py, tests_upstream/test_watch.py, tests_upstream/test_incremental.py (upstream build_from_json and rebuild behaviour)",
+    "GAP: no test asserts that graph.json after an update equals a fresh full scan's node for node, edge for edge and community for community (a grep of tests/ for such a comparison found none). Stage A needs one, ideally run under two PYTHONHASHSEED values."
+   ]
+  },
+  {
+   "subsystem": "workflow.update around the graph build: snapshot/hash, graph-affected check, prune check, snapshot, derived indexes (search_index, copies, lexicon, anchors); plus python_facts.collect inside index.build",
+   "summary": "`update` (verinoda/workflow.py:261) takes the build lock and calls `_update` (workflow.py:358). `_update` first hashes the whole tree via `current_state` (snapshot.py:295 -> hash_files snapshot.py:222 -> list_files snapshot.py:116) and diffs it against the last snapshot (snapshot.py:288). It then decides whether to rebuild with `_graph_affected` (workflow.py:219), which parses the 36 MB graph.json through index.graph_source_files (index.py:2745). If a rebuild is needed it runs `index.build(repo, prune_missing=True)` over the whole corpus (workflow.py:396). That took 160.8 of 180.8 profiled seconds. Inside it, python_facts.collect (python_facts.py:154) took 4.83 s, 3.9 s of which went to repeated module-path probes (resolution.py:2210, :2248). After the build, `_no_missing_files` (workflow.py:79) re-reads graph.json and re-resolves every source file (index.py:2712-2742), although `_post_process` has just done the same prune (index.py:2702). Then `take_snapshot` (snapshot.py:262) lists and stats the tree again, `invalidate_stale` runs, and `_derive` (workflow.py:106) runs. `_derive` loads the graph a second time (index.load index.py:1516; the build already loaded it for the receiver sidecar, index.py:125/2538) and runs search_index.update, copies.update, lexicon.build and anchors.update_facts one after another through `_call_hook` (workflow.py:96). File hashes already have a stat-keyed memo in atlas.db's `file_stat` table, with git's racy-clean margin (snapshot.py:163-219, D21). Only 3 of 2,588 files were re-read, so what remains is listing and stat cost: list_files ran 5 times (hash_files x2, lexicon x2, search_index._data_files x1), with one `_is_file` stat per path (12,940 calls, 1.74 s), and hash_files stats each path again (5,176 calls, 0.67 s). lexicon.build re-extracts only changed files (3 reparsed; lexicon.py:933-948). It still recomputes the corpus-wide G² association (`_associate` lexicon.py:390, 4.75 s), vocab and seed hits, and rewrites the 18 MB lexicon.json (lexicon.py:949-983). The association is a global statistic (n and every marginal change when one unit changes), so it cannot be updated per file without keeping counters and handling order-dependent sites. search_index.update is per-file for content, but it computes `_gsig` for every graph file (1,335 calls, 1.61 s) and re-lists and ignore-checks the tree (search_index.py:1148-1188). None of these derived passes feeds index.build (grep finds no lexicon or search_index use in verinoda/index.py or project_index/*.py besides a cache-pop comment at index.py:2482). Changes to them therefore cannot change graph.json. `update --fast` (workflow.py:283-298, 341-355; DESIGN.md section 17) runs `_derive` now and leaves the graph to a detached plain `update`. That child runs `_derive` again over the same changed files, so every saving in `_derive` counts twice on the fast path.",
+   "steps": [
+    {
+     "name": "update: build lock + dispatch",
+     "location": "verinoda/workflow.py:261",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 180.79,
+     "inputs": "repo, wait, fast",
+     "outputs_consumed_by": "CLI/MCP; starts background update when index_mode == deferred (workflow.py:296-297)"
+    },
+    {
+     "name": "_update orchestration",
+     "location": "verinoda/workflow.py:358",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 180.78,
+     "inputs": "store latest snapshot, working tree",
+     "outputs_consumed_by": "update result dict"
+    },
+    {
+     "name": "current_state: git status + list_files + stat-cached hash_files",
+     "location": "verinoda/snapshot.py:295",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 1.18,
+     "inputs": "git ls-files x2, one stat per listed file (twice: _is_file snapshot.py:134 and hash_files snapshot.py:238), file_stat table",
+     "outputs_consumed_by": "changed_files diff (workflow.py:367), _config_digests (workflow.py:395), _deferred"
+    },
+    {
+     "name": "changed_files diff + misaligned_files",
+     "location": "verinoda/workflow.py:367-376",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 0.02,
+     "inputs": "previous snapshot's file map, current hashes, search.db misaligned rows",
+     "outputs_consumed_by": "_graph_affected, _derive(changed=...)"
+    },
+    {
+     "name": "extraction stamp check",
+     "location": "verinoda/workflow.py:384-385 (buildlock.py:221,258)",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 0.04,
+     "inputs": "build_stats.json, extractor source hash (memoised in _STAMP)",
+     "outputs_consumed_by": "rebuild decision"
+    },
+    {
+     "name": "_graph_affected (parses graph.json for its file set)",
+     "location": "verinoda/workflow.py:219 -> verinoda/index.py:2745",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 0.62,
+     "inputs": "diff, graph.json (36 MB JSON parse, 0.48 s)",
+     "outputs_consumed_by": "rebuild decision workflow.py:386/389"
+    },
+    {
+     "name": "index.build (whole-corpus graph rebuild)",
+     "location": "verinoda/workflow.py:396 -> verinoda/index.py:60",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 160.78,
+     "inputs": "whole tree, AST cache, python_facts.json, python_cross.json",
+     "outputs_consumed_by": "graph.json, receiver_calls.json, stats for snapshot"
+    },
+    {
+     "name": "python_facts.collect (inside index.build)",
+     "location": "verinoda/python_facts.py:154",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 4.83,
+     "inputs": "every .py path (read_bytes + blake2b, 738 files), cached facts; per import: _resolve_python_module_path (4,514 calls, 2.91 s) / _resolve_python_namespace_dir (1,054 calls, 1.01 s), sub_py/sub_pkg is_file (1,470 calls, 0.19 s)",
+     "outputs_consumed_by": "facts.imports / module_imports / exports / uses -> resolution._augment_symbol_resolution_edges -> graph edges"
+    },
+    {
+     "name": "refresh_receiver_sidecar (loads graph once, inside index.build)",
+     "location": "verinoda/index.py:125 -> verinoda/index.py:2535",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 4.43,
+     "inputs": "graph.json via load (1.83 s), per-file facts by sha256",
+     "outputs_consumed_by": "receiver_calls.json, read by apply_receiver_calls in later load()"
+    },
+    {
+     "name": "record_build",
+     "location": "verinoda/buildlock.py:270 (called workflow.py:405)",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 0.01,
+     "inputs": "graph seconds, config digests",
+     "outputs_consumed_by": "build_stats.json (recorded_extraction, recorded_configs, last_build_seconds)"
+    },
+    {
+     "name": "_no_missing_files -> prune_missing_files (re-parse graph.json, re-resolve every source_file)",
+     "location": "verinoda/workflow.py:79 -> verinoda/index.py:2723/2712/2629",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 1.56,
+     "inputs": "graph.json (json.loads 0.45 s), _local_source resolve per source file (index.py:2615; 2,528 calls over this and _post_process, 1.67 s)",
+     "outputs_consumed_by": "pruned/dangling lists in result; rewrite of graph.json only when something is missing"
+    },
+    {
+     "name": "take_snapshot (git status + list_files + stat-cached hash_files again)",
+     "location": "verinoda/snapshot.py:262",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 1.21,
+     "inputs": "working tree after build, file_stat cache",
+     "outputs_consumed_by": "snapshots table, invalidate_stale, _derive(file_hashes, all_files, tree)"
+    },
+    {
+     "name": "invalidate_stale",
+     "location": "verinoda/workflow.py:424 (claims.py:1030)",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 0.06,
+     "inputs": "snapshot diff, claim evidence",
+     "outputs_consumed_by": "result.stale"
+    },
+    {
+     "name": "_derive: index.load of the new graph (second full load this process)",
+     "location": "verinoda/workflow.py:122 -> verinoda/index.py:1516",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 1.93,
+     "inputs": "graph.json + receiver_calls.json",
+     "outputs_consumed_by": "search_index.update, copies.update, lexicon.build"
+    },
+    {
+     "name": "search_index.update",
+     "location": "verinoda/workflow.py:125 -> verinoda/search_index.py:1118",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 4.7,
+     "inputs": "graph (_gsig for every graph file: 1,335 calls, 1.61 s; _graph_files resolve per file 0.86 s), list_files + ignore rules (_data_files 1.25 s), stat per file, bytes of changed files only",
+     "outputs_consumed_by": "search.db"
+    },
+    {
+     "name": "copies.update",
+     "location": "verinoda/workflow.py:128 -> verinoda/copies.py:161",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 0.78,
+     "inputs": "graph nodes",
+     "outputs_consumed_by": "copies.json"
+    },
+    {
+     "name": "lexicon.build",
+     "location": "verinoda/workflow.py:147 -> verinoda/lexicon.py:910",
+     "reads_whole_corpus": "partly",
+     "profile_seconds": 7.45,
+     "inputs": "old lexicon.json (18 MB, _read_raw 0.48 s), _candidate_files (graph + list_files 0.71 s), second list_files (lexicon.py:954, 0.64 s), _extract of 3 changed files (0.20 s), _associate over all units (4.75 s), json.dumps (0.39 s)",
+     "outputs_consumed_by": "lexicon.json (query planning, idf); never the graph"
+    },
+    {
+     "name": "lexicon._associate (corpus-wide G2)",
+     "location": "verinoda/lexicon.py:390",
+     "reads_whole_corpus": "yes",
+     "profile_seconds": 4.75,
+     "inputs": "every stored unit of every candidate file (dedup, counters, 92,689 g2 calls = 1.43 s, tt 2.55 s)",
+     "outputs_consumed_by": "pairs, text_sites, stop_parts, units in lexicon.json"
+    },
+    {
+     "name": "anchors.update_facts (changed files only)",
+     "location": "verinoda/workflow.py:149 -> verinoda/anchors.py:608",
+     "reads_whole_corpus": "no",
+     "profile_seconds": 0.19,
+     "inputs": "changed paths (3 files)",
+     "outputs_consumed_by": "atlas.db file facts"
+    }
+   ],
+   "opportunities": [
+    {
+     "title": "Memoise Python module-path resolution per (module, level, importing directory) inside python_facts.collect",
+     "description": "collect() calls res._resolve_python_module_path(module_name, path, root, level) (python_facts.py:188) and res._resolve_python_namespace_dir (python_facts.py:192) once per import: 4,514 and 1,054 calls, 2.91 s + 1.01 s under the profile. The results depend on the importing file only through path.parent and path.parents (resolution.py:2212-2215, 2224-2245; 2268-2272). A read-only count over .verinoda/index/python_facts.json gives 4,514 imports but only 670 distinct (module_name, parent dir, level) keys. A dict local to collect() keyed by (module_name, level, str(path.parent)) would cut about 85% of those calls. The same applies to the sub_py/sub_pkg is_file probes (python_facts.py:197-199; 1,470 calls, 0.19 s), keyed by the probed path. All memoisation stays in verinoda/python_facts.py, so no file under project_index is edited, which the module docstring requires (python_facts.py:8-10).",
+     "locations": [
+      "verinoda/python_facts.py:183-208",
+      "verinoda/project_index/extractors/resolution.py:2210-2246",
+      "verinoda/project_index/extractors/resolution.py:2248-2290"
+     ],
+     "est_saving_seconds_under_profile": 3.3,
+     "graph_identical": "yes",
+     "why_identical": "Both resolvers are pure functions of (module_name, current_path.parent, root, level) and the file system (resolution.py:2211-2246 uses current_path only via .parent/.parents). The tree does not change during a build; the build already relies on that in _resolve_once (index.py:131-137). The loops still append facts in the same order (python_facts.py:183-215), so facts.imports/module_imports/exports/uses are identical lists.",
+     "risks": "If upstream resolution ever starts reading current_path itself (not only its parent), the key would be wrong. tests/test_python_facts.py compares collect() with the upstream pass and should get a case with two files in one directory importing the same module. The memo must live only for one collect() call (a long-lived MCP process sees file additions between builds).",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Hand the snapshot's file listing to the derived passes instead of calling list_files three more times",
+     "description": "After take_snapshot, _update already holds the listing as the keys of store.snapshot_files(snap['id']) (workflow.py:429). Those keys are list_files() minus files whose stat or hash failed (snapshot.py:231-248). lexicon.build still calls list_files twice (_candidate_files lexicon.py:868/871 and build lexicon.py:954; 0.65 + 0.64 s), and search_index._data_files calls it once (search_index.py:474; 0.64 s). Each call runs two `git ls-files` processes and one is_file stat per path (snapshot.py:127-134). Passing `all_files` (already a _derive parameter, workflow.py:106) as an optional `listed=` argument to lexicon.build and search_index.update, with a fallback to list_files when it is absent, removes these calls. Inside lexicon.build, one listing can also serve both uses.",
+     "locations": [
+      "verinoda/workflow.py:106-150",
+      "verinoda/workflow.py:428-431",
+      "verinoda/lexicon.py:862-874",
+      "verinoda/lexicon.py:952-956",
+      "verinoda/search_index.py:461-474",
+      "verinoda/search_index.py:1148-1150"
+     ],
+     "est_saving_seconds_under_profile": 1.9,
+     "graph_identical": "yes",
+     "why_identical": "These passes run after graph.json is final, and index.build reads none of their outputs (no lexicon/search_index use in verinoda/index.py or project_index). The derived outputs are also identical except in a race. The snapshot listing is list_files() as it was a fraction of a second earlier, and list_files already drops non-files (snapshot.py:134), so hash_files only drops a file that vanished or became unreadable in that window.",
+     "risks": "There is a race window of about 1 s (take_snapshot to _derive) instead of 0. A file that exists but cannot be read (so hash_files skips it at snapshot.py:245-248) would disappear from the lexicon/search listing, where list_files alone would have kept it (search_index would then record it as skipped). To be exact, pass list_files' own result out of take_snapshot rather than the hash-map keys. Do not use listed_files' 5 s TTL cache (snapshot.py:145-160) for this: in the MCP server it can predate the snapshot.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Reuse the Graph the build loaded for the receiver sidecar in _derive",
+     "description": "index.build loads graph.json into a networkx graph for refresh_receiver_sidecar (index.py:125 -> 2538; 1.83 s). Seconds later _derive loads the same file again (workflow.py:122 -> index.py:1516; 1.93 s). refresh_receiver_sidecar only computes edge lists (index.py:2567-2576); the only add_edge in index.py after load is _apply_edges/_apply_sidecar (index.py:2492), and grep finds no add_edge/add_node in jvm_mixins.py or datapack_java.py. Proposal: build returns that Graph in stats (in memory only, not serialised). _update passes it to _derive unless _no_missing_files rewrote graph.json (`extra` non-empty, workflow.py:88-93). _derive then calls apply_receiver_calls(g) (index.py:2582) instead of index.load. Stage-B work will want the same handoff.",
+     "locations": [
+      "verinoda/index.py:114-128",
+      "verinoda/index.py:2535-2579",
+      "verinoda/workflow.py:106-125",
+      "verinoda/workflow.py:420-431"
+     ],
+     "est_saving_seconds_under_profile": 1.9,
+     "graph_identical": "yes",
+     "why_identical": "graph.json is not touched. The handed-over object was built by the same load() from the same bytes (index.py:1521-1529), and augment=True only adds the sidecar edges (index.py:1530-1531), which apply_receiver_calls adds the same way. Reload whenever the graph file was rewritten after that load (prune path) or when same_graph() says the file changed (index.py:1554).",
+     "risks": "Graph-level caches filled during the sidecar pass (_index_files by node count index.py:1057-1075, _owners, others) survive into _derive. _apply_edges pops _ppr_adj/_qp_ix/_testcode_cache (index.py:2482-2484) but other caches may not be popped. I have not verified that no cache depends on edges. A search.db / lexicon.json equality test against the reload path is needed (tests/test_search_index.py:350 style). Memory peak: the Graph is held a little longer.",
+     "effort": "medium",
+     "applies_to": "both"
+    },
+    {
+     "title": "Skip the corpus-wide association when the lexicon's unit list did not change",
+     "description": "lexicon.build always reruns _associate over every unit (lexicon.py:949-950; 4.75 s), vocab and seed hits (962-970), and rewrites the 18 MB file. This happens even when no candidate file was re-extracted: a data-file-only update still runs _derive (workflow.py:428-431), and the background `update` that `--fast` starts re-derives the same changed files the fast pass already took in (workflow.py:341-355, then a plain _update). In that case every file hits prev by sha (lexicon.py:944-946), so reparsed == 0 and the unit list is the same. Store a digest of the ordered unit list (plus the pre-merge pairs of words that translations override, lexicon.py:959-961) in lexicon.json. When the digest matches, reuse pairs/text_sites/stop/n_units. Translations and phrases are cheap and still recomputed (lexicon.py:955-956, 0.02 s).",
+     "locations": [
+      "verinoda/lexicon.py:933-983",
+      "verinoda/lexicon.py:390-463",
+      "verinoda/workflow.py:341-355"
+     ],
+     "est_saving_seconds_under_profile": 4.75,
+     "graph_identical": "yes",
+     "why_identical": "_associate is a deterministic function of the ordered units list (lexicon.py:390-463: sorted outputs, first-seen dedup), so the same list gives the same output. The lexicon is never read by the graph build. Saving in the measured one-function edit: 0, because units change there. The saving applies to data/doc-only updates and to the background build of every `--fast` update.",
+     "risks": "The stored pairs already have translations merged (lexicon.py:959-961), so the raw association must be stored or reconstructed exactly. The digest must cover everything _associate reads, including the test-file filter (testcode.is_test_file, whose rules could change between versions: add LEXICON_VERSION and the params to the digest). File size grows a little.",
+     "effort": "medium",
+     "applies_to": "both"
+    },
+    {
+     "title": "One stat per file in hash_files (drop the separate is_file pass for it)",
+     "description": "list_files stats every listed path through _is_file (snapshot.py:108-113, 134; 12,940 calls, 1.74 s over 5 listings). For the two hash_files listings, hash_files then stats each path again (snapshot.py:238; 5,176 calls, 0.67 s). A hash_files-private listing could skip the is_file filter and do a single os.stat per path, keeping regular files with stat.S_ISREG(st.st_mode) (Path.is_file also follows links and tests S_ISREG), and feed that stat to the cache check.",
+     "locations": [
+      "verinoda/snapshot.py:116-134",
+      "verinoda/snapshot.py:222-252"
+     ],
+     "est_saving_seconds_under_profile": 0.7,
+     "graph_identical": "yes",
+     "why_identical": "Snapshots are not graph input. The same set of files is kept: Path.is_file() is os.stat + S_ISREG with errors mapped to False, and hash_files already skips stat errors (snapshot.py:237-240). The hashes and the stat-cache rule (snapshot.py:198-205) are unchanged.",
+     "risks": "list_files's other filters (own_filter, skip dirs) must stay identical, so share that code rather than copy it. tests/test_snapshot_cache.py:60-190 cover the cache rules.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Share _local_source resolutions between _post_process, _no_missing_files and search_index._graph_files",
+     "description": "The same ~1,260 source_file values are resolved with Path.resolve() three times per update: _missing_in_nodes in _post_process (index.py:2702) and again in prune_missing_files (index.py:2732; 2,528 calls total, 1.67 s), then _graph_files (search_index.py:414; 0.81 s). _no_missing_files also re-parses the 36 MB graph.json (json.loads 0.45 s) although the build just pruned (docstring workflow.py:85-86: 'normally nothing is left to prune'). Two options. (a) A memo for _local_source for the duration of one _update, as _resolve_once does for the build (index.py:131-137). (b) Have index.build return the node source-file set it already had in `data` (index.py:100-107), so prune_missing_files can check existence without re-reading JSON, and read JSON only when something is missing.",
+     "locations": [
+      "verinoda/index.py:2615-2637",
+      "verinoda/index.py:2712-2742",
+      "verinoda/workflow.py:79-93",
+      "verinoda/search_index.py:404-416"
+     ],
+     "est_saving_seconds_under_profile": 1.6,
+     "graph_identical": "yes",
+     "why_identical": "The existence check (p.exists(), index.py:2636) is still done after the build, so a file deleted during the build is still pruned. Only the resolve() of a path (does it lie inside repo) is reused, and that changes only if a symlink or junction is re-pointed during the update. With (b) the file set equals what json.loads(graph.json) gives, because build wrote exactly `data` (index.py:2704-2708).",
+     "risks": "(a) widens the resolve-memo window from the build to the whole update. A junction re-pointed mid-update would be judged by the older resolution; the next update corrects it. Keep the memo out of long-lived processes (clear it at the end of _update). Covered by tests/test_workflow_index.py:95,116,258.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Compute a method->class map once for search_index._gsig",
+     "description": "_gsig runs g.in_edges(n, {'method'}) per symbol (search_index.py:398; 18,754 in_edges calls, 0.40 s), and the first symbols_in call pays for Graph._index_files (0.86 s over 1,335 calls). A single pass over edges with relation 'method', choosing for each target the same first in-edge label that next() picks (in G.in_edges order), gives the class per node for all files. Also reuse the stat from the main loop instead of the second (repo / f).exists() per stored file (search_index.py:1188; 0.17 s).",
+     "locations": [
+      "verinoda/search_index.py:394-401",
+      "verinoda/search_index.py:1162-1190"
+     ],
+     "est_saving_seconds_under_profile": 0.5,
+     "graph_identical": "yes",
+     "why_identical": "search.db is derived after the graph is written and is not read by the build. gsig bytes stay identical if the chosen class is the first 'method' in-edge in networkx's in_edges iteration order, as `next(...)` picks today.",
+     "risks": "If the map is built by iterating g.G.edges instead of per-node in_edges, the 'first' in-edge can differ for a node with two class parents, and the signature would change (one-time re-index, not wrong). tests/test_search_index.py:350 and tests/test_data_index.py:203 check incremental == full.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Inline g2's helper in _associate with the same float operation order",
+     "description": "g2/h are called 92,689/278,067 times (lexicon.py:378-387; 1.43 s cumulative, mostly per-call overhead that cProfile inflates). Inlining h into g2, keeping the same summation order (left-to-right over k11,k12,k21,k22, same log(k/s) terms, same k>0 skips), removes about 370k Python calls. The dedup loop's is_test_file per unit (25,951 calls) could also be cached per file path.",
+     "locations": [
+      "verinoda/lexicon.py:378-387",
+      "verinoda/lexicon.py:396-403",
+      "verinoda/lexicon.py:442-450"
+     ],
+     "est_saving_seconds_under_profile": 1,
+     "graph_identical": "yes",
+     "why_identical": "The lexicon is not a graph input. The lexicon values stay bit-identical only if every float operation happens in the same order: sum(ks) starts at int 0, and 0 + x == x exactly for the positive floats here. Otherwise round(s, 2) or the G2_MIN threshold could flip.",
+     "risks": "Wall-clock gain is much smaller than the profile suggests (probably under 0.4 s). tests/test_lexicon.py:273 checks g2. A lexicon.json equality check before/after on this repository is needed.",
+     "effort": "small",
+     "applies_to": "both"
+    },
+    {
+     "title": "Answer _graph_affected without parsing graph.json",
+     "description": "_graph_affected parses the whole graph.json just to get its source-file set (index.py:2745-2758; 0.57 s). record_build (buildlock.py:270) could also store that set with graph_identity(stat) of graph.json, taken from the `data` the build already held (index.py:100-107). _graph_affected would use it when index.same_graph() says graph.json is the recorded one, and parse the JSON otherwise.",
+     "locations": [
+      "verinoda/workflow.py:219-236",
+      "verinoda/index.py:2745-2758",
+      "verinoda/buildlock.py:270-289"
+     ],
+     "est_saving_seconds_under_profile": 0.55,
+     "graph_identical": "yes",
+     "why_identical": "The decision input is the same set when the recorded identity matches the graph file (stat, then sha256 when the stat differs, index.py:1554-). When it does not match, the JSON is read as today. The graph build itself is unchanged.",
+     "risks": "build_stats.json grows by ~1,260 paths. Stored paths must follow graph_source_files' 'last value per repeated id' rule (index.py:2751-2757). A small gain, most useful for data-only updates where no rebuild follows.",
+     "effort": "small",
+     "applies_to": "cli_process"
+    }
+   ],
+   "equality_hazards": [
+    "Snapshot/derived timestamps and ids: snapshot id/created_at (snapshot.py:270-283), lexicon built_at (lexicon.py:972), search.db built_at/generation (search_index.py:1205-1209), build_stats 'at' (buildlock.py:284). Exclude them when comparing runs.",
+    "Community labels and graph content come from index.build (clustering, communities); a comparison must use a full scan of the same tree. DESIGN.md section 17.3 reports equality 'communities included' for the --fast background build.",
+    "Stat-cache racy-clean rule: a file modified within RACY_MARGIN_NS (2 s) of its recording is re-hashed (snapshot.py:39-41, 198-205); timing differences change which files are re-hashed, not the hashes.",
+    "List and filesystem races: current_state lists before the build and take_snapshot after it (workflow.py:366 vs 422); a file edited during the build shows up via misaligned_files next time (workflow.py:372-376). Reusing a listing across steps widens such windows.",
+    "listed_files TTL cache (snapshot.py:145-160, 5 s) can return an older listing in a long-lived MCP process.",
+    "Resolve memos (_resolve_once, index.py:131-137) assume the tree does not move during a build; extending them past the build changes that assumption.",
+    "Order sensitivity: lexicon _associate uses first-seen dedup and first-MAX_TEXT_SITES/MAX_SITES site lists, so it depends on unit order = sorted candidate files (lexicon.py:393-403, 431-440, 457-462); python_facts appends facts in py_paths order (python_facts.py:183-215); search_index _gsig picks the first 'method' in-edge via next() (search_index.py:398).",
+    "lexicon keeps a file's old units when its sha is unchanged even if the graph spans used by _generic_units changed (lexicon.py:944-946, 354-358); existing behaviour that any association-skip must not 'fix' silently if the goal is byte equality.",
+    "Float rounding in G2 (round(s,2), threshold 10.83, lexicon.py:447-450): any change in arithmetic order can flip borderline pairs.",
+    "python_facts.json save order follows `seen` insertion order (python_facts.py:216-219); the cache is rewritten only when changed or the file set differs."
+   ],
+   "covering_tests": [
+    "tests/test_workflow_index.py::test_update_reindexes_only_what_changed",
+    "tests/test_workflow_index.py::test_deleted_file_leaves_the_graph_and_the_search_index",
+    "tests/test_workflow_index.py::test_nodes_the_indexer_keeps_for_a_deleted_file_are_pruned",
+    "tests/test_workflow_index.py::test_nodes_for_files_that_never_existed_are_dropped_and_reported_apart",
+    "tests/test_workflow_index.py::test_lexicon_and_anchor_hooks_are_called_and_their_errors_reported",
+    "tests/test_workflow_index.py::test_an_update_keeps_the_cross_file_edges_of_the_files_it_re_extracts",
+    "tests/test_workflow_index.py::test_a_file_edited_while_the_index_was_built_is_caught_and_rebuilt",
+    "tests/test_workflow_index.py::test_an_update_that_touches_no_file_of_the_graph_keeps_the_graph",
+    "tests/test_workflow_index.py::test_an_update_that_rebuilds_the_same_graph_keeps_it_and_writes_what_the_full_path_writes",
+    "tests/test_workflow_index.py::test_a_graph_an_older_extraction_built_is_rebuilt_once_without_a_changed_file",
+    "tests/test_update_fast.py::test_fast_update_defers_the_graph_and_takes_the_text_in_now",
+    "tests/test_update_fast.py::test_a_change_the_graph_does_not_read_is_taken_in_as_before",
+    "tests/test_python_facts.py::test_cold_warm_and_edited_files_give_the_upstream_facts",
+    "tests/test_python_facts.py::test_a_new_file_changes_where_an_import_points_without_a_new_walk",
+    "tests/test_lexicon.py::test_rebuild_is_incremental",
+    "tests/test_lexicon.py::test_g2_is_zero_for_independence_and_positive_for_association",
+    "tests/test_lexicon.py::test_save_order",
+    "tests/test_search_index.py::test_incremental_update_equals_a_full_rebuild",
+    "tests/test_data_index.py::test_incremental_update_with_data_files_equals_a_rebuild",
+    "tests/test_snapshot_cache.py::test_unchanged_old_files_are_not_rehashed",
+    "tests/test_snapshot_cache.py::test_racy_clean_same_size_same_mtime_edit_is_still_detected",
+    "tests/test_snapshot_cache.py::test_snapshots_reuse_the_cache_through_the_store",
+    "tests/test_snapshot_stale.py",
+    "tests/test_selffiles.py"
+   ]
+  }
+ ],
+ "critic": "# Completeness critique: update pipeline maps (profile: update.prof, 181.8 s under cProfile, 78 s wall)\n\n## 1. Profile time (cumulative > ~1.5 s) that no map step explains\n\n**a. `refresh_receiver_sidecar` apart from its `load` (about 2.6 s of 4.43 s)**\n- The maps count only the 1.83 s `load` inside it (index.py:2538). The other costs are unmapped:\n  - `receiver_call_edges` index.py:1652, 1.40 s. Its `facts_for` closure (index.py:2544-2551) takes 0.47 s: it re-reads and sha256-hashes 713 .py files on every build, even when the facts are reused.\n  - `java_call_edges` index.py:1835, 0.50 s.\n  - About 0.7 s in `java_registers_edges`, `jvm_mixins.mixin_edges` and `datapack_java.graph_edges` (index.py:2567-2572).\n- All of these edges are recomputed over the whole graph on every build. No opportunity covers them.\n\n**b. `_reconcile_existing_graph` outside the Markdown relink and the JSON loads (about 3.0 s of 9.56 s)**\n- `_get_extractor(Path(source_file))` runs once per existing node (watch.py:883): 29,734 calls, 0.68 s. It sniffs file contents for .h, .m and extensionless files (extract.py:6593-6616).\n- `is_evicted`: 220,203 calls, 0.50 s (watch.py:491-492, called at 971-1026).\n- The memoised `identity` and `in_watch_root` wrappers (index.py:929, 939): 0.55 s.\n- `absolute_identity`: 0.26 s. Own time: 0.53 s.\n- Map 3 attributes the whole 9.56 s to the Markdown relink and the loads. It gives no seconds for the rest.\n\n**c. The body of `extract()` (extract.py:6858)**\n- Own time is 2.4 s, plus `dict.get` 0.94 s and `Path()` construction 0.71 s.\n- Steps 21-24 of map 2 cover the global label index, the import-evidence index and the direct-call loop (extract.py:7782-8116). They are listed with profile_seconds -1, so the loop's cost is never measured.\n- Also unmapped: `vendored_reason` (called at extract.py:7018, vendored.py:153-167), 0.66 s. It opens the first 64 KiB of all 1,259 files with nodes on every build, cache hits included. The result depends only on the bytes and the path, so it could be stored with the AST entry.\n\n**d. `build_from_json` beyond the alias loop (about 5 s of 16.35 s)**\n- Own time 2.65 s (build.py:872).\n- `Path.suffix`: 91,446 calls, 1.31 s. Part of it is per edge at build.py:1359-1360.\n- `_is_file_node_label`: 340,994 calls, 0.60 s (build.py:424).\n- `add_edge`: 0.42 s.\n- Map 4 attributes build time to the alias loop (build.py:1228-1251) only.\n\n**e. Python cross-file pass beyond `_file_stem`**\n- `_resolve_cross_file_imports` spends 1.27 s in `visit` (resolution.py:2585, 714 calls). `python_cross` spends 0.61 s parsing its kept trees (python_cross.py:331).\n- Only the `_file_stem` and `resolve_import` parts are mapped.\n\n**f. Cost of `index.py:146 resolve` (4.47 s cumulative) that moves between callers**\n- `cached_word_count`: 1.13 s for 2,542 first-touch resolves (cache.py:560).\n- `_portability_anchors`: 0.73 s.\n- `watch._ast_manifest_files._failed`: 0.54 s, and 0.62 s for `_ast_manifest_files` in total (watch.py:1808-1832). It resolves every detected file, and it runs only because this build had failed AST sources. No map mentions it.\n- Removing the word counts (map 3's report opportunity) moves the first-touch cost to the next caller rather than removing it. The mapper already said so.\n\n**g. The 16.47 s open stall is specific to AST cache entries (supports map 1's hypothesis)**\n- In the same run, `Path.open` from `read_text` cost 16.77 s, of which 16.47 s came from `load_cached` (1,237 files, about 13 ms each).\n- Source-file reads in the same OneDrive tree were fast:\n\n| Read | Files | Time |\n|---|---|---|\n| `_looks_like_paper` read_text (detect.py:323) | 1,383 | 0.44 s |\n| `extract_markdown` | 352 | 0.15 s |\n| `vendored_reason` opens | 1,259 | 0.17 s (0.13 ms each) |\n| `python_facts` read_bytes | 738 | 0.18 s |\n\n- So the stall is not a general property of the OneDrive tree. It fits the \"freshly written cache files\" explanation. The cause is still unproven.\n\n**h. Mapped but with no opportunity**\n- `_graph_key`: 0.90 s per build (index.py:850-859), inside the topology wrapper (index.py:684, 1.17 s).\n- It json-dumps the whole topology and adjacency only to key the rebuild record.\n\n## 2. Doubtful \"graph_identical: yes\" claims\n\n**A. Length and key-set pre-check before the compares (map 4: \"…neither can dicts whose key sets differ\")**\n- This is partly refuted for `same_graph`. `_canonical_graph_for_compare` pops `built_at_commit` (watch.py:1077) and normalises a missing `directed` to False (watch.py:1078-1084).\n- So an old graph.json without `directed` and a candidate with `\"directed\": false` compare equal in full, but their raw key sets differ.\n- A raw key-set pre-check would therefore return False where the full compare returns True. That flips `no_change` (watch.py:2148). Then:\n  - graph.json is replaced with a new `built_at_commit`.\n  - The report, labels and sig files are rewritten, and a backup is made (watch.py:2166-2182).\n  - `_keep_unchanged_graph` sees before ≠ after (index.py:822) and may write a record, which changes the path the next build takes.\n- Nodes and edges stay the same; the bytes and mtimes do not.\n- Safe form: compare only list lengths, or key sets after the same pop and normalisation. For the topology compare only `built_at_commit` is popped (watch.py:1096), so map 3's key-set check is safe if it drops that key.\n- The count part holds. Reconcile only calls setdefault on `_origin` (watch.py:806-809) and never changes list lengths.\n- Context: on this repo the compares run against a post-processed graph.json (index.py:2695-2708). The profile shows `_write_pruned` ran (index.py:2677, 1 call). The `_keep_unchanged_graph` docstring (index.py:619-624) says such graphs never compare equal. So both compares are almost always False here: the saving is real and the equality risk is small.\n\n**B. \"Skip lookups for known-empty JSON\" (map 1): unsure, not yes**\n- Today an AST cache hit wins (extract.py:6976-6980), and the replay runs only on misses (index.py:334-348).\n- The AST cache key carries no extractor-source stamp (cache.py:966, 521-528). The empty-JSON stamp does hash extract.py, json_config and base (index.py:300-314).\n- So an AST entry and a known-empty record can exist for the same bytes. Examples: an entry saved by the upstream passthrough, which runs extract without the wrapper (cli.py:2355), or an entry from other extractor code in the same version directory.\n- In that state today's order returns the cached nodes and the reordered one returns empty. Output is identical only when the cache is consistent.\n\n**C. \"Keep the AST cache outside OneDrive\" (map 1)**\n- The graph stays identical, but the move is incomplete. The stat index location and key anchor are fixed by the first `_ensure_stat_index` call in the process (cache.py:334, 343).\n- That first call is detect's `cached_word_count` (detect.py:2004-2010 → cache.py:543), with `cache_root=None`, before extract runs. So stat-index.json stays under the repo.\n- In an MCP process, the first build fixes the location for the life of the process.\n\n**D. \"Stop producing GRAPH_REPORT.md\" (map 3)**\n- The graph stays identical only if both report producers are stubbed. The kept path `_as_the_full_path` calls `report.generate`, `score_all`, `god_nodes` and `surprising_connections` itself (index.py:754-788).\n- Stubbing only the vendored call makes the kept path and the full path write different reports. `same_report` also drives `no_change` (watch.py:2146-2148).\n\n**E. \"Lazy ignored_predicate\" (map 3)**\n- Equality holds, but the saving is doubtful. Reconcile calls `_ignored_now` for every existing node whose source is non-AST and still on disk (watch.py:883-898, 917), not only for corpus-absent code.\n- If this graph has any such node, the predicate is built anyway. Whether it does is unverified.\n\n**F. \"Memoise the alias loop through a module-level patch of `build._old_file_stems`\" (map 4)**\n- It holds only with copies. `_semantic_id_remap` inserts into the returned list (build.py:752).\n- A shared memo list would accumulate `abs_stem` entries and change ids.\n\n**G. \"Parse graph.json once\" and any memo that copies preserved items**\n- This is a hazard more than a refutation. Preserved nodes and edges are the same dict objects as `existing_graph_data` (watch.py:799-800, 1034-1041).\n- They are then mutated in place:\n  - `rebase_preserved` (watch.py:1034).\n  - `split_case_collisions` (case_ids.py:133, via the wrapper at index.py:505-508).\n  - `build_from_json` (build.py:982-989, 1609-1610).\n- The topology compare, `_node_community_map` (watch.py:2044) and `_check_shrink` read those mutated objects. Keeping the separate reparse at watch.py:2124 is therefore required, as map 3 says.\n- Any change that copies preserved items (a pickle or deepcopy style memo applied here) changes what these decisions see.\n\n**Verified as holding (checked against code)**\n\n| Claim | Evidence |\n|---|---|\n| Twin-drop Counter over imports edges only | extract.py:7519-7547 |\n| Lazy Go `fqn_to_ids` | stubs appended only after the loop, resolution.py:3104-3105; the loop never touches `contains` edges, 3087-3091 |\n| `_missing_in_nodes` stat-first | index.py:2615-2637 |\n| O(N) remap | cluster.py:399-405 appends overlap > 0 only |\n| `iter()` around the EdgeDataView | sort is on the canonical pair, cluster.py:142 |\n| python_facts memo | resolution.py:2210-2246 uses `current_path` only via `.parent` / `.parents` |\n| `_lang_family` memo | extract.py:2736-2787; the names are not imported elsewhere |\n| Markdown `_evidence` skip | markdown_resolution.py:213-217, used only in the subset test |\n| Swift reorder | extract.py:3073-3091, pure predicates |\n| `_absolutize_ids_in` fast reject | prefix-only restore, cache.py:893-906 |\n| Hand-over of post-processed data to the sidecar | index.py:2695-2708; `refresh_receiver_sidecar` already takes `g`, index.py:2535 |\n\n## 3. Equality hazards the maps missed\n\n1. **`update` skips the rebuild for edited files that have no nodes.** `_graph_affected` counts a modified file only if it is in the graph (workflow.py:236, 244), and removed files likewise; only added files are classified (workflow.py:248-258).\n   - A file whose extraction failed or gave zero nodes is never cached (extract.py:6671, 6846) and has no nodes.\n   - If it is then fixed, or a data JSON becomes config-shaped, `update` does nothing, while `scan` (workflow.py:180) would add its nodes.\n   - This breaks \"update == scan\" whatever Stage A does. The equality test must use a code edit, or know about this case.\n2. **Ignore-file edits.** detect's corpus depends on the ignore files (detect.py:1650-1690). An edited `.gitignore` is not a graph source, so by rule 1 no rebuild happens. Whether ignore files appear in the snapshot diff is unverified.\n3. **`scan` and `update` can run in different modes.** `scan` forces when the graph names missing files (workflow.py:178). Force disables `_keep_unchanged_graph` and the empty-JSON replay (index.py:86-87) and bypasses `_check_shrink`. `update` forces only after a refusal with removed files (workflow.py:397-401). The oracle must be run in the same mode.\n4. **Aliasing between existing and new items.** See 2G: the in-place mutation order affects the compares, the community remap and the shrink guard.\n5. **Dependence on the working directory.**\n   - Reconcile's `_get_extractor(Path(source_file))` is given repo-relative paths (watch.py:883). For .m and extensionless files the answer depends on reading that file relative to the process cwd (extract.py:6609-6616).\n   - `_resolve_cached` keys on `os.getcwd()` (resolution.py:1100).\n   - A CLI run in the repo and an MCP server with another cwd may differ. Whether any such file is in the graph is unverified.\n6. **Environment variables.**\n   - `VERINODA_GRAPH_VENDORED` set in the environment overrides the config (index.py:413-416).\n   - `GRAPHIFY_VIZ_NODE_LIMIT` gates the kept path (index.py:751).\n   - `GRAPHIFY_MTIME_GRANULARITY_MS` sets how long a stat entry counts as racily clean (cache.py:243-268).\n   - Equality runs must use the same environment.\n7. **graph.json alone is not the graph.** `load()` adds the receiver, Java, mixin and datapack sidecar edges (index.py:1530-1531, 2567-2573). Per-file facts are reused from the old sidecar by sha256 (index.py:2547-2555). The oracle should compare `load(repo)` edges, not only graph.json.\n8. **Write timing decides the next build's path.** The rebuild record is written only when graph.json changed on disk during the build (index.py:822) and only when a second remap reproduces the communities (index.py:826-829). Any Stage-A change to whether or when the pipeline writes graph.json, the report or the labels (see 2A, 2D) changes whether the next update takes the kept path. The kept path is then only as equal as `_as_the_full_path` (index.py:754-788) is to the full path.\n9. **The stat-index location and anchor are fixed per process** (cache.py:334-345). A long-lived MCP process keeps the first build's location and `_stat_index` state across builds. This affects which files are re-hashed, not the hashes.\n\nProfile helper scripts are in the scratchpad: `opens.py` (new), `callers_xp.py`, `callees_xp.py` and `prof.py`, all under <scratch>/."
+}
