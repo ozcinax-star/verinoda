@@ -1479,6 +1479,17 @@ def _r_decide_check(r: dict) -> None:
         w = f["waiver"]
         print(f"waived {f['decision']} {f['guard']} {f['at']} ({w['reason']}"
               + (f", until {w['until']}" if w.get("until") else "") + ")")
+    if r.get("baselined"):
+        b = r.get("baseline") or {}
+        print(f"baselined: {len(r['baselined'])} known violation(s) listed in {b.get('file')} (recorded "
+              f"{b.get('recorded')}): not failing, still violations")
+        for f in r["baselined"][:20]:
+            print(f"  {f['decision']} {f['guard']} {f['at']} {f.get('line') or ''}")
+        if len(r["baselined"]) > 20:
+            print(f"  ... {len(r['baselined']) - 20} more (--json lists them)")
+    for e in r.get("baseline_fixed") or []:
+        print(f"fixed since the baseline: {e['decision']} {e['guard']} {e['file']}: {e['text']}"
+              + (f" (x{e['count']})" if e["count"] > 1 else ""))
     for o in r.get("ok") or []:
         scope = ", ".join(f"{k} {v}" for k, v in (o.get("scope") or {}).items())
         print(f"ok {o['decision']} {o['guard']} {o['kind']} {o['what']}" + (f" ({scope})" if scope else ""))
@@ -1546,13 +1557,12 @@ def _r_brief(b: dict, indent: str = "") -> None:
         print(f"next: {b['next_step']}")
 
 
-def _decide_check(args, repo: Path) -> int:
+def _decide_graph(args, repo: Path, recs) -> tuple:
+    """(graph, note, stale_graph) for a decision check: the index refreshed first when an edge guard needs it."""
     from verinoda import decisions as dm
     from verinoda import guards
     from verinoda.paths import db_path, graph_path
 
-    ddir = getattr(args, "decisions_dir", None)
-    recs = dm.load_all(repo, ddir)
     graph, note, stale_graph = None, None, None
     if any(d.enforced and g.get("kind") in dm.EDGE_KINDS and g.get("status") == "accepted"
            for d in recs for g in d.guards):
@@ -1577,6 +1587,16 @@ def _decide_check(args, repo: Path) -> int:
             from verinoda import index
 
             graph = index.load(repo)
+    return graph, note, stale_graph
+
+
+def _decide_check(args, repo: Path) -> int:
+    from verinoda import decisions as dm
+    from verinoda import guards
+
+    ddir = getattr(args, "decisions_dir", None)
+    recs = dm.load_all(repo, ddir)
+    graph, note, stale_graph = _decide_graph(args, repo, recs)
     try:
         res = guards.check(repo, graph=graph, base=args.base, changed_only=args.changed, records=recs,
                            decisions_dir=ddir, graph_stale=stale_graph)
@@ -1589,6 +1609,59 @@ def _decide_check(args, repo: Path) -> int:
         res["index"] = note
     _emit(args, res, _r_decide_check)
     return res["exit"]
+
+
+def _decide_baseline(args, repo: Path) -> int:
+    """``decide baseline``: the baseline's state; ``--record`` writes it (the user's call), ``--shrink`` removes
+    what is fixed."""
+    from verinoda import baseline as bl
+    from verinoda import decisions as dm
+    from verinoda import guards
+
+    if args.record and args.shrink:
+        print("error: --record and --shrink are two different steps", file=sys.stderr)
+        return 2
+    ddir_arg = getattr(args, "decisions_dir", None)
+    try:
+        recs = dm.load_all(repo, ddir_arg)
+        ddir = dm.decisions_dir_source(repo, ddir_arg)[0]
+        graph, _note, stale_graph = _decide_graph(args, repo, recs)
+        res = guards.check(repo, graph=graph, records=recs, decisions_dir=ddir_arg, graph_stale=stale_graph,
+                           use_baseline=not args.record)
+        if args.record:
+            out = bl.record(ddir, res, statement=args.said, replace=args.replace, today=dm._today())
+        elif args.shrink:
+            out = bl.shrink(ddir, res, today=dm._today())
+        else:
+            data = bl.load(ddir)
+            out = {"status": "none" if data is None else "present", "file": str(bl.path(ddir)),
+                   **(res.get("baseline") or {}), "new": len(res["violations"]) + len(res["possible"]),
+                   "fixed_entries": res.get("baseline_fixed") or []}
+    except (bl.BaselineError, dm.DecisionError, ValueError) as exc:
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    def render(r: dict) -> None:
+        if r["status"] == "none":
+            print(f"no baseline ({r['file']}); `decide baseline --record --said \"...\"` records the current "
+                  "violations as known")
+            return
+        if r["status"] == "present":
+            print(f"baseline {r['file']}: {r.get('entries')} entr(ies), recorded {r.get('recorded')}; "
+                  f"{r.get('matched')} still found, {r.get('fixed')} fixed, {r['new']} new violation(s) not in it")
+            for e in r["fixed_entries"]:
+                print(f"  fixed: {e['decision']} {e['guard']} {e['file']}: {e['text']}"
+                      + (f" (x{e['count']})" if e["count"] > 1 else ""))
+            return
+        print(f"baseline {r['status']}: {r['file']} ({r['entries']} entr(ies)"
+              + (f", {r['removed']} removed" if "removed" in r else "") + ")")
+        if r.get("note"):
+            print(f"  note: {r['note']}")
+
+    _emit(args, out, render)
+    return 0
 
 
 def cmd_decide(args) -> int:
@@ -1604,6 +1677,8 @@ def cmd_decide(args) -> int:
                 print(json.dumps({"status": "error", "exit": 2, "error": msg[:600]}, ensure_ascii=False))
             print(f"error: {msg}", file=sys.stderr)
             return 2
+    if args.decide_cmd == "baseline":
+        return _decide_baseline(args, repo)
     if args.decide_cmd == "toc":  # reads the files only: no store needed
         try:
             res = dm.write_toc(repo, args.write, args.decisions_dir) if args.write else \
@@ -3222,6 +3297,15 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--reason", required=True)
     c.add_argument("--until", metavar="YYYY-MM-DD")
     c.add_argument("--said", help=said_help)
+    c = add("baseline", cmd_decide, "known violations that decide check does not fail on (baseline.json in the "
+                                    "decisions folder): its state; --record writes it from the current violations "
+                                    "(the user's call), --shrink removes the ones fixed", parent=dsub)
+    c.add_argument("--record", action="store_true", help="record every current violation as known")
+    c.add_argument("--replace", action="store_true", help="with --record: replace a baseline even if it grows")
+    c.add_argument("--shrink", action="store_true", help="remove the entries that are fixed (never adds)")
+    c.add_argument("--said", help=said_help)
+    c.add_argument("--no-refresh", action="store_true", help="do not refresh the index first")
+    baseline_parser = c
     c = add("supersede", cmd_decide, "an existing record replaces another: the old one's status becomes superseded "
                                      "and both records name each other (the user's call)", parent=dsub)
     c.add_argument("id", metavar="OLD", help="the record that is replaced (ADR-N)")
@@ -3237,6 +3321,7 @@ def build_parser() -> argparse.ArgumentParser:
     ddir_help = ("the folder of the decision records, relative to the repository (default: decisions.dir in "
                  ".verinoda/config.json, else [decisions] dir in verinoda.toml or [tool.verinoda.decisions] dir in "
                  "pyproject.toml, else .verinoda/decisions)")
+    baseline_parser.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
     c = add("list", cmd_decide, "decision records, their guards and waivers, and ADRs without a record", parent=dsub)
     c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
     c = add("toc", cmd_decide, "the records by date with their relations: a Markdown table of contents and a "
