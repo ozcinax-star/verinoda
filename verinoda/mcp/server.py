@@ -798,7 +798,7 @@ class AtlasTools:
 
     def project_query(self, question: str, max_items: int = 8, format: str = "text") -> dict:
         def go():
-            from verinoda import retrieval
+            from verinoda import query_filters, retrieval
 
             q = _text(question, "question")
             n = _clamp(max_items, 1, 25, "max_items")
@@ -813,7 +813,12 @@ class AtlasTools:
                 self._query_memo.move_to_end(key)
                 self.cache_stats["query_memo_hits"] += 1
                 return hit[1]
-            res = retrieval.retrieve(g, q, retrieval.Budget(max_items=n, max_chars=budget))
+            try:
+                res = retrieval.retrieve(g, q, retrieval.Budget(max_items=n, max_chars=budget), filters=True)
+            except query_filters.FilterError as exc:
+                raise ToolFailure("invalid_argument", str(exc),
+                                  "filters: path:GLOB lang:NAME symbol:NAME is:vendored|generated|minified|test "
+                                  "/regex/, AND OR NOT, -filter, parentheses") from None
             retrieval.attach_freshness(res, g, fresh)
             if fmt == "json":
                 out = _jsonable(res)
@@ -2352,7 +2357,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
     @register("project_query")
     def project_query(
-        question: Annotated[str, Field(description="Question, symbol or file names to look up.")],
+        question: Annotated[str, Field(description="Question, symbol or file names to look up; filters narrow it: "
+                                                   "path:GLOB lang: symbol: is:vendored /regex/ AND OR NOT.")],
         max_items: Annotated[int, Field(description="Maximum code locations to return (1-25).")] = 8,
         format: Annotated[Literal["text", "json"], Field(description="'text' (default): plain text for reading, "
                                                                       "skeleton first; 'json': structured items.")]
