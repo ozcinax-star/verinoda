@@ -18,7 +18,8 @@ the staged changes, or a planned change (``targets`` + ``change``):
    checks removed or changed, a check made constant), performance (IO or queries inside loops, loops
    added to hot paths), public API (call sites whose arity no longer fits, removed names still used),
    config (environment and config values read on changed lines, changed config keys) and entry points
-   (entries that reach the change).
+   (entries that reach the change). Each public definition added, removed or with a changed signature
+   gets an ``api_changes`` verdict - breaking (with the call sites it breaks), compatible or unknown.
 4. **Tests**: static reach, observed reach from the runtime tracer's latest run or ``observe``, and a
    run of the selected tests (``run_tests``) through :mod:`verinoda.experiments`.
 5. **Unknowns** with a next step, and a **read_first** list packed to ``max_chars``.
@@ -55,6 +56,7 @@ PLANNED_KINDS = ("body", "signature", "remove")
 DEPTH = 3
 MAX_DEPENDENTS = 40
 MAX_PER_CONCERN = 25
+MAX_API_CHANGES = 100
 HEALTH_CLONE_WORK = 5_000_000   # the review's near-duplicate search: pairs of equal tokens its ratios scan (a few s)
 HEALTH_CLONE_COMPARISONS = 2000
 DEFAULT_MAX_CHARS = 6000
@@ -83,7 +85,9 @@ RULES = {
                     "a loop added or its condition changed in a hot path (tick/render registrations, tick-like "
                     "overrides, request handlers)"],
     "public_api": ["call sites whose arguments no longer fit a changed signature (Python: bound by imports; "
-                   "Java/Kotlin: argument counts)", "removed names still imported or used"],
+                   "Java/Kotlin: argument counts)", "removed names still imported or used",
+                   "api_changes: a verdict per public definition added, removed or re-signed (parameter shapes of "
+                   "both versions, the call sites above)"],
     "config": ["environment reads on changed lines", "names bound from environment/config modules read on "
                "changed lines", "config values and keys (config classes, key literals) on changed lines",
                "changed keys of config files, with their readers found by literal key search"],
@@ -2868,6 +2872,266 @@ def _public_api(ctx: _Ctx, changes: list[Change], unknown: list[dict]) -> list[d
     return out
 
 
+# -- API verdicts: each public change breaking, compatible or unknown -------------------------------------------
+
+_BREAK_RULES = ("arity-break", "positional-order-changed", "removed-still-used")
+_JVM_SUFFIXES = (".java", ".kt", ".kts")
+_JS_SUFFIXES = (".js", ".jsx", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".tsx")
+# languages whose visibility rule is read (Python naming, Go capitals, Rust `pub`, JS/TS `export`, JVM and C#
+# modifiers); elsewhere public means only "no private-like keyword on the line", a weaker test
+_VISIBILITY_READ = frozenset({".py", ".pyi", ".go", ".rs", ".cs", *_JVM_SUFFIXES, *_JS_SUFFIXES})
+_NOT_PUBLIC_JVM = re.compile(r"\b(?:private|internal)\b")
+_NOT_PUBLIC_OTHER = re.compile(r"\b(?:private|fileprivate|internal)\b")
+_RUST_PUB = re.compile(r"(?:^|[\s(])pub\b(?!\s*\()")
+_CS_PUBLIC = re.compile(r"\b(?:public|protected)\b")
+# a Python file that runs as a script or configures a tool, not a module other code imports
+_PY_SCRIPT_NAMES = frozenset({"setup.py", "conftest.py", "noxfile.py", "manage.py", "fabfile.py", "__main__.py"})
+_PY_SCRIPT_DIRS = frozenset({"scripts", "examples"})
+
+
+def _enclosing(ctx: _Ctx, c: Change, side: str) -> list[tuple[dict, str]]:
+    """``(symbol, definition line text)`` of the definitions around ``c`` in one version, outermost first."""
+    line = c.old_def_line if side == "old" else c.def_line
+    if not line:
+        return []
+    syms = (ctx.facts(c.file, side) or {}).get("symbols") or {}
+    lines = ctx.lines(c.file, side)
+    around = sorted((s for s in syms.values() if s.get("def", s["start"]) < line <= s["end"]),
+                    key=lambda s: s["start"])
+    return [(s, lines[s.get("def", s["start"]) - 1] if s.get("def", s["start"]) <= len(lines) else "")
+            for s in around]
+
+
+def _js_exported(text: str, name: str) -> bool:
+    """Whether a JS/TS module exports ``name`` other than on its definition line: an ``export { ... }`` list,
+    ``export default name``, ``exports.name`` or ``module.exports``."""
+    n = re.escape(name)
+    return any(re.search(p, text) for p in (
+        rf"\bexport\s+(?:type\s+)?\{{[^}}]*\b{n}\b", rf"\bexport\s+default\s+{n}\b", rf"\bexports\.{n}\b",
+        rf"\bmodule\.exports\s*=\s*{n}\b", rf"\bmodule\.exports\s*=\s*\{{[^}}]*\b{n}\b"))
+
+
+def _is_public(ctx: _Ctx, c: Change, side: str) -> bool:
+    """Public in one version, by each language's rule: Python - no part of the module path or of the qualified
+    name starts with ``_`` (dunders excepted), no enclosing definition is a function, and the file is not a script
+    (``setup.py``, ``conftest.py``, a ``scripts/`` or ``examples/`` directory); Go - an exported (capitalised)
+    name; Rust - ``pub`` (not ``pub(crate)``), or a method of a trait or trait impl, inside ``pub`` modules;
+    JS/TS - the top-level definition is exported and a member is not ``private`` / ``#``; Java/Kotlin - no
+    ``private`` / ``internal`` on its line or an enclosing class's; C# - ``public`` / ``protected`` on its line
+    and every enclosing type's (interface members excepted); other languages - no private-like keyword on its
+    line."""
+    sfx = _suffix(c.file)
+    if sfx in (".py", ".pyi"):
+        parts = c.qual.split("#")[0].split(".")
+
+        def private(p: str) -> bool:
+            return p.startswith("_") and not (p.startswith("__") and p.endswith("__"))
+
+        path = PurePosixPath(c.file)
+        if path.name in _PY_SCRIPT_NAMES or any(p in _PY_SCRIPT_DIRS for p in path.parts[:-1]):
+            return False
+        if any(private(p) for p in path.parts[:-1]) or private(path.stem):
+            return False
+        if any(private(p) for p in parts):
+            return False
+        return all((ctx.sym(c.file, ".".join(parts[:i]), side) or {}).get("kind") in ("class", None)
+                   for i in range(1, len(parts)))
+    line = c.old_def_line if side == "old" else c.def_line
+    lines = ctx.lines(c.file, side)
+    if not line or line > len(lines):
+        return False
+    own = lines[line - 1]
+    outer = _enclosing(ctx, c, side)
+    if sfx == ".go":
+        return c.name[:1].isupper()
+    if sfx == ".rs":
+        via_trait = any(re.match(r"\s*(?:unsafe\s+)?(?:impl\b.*\bfor\b|(?:pub\s+)?trait\b)", t) for _, t in outer)
+        mods_pub = all(_RUST_PUB.search(t) for _, t in outer if re.match(r"\s*(?:pub\S*\s+)?mod\b", t))
+        return mods_pub and (via_trait or bool(_RUST_PUB.search(own)))
+    if sfx in _JS_SUFFIXES:
+        if any(s["kind"] != "class" for s, _ in outer) or re.search(r"\bprivate\b|^\s*(?:static\s+)?#", own):
+            return False
+        top = outer[0][1] if outer else own
+        top_name = c.qual.split("#")[0].split(".")[0] if outer else c.name
+        return bool(re.search(r"\bexport\b", top)) or _js_exported(ctx.text(c.file, side) or "", top_name)
+    if sfx in _JVM_SUFFIXES:
+        return not any(_NOT_PUBLIC_JVM.search(t) for t in [own] + [t for _, t in outer])
+    if sfx == ".cs":
+        types = [t for _, t in outer if not re.match(r"\s*namespace\b", t)]
+        in_interface = bool(types) and re.search(r"\binterface\b", types[-1]) is not None
+        return all(_CS_PUBLIC.search(t) for t in types) and (in_interface or bool(_CS_PUBLIC.search(own)))
+    if sfx in (".c", ".h") and re.match(r"\s*(?:\w+\s+)*?static\b", own):
+        return False
+    return not _NOT_PUBLIC_OTHER.search(own)
+
+
+def _py_shape_breaks(old: dict, new: dict, bound: bool) -> list[str]:
+    """How a Python signature stops accepting calls the old one accepted (parameter shapes of both syntax trees):
+    empty when every call that bound to the old parameters binds to the same parameters of the new one."""
+    op_, np_ = list(old["pos"]), list(new["pos"])
+    o_req, n_req, o_po, n_po = old["required"], new["required"], old["posonly"], new["posonly"]
+    if bound and op_ and op_[0] in ("self", "cls") and np_ and np_[0] == op_[0]:
+        op_, np_, o_req, n_req = op_[1:], np_[1:], o_req - 1, n_req - 1
+        o_po, n_po = max(0, o_po - 1), max(0, n_po - 1)
+
+    def was_required(name: str) -> bool:
+        return name in old["kw_required"] or (name in op_ and op_.index(name) < o_req)
+
+    out = []
+    no_default: list[str] = []
+    for i, name in enumerate(op_):
+        if i >= len(np_):
+            if name in new["kwonly"]:
+                out.append(f"parameter {name} is now keyword-only")
+            elif new["varargs"]:
+                out.append(f"positional parameter {name} removed (an argument passed for it now goes into *args)")
+            else:
+                out.append(f"positional parameter {name} removed")
+            continue
+        # a positional-only parameter is never passed by name: renaming it breaks no call, moving another
+        # parameter of the old signature into its place does
+        if np_[i] != name and (i >= o_po or np_[i] in op_):
+            out.append(f"parameter {i + 1} was {name}, is now {np_[i]}")
+        if o_req <= i < n_req:
+            no_default.append(np_[i])
+    added = []
+    for name in np_[len(op_):max(n_req, 0)]:
+        if was_required(name):
+            continue
+        (no_default if name in old["kwonly"] or name in op_ else added).append(name)
+    if added:
+        out.append("required parameter(s) added: " + ", ".join(added))
+    if old["varargs"] and len(np_) > len(op_):
+        out.append("parameter(s) added before *args: " + ", ".join(np_[len(op_):]))
+    if old["varargs"] and not new["varargs"]:
+        out.append("*args removed")
+    if old["varkw"] and not new["varkw"]:
+        out.append("**kwargs removed")
+    if n_po > o_po:
+        out.append("parameter(s) made positional-only: " + ", ".join(np_[o_po:n_po]))
+    keywordable = set(np_[n_po:]) | set(new["kwonly"])
+    for k in old["kwonly"]:
+        if k not in keywordable and not new["varkw"]:
+            out.append(f"keyword parameter {k} removed")
+    added_kw = []
+    for k in new["kw_required"]:
+        if not was_required(k):
+            (no_default if k in old["kwonly"] or k in op_ else added_kw).append(k)
+    if added_kw:
+        out.append("required keyword parameter(s) added: " + ", ".join(added_kw))
+    if no_default:
+        out.append("default value removed: " + ", ".join(dict.fromkeys(no_default)))
+    return list(dict.fromkeys(out))
+
+
+def _shape_verdict(ctx: _Ctx, c: Change) -> tuple[str, list[str], str]:
+    """``(verdict, reasons, basis)`` of a changed signature from its parameters alone: breaking, compatible or
+    unknown."""
+    if c.file in ctx.base_texts and ctx.base_texts.get(c.file) == ctx.text(c.file):
+        return "unknown", ["a planned signature change has no new signature to compare"], "planned change"
+    if _suffix(c.file) in (".py", ".pyi"):
+        ofn = rr.py_def_at(ctx.pytree(c.file, "old"), c.old_def_line) if c.old_def_line else None
+        nfn = rr.py_def_at(ctx.pytree(c.file), c.def_line) if c.def_line else None
+        if ofn is None or nfn is None or isinstance(ofn, ast.ClassDef) or isinstance(nfn, ast.ClassDef):
+            return "unknown", ["a class header, or a definition without parameters to compare"], "syntax trees"
+        owner = c.qual.rpartition(".")[0]
+        bound = bool(owner) and (ctx.sym(c.file, owner) or {}).get("kind") == "class" and not any(
+            rr.dotted(d) == "staticmethod" for d in nfn.decorator_list)
+        why = _py_shape_breaks(rr.py_params(ofn), rr.py_params(nfn), bound)
+        return ("breaking" if why else "compatible"), why, \
+            "parameter names, order, defaults, *args and **kwargs of both versions (syntax trees)"
+    if _suffix(c.file) in _JVM_SUFFIXES and c.old_def_line and c.def_line:
+        o = rr.ts_param_count(ctx.tstree(c.file, "old"), c.old_def_line)
+        n = rr.ts_param_count(ctx.tstree(c.file), c.def_line)
+        if o and n:
+            (o_req, o_tot, o_va), (n_req, n_tot, n_va) = o, n
+            why = []
+            if n_req > o_req:
+                why.append(f"required parameters {o_req} -> {n_req}")
+            if n_tot < o_tot and not n_va:
+                why.append(f"parameters {o_tot} -> {n_tot}")
+            if o_va and not n_va:
+                why.append("varargs removed")
+            if why:
+                return "breaking", why, "parameter counts of both versions (syntax trees)"
+            if n_tot > o_tot:
+                return "compatible", [], "parameters added with default values (syntax trees; source compatibility)"
+            return "unknown", ["the parameter count is unchanged: a parameter type, modifier or the return type "
+                               "changed, which is not compared"], "parameter counts of both versions (syntax trees)"
+    return "unknown", ["signatures of this language are not compared"], "no parameter comparison"
+
+
+def _api_changes(ctx: _Ctx, changes: list[Change], findings: list[dict]) -> list[dict]:
+    """One verdict per public definition added, removed or with a changed signature: ``breaking`` (with the call
+    sites in the tree it breaks - the public_api findings for that symbol - and, when none, the reasons from its
+    parameters), ``compatible`` or ``unknown``. A verdict is at most strong_inference unless a broken call site
+    is statically_verified: public is a naming convention and callers outside the tree are not seen; weak_inference
+    in a language whose visibility rule is not read. ``at`` is the definition's line in the tree (None for a
+    removal), ``base_at`` its line in the base version."""
+    out = []
+    for c in changes:
+        if not c.qual or c.test or c.kind not in ("added", "removed", "signature") or \
+                _suffix(c.file) not in CODE_SUFFIXES:
+            continue
+        was_public = c.kind != "added" and _is_public(ctx, c, "old")
+        is_public = c.kind != "removed" and _is_public(ctx, c, "new")
+        if not (was_public or is_public):
+            continue
+        mine = [f for f in findings if f.get("for") == c.symbol]
+        breaks = [{"at": f["at"], "status": f["status"], "finding": f["finding"]}
+                  for f in mine if f["rule"] in _BREAK_RULES]
+        unchecked = [f["at"] for f in mine if f["rule"] == "call-site-of-changed-signature"]
+        at = f"{c.file}:{c.def_line}" if c.def_line else None
+        base_at = f"{c.file}:{c.old_def_line}" if c.old_def_line else None
+        reasons: list[str] = []
+        if c.kind == "added":
+            verdict, basis = "compatible", "a new public name (nothing called it before)"
+        elif not is_public:
+            verdict, basis = "breaking", "the definition is no longer public (its visibility was narrowed)"
+            if not breaks:
+                reasons.append("no call site in the tree under review reaches it; callers outside it break")
+        elif not was_public:
+            verdict, basis = "compatible", "a name made public (nothing outside could call it before)"
+        elif c.kind == "removed":
+            owner = c.qual.split("#")[0].rpartition(".")[0]
+            inherited = bool(owner) and _suffix(c.file) in (".py", ".pyi") and \
+                (ctx.sym(c.file, owner) or {}).get("kind") == "class" and \
+                _py_bases_provide(ctx, c.file, owner, c.name)[0] is True
+            if inherited and not breaks:
+                verdict, basis = "compatible", "a base class in the project still defines it"
+            else:
+                verdict, basis = "breaking", "the public name no longer exists"
+                if not breaks:
+                    reasons.append("no call site in the tree under review uses it; callers outside it break")
+        else:
+            verdict, reasons, basis = _shape_verdict(ctx, c)
+            if breaks:
+                verdict = "breaking"
+            elif verdict == "breaking":
+                reasons.append("no call site in the tree under review breaks; callers outside it do")
+        if breaks:
+            status = min((b["status"] for b in breaks), key=rr.rank)
+        elif verdict == "unknown":
+            status = "unknown"
+        elif _suffix(c.file) in _VISIBILITY_READ:
+            status = "strong_inference"
+        else:
+            status = "weak_inference"
+        d = {"symbol": c.symbol, "kind": c.kind, "verdict": verdict, "status": status, "at": at,
+             "base_at": base_at, "basis": basis, "breaks": breaks[:MAX_PER_CONCERN]}
+        if len(breaks) > MAX_PER_CONCERN:
+            d["breaks_total"] = len(breaks)
+        if c.renamed_from:
+            d["renamed_from"] = c.renamed_from
+        if reasons:
+            d["reasons"] = reasons
+        if unchecked:
+            d["call_sites_not_checked"] = unchecked[:MAX_PER_CONCERN]
+        out.append(d)
+    out.sort(key=lambda d: ({"breaking": 0, "unknown": 1, "compatible": 2}[d["verdict"]], d["symbol"]))
+    return out
+
+
 def _py_call_sites(ctx: _Ctx, c: Change, files: list[str] | None = None) -> list[tuple[str, ast.Call, str, str]]:
     """``(file, call, how, status)`` of the calls that bind to ``c`` (Python): names imported from its module or
     defined in its file (not where a local of that name hides it), module attributes (``import pkg.m``, ``from pkg
@@ -4499,6 +4763,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     for k in found:
         found[k] = _dedupe(found[k])
         found[k].sort(key=lambda f: (rr.rank(f["status"]), f["at"] or ""))
+    api = _api_changes(ctx, changes, found["public_api"]) if "public_api" in want else []
     truncated_concerns = {k: len(v) for k, v in found.items() if len(v) > MAX_PER_CONCERN}
     shown = {k: v[:MAX_PER_CONCERN] for k, v in found.items()}
     # tests
@@ -4525,6 +4790,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         "dependents_truncated": dep_total > len(dependents),
         "binding_readers": readers,
         "concerns": {k: shown[k] for k in CONCERNS if k in want},
+        "api_changes": api,
         "concerns_checked": {k: (f"{len(found[k])} finding(s)" if found[k] else
                                  "no finding from rules: " + "; ".join(RULES[k]))
                              for k in CONCERNS if k in want},
@@ -4541,9 +4807,12 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
                      + (["health (a planned change has no new version to measure)"]
                         if targets and "health" in want else []) + health_notes},
         "counts": {"changes": len(changes), "findings": sum(len(v) for v in found.values()),
-                   "strong_or_verified": n_strong, "unknown": len(unknown)},
+                   "strong_or_verified": n_strong, "unknown": len(unknown),
+                   "api_breaking": sum(1 for a in api if a["verdict"] == "breaking")},
     }
     res["summary"] = _summary(res)
+    if len(api) > MAX_API_CHANGES:   # breaking first: what is cut is the tail of compatible and unknown ones
+        res["api_changes"], res["api_changes_total"] = api[:MAX_API_CHANGES], len(api)
     res["seconds"] = round(time.perf_counter() - t0, 3)
     res["exit"] = 3 if (n_strong or unknown) else 0
     if record and store is not None:
@@ -4994,6 +5263,10 @@ def _summary(res: dict) -> str:
     parts = [f"Review of {where}: {len(ch)} change(s) (" + ", ".join(f"{n} {k}" for k, n in kinds.items()) + ")."]
     parts.append(("Findings - " + counts + "." if counts else "No finding from the rules.")
                  + (f" No finding from the rules for: {', '.join(quiet)}." if quiet and counts else ""))
+    api = res.get("api_changes") or []
+    if api:
+        by = {v: sum(1 for a in api if a["verdict"] == v) for v in ("breaking", "unknown", "compatible")}
+        parts.append(f"Public API: {len(api)} change(s) - " + ", ".join(f"{n} {v}" for v, n in by.items() if n) + ".")
     if res["unknown"]:
         parts.append(f"{len(res['unknown'])} unknown(s) to report.")
     if others:
@@ -5017,6 +5290,8 @@ def _record(store, repo: Path, res: dict) -> str | None:
             "result": {"kind": "review", "summary": res["summary"], "changes": res["changes"],
                        "findings": [{k: f.get(k) for k in ("concern", "rule", "status", "at", "finding")}
                                     for fs in res["concerns"].values() for f in fs],
+                       "api_changes": [{k: a.get(k) for k in ("symbol", "verdict", "status", "at", "base_at")}
+                                       for a in res.get("api_changes") or []],
                        "unknown": res["unknown"], "tests": {"static": [t["test"] for t in res["tests"]["static"]]}},
             "created_at": now()})
     except Exception:  # noqa: BLE001 - a read-only or busy store: the review is still returned
@@ -5049,6 +5324,21 @@ def render_text(res: dict) -> str:
                                                 else "") + (f"  ({f['derived_by']})" if f.get("derived_by") else ""))
         if len(fs) > 8:
             out.append(f"  ... {len(fs) - 8} more (--json)")
+    if res.get("api_changes"):
+        out.append("")
+        out.append("Public API changes:")
+        for a in res["api_changes"][:12]:
+            out.append(f"  [{a['verdict']}, {a['status']}] {a['symbol']}  {a['kind']}  "
+                       + (f"at {a['at']}" if a.get("at") else f"at base {a['base_at']}"))
+            for b in a["breaks"][:4]:
+                out.append(f"      breaks {b['at']} [{b['status']}]")
+            if len(a["breaks"]) > 4:
+                out.append(f"      ... {a.get('breaks_total', len(a['breaks'])) - 4} more call site(s) (--json)")
+            for r in (a.get("reasons") or [])[:2]:
+                out.append(f"      {r}")
+        total = res.get("api_changes_total") or len(res["api_changes"])
+        if total > 12:
+            out.append(f"  ... {total - 12} more (--json)")
     quiet = [k for k, v in res["concerns"].items() if not v]
     if quiet:
         out.append("")

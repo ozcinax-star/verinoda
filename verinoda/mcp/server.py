@@ -1123,7 +1123,7 @@ class AtlasTools:
             return res
         return self._run("change_review", go, need="graph",
                          keep=("summary", "exit", "counts", "concerns", "unknown", "read_first", "tests",
-                               "concerns_checked", "changes"),
+                               "concerns_checked", "changes", "api_changes"),
                          first=("dependents", "binding_readers", "skipped"))
 
     def question_plan_draft(self, question: str) -> dict:
