@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D88)
+## Upgrading from 0.3.2 (D60-D89)
 
 ### D63: Running a project's own tests safely
 
@@ -336,6 +336,15 @@ dependencies not met", plus one line for dependencies the repository alone canno
 `datapack packs` and `--with PATH`. A repository with a collision but no datapack functions now gets the summary
 and not `no_datapack` (exit 0 and not 2). `--with` is refused on `datapack tag|score|function`. No new MCP tool, so the tool count in UPGRADING does not change. No
 rescan is needed.
+
+### D89: Coverage import
+
+- New command `verinoda coverage`; `review` has `--coverage REPORT` and, when a report lies at a usual path
+  (`coverage.xml`, `lcov.info`, `coverage/lcov.info`, `build/reports/jacoco/test/jacocoTestReport.xml`,
+  `target/site/jacoco/jacoco.xml`, ...), a `tests.coverage` section. A review that exited 0 can now exit 3 when
+  a fresh report shows changed lines no test ran. `counts.uncovered_changed_lines` is a new key.
+- The MCP tool count does not change (no new tool; `change_review` reads the reports it finds), so
+  UPGRADING's tool count needs no change.
 
 ### D60-D62
 
