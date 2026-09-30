@@ -7,7 +7,8 @@ a scanner did not observe are never invented; heuristics are labelled.
 Views: hierarchy, dependencies (calls/imports), dataflow (entry -> persistence),
 config (env vars and config files), tests (test -> behaviour), history (git +
 decision records), impact (reverse dependencies of a change), cycles (dependency
-cycles between files and the fewest dependencies to cut).
+cycles between files and the fewest dependencies to cut), dead (code no entry point
+reaches, :mod:`verinoda.deadcode`).
 """
 
 from __future__ import annotations
@@ -911,6 +912,12 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
     }
 
 
+def dead(g: Graph) -> dict:
+    from verinoda import deadcode
+
+    return deadcode.dead_code(g)
+
+
 # -- 8. cycles ------------------------------------------------------------------------------
 
 CYCLE_RELATIONS = {"calls", "imports", "imports_from", "uses", "inherits"}   # the dependencies view's edges
@@ -1297,10 +1304,14 @@ def cycles(g: Graph) -> dict:
 
 VIEWS = {
     "hierarchy": hierarchy, "dependencies": dependencies, "dataflow": dataflow,
-    "config": config, "tests": tests_view, "history": history, "cycles": cycles,
+    "config": config, "tests": tests_view, "history": history, "cycles": cycles, "dead": dead,
 }
 
 
+# the views `verinoda map` builds when none is named; dead is asked for by name (--view dead)
+DEFAULT_VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "cycles")
+
+
 def build_map(g: Graph, views: list[str] | None = None) -> dict:
-    views = views or list(VIEWS)
+    views = views or list(DEFAULT_VIEWS)
     return {v: VIEWS[v](g) for v in views}

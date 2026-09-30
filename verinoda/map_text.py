@@ -157,6 +157,28 @@ def _impact(v: dict, cap: int) -> list[str]:
     return out
 
 
+def _dead(v: dict, cap: int) -> list[str]:
+    s, se = v.get("summary", {}), v.get("searched", {})
+    claims = v.get("claims", [])
+    total = len(claims) + v.get("claims_not_shown", 0)
+    out = [f"{total} dead-code claims ({s.get('strong_inference', 0)} strong_inference, "
+           f"{s.get('weak_inference', 0)} weak_inference): {s.get('orphan_files', 0)} files, "
+           f"{s.get('dead_symbols', 0)} symbols of {s.get('code_symbols', 0)}",
+           f"searched from {se.get('entry_points_total', 0)} entry points, {se.get('entry_modules_total', 0)} entry "
+           f"modules and {se.get('test_code_nodes', 0)} test-code nodes"]
+    n = max(3, cap - 3)
+    for c in claims[:n]:
+        what = "file" if c["kind"] == "orphan_file" else c.get("symbol_kind", "symbol")
+        why = {"orphan_file": "nothing reaches it", "zero_callers": "no callers"}.get(c["kind"], "callers unreached")
+        line = f"   [{c['status']}] {what} {c['subject']} at {c['at']}: {why}"
+        if c.get("dynamic_uses"):
+            u = c["dynamic_uses"][0]
+            line += f"; kept alive? {u['kind']} at {u['at']}"
+        out.append(line)
+    out += _more(min(n, len(claims)), total, "claims (--json has them with their evidence)")
+    return out
+
+
 def _cycles(v: dict, cap: int) -> list[str]:
     """At most ``cap`` lines: a cycle's cuts take two lines each, and a line is kept for saying what was left out."""
     cycles = v.get("cycles", [])
@@ -198,7 +220,8 @@ def _cycles(v: dict, cap: int) -> list[str]:
 
 
 RENDERERS = {"hierarchy": _hierarchy, "dependencies": _dependencies, "dataflow": _dataflow,
-             "config": _config, "tests": _tests, "history": _history, "impact": _impact, "cycles": _cycles}
+             "config": _config, "tests": _tests, "history": _history, "impact": _impact, "cycles": _cycles,
+             "dead": _dead}
 
 
 def render(res: dict, cap: int) -> str:

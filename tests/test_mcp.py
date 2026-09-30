@@ -343,8 +343,9 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
     by = {t["name"]: t["inputSchema"]["properties"] for t in core}
     assert set(by["analyze"]) == {"question", "budget_seconds"} and "env" not in by["code_check"]
     wire = json.dumps(core, separators=(",", ":"))
-    # 50,029 chars for the 33 tools before (2026-09-25); 11,999 for 12 on 2026-09-26; 8,905 for 11 (D60)
-    assert len(wire) < 4500
+    # 50,029 chars for the 33 tools before (2026-09-25); 11,999 for 12 on 2026-09-26; 8,905 for 11 (D60);
+    # 4,585 with code_check's deps argument (D82) and map_view's dead view
+    assert len(wire) < 4600
     assert '"title"' not in wire and "outputSchema" not in wire
     text = instructions("core")
     assert all(n in text for n in CORE_TOOLS) and "--profile full" in text and "question_plan_draft" not in text
@@ -540,7 +541,8 @@ def test_relation_trace_passes_hints_reachability_and_note(repo, tools):
     assert execution["status"] == "found" and execution["reachability"] == "execution"
 
 
-@pytest.mark.parametrize("view", ["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "cycles"])
+@pytest.mark.parametrize("view", ["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "cycles",
+                                  "dead"])
 def test_map_view_equals_core(repo, tools, view):
     from verinoda import architecture_map as am
     from verinoda import index

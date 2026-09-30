@@ -126,7 +126,8 @@ def test_update_is_noop_on_unchanged_tree(repo):
         assert f"index {res['index_mode']}" in r.stdout
 
 
-@pytest.mark.parametrize("view", ["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "cycles"])
+@pytest.mark.parametrize("view", ["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "cycles",
+                                  "dead"])
 def test_map_views_json(repo, view):
     res = ok_json("map", str(repo), "--view", view, "--json", cwd=repo)
     assert list(res) == [view]

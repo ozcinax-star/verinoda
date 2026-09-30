@@ -122,7 +122,9 @@ EXCERPT_MAX_LINES = 30
 EDGE_CAP = 25
 LIST_CAP = 50
 CODE_CHECK_BUDGET_S = float(os.environ.get("VERINODA_MCP_CHECK_BUDGET_S", "90"))   # code_check holds the server
-VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact", "cycles", "outline")
+VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact", "cycles", "outline",
+         "dead")
+DEAD_FIRST_CUT = ("searched.entry_points", "searched.entry_modules")
 VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
 RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
 NETWORK_MODES = ("off", "cache", "on")
@@ -1077,7 +1079,15 @@ class AtlasTools:
                 res["note"] = f"targets are only used by the impact view; ignored for {view}"
             res.update(freshness.summary(fresh))
             return res
-        return self._run("map_view", go, need="graph")
+        if view != "dead":
+            return self._run("map_view", go, need="graph")
+        # the dead view's claims are the answer: the lists of what was searched give way first
+        res = self._run("map_view", go, need="graph", first=DEAD_FIRST_CUT)
+        cut = ((res.get("truncation") or {}).get("cut") or {}).get("claims")
+        if cut:
+            res["claims_not_shown"] = res.get("claims_not_shown", 0) + cut["total"] - cut["kept"]
+            res["truncated"] = True
+        return res
 
     # -- question understanding -----------------------------------------------------
     def change_review(self, base: str | None = None, staged: bool = False, targets: list[str] | None = None,
@@ -1875,7 +1885,7 @@ GATEWAY = "run_tool"
 GATEWAY_CATALOG: dict[str, str] = {
     "node_inspect": "node_inspect {name}: one symbol's definition and edges with file:line",
     "relation_trace": "relation_trace {source, target, mode?: flow|any}: call paths between two symbols",
-    "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|cycles|outline, "
+    "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|cycles|outline|dead, "
                 "targets?}",
     "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: earlier claims, "
                   "their evidence re-checked",
@@ -2026,8 +2036,8 @@ DESCRIPTIONS: dict[str, str] = {
     "map_view": (
         "One architecture view: hierarchy, dependencies, dataflow, config, tests, history, impact "
         "(dependents of targets; default the working-tree changes), cycles (file dependency cycles and the "
-        "fewest dependencies to cut), or outline (the wiki page tree; targets = page ids for their Mermaid "
-        "diagrams). 'coverage' states the method and its limits."),
+        "fewest dependencies to cut), outline (the wiki page tree; targets = page ids for their Mermaid "
+        "diagrams), or dead (code no entry point reaches, as claims). 'coverage' states the method and its limits."),
     "change_review": (
         "What a change touches, by concern: the working tree vs HEAD (base=REV, staged), or planned targets "
         "('path.py[::Name]') + change. Dependents, findings ('no finding' is not 'safe'), tests reaching it, "
@@ -2423,7 +2433,7 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     @register("map_view")
     def map_view(
         view: Annotated[Literal["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
-                                "cycles", "outline"],
+                                "cycles", "outline", "dead"],
                         Field(description="Which architecture view to return.")],
         targets: Annotated[list[str] | None, Field(description="impact view: changed files or symbols (default = "
                                                                "git working-tree changes); outline view: page ids "
