@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D84)
+## Upgrading from 0.3.2 (D60-D85)
 
 ### D63: Running a project's own tests safely
 
@@ -305,6 +305,12 @@ No schema change; no new MCP tool.
 
 `verinoda map --view dead` and MCP `map_view {view: "dead"}` are new; no existing view, output field or
 default changes. Nothing is stored; the index format is unchanged.
+
+### D85: MCP prompts
+
+`verinoda mcp serve` now also answers `prompts/list` and `prompts/get` with four ready workflows (review,
+onboarding, debug, pre_merge); `verinoda mcp prompts` prints them. The tool count (38) and the core menu
+are unchanged, so the tool count in UPGRADING needs no change.
 
 ### D60-D62
 
