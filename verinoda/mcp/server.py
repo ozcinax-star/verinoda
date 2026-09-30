@@ -1296,7 +1296,19 @@ class AtlasTools:
 
     # -- name-existence check (D32) ------------------------------------------------------
     def code_check(self, paths: list[str] | None = None, diff: str | None = None, snippet: str | None = None,
-                   as_path: str | None = None, env: str | None = None, include_exists: bool = False) -> dict:
+                   as_path: str | None = None, env: str | None = None, include_exists: bool = False,
+                   deps: bool = False) -> dict:
+        if deps:
+            def go_deps():
+                depcheck = self._optional("verinoda.depcheck")
+                if paths or _opt_text(diff) or _opt_text(snippet) or _opt_text(as_path):
+                    raise ToolFailure("invalid_argument", "deps checks the whole project's manifests",
+                                      "call code_check(deps=true) without paths, diff or snippet")
+                # the environment is read from its files; nothing it names is started
+                return depcheck.check_deps(self.repo, env=_opt_text(env) or "auto")
+            return self._run("code_check", go_deps, first=("findings",),
+                             keep=("summary", "exit", "exit_because", "manifests", "limits"))
+
         def go():
             codecheck = self._optional("verinoda.codecheck")
             ps = [p.replace("\\", "/") for p in _str_list(paths, "paths")] if paths else None
@@ -2005,7 +2017,7 @@ DESCRIPTIONS: dict[str, str] = {
         "edited, not for reading code: do the modules, names, methods, arguments and keys it uses exist in "
         "the project and its environment? Input: paths, diff (a revision; nothing: changes against HEAD), or "
         "snippet + as_path. Each site: exists | absent (nearest names) | unknown | not_installed | guarded; "
-        "exit 3 = absent. Read-only."),
+        "exit 3 = absent. deps=true: the manifests' dependencies against the imports instead. Read-only."),
     "api_members": (
         "The real members of a Python module, class or function (dotted target) in the project's environment, "
         "or of a Java class on the build's classpath (access included): name, kind, signature, file:line, "
@@ -2455,9 +2467,11 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         = None,
         env: EnvArg = None,
         include_exists: Annotated[bool, Field(description="Also list the sites that exist and the LOW unknowns.")] = False,
+        deps: Annotated[bool, Field(description="Instead: declared vs imported dependencies (missing, transitive "
+                                                "only, unused, wrong group).")] = False,
     ) -> dict[str, Any]:
         return emit(t.code_check(paths=paths, diff=diff, snippet=snippet, as_path=as_path, env=env,
-                                 include_exists=include_exists))
+                                 include_exists=include_exists, deps=deps))
 
     @register("api_members")
     def api_members(
@@ -2751,8 +2765,10 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
             snippet: Annotated[OptStr, Field(description="Code not written yet, checked as if it were in as_path.")]
             = None,
             as_path: Annotated[OptStr, Field(description="With snippet: the file it is for.")] = None,
+            deps: Annotated[bool, Field(description="Instead: declared vs imported dependencies (missing, transitive "
+                                                    "only, unused, wrong group).")] = False,
         ) -> dict[str, Any]:
-            return emit(t.code_check(paths=paths, diff=diff, snippet=snippet, as_path=as_path))
+            return emit(t.code_check(paths=paths, diff=diff, snippet=snippet, as_path=as_path, deps=deps))
 
         add("analyze", analyze_core, DESCRIPTIONS["analyze"])
         add("code_check", code_check_core, DESCRIPTIONS["code_check"])
