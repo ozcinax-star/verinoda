@@ -1575,6 +1575,30 @@ def test_stdio_roundtrip(repo, tmp_path):
     assert "verinoda mcp: serving" in (tmp_path / "server.err").read_text(encoding="utf-8", errors="replace")
 
 
+def test_stdio_prompts_list_and_get(tmp_path):
+    """The ready workflows are listed by prompts/list and filled in by prompts/get, over the protocol; the
+    capability is announced at initialize. No index is needed: a prompt states nothing about the code."""
+    from verinoda.mcp import prompts as P
+
+    plain = tmp_path / "unscanned"
+    plain.mkdir()
+    (plain / "app.py").write_text("def main():\n    return 1\n", encoding="utf-8")
+
+    async def body(s, init):
+        listed = await s.list_prompts()
+        got = await s.get_prompt("pre_merge", {"base": "develop"})
+        return init, listed, got
+
+    init, listed, got = _session(plain, tmp_path / "server.err", body)
+    assert init.capabilities.prompts is not None
+    assert [p.name for p in listed.prompts] == list(P.PROMPT_NAMES)
+    debug = next(p for p in listed.prompts if p.name == "debug")
+    assert {(a.name, bool(a.required)) for a in debug.arguments} == {("symptom", True), ("repro", False)}
+    text = got.messages[0].content.text
+    assert "into develop" in text and 'run_tool {"name": "change_review", "arguments": {"base": "develop"}}' in text
+    assert 'code_check {"diff": "develop"}' in text
+
+
 def test_stdio_server_starts_in_unscanned_dir(tmp_path):
     plain = tmp_path / "unscanned"
     plain.mkdir()

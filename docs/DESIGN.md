@@ -6097,6 +6097,188 @@ reached method; the `zero_callers` wording; every entry point named; unreadable 
 default map without `dead`; the MCP cap cutting the searched lists first with a correct `claims_not_shown`.
 `tests/test_docs.py` covers the README and ARCHITECTURE rows.
 
+## 58. MCP prompts (D85, 2026-09-30)
+
+### 58.1 Why
+
+An agent connected to Verinoda has to work out, each session, which tools to call for a routine task and in
+what order: reviewing a change, getting to know a project, debugging a failure, checking a branch before a
+merge. code-review-graph ships such workflows as MCP prompts. MCP clients show prompts to the user
+(Claude Code as `/mcp__verinoda__review` and so on), so one pick starts the right sequence of calls with the
+reporting rules that go with it.
+
+### 58.2 Decisions
+
+- Four prompts, served by `verinoda mcp serve` over `prompts/list` and `prompts/get`: `review` [base],
+  `onboarding` [topic], `debug` symptom [repro], `pre_merge` [base, default main]. Code:
+  `verinoda/mcp/prompts.py` (steps and text), `server._add_prompts` (registration).
+- A prompt is a fixed sequence of tool calls plus reporting rules. It states nothing about the code, so it
+  carries no claims; the tools it names return the claims and evidence. Every prompt ends with the rule
+  that every statement about the code comes from a tool result (claim, status, file:line) and that missing
+  evidence is 'unknown' plus a next step.
+- Prompts are not tools: the core profile still lists five tools, and the core tool menu is unchanged
+  (`tools/list`, core, on examples/orders_app: 4,478 characters before and after).
+- The text is worded for the served profile, so it only names calls the agent can make: a listed tool is
+  named directly (`code_check {"diff": "HEAD"}`), a tool behind `run_tool` as a `run_tool` call
+  (`run_tool {"name": "change_review", "arguments": {}}`), a tool the profile does not serve as its CLI
+  command (the debug ledger in core: `verinoda debug start "..." -- <repro>`, `verinoda debug try
+  --hypothesis ...`), and a step with neither is left out (decision_check in core when the project has no
+  decision records).
+- Every prompt starts with `index_update`. The steps reuse the existing tools only: review = change_review,
+  code_check on the diff, decision_check; onboarding = map_view hierarchy / dependencies / tests, then
+  analyze; debug = project_query, analyze, debug_start, debug_attempt, code_check; pre_merge =
+  history_search {base}, change_review {base}, code_check {diff: base}, code_check {deps}, decision_check
+  {base}, map_view cycles.
+- The rules the tools already state are repeated where they matter: "'No finding' is not 'safe'" (review),
+  "never say the branch is safe to merge" (pre_merge), "never say 'fixed'" (debug), map views are
+  extractions and heuristics, so what they suggest is inference (onboarding).
+- `verinoda mcp prompts [NAME] [--arg NAME=VALUE] [--profile core|full] [--json]` prints the list or one
+  prompt filled in, with the same text the server sends (for users without a prompt-capable client, and to
+  see what a prompt will do). Exit 2 on an unknown prompt, an unknown or malformed `--arg`, or a missing
+  required argument.
+- The debug `repro` is one string (MCP prompt arguments are strings); it is split into the argument list
+  `debug_start` takes at whitespace, with `'` and `"` grouping, and a backslash kept as it is (no shell
+  escapes), so a Windows path such as `tests\test_x.py` or `"C:\Program Files\py.exe"` survives. In the
+  core profile's CLI fallback each argument is re-quoted with double quotes when it has a space or a shell
+  character, and the symptom is always double-quoted.
+- The server and the CLI check the arguments the same way (`prompts.argument_problems`): a blank required
+  argument or a repro with an unbalanced quote is refused. The CLI exits 2; `prompts/get` answers with a
+  JSON-RPC invalid-params error that carries the reason (not the SDK's generic "Error rendering prompt").
+
+### 58.3 Measured
+
+On examples/orders_app (mcp 2.2.0):
+
+| | core | full |
+|---|---|---|
+| `prompts/list`, compact JSON | 1,253 chars | 1,253 chars |
+| `tools/list`, compact JSON | 4,478 (unchanged) | 43,436 (unchanged) |
+| review / onboarding / debug / pre_merge text | 728 / 1,038 / 1,054 / 997 | 782 / 933 / 930 / 977 |
+
+`prompts/list` is read when the client asks for it, not sent with every request like the tool menu.
+
+### 58.4 Not done
+
+- The steps are fixed; a prompt does not look at the project first (other than which tools the profile
+  serves). An agent that finds a step useless still has to skip it itself.
+- The core tool menu is at 4,478 of its 4,500-character budget before this change; nothing here adds to
+  it, but the margin is small for the next item that touches a core tool.
+- Clients decide how prompts are shown; some list them only on request, some not at all.
+- The CLI command the core debug prompt suggests quotes with double quotes (an inner `"` as `\"`); it
+  keeps a path with spaces together in bash, cmd and PowerShell, but a symptom or argument with `$`, `%`
+  or `"` may still need editing for a particular shell. An unquoted repro path with a space is two
+  arguments, as in a shell.
+- Because backslashes are literal, a repro cannot escape a quote or a space with `\`; quote the argument
+  instead.
+
+### 58.5 Tests
+
+- tests/test_mcp_prompts.py: every step names a real tool with arguments its schema accepts; the full
+  profile names every tool directly; the core profile routes through `run_tool` and the CLI and leaves out
+  decision_check in a project without records; the debug repro becomes an argument list and `symptom` is
+  required; a Windows repro keeps its backslashes and the core CLI fallback quotes each argument; the
+  server refuses a blank symptom and an unbalanced repro quote with the reason, in both profiles, as the
+  CLI does (exit 2); the in-process server lists and fills in the prompts with their descriptions and
+  arguments and its tool menu is unchanged; `verinoda mcp prompts` lists (`--json`), prints and refuses bad
+  arguments (exit 2).
+- tests/test_mcp.py `test_stdio_prompts_list_and_get`: over stdio, initialize announces the prompts
+  capability, `prompts/list` lists the four with their arguments and `prompts/get` fills one in.
+
+## 59. Breaking vs compatible API change (D86, 2026-09-30)
+
+### 59.1 Why
+
+`review` already found call sites that no longer fit a changed signature and removed names still used (the
+`public_api` concern), but only as findings per call site. A reviewer asking "is this change breaking?" had to
+infer the answer from the absence or presence of findings, and a public function removed or re-signed with no
+caller in the repository read as "no finding" - although every caller outside the repository breaks. Each public
+change now gets one verdict, with the call sites it breaks.
+
+### 59.2 Decisions
+
+- **Part of `review`, not a new command.** `review --json` (and MCP `change_review`, reached through `run_tool`)
+  carries `api_changes`: one entry per public definition that was added, removed or had its signature changed.
+  No new tool, no new argument, no menu text: the core menu is unchanged.
+- **Entry shape** (a claim): `symbol`, `kind`, `verdict` (`breaking` | `compatible` | `unknown`), `status`, `at`
+  (the definition's line in the tree; None for a removal), `base_at` (its line in the base version), `basis`,
+  `breaks` (the call sites it breaks: `at`, `status`, `finding`, taken from the `public_api` findings for that
+  symbol with rules `arity-break`, `positional-order-changed`, `removed-still-used`), and when present `reasons`,
+  `call_sites_not_checked` (the weak `call-site-of-changed-signature` sites), `renamed_from`, `breaks_total`.
+  A removed definition is cited by `base_at` only: its base line in the working tree holds other code. The list
+  holds at most 100 entries (breaking first); a longer one gets `api_changes_total`, and the summary and
+  `counts.api_breaking` count the whole list.
+- **Verdict rules.**
+  - added: `compatible` (a new public name).
+  - removed: `breaking`; with no call site in the tree the reason says callers outside it break. A Python method
+    a project base class still defines is `compatible`.
+  - visibility: public in the base version and not public now (a Java method made `private`) is `breaking`;
+    the other way round is `compatible`. Whether a change is listed at all is decided by either version, so a
+    narrowed definition is not left out.
+  - signature, Python: the parameter shapes of both syntax trees are compared (`_py_shape_breaks`): a positional
+    parameter removed (also when the new signature has `*args`: its keyword callers break and a positional
+    argument for it lands in `*args`) or made keyword-only, renamed or moved (a positional-only parameter may be
+    renamed: no caller names it; moving another one into its place still counts), a required positional or
+    keyword parameter added, a default value removed, a parameter added before `*args`, `*args` / `**kwargs`
+    removed, parameters made positional-only, a keyword parameter removed. None of these: `compatible`.
+    `self` / `cls` is left out for methods (not for `@staticmethod`).
+  - signature, Java/Kotlin: parameter counts of both versions (`ts_param_count`): more required, fewer in total
+    (without varargs) or varargs removed is `breaking`; more in total with no more required (Kotlin defaults) is
+    `compatible`; the same counts (a type, modifier or return type changed) is `unknown`.
+  - signature, other languages and planned changes (`--change signature`: no new signature yet): `unknown`.
+  - any broken call site makes the verdict `breaking`, whatever the shape comparison said.
+- **Status.** With broken call sites: the strongest status among them (a Python arity break bound through imports
+  is `statically_verified`). Otherwise `strong_inference` for breaking / compatible - public is a convention
+  and callers outside the tree are not seen - in the languages whose visibility rule is read (below);
+  `weak_inference` in the others, where public only means "no private-like keyword on the line"; `unknown` for an
+  unknown verdict.
+- **Public** (`_is_public`, per version). Python: no component of the module path or of the qualified name
+  starts with `_` (dunders are public, so `Cls.__init__` counts), no enclosing definition is a function, and the
+  file is not a script or tool configuration (`setup.py`, `conftest.py`, `noxfile.py`, `manage.py`, `fabfile.py`,
+  `__main__.py`, or a file under a `scripts/` or `examples/` directory). Go: a capitalised (exported) name. Rust:
+  `pub` on the definition's line (`pub(crate)`, `pub(super)`, `pub(in ...)` are not public) or a method of a trait
+  or trait impl, and every enclosing `mod` is `pub`. JS/TS: the top-level definition is exported (`export` on its
+  line, an `export { ... }` list, `export default`, `exports.x`, `module.exports`), no enclosing definition is a
+  function, and a member is not `private` / `#`. Java/Kotlin: no `private` / `internal` on the definition's line
+  or an enclosing class's line. C#: `public` / `protected` on its line (a member of an interface needs none) and
+  on every enclosing type's line. C: not `static`. Other languages: no `private` / `fileprivate` / `internal` on
+  its line (weak_inference, see Status).
+- Computed only when the `public_api` concern is requested; `counts.api_breaking`, a sentence in `summary`
+  ("Public API: N change(s) - x breaking, y unknown, z compatible."), a "Public API changes" block in the text
+  output (breaking first), and the verdicts in the stored review record.
+
+### 59.3 Measured
+
+In-sample fixtures only (tests below): the generated `pkg` project (four call-site shapes of one function) and the
+generated Java project of the review tests. No held-out set, no timing change worth noting (the verdicts reuse the
+concern's call-site search; the shape comparison is two syntax-tree lookups per changed signature).
+
+### 59.4 Not done
+
+- Types, return types, default values, exceptions and behaviour are not compared: `compatible` means "every call
+  that bound to the old parameters binds to the new ones", not "same behaviour".
+- Java package-private members count as public; Python `__all__` is not read; a Go name in an `internal/`
+  package or in `package main`, and a Rust `pub` item of a private type, still count as public. A JS/TS name
+  exported through a re-export in another file (`export * from`) is not seen as exported.
+- Visibility sections (C++ `private:`, Ruby `private`) are not read: those languages get weak_inference.
+- The Python script test is by file and directory name only: a module imported from a `scripts/` directory is
+  left out, a script elsewhere counts as public.
+- Kotlin "compatible" is source compatibility: adding a parameter with a default breaks binary callers.
+- Module-level names removed through an assignment or an import (the `module_statement` changes the concern
+  checks) get findings but no verdict; only definitions (functions, classes, methods) do.
+- A Java overload set changed together is compared per declaration line only.
+
+### 59.5 Tests
+
+`tests/test_review.py`: `test_a_required_parameter_is_a_breaking_change_with_the_call_sites_it_breaks`,
+`test_a_parameter_with_a_default_is_a_compatible_change`,
+`test_a_renamed_parameter_breaks_keyword_callers_outside_the_tree`,
+`test_removed_and_added_public_names_and_private_ones_left_out`, `test_python_parameter_shapes_compared`,
+`test_java_verdicts_from_parameter_counts`, `test_the_api_verdicts_follow_the_public_api_concern`,
+`test_a_positional_parameter_folded_into_args_breaks_keyword_callers`,
+`test_narrowed_visibility_is_a_breaking_change`, `test_a_member_of_a_private_java_class_is_not_public`,
+`test_visibility_rules_of_go_rust_and_typescript`, `test_python_scripts_are_not_public_api`,
+`test_the_api_verdict_list_is_capped_breaking_first`.
+
 ## Sources
 
 - **Retrieval:**
