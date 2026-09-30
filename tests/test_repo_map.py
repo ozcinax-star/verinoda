@@ -140,3 +140,56 @@ def test_nested_functions_and_decorators(tmp_path):
     assert "    def size(self) -> int:" in texts and "def outer(x):" in texts
     assert not any("inner" in t for t in texts) and not any(t.lstrip().startswith("@") for t in texts)
     assert next(s for s in lib["signatures"] if "size" in s["text"])["at"] == "lib.py:6"
+
+
+def test_the_files_in_play_weigh_as_much_on_a_large_graph():
+    # 900 files that all use one hub; the file in play uses one leaf: the leaf, not the hub, comes first
+    nodes = [f"m{i}.py" for i in range(900)] + ["hub.py", "leaf.py", "play.py"]
+    edges = {(f"m{i}.py", "hub.py"): 1.0 for i in range(900)}
+    edges[("play.py", "leaf.py")] = 1.0
+    plain = am._pagerank(nodes, edges, set())
+    rank = am._pagerank(nodes, edges, {"play.py"})
+    assert plain["hub.py"] > plain["leaf.py"]
+    assert rank["leaf.py"] > rank["hub.py"] and max(rank, key=rank.get) in ("play.py", "leaf.py")
+    assert abs(sum(rank.values()) - 1) < 1e-6
+
+
+def test_targets_are_normalised_and_an_unknown_one_is_an_error_in_the_cli(app, capsys):
+    repo, g = app
+    v = am.repo_map(g, [str(repo / "orders" / "api.py"), r"orders\..\orders/service.py"])
+    assert v["focus"] == ["orders/api.py", "orders/service.py"] and "focus_unresolved" not in v
+    assert cli.main(["map", str(repo), "--view", "repo", "--target", "orders/api.pyy"]) == 2
+    captured = capsys.readouterr()
+    assert "not a file of the graph: orders/api.pyy" in captured.out and "error:" in captured.err
+
+
+@pytest.mark.parametrize("budget", ["0", "-3"])
+def test_cli_rejects_a_budget_below_one(app, capsys, budget):
+    repo, _g = app
+    assert cli.main(["map", str(repo), "--view", "repo", "--max-tokens", budget, "--json"]) == 2
+    assert "--max-tokens must be at least 1" in capsys.readouterr().err
+
+
+def test_mcp_lowers_the_budget_to_fit_the_cap_and_counts_what_it_sends(app):
+    from verinoda.mcp.server import AtlasTools
+
+    repo, _g = app
+    res = AtlasTools(repo, max_chars=2400).map_view("repo", targets=["orders/api.py"])
+    assert "truncation" not in res and res["budget_note"] and res["max_tokens"] < am.REPO_MAP_TOKENS
+    assert res["symbols_shown"] == sum(len(r["signatures"]) for r in res["files"]) > 0
+    assert all(set(s) == {"at", "text"} for r in res["files"] for s in r["signatures"])
+
+
+def test_a_moved_definition_is_not_quoted_and_is_counted(tmp_path):
+    repo = tmp_path / "stale"
+    repo.mkdir()
+    (repo / "a.py").write_text("import os\n\n\ndef get(x):\n    return x\n\n\ndef put(y):\n    return y\n",
+                               encoding="utf-8")
+    (repo / "b.py").write_text("from a import get, put\n\n\ndef run():\n    return get(put(1))\n", encoding="utf-8")
+    g = _scan(repo)
+    (repo / "a.py").write_text("import os\n\n\nbudget = 1\n\n\n\ndef put(y):\n    return y\n", encoding="utf-8")
+    v = am.repo_map(g)
+    texts = [s["text"] for r in v["files"] for s in r["signatures"]]
+    assert "budget = 1" not in texts and "def put(y):" in texts
+    assert v["signatures_not_found"] == 1 and v["symbols_total"] == v["symbols_shown"]
+    assert "1 definition lines not found" in map_text.render({"repo": v}, 100)

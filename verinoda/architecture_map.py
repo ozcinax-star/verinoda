@@ -1362,6 +1362,9 @@ REPO_MAP_TOKENS = 1024        # default budget of `map --view repo` (estimated t
 REPO_MAP_DAMPING = 0.85
 REPO_MAP_SIGNATURE_CHARS = 160
 REPO_MAP_UNRESOLVED_SHOWN = 20
+# share of the random jump that lands on the files in play (split among them), the rest spread over all files:
+# a fixed share, so that the focus weighs as much on a thousand files as on ten
+REPO_MAP_FOCUS_JUMP = 0.9
 # data files whose keys the extractor emits as symbols: no signatures to show
 REPO_MAP_DATA_SUFFIXES = (".json", ".toml", ".ini", ".cfg", ".yml", ".yaml", ".properties", ".xml")
 
@@ -1377,12 +1380,13 @@ def repo_map_lines(row: dict) -> list[str]:
 
 
 def _pagerank(nodes: list[str], edges: dict[tuple[str, str], float], focus: set[str]) -> dict[str, float]:
-    """Weighted PageRank by power iteration; the random jump lands on the files in play ten times as often as
-    on any other file (uniform without them). A file without dependencies spreads its rank like a jump."""
+    """Weighted PageRank by power iteration; ``REPO_MAP_FOCUS_JUMP`` of the random jump lands on the files in
+    play, the rest on all files alike (uniform without them). A file without dependencies spreads its rank like
+    a jump."""
     n = len(nodes)
-    jump = {f: (10.0 if f in focus else 1.0) for f in nodes}
-    total = sum(jump.values())
-    jump = {f: w / total for f, w in jump.items()}
+    focus = focus & set(nodes)
+    rest = (1 - REPO_MAP_FOCUS_JUMP) if focus else 1.0
+    jump = {f: rest / n + (REPO_MAP_FOCUS_JUMP / len(focus) if f in focus else 0.0) for f in nodes}
     out_w: dict[str, float] = defaultdict(float)
     for (a, _b), w in edges.items():
         out_w[a] += w
@@ -1400,14 +1404,17 @@ def _pagerank(nodes: list[str], edges: dict[tuple[str, str], float], focus: set[
 
 def _signature(g: Graph, sym: str, lines: list[str]) -> tuple[int, str] | None:
     """The definition line of a symbol (its indentation kept): its own line, or past its decorators the first
-    line naming it."""
+    line naming it as a whole word. None when no such line is found (the file changed since the scan)."""
     ln = g.line(sym)
     if not ln or ln > len(lines):
         return None
     name = g.label(sym).lstrip(".").split("(")[0]
+    word = re.compile(rf"(?<![\w$]){re.escape(name)}(?![\w$])") if name else None
     for i in range(ln, min(ln + 12, len(lines) + 1)):
         text = lines[i - 1].rstrip()
-        if text.strip() and not text.lstrip().startswith("@") and (not name or name in text):
+        if not text.strip() or text.lstrip().startswith("@"):
+            continue
+        if word is None or word.search(text):
             if len(text) > REPO_MAP_SIGNATURE_CHARS:
                 text = text[:REPO_MAP_SIGNATURE_CHARS - 3] + "..."
             return i, text
@@ -1446,8 +1453,7 @@ def repo_map(g: Graph, focus: list[str] | None = None, max_tokens: int = REPO_MA
     known = set(_files(g))
     in_play, unresolved = [], []
     for t in focus or []:
-        rel = str(t).replace("\\", "/").split("::")[0].strip()
-        rel = rel[2:] if rel.startswith("./") else rel
+        rel = repo_relative(g.root, str(t).split("::")[0].strip())
         (in_play if rel in known else unresolved).append(rel if rel in known else str(t))
     in_play = sorted(set(in_play))
     deps, _stdlib = _file_deps(g)
@@ -1468,16 +1474,23 @@ def repo_map(g: Graph, focus: list[str] | None = None, max_tokens: int = REPO_MA
             scored.append((-rank.get(f, 0.0) * (1 + inbound[s]) / share, f, g.line(s) or 0, s))
     scored.sort()
     rows: dict[str, dict] = {}
-    used, shown = 0, 0
+    used, shown, not_found, full = 0, 0, 0, False
+    lines: dict[str, list[str]] = {}
     for _score, f, _ln, s in scored:
-        sig = _signature(g, s, _read(g.root, f))
-        if not sig:
+        if f not in lines:
+            lines[f] = _read(g.root, f)
+        sig = _signature(g, s, lines[f])
+        if not sig:   # counted, so that "N of M" is never a budget cut it was not
+            not_found += 1
             continue
-        entry = {"symbol": g.label(s), "at": f"{f}:{sig[0]}", "text": sig[1]}
+        if full:
+            continue
+        entry = {"at": f"{f}:{sig[0]}", "text": sig[1]}   # the text names the symbol
         cost = repo_tokens(repo_map_lines({"file": f, "signatures": [entry]})[1])
         cost += 0 if f in rows else repo_tokens(f"{f}:")
         if used + cost > max_tokens:
-            break
+            full = True   # a prefix of the ranking: nothing after this one is shown
+            continue
         used += cost
         shown += 1
         rows.setdefault(f, {"file": f, "rank": round(rank.get(f, 0.0), 5), "status": "strong_inference",
@@ -1495,7 +1508,9 @@ def repo_map(g: Graph, focus: list[str] | None = None, max_tokens: int = REPO_MA
                        "containers are not resolved",
                        "a signature is the definition's first line (a multi-line signature is cut there)",
                        "the files in play are left out of the map; their dependents rank only through what "
-                       "they use (the impact view lists dependents)"],
+                       "they use (the impact view lists dependents)",
+                       "a symbol whose definition line is no longer where the index says (the file changed since "
+                       "the scan) is not shown, and counted in signatures_not_found"],
         },
         "focus": in_play,
         **({"focus_unresolved": unresolved[:REPO_MAP_UNRESOLVED_SHOWN],
@@ -1505,8 +1520,24 @@ def repo_map(g: Graph, focus: list[str] | None = None, max_tokens: int = REPO_MA
         "files": files,
         "files_ranked": len(nodes),
         "symbols_shown": shown,
-        "symbols_total": len(scored),
+        "symbols_total": len(scored) - not_found,
+        **({"signatures_not_found": not_found} if not_found else {}),
     }
+
+
+def repo_relative(root: Path | str, target: str) -> str:
+    """A path as the graph names files: relative to the repository, forward slashes, ``.`` and ``..`` resolved
+    (an absolute path inside the repository is made relative; one outside it is returned as given)."""
+    import posixpath
+
+    t = target.replace("\\", "/")
+    if Path(target).is_absolute():
+        try:
+            t = Path(target).resolve().relative_to(Path(root).resolve()).as_posix()
+        except (OSError, ValueError):
+            return t
+    t = posixpath.normpath(t) if t else t
+    return "" if t == "." else t
 
 
 VIEWS = {

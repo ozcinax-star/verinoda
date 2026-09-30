@@ -1075,8 +1075,23 @@ class AtlasTools:
                 res.update(freshness.summary(fresh))
                 return res
             if view == "repo":   # the files in play: the targets, else the working-tree changes
-                res = am.repo_map(g, tg or am.changed_files_from_git(self.repo))
+                focus = tg or am.changed_files_from_git(self.repo)
+                # the budget is lowered until the map fits the response cap, so that no file is cut from it
+                # afterwards and its counts describe what is sent
+                budget, room = am.REPO_MAP_TOKENS, self.max_chars * 3 // 4
+                res = am.repo_map(g, focus, max_tokens=budget)
+                for _ in range(6):
+                    size = _size(res)
+                    if size <= room or budget <= 16:
+                        break
+                    budget = max(16, min(budget - 1, budget * room * 9 // (size * 10)))
+                    res = am.repo_map(g, focus, max_tokens=budget)
+                if budget < am.REPO_MAP_TOKENS:
+                    res["budget_note"] = f"max_tokens lowered from {am.REPO_MAP_TOKENS} to fit the response cap"
                 res["focus_source"] = "argument" if tg else "git working-tree changes (HEAD + untracked)"
+                if tg and res.get("focus_unresolved"):
+                    res["next_step"] = ("a target is not a file of the graph (see focus_unresolved): pass a "
+                                        "repository-relative path; the map was ranked without it")
                 res.update(freshness.summary(fresh))
                 return res
             if view == "outline":  # the wiki page tree; the pages named in targets with their Mermaid diagrams

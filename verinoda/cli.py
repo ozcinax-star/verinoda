@@ -781,8 +781,14 @@ def cmd_map(args) -> int:
         res = {"impact": am.impact(g, targets, stale=fresh["files"])}
         failed = bool(args.target and res["impact"]["unresolved"])
     elif args.view == "repo":   # the files in play: the targets named, else the working-tree changes
+        budget = am.REPO_MAP_TOKENS if args.max_tokens is None else args.max_tokens
+        if budget < 1:
+            print(f"error: --max-tokens must be at least 1 (got {budget})", file=sys.stderr)
+            return 2
         focus = args.target or am.changed_files_from_git(repo, args.base)
-        res = {"repo": am.repo_map(g, focus, max_tokens=args.max_tokens or am.REPO_MAP_TOKENS)}
+        res = {"repo": am.repo_map(g, focus, max_tokens=budget)}
+        # like the impact view: a --target that names no file of the graph is an error, not a silent fallback
+        failed = bool(args.target and res["repo"].get("focus_unresolved"))
     elif args.view:
         res = {args.view: am.VIEWS[args.view](g)}
     else:
@@ -814,7 +820,10 @@ def cmd_map(args) -> int:
         print()
     if not args.view:
         print("one view in more detail: --view NAME [--max-lines N]; everything: --json")
-    if failed:
+    if failed and args.view == "repo":
+        print("error: a --target is not a file of the graph (see above); pass a repository-relative path",
+              file=sys.stderr)
+    elif failed:
         print("error: a --target did not name one symbol exactly (see above); pass it as path/file.py::Name or a "
               "node id", file=sys.stderr)
     return 2 if failed else 0

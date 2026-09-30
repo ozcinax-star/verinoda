@@ -293,7 +293,9 @@ def _repo(v: dict, cap: int) -> list[str]:
     out = [f"{v.get('symbols_shown', 0)} of {v.get('symbols_total', 0)} signatures in {len(v.get('files', []))} of "
            f"{v.get('files_ranked', 0)} files, ~{v.get('tokens', 0)} of {v.get('max_tokens', 0)} tokens; ranked "
            "by PageRank (strong_inference)"
-           + (f"; files in play (left out): {', '.join(v['focus'][:6])}" if v.get("focus") else "")]
+           + (f"; files in play (left out): {', '.join(v['focus'][:6])}" if v.get("focus") else "")
+           + (f"; {v['signatures_not_found']} definition lines not found (update the index)"
+              if v.get("signatures_not_found") else "")]
     if v.get("focus_unresolved"):
         more = v.get("focus_unresolved_total", 0) - 6
         out.append(f"   not a file of the graph: {', '.join(v['focus_unresolved'][:6])}"
