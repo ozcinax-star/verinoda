@@ -830,11 +830,30 @@ def cmd_review(args) -> int:
     try:
         res = rv.review(repo, store=st, base=args.base, staged=args.staged, targets=args.target,
                         change=args.change or ("body" if args.target else None), concerns=concerns,
-                        run_tests=args.run_tests, observe=args.observe, max_chars=args.max_chars)
+                        run_tests=args.run_tests, observe=args.observe, max_chars=args.max_chars,
+                        coverage_reports=args.coverage)
     finally:
         st.close()
     _emit(args, res, lambda r: _write(rv.render_text(r)))
     return int(res["exit"])
+
+
+def cmd_coverage(args) -> int:
+    from verinoda import coverage_import as ci
+
+    repo = _repo(args)
+    if args.limit < 1:
+        print("error: --limit must be a positive number", file=sys.stderr)
+        return 2
+    paths = [_rel_in_repo(repo.resolve(), p, "path") for p in args.paths or []]
+    try:
+        res = ci.report(repo, paths or None, reports=args.report, base_reports=args.base_report, base=args.base,
+                        limit=args.limit)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 4
+    _emit(args, res, lambda r: _write(ci.render_text(r)))
+    return 0
 
 
 def cmd_health(args) -> int:
@@ -2800,6 +2819,19 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--observe", action="store_true",
                     help="run those tests under the call tracer: which of them reach the changed functions")
     sp.add_argument("--max-chars", type=int, default=6000, help="budget of the read_first list")
+    sp.add_argument("--coverage", action="append", metavar="REPORT",
+                    help="a coverage report (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON; repeatable): the "
+                         "changed lines no test ran (default: the reports found at the usual paths)")
+    sp = add("coverage", cmd_coverage, "coverage reports (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON) read "
+                                       "into lines and symbols: what ran, what did not, which tests ran it; with "
+                                       "--base-report the indirect coverage changes")
+    sp.add_argument("paths", nargs="*", help="files or folders (default: every file a report measured)")
+    sp.add_argument("--report", action="append", metavar="FILE",
+                    help="a report to read (repeatable; default: the reports found at the usual paths)")
+    sp.add_argument("--base-report", action="append", metavar="FILE",
+                    help="the base version's report (repeatable): lines whose coverage changed")
+    sp.add_argument("--base", help="with --base-report: the commit the working tree is compared with (default HEAD)")
+    sp.add_argument("--limit", type=int, default=40, help="symbols shown (default 40)")
     sp = add("health", cmd_health, "code health per function: cyclomatic and cognitive complexity, nesting, length, "
                                    "parameters, and near-duplicate functions with a similarity score")
     sp.add_argument("paths", nargs="*", help="files or folders (default: every code file that is not a test)")
