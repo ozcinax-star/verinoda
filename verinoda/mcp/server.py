@@ -2887,8 +2887,41 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
         add(GATEWAY, run_tool, gateway_description(behind))
 
+    _add_prompts(srv, listed, served)
     _compact_schemas(srv)
     return srv
+
+
+def _add_prompts(srv, listed: set[str], served: set[str]) -> None:
+    """The ready workflows (:mod:`verinoda.mcp.prompts`) as MCP prompts, worded for this profile's menu."""
+    from pydantic import Field
+
+    from verinoda.mcp import prompts as P
+
+    def text(name: str, **args) -> str:
+        return P.render(name, args, listed=listed, served=served, gateway=GATEWAY)
+
+    def arg(prompt: str, name: str):
+        return Field(description=next(d for a, d, _ in P.ARGUMENTS[prompt] if a == name))
+
+    def review(base: Annotated[str | None, arg("review", "base")] = None) -> str:
+        return text("review", base=base)
+
+    def onboarding(topic: Annotated[str | None, arg("onboarding", "topic")] = None) -> str:
+        return text("onboarding", topic=topic)
+
+    def debug(symptom: Annotated[str, arg("debug", "symptom")],
+              repro: Annotated[str | None, arg("debug", "repro")] = None) -> str:
+        return text("debug", symptom=symptom, repro=repro)
+
+    def pre_merge(base: Annotated[str | None, arg("pre_merge", "base")] = None) -> str:
+        return text("pre_merge", base=base)
+
+    for fn in (review, onboarding, debug, pre_merge):
+        try:
+            srv.prompt(name=fn.__name__, description=P.DESCRIPTIONS[fn.__name__])(fn)
+        except (AttributeError, TypeError):  # pragma: no cover - an SDK without prompts: the tools still serve
+            return
 
 
 def _win_rebind_std_handle(fd: int) -> None:
