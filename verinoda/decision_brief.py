@@ -411,7 +411,9 @@ class _Probe:
             for i in range(min(len(code), len(with_strings))):
                 for rx, kind in SINK_PATTERNS:
                     if rx.search(code[i] if kind == "db-connection" else with_strings[i]):
-                        found.setdefault((rel, i + 1), (rel, i + 1, kind, rx.pattern))
+                        # the needle keeps the pattern's case-insensitivity (lowercase SQL re-checks too)
+                        found.setdefault((rel, i + 1), (rel, i + 1, kind,
+                                                        ("(?i)" if rx.flags & re.I else "") + rx.pattern))
                         break
         ordered = sorted(found.values(), key=lambda s: (s[0], s[1]))
         sinks = [(rel, i, kind) for rel, i, kind, _ in ordered]

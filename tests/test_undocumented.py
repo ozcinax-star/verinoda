@@ -94,15 +94,18 @@ def test_a_record_or_an_adr_that_names_the_choice_covers_it(repo):
                         guards=["only_in calls=sqlite3.connect allowed=store/**"])
     finally:
         st.close()
-    _write(repo, "docs/adr/0001-http.md", "# HTTP\n\nStatus: accepted\n\nWe call services with Requests only.\n")
+    _write(repo, "docs/adr/0001-http.md",
+           "# HTTP\n\nStatus: accepted\n\nWe call services with the Requests library only.\n")
     res = ud.find(repo)
     assert _ids(res) == ["config:app/config.py"]
     cov = {c["id"]: c["by"][0] for c in res["covered"]}
     assert cov["storage:store/db.py"]["record"] == rec["id"]
-    # the record's guard glob store/** matches the file; the line it cites holds that glob
+    # the record's only_in guard on the driver allows only store/**, which matches the file; the line it cites
+    # is the guard's own
     at, line = cov["storage:store/db.py"]["at"].rsplit(":", 1)
-    assert cov["storage:store/db.py"]["via"] == "a guard's glob store/** matches store/db.py"
-    assert "store/**" in (repo / at).read_text(encoding="utf-8").split("\n")[int(line) - 1]
+    assert cov["storage:store/db.py"]["via"].endswith("allows only store/**, which matches store/db.py")
+    assert "only_in calls=sqlite3.connect allowed=store/**" in \
+        (repo / at).read_text(encoding="utf-8").split("\n")[int(line) - 1]
     assert cov["library:requests"] == {"document": "docs/adr/0001-http.md", "at": "docs/adr/0001-http.md:5",
                                        "via": "names requests"}
     assert res["searched"] == {**res["searched"], "records": 1, "documents": 1}
@@ -175,3 +178,64 @@ def test_cli_lists_and_dismisses(repo, capsys):
     assert "record: verinoda decide record" in out
     assert cli.main(["decide", "dismiss", "library:nothing", "--reason", "x", "--repo", str(repo)]) == 2
     assert "not a current candidate" in capsys.readouterr().err
+
+
+def test_lowercase_sql_is_a_storage_path_with_evidence_that_rechecks(repo):
+    # the SQL of store/db.py moves to a file of its own, in lowercase
+    _write(repo, "store/db.py", FILES["store/db.py"].replace("    conn.execute(\"INSERT INTO t VALUES (?)\", (x,))\n",
+                                                             ""))
+    _write(repo, "store/repo.py", "def put(c):\n    c.execute('insert into t values (?)')\n"
+                                  "    c.execute('update t set a=1')\n    c.execute('delete from t')\n")
+    res = ud.find(repo)
+    c = next(c for c in res["candidates"] if c["id"] == "storage:store/repo.py")
+    assert "sql-write" in c["fact"]["text"]
+    assert [e["locator"] for e in c["fact"]["evidence"]] == ["store/repo.py:2", "store/repo.py:3", "store/repo.py:4"]
+    assert all(dbr.recheck(repo, e) for e in c["fact"]["evidence"])
+
+
+def test_a_guard_about_something_else_covers_nothing(repo):
+    st = open_store(repo)
+    try:
+        dm.record(st, repo, chosen="layers", rationale="x", title="App does not call the net client",
+                  guards=["no_edge from=app/** to=net/**"])
+        dm.record(st, repo, chosen="subprocess", rationale="x", title="Processes are started in one place",
+                  guards=["only_in calls=subprocess.run allowed=app/**"])
+    finally:
+        st.close()
+    res = ud.find(repo)
+    assert _ids(res) == ["storage:store/db.py", "library:requests", "config:app/config.py"] and not res["covered"]
+
+
+def test_a_library_is_kept_behind_one_file_only_when_all_its_modules_are(repo):
+    _write(repo, "requirements.txt", FILES["requirements.txt"] + "attrs\n")
+    _write(repo, "app/models.py", "import attr\n\n\n@attr.s\nclass A:\n    pass\n")
+    assert "library:attrs" in _ids(ud.find(repo))
+    _write(repo, "net/other.py", "import attrs\n")
+    assert "library:attrs" not in _ids(ud.find(repo))
+
+
+def test_an_ordinary_word_in_an_adr_does_not_cover_a_library(repo):
+    _write(repo, "docs/adr/0001-rate-limit.md", "# Rate limit\n\nStatus: accepted\n\n"
+                                                "We cap incoming HTTP requests per client; we will never use SQLite.\n")
+    res = ud.find(repo)
+    assert "library:requests" in _ids(res) and "storage:store/db.py" in _ids(res)
+    _write(repo, "docs/adr/0001-rate-limit.md", "# HTTP\n\nStatus: accepted\n\nWe use `requests`.\n")
+    assert "library:requests" not in _ids(ud.find(repo))
+
+
+def test_a_path_with_a_space_gives_a_guard_record_accepts(tmp_path):
+    for rel, text in FILES.items():
+        _write(tmp_path, rel.replace("store/", "my store/"), text)
+    res = ud.find(tmp_path)
+    st = next(c for c in res["candidates"] if c["id"] == "storage:my store/db.py")
+    assert dm.parse_guard(st["guard"], tmp_path, "g1")["allowed"] == ["my store/db.py"]
+
+
+def test_a_dismissal_list_is_kept_out_of_git_and_may_start_with_a_bom(tmp_path):
+    for rel, text in FILES.items():
+        _write(tmp_path, rel, text)
+    ud.dismiss(tmp_path, "config:app/config.py", "fine")
+    assert (tmp_path / ".verinoda" / ".gitignore").read_text(encoding="utf-8") == "*\n"
+    p = ud.dismissed_path(tmp_path)
+    p.write_text("\ufeff" + p.read_text(encoding="utf-8"), encoding="utf-8")
+    assert [e["id"] for e in ud.load_dismissed(tmp_path)] == ["config:app/config.py"]
