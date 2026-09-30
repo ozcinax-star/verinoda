@@ -198,7 +198,10 @@ What is left, found by running the baseline against itself (``--no-rules`` shows
   named in atlas.db's ``meta.schema_written_by`` (version and commit), except that on ``C0`` the baseline's is
   the plain token and the candidate's ``other``: only a schema migration rewrites it
 
-Known limits: SQLite files are compared by content and the two layout pragmas (freelist_count, schema_version), not page by page
+Known limits: the stat index is compared on the paths both sides have (which files get an entry depends
+on the clock), so a candidate that records fewer files there is not caught (it only hashes more); replace
+backups left in ``index/cache`` are not counted (the baseline leaves and removes them at random with a cold
+cache). SQLite files are compared by content and the two layout pragmas (freelist_count, schema_version), not page by page
 and not by page_count (the baseline differs from itself in it). A clock's fraction digits are not
 compared (``repr(time.time())`` has 3 or fewer about once in 3000 values: the baseline would differ from
 itself), so rounding a clock to milliseconds is not caught, dropping the fraction is. When the candidate changes the
@@ -765,6 +768,9 @@ RULES: list[Rule] = [
     Rule("stat_index_clock", ("index/cache/stat-index.json",),
          "`indexed_at_ns` is when the stat index hashed the file (time.time_ns(); the racy-clean check reads it): "
          "accepted only inside a run of this side, named by that run", (("*", "indexed_at_ns"),), _clock_ns),
+    Rule("stat_index_entries", ("index/cache/stat-index.json",),
+         "which files have an entry depends on the clock (racy-clean): only the paths both sides have are "
+         "compared, each entry in full"),
     Rule("update_timings", (JSON_OUT,),
          "`seconds`, `index_seconds` and `ms` (at any depth) are durations",
          (("**", "seconds"), ("**", "index_seconds"), ("**", "ms")), _duration),
@@ -2246,6 +2252,11 @@ def collect_files(repo: Path, sctx: SideCtx, tmp: Path) -> dict:
     for r in rels:
         if _REPLACE_BAK.search(r):
             folder = r.rsplit("/", 1)[0] if "/" in r else ""
+            if folder == "index/cache":
+                # the stat index and AST cache writes: the baseline leaves and removes these at random with a cold
+                # cache (calibration 2026-09-30: 16 over one fixtures case), so they are not counted
+                _hit(["replace_bak_leftover"])
+                continue
             baks[folder] = baks.get(folder, 0) + 1
     rels = [r for r in rels if not _REPLACE_BAK.search(r)]
     names = artifact_names(rels, sctx)
@@ -2332,6 +2343,27 @@ def replace_bak_difference(a: dict, b: dict) -> int:
     return sum(abs(a.get(k, 0) - b.get(k, 0)) for k in set(a) | set(b))
 
 
+STAT_INDEX = "index/cache/stat-index.json"
+
+
+def stat_index_common(vb: bytes, vc: bytes) -> tuple[bytes, bytes, int]:
+    """The stat index on both sides cut to the paths both have. Whether a file gets an entry depends on the
+    clock (the racy-clean rule leaves out a file hashed within its mtime's tick), so the baseline differs from
+    itself in which entries exist (calibration 2026-09-30, fixtures cold, side M vs BM); a missing entry only
+    means the file is hashed again, while an entry both sides have is compared in full. Returns the two texts
+    (unchanged when either does not parse) and how many entries were left out."""
+    try:
+        jb, jc = json.loads(vb), json.loads(vc)
+    except ValueError:
+        return vb, vc, 0
+    if not (isinstance(jb, dict) and isinstance(jc, dict)):
+        return vb, vc, 0
+    common = set(jb) & set(jc)
+    gone = len(set(jb) ^ set(jc))
+    dump = lambda d: json.dumps({k: d[k] for k in sorted(common)}, sort_keys=True).encode("utf-8")
+    return (dump(jb), dump(jc), gone) if gone else (vb, vc, 0)
+
+
 def compare(b: Side, c: Side, skip=(), tolerated: list | None = None, bak_key=None) -> list[tuple[str, str]]:
     """``[(artifact, where)]`` for each artifact that differs. ``replace_bak_leftovers`` (what the step added)
     differs once the differences of the pair ``bak_key`` names, summed over its steps (``BAK_SPENT``), exceed
@@ -2361,6 +2393,10 @@ def compare(b: Side, c: Side, skip=(), tolerated: list | None = None, bak_key=No
                 if tolerated is not None:
                     tolerated.append((name, where))
             continue
+        if name == STAT_INDEX and kb == kc == "bytes":
+            vb, vc, gone = stat_index_common(vb, vc)
+            if gone:
+                _hit(["stat_index_entries"])
         if kb == "bytes" and kc == "bytes":
             d = bytes_diff(vb, vc)
         elif kb == kc == "json":
