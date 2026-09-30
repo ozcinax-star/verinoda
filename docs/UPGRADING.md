@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D96)
+## Upgrading from 0.3.2 (D60-D97)
 
 ### D63: Running a project's own tests safely
 
@@ -402,6 +402,13 @@ findings the change removed under `differential.fixed_findings`. Every finding h
 a change whose findings were all there before now exits 0. `counts` has two new keys, `preexisting` and `fixed`; `op-on-changed-line` findings carry `op_kind` and
 `io-in-loop` findings `base_had: loop` when the loop did that IO before.
 The MCP tool count does not change (no new tool), so UPGRADING's tool count needs no edit.
+
+### D97: What a merged change made stale
+
+`verinoda review` (and `change_review`) now has a `made_stale` key: the stored claims, notes and decision
+records the change makes stale, each with a status, the changed line and what it cites, plus a "Made stale by
+the change" section in the text. Nothing to do; no new command, no MCP tool count change (UPGRADING's tool
+count stays as it is), no store schema change.
 
 ### D60-D62
 

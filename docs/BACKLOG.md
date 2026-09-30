@@ -130,7 +130,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 12.1 | **Docs coupled to code, drift check and trivial auto-fix** | Code references in ordinary repo docs checked on each change; renames and moved lines fixed, the rest flagged; a CI check | Swimm | `verinoda docs check` fails on a broken reference and `--fix` repairs a rename |
-| 12.3 | **What a merged change made stale** | The claims, notes and decision records a PR made stale, as a comment or report | Mintlify, Dosu (without a model here) | `review` lists them |
 | 12.4 | **Decision record lifecycle** | Supersede with status updated on both records, links with reverse links, a graph of records, a table of contents, a timeline site | adr-tools, Log4brains | `decide supersede` and a timeline in `ui` |
 | 12.5 | **Undocumented decisions** | Find structural choices no decision record covers (a single storage path, an exclusive library) | Codex ADR workflow | candidates listed as `weak_inference` for the user to record or dismiss |
 | 12.6 | **Specs traced to code and tests** | Requirement criteria (EARS style) linked to code and tests through claims; criteria with no evidence reported | Kiro specs, GitHub spec-kit, Tessl | `verinoda spec check` lists unevidenced criteria |
