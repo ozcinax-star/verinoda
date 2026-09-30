@@ -15,7 +15,9 @@ front matter line it matched (``evidence_at``) and a status:
   holds only the call's last name (``weak_inference``);
 * ``no_edge``: a changed file matches the guard's ``from`` or ``to`` glob (``statically_verified``); the same
   for the globs of ``layers`` (``order``), ``allow_edges`` (``from``, ``allowed``) and ``public`` (``module``,
-  ``api``), a ``tag:NAME`` read as its committed globs (D93);
+  ``api``), a ``tag:NAME`` read as its committed globs (D93); a change to the definition of a tag the guard
+  uses (``verinoda.toml`` or ``pyproject.toml``, the tag's globs parsed on both sides and compared)
+  (``statically_verified``);
 * ``dependency`` and ``revisit-when dependency_added``: a changed line of a manifest ``decide check`` reads
   names the package, compared as ``decide check`` compares names (runs of ``-``, ``_`` and ``.`` alike)
   (``strong_inference``);
@@ -296,6 +298,11 @@ def _edge_guard(d, g: dict, files: _Files, ev: str | None, tags: dict[str, list[
             globs = tags.get(pat[len(TAG_PREFIX):], []) if pat.startswith(TAG_PREFIX) else [pat]
             sides.append((key, pat, globs))
     what = f"no {rels} from {g.get('from')} to {g.get('to')}" if kind == "no_edge" else f"{kind}, {rels}"
+    used = {pat[len(TAG_PREFIX):] for _key, pat, _globs in sides if pat and pat.startswith(TAG_PREFIX)}
+    for rel, name, line in _tag_edits(files, used):
+        out.append(_reach("guard", g.get("id"), line, f"{rel} changes tag:{name}, which {d.id}'s guard "
+                          f"`{g.get('spec') or kind}` uses ({what}): the files the rule checks change with it"
+                          f"{note}", "statically_verified", ev))
     for rel in files.names:
         for key, pat, globs in sides:
             if pat and any(_glob(rel, x) for x in globs):
@@ -303,6 +310,47 @@ def _edge_guard(d, g: dict, files: _Files, ev: str | None, tags: dict[str, list[
                                   f"{rel} matches {key}={pat} of {d.id}'s guard `{g.get('spec') or kind}` "
                                   f"({what}){note}", "statically_verified", ev))
                 break
+    return out
+
+
+# the committed tag tables (decisions.architecture_tags): file -> the keys down to the table
+_TAG_TABLES = {"verinoda.toml": ("architecture", "tags"),
+               "pyproject.toml": ("tool", "verinoda", "architecture", "tags")}
+
+
+def _tag_table(text: str | None, keys: tuple[str, ...]) -> dict | None:
+    """The tag table of one side of a committed file; ``None`` when that side cannot be parsed."""
+    try:
+        import tomllib  # type: ignore[import-not-found]
+    except ImportError:  # pragma: no cover - py3.10
+        import tomli as tomllib  # type: ignore[no-redef]
+
+    if text is None:
+        return {}
+    try:
+        data = tomllib.loads(text.lstrip("﻿"))
+    except ValueError:
+        return None
+    for key in keys:
+        data = data.get(key) if isinstance(data, dict) else None
+    return data if isinstance(data, dict) else {}
+
+
+def _tag_edits(files: _Files, names: set[str]) -> list[tuple[str, str, str]]:
+    """``(file, tag, at)`` for each tag of ``names`` whose value differs between the base and the new side
+    of a changed tag file (a side that does not parse differs from any other)."""
+    out = []
+    for rel, keys in _TAG_TABLES.items() if names else ():
+        if rel not in files.text or rel in files.planned:
+            continue
+        old, new = _tag_table(files.old_text.get(rel), keys), _tag_table(files.text.get(rel), keys)
+        for name in sorted(names):
+            if old is not None and new is not None and old.get(name) == new.get(name):
+                continue
+            rows = (files.text.get(rel) or "").split("\n")
+            ln = next((i for i, r in enumerate(rows, 1) if re.match(rf"\s*[\"']?{re.escape(name)}[\"']?\s*=", r)),
+                      None)
+            out.append((rel, name, f"{rel}:{ln}" if ln else files.first_line(rel)))
     return out
 
 

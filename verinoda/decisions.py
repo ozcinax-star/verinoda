@@ -47,10 +47,11 @@ is quoted; a backslash is kept as written (``allowed=orders\\repository.py``, ``
   the other;
 * ``layers order=GLOB,GLOB[,...] [relations=...]``: the layers, top first; no graph edge from a file of a
   lower layer to a file of a higher one (docs/DESIGN.md D93);
-* ``allow_edges from=GLOB allowed=GLOB[,...] [relations=...]``: the files ``from`` matches depend only on
-  each other and on the allowed files (an edge to any other file of the index breaks it);
-* ``public module=GLOB api=GLOB[,...] [relations=...]``: code outside the module reaches it only through
-  its public files;
+* ``allow_edges from=GLOB allowed=GLOB[,...] [relations=...] [scope=product|all]``: the files ``from``
+  matches depend only on each other and on the allowed files (an edge to any other file of the index
+  breaks it); test files among them are left out unless ``scope=all``;
+* ``public module=GLOB api=GLOB[,...] [relations=...] [scope=product|all]``: code outside the module
+  reaches it only through its public files; test code outside it is left out unless ``scope=all``;
 * ``dependency absent=NAME`` / ``dependency present=NAME``: a declared dependency must (not) exist.
 
 A glob of an edge guard may be ``tag:NAME``: the globs listed under that name in a committed
@@ -83,6 +84,8 @@ STATUSES = ("proposed", "accepted", "superseded", "rejected", "deprecated")
 GUARD_KINDS = ("only_in", "no_edge", "layers", "allow_edges", "public", "dependency")
 # the guards that read graph edges: the index is loaded (and refreshed first) for them
 EDGE_KINDS = ("no_edge", "layers", "allow_edges", "public")
+# the guards whose default scope leaves test code out (scope=all takes it in)
+_SCOPED = ("only_in", "allow_edges", "public")
 TAG_PREFIX = "tag:"
 REVISIT_KINDS = ("dependency_added", "file_appears")
 EDGE_RELATIONS = ("imports", "imports_from", "calls", "uses", "inherits", "implements", "references")
@@ -584,6 +587,9 @@ def validate_guard(g: dict) -> dict:
         bad = [r for r in g.get("relations") or [] if r not in EDGE_RELATIONS]
         if bad:
             raise DecisionError(f"relations {bad} are not graph relations ({', '.join(EDGE_RELATIONS)})")
+    if kind in _SCOPED and g.get("scope", "product") not in ("product", "all"):
+        raise DecisionError("scope must be product (default: no tests, reference trees or copies) or all"
+                            if kind == "only_in" else "scope must be product (default: no test files) or all")
     if kind == "only_in":
         what = [k for k in ("calls", "sink", "pattern") if g.get(k)]
         if len(what) != 1:
@@ -601,8 +607,6 @@ def validate_guard(g: dict) -> dict:
                 raise DecisionError(f"pattern={g['pattern']!r} is not a valid regex: {exc}") from None
         if not g.get("allowed"):
             raise DecisionError("only_in needs allowed=PATH[,GLOB...] (the files the call may appear in)")
-        if g.get("scope", "product") not in ("product", "all"):
-            raise DecisionError("scope must be product (default: no tests, reference trees or copies) or all")
     elif kind == "no_edge":
         if not g.get("from") or not g.get("to"):
             raise DecisionError("no_edge needs from=GLOB and to=GLOB")
@@ -646,6 +650,8 @@ def parse_guard(spec: str, repo: Path, gid: str, *, status: str = "accepted") ->
         for k in many:
             g[k] = [rel_path(repo, v, k) for v in _list(kv.pop(k, ""))]
         g["relations"] = _list(kv.pop("relations", "")) or list(DEFAULT_EDGE_RELATIONS)
+        if kind in _SCOPED:
+            g["scope"] = kv.pop("scope", "product").strip().lower() or "product"
         if "imports" in g["relations"] and "imports_from" not in g["relations"]:
             g["relations"].append("imports_from")
     elif kind == "dependency":

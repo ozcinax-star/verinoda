@@ -2737,8 +2737,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         base: Annotated[OptStr, Field(description="A git revision (e.g. 'origin/main'): findings in files changed "
                                                   "since it are new/touched, the rest pre-existing.")] = None,
         changed_only: Annotated[bool, Field(description="The same against HEAD (the agent's own changes).")] = False,
-        refresh: Annotated[bool, Field(description="Update a stale index first when a no_edge guard needs "
-                                                   "the graph.")] = True,
+        refresh: Annotated[bool, Field(description="Update a stale index first when an edge guard "
+                                                   "(no_edge, layers, allow_edges, public) needs the graph.")] = True,
     ) -> dict[str, Any]:
         return emit(t.decision_check(base=base, changed_only=changed_only, refresh=refresh))
 

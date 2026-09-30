@@ -33,6 +33,8 @@ FILES = {
     "orders/__init__.py": "",
     "orders/api.py": "from orders._impl import run\n\n\ndef submit(x):\n    return run(x)\n",
     "orders/_impl.py": "def run(x):\n    return x\n",
+    # a test reaches into the module's internals: test code, out of public's and allow_edges' default scope
+    "tests/test_orders.py": "from orders._impl import run\n\n\ndef test_run():\n    assert run(1) == 1\n",
 }
 
 
@@ -125,6 +127,39 @@ def test_public_api_is_the_only_way_in(clean, broken):
     assert "orders/** is reached only through orders/api.py" in res["violations"][0]["why"]
 
 
+def test_test_code_is_out_of_public_and_allow_edges_unless_scope_all(clean):
+    spec = "public module=orders/** api=orders/api.py,orders/__init__.py"
+    res = _check(clean, spec)
+    assert res["exit"] == 0 and any("1 test file(s) outside the module are out of scope" in x
+                                    for x in res["ok"][0]["limits"])
+    res = _check(clean, spec + " scope=all")
+    assert res["exit"] == 1 and {v["at"] for v in res["violations"]} >= {"tests/test_orders.py:1"}
+    # from files that are all test code: nothing is checked by default, never ok
+    res = _check(clean, "allow_edges from=tests/** allowed=orders/api.py")
+    assert res["exit"] == 3 and "all test code" in res["unknown"][0]["why"]
+    res = _check(clean, "allow_edges from=tests/** allowed=orders/api.py scope=all")
+    assert res["exit"] == 1 and res["violations"][0]["at"] == "tests/test_orders.py:1"
+
+
+def test_api_files_outside_the_module_leave_it_unknown(clean):
+    res = _check(clean, "public module=orders/** api=app/core/service.py")
+    assert res["exit"] == 3 and not res["violations"]
+    assert "matches no file inside module=orders/**" in res["unknown"][0]["why"]
+    # one api file inside and one outside: checked, the stray one is a limit
+    res = _check(clean, "public module=orders/** api=orders/api.py,orders/__init__.py,app/core/service.py")
+    assert res["exit"] == 0 and any("1 api file(s) lie outside" in x for x in res["ok"][0]["limits"])
+
+
+def test_a_layer_left_with_no_file_of_its_own_is_unknown(broken):
+    res = _check(broken, "layers order=app/**,app/db/**")
+    assert res["exit"] == 3 and "layer 2=app/db/** has no file of its own" in res["unknown"][0]["why"]
+    res = _check(broken, "layers order=app/**,app/**")
+    assert res["exit"] == 3
+    # overlapping layers that each keep files: a file counts once, in the highest layer it matches
+    res = _check(broken, "layers order=app/ui/**,app/**")
+    assert res["exit"] == 1 and res["violations"][0]["at"] == "app/db/store.py:1"
+
+
 def test_tags_from_verinoda_toml_name_file_sets(broken):
     toml = broken / "verinoda.toml"
     toml.write_text('[architecture.tags]\nui = ["app/ui/**"]\ncore = "app/core/**"\ndata = ["app/db/**"]\n',
@@ -155,11 +190,13 @@ def test_specs_are_validated(tmp_path):
                       ("allow_edges from=app/**", "allowed=GLOB"),
                       ("public module=orders/**", "api=GLOB"),
                       ("layers order=../x,y", "inside the repository"),
-                      ("public module=a api=b relations=bogus", "not graph relations")):
+                      ("public module=a api=b relations=bogus", "not graph relations"),
+                      ("public module=a api=b scope=tests", "scope must be product")):
         with pytest.raises(dm.DecisionError, match=msg):
             dm.parse_guard(spec, tmp_path, "g1")
     g = dm.parse_guard("layers order=a/**,b/** relations=imports", tmp_path, "g1")
-    assert g["order"] == ["a/**", "b/**"] and g["relations"] == ["imports", "imports_from"]
+    assert g["order"] == ["a/**", "b/**"] and g["relations"] == ["imports", "imports_from"] and "scope" not in g
+    assert dm.parse_guard("public module=a api=b", tmp_path, "g1")["scope"] == "product"
 
 
 def test_architecture_tags_report_bad_entries(tmp_path):
@@ -186,7 +223,7 @@ def test_decide_check_fails_ci_on_a_layer_violation(broken, capsys):
         assert res["violations"][0]["at"] == "app/db/store.py:1"
         assert cli.main(["decide", "check", "--repo", str(repo)]) == 1
         out = capsys.readouterr().out
-        assert "VIOLATED ADR-0001 g1 layers layers app/ui/** > app/core/** > app/db/**" in out
+        assert "VIOLATED ADR-0001 g1 layers app/ui/** > app/core/** > app/db/**" in out
         assert "app/db/store.py:1 from app.ui.views import show" in out
         # review lists the record a change to a layer's file reaches
         text = (repo / "app/db/store.py").read_text(encoding="utf-8")
@@ -195,6 +232,30 @@ def test_decide_check_fails_ci_on_a_layer_violation(broken, capsys):
         (rec,) = reach["records"]
         assert any("matches order=app/db/**" in h["why"] and h["status"] == "statically_verified"
                    for h in rec["reached_by"]), rec
+    finally:
+        shutil.rmtree(repo / "docs")
+        (repo / "verinoda.toml").unlink()
+
+
+def test_review_names_a_rule_whose_tag_changes(clean):
+    repo = clean
+    tags = '[architecture.tags]\nui = ["app/ui/**"]\ndata = "app/db/**"\n'
+    (repo / "verinoda.toml").write_text(tags + '\n[decisions]\ndir = "docs/decisions"\n', encoding="utf-8")
+    st = open_store(repo)
+    try:
+        dm.record(st, repo, chosen="no ui from data", rationale="t", guards=["no_edge from=tag:data to=tag:ui"])
+    finally:
+        st.close()
+    try:
+        text = (repo / "verinoda.toml").read_text(encoding="utf-8")
+        diff = SimpleNamespace(rel="verinoda.toml", old=text, new=text.replace('"app/ui/**"', '"app/nothing/**"'))
+        (rec,) = decision_reach.reached(repo, [], [diff])["records"]
+        (hit,) = [h for h in rec["reached_by"] if "changes tag:ui" in h["why"]]
+        assert hit["at"] == "verinoda.toml:2" and hit["status"] == "statically_verified"
+        assert not any("changes tag:data" in h["why"] for h in rec["reached_by"])
+        # an edit that leaves the tags as they were reaches nothing through them
+        diff = SimpleNamespace(rel="verinoda.toml", old=text, new=text + "# a comment\n")
+        assert not decision_reach.reached(repo, [], [diff])["records"]
     finally:
         shutil.rmtree(repo / "docs")
         (repo / "verinoda.toml").unlink()

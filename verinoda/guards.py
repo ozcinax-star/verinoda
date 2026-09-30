@@ -1627,11 +1627,26 @@ def check_no_edge(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], 
     return _edge_hits(ctx, g, scan, from_files, lambda _fu, fv: "" if fv in to_files else None), scan, what
 
 
+def _tests_out(g: dict, files: set[str], side: str, scan: Scan) -> set[str]:
+    """The test files among ``files`` a guard leaves out of its sources (none with ``scope=all``), named in the
+    limits; when they are all of them, the guard would look at nothing: unknown."""
+    if g.get("scope") == "all":
+        return set()
+    tests = {f for f in files if is_test_file(f)}
+    if tests and tests == files:
+        scan.unknown.append(f"the {len(tests)} file(s) {side} are all test code, out of scope (scope=all "
+                            "includes them), so no edge was checked")
+    elif tests:
+        scan.limit(f"{len(tests)} test file(s) {side} are out of scope (scope=all includes them)")
+    return tests
+
+
 def check_layers(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
     """``layers order=TOP,...,BOTTOM``: an edge from a file of a lower layer to a file of a higher one breaks
-    it; a layer may use itself and every layer below it. A file two layers match is in the higher one."""
+    it; a layer may use itself and every layer below it. A file two layers match is in the higher one; a
+    layer left with no file of its own (a higher layer's glob covers all of its files) is unknown."""
     order = list(g["order"])
-    what = f"layers {' > '.join(order)} ({_rels(g)})"
+    what = f"{' > '.join(order)} ({_rels(g)})"
     scan, indexed = _edge_scan(ctx, "layers")
     if indexed is None:
         return [], scan, what
@@ -1640,9 +1655,14 @@ def check_layers(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], S
     for i, pat in enumerate(order):
         files = _side_files(ctx, indexed, f"layer {i + 1}", pat, scan)
         both += len(files & layer.keys())
-        for f in files:
-            layer.setdefault(f, i)
-        scan.files[f"layer_{i + 1}_files"] = len(files)
+        own = files - layer.keys()
+        for f in own:
+            layer[f] = i
+        # the files the layer holds once each file is in the highest layer it matches
+        scan.files[f"layer_{i + 1}_files"] = len(own)
+        if files and not own:
+            scan.unknown.append(f"layer {i + 1}={pat} has no file of its own: each of the {len(files)} file(s) it "
+                                "matches is in a higher layer, so no edge could break the order at it")
     if both:
         scan.limit(f"{both} file(s) match more than one layer; each counts in the highest one it matches")
     if scan.unknown:
@@ -1658,7 +1678,8 @@ def check_layers(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], S
 
 def check_allow_edges(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
     """``allow_edges from=GLOB allowed=...``: the from files may use each other and the allowed files; an
-    edge to any other file of the index breaks it (a package outside the project is no node: not seen)."""
+    edge to any other file of the index breaks it (a package outside the project is no node: not seen). Test
+    files among the from files are left out unless ``scope=all``, as for ``only_in``."""
     allowed = list(g["allowed"])
     what = f"{g['from']} uses only {', '.join(allowed)} ({_rels(g)})"
     scan, indexed = _edge_scan(ctx, "allow_edges")
@@ -1666,6 +1687,7 @@ def check_allow_edges(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str
         return [], scan, what
     from_files = _side_files(ctx, indexed, "from", g["from"], scan)
     ok_files = set(from_files)
+    from_files -= _tests_out(g, from_files, "from", scan)
     for pat in allowed:
         ok_files |= _side_files(ctx, indexed, "allowed", pat, scan, required=False)
     scan.files.update({"from_files": len(from_files), "allowed_files": len(ok_files - from_files)})
@@ -1678,7 +1700,9 @@ def check_allow_edges(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str
 
 def check_public(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
     """``public module=GLOB api=...``: an edge from a file outside the module to a file inside it that is not
-    one of its public (api) files breaks it; the module's own files use each other freely."""
+    one of its public (api) files breaks it; the module's own files use each other freely. Test files outside
+    the module are left out unless ``scope=all``, as for ``only_in``. Api globs that match no file inside the
+    module leave nothing public: unknown, like a glob that matches nothing."""
     api = list(g["api"])
     what = f"{g['module']} only through {', '.join(api)} ({_rels(g)})"
     scan, indexed = _edge_scan(ctx, "public")
@@ -1688,15 +1712,22 @@ def check_public(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], S
     api_files: set[str] = set()
     for pat in api:
         api_files |= _side_files(ctx, indexed, "api", pat, scan)
-    outside = api_files - module
-    if outside:
-        scan.limit(f"{len(outside)} api file(s) lie outside module={g['module']}: {', '.join(sorted(outside)[:3])}")
+    stray = api_files - module
+    if stray and module:
+        shown = ", ".join(sorted(stray)[:3])
+        if api_files & module:
+            scan.limit(f"{len(stray)} api file(s) lie outside module={g['module']}: {shown}")
+        else:
+            scan.unknown.append(f"api={', '.join(api)} matches no file inside module={g['module']} (only {shown}), "
+                                "so the module would have no public file; no edge was checked")
+    outside = indexed - module
+    outside -= _tests_out(g, outside, "outside the module", scan)
     scan.files.update({"module_files": len(module), "api_files": len(api_files & module),
-                       "outside_files": len(indexed - module)})
+                       "outside_files": len(outside)})
     if scan.unknown:
         return [], scan, what
     rule = f"{g['module']} is reached only through {', '.join(api)}"
-    return _edge_hits(ctx, g, scan, indexed - module,
+    return _edge_hits(ctx, g, scan, outside,
                       lambda _fu, fv: rule if fv in module and fv not in api_files else None), scan, what
 
 
@@ -2241,9 +2272,9 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
     ``decisions_dir``: the records' folder (``--decisions-dir``) instead of the configured one.
 
     ``graph_stale``: why ``graph`` may be older than the working tree (its refresh failed, or another build
-    was still running): every edge guard (no_edge, layers, allow_edges, public) is then ``unknown`` (a violation it still finds stands, as its
-    line is re-read), and without a violation ``exit`` is 2, as for an error: a gate never passes on edges
-    it could not read.
+    was still running): every edge guard (no_edge, layers, allow_edges, public) is then ``unknown`` (a
+    violation it still finds stands, as its line is re-read), and without a violation ``exit`` is 2, as for
+    an error: a gate never passes on edges it could not read.
     """
     from verinoda import decisions as dm
     from verinoda.snapshot import list_files
