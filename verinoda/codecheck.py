@@ -4140,27 +4140,55 @@ def _api_docs(target: str, res: dict, src: dict | None) -> dict:
     from verinoda import libdocs
 
     if res.get("language") == "Java":
-        return {"quotes": [], "notes": ["class files carry no Javadoc; docs are not read for Java classes"]}
+        return libdocs.empty("class files", "class files carry no Javadoc; docs are not read for Java classes")
     if src is None:
-        return {"quotes": [], "notes": ["no source file for the definition; no docs to quote"]}
+        return libdocs.empty("source files", "no source file for the definition; no docs to quote")
     ck, path, line, names = src["ck"], src.get("path"), src.get("line"), src.get("names")
+    doc = None
     if path is None and src.get("std"):
-        path, names = _std_source(ck.env, src["std"])
+        path, names, doc = _std_source(ck.env, src["std"])
+    if path is None and str(res.get("source") or "").startswith("installed") and res.get("at"):
+        at = Path(str(res["at"]))   # a compiled module: its display path is the installed file
+        path = at if at.is_absolute() and at.is_file() else None
     path = Path(path) if path else None
     dist = ck.env.dist_info_of(path) if path is not None and ck.origin(path) == "installed" else None
-    origin = "the standard library" if res.get("source") == "stdlib" else         "this project" if res.get("source") == "project" else "not an installed distribution"
+    source = res.get("source")
+    origin = ("the standard library" if source == "stdlib" else "this project" if source == "project"
+              else "not an installed distribution")
     return libdocs.build(target, src_path=path, src_line=line, src_names=names, dist=dist, disp=ck.disp,
-                         top_level=src.get("top", False), origin=origin)
+                         top_level=src.get("top", False), origin=origin, doc=doc)
 
 
-def _std_source(envinfo: cenv.EnvInfo, full: str) -> tuple[Path | None, list[str] | None]:
-    """(source file of the longest standard-library module prefix of ``full``, the rest of the name)."""
+def _std_source(envinfo: cenv.EnvInfo, full: str) -> tuple[Path | None, list[str] | None, dict | None]:
+    """(source file, the rest of the name, its docstring) for a standard-library name: the longest module
+    prefix of ``full`` with a source file, following up to three ``from x import name`` re-exports
+    (``json.JSONDecoder`` is defined in ``json.decoder``)."""
+    from verinoda import libdocs
+
     parts = full.split(".")
     for i in range(len(parts), 0, -1):
-        info = envinfo.oracle().ask("module", name=".".join(parts[:i]))
-        if info.get("ok") and info.get("file"):
-            return Path(info["file"]), parts[i:]
-    return None, None
+        mod = ".".join(parts[:i])
+        info = envinfo.oracle().ask("module", name=mod)
+        if not (info.get("ok") and info.get("file")):
+            continue
+        path, rest = Path(info["file"]), parts[i:]
+        doc = libdocs.docstring(path, None, rest) if path.suffix == ".py" else None
+        for _ in range(3):
+            if not doc or "imported_from" not in doc:
+                break
+            m, level = doc["imported_from"]
+            if level:
+                pkg = mod if path.name == "__init__.py" else mod.rpartition(".")[0]
+                for _ in range(level - 1):
+                    pkg = pkg.rpartition(".")[0]
+                m = f"{pkg}.{m}" if m else pkg
+            nxt = envinfo.oracle().ask("module", name=m)
+            if not (nxt.get("ok") and nxt.get("file")) or not str(nxt["file"]).endswith(".py"):
+                break
+            mod, path = m, Path(nxt["file"])
+            doc = libdocs.docstring(path, None, rest)
+        return path, rest, doc
+    return None, None, None
 
 
 def _api(repo: Path, target: str, *, env: str | None, private: bool, trust_env: bool) -> dict:

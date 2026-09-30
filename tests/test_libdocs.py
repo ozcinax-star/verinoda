@@ -95,7 +95,8 @@ def test_class_docs_quote_the_installed_docstring_and_the_readme_section_naming_
     doc = _quote(res, "docstring")
     start = _line(LIB, '    """A client')
     assert doc["at"].endswith(f"site-packages/fancylib/__init__.py:{start}-{start + 3}")
-    assert doc["text"].startswith("A client that retries.") and "``retries``" in doc["text"]
+    assert doc["text"].startswith("\"\"\"A client that retries.") and "``retries``" in doc["text"]
+    assert doc["text"].endswith('"""') and "\n    " not in doc["text"]   # the source lines, dedented
     readme = _quote(res, "readme")
     assert readme["heading"] == "Using Client" and readme["text"].splitlines()[-1] == "Build a `Client` and call `get`."
     assert readme["at"].endswith(f"fancylib-2.1.0.dist-info/METADATA:{_line(README, '## Using')}-"
@@ -104,10 +105,10 @@ def test_class_docs_quote_the_installed_docstring_and_the_readme_section_naming_
 
 def test_a_function_found_by_its_text_and_a_package_by_its_opening_section(venv_proj):
     fn = codecheck.api(venv_proj, "fancylib.real_fn", docs=True)
-    assert _quote(fn, "docstring")["text"] == "Call once, retry on failure."
+    assert _quote(fn, "docstring")["text"] == "\"\"\"Call once, retry on failure.\"\"\""
     assert _quote(fn, "readme")["heading"] == "Other"          # named in the text, not in a heading
     top = codecheck.api(venv_proj, "fancylib", docs=True)
-    assert _quote(top, "docstring")["text"] == "Fancylib: retries made simple."
+    assert _quote(top, "docstring")["text"] == "\"\"\"Fancylib: retries made simple.\"\"\""
     assert _quote(top, "readme")["heading"] == "fancylib"
 
 
@@ -146,8 +147,91 @@ def test_long_docs_are_capped_and_marked(tmp_path):
     body = "\n".join(f"line {i}" for i in range(200))
     src = _write(tmp_path, "m.py", f'"""{body}"""\n')
     doc = libdocs.docstring(src)
-    assert doc["truncated"] and len(doc["text"].splitlines()) == libdocs.MAX_LINES
-    assert libdocs.docstring(_write(tmp_path, "bad.py", "def (:\n")) is None
+    assert doc["truncated"] and len(doc["text"].splitlines()) == libdocs.MAX_LINES and doc["end"] == libdocs.MAX_LINES
+    assert libdocs.docstring(_write(tmp_path, "bad.py", "def (:\n")) == {"missing": "the file could not be parsed as "
+                                                                                    "Python"}
+    wide = libdocs.docstring(_write(tmp_path, "w.py", '"""' + "\n".join("x" * 990 for _ in range(10)) + '"""\n'))
+    assert wide["truncated"] and wide["end"] == 4 and len(wide["text"].splitlines()) == 4   # whole lines only
+    readme = _write(tmp_path, "r-1.dist-info/METADATA", "Name: r\n\n# Widget\n" + "Widget " + "a" * 990 + "\n"
+                    + ("b" * 997 + "\n") * 9)
+    sec = libdocs.readme_section(readme.parent, ["r.Widget", "Widget"])
+    assert sec["truncated"] and sec["end"] - sec["start"] + 1 == len(sec["text"].splitlines()) == 4
+
+
+def test_quotes_sit_on_the_lines_they_cite(tmp_path):
+    # a form feed or a Unicode line separator is not a line break of the file
+    readme = _write(tmp_path, "y-1.dist-info/METADATA", "Name: y\n\nIntro \x0c page\u2028more\n\n## Gadget\n\n"
+                                                        "use y.Gadget here\n")
+    sec = libdocs.readme_section(readme.parent, ["y.Gadget", "Gadget"])
+    lines = readme.read_text(encoding="utf-8").split("\n")
+    assert sec["heading"] == "Gadget" and lines[sec["start"] - 1] == "## Gadget" and \
+        lines[sec["end"] - 1] == "use y.Gadget here"
+    # escapes stay as written: the quote is the source, not the evaluated string
+    src = _write(tmp_path, "esc.py", 'def f():\n    """Match \\d+ and \\x41.\n\n    Tab\\there.\n    """\n')
+    doc = libdocs.docstring(src, 1)
+    assert doc["text"] == '"""Match \\d+ and \\x41.\n\nTab\\there.\n"""' and (doc["start"], doc["end"]) == (2, 5)
+
+
+def test_what_cannot_be_quoted_is_said_precisely(tmp_path):
+    src = _write(tmp_path, "al.py", "from typing import Protocol, overload\nimport os\n\n\nclass A(Protocol):\n"
+                                    "    @overload\n    def get(self, x: int) -> int: ...\n    @overload\n"
+                                    "    def get(self, x: str) -> str: ...\n\n\nclass B:\n    def get(self, x):\n"
+                                    "        \"\"\"B.get: unrelated.\"\"\"\n\n\nalias = B\n")
+    assert libdocs.docstring(src, 6) == {"missing": "the definition has no docstring"}   # not B.get's
+    assert "an alias or a value" in libdocs.docstring(src, 17)["missing"]
+    assert "a re-export" in libdocs.docstring(src, 2)["missing"]
+    miss = libdocs.docstring(src, None, ["Protocol"])
+    assert miss["imported_from"] == ("typing", 0) and "not followed" in miss["missing"]
+
+
+def test_the_standard_library_re_export_is_followed(tmp_path):
+    res = codecheck.api(tmp_path, "json.JSONDecoder", env="none", docs=True)
+    doc = _quote(res, "docstring")
+    assert "json/decoder.py:" in doc["at"] and "Simple JSON" in doc["text"]
+    codecheck.reset_caches()
+
+
+def test_readme_choice_skips_urls_changelogs_and_logo_preambles(tmp_path):
+    meta = _write(tmp_path, "click-8.dist-info/METADATA",
+                  "Name: click\n\n<div><img src=\"https://example.org/pallets/click/logo.png\"></div>\n\n"
+                  "# Click\n\nClick is a package for creating command line interfaces.\n\n## A Simple Example\n\n"
+                  "```python\nimport click\n\n@click.option(\"--n\")\ndef hello(n): ...\n```\n\n"
+                  "## Changes\n\n### 8.0\n\n- `click.echo` got faster\n")
+    top = libdocs.readme_section(meta.parent, ["click"], top_level=True)
+    assert top["heading"] == "Click" and "command line interfaces" in top["text"]
+    assert libdocs.readme_section(meta.parent, ["click.option", "option"])["heading"] == "A Simple Example"
+    assert libdocs.readme_section(meta.parent, ["click.echo", "echo"]) is None     # only in the changelog
+    old = _write(tmp_path, "old-1.0.egg-info/PKG-INFO",
+                 "Metadata-Version: 1.1\nName: old\nDescription: Old\n        ===\n        \n        Use `Foo()` here\n"
+                 "        \nPlatform: UNKNOWN\n")
+    sec = libdocs.readme_section(old.parent, ["old.Foo", "Foo"])
+    assert sec["text"] == "Old\n===\n\nUse `Foo()` here" and (sec["start"], sec["end"]) == (3, 6)
+
+
+def test_a_long_heading_line_does_not_backtrack(tmp_path):
+    import time
+
+    meta = _write(tmp_path, "h-1.dist-info/METADATA", "Name: h\n\n# a" + " " * 20000 + "x\n\nWidget()\n")
+    t = time.perf_counter()
+    libdocs.readme_section(meta.parent, ["h.Widget", "Widget"])
+    assert time.perf_counter() - t < 1
+
+
+def test_a_namespace_package_file_belongs_to_the_distribution_that_lists_it(tmp_path):
+    from verinoda import codecheck_env as cenv
+
+    site = tmp_path / "site"
+    _write(site, "nspkg/api/__init__.py", "")
+    _write(site, "nspkg/sdk/__init__.py", "")
+    _write(site, "ns_pkg_api-1.0.dist-info/METADATA", "Name: ns-pkg-api\nVersion: 1.0\n")
+    _write(site, "ns_pkg_api-1.0.dist-info/RECORD", "nspkg/api/__init__.py,,\n")
+    _write(site, "ns_pkg_sdk-2.0.dist-info/METADATA", "Name: ns-pkg-sdk\nVersion: 2.0\n")
+    _write(site, "ns_pkg_sdk-2.0.dist-info/RECORD", "nspkg/sdk/__init__.py,,\n")
+    dists, top = cenv._dists([site])
+    env = cenv.EnvInfo.__new__(cenv.EnvInfo)
+    env.site_dirs, env.dists, env.top_level = [site], dists, top
+    assert env.dist_info_of(site / "nspkg" / "sdk" / "__init__.py")[:2] == ("ns-pkg-sdk", "2.0")
+    assert env.dist_of(site / "nspkg" / "api" / "__init__.py") == ("ns-pkg-api", "1.0")
 
 
 def test_an_overloaded_function_quotes_its_implementation_docstring(tmp_path):
@@ -155,7 +239,7 @@ def test_an_overloaded_function_quotes_its_implementation_docstring(tmp_path):
                                    "@overload\ndef f(x: str) -> str: ...\ndef f(x):\n    \"\"\"The real one.\"\"\"\n"
                                    "    return x\n")
     doc = libdocs.docstring(src, 4)
-    assert doc["text"] == "The real one." and doc["start"] == 9
+    assert doc["text"] == "\"\"\"The real one.\"\"\"" and doc["start"] == 9
 
 
 def test_a_bare_name_in_prose_is_not_a_mention_but_code_is(tmp_path):
