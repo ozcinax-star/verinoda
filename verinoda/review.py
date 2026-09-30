@@ -24,7 +24,8 @@ the staged changes, or a planned change (``targets`` + ``change``):
    run of the selected tests (``run_tests``) through :mod:`verinoda.experiments`, and the changed lines a
    coverage report (lcov, Cobertura, JaCoCo, coverage.py JSON: :mod:`verinoda.coverage_import`) shows no test
    ran, in any language.
-5. **Unknowns** with a next step, and a **read_first** list packed to ``max_chars``.
+5. **Unknowns** with a next step, and a **read_first** list packed to ``max_chars``: changed code, call
+   sites, then concern lines, each kind hottest first (:func:`verinoda.hotspots.rank`).
 
 Honesty rules: a dependent is "possibly affected"; a finding never says "safe" or "no impact" - an empty
 concern reads "no finding from rules R"; mechanical facts (a call bound through imports on a changed
@@ -48,7 +49,7 @@ from collections import deque
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
-from verinoda import anchors, testcode
+from verinoda import anchors, hotspots, testcode
 from verinoda import review_rules as rr
 from verinoda.architecture_map import CONFIG_FILE_RE, ENV_PATTERNS, entry_reasons
 from verinoda.testcode import is_test_or_support_file as _is_test
@@ -111,6 +112,9 @@ LIMITS = [
     "unchanged file appears only after `verinoda update`",
     NO_LINE_COVERAGE,
     "findings are not stored as claims; the review record is stored in the analyses table",
+    "read_first ranks each kind by the hotspot score of the function holding a range's changed definition, call "
+    "or finding line (its changes in the last "
+    f"{hotspots.REVIEW_COMMITS} commits touching the file x cyclomatic complexity): a heuristic order",
 ]
 
 
@@ -4607,33 +4611,56 @@ def _observed_tests(ctx: _Ctx, changes: list[Change]) -> dict | None:
 
 # -- read_first ----------------------------------------------------------------------------------------
 
+def _hotspots_of(ctx: _Ctx, ranges: list[list]) -> list[dict | None] | None:
+    """The hotspot (:func:`verinoda.hotspots.rank`) of the function holding each new-side range's line of interest
+    (a changed definition's first line, the call, the finding's line); None when the history could not be read."""
+    new = [i for i, r in enumerate(ranges) if r[3] == "new"]
+    texts = {}
+    for i in new:
+        rel = ranges[i][0]
+        if rel not in texts and (t := ctx.text(rel, "new")) is not None:
+            texts[rel] = t
+    out: list[dict | None] = [None] * len(ranges)
+    if not texts:
+        return out
+    got = hotspots.rank(ctx.repo, [(ranges[i][0], ranges[i][6]) for i in new], texts)
+    if got is None:
+        return None
+    for i, h in zip(new, got):
+        out[i] = h
+    return out
+
+
 def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concerns: dict[str, list[dict]],
                 max_chars: int) -> tuple[list[dict], dict]:
-    items: list[tuple[str, int, int, str, str]] = []   # (file, start, end, side, why)
+    # (file, start, end, side, why, kind rank, the line whose function ranks the range)
+    items: list[tuple[str, int, int, str, str, int, int]] = []
     renamed = {(c.file, c.renamed_from) for c in changes if c.renamed_from}
     for c in changes:
         if c.renamed_from and c.lines:   # a rename: the new header, not the unchanged body twice
             d = c.def_line or c.lines[0]
             items.append((c.file, max(c.lines[0], d - 1), d + 1, "new", f"renamed from {_last(c.renamed_from)} "
-                          "(same body)"))
+                          "(same body)", 0, d))
             continue
         if c.kind == "removed" and (c.file, c.qual) in renamed:
             continue
         if c.kind in ("added", "body", "signature", "module_statement", "config_key", "file_only") and c.lines:
             a, b = c.lines
+            focus = c.def_line or a
             if b - a > 60 and c.new_changed:   # a long definition: the changed lines with context
                 a, b = max(a, min(c.new_changed) - 3), min(b, max(c.new_changed) + 3)
             why = f"changed ({c.kind})"
             if b - a > 80:
                 b, why = a + 80, why + ", first 80 lines"
-            items.append((c.file, a, b, "new", why))
+            items.append((c.file, a, b, "new", why, 0, focus))
         elif c.kind == "removed" and c.old_lines:
-            items.append((c.file, c.old_lines[0], c.old_lines[1], "old", "removed (base version)"))
+            items.append((c.file, c.old_lines[0], c.old_lines[1], "old", "removed (base version)", 0,
+                          c.old_lines[0]))
     for d in dependents:
         if d.get("distance") == 1 and d.get("call_at"):
             f, _, ln = d["call_at"].rpartition(":")
             if ln.isdigit():
-                items.append((f, max(1, int(ln) - 3), int(ln) + 3, "new", f"call site of {d['to']}"))
+                items.append((f, max(1, int(ln) - 3), int(ln) + 3, "new", f"call site of {d['to']}", 1, int(ln)))
     order = sorted((f for fs in concerns.values() for f in fs), key=lambda f: rr.rank(f["status"]))
     for f in order:
         for at in [f["at"], *f.get("evidence_at", [])[:2]]:
@@ -4641,18 +4668,24 @@ def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concer
                 continue
             rel, ln = at.rsplit(":", 1)[0], int(at.rsplit(":", 1)[1])
             side = "old" if f.get("side") == "base" and at == f["at"] else "new"
-            items.append((rel, max(1, ln - 1), ln + 1, side, f"{f['concern']}: {f['rule']}"))
+            items.append((rel, max(1, ln - 1), ln + 1, side, f"{f['concern']}: {f['rule']}", 2, ln))
     # merge overlapping ranges of one file and side, keep the first reason
     merged: list[list] = []
-    for rel, a, b, side, why in items:
+    for rel, a, b, side, why, tier, focus in items:
         for m in merged:
             if m[0] == rel and m[3] == side and a <= m[2] + 1 and b >= m[1] - 1:
                 m[1], m[2] = min(m[1], a), max(m[2], b)
                 break
         else:
-            merged.append([rel, a, b, side, why])
+            merged.append([rel, a, b, side, why, tier, focus])
+    # changed code, then call sites, then concern lines; within each, the hotter function first
+    hot = _hotspots_of(ctx, merged)
+    unranked = hot is None
+    hot = hot or [None] * len(merged)
+    order = sorted(range(len(merged)), key=lambda i: (merged[i][5], -(hot[i]["score"] if hot[i] else 0), i))
     out, more, used = [], [], 0
-    for rel, a, b, side, why in merged:
+    for i in order:
+        rel, a, b, side, why, _tier, _focus = merged[i]
         lines = ctx.lines(rel, side)
         b = min(b, len(lines))
         if a > b:
@@ -4660,13 +4693,15 @@ def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concer
         chars = sum(len(x) + 1 for x in lines[a - 1:b])
         at = f"{rel}:{a}-{b}" if b > a else f"{rel}:{a}"
         rec = {"at": at + (" (base)" if side == "old" else ""), "why": why, "chars": chars}
+        if hot[i]:
+            rec["hotspot"] = hot[i]
         if used + chars <= max_chars:
             out.append(rec)
             used += chars
         else:
             more.append(rec)
     return out, {"max_chars": max_chars, "used_chars": used, "truncated": bool(more),
-                 "more": more[:20], "more_total": len(more)}
+                 "more": more[:20], "more_total": len(more), **({"unranked": True} if unranked else {})}
 
 
 # -- the review --------------------------------------------------------------------------------------------
@@ -4785,6 +4820,9 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     note = _graph_note(ctx, cited, changes)
     unknown += _graph_unknown(note)
     read_first, budget = _read_first(ctx, changes, dependents, shown, max_chars)
+    if budget.pop("unranked", False):
+        health_notes = [*health_notes, "read_first hotspot order (the change history could not be read: no git "
+                        "history, or the git log failed or timed out): the ranges keep the order they were found in"]
     from verinoda import decision_reach
 
     reach = decision_reach.reached(repo, changes, diffs)
