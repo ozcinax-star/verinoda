@@ -258,9 +258,37 @@ def _hotspots(v: dict, cap: int) -> list[str]:
     return out
 
 
+def _sides(v: dict, cap: int) -> list[str]:
+    s = v.get("summary", {})
+    if v.get("note"):
+        return [v["note"]]
+    out = [f"{s.get('client_only_symbols', 0)} client-only symbols "
+           f"({', '.join(f'{k} {n}' for k, n in s.get('client_only_by_basis', {}).items()) or 'none'}); "
+           f"{s.get('server_entry_points', 0)} server entry points searched "
+           f"({s.get('client_entry_points_left_out', 0)} client ones left out)"]
+    if v.get("unknown"):
+        return out + [f"unknown: {v['unknown']}"]
+    claims = v.get("claims", [])
+    total = len(claims) + v.get("claims_not_shown", 0)
+    out.append(f"{total} paths from server code to client-only code")
+    n = max(3, (cap - 4) // 2)
+    for c in claims[:n]:
+        out.append(f"   [{c['status']}] {c['subject']} at {c['at']} (client-only: {c['client_only']['at']})")
+        out.append("     " + " -> ".join([c["entry"]["symbol"]] + [h["to"] for h in c["path"]]))
+    out += _more(min(n, len(claims)), total, "paths (--json has every hop with its line)")
+    crossings = v.get("unreached_crossings", [])
+    if crossings:
+        out.append(f"{s.get('unreached_crossings', len(crossings))} edges from common code into client-only code "
+                   "that no server entry point reaches:")
+        m = max(1, cap - len(out) - 1)
+        out += [f"   {c['from']} {c['relation']} {c['to']} at {c['at']}" for c in crossings[:m]]
+        out += _more(min(m, len(crossings)), s.get("unreached_crossings", len(crossings)), "edges")
+    return out
+
+
 RENDERERS = {"hierarchy": _hierarchy, "dependencies": _dependencies, "dataflow": _dataflow,
              "config": _config, "tests": _tests, "history": _history, "impact": _impact, "cycles": _cycles,
-             "dead": _dead, "hotspots": _hotspots}
+             "dead": _dead, "hotspots": _hotspots, "sides": _sides}
 
 
 def render(res: dict, cap: int) -> str:
