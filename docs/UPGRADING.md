@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D102)
+## Upgrading from 0.3.2 (D60-D103)
 
 ### D63: Running a project's own tests safely
 
@@ -454,6 +454,13 @@ call to the missing function `ns:do_`. No MCP tool was added; the tool counts in
 `net.minecraft.client` classes) that the mod's server-side entry points reach, each path a `strong_inference`
 claim at most (`weak_inference` through an inferred edge) with every hop at `file:line`. Plain `verinoda map` is unchanged. No new MCP tool: the tool counts in
 UPGRADING, README and ARCHITECTURE do not change.
+
+### D103: Violation baseline and ratchet
+
+New: `verinoda decide baseline [--record --said "..." [--replace] | --shrink]` keeps a committed list of known
+violations (`baseline.json` in the decisions folder). With a baseline, `decide check` fails only on violations it
+does not list; listed ones are `baselined`, fixed entries `baseline_fixed`. Without a `baseline.json` nothing
+changes. The MCP tool count is unchanged.
 
 ### D60-D62
 

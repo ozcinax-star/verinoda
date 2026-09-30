@@ -81,7 +81,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 7.2 | **Violation baseline and ratchet** | Known violations recorded; only new ones fail; the baseline shrinks as they are fixed | ArchUnit FreezingArchRule, dependency-cruiser | a new violation fails while old ones pass |
 | 7.3 | **Ask before writing a dependency** | Check a proposed dependency against the rules before the code exists | Sonargraph MCP `check_proposed_dependency` | an MCP call answers allowed / forbidden with the rule |
 | 7.4 | **What-if refactoring** | Simulate moving or renaming modules and re-check rules and cycles without editing | Sonargraph, Lattix | a simulated move reports the violations it would add or remove |
 | 7.5 | **DSM view and C4 model check** | Dependency structure matrix; a C4 model compared with the real graph | Lattix, NDepend, IntelliJ, Structurizr | the matrix in `ui`; model edges without code edges listed |

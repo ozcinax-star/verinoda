@@ -7963,6 +7963,57 @@ constructor naming `MinecraftClient`: a `weak_inference` path), `test_a_kotlin_a
 (an expression-bodied client function does not make the next member client-only).
 `tests/test_mcp.py::test_map_view_equals_core` covers `sides` through MCP.
 
+## 76. Violation baseline and ratchet (D103, 2026-10-01)
+
+### 76.1 Why
+
+A rule adopted on old code (a layering rule, say) has violations nobody will fix today. `decide check` then fails
+until every one is fixed or waived site by site, so the rule is not enforced at all. `--changed` / `--base` only
+say whether a finding's file changed; they forget nothing and remember nothing. A baseline records the known
+violations once, lets CI fail only on new ones, and shrinks as the old ones are fixed (ArchUnit's freezing rules,
+dependency-cruiser's known-violations file).
+
+### 76.2 Decisions
+
+- **`verinoda decide baseline`** shows the state (entries, still found, fixed, new); `--record --said "..."`
+  writes it from every current VIOLATED and POSSIBLE site (pre-existing ones included); `--shrink` removes the
+  fixed entries. Not an MCP action: accepting violations is the user's call, made from the command line; the
+  MCP `decision_check` returns the new keys.
+- **Where.** `baseline.json` in the decisions folder, next to the records, so it is committed and CI reads the
+  same list. JSON with `verinoda-baseline: 1`, the date, the user's words and the entries.
+- **Keyed by what the site is, not where.** An entry is (decision, guard, file, the code line's text with white
+  space collapsed), counted per key. A line that moves because of an edit above it keeps its entry; a line whose
+  code changes, or a second copy of a baselined line, is a new violation. A file-level finding keys on its file.
+- **`decide check` with a baseline.** A finding the baseline lists moves to `baselined` (in file order, so the
+  first occurrences are the counted ones): still a violation with its status and line, just not failing; the
+  text output says so. An entry nothing matched is `baseline_fixed`, and `next_step` names
+  `decide baseline --shrink`. Exit codes are computed after, so new violations still exit 1.
+- **The ratchet only turns one way.** `--record` needs `--said` (the user's own words), refuses a stale graph
+  (edge guards would be missing), and refuses to replace a baseline that would gain an entry unless `--replace`
+  is given. `--shrink` never adds and needs no words, but removes nothing while any check was incomplete (an
+  entry of a guard that did not run is not fixed).
+- **Never passes on a list it could not read.** A baseline that is not JSON, not format 1, or has an entry
+  without decision, guard and file is an `unknown` in `decide check` (exit 3 at best), and nothing is moved.
+
+### 76.3 Measured
+
+Tests only: a two-layer project with two known upward edges (the import and its call site).
+
+### 76.4 Not done
+
+- The key is the code line's text: two identical lines in one file are told apart by count, not by place, so
+  after a reorder the first ones found are the baselined ones.
+- A baseline does not expire; waivers (`decide waive --until`) are the per-site, dated form.
+- Not recorded in the decision log of the store: the committed file (with the user's words) is the record.
+
+### 76.5 Tests
+
+`tests/test_baseline.py`: old violations pass and new ones fail; a line moved by an edit above keeps its entry; the
+baseline does not grow without `--replace`; fixed entries are reported, then shrunk, and a violation that comes
+back after a shrink fails again; a repeated line and a changed line are new; an unreadable, wrong-format or
+incomplete baseline never passes; the CLI (state, `--record` without `--said` refused, `--record`, `check` with
+`baselined`, `--shrink`, `--shrink` with `--record` refused), in a project path with a space and non-ASCII.
+
 ## Sources
 
 - **Retrieval:**
