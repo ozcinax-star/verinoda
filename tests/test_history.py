@@ -443,3 +443,55 @@ def test_symbol_history_cli_and_mcp(sym_repo, capsys):
 def test_symbol_history_outside_git(tmp_path):
     (tmp_path / "a.py").write_bytes(b"x = 1\n")
     assert history.symbol_history(tmp_path, None, "a.py:1-1")["status"] == "not_git"
+
+
+def test_review_round_edges(sym_repo, tmp_path):
+    r, shas = sym_repo
+    work = tmp_path / "top"
+    _git(tmp_path, "clone", "-q", str(r), str(work))
+    # only people trailers are dropped; "Reason:" and "Note:" lines are the reason
+    (work / "pricing.py").write_bytes(PRICING_3.replace("return 1", "return 2").encode())
+    _git(work, "commit", "-q", "-am", "Change other\n\nReason: the API v2 contract.\nNote: see RFC-12\n\n"
+                                      "Signed-off-by: Bob <b@x>", author="Bob")
+    got = history.symbol_history(work, None, "pricing.py:5-6")
+    assert got["commits"][0]["body"] == "Reason: the API v2 contract.\nNote: see RFC-12"
+    # a range past the end, a path outside the project, an absolute path inside it
+    with pytest.raises(ValueError, match="has 6 lines"):
+        history.symbol_history(work, None, "pricing.py:50-60")
+    with pytest.raises(ValueError, match="outside the project"):
+        history.symbol_history(work, None, "../x.py:1-2")
+    absolute = history.symbol_history(work, None, f"{(work / 'pricing.py').as_posix()}:1-2")
+    assert absolute["file"] == "pricing.py" and absolute["status"] == "found"
+    # a file deleted in the working tree is read at HEAD, not taken for a name
+    (work / "pricing.py").unlink()
+    gone = history.symbol_history(work, None, "pricing.py:1-2")
+    assert gone["status"] == "found" and "not in the working tree" in gone["note"]
+    _git(work, "checkout", "--", "pricing.py")
+    # a stale index is not used for line numbers
+    from verinoda import index, workflow
+    from verinoda.store import open_store
+
+    workflow.init(work)
+    st = open_store(work)
+    try:
+        workflow.scan(st, work)
+    finally:
+        st.close()
+    (work / "pricing.py").write_bytes(("import math\n\n\n" + PRICING_3).encode())
+    stale = history.symbol_history(work, index.load(work), "other", stale=["pricing.py"])
+    assert stale["status"] == "stale_index" and "commits" not in stale
+    # a shallow clone says so in text
+    shallow = tmp_path / "shallow"
+    _git(tmp_path, "clone", "-q", "--depth", "1", (r.as_uri()), str(shallow))
+    assert cli.main(["history", "symbol", "pricing.py:1-2", "--repo", str(shallow)]) == 0
+
+
+def test_mcp_refuses_an_empty_symbol(sym_repo):
+    from verinoda.mcp.server import AtlasTools
+
+    r, _ = sym_repo
+    (r / ".verinoda").mkdir(exist_ok=True)
+    try:
+        assert AtlasTools(r).history_search(symbol="  ")["error"] == "invalid_argument"
+    finally:
+        shutil.rmtree(r / ".verinoda")

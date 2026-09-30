@@ -1026,6 +1026,8 @@ class AtlasTools:
                 raise ValueError(f"{', '.join(sorted(given - own))}: not used with {mode} (history_search has "
                                  "four modes: symbol, text (+regex), base (+head), or the commit filters; path goes "
                                  "with the last three)")
+            if isinstance(symbol, str) and symbol and not symbol.strip():
+                raise ValueError("symbol is empty: pass a name or path:A-B")
             if _opt_text(symbol):
                 t = _opt_text(symbol)
                 g = stale = None

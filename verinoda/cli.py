@@ -1127,7 +1127,7 @@ def cmd_history(args) -> int:
         from verinoda import freshness, index
 
         g = stale = None
-        if not history._SPAN.match(args.target.strip()):
+        if not history._SPAN.match(args.target.strip()):   # path:A-B needs no index
             _need_graph(repo)
             g, stale = index.load(repo), freshness.check(repo)["files"]
         try:

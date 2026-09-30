@@ -1841,6 +1841,7 @@ def _h_why(ctx: _Ctx, sub: _Sub) -> None:
     files = {i["file"] for i in sub.items}
     terms = _decision_terms(ctx, sub)
     found = False
+    why_not = None   # why the symbol's commits could not be read, for the unknown
     for dec in hv["decisions"]:
         text = "\n".join(am._read(repo, dec["doc"]))
         folded = tn.fold_tr(text).lower()
@@ -1880,14 +1881,19 @@ def _h_why(ctx: _Ctx, sub: _Sub) -> None:
         if not sp or not hv["is_git"] or not ctx.budget.ok:
             continue
         a, b = sp
+        if it["file"] in (rec.stale_files or ()):   # the index's lines are not the file's any more
+            why_not = f"{it['file']} changed since the index: its commits were not read"
+            continue
         # the commits whose diffs changed the symbol's lines, each message quoted whole (subject and body):
         # the author's own words are the "why" evidence, nothing is summarised
         try:
             got = history.symbol_commits(repo, it["file"], a, b, limit=3)
-        except ValueError:
-            got = {"commits": []}
+        except ValueError as exc:
+            got = {"commits": [], "note": str(exc)}
         ctx.step("git_log_L", f"{it['file']}:{a}-{b}")
         unc = [got["note"]] if got.get("note") else []
+        if not got.get("commits") and got.get("note"):
+            why_not = got["note"]
         for c in got.get("commits") or []:
             if rec.claim(f"`{it['symbol']}` lines {a}-{b} were changed in {c['commit'][:10]} ({c['date'][:10]}): "
                          f"{c['subject']}", kind="history", status="primary_source_verified",
@@ -1896,7 +1902,8 @@ def _h_why(ctx: _Ctx, sub: _Sub) -> None:
                 found = True
     if not found and not rec.skipped["why"]:
         _unknown(ctx, sub, {"question": sub.sq.get("text") or SUBQUESTIONS["why"],
-                            "why": "no decision record or commit message explains it",
+                            "why": "no decision record or commit message explains it"
+                                   + (f" ({why_not})" if why_not else ""),
                             "next_step": "search issue tracker/PR discussion; or `verinoda research <reference>` "
                                          "if the design follows an external reference"})
     elif found:
