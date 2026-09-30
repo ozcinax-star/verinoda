@@ -219,9 +219,32 @@ def _cycles(v: dict, cap: int) -> list[str]:
     return out
 
 
+def _hotspots(v: dict, cap: int) -> list[str]:
+    if not v.get("is_git"):
+        return ["no git history"]
+    w = v.get("window", {})
+    span = "the whole history" if w.get("whole_history") else f"the last {w.get('commits', 0)} commits"
+    files, fns = v.get("files", []), v.get("functions", [])
+    changed = v.get("files_total", 0) + v.get("below_top_not_measured", 0)
+    out = [f"{changed} changed code files over {span} (since {(w.get('since') or '-')[:10]}); "
+           "score = changes x complexity (strong_inference)"]
+    n = max(3, (cap - 3) // 2)
+    for r in files[:n]:
+        out.append(f"   {r['score']:>6}  {r['changes']:>4} changes x {r['complexity']:>4}  {r['file']}")
+    out += _more(min(n, len(files)), v.get("files_total", 0), "files")
+    if v.get("below_top_not_measured"):
+        out.append(f"   {v['below_top_not_measured']} more files not measured: a bound on their score is below the top")
+    out.append(f"functions of the top {w.get('functions_of_top_files', 0)} files (changes x cyclomatic):")
+    m = max(3, cap - len(out) - 1)
+    for r in fns[:m]:
+        out.append(f"   {r['score']:>6}  {r['changes']:>4} changes x {r['cyclomatic']:>4}  {r['symbol']}  at {r['at']}")
+    out += _more(min(m, len(fns)), v.get("functions_total", 0), "functions")
+    return out
+
+
 RENDERERS = {"hierarchy": _hierarchy, "dependencies": _dependencies, "dataflow": _dataflow,
              "config": _config, "tests": _tests, "history": _history, "impact": _impact, "cycles": _cycles,
-             "dead": _dead}
+             "dead": _dead, "hotspots": _hotspots}
 
 
 def render(res: dict, cap: int) -> str:
