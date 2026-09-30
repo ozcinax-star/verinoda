@@ -240,15 +240,10 @@ edge's location matter.
   `history compare BASE [HEAD] [--path P]`. Read only; exit 2 when nothing is found.
 - The MCP server has 38 tools: `history_search` is new, served by the core profile behind `run_tool` and by
   the full profile. Reinstalled skills allow `verinoda history` and mention it.
-- **Integrator: `docs/UPGRADING.md` line 210 says "the server has 37 tools" (D62).**
-  `tests/test_docs.py::test_schema_version_and_mcp_tool_count_match_the_code` requires every "N tools" in
-  UPGRADING.md to equal the current count, so that line needs rewording (for example "the server had 37 tools
-  then") or the new note must replace it; README.md and ARCHITECTURE.md already say 38. Until then that one
-  test fails on this branch.
 
 ### D60-D62
 
-- D62: the server has 37 tools; the new one, `grep_context`, is what an optional Claude Code Grep hook calls
+- D62: `grep_context`, the server's 37th tool then, is what an optional Claude Code Grep hook calls
   (through run_tool in the core profile). Nothing calls it unless that hook is configured
   (`verinoda/agents/templates/claude_hooks.json`); no migration.
 
