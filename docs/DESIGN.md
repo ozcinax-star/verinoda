@@ -7011,6 +7011,79 @@ written; alias, import and re-export notes; `json.JSONDecoder` followed to `json
 changelog section and a logo preamble; an old `PKG-INFO`; a long heading line under a second; a namespace
 package's two distributions.
 
+## 67. Commit rationale per symbol (D94, 2026-10-01)
+
+### 67.1 Why
+
+"Why is this function like this?" is often answered by the commit that changed it: its author wrote the reason in
+the message. `analyze` already quoted the subjects of up to three `git log -L` commits for a why-question, but only
+the subject (the reason is usually in the body), only through `analyze`, and with the working tree's line numbers
+given to `git log -L`, which starts from HEAD: after an uncommitted edit above the symbol, git followed the wrong
+lines or failed. There was no direct way to ask for a symbol's commits.
+
+### 67.2 Decisions
+
+- **`verinoda history symbol NAME|path:A-B [--limit N]`** and the MCP `history_search` mode `{symbol}` (a fourth
+  mode; a parameter of another mode, `path` included, is an error as before). The core MCP profile keeps its
+  tools; the gateway's one-line description of `history_search` names the new mode.
+- **Git follows the lines, Verinoda does not guess.** The commits are git's own `log -L start,end:file` over the
+  history of HEAD, newest first, read with `%B` (the whole message). No model summary: the subject and the body are
+  quoted as the author wrote them. The body is capped at 12 lines (`body_truncated`); a closing block of people
+  trailers (`Signed-off-by:`, `Co-authored-by:`, `Reviewed-by:`, `Acked-by:`, `Tested-by:`, `Cc:`, `Change-Id:`
+  and the like) is dropped because it names people, not reasons; any other `Key: value` line (`Reason:`,
+  `Note:`, `See:`) is kept.
+- **Working tree versus HEAD.** When the file differs from HEAD, the symbol's working-tree lines are mapped to
+  HEAD's lines with the same text diff the hotspots view uses (`hotspots._line_map`), and the answer says so (a
+  `note`, and an uncertainty on every claim). Lines that are all new since HEAD, or a file HEAD does not have,
+  are `not_committed`: no commit is attributed to them. A file deleted from the working tree is read at HEAD's
+  lines (said in the note); a range that starts past the file's end is an error that says the file's length.
+- **Paths.** `path:A-B` is always a path, never a name: relative to the project or absolute inside it; a path
+  outside the project (`../x.py`) is refused, since the history read is the project's.
+- **A stale index is never used for line numbers.** When the symbol's file changed since the index, the
+  index's lines are the file's as it was scanned: `history symbol NAME` answers `stale_index` (run `verinoda
+  update`, or give `path:A-B`), and `analyze` does not read that symbol's commits (the unknown says why).
+- **Names.** `NAME` is resolved by `naming.resolve` as `node_inspect` and `rename-preview` resolve it; a name that
+  is ambiguous or does not resolve is answered with its candidates and no commits, never with a similar name.
+  `path:A-B` needs no index.
+- **Claims.** Each commit is a `history` claim, `primary_source_verified` (git history is a primary source; the
+  claim is only that the commit changed those lines, with its message quoted), evidence `git_history` with the
+  locator `commit <sha> <file>`, the message as the excerpt, `meta.head_lines`. The coverage limits say that the
+  history is HEAD's, that `-L` stays within the file (a symbol moved from another file starts where it arrived),
+  and that a message states the author's intent when committing, not the current behaviour.
+- **`analyze`'s why-questions** use the same reading (`history.symbol_commits`, three commits): the claim text
+  keeps its old form (`` `sym` lines A-B were changed in <sha> (<date>): <subject> ``), and its evidence now
+  quotes the body too; the line mapping fixes the wrong-lines case above.
+
+### 67.3 Measured
+
+On this repository: `history symbol verinoda/history.py:495-520` with the file edited (the function moved down 5
+lines) mapped to HEAD's lines 490-515 and returned the commit that added `co_changes`, about 0.3 s. The tests'
+fixture: a rounding commit's reason ("the ledger stores cents") is in the body, not the subject, and is quoted.
+
+Review round (two reviewers): fixed commits of another symbol attributed through a stale index, `Reason:` and
+`Note:` bodies dropped as trailers, paths outside the project answered, a deleted file taken for a name, a range
+past the end reported as a timeout, the shallow-clone and resolution notes missing from the text output, an
+empty MCP `symbol` running a plain commit search, and the `not_committed` reason lost from analyze's unknown.
+
+### 67.4 Not done
+
+- `git log -L` does not follow a symbol across files (a move or a split); the history starts at the move.
+- A commit that only reformatted the lines counts like any other (use `git blame -w` style reading for that).
+- The mapping of edited lines to HEAD's is a text diff; a heavily rewritten symbol may map to a smaller range.
+- Merge commits appear when git's `-L` lists them; they are marked `merge`.
+- Evidence excerpts are capped at 300 characters (the store's rule); the answer's `commits` list has the body.
+
+### 67.5 Tests
+
+`tests/test_history.py`: a line range's commits newest first with subject, body and the trailer block dropped, and
+claims the store's status rules allow; working-tree lines mapped to HEAD's (and all-new lines or a new file
+`not_committed`, a reversed range an error) in a repository path with a space and non-ASCII; a name resolved
+through a scanned index, a misspelled name unresolved and never replaced, no index without `path:A-B`; `analyze`'s
+why-question quoting the body; the CLI (text and `--json`, `--limit`) and the MCP `symbol` mode with the other
+modes' parameters refused; outside git; review round: people trailers dropped but `Reason:`/`Note:` kept, a
+range past the end, `../x.py` refused, an absolute path inside the project, a deleted file read at HEAD, a stale
+index answered `stale_index`, a shallow clone, an empty MCP `symbol` refused.
+
 ## Sources
 
 - **Retrieval:**

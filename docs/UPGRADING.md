@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D93)
+## Upgrading from 0.3.2 (D60-D94)
 
 ### D63: Running a project's own tests safely
 
@@ -373,6 +373,12 @@ command or MCP tool; the tool counts in UPGRADING do not change.
 section of the installed distribution's README that names it, each with `path:start-end` and the installed
 version, read from the installed files. Answers without the option are unchanged. The MCP tool count is
 unchanged.
+
+### D94: Commit rationale per symbol
+
+New: `verinoda history symbol NAME|path:A-B` (MCP `history_search` with `symbol`) lists the commits that changed
+a symbol's lines, each quoting its message. `analyze`'s why-answers now quote the commit body in the evidence and
+map working-tree lines to HEAD's before asking git; their claim text is unchanged. The MCP tool count is unchanged.
 
 ### D60-D62
 
