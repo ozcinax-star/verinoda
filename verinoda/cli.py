@@ -1178,6 +1178,21 @@ def cmd_history(args) -> int:
     return 0 if res["status"] in ("found", "same") else 2
 
 
+def cmd_docs(args) -> int:
+    from verinoda import docrefs
+
+    repo = _repo(args)
+    res = docrefs.check(repo, args.paths or None, exclude=args.exclude or None)
+    if args.fix and (res["renamed"] or res["moved"]):
+        res["fixed"] = docrefs.fix(repo, res)
+        fixed = {f["at"] + f["from"] for f in res["fixed"]}
+        for key in ("renamed", "moved"):
+            res[key] = [f for f in res[key] if f["at"] + f["ref"] not in fixed]
+        res["exit"] = 1 if res["broken"] or res["changed"] or res["renamed"] or res["moved"] else 0
+    _emit(args, res, lambda r: print(docrefs.render(r)))
+    return res["exit"]
+
+
 def cmd_owners(args) -> int:
     from verinoda import ownership
 
@@ -3210,6 +3225,16 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("base", help="the base revision (branch, tag, sha, HEAD~3)")
     c.add_argument("head", nargs="?", default="HEAD", help="the other revision (default HEAD)")
     c.add_argument("--path", help="only this file or folder")
+    sp = sub.add_parser("docs", help="code references in the repository's documents")
+    dsub_docs = sp.add_subparsers(dest="docs_cmd", required=True)
+    c = add("check", cmd_docs, "check the paths and line references the repository's Markdown, reStructuredText and "
+                               "text documents cite against the working tree (exit 1: a reference is broken, "
+                               "renamed, moved or its lines changed)", parent=dsub_docs)
+    c.add_argument("paths", nargs="*", help="documents or folders to check (default: every tracked document)")
+    c.add_argument("--exclude", action="append", metavar="GLOB",
+                   help="leave out documents matching this glob (repeatable), e.g. a vendored or template folder")
+    c.add_argument("--fix", action="store_true", help="rewrite renamed paths and moved line numbers in place (the "
+                                                      "reference's own characters only); the rest stays flagged")
     sp = add("owners", cmd_owners, "who knows this code: the CODEOWNERS rule that owns it, and from git blame its "
                                    "authors, main author, bus factor and knowledge loss (exit 2: nothing found)")
     sp.add_argument("target", nargs="?", help="a file, a folder, path:A-B or path#Symbol (default: the project)")
