@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D78)
+## Upgrading from 0.3.2 (D60-D79)
 
 ### D63: Running a project's own tests safely
 
@@ -256,6 +256,16 @@ edge's location matter.
   whether the files agree). Read-only, no index needed, no schema change. Exit 3 when something is wrong: a CI
   step that runs it fails on a stale instruction file.
 - If the MCP tool below is added: the server has one more tool (full profile only); update the tool counts.
+
+### D79: Filter syntax in query
+
+`verinoda query` and MCP `project_query` read filters in the question: `path:GLOB`, `lang:NAME`,
+`symbol:NAME`, `is:vendored|generated|minified|test`, `/regex/`, and `AND` / `OR` / `NOT` / `-` / parentheses.
+Filters narrow the ranked results and add no score. A question of filters only lists every matching unit. A
+question with no `key:value` filter and no `/regex/` token ranks exactly as before (`/word/`, one path
+segment between slashes, and an `is:` value that is not a filter are words). JSON results with filters
+carry a new `filters` block. An unreadable filter is an error: exit code 1 on the CLI, `invalid_argument` on
+MCP. No re-index is needed.
 
 ### D60-D62
 
