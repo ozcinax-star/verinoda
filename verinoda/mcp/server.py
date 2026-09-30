@@ -2087,7 +2087,7 @@ DESCRIPTIONS: dict[str, str] = {
         "edited, not for reading code: do the modules, names, methods, arguments and keys it uses exist in "
         "the project and its environment? Input: paths, diff (a revision; nothing: changes against HEAD), or "
         "snippet + as_path. Each site: exists | absent (nearest names) | unknown | not_installed | guarded; "
-        "exit 3 = absent. deps=true: the manifests' dependencies against the imports instead. Read-only."),
+        "exit 3 = absent. Read-only."),
     "api_members": (
         "The real members of a Python module, class or function (dotted target) in the project's environment, "
         "or of a Java class on the build's classpath (access included): name, kind, signature, file:line, "
@@ -2561,8 +2561,7 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         = None,
         env: EnvArg = None,
         include_exists: Annotated[bool, Field(description="Also list the sites that exist and the LOW unknowns.")] = False,
-        deps: Annotated[bool, Field(description="Instead: declared vs imported dependencies (missing, transitive "
-                                                "only, unused, wrong group).")] = False,
+        deps: Annotated[bool, Field(description="Instead: the manifests' dependencies vs the imports.")] = False,
     ) -> dict[str, Any]:
         return emit(t.code_check(paths=paths, diff=diff, snippet=snippet, as_path=as_path, env=env,
                                  include_exists=include_exists, deps=deps))
@@ -2859,8 +2858,7 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
             snippet: Annotated[OptStr, Field(description="Code not written yet, checked as if it were in as_path.")]
             = None,
             as_path: Annotated[OptStr, Field(description="With snippet: the file it is for.")] = None,
-            deps: Annotated[bool, Field(description="Instead: declared vs imported dependencies (missing, transitive "
-                                                    "only, unused, wrong group).")] = False,
+            deps: Annotated[bool, Field(description="Instead: the manifests' dependencies vs the imports.")] = False,
         ) -> dict[str, Any]:
             return emit(t.code_check(paths=paths, diff=diff, snippet=snippet, as_path=as_path, deps=deps))
 
