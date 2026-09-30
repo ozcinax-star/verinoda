@@ -930,6 +930,20 @@ def cmd_when(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_history(args) -> int:
+    from verinoda import history
+
+    repo = _repo(args)
+    if args.history_cmd == "text":
+        res = history.text_history(repo, args.text, regex=args.regex, path=args.path)
+    elif args.history_cmd == "commits":
+        res = history.commits(repo, message=args.message, author=args.author, path=args.path, since=args.since,
+                              until=args.until, diff=args.diff, limit=args.limit)
+    else:
+        res = history.compare(repo, args.base, args.head, path=args.path)
+    _emit(args, res, lambda r: print(history.render(r)))
+    return 0 if res["status"] in ("found", "same") else 2
+
 # -- question plans (docs/DESIGN.md D1-D9) ----------------------------------------
 
 def _plan_file(repo: Path, arg: str) -> Path:
@@ -2628,6 +2642,29 @@ def build_parser() -> argparse.ArgumentParser:
                                "around each call")
     sp.add_argument("symbol")
     sp.add_argument("--depth", type=int, default=6, help="caller hops to walk back (default 6)")
+    sp = sub.add_parser("history", help="git history: when a text appeared or disappeared (the commits as "
+                                         "evidence), commit search, two revisions compared (exit 2: nothing found)")
+    hsub = sp.add_subparsers(dest="history_cmd", required=True)
+    c = add("text", cmd_history, "the commit that first added TEXT and, when HEAD has none, the one that last "
+                                 "removed it (git log -S; -G with --regex), each with its file:line", parent=hsub)
+    c.add_argument("text", help="the text to look for (a name, a string, a line of code)")
+    c.add_argument("--regex", action="store_true", help="TEXT is an extended regular expression matched against "
+                                                        "added and removed lines")
+    c.add_argument("--path", help="only the history of this file or folder (a git pathspec)")
+    c = add("commits", cmd_history, "commits by message, author, path, date and diff content, newest first",
+            parent=hsub)
+    c.add_argument("--message", help="a regular expression the commit message matches (case ignored)")
+    c.add_argument("--author", help="a regular expression the author's name or e-mail matches (case ignored)")
+    c.add_argument("--path", help="commits that touch this file or folder")
+    c.add_argument("--since", help="commits after this date (2026-01-31, '2 weeks ago')")
+    c.add_argument("--until", help="commits before this date")
+    c.add_argument("--diff", metavar="REGEX", help="commits whose added or removed lines match (case ignored)")
+    c.add_argument("--limit", type=int, default=20, help="commits to list (default 20, at most 100)")
+    c = add("compare", cmd_history, "what HEAD_REV has that BASE_REV has not: commits, merge base, files changed "
+                                    "with line counts", parent=hsub)
+    c.add_argument("base", help="the base revision (branch, tag, sha, HEAD~3)")
+    c.add_argument("head", nargs="?", default="HEAD", help="the other revision (default HEAD)")
+    c.add_argument("--path", help="only this file or folder")
     sp = add("analyze", cmd_analyze, "answer a question as claims with evidence, critique and unknowns")
     sp.add_argument("question", nargs="?", help="the question (optional with --plan: the plan's user_message)")
     sp.add_argument("--plan", metavar="FILE",

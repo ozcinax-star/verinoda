@@ -22,6 +22,8 @@ exactly what the evidence supports.
 
 - "How does X work / where is X / what calls X / how does data get from A to B?"
 - "Why is it built this way?" (git history and design docs are searched)
+- "When did X appear or disappear?" (`verinoda history text X`: the commits are the evidence;
+  `history commits`, `history compare BASE`)
 - "Should we switch to X / which one should we pick / how will this scale?" (the code's side; the user decides)
 - "What breaks if I change X?" (`verinoda review --target`; before you finish a change: `verinoda review`)
 - Re-checking an earlier conclusion (yours or the user's), or comparing with a reference repo or doc.
@@ -46,8 +48,8 @@ sandboxed shell), use the MCP tools (their entry stores the absolute path). In P
 If the `verinoda` MCP server is configured (`[mcp_servers.verinoda]` in `~/.codex/config.toml`,
 or in the project's `.codex/config.toml` when the project is trusted), prefer its tools where they
 cover the task: they call the same core functions as the CLI. The default profile lists project_query, analyze,
-code_check, index_update and run_tool (inspect/trace/map, claims, change_review, decision_check by name); run the
-CLI for the rest. The CLI prints plain text written for you: read it as it is. Add `--json` only for a field the
+code_check, index_update and run_tool (inspect/trace/map, claims, change_review, history_search, decision_check
+by name); run the CLI for the rest. The CLI prints plain text written for you: read it as it is. Add `--json` only for a field the
 text leaves out (every unknown site of `check`, an analysis' full record): JSON costs 2-5x the tokens.
 
 If the CLI fails inside the Codex sandbox (`PermissionError`/`ModuleNotFoundError` importing `verinoda`), use the
