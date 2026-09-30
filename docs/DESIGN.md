@@ -5301,6 +5301,90 @@ Run: `PYTHONPATH=. python -m pytest tests/test_history.py tests/test_mcp.py test
 tests/test_docs.py tests/test_agents.py`. `test_agents.py` has 25 failures that also fail on the base commit in
 a worktree (the `verinoda` on PATH is another build); `test_docs.py` fails the one tool-count test above.
 
+## 50. Mermaid diagrams and a wiki outline (D77, 2026-09-30)
+
+### 50.1 Decisions
+
+- **Claims and status.** Every arrow is a claim with the edge lines it was drawn from (an extracted edge's
+  line first, up to three). Graph edges are extractions, never verification: an arrow with at least one
+  `EXTRACTED` edge is `strong_inference`, one drawn only from `INFERRED` edges `weak_inference`, drawn
+  dashed (`-.->`) or, in a sequence, with an open arrow (`-)`).
+- **Nested pages.** A file listed by several pages counts, in the architecture diagram, for the deepest
+  of them (a sub-page over the parent that lists the whole folder), then for the first; a page whose files
+  are all in its sub-pages has no box. A parent page listing `src/` and sub-pages listing its folders
+  therefore draws the arrows between the sub-pages.
+- **The steering file is checked, not trusted.** A value of the wrong type (a `parent` that is not text,
+  `paths` or `flows` that are not lists, a path that is not text), a page without a title and a title an
+  earlier page already has are each a line under `problems`, and the value (or the duplicate page) is left
+  out; nothing in the file can stop `wiki`, the MCP view or the export. The file may start with a UTF-8
+  BOM. A path is relative to the repository root: a leading `./` is dropped, a dot-folder (`.github/`)
+  keeps its dot.
+- **No guessing.** An endpoint resolves through `naming.resolve` / `trace`: a name that names nothing is
+  `unresolved` with no diagram (`mermaid: null`), its hints and a next step; a name resolved by similarity
+  says so (`fuzzy`, and a `%%` comment in the text form). Whatever the steering file names that the index
+  does not have (a path matching no file, a parent no page has, a malformed flow, a flow that does not
+  resolve) is listed under `problems`; a broken file falls back to the default outline and says why.
+- **The steering file is not code.** `freshness` reports a new or edited `.verinoda-wiki.json` as changed
+  since the index; the outline leaves it out of the stale list it hands to `naming.resolve`, so a flow's
+  name spelled only there is not reported `not_indexed`.
+- **Text, not a renderer.** The export's Content-Security-Policy allows only its own script and style and
+  no connections; Mermaid's renderer is about 3 MB and would have to be vendored. The diagrams travel as
+  Mermaid text, which GitHub, GitLab, Obsidian and mermaid.live draw; the `wiki --markdown` output renders
+  as diagrams wherever Markdown with Mermaid is shown.
+- **Label safety.** Label text passes through one translation table: `"`, `#`, `;`, `<`, `>`, `|` and
+  newlines become Mermaid entities, so a symbol or file name cannot end a label or a statement. Node ids
+  are generated (`n0`, `p0`), never taken from names.
+- **Bounded.** At most 30 boxes and 60 arrows per diagram (the best connected first; `truncated` and
+  `left_out` say how many were dropped), 60 files listed per page (`file_count` has the total).
+- **Small registry footprint.** Two CLI parser entries, one `map_view` view (the `VIEWS` tuple, the
+  argument's `Literal`, two description strings), one UI route, one export field.
+
+### 50.2 Not done
+
+- Pages have no generated prose: a page's text is its `purpose` as written in the steering file (or a
+  one-line default). The wiki is an outline with diagrams, not a written wiki.
+- The architecture diagram counts edges between files; dynamic dispatch, reflection, dependency
+  injection and callbacks the graph does not have are not drawn.
+- A sequence diagram shows one path, one message per call, no returns or loops; a flow without a target
+  follows only `calls` edges to files of the project.
+- The default parts are folders (first two levels); a project laid out differently wants a steering file.
+- The page ids are slugs of the titles: renaming a page changes its `#/w/` address.
+- The exported page shows Mermaid text; drawing it needs a Mermaid viewer.
+
+### 50.3 Tests
+
+`tests/test_diagrams.py` (orders_app scanned once per module):
+
+- `test_architecture_counts_edges_between_parts_with_their_lines`
+- `test_flow_between_two_symbols_marks_an_inferred_call`
+- `test_flow_of_one_symbol_is_what_it_calls`
+- `test_sequence_is_messages_between_owners`
+- `test_a_name_that_names_nothing_gives_no_diagram`
+- `test_labels_cannot_break_the_diagram`
+- `test_as_text_is_a_mermaid_file_with_its_evidence_as_comments`
+- `test_default_outline_is_an_overview_and_a_page_per_folder`
+- `test_a_repo_file_steers_the_pages`
+- `test_a_broken_steering_file_falls_back_and_says_so`
+- `test_cli_diagram_and_wiki`
+- `test_mcp_map_view_outline`
+- `test_the_html_export_carries_the_diagrams`
+- `test_two_files_with_one_name_are_two_participants`
+- `test_a_steering_path_may_name_a_dot_folder`
+- `test_nested_pages_draw_the_arrows_between_the_sub_pages`
+- `test_a_mistyped_steering_file_is_listed_under_problems` (also: a BOM, a duplicate title, the export)
+- `test_a_flow_cut_to_its_boxes_says_how_many_were_left_out`
+- `test_a_flow_of_a_symbol_that_calls_nothing_says_so`
+- `test_mcp_outline_with_targets_gives_only_those_pages`
+- `test_the_export_escapes_a_flow_diagrams_markup` (a steered export with a flow: `<br/>` escaped)
+
+The small second repository (two `utils.py`, a `.ci/` folder, under a path with a space and `ğ`) is
+scanned once per module. The page's JavaScript that shows a wiki page is not run under test (no browser
+in the suite); the tests check the data it reads and the route it answers.
+
+Existing suites run against the change: `tests/test_mcp.py` (the `map_view` enum equals `VIEWS`, the core
+profile counts), `tests/test_ui.py` (the export's policy, scripts and links), `tests/test_cli.py`,
+`tests/test_architecture_map.py`, `tests/test_docs.py` (README commands table, ARCHITECTURE module table).
+
 ## Sources
 
 - **Retrieval:**

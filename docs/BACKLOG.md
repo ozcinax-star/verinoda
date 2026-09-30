@@ -168,7 +168,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 14.1 | **Evidence-backed code tours** | A tour built from `trace` or the dataflow view, pinned to a commit, re-anchored when code moves; CodeTour format | CodeTour | `verinoda tour` writes a `.tour` file that opens in VS Code |
 | 14.2 | **Named flow maps** | A `trace` or map result saved under a name, shareable and citable by agents | Windsurf/Devin Codemaps | `verinoda map save NAME` and an MCP read by name |
-| 14.3 | **Mermaid diagrams and a wiki outline** | Architecture, call-flow and sequence diagrams exported as Mermaid; a page tree steered by a repo file; an outline over MCP | DeepWiki, Google Code Wiki | the HTML export carries the diagrams |
 | 14.5 | **Butterfly view** | Callers and callees, or the inheritance tree, centred on one symbol | Understand, Sourcetrail | a view in `ui` |
 
 ## 15 - Runtime evidence import
