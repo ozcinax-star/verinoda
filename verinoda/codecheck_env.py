@@ -103,6 +103,18 @@ class EnvInfo:
 
     def dist_of(self, module_path: Path | str | None) -> tuple[str, str] | None:
         """(dist name, version) of an installed file, or None."""
+        found = self._dist_entry(module_path)
+        if found is None:
+            return None
+        top, d = found
+        return (d[0], d[1]) if d else (top, "?")
+
+    def dist_info_of(self, module_path: Path | str | None) -> tuple[str, str, Path] | None:
+        """(dist name, version, its .dist-info or .egg-info directory) of an installed file, or None."""
+        found = self._dist_entry(module_path)
+        return found[1] if found else None
+
+    def _dist_entry(self, module_path: Path | str | None) -> tuple[str, tuple[str, str, Path] | None] | None:
         if not module_path:
             return None
         p = Path(module_path)
@@ -113,8 +125,7 @@ class EnvInfo:
                 continue
             top = rel.parts[0] if rel.parts else ""
             top = top[:-3] if top.endswith((".py", ".so")) else top.split(".")[0]
-            d = self.dists.get(self.top_level.get(top, _norm_dist(top)))
-            return (d[0], d[1]) if d else (top, "?")
+            return top, self.dists.get(self.top_level.get(top, _norm_dist(top)))
         return None
 
     def origin(self, module_path: Path | str | None) -> str | None:

@@ -2480,12 +2480,22 @@ def _r_api(r: dict) -> None:
         kind = " ".join(x for x in (m.get("access") if m.get("access") != "public" else None,
                                     "static" if m.get("static") else None, m.get("kind")) if x)
         print(f"  {sig:<60} {kind:<22} {m.get('at') or ''}{extra}")
+    docs = r.get("docs")
+    if docs:
+        print("docs" + (f" ({docs['version']})" if docs.get("version") else "") + ":")
+        for q in docs.get("quotes", []):
+            head = q["kind"] + (f" - {q['heading']}" if q.get("heading") else "")
+            print(f"  {head} ({q['at']}){' [truncated]' if q.get('truncated') else ''}")
+            for ln in q["text"].splitlines():
+                print(f"    | {ln}")
+        for n in docs.get("notes", []):
+            print(f"  note: {n}")
 
 
 def cmd_api(args) -> int:
     from verinoda import codecheck
 
-    res = codecheck.api(_repo(args), args.target, env=args.env, private=args.private)
+    res = codecheck.api(_repo(args), args.target, env=args.env, private=args.private, docs=args.docs)
     _emit(args, res, _r_api)
     return int(res.get("exit", 0))
 
@@ -3402,6 +3412,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("target", metavar="NAME", help="dotted name, e.g. packaging.specifiers.SpecifierSet")
     sp.add_argument("--env", default="auto", help=env_help)
     sp.add_argument("--private", action="store_true", help="also list names that start with an underscore")
+    sp.add_argument("--docs", action="store_true",
+                    help="also quote the definition's docstring and the section of the installed distribution's "
+                         "README that names it, from the installed files (the version the environment has)")
 
     sp = sub.add_parser("memory", help="versioned learnings tied to claims")
     msub = sp.add_subparsers(dest="mem_cmd", required=True)

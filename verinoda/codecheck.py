@@ -4120,13 +4120,50 @@ def _java_api(repo: Path, target: str, private: bool) -> dict | None:
 
 
 def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = False,
-        trust_env: bool = True) -> dict:
+        trust_env: bool = True, docs: bool = False) -> dict:
     """The real members of a module, class or function, with signatures and locations. ``found`` is False
     (exit 3) only for a name shown missing from a closed container, or a module missing from the search path;
     a name that was not decided (an open container, the attributes of a function or variable, no resolver,
     no project environment) is ``found: None`` with ``decided: "unknown"`` (or ``"not_installed"``), exit 0.
     A name of the project's code in another language (a Java class) is ``found: None`` with ``decided:
-    "unsupported_language"``, exit 4 as in :func:`check`: not checked, never "not found" and never a pass."""
+    "unsupported_language"``, exit 4 as in :func:`check`: not checked, never "not found" and never a pass.
+    ``docs``: a found target also gets ``docs``, the docstring and the README section of the version installed
+    (:mod:`verinoda.libdocs`), quoted with their lines."""
+    res = _api(repo, target, env=env, private=private, trust_env=trust_env)
+    src = res.pop("_src", None)
+    if docs and res.get("found"):
+        res["docs"] = _api_docs(target, res, src)
+    return res
+
+
+def _api_docs(target: str, res: dict, src: dict | None) -> dict:
+    from verinoda import libdocs
+
+    if res.get("language") == "Java":
+        return {"quotes": [], "notes": ["class files carry no Javadoc; docs are not read for Java classes"]}
+    if src is None:
+        return {"quotes": [], "notes": ["no source file for the definition; no docs to quote"]}
+    ck, path, line, names = src["ck"], src.get("path"), src.get("line"), src.get("names")
+    if path is None and src.get("std"):
+        path, names = _std_source(ck.env, src["std"])
+    path = Path(path) if path else None
+    dist = ck.env.dist_info_of(path) if path is not None and ck.origin(path) == "installed" else None
+    origin = "the standard library" if res.get("source") == "stdlib" else         "this project" if res.get("source") == "project" else "not an installed distribution"
+    return libdocs.build(target, src_path=path, src_line=line, src_names=names, dist=dist, disp=ck.disp,
+                         top_level=src.get("top", False), origin=origin)
+
+
+def _std_source(envinfo: cenv.EnvInfo, full: str) -> tuple[Path | None, list[str] | None]:
+    """(source file of the longest standard-library module prefix of ``full``, the rest of the name)."""
+    parts = full.split(".")
+    for i in range(len(parts), 0, -1):
+        info = envinfo.oracle().ask("module", name=".".join(parts[:i]))
+        if info.get("ok") and info.get("file"):
+            return Path(info["file"]), parts[i:]
+    return None, None
+
+
+def _api(repo: Path, target: str, *, env: str | None, private: bool, trust_env: bool) -> dict:
     from verinoda import precise
 
     repo = Path(repo).resolve()
@@ -4226,13 +4263,14 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
                 return _api_leaf(head, std_full, obj_kind, rest)
             sig = info.get("signature")
             return {**head, "found": True, "kind": obj_kind, "source": "stdlib", "at": f"<stdlib>:{std_full}",
-                    **({"signature": part + sig} if sig else {}), "exit": 0}
+                    **({"signature": part + sig} if sig else {}), "exit": 0, "_src": {"ck": ck, "std": std_full}}
         if m.kind == "class" and m.file and m.line:
             cls_facts, err = cf.class_at(Path(m.file), m.line)
             if cls_facts is None:
                 if rest:
                     return _api_leaf(head, f"{c.full}.{part}", "class", rest, err)
-                return {**head, "found": True, "kind": "class", "why": err, "exit": 0}
+                return {**head, "found": True, "kind": "class", "why": err, "exit": 0,
+                        "_src": {"ck": ck, "path": m.file, "line": m.line}}
             c = ck.facts_container(cls_facts, f"{c.full}.{part}", True)
             obj_kind = "class"
             continue
@@ -4241,11 +4279,18 @@ def api(repo: Path, target: str, *, env: str | None = "auto", private: bool = Fa
         fn = cf.function_at(Path(m.file), m.line) if m.file and m.line else None
         at = f"{ck.disp(m.file)}:{m.line}" if m.file and m.line else c.where
         return {**head, "found": True, "kind": m.kind, "source": c.source, "at": at,
-                **({"signature": f"{part}({cf._args_text(fn)})"} if fn is not None else {}), "exit": 0}
+                **({"signature": f"{part}({cf._args_text(fn)})"} if fn is not None else {}), "exit": 0,
+                "_src": {"ck": ck, "path": m.file, "line": m.line}}
     rows = _api_rows(ck, c, std_full, obj_kind, private)
+    if std_full is not None:
+        src = {"ck": ck, "std": std_full}
+    elif obj_kind == "class" and cls_facts is not None:
+        src = {"ck": ck, "path": cls_facts.path, "line": cls_facts.node.lineno}
+    else:
+        src = {"ck": ck, "path": c.files[0] if c.files else None, "top": "." not in (c.full or "")}
     return {**head, "found": True, "kind": obj_kind, "name": c.full, "source": c.source, "at": c.where,
             "closed": c.closed, **({"why_open": c.why} if c.why else {}), "members": rows,
-            "count": len(rows), "exit": 0}
+            "count": len(rows), "exit": 0, "_src": src}
 
 
 def _other_language_source(repo: Path, parts: list[str]) -> tuple[str, str] | None:
