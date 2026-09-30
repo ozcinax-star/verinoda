@@ -1721,7 +1721,9 @@ def test_removed_and_added_public_names_and_private_ones_left_out(tmp_path):
     got = _api(_review(repo))
     assert "pkg/extra.py::_hidden" not in got
     rm = got["pkg/rules.py::validate"]
-    assert rm["verdict"] == "breaking" and rm["status"] == "statically_verified" and rm["at"] == "pkg/rules.py:1"
+    # the removed definition's line is in the base version: `at` (the tree) is None, `base_at` names it
+    assert rm["verdict"] == "breaking" and rm["status"] == "statically_verified"
+    assert rm["at"] is None and rm["base_at"] == "pkg/rules.py:1" and "evidence_at" not in rm
     assert {"pkg/use_from.py:1", "pkg/use_alias.py:5"} <= {b["at"] for b in rm["breaks"]}
     lonely = got["pkg/extra.py::lonely"]
     assert lonely["verdict"] == "breaking" and lonely["breaks"] == [] and lonely["status"] == "strong_inference"
@@ -1743,7 +1745,19 @@ def test_python_parameter_shapes_compared():
                                                                "parameter 2 was b, is now a"]
     assert breaks("def f(a): pass", "def f(a, /): pass") == ["parameter(s) made positional-only: a"]
     assert breaks("def f(a, **kw): pass", "def f(a): pass") == ["**kwargs removed"]
-    assert breaks("def f(a, *, k=1): pass", "def f(a, *, k): pass") == ["required keyword parameter(s) added: k"]
+    assert breaks("def f(a, *, k=1): pass", "def f(a, *, k): pass") == ["default value removed: k"]
+    assert breaks("def f(a, b=1): pass", "def f(a, b): pass") == ["default value removed: b"]
+    assert breaks("def f(a): pass", "def f(a, *, k): pass") == ["required keyword parameter(s) added: k"]
+    # a positional parameter gone into *args: its keyword callers break, its positional ones fill *args
+    assert breaks("def f(a, b, *args): pass", "def f(a, *args): pass") == [
+        "positional parameter b removed (an argument passed for it now goes into *args)"]
+    assert breaks("def f(a, b): pass", "def f(a, *args): pass") == [
+        "positional parameter b removed (an argument passed for it now goes into *args)"]
+    assert breaks("def keep(a, b=1): pass", "def keep(a, *args, b=1): pass") == ["parameter b is now keyword-only"]
+    # a positional-only parameter is never passed by name: renaming it is compatible, swapping two is not
+    assert breaks("def f(a, /): pass", "def f(b, /): pass") == []
+    assert breaks("def f(a, b, /): pass", "def f(b, a, /): pass") == ["parameter 1 was a, is now b",
+                                                                     "parameter 2 was b, is now a"]
     assert breaks("def f(a, *, k=1): pass", "def f(a, k=1): pass") == []
     assert breaks("def f(*args): pass", "def f(a, *args): pass") == ["required parameter(s) added: a",
                                                                    "parameter(s) added before *args: a"]
@@ -1761,6 +1775,86 @@ def test_java_verdicts_from_parameter_counts(jvm):
                                                "src/main/java/com/ex/core/ForgeBlock.java:9"}
     sv = got["src/main/java/com/ex/core/Forge.java::Forge.stillValid"]
     assert sv["verdict"] == "unknown" and sv["status"] == "unknown" and "not compared" in sv["reasons"][0]
+
+
+def test_a_positional_parameter_folded_into_args_breaks_keyword_callers(tmp_path):
+    files = {"pkg/__init__.py": "",
+             "pkg/k.py": "class Box:\n    def __init__(self, n):\n        self.n = n\n\n"
+                         "    def put(self, a, b, *rest):\n        return a, b, rest\n",
+             "pkg/use_k.py": "from pkg.k import Box\n\n\ndef go():\n    return Box(1).put(1, b=2)\n"}
+    repo = _project(tmp_path, "api", files)
+    _edit(repo, "pkg/k.py", "    def put(self, a, b, *rest):\n        return a, b, rest\n",
+          "    def put(self, a, *rest):\n        return a, rest\n")
+    a = _api(_review(repo))["pkg/k.py::Box.put"]
+    assert a["verdict"] == "breaking"
+    assert "positional parameter b removed (an argument passed for it now goes into *args)" in a["reasons"]
+
+
+def test_narrowed_visibility_is_a_breaking_change(jvm):
+    _edit(jvm, "src/main/java/com/ex/core/Forge.java", "    public boolean stillValid(Object player) {",
+          "    private boolean stillValid(Object player) {")
+    sv = _api(_review(jvm))["src/main/java/com/ex/core/Forge.java::Forge.stillValid"]
+    assert sv["verdict"] == "breaking" and "no longer public" in sv["basis"]
+    assert sv["status"] in ("strong_inference", "statically_verified")
+
+
+def test_a_member_of_a_private_java_class_is_not_public(tmp_path):
+    files = {"src/A.java": "public class A {\n    int f(int a) {\n        return a;\n    }\n\n"
+                           "    private static class In {\n        public int g(int a) {\n            return a;\n"
+                           "        }\n    }\n}\n"}
+    repo = _project(tmp_path, "api", files)
+    _edit(repo, "src/A.java", "    int f(int a) {", "    int f(int a, int b) {")
+    _edit(repo, "src/A.java", "        public int g(int a) {", "        public int g(int a, int b) {")
+    got = _api(_review(repo))
+    assert "src/A.java::A.In.g" not in got and got["src/A.java::A.f"]["verdict"] == "breaking"
+
+
+def test_visibility_rules_of_go_rust_and_typescript(tmp_path):
+    files = {"go/util.go": "package util\n\nfunc helper(x int) int {\n\treturn x\n}\n\n"
+                           "func Exported(x int) int {\n\treturn helper(x)\n}\n\nfunc Gone() {}\n",
+             "rs/lib.rs": "fn private_fn() {}\n\npub fn gone() {}\n\npub(crate) fn crate_fn() {}\n\npub fn keep() {\n"
+                          "    private_fn();\n    crate_fn();\n}\n",
+             "web/a.ts": "function localOnly(): number {\n  return 1;\n}\n\nexport function gone(): number {\n"
+                         "  return 2;\n}\n\nfunction listed(): number {\n  return localOnly();\n}\n\n"
+                         "export { listed };\n"}
+    repo = _project(tmp_path, "api", files)
+    _edit(repo, "go/util.go", "func helper(x int) int {\n\treturn x\n}\n\n", "")
+    _edit(repo, "go/util.go", "\treturn helper(x)", "\treturn x")
+    _edit(repo, "go/util.go", "\nfunc Gone() {}\n", "")
+    _edit(repo, "rs/lib.rs", "fn private_fn() {}\n\npub fn gone() {}\n\npub(crate) fn crate_fn() {}\n\n", "")
+    _edit(repo, "rs/lib.rs", "    private_fn();\n    crate_fn();\n", "")
+    _edit(repo, "web/a.ts", "function localOnly(): number {\n  return 1;\n}\n\n"
+          "export function gone(): number {\n  return 2;\n}\n\n", "")
+    _edit(repo, "web/a.ts", "return localOnly();", "return 1;")
+    _edit(repo, "web/a.ts", "function listed(): number {", "function listed(n: number): number {")
+    got = _api(_review(repo))
+    for hidden in ("go/util.go::helper", "rs/lib.rs::private_fn", "rs/lib.rs::crate_fn", "web/a.ts::localOnly"):
+        assert hidden not in got, hidden
+    for public in ("go/util.go::Gone", "rs/lib.rs::gone", "web/a.ts::gone"):
+        assert got[public]["verdict"] == "breaking" and got[public]["status"] == "strong_inference", public
+    assert "web/a.ts::listed" in got
+
+
+def test_python_scripts_are_not_public_api(tmp_path):
+    files = {"pkg/__init__.py": "", "pkg/m.py": "def api(x):\n    return x\n",
+             "scripts/build.py": "def main():\n    return 0\n", "setup.py": "def x():\n    return 0\n"}
+    repo = _project(tmp_path, "api", files)
+    _edit(repo, "scripts/build.py", "def main():", "def run():")
+    _edit(repo, "setup.py", "def x():\n    return 0\n", "")
+    _edit(repo, "pkg/m.py", "def api(x):", "def api(x, y):")
+    assert set(_api(_review(repo))) == {"pkg/m.py::api"}
+
+
+def test_the_api_verdict_list_is_capped_breaking_first(tmp_path, monkeypatch):
+    files = {"pkg/__init__.py": "", "pkg/m.py": "def old(x):\n    return x\n"}
+    repo = _project(tmp_path, "api", files)
+    (repo / "pkg/m.py").write_text("".join(f"def new{i}(x):\n    return x\n\n\n" for i in range(3)),
+                                   encoding="utf-8", newline="\n")
+    monkeypatch.setattr(rv, "MAX_API_CHANGES", 2)
+    res = _review(repo)
+    assert res["api_changes_total"] == 4 and len(res["api_changes"]) == 2
+    assert res["api_changes"][0]["symbol"] == "pkg/m.py::old" and res["counts"]["api_breaking"] == 1
+    assert "Public API: 4 change(s) - 1 breaking, 3 compatible." in res["summary"]
 
 
 def test_the_api_verdicts_follow_the_public_api_concern(tmp_path):
