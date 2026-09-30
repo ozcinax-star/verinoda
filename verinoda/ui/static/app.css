@@ -252,3 +252,8 @@ ol.timeline { list-style: none; margin: 0 0 16px; padding: 0 0 0 14px; border-le
 .tl-item .rel.one-sided { border-style: dashed; color: var(--warn); border-color: var(--warn); }
 .tl-item .warn { color: var(--warn); }
 @media (max-width: 900px) { #app { --right-w: 0px; } #right { display: none; } #note { padding: 16px; } }
+.bfly { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: start; margin-top: 8px; }
+.bfly-mid { padding: 6px 10px; border: 1px solid var(--accent); border-radius: 6px; white-space: nowrap; align-self: center; }
+.bfly-side { min-width: 0; }
+ul.bfly-tree ul.bfly-tree { flex-basis: 100%; padding-left: 14px; border-left: 1px solid var(--border); }
+@media (max-width: 900px) { .bfly { grid-template-columns: 1fr; } }

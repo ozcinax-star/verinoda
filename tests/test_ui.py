@@ -227,6 +227,19 @@ def test_the_page_and_the_api_are_served_locally(served):
     assert status == 200 and json.loads(body)["records"] == [] and json.loads(body)["mermaid"] == ""
 
 
+def test_the_butterfly_of_a_method_is_served(served):
+    from urllib.parse import quote
+
+    hit = json.loads(_get(served, "/api/search?q=spawn")[2])["results"][0]
+    status, _h, body = _get(served, "/api/butterfly?depth=1&id=" + quote(hit["id"]))
+    r = json.loads(body)
+    assert status == 200 and r["mode"] == "calls" and [s["key"] for s in r["sides"]] == ["callers", "callees"]
+    assert all(it["via"] == hit["id"] and it["claim"]["status"] != "verified" for s in r["sides"] for it in s["items"])
+    assert r["sides"][0]["items"]
+    assert _get(served, "/api/butterfly?mode=sideways&id=" + quote(hit["id"]))[0] == 400
+    assert _get(served, "/api/butterfly?id=nope")[0] == 404
+
+
 def test_the_server_refuses_other_hosts_writes_and_unknown_paths(served):
     assert _get(served, "/api/stats", host="evil.example")[0] == 403        # DNS rebinding
     assert _get(served, "/", host=f"attacker.test:{served}")[0] == 403
