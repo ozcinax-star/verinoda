@@ -61,7 +61,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 4.1 | **Commit, diff and revision search** | Search commits by message, author, path and date; search diff content; compare two revisions | Sourcegraph MCP | "when did X appear or disappear" answered with the commit as evidence |
 | 4.2 | **Hotspots** | Change frequency times complexity, per file and per function | CodeScene, CodeCharta | `map --view hotspots`; `review` ranks `read_first` with it |
 | 4.3 | **Temporal coupling** | Files and functions that change together without a static edge | CodeScene | impact lists history-coupled files as `strong_inference` with their commit count |
 | 4.4 | **Ownership and knowledge map** | Main authors, bus factor, knowledge loss, CODEOWNERS resolution | CodeScene, Sourcegraph Own, Glean | "who knows this code" answered from blame and CODEOWNERS |
