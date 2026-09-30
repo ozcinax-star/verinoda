@@ -11,6 +11,7 @@ as a ``run_tool`` call, and a step whose tool the profile does not serve names t
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from dataclasses import dataclass
 
@@ -76,8 +77,9 @@ def _steps(name: str, args: dict[str, str]) -> tuple[str, list[Step], str]:
     if name == "debug":
         symptom = (args.get("symptom") or "").strip()
         repro = (args.get("repro") or "").strip()
-        command = shlex.split(repro, posix=True) if repro else ["<the command that shows the failure>"]
-        cli_start = f"verinoda debug start {json.dumps(symptom, ensure_ascii=False)} -- {repro or '<repro command>'}"
+        command = split_repro(repro) if repro else ["<the command that shows the failure>"]
+        cli_start = (f"verinoda debug start {_quote(symptom, always=True)} -- "
+                     + (" ".join(_quote(a) for a in command) if repro else "<repro command>"))
         return (f"Debug this failure with Verinoda: {symptom}", [
             Step("index_update", {}, "bring the index up to the working tree"),
             Step("project_query", {"question": symptom}, "the code locations the symptom names (leads, not "
@@ -117,8 +119,40 @@ def _call(step: Step, listed: set[str], served: set[str], gateway: str) -> str |
     return None
 
 
+def split_repro(repro: str) -> list[str]:
+    r"""The argument list of a repro command: split at whitespace, ' and " group, a backslash is kept as it is.
+
+    Shell escapes are not applied, so a Windows path (``C:\Users\me\x.py``) keeps its separators.
+    Raises ValueError on an unbalanced quote.
+    """
+    lex = shlex.shlex(repro, posix=True)
+    lex.whitespace_split, lex.escape, lex.commenters = True, "", ""
+    return list(lex)
+
+
+_PLAIN = re.compile(r"[\w@%+=:,./\\-]+")
+
+
+def _quote(arg: str, *, always: bool = False) -> str:
+    """``arg`` in double quotes when it is empty or has a space or a shell character (for a command to copy)."""
+    if not always and _PLAIN.fullmatch(arg):
+        return arg
+    return '"' + arg.replace('"', '\\"') + '"'
+
+
 def missing_required(name: str, args: dict[str, str]) -> list[str]:
     return [a for a, _, req in ARGUMENTS[name] if req and not (args.get(a) or "").strip()]
+
+
+def argument_problems(name: str, args: dict[str, str]) -> list[str]:
+    """Why prompt ``name`` cannot be filled in with ``args`` (empty when it can); the server and the CLI both check."""
+    problems = [f"{name} needs {a} (a non-blank value)" for a in missing_required(name, args)]
+    if name == "debug" and (args.get("repro") or "").strip():
+        try:
+            split_repro(args["repro"].strip())
+        except ValueError as exc:
+            problems.append(f"repro: {exc}; balance its quotes")
+    return problems
 
 
 def render(name: str, args: dict[str, str] | None = None, *, listed, served, gateway: str = "run_tool") -> str:

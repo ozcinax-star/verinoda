@@ -85,6 +85,32 @@ def test_debug_splits_the_repro_into_an_argument_list(plain):
     assert P.missing_required("debug", {"symptom": "x"}) == []
 
 
+def test_debug_repro_keeps_windows_backslashes(plain):
+    listed, served = _menu(plain, "full")
+    repro = r'"C:\Program Files\py.exe" -m pytest tests\test_x.py'
+    assert P.split_repro(repro) == [r"C:\Program Files\py.exe", "-m", "pytest", r"tests\test_x.py"]
+    text = P.render("debug", {"symptom": "boom", "repro": repro}, listed=listed, served=served)
+    assert json.dumps([r"C:\Program Files\py.exe", "-m", "pytest", r"tests\test_x.py"]) in text
+
+
+def test_debug_cli_fallback_quotes_each_repro_argument(plain):
+    listed, served = _menu(plain, "core")
+    text = P.render("debug", {"symptom": "boom", "repro": r'"C:\x y\python.exe" -m pytest'},
+                    listed=listed, served=served)
+    assert r'`verinoda debug start "boom" -- "C:\x y\python.exe" -m pytest`' in text
+
+
+@pytest.mark.parametrize("profile", ["core", "full"])
+@pytest.mark.parametrize("args, why", [({"symptom": "   "}, "needs symptom"),
+                                       ({"symptom": "x", "repro": "python -c 'print(1)"}, "No closing quotation")])
+def test_server_refuses_what_the_cli_refuses(plain, profile, args, why):
+    srv = mcp_server.build_server(plain, profile=profile)
+    with pytest.raises(Exception) as exc:
+        anyio.run(srv.get_prompt, "debug", args)
+    assert why in str(exc.value) and "Error rendering" not in str(exc.value)
+    assert P.argument_problems("debug", args)
+
+
 def test_server_lists_and_fills_in_the_prompts_without_changing_the_tool_menu(plain):
     srv = mcp_server.build_server(plain)
     listed = anyio.run(srv.list_prompts)
@@ -113,7 +139,9 @@ def test_cli_lists_and_prints_prompts(plain, capsys):
     assert capsys.readouterr().out.startswith("Review the uncommitted change")
 
 
-@pytest.mark.parametrize("argv", [["debug"], ["nope"], ["review", "--arg", "topic=x"], ["review", "--arg", "base"]])
+@pytest.mark.parametrize("argv", [["debug"], ["nope"], ["review", "--arg", "topic=x"], ["review", "--arg", "base"],
+                                  ["debug", "--arg", "symptom=  "],
+                                  ["debug", "--arg", "symptom=x", "--arg", "repro=echo 'unterminated"]])
 def test_cli_refuses_bad_prompt_arguments(plain, capsys, argv):
     assert cli.main(["mcp", "prompts", *argv, "--repo", str(plain)]) == 2
     assert "error:" in capsys.readouterr().err

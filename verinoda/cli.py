@@ -2534,6 +2534,10 @@ def cmd_mcp_prompts(args) -> int:
     if missing:
         print(f"error: {args.name} needs --arg {missing[0]}=...", file=sys.stderr)
         return 2
+    problems = P.argument_problems(args.name, given)
+    if problems:
+        print(f"error: {problems[0]}", file=sys.stderr)
+        return 2
     text = P.render(args.name, given, listed=listed, served=served, gateway=GATEWAY)
     _write(_dump({"name": args.name, "profile": profile, "arguments": given, "text": text}) if args.json else text)
     return 0

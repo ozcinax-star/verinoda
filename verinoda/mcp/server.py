@@ -2892,6 +2892,20 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     return srv
 
 
+def _invalid_params(message: str) -> Exception:
+    """A JSON-RPC invalid-params error the SDK passes to the client with its message (not 'Error rendering')."""
+    try:
+        from mcp.shared.exceptions import MCPError  # mcp >= 2
+        return MCPError(-32602, message)
+    except ImportError:  # pragma: no cover - mcp 1.x
+        try:
+            from mcp.shared.exceptions import McpError
+            from mcp.types import ErrorData
+            return McpError(ErrorData(code=-32602, message=message))
+        except ImportError:
+            return ValueError(message)
+
+
 def _add_prompts(srv, listed: set[str], served: set[str]) -> None:
     """The ready workflows (:mod:`verinoda.mcp.prompts`) as MCP prompts, worded for this profile's menu."""
     from pydantic import Field
@@ -2899,7 +2913,11 @@ def _add_prompts(srv, listed: set[str], served: set[str]) -> None:
     from verinoda.mcp import prompts as P
 
     def text(name: str, **args) -> str:
-        return P.render(name, args, listed=listed, served=served, gateway=GATEWAY)
+        given = {k: v for k, v in args.items() if v is not None}
+        problems = P.argument_problems(name, given)
+        if problems:  # the same check as `verinoda mcp prompts`, sent as invalid params rather than a render error
+            raise _invalid_params("; ".join(problems))
+        return P.render(name, given, listed=listed, served=served, gateway=GATEWAY)
 
     def arg(prompt: str, name: str):
         return Field(description=next(d for a, d, _ in P.ARGUMENTS[prompt] if a == name))
