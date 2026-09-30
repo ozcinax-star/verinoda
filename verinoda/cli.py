@@ -930,6 +930,25 @@ def cmd_when(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_extract(args) -> int:
+    from verinoda import extract
+
+    if not args.target and args.from_file is None:
+        raise SystemExit("error: give a location (path:LINE, path#Symbol) or --from FILE")
+    output = None
+    if args.from_file == "-":
+        output = sys.stdin.read()
+    elif args.from_file is not None:
+        f = Path(args.from_file)
+        if not f.is_file():
+            raise SystemExit(f"error: {args.from_file} is not a file")
+        output = f.read_text(encoding="utf-8", errors="replace")
+    res = extract.run(_repo(args), args.target, output=output, cwd=Path.cwd(),
+                      max_lines=args.max_lines or None, limit=max(1, args.limit))
+    _emit(args, res, lambda r: _write(extract.render(r, numbers=not args.no_numbers)))
+    return 0 if res["status"] == "found" else 2
+
+
 # -- question plans (docs/DESIGN.md D1-D9) ----------------------------------------
 
 def _plan_file(repo: Path, arg: str) -> Path:
@@ -2628,6 +2647,16 @@ def build_parser() -> argparse.ArgumentParser:
                                "around each call")
     sp.add_argument("symbol")
     sp.add_argument("--depth", type=int, default=6, help="caller hops to walk back (default 6)")
+    sp = add("extract", cmd_extract, "the whole function or class around a location: path:LINE, path#Symbol, or "
+                                     "the locations in a compiler's or test run's output (the file as it is now; "
+                                     "no index needed; exit 2 = a location not found)")
+    sp.add_argument("target", nargs="*", help="path:LINE, path:LINE-LINE, path#Symbol (or path::Symbol), or an "
+                                              "error line as a tool printed it")
+    sp.add_argument("--from", dest="from_file", metavar="FILE",
+                    help="read the locations from a compiler's, linter's or test run's output ('-': stdin)")
+    sp.add_argument("--max-lines", type=int, default=0, help="print at most N lines of each definition (0: all)")
+    sp.add_argument("--limit", type=int, default=20, help="at most N locations (default 20)")
+    sp.add_argument("--no-numbers", action="store_true", help="the source as it is, without line numbers")
     sp = add("analyze", cmd_analyze, "answer a question as claims with evidence, critique and unknowns")
     sp.add_argument("question", nargs="?", help="the question (optional with --plan: the plan's user_message)")
     sp.add_argument("--plan", metavar="FILE",
