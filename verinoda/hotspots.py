@@ -24,7 +24,7 @@ import heapq
 import re
 from array import array
 from collections import Counter
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from verinoda import health
 from verinoda.snapshot import git
@@ -34,6 +34,7 @@ DEFAULT_LIMIT = 20       # files and functions listed
 FUNCTION_FILES = 20      # the top files whose functions are measured
 REVIEW_COMMITS = 500     # per-function window of `review`: the last N commits touching the reviewed files
 ZERO_BLOB = "0" * 40
+_EXACT_DIFF_CELLS = 4_000_000   # a working-tree diff larger than this (lines x lines) uses difflib's autojunk
 _HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 _INDEX_RE = re.compile(r"^index ([0-9a-f]+)\.\.([0-9a-f]+)")
 _GIT = ("-c", "core.quotepath=off")
@@ -59,43 +60,82 @@ def _code(rel: str) -> bool:
     return PurePosixPath(rel).suffix.lower() in (".py", ".pyi", *anchors.TS_LANGS)
 
 
+def _scope(repo) -> tuple[list[str], list[str]]:
+    """The diff option and the pathspec that keep a log inside the project: in a folder of its git repository,
+    that folder, its paths relative to it (as the graph's are)."""
+    from verinoda.treestate import project_prefix
+
+    return (["--relative"], ["--", "."]) if project_prefix(repo) else ([], [])
+
+
+def _grafted(repo) -> set[str]:
+    """The boundary commits of a shallow clone (their diff shows every file as added); empty when not shallow."""
+    if (git(repo, "rev-parse", "--is-shallow-repository") or "").strip() != "true":
+        return set()
+    path = (git(repo, "rev-parse", "--git-path", "shallow") or "").strip()
+    if not path:
+        return set()
+    p = Path(path) if Path(path).is_absolute() else Path(repo) / path
+    try:
+        return {ln.strip() for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()}
+    except OSError:
+        return set()
+
+
 def file_changes(repo, n_commits: int = DEFAULT_COMMITS) -> dict | None:
     """Per path, the non-merge commits among the last ``n_commits`` that touched it; None without git history.
-    ``{"changes": Counter, "last": {path: (sha, date)}, "commits", "oldest", "whole_history"}``."""
-    out = git(repo, *_GIT, "log", "--no-merges", "--no-renames", f"-n{n_commits}", "--format=@@%H%x1f%cI",
-              "--name-only")
+    ``{"changes": Counter, "last": {path: (sha, date)}, "commits", "oldest", "whole_history", "shallow"}``. A
+    shallow clone's boundary commits are not counted (their diff is the whole tree)."""
+    rel, spec = _scope(repo)
+    out = git(repo, *_GIT, "log", "--no-merges", "--no-renames", *rel, f"-n{n_commits}", "--format=@@%H%x1f%cI",
+              "--name-only", *spec)
     if out is None:
         return None
+    grafted = _grafted(repo)
     changes: Counter = Counter()
     last: dict[str, tuple[str, str]] = {}
-    commits, oldest, cur = 0, None, ("", "")
+    commits, oldest, cur, skip = 0, None, ("", ""), False
     for line in out.splitlines():
         if line.startswith("@@"):
             sha, _, date = line[2:].partition("\x1f")
-            cur, oldest = (sha, date), date
-            commits += 1
-        elif line.strip():
+            skip = sha in grafted
+            if not skip:
+                cur, oldest = (sha, date), date
+                commits += 1
+        elif line.strip() and not skip:
             f = line.strip()
             changes[f] += 1
             last.setdefault(f, cur)   # newest first
     return {"changes": changes, "last": last, "commits": commits, "oldest": oldest,
-            "whole_history": commits < n_commits}
+            "whole_history": commits < n_commits and not grafted, "shallow": bool(grafted)}
 
 
 def _identity(n: int) -> array:
     return array("i", range(1, n + 1))
 
 
-def _line_map(old: str, new: str) -> array:
-    """For each line of ``old``, its line in ``new`` (0: changed or gone)."""
+def _line_map(old: str, new: str, own: list | None = None) -> array:
+    """For each line of ``old``, its line in ``new`` (0: gone), carried as :func:`_parent_map` carries a diff:
+    an unchanged line as its copy, an edited line as the line in its place. The lines both texts start and end
+    with are matched first; a large middle is diffed with difflib's popular-line heuristic (``autojunk``) so a
+    file of many repeated lines does not take quadratic time."""
     a, b = old.split("\n"), new.split("\n")
     if a == b:
         return _identity(len(a))
-    out = array("i", bytes(4 * len(a)))
-    for i, j, n in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks():
-        for k in range(n):
-            out[i + k] = j + k + 1
-    return out
+    pre = 0
+    while pre < len(a) and pre < len(b) and a[pre] == b[pre]:
+        pre += 1
+    suf = 0
+    while suf < len(a) - pre and suf < len(b) - pre and a[-1 - suf] == b[-1 - suf]:
+        suf += 1
+    ma, mb = a[pre:len(a) - suf], b[pre:len(b) - suf]
+    sm = difflib.SequenceMatcher(None, ma, mb, autojunk=len(ma) * len(mb) > _EXACT_DIFF_CELLS)
+    hunks = []
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag != "equal":
+            ol, nl = i2 - i1, j2 - j1
+            hunks.append((pre + i1 + (1 if ol else 0), ol, pre + j1 + (1 if nl else 0), nl))
+    return _parent_map(_identity(len(b)), hunks, own)
 
 
 def _parent_map(m: array, hunks: list[tuple[int, int, int, int]], own: list | None = None) -> array:
@@ -148,7 +188,8 @@ def function_changes(repo, texts: dict[str, str], *, n_commits: int | None = REV
     rels = [r for r in rels if metrics[r]]
     if not rels:
         return {"files": {}, "metrics": metrics, "commits": 0, "unmapped": 0}
-    tree = git(repo, *_GIT, "ls-tree", "--full-tree", "HEAD", "--", *rels)
+    owners = {r: _owners(metrics[r], texts[r].count("\n") + 1) for r in rels}
+    tree = git(repo, *_GIT, "ls-tree", "HEAD", "--", *rels)   # paths relative to the project's folder
     if tree is None:
         return None
     maps: dict[tuple[str, str], array] = {}
@@ -158,15 +199,18 @@ def function_changes(repo, texts: dict[str, str], *, n_commits: int | None = REV
         if len(parts) == 3 and parts[1] == "blob" and path in texts:
             head = git(repo, "cat-file", "blob", parts[2])
             if head is not None:
-                maps[(path, parts[2])] = _line_map(head.replace("\r\n", "\n"), texts[path].replace("\r\n", "\n"))
-    owners = {r: _owners(metrics[r], texts[r].count("\n") + 1) for r in rels}
+                maps[(path, parts[2])] = _line_map(head.replace("\r\n", "\n"), texts[path].replace("\r\n", "\n"),
+                                                   owners.get(path))
+    # no external diff or text conversion: a repository's config could name a program, and a converted text's
+    # line numbers are not the file's
     args = ["log", "--topo-order", "-m", "--no-renames", "--full-index", "-U0", "--no-color", "--no-ext-diff",
-            "--format=@@%H%x1f%P%x1f%cI"]
+            "--no-textconv", *_scope(repo)[0], "--format=@@%H%x1f%P%x1f%cI"]
     args += [f"-n{n_commits}"] if n_commits else []
     args += [f"--since={since}"] if since else []
     log = git(repo, *_GIT, *args, "--", *rels, timeout=120)
     if log is None:
         return None
+    grafted = _grafted(repo)
     counts: dict[str, dict[str, dict]] = {r: {} for r in rels}
     shas: set[str] = set()
     unmapped = 0
@@ -210,8 +254,10 @@ def function_changes(repo, texts: dict[str, str], *, n_commits: int | None = REV
             close()
             sec = None
             sha, parents, date = (line[2:].split("\x1f") + ["", ""])[:3]
-            commit = (sha, date, len(parents.split()) > 1)
-            shas.add(sha)
+            # a merge, or a shallow clone's boundary (its diff adds every file): its diffs only carry lines
+            commit = (sha, date, len(parents.split()) > 1 or sha in grafted)
+            if sha not in grafted:
+                shas.add(sha)
         elif line.startswith("diff --git "):
             close()
             sec = {"rel": None, "old": None, "new": None, "hunks": []}
@@ -282,7 +328,7 @@ def hotspots(g, n_commits: int = DEFAULT_COMMITS, limit: int = DEFAULT_LIMIT) ->
     cands.sort(key=lambda c: (c[4] is not None, -(c[1] * (c[4] or 0)), c[0]))
     keep = max(limit, FUNCTION_FILES)
     best: list[int] = []   # a min-heap of the highest `keep` scores so far
-    rows, texts, fmetrics, not_measured, below = [], {}, {}, [], 0
+    rows, texts, fmetrics, not_measured, below = [], {}, {}, [], 0   # below: files the bound skipped
     for i, (f, n, lines, text, bound) in enumerate(cands):
         if bound is not None and len(best) >= keep and n * bound < best[0]:
             below = len(cands) - i
@@ -309,26 +355,37 @@ def hotspots(g, n_commits: int = DEFAULT_COMMITS, limit: int = DEFAULT_LIMIT) ->
               "functions_of_top_files": len(top)}
     if fn and fn["unmapped"]:
         window["function_changes_not_mapped"] = fn["unmapped"]
+    if fc["shallow"]:
+        window["shallow"] = True
+        res["coverage"]["limits"].append("a shallow clone: the commits before its boundary are missing and the "
+                                         "boundary commits are not counted (`git fetch --unshallow` for the rest)")
+    if top and fn is None:
+        window["functions_not_measured"] = True
+        res["coverage"]["limits"].append("the per-function git log failed or timed out: no function is ranked")
+    if _scope(root)[0]:
+        res["coverage"]["limits"].append("the project is a folder of its git repository: only commits and paths "
+                                         "inside that folder are read")
     return res | {
-        "is_git": True, "window": window,
+        "is_git": True, "window": window, "files_changed": len(cands),
         "files": rows[:limit], "files_total": len(rows),
         "functions": frows[:limit], "functions_total": len(frows),
-        **({"truncated": True} if len(rows) > limit or len(frows) > limit else {}),
+        **({"truncated": True} if len(rows) > limit or len(frows) > limit or below else {}),
         **({"not_measured": not_measured[:20], "not_measured_total": len(not_measured)} if not_measured else {}),
         **({"below_top_not_measured": below} if below else {}),
     }
 
 
 def rank(repo, ranges: list[tuple[str, int]], texts: dict[str, str], n_commits: int = REVIEW_COMMITS
-         ) -> list[dict | None]:
+         ) -> list[dict | None] | None:
     """For each ``(path, line)`` of the current text: the hotspot of the function holding it
-    (``{"symbol", "changes", "cyclomatic", "score", "status"}``), or None (no function, no git history)."""
+    (``{"symbol", "changes", "cyclomatic", "score", "status"}``), or None (no function); None instead of the list
+    when the history could not be read (no git history, or git failed)."""
     try:
         fc = function_changes(repo, texts, n_commits=n_commits)
     except (OSError, ValueError, RecursionError):
         fc = None
     if not fc:
-        return [None] * len(ranges)
+        return None
     out: list[dict | None] = []
     for rel, ln in ranges:
         ms = fc["metrics"].get(rel) or {}

@@ -118,7 +118,7 @@ def test_uncommitted_edits_shift_the_current_spans(history):
 
 def test_no_git_history_is_none(tmp_path):
     assert hs.file_changes(tmp_path) is None
-    assert hs.rank(tmp_path, [("a.py", 1)], {"a.py": "def f():\n    return 1\n"}) == [None]
+    assert hs.rank(tmp_path, [("a.py", 1)], {"a.py": "def f():\n    return 1\n"}) is None
 
 
 def _scan(repo: Path) -> None:
@@ -234,3 +234,118 @@ def test_the_view_skips_files_that_cannot_reach_the_top(tmp_path, monkeypatch):
     v = hs.hotspots(_graph(repo), limit=1)
     assert [r["file"] for r in v["files"]] == ["big.py"] and v["below_top_not_measured"] == 1
     assert v["files"][0]["score"] == 4 * 5
+
+
+def test_an_edited_line_keeps_its_history(history):
+    """A line edited in the working tree takes its HEAD line's place: the function keeps its commits."""
+    text = (history / "app/core.py").read_text(encoding="utf-8")
+    for edited in (text.replace("return 2\n", "return 9\n"), text.replace("return 3\n", "return 7\n")):
+        fc = hs.function_changes(history, {"app/core.py": edited}, n_commits=500)
+        assert {q: c["changes"] for q, c in fc["files"]["app/core.py"].items()} == {"hot": 5, "cold": 2}
+    # a working-tree line map: replaced lines in place, a deleted line inside one function to the line before it
+    assert list(hs._line_map("a\nb\nc\nd", "a\nB\nc\nd")) == [1, 2, 3, 4]
+    own = [None, "f", "f", "f", "f"]
+    assert list(hs._line_map("a\nb\nc\nd", "a\nc\nd", own)) == [1, 1, 2, 3]
+    assert list(hs._line_map("a\nb\nc\nd", "a\nc\nd")) == [1, 0, 2, 3]
+
+
+def test_the_working_tree_map_is_not_quadratic_on_repeated_lines():
+    import time
+
+    old = "\n".join("x = 1" if i % 2 else "y = 2" for i in range(20000))
+    new = "z = 0\n" + old[6:-5] + "w = 3"   # both ends edited: the middle is 20k repeated lines
+    t0 = time.perf_counter()
+    m = hs._line_map(old, new)
+    assert time.perf_counter() - t0 < 10
+    assert len(m) == 20000 and m[0] == 1 and m[10000] == 10001
+
+
+def test_a_project_in_a_folder_of_its_git_repository(tmp_path):
+    """The graph's paths are relative to the project folder, git's to the repository: the view and the ranking
+    read the folder's history with its paths."""
+    mono = tmp_path / "mono"
+    mono.mkdir()
+    _git(mono, "init", "-q", "-b", "main")
+    _write(mono, "other/x.py", "def o(a):\n    if a:\n        return 1\n")
+    for i, hot in enumerate("abcd"):
+        _write(mono, "pkg/app/core.py", _src(hot=hot, cold=str(i // 2)))
+        _commit(mono, f"c{i}")
+    proj = mono / "pkg"
+    v = hs.hotspots(_graph(proj))
+    assert [(r["file"], r["changes"]) for r in v["files"]] == [("app/core.py", 4)]
+    assert {f["symbol"]: f["changes"] for f in v["functions"]} == {"app/core.py::hot": 4, "app/core.py::cold": 2}
+    assert v["window"]["commits"] == 4 and any("folder of its git" in lim for lim in v["coverage"]["limits"])
+    text = (proj / "app/core.py").read_text(encoding="utf-8")
+    [h] = hs.rank(proj, [("app/core.py", text.split("\n").index("def hot(a, b):") + 1)], {"app/core.py": text})
+    assert h["symbol"] == "app/core.py::hot" and h["changes"] == 4
+
+
+def test_a_textconv_driver_does_not_shift_the_hunks(history):
+    conv = history.parent / "pad.py"
+    conv.write_text("import sys\nsys.stdout.write('#\n' * 6 + open(sys.argv[1]).read())\n", encoding="utf-8")
+    (history / ".git/info/attributes").write_text("*.py diff=pad\n", encoding="utf-8")
+    _git(history, "config", "diff.pad.textconv", f'"{Path(sys.executable).as_posix()}" "{conv.as_posix()}"')
+    text = (history / "app/core.py").read_text(encoding="utf-8")
+    fc = hs.function_changes(history, {"app/core.py": text}, n_commits=None)
+    assert {q: c["changes"] for q, c in fc["files"]["app/core.py"].items()} == {"hot": 5, "cold": 2}
+
+
+def test_a_shallow_clone_is_not_the_whole_history(history, tmp_path):
+    shallow = tmp_path / "shallow"
+    _git(tmp_path, "clone", "-q", "--depth", "2", history.as_uri(), str(shallow))
+    v = hs.hotspots(_graph(shallow))
+    assert v["window"]["whole_history"] is False and v["window"]["shallow"] is True
+    assert v["window"]["commits"] == 1   # the boundary commit (every file added) is not a change
+    assert {f["symbol"]: f["changes"] for f in v["functions"]} == {"app/core.py::hot": 1}
+    assert any("shallow clone" in lim for lim in v["coverage"]["limits"])
+    from verinoda import map_text
+
+    assert "whole history" not in map_text.render({"hotspots": v}, 12)
+
+
+def test_files_skipped_by_the_bound_are_counted_and_truncate(tmp_path, monkeypatch):
+    from verinoda import map_text
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _write(repo, "big.py", _src())
+    _write(repo, "small.py", "def s(a):\n    return a\n")
+    _write(repo, "flat.py", "X = 1\n")   # no function: its bound is 0
+    _commit(repo, "init")
+    monkeypatch.setattr(hs, "FUNCTION_FILES", 1)
+    v = hs.hotspots(_graph(repo), limit=1)
+    assert v["files_total"] == 1 and v["below_top_not_measured"] == 2 and v["truncated"] is True
+    assert v["files_changed"] == 3
+    assert "3 changed code files" in map_text.render({"hotspots": v}, 12)
+
+
+def test_a_failed_function_pass_says_so(history, monkeypatch):
+    monkeypatch.setattr(hs, "function_changes", lambda *a, **k: None)
+    v = hs.hotspots(_graph(history))
+    assert v["files"] and v["functions"] == [] and v["window"]["functions_not_measured"] is True
+    assert any("per-function git log failed" in lim for lim in v["coverage"]["limits"])
+
+
+def test_review_ranks_a_call_site_by_the_function_holding_the_call(history):
+    from verinoda import review as rv
+    from verinoda.store import open_store
+
+    def caller(n: int) -> str:
+        return (f"from app.core import hot\ndef warm(a):\n    if a:\n        return {n}\n    return 0\n"
+                "def use():\n    return hot(1, 2)\n")
+
+    for n in range(4):
+        _write(history, "app/caller.py", caller(n))
+        _commit(history, f"warm {n}")
+    _scan(history)
+    text = (history / "app/core.py").read_text(encoding="utf-8")
+    (history / "app/core.py").write_text(text.replace("return 2\n", "return 9\n"), encoding="utf-8", newline="\n")
+    st = open_store(history)
+    try:
+        res = rv.review(history, store=st, concerns=["health"], record=False)
+    finally:
+        st.close()
+    [site] = [r for r in res["read_first"] if r["why"] == "call site of app/core.py::hot"
+              or r["why"].startswith("call site of") and r["at"].startswith("app/caller.py")]
+    assert site["hotspot"]["symbol"] == "app/caller.py::use"

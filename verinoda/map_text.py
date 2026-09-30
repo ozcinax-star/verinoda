@@ -225,7 +225,7 @@ def _hotspots(v: dict, cap: int) -> list[str]:
     w = v.get("window", {})
     span = "the whole history" if w.get("whole_history") else f"the last {w.get('commits', 0)} commits"
     files, fns = v.get("files", []), v.get("functions", [])
-    changed = v.get("files_total", 0) + v.get("below_top_not_measured", 0)
+    changed = v.get("files_changed", v.get("files_total", 0))
     out = [f"{changed} changed code files over {span} (since {(w.get('since') or '-')[:10]}); "
            "score = changes x complexity (strong_inference)"]
     n = max(3, (cap - 3) // 2)
