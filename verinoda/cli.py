@@ -935,6 +935,14 @@ def cmd_backlog(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_agent_lint(args) -> int:
+    from verinoda import agentlint
+
+    res = agentlint.lint(_repo(args), extra=args.file, memory=not args.no_memory, include_ok=args.all)
+    _emit(args, res, lambda r: _write(agentlint.render(r)))
+    return {"wrong": 3, "no_files": 2}.get(res["status"], 0)
+
+
 def cmd_datapack(args) -> int:
     from verinoda import datapack
 
@@ -2739,6 +2747,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("backlog", cmd_backlog, "a backlog item and the code comments that cite it, or the items that explain "
                                      "a line or symbol (docs/BACKLOG.md rows and headings)")
     sp.add_argument("target", help="an item id (69.3), path/File.java:LINE[-LINE], or a symbol")
+    sp = add("agent-lint", cmd_agent_lint, "AGENTS.md, CLAUDE.md, Copilot/Cursor/Windsurf rules and Claude Code "
+                                           "memory checked against the tree: paths, scripts and targets, modules, "
+                                           "declared packages, and whether the files agree (exit 3 = something "
+                                           "wrong, 2 = no such file)")
+    sp.add_argument("--file", action="append", metavar="PATH", help="one more instruction file to check; repeatable")
+    sp.add_argument("--no-memory", action="store_true",
+                    help="leave out Claude Code's memory files for the project (~/.claude/projects/.../memory)")
+    sp.add_argument("--all", action="store_true", help="list the checks that passed too")
     sp = add("datapack", cmd_datapack, "Minecraft datapacks: entity tags checked but never added, objectives written "
                                        "but never read, calls to missing functions (from mcfunction or Java); or "
                                        "one tag, score or function across mcfunction and Java (a function's Java "
