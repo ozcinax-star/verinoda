@@ -57,11 +57,27 @@ _SEL_TEAM = re.compile(r"[\[,]\s*team\s*=\s*!?([A-Za-z0-9_.+-]+)")
 _BAR_ID = r"([a-z0-9_.-]+(?::[a-z0-9_./-]+)?)"
 _BOSSBAR = re.compile(rf"{_AT_CMD}bossbar\s+(add|remove|set|get)\s+{_BAR_ID}")
 _STORE_BAR = re.compile(rf"\bstore\s+(?:result|success)\s+bossbar\s+{_BAR_ID}")
+# a string in Java starts with any word (a log line: "trigger fired for player"): there the rest of the string
+# must be the rest of the command too
+_TRIGGER_TAIL = r"(?:\s+(?:add|set)\s+-?\d+)?\s*"
+_TEAM_TAIL = {"add": r"(?:\s+(?:[\"'{\[].*|\S+))?\s*", "remove": r"\s*", "empty": r"\s*", "list": r"\s*",
+              "join": r"(?:\s+(?:@[a-z](?:\[[^\]]*\])?|[^\s@]\S*))?\s*",
+              "modify": r"\s+(?:color|displayName|friendlyFire|seeFriendlyInvisibles|nametagVisibility"
+                        r"|deathMessageVisibility|collisionRule|prefix|suffix)\s+\S.*"}
+_BAR_TAIL = {"add": r"\s+(?:[\"'{\[].*|\S+)\s*", "remove": r"\s*",
+             "set": r"\s+(?:color|max|name|players|style|value|visible)(?:\s+\S.*)?",
+             "get": r"\s+(?:max|players|value|visible)\s*"}
+# a text's click runs a command: {"clickEvent":{"action":"run_command","value":"/trigger vote set 1"}}
+_CLICK_TRIGGER = re.compile(r"""\b(?:value|command)["']?\s*:\s*["']/?trigger\s+([A-Za-z0-9_.+-]+)""")
 _OBJ_DECL = r"scoreboard\s+objectives|team|bossbar"
 _MACRO_DECL = re.compile(rf"(?:{_AT_CMD}|(?<=\s)(?=scoreboard\s))({_OBJ_DECL})\s+add\s+\$\(")
-_MACRO_TOKEN = re.compile(r"[A-Za-z0-9_.+:/-]*\$\([^)]*\)[A-Za-z0-9_.+:/-]*")
+_MACRO_TOKEN = re.compile(r"(?<![A-Za-z0-9_.+:/-])[A-Za-z0-9_.+:/-]*\$\([^)]{0,64}\)"
+                          r"(?:[A-Za-z0-9_.+:/-]|\$\([^)]{0,64}\))*")
 # a declaration a Java command string leaves open for a concatenation: "scoreboard objectives add " + NAME
 _DECL_OPEN = re.compile(rf"(?:{_AT_CMD}|(?<=\s)(?=scoreboard\s))({_OBJ_DECL})\s+add\s+([A-Za-z0-9_.+:-]*)$")
+# a declaration whose name a format fills in with a value that is not read (marked \x01): a pattern
+_DECL_FILLED = re.compile(rf"(?:{_AT_CMD}|(?<=\s)(?=scoreboard\s))({_OBJ_DECL})\s+add\s+(\S*\x01\S*)")
+_FORMAT_SPEC = re.compile(r"%(?:(\d+)\$)?[-#+ 0,(]*\d*(?:\.\d+)?([sSdn%])")
 
 # Java: tags through the entity API (the methods, or the live set `entityTags()` returns), objectives by name
 _J_TAG_CALL = re.compile(r"\.(addTag|removeTag|addScoreboardTag|removeScoreboardTag)\s*\("
@@ -145,10 +161,12 @@ def tag_members(root: Path, tag: str) -> list[str]:
     return []
 
 
-def parse_function(text: str) -> tuple[list[tuple[int, str, str, str | None]], list[tuple[int, str, str]],
-                                        list[tuple[int, str, str]]]:
+def parse_function(text: str, *, command_string: bool = False
+                   ) -> tuple[list[tuple[int, str, str, str | None]], list[tuple[int, str, str]],
+                              list[tuple[int, str, str]]]:
     """``(calls, tag sites, objective sites)`` of one mcfunction's text: calls ``(line, target, how, delay)``, tag
-    sites ``(line, name, add|remove|check)``, objective sites ``(line, name, define|write|read)``."""
+    sites ``(line, name, add|remove|check)``, objective sites ``(line, name, define|write|read)``.
+    ``command_string``: the text is a string of Java code, which may be a message, not a command."""
     calls, tags, objs = [], [], []
     for i, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
@@ -189,6 +207,9 @@ def parse_function(text: str) -> tuple[list[tuple[int, str, str, str | None]], l
         for m in _OBJ_DISPLAY.finditer(line):
             objs.append((i, m.group(1), "read"))
         for m in _TRIGGER.finditer(line):
+            if not command_string or re.fullmatch(_TRIGGER_TAIL, line[m.end():]):
+                objs.append((i, m.group(1), "write"))
+        for m in _CLICK_TRIGGER.finditer(line):
             objs.append((i, m.group(1), "write"))
         for m in _PLAYERS.finditer(line):
             verb, obj = m.group(1), m.group(3)
@@ -216,11 +237,11 @@ def bossbar_id(name: str) -> str:
     return name if ":" in name else f"minecraft:{name}"
 
 
-def parse_symbols(text: str) -> list[tuple[int, str, str, str]]:
+def parse_symbols(text: str, *, command_string: bool = False) -> list[tuple[int, str, str, str]]:
     """The teams and boss bars of one mcfunction's text, and the objectives, teams and boss bars a macro declares:
     ``(line, what, name, kind)``, ``what`` being ``team``, ``bossbar`` or ``objective`` and ``kind`` ``define``
     (``team add``, ``bossbar add``), ``remove``, ``check`` (``team=`` in a selector) or ``use``; a name a macro fills
-    in (``team add $(t)``) is ``*``."""
+    in (``team add $(t)``) is ``*``. ``command_string`` as for :func:`parse_function`."""
     out = []
     for i, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
@@ -232,10 +253,14 @@ def parse_symbols(text: str) -> list[tuple[int, str, str, str]]:
                 what = m.group(1).split()[0]
                 out.append((i, "objective" if what == "scoreboard" else what, "*", "define"))
         for m in _TEAM_CMD.finditer(line):
+            if command_string and not re.fullmatch(_TEAM_TAIL[m.group(1)], line[m.end():]):
+                continue
             out.append((i, "team", m.group(2), {"add": "define", "remove": "remove"}.get(m.group(1), "use")))
         for m in _SEL_TEAM.finditer(line):
             out.append((i, "team", m.group(1), "check"))
         for m in _BOSSBAR.finditer(line):
+            if command_string and not re.fullmatch(_BAR_TAIL[m.group(1)], line[m.end():]):
+                continue
             out.append((i, "bossbar", bossbar_id(m.group(2)),
                         {"add": "define", "remove": "remove"}.get(m.group(1), "use")))
         for m in _STORE_BAR.finditer(line):
@@ -327,6 +352,40 @@ def _top_level(expr: str, chars: str) -> list[int]:
 def _split(expr: str, ch: str) -> list[str]:
     cuts = _top_level(expr, ch)
     return [expr[a + 1:b] for a, b in zip([-1] + cuts, cuts + [len(expr)])]
+
+
+def _formatted(s: str, t: str, b: str, start: int, end: int, value) -> str:
+    """Command string ``s`` (the literal at ``t[start:end]``, ``b`` the blanked text) as ``String.format(s, ...)`` or
+    ``s.formatted(...)`` fills it in: each ``%s`` / ``%d`` takes its argument's one value, or ``\\x01`` when that
+    is not a single value read through ``value`` (a constant binding). ``s`` itself when it is no format."""
+    after = re.match(r"\s*\.\s*formatted\s*\(", b[end:end + 80])
+    before = re.search(r"\bformat\s*\(\s*(?:[\w.]+\s*,\s*)?$", b[max(0, start - 120):start])
+    if after:
+        paren = end + after.end() - 1
+        close = _close(b, paren)
+        args = _split(t[paren + 1:close], ",") if close > 0 else None
+    elif before:
+        paren = max(0, start - 120) + before.start() + before.group().index("(")
+        close = _close(b, paren)
+        args = _split(t[end:close], ",")[1:] if close > end else None
+    else:
+        return s
+    if args is None:
+        return s
+    nxt = iter(range(len(args)))
+
+    def fill(m: re.Match) -> str:
+        if m.group(2) == "%":
+            return "%"
+        if m.group(2) == "n":
+            return " "
+        k = int(m.group(1)) - 1 if m.group(1) else next(nxt, len(args))
+        if not 0 <= k < len(args):
+            return "\x01"
+        vals, pats = _values(args[k], value)
+        return next(iter(vals)) if len(vals) == 1 and not pats else "\x01"
+
+    return _FORMAT_SPEC.sub(fill, s)
 
 
 class _Consts:
@@ -622,24 +681,46 @@ def index(repo: Path, *, java_files: list[str] | None = None, java_calls: bool =
                 if h[1] < len(args):
                     tag_site(m.start(), args[h[1]], h[0])
         # commands written as strings in Java (run through the server's command dispatcher)
-        for m in re.finditer(r'"((?:[^"\\\n]|\\.){6,})"', t):
-            s = m.group(1).replace('\\"', '"')
-            if not re.search(r"(?:^|\s)(?:tag|scoreboard|summon|execute|function|data|team|bossbar|trigger)\s", s):
+        literals = []  # (text, its offset, the literal's start and end, in a text block)
+        for m in _J_NOISE.finditer(t):  # string literals paired as Java pairs them, comments skipped
+            lit = m.group()
+            if lit.startswith('"""'):  # a text block: one command a line
+                if not lit.endswith('"""') or len(lit) < 6:
+                    continue
+                at = m.start() + 3
+                for part in lit[3:-3].split("\n"):
+                    literals.append((part, at, m.start(), m.end(), True))
+                    at += len(part) + 1
+            elif lit.startswith('"') and len(lit) >= 8 and lit.endswith('"'):
+                literals.append((lit[1:-1], m.start(), m.start(), m.end(), False))
+        for raw_s, s_start, lit_start, lit_end, text_block in literals:
+            s = raw_s.replace('\\"', '"')
+            if not re.search(r"(?:^|\s)(?:tag|scoreboard|summon|execute|function|data|team|bossbar|trigger|tellraw)"
+                             r"\s", s):
                 continue
-            ln = line_of(m.start())
-            joined = re.match(r"\s*\+", t[m.end():m.end() + 40])
+            ln = line_of(s_start)
+            site_text = lines[ln - 1].strip()[:160]
+            if "%" in s:  # String.format("... add %s dummy", NAME) or "... add %s dummy".formatted(NAME)
+                s = _formatted(s, t, cx.blank(f), lit_start, lit_end, lambda e, d: cx.value(e, f, lit_start, d))
+                for dm in _DECL_FILLED.finditer(s):
+                    what = {"scoreboard": "objective"}.get(dm.group(1).split()[0], dm.group(1))
+                    declared.append((what, re.sub(r"[^A-Za-z0-9_.+:*-]+", "*", dm.group(2).replace("\x01", "*")),
+                                     Site(f, ln, "java", "define", site_text)))
+                s = re.sub(r"\S*\x01\S*", "\x01", s)  # a word a value fills in that is not read is no name
+            joined = not text_block and re.match(r"\s*\+", t[lit_end:lit_end + 40])
             if joined:  # "... add " + NAME: the name is the concatenation's, not the literal's last word
-                _concat_declare(f, t, m.end(), s, ln)
+                _concat_declare(f, t, lit_end, s, ln)
                 s = re.sub(r"\S+$", "", s)
-            if re.search(r"\+\s*$", t[max(0, m.start() - 40):m.start()]):  # PREFIX + "_x ...": "_x" is part of one
-                s = re.sub(r"^\S+", "", s)
-            _c, ts, os_ = parse_function(s)
+            if not text_block and re.search(r"\+\s*$", t[max(0, lit_start - 40):lit_start]):
+                s = re.sub(r"^\S+", "", s)  # PREFIX + "_x ...": "_x" is part of one
+            s = s.strip()
+            _c, ts, os_ = parse_function(s, command_string=True)
             for _l, name, kind in ts:
-                tags.setdefault(name, []).append(Site(f, ln, "java", kind, lines[ln - 1].strip()[:160]))
+                tags.setdefault(name, []).append(Site(f, ln, "java", kind, site_text))
             for _l, name, kind in os_:
-                objs.setdefault(name, []).append(Site(f, ln, "java", kind, lines[ln - 1].strip()[:160]))
-            for _l, what, name, kind in parse_symbols(s):
-                symbols[what].setdefault(name, []).append(Site(f, ln, "java", kind, lines[ln - 1].strip()[:160]))
+                objs.setdefault(name, []).append(Site(f, ln, "java", kind, site_text))
+            for _l, what, name, kind in parse_symbols(s, command_string=True):
+                symbols[what].setdefault(name, []).append(Site(f, ln, "java", kind, site_text))
         # objectives and teams declared through the scoreboard API (or a project method handing its name on to it)
         mojang = "net.minecraft.world.scores" in t and "net.minecraft.scoreboard" not in t
         if _J_DECLARE.search(t) or (decl_rx is not None and decl_rx.search(t)):
@@ -711,8 +792,8 @@ def _tag_helpers(texts: dict[str, str]) -> dict[str, tuple[str, int]]:
         if not _TAG_API.search(text):  # a helper's body calls the tag API
             continue
         for m in decl.finditer(text):
-            body = _method_body(text, m.group(1)) or ""
-            if len(body) > 1500:
+            body = _body_at(text, m.end() - 1, 1500)
+            if body is None:
                 continue
             params = [(k, p.split()[-1]) for k, p in enumerate(m.group(2).split(",")) if "String" in p and p.split()]
             live = r"(?:entityTags|getTags|getScoreboardTags|getCommandTags)\s*\(\s*\)\s*\.\s*"
@@ -737,8 +818,8 @@ def _declare_helpers(texts: dict[str, str]) -> dict[str, tuple[str, int]]:
         if not re.search(r"\.(?:addObjective|addPlayerTeam|addTeam)\s*\(", text):
             continue
         for m in decl.finditer(text):
-            body = _method_body(text, m.group(1)) or ""
-            if len(body) > 1500:
+            body = _body_at(text, m.end() - 1, 1500)
+            if body is None:
                 continue
             for k, p in enumerate(m.group(2).split(",")):
                 if "String" not in p or not p.split():
@@ -749,6 +830,16 @@ def _declare_helpers(texts: dict[str, str]) -> dict[str, tuple[str, int]]:
                 elif re.search(rf"\.(?:addPlayerTeam|addTeam){arg}", body):
                     out.setdefault(m.group(1), set()).add(("team", k))
     return {k: next(iter(v)) for k, v in out.items() if len(v) == 1}
+
+
+def _body_at(text: str, open_pos: int, limit: int) -> str | None:
+    """The body of the brace at ``open_pos`` (brace-matched), or None when it is longer than ``limit``."""
+    depth = 0
+    for m in re.finditer(r"[{}]", text[open_pos:open_pos + limit + 2]):
+        depth += 1 if m.group() == "{" else -1
+        if depth == 0:
+            return text[open_pos + 1:open_pos + m.start()]
+    return None
 
 
 def _method_body(text: str, name: str) -> str | None:
@@ -888,45 +979,64 @@ def naming_rules(repo: Path) -> tuple[dict[str, re.Pattern], list[dict]]:
         except re.error as e:
             bad.append({"kind": kind, "rule": rx, "why": f"not a regex: {e}"})
             continue
-        if _nested_repeat(rx):  # a name could take exponential time to match: the rule is not applied
+        why = _risky_rule(rx)
+        if why:  # a name could take too long to match: the rule is not applied
             del rules[kind]
-            bad.append({"kind": kind, "rule": rx, "why": "a repeat inside a repeat (or around alternatives) can "
-                                                        "take exponential time; write it without nesting"})
+            bad.append({"kind": kind, "rule": rx, "why": why})
     return rules, bad
 
 
-def _nested_repeat(rx: str) -> bool:
-    """Does ``rx`` repeat a part that itself repeats or chooses between alternatives (``(a+)*``, ``(a|aa)*``), the
-    shape whose matching can backtrack exponentially? Read from Python's own parse of the pattern."""
+def _risky_rule(rx: str) -> str | None:
+    """Why matching ``rx`` could take exponential or high polynomial time on one long name, or None. Read from
+    Python's own parse of the pattern, and conservative: a repeat around anything that itself varies (``(a+)*``,
+    ``(a|aa)*``, ``(a?){30}``), more than four parts of varying length (five ``[a-z]*`` in a row), or
+    alternatives that multiply past 64 ways."""
     try:
         from re import _parser as sre_parse  # Python 3.11+
     except ImportError:  # pragma: no cover - Python 3.10
         import sre_parse  # type: ignore[no-redef]
+    counts = {"varying": 0, "ways": 1}
+
+    def subs(av):
+        for sub in (av if isinstance(av, (tuple, list)) else ()):
+            if isinstance(sub, sre_parse.SubPattern):
+                yield sub
+            elif isinstance(sub, list):
+                yield from (x for x in sub if isinstance(x, sre_parse.SubPattern))
 
     def walk(items, inside: bool) -> bool:
         for op, av in items:
             name = str(op)
             if name.endswith("REPEAT"):
-                many = av[1] > 1
-                if inside and many:
+                lo, hi = av[0], av[1]
+                if inside and lo != hi:
                     return True
-                if walk(av[2], inside or many):
+                if lo != hi:
+                    counts["varying"] += 1
+                if walk(av[2], inside or hi > 1):
                     return True
                 continue
-            if name == "BRANCH" and inside:
+            if name == "BRANCH":
+                if inside:
+                    return True
+                counts["ways"] *= max(1, len(av[1]))
+            if any(walk(sub, inside) for sub in subs(av)):
                 return True
-            for sub in (av if isinstance(av, (tuple, list)) else ()):
-                if isinstance(sub, sre_parse.SubPattern) and walk(sub, inside):
-                    return True
-                if isinstance(sub, list) and any(isinstance(x, sre_parse.SubPattern) and walk(x, inside)
-                                                 for x in sub):
-                    return True
         return False
 
     try:
-        return walk(sre_parse.parse(rx), False)
+        nested = walk(sre_parse.parse(rx), False)
     except Exception:  # noqa: BLE001 - a pattern the parser rejects fails to compile first
-        return False
+        return None
+    if nested:
+        return ("a repeat around a part that itself repeats, is optional or chooses between alternatives can take "
+                "exponential time; write it without nesting")
+    if counts["varying"] > 4:
+        return (f"{counts['varying']} parts of varying length can take high polynomial time on a long name; "
+                "use at most four")
+    if counts["ways"] > 64:
+        return f"alternatives multiply to {counts['ways']} ways; use at most 64"
+    return None
 
 
 def naming_problems(ix: dict, rules: dict[str, re.Pattern]) -> list[dict]:

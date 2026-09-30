@@ -217,3 +217,79 @@ def test_score_lookup_carries_the_built_name_lead(repo, capsys):
     assert cli.main(["datapack", "score", "a_board", "--repo", str(repo)]) == 0
     out = capsys.readouterr().out
     assert "never declared by name" in out and "declares a_*" in out
+
+
+def _mini(tmp_path, mcfunction: str, java: str) -> Path:
+    root = tmp_path / "mini"
+    (root / "data/ns/function").mkdir(parents=True)
+    (root / "data/ns/function/a.mcfunction").write_bytes(mcfunction.encode("utf-8"))
+    (root / "A.java").write_bytes(java.encode("utf-8"))
+    return root
+
+
+def test_a_java_string_that_starts_with_a_command_word_is_a_command_only_when_the_rest_fits(tmp_path):
+    java = """class A { void f() {
+    LOGGER.info("trigger fired for player");
+    LOGGER.debug("team list refreshed ok");
+    LOGGER.info("bossbar set up done");
+    s.run("team join red @s");
+    s.run("execute as @a run trigger vote set 1");
+    s.run("bossbar set ns:x value 3");
+} }
+"""
+    ix = datapack.index(_mini(tmp_path, "say hi\n", java), java_files=["A.java"], java_calls=False)
+    assert set(ix["objectives"]) == {"vote"} and set(ix["teams"]) == {"red"} and set(ix["bossbars"]) == {"ns:x"}
+    assert [r["name"] for r in datapack.problems(ix)["scores_written_never_read"]] == ["vote"]
+
+
+def test_declared_by_a_format_string_and_a_text_block(tmp_path):
+    mcf = "".join(f"scoreboard players set @s {n} 1\nexecute if score @s {n} matches 1 run say x\n"
+                  for n in ("kills", "k_f2", "k_blk", "k_dyn"))
+    java = '''class A {
+    static final String K = "kills";
+    void f() {
+        s.run(String.format("scoreboard objectives add %s dummy", K));
+        s.run("scoreboard objectives add %s dummy".formatted("k_f2"));
+        s.run(String.format("scoreboard objectives add k_%s dummy", kind));
+        s.run("""
+            scoreboard objectives add k_blk dummy
+            """);
+    }
+}
+'''
+    ix = datapack.index(_mini(tmp_path, mcf, java), java_files=["A.java"], java_calls=False)
+    pr = datapack.problems(ix)
+    assert [r["name"] for r in pr["objectives_used_never_declared"]] == ["k_dyn"]
+    assert [d["pattern"] for d in pr["objectives_used_never_declared"][0]["maybe_declared_by"]] == ["k_*"]
+    assert {s.at for s in ix["objectives"]["k_blk"] if s.kind == "define"} == {"A.java:8"}
+    assert "k_" not in ix["objectives"]
+
+
+def test_a_click_event_runs_trigger():
+    line = 'tellraw @a {"text":"[Vote]","clickEvent":{"action":"run_command","value":"/trigger vote set 1"}}'
+    assert datapack.parse_function(line)[2] == [(1, "vote", "write")]
+    assert datapack.parse_function("tellraw @a {text:'x',click_event:{action:'run_command',command:'/trigger v2'}}"
+                                   )[2] == [(1, "v2", "write")]
+
+
+def test_naming_rules_that_backtrack_without_nested_repeats_are_refused():
+    assert "exponential" in datapack._risky_rule(r"(a?){26}a{26}")
+    assert "polynomial" in datapack._risky_rule(r"\w*\w*\w*\w*\w*\w*!")
+    assert "at most 64" in datapack._risky_rule("(a|ab)" * 7)
+    for ok in ("[a-z]+_[a-z]+", "(obj|objective)_[a-z0-9]+", "^[a-z0-9_.]+$", "[a-z]{4,}"):
+        assert datapack._risky_rule(ok) is None
+
+
+def test_a_long_macro_line_and_many_helper_methods_stay_linear():
+    import time
+
+    start = time.perf_counter()
+    datapack.parse_function("$say " + "a" * 40000)
+    datapack.parse_symbols("$say " + "a" * 40000)
+    assert datapack._unmacro("$team join a$(x)b$(y)c red_$(s) @s") == "team join $(m) $(m) @s"
+    src = "class A {\n" + "".join(f'void m{i}(Scoreboard sb, String n{i}) {{ sb.addObjective("o{i}", x); }}\n'
+                                  for i in range(1500)) + "}"
+    assert datapack._declare_helpers({"A.java": src}) == {}
+    assert time.perf_counter() - start < 5
+    src = "class A {\n void mk(Scoreboard sb, String n) { sb.addObjective(n, x); }\n}"
+    assert datapack._declare_helpers({"A.java": src}) == {"mk": ("objective", 1)}
