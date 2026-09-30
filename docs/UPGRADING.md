@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D105)
+## Upgrading from 0.3.2 (D60-D106)
 
 ### D63: Running a project's own tests safely
 
@@ -476,6 +476,12 @@ MCP tool count is unchanged.
   docs/UPGRADING.md's "38 tools" needs to become 39 (tests/test_docs.py
   `test_schema_version_and_mcp_tool_count_match_the_code` fails until it does).
 - The core instructions of a project with decision records now name `dependency_ask`.
+
+### D106: What-if refactoring
+
+New: `verinoda what-if --move OLD=NEW` simulates moving or renaming files and folders (nothing is edited) and
+reports the edge-guard findings and the dependency cycles the move would add or remove; exit 3 when it adds some.
+The cycles view's output is unchanged. The MCP tool count is unchanged.
 
 ### D60-D62
 
