@@ -143,6 +143,9 @@ def _impact(v: dict, cap: int) -> list[str]:
     out = [f"targets: {', '.join(v.get('targets', [])[:6]) or '(none)'}"]
     if v.get("unresolved"):
         out.append(f"   not in the graph: {', '.join(v['unresolved'][:6])}")
+    if v.get("history_only_targets"):
+        out.append(f"   files without a graph node, read in git history only: "
+                   f"{', '.join(v['history_only_targets'][:6])}")
     out.append(f"{len(syms)} possibly affected symbols in {len(files)} files")
     n = max(3, cap - 5)
     for s in syms[:n]:
@@ -154,6 +157,19 @@ def _impact(v: dict, cap: int) -> list[str]:
     from verinoda import gametests
 
     out += gametests.render(v.get("gametests"))
+    coupled, hc = v.get("history_coupled") or [], v.get("history_coupling") or {}
+    if coupled:
+        out.append(f"changed together in git, no graph edge ({len(coupled)}"
+                   + (", more not shown" if hc.get("truncated") else "") + f"; last {hc.get('commits_read')} commits):")
+        n = max(3, cap // 4)
+        for c in coupled[:n]:
+            out.append(f"   [{c['status']}] {c['file']}: {c['commits']} of {c['target_commits']} commits of "
+                       f"{c['coupled_to']}")
+        out += _more(n, len(coupled), "coupled files")
+    if hc.get("error"):
+        out.append(f"changed together in git: not read ({hc['error']})")
+    elif hc.get("shallow"):
+        out.append(f"changed together in git: a shallow clone, only {hc.get('commits_read')} commits to read")
     return out
 
 

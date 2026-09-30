@@ -247,7 +247,7 @@ def run_fixture(fx: dict, work: Path, *, vcopy: Path | None = None, keep: bool =
                 full = review(repo, store=st, graph=g, observe=bool(fx["options"].get("observe")),
                               run_tests=bool(fx["options"].get("run_tests")), record=False)
                 res["tests"] = full["tests"]
-            impact = am.impact(g, am.changed_files_from_git(repo))
+            impact = am.impact(g, am.changed_files_from_git(repo), co_change=False)
         finally:
             st.close()
         sc = score(fx, res)
