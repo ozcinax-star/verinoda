@@ -59,7 +59,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 4.5 | **Suggested reviewers and related changes** | Reviewers and earlier commits or PRs that touched the same code | CodeRabbit | `review` lists them |
 | 4.6 | **Pattern trends and code monitors** | A search pattern's count over history (migration progress); a saved pattern that fails CI when new matches appear | Sourcegraph Code Insights and Code Monitoring | `verinoda monitor` exits 1 on a new match |
 
 ## 5 - Retrieval and token economy
